@@ -144,6 +144,15 @@ class ArgvTest(unittest.TestCase):
         self.assertNotEqual(env["PATH"], "/i/bin:" + container.IMAGE_PATH)          # the docker program's own
         self.assertEqual(u.inside("u0002"), "http://relay:8080/u0002/v1")
 
+    def test_a_licence_forwarder_listens_before_it_takes_the_servers_name(self):
+        u = container.Unit("j", "u0001", os.path.join(self.tmp, "rec"), image="img", app="/app", base="b", key="k")
+        calls = []
+        with mock.patch.object(container, "_docker", side_effect=lambda argv, **kw: calls.append(argv[:2])), \
+                mock.patch.object(container, "wait_listening", side_effect=lambda name, *a: calls.append(["wait", name])):
+            self.assertEqual(u._forward(1, "licence.example:27000"), "licence.example:27000")
+        name = u.names["agent"] + "-lic1"
+        self.assertEqual(calls, [["run", "-d"], ["wait", name], ["network", "connect"]])
+
     def test_a_long_job_name_gives_a_short_unique_slug(self):
         a, b = container.slug("x" * 200), container.slug("x" * 199 + "y")
         self.assertLessEqual(len(a), 80)
