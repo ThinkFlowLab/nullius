@@ -9,7 +9,7 @@ theme:
   name: material
   custom_dir: overrides
   font: false
-  favicon: assets/favicon.png?v=3
+  favicon: assets/favicon.png?v=4
   logo: assets/mark.svg
   palette:
     - scheme: slate

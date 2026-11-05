@@ -54,7 +54,7 @@ path to the build script. Generated output is ignored by Git.
   the wordmark link to the landing page at `https://thinkflowlab.ai/nullius/`.
   Tabs use one transparent PNG favicon, with a versioned URL to refresh cached icons.
   The PNG and Apple touch icon are rendered from `assets/favicon.svg`: the mark
-  alone, in neutral grey for both light and dark browser chrome. Saved shortcuts
+  alone, in the brand's white (`#e8e8e6`). Saved shortcuts
   can add their own platform background.
   Safari's pinned tabs use a separate black-on-transparent SVG mask.
 - Fonts and their licences come from `app/static/fonts/`. No external font
