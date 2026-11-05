@@ -37,7 +37,7 @@ your existing `settings.json` ([location and precedence](README.md#save)).
 
 | | |
 | --- | --- |
-| A run | Its provider's key and endpoint, as environment, never written |
+| A run | Its provider's key and endpoint, as environment (the key to a docker relay as a file) |
 | A recipe, a log | Nothing; logs are redacted |
 | A standard run on Anthropic | The relay alone |
 

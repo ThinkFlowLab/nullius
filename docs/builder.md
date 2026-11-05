@@ -88,7 +88,7 @@ a declared model list keeps those published choices.
 | --- | --- |
 | Order | `nop`, `oracle`, then the agents under evaluation |
 | Each Run | A new job (recipe name + timestamp); never resumes |
-| Key and endpoint | Passed as environment (over stdin to a host), never written; logs redacted. Other secrets withheld |
+| Key and endpoint | Passed as environment (over stdin to a host), the key to a docker relay as a file; logs redacted. Other secrets withheld |
 | A host | Gets a content-addressed snapshot of the running backend and effective catalogue into `~/.nullius/app/<content-id>`, including source edits and user entries but no configuration stores; a Harbor recipe gets its pin's wheels in `~/.nullius/harbor/<pin>/wheels`, and `uv` if missing |
 | Proofs | Local runs save to the user catalogue. A host uses a writable copy in its run's `catalogue/`, isolated from the host's own entries; that copy and its proofs mirror back alongside `jobs/`, without changing the active user catalogue |
 | Docker | Where a recipe needs it, `docker ps` must answer, or the run stops before it starts |
