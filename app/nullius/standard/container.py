@@ -22,9 +22,10 @@ answers). All where they are on this machine, so every path a
 definition's templates rendered (``{home}``, ``{install}``, ``{here}``) holds
 inside unchanged. A uv environment's interpreter lives outside the install
 (``pyvenv.cfg`` names it); its folder is mounted read-only too. The container
-runs as this machine's user (``--user uid:gid``), with no capabilities and no
-way to gain privileges, so what it writes in the workspace is the user's to
-read and remove.
+runs as this machine's user, with no capabilities and no way to gain
+privileges, so what it writes in the workspace is the user's to read and
+remove. That is ``--user uid:gid``, or ``--user 0:0`` on a rootless engine,
+where a container's root is this machine's user.
 
 **The relay is a sidecar, and the agent's only way out.** Per unit, an
 internal network (``docker network create --internal``: no route off it); a
@@ -396,8 +397,29 @@ def mounts(rw: Iterable[str], ro: Iterable[str], files: Iterable[str] = ()) -> L
     return out
 
 
+_rootless: Optional[bool] = None
+
+
+def rootless() -> bool:
+    """Whether the engine is rootless (Docker or podman): its uid 0 is this
+    machine's user, every other uid a sub-uid. The first answer is kept. An
+    engine that does not answer counts as rootful and is asked again."""
+    global _rootless
+    if _rootless is None:
+        try:
+            r = _docker(["info", "--format", "{{.SecurityOptions}}"], check=False, timeout=30)
+        except Unavailable:
+            return False
+        if r.returncode != 0:
+            return False
+        _rootless = "name=rootless" in r.stdout
+    return _rootless
+
+
 def _user() -> str:
-    return f"{os.getuid()}:{os.getgid()}"
+    """The ``--user`` that gives a container's files to this machine's user:
+    ``0:0`` on a rootless engine, ``uid:gid`` otherwise."""
+    return "0:0" if rootless() else f"{os.getuid()}:{os.getgid()}"
 
 
 def run_argv(image: str, cmd: List[str], *, name: str, network: str, job: str, workdir: str,
