@@ -1,0 +1,7 @@
+{"ts": "2026-09-14T08:00:00Z", "seq": 1, "job": "prep-x2", "trial": null, "event": "job.prepare", "stage": "dataset", "n_total": 2, "n_concurrent": 2, "agents": ["my-agent"], "tasks": ["hello-world", "hello-user"]}
+{"ts": "2026-09-14T08:00:12Z", "seq": 2, "job": "prep-x2", "trial": null, "event": "job.prepare", "stage": "image"}
+{"ts": "2026-09-14T08:00:41Z", "seq": 3, "job": "prep-x2", "trial": null, "event": "job.start", "n_total": 2, "n_concurrent": 2, "agents": ["my-agent"], "tasks": ["hello-world", "hello-user"], "wall_sec": 1200}
+{"ts": "2026-09-14T08:00:41Z", "seq": 4, "job": "prep-x2", "trial": "hello-world__p1", "event": "trial.queued", "task": "hello-world", "agent": "my-agent", "model": "openai/meta/muse-spark-1.3-contributor", "position": 1}
+{"ts": "2026-09-14T08:00:41Z", "seq": 5, "job": "prep-x2", "trial": "hello-user__p2", "event": "trial.queued", "task": "hello-user", "agent": "my-agent", "model": "openai/meta/muse-spark-1.3-contributor", "position": 2}
+{"ts": "2026-09-14T08:00:44Z", "seq": 6, "job": "prep-x2", "trial": "hello-world__p1", "event": "trial.phase", "phase": "env_setup", "timeout_sec": 300}
+{"ts": "2026-09-14T08:00:45Z", "seq": 7, "job": "prep-x2", "trial": "hello-user__p2", "event": "trial.phase", "phase": "env_setup", "timeout_sec": 300}

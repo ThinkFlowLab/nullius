@@ -1,0 +1,37 @@
+{
+  "key": "humaneval",
+  "title": "HumanEval",
+  "category": "Coding",
+  "domain": "Python functions written from their signature and docstring, each checked by its unit tests.",
+  "scoring": "Pass rate (pass@1)",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "upstream_limitations": [
+    "Original asks a chat model for the code. The paper's Codex models, used through raw completion, are not available."
+  ],
+  "limitations": [
+    "The tests run the agent's code. On the docker backend they run in a throwaway container with no network. On local processes they run on this machine, as you, for 3 seconds at most.",
+    "Only solution.py is tested. Other files the agent writes are ignored.",
+    "The task given to agents, completing the function in solution.py, is Nullius's wording."
+  ],
+  "datasets": [
+    {
+      "key": "humaneval",
+      "title": "HumanEval",
+      "tasks": 164,
+      "official": "https://github.com/openai/human-eval",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The upstream's check_correctness: the problem's prompt, the agent's completion and the problem's own check(candidate), run as one program.",
+      "notes": "164 problems. MIT License."
+    }
+  ],
+  "citation": "@article{chen2021codex,\n  title={Evaluating Large Language Models Trained on Code},\n  author={Chen, Mark and Tworek, Jerry and Jun, Heewoo and Yuan, Qiming and Pinto, Henrique Ponde de Oliveira and Kaplan, Jared and others},\n  journal={arXiv preprint arXiv:2107.03374},\n  year={2021}\n}",
+  "citation_source": "https://github.com/openai/human-eval",
+  "good_to_know": [
+    "One attempt per problem gives pass@1. With n attempts per problem, the run reports pass@1 to pass@n. The paper sampled 200."
+  ]
+}

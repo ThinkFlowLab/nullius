@@ -1,0 +1,519 @@
+{
+ "job": "liveboard-oracle-x4",
+ "now": "2026-09-12T22:54:20.798000Z",
+ "state": "finished",
+ "launched_at": null,
+ "preparing": null,
+ "started_at": "2026-09-12T22:53:55.946000Z",
+ "finished_at": "2026-09-12T22:54:20.798000Z",
+ "running": false,
+ "n_concurrent": 4,
+ "wall_sec": null,
+ "budget": null,
+ "agents": [
+  "oracle"
+ ],
+ "counts": {
+  "total": 4,
+  "running": 0,
+  "pending": 0,
+  "completed": 4,
+  "resolved": 4,
+  "unresolved": 0,
+  "errored": 0,
+  "cancelled": 0
+ },
+ "mean_reward": 1.0,
+ "totals": {
+  "n_input_tokens": null,
+  "n_cache_tokens": null,
+  "n_output_tokens": null,
+  "cost_usd": null
+ },
+ "tokens_per_sec": null,
+ "elapsed_sec": 24.852,
+ "eta_sec": null,
+ "trials": [
+  {
+   "trial": "hello-world__mAXMKXR",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "model": null,
+   "position": 0,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 120.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": null,
+   "n_cache_tokens": null,
+   "n_output_tokens": null,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 2.130092,
+    "agent_setup": 6.7e-05,
+    "agent_run": 0.198945,
+    "verify": 11.446594
+   },
+   "total_sec": 24.799
+  },
+  {
+   "trial": "hello-alpine__7tLqUzj",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "model": null,
+   "position": 1,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 120.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": null,
+   "n_cache_tokens": null,
+   "n_output_tokens": null,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 4.903082,
+    "agent_setup": 4.6e-05,
+    "agent_run": 0.203129,
+    "verify": 6.718132
+   },
+   "total_sec": 22.867
+  },
+  {
+   "trial": "reward-kit-example__cGmVgm7",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "model": null,
+   "position": 2,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 120.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": null,
+   "n_cache_tokens": null,
+   "n_output_tokens": null,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 2.933697,
+    "agent_setup": 3.6e-05,
+    "agent_run": 1.951166,
+    "verify": 7.914696
+   },
+   "total_sec": 24.111
+  },
+  {
+   "trial": "hello-user__avpxuCw",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "model": null,
+   "position": 3,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 120.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": null,
+   "n_cache_tokens": null,
+   "n_output_tokens": null,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 2.091223,
+    "agent_setup": 4.8e-05,
+    "agent_run": 0.207735,
+    "verify": 0.197373
+   },
+   "total_sec": 14.589
+  }
+ ],
+ "lanes": [
+  {
+   "agent": "oracle",
+   "trials": [
+    "hello-world__mAXMKXR",
+    "hello-alpine__7tLqUzj",
+    "reward-kit-example__cGmVgm7",
+    "hello-user__avpxuCw"
+   ],
+   "counts": {
+    "total": 4,
+    "running": 0,
+    "pending": 0,
+    "completed": 4,
+    "resolved": 4,
+    "unresolved": 0,
+    "errored": 0,
+    "cancelled": 0
+   },
+   "mean_reward": 1.0,
+   "totals": {
+    "n_input_tokens": null,
+    "n_cache_tokens": null,
+    "n_output_tokens": null,
+    "cost_usd": null
+   },
+   "wins": 0
+  }
+ ],
+ "winners": [],
+ "tail": [
+  {
+   "ts": "2026-09-12T22:53:55.946000Z",
+   "seq": 1,
+   "job": "liveboard-oracle-x4",
+   "trial": null,
+   "event": "job.start",
+   "n_total": 4,
+   "n_concurrent": 4,
+   "agents": [
+    "oracle"
+   ],
+   "tasks": [
+    "hello-alpine",
+    "hello-user",
+    "hello-world",
+    "reward-kit-example"
+   ]
+  },
+  {
+   "ts": "2026-09-12T22:53:55.946000Z",
+   "seq": 2,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-world__mAXMKXR",
+   "event": "trial.queued",
+   "agent": "oracle",
+   "position": 0
+  },
+  {
+   "ts": "2026-09-12T22:53:55.946000Z",
+   "seq": 3,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-alpine__7tLqUzj",
+   "event": "trial.queued",
+   "agent": "oracle",
+   "position": 1
+  },
+  {
+   "ts": "2026-09-12T22:53:55.946000Z",
+   "seq": 4,
+   "job": "liveboard-oracle-x4",
+   "trial": "reward-kit-example__cGmVgm7",
+   "event": "trial.queued",
+   "agent": "oracle",
+   "position": 2
+  },
+  {
+   "ts": "2026-09-12T22:53:55.946000Z",
+   "seq": 5,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-user__avpxuCw",
+   "event": "trial.queued",
+   "agent": "oracle",
+   "position": 3
+  },
+  {
+   "ts": "2026-09-12T22:53:55.997000Z",
+   "seq": 6,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-world__mAXMKXR",
+   "event": "trial.phase",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "phase": "env_setup",
+   "timeout_sec": 600.0
+  },
+  {
+   "ts": "2026-09-12T22:53:56.035000Z",
+   "seq": 7,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-alpine__7tLqUzj",
+   "event": "trial.phase",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "phase": "env_setup",
+   "timeout_sec": 600.0
+  },
+  {
+   "ts": "2026-09-12T22:53:56.174000Z",
+   "seq": 8,
+   "job": "liveboard-oracle-x4",
+   "trial": "reward-kit-example__cGmVgm7",
+   "event": "trial.phase",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "phase": "env_setup",
+   "timeout_sec": 600.0
+  },
+  {
+   "ts": "2026-09-12T22:53:56.208000Z",
+   "seq": 9,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-user__avpxuCw",
+   "event": "trial.phase",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "phase": "env_setup",
+   "timeout_sec": 600.0
+  },
+  {
+   "ts": "2026-09-12T22:53:58.127000Z",
+   "seq": 10,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-world__mAXMKXR",
+   "event": "trial.phase",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "phase": "agent_setup",
+   "timeout_sec": 360.0
+  },
+  {
+   "ts": "2026-09-12T22:53:58.128000Z",
+   "seq": 11,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-world__mAXMKXR",
+   "event": "trial.phase",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "phase": "agent_run",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-12T22:53:58.300000Z",
+   "seq": 12,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-user__avpxuCw",
+   "event": "trial.phase",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "phase": "agent_setup",
+   "timeout_sec": 360.0
+  },
+  {
+   "ts": "2026-09-12T22:53:58.300000Z",
+   "seq": 13,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-user__avpxuCw",
+   "event": "trial.phase",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "phase": "agent_run",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-12T22:53:58.594000Z",
+   "seq": 14,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-world__mAXMKXR",
+   "event": "trial.phase",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "phase": "verify",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-12T22:53:58.800000Z",
+   "seq": 15,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-user__avpxuCw",
+   "event": "trial.phase",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "phase": "verify",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-12T22:53:59.108000Z",
+   "seq": 16,
+   "job": "liveboard-oracle-x4",
+   "trial": "reward-kit-example__cGmVgm7",
+   "event": "trial.phase",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "phase": "agent_setup",
+   "timeout_sec": 360.0
+  },
+  {
+   "ts": "2026-09-12T22:53:59.108000Z",
+   "seq": 17,
+   "job": "liveboard-oracle-x4",
+   "trial": "reward-kit-example__cGmVgm7",
+   "event": "trial.phase",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "phase": "agent_run",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-12T22:54:00.939000Z",
+   "seq": 18,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-alpine__7tLqUzj",
+   "event": "trial.phase",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "phase": "agent_setup",
+   "timeout_sec": 360.0
+  },
+  {
+   "ts": "2026-09-12T22:54:00.939000Z",
+   "seq": 19,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-alpine__7tLqUzj",
+   "event": "trial.phase",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "phase": "agent_run",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-12T22:54:01.322000Z",
+   "seq": 20,
+   "job": "liveboard-oracle-x4",
+   "trial": "reward-kit-example__cGmVgm7",
+   "event": "trial.phase",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "phase": "verify",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-12T22:54:01.396000Z",
+   "seq": 21,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-alpine__7tLqUzj",
+   "event": "trial.phase",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "phase": "verify",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-12T22:54:10.797000Z",
+   "seq": 22,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-user__avpxuCw",
+   "event": "trial.end",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "outcome": "resolved",
+   "reward": 1.0,
+   "evidence": "reward 1.0 >= 1.0",
+   "durations": {
+    "env_setup": 2.091223,
+    "agent_setup": 4.8e-05,
+    "agent_run": 0.207735,
+    "verify": 0.197373
+   }
+  },
+  {
+   "ts": "2026-09-12T22:54:18.902000Z",
+   "seq": 23,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-alpine__7tLqUzj",
+   "event": "trial.end",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "outcome": "resolved",
+   "reward": 1.0,
+   "evidence": "reward 1.0 >= 1.0",
+   "durations": {
+    "env_setup": 4.903082,
+    "agent_setup": 4.6e-05,
+    "agent_run": 0.203129,
+    "verify": 6.718132
+   }
+  },
+  {
+   "ts": "2026-09-12T22:54:20.285000Z",
+   "seq": 24,
+   "job": "liveboard-oracle-x4",
+   "trial": "reward-kit-example__cGmVgm7",
+   "event": "trial.end",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "outcome": "resolved",
+   "reward": 1.0,
+   "evidence": "reward 1.0 >= 1.0",
+   "durations": {
+    "env_setup": 2.933697,
+    "agent_setup": 3.6e-05,
+    "agent_run": 1.951166,
+    "verify": 7.914696
+   }
+  },
+  {
+   "ts": "2026-09-12T22:54:20.796000Z",
+   "seq": 25,
+   "job": "liveboard-oracle-x4",
+   "trial": "hello-world__mAXMKXR",
+   "event": "trial.end",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "outcome": "resolved",
+   "reward": 1.0,
+   "evidence": "reward 1.0 >= 1.0",
+   "durations": {
+    "env_setup": 2.130092,
+    "agent_setup": 6.7e-05,
+    "agent_run": 0.198945,
+    "verify": 11.446594
+   }
+  },
+  {
+   "ts": "2026-09-12T22:54:20.798000Z",
+   "seq": 26,
+   "job": "liveboard-oracle-x4",
+   "trial": null,
+   "event": "job.end",
+   "n_completed": 4,
+   "n_errored": 0,
+   "n_cancelled": 0
+  }
+ ],
+ "notices": []
+}

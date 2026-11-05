@@ -1,0 +1,165 @@
+{# Shared chart controls for the trial and task-comparison pages.
+
+   Each macro takes `url`, a macro of `(trace filter, chart filter) -> href`,
+   so each page owns its query keys while sharing the chart markup.
+
+   The numbers arrive already placed in SVG user units from
+   `app/nullius/traces/charts.py`, which computes them in Python
+   because the arithmetic runs on nanosecond magnitudes a JS double cannot hold. #}
+
+
+{# The label filter's chips. Built from the *unfiltered* tree, so a hidden label
+   keeps the chip that brings it back. #}
+{% macro facet_chips(facets, filt, chart_filter, url) %}
+<div class="legend facets">
+  {% for f in facets %}
+  <a class="chip k-{{ f.kind }}{% if f.hidden %} off{% endif %}"
+     href="{{ url(filt.toggled_name(f.name), chart_filter) }}"
+     title="{{ 'Show' if f.hidden else 'Leave out' }} the {{ f.count }} span{{ '' if f.count == 1 else 's' }} labelled “{{ f.name }}”">{{ f.name }} <b>{{ f.count }}</b></a>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+
+{# The four charts, their legends, and the paragraph that stops them being
+   misread as an accounting of the run.
+
+   `empty_note` explains why the current page has nothing to plot.
+
+   `tail` closes the paragraph that says summed span time is not wall clock. The
+   trial page points from there at the Time breakdown strip below it; a page
+   without that strip must not claim one. #}
+{% macro charts_panel(charts, chart_filter, filt, url, empty_note="", tail="") %}
+{% set box = charts.box %}
+<div class="panel">
+  <h3 style="margin-top:0">Distributions
+    <span class="muted" style="font-weight:400">· the shape of the calls, not the timeline</span></h3>
+  {% if charts.has_spans %}
+  <div class="charts">
+    {% for c in charts.items %}
+    <figure class="chart" id="chart-{{ c.key }}">
+      <figcaption><b>{{ c.title }}</b> <span class="muted small">{{ c.subtitle }}</span>
+        {% if c.head %}
+        <span class="ch-head"><span class="ch-value">{{ c.head.ns|nsround if c.head.ns is not none else c.head.text }}</span>
+          <span class="ch-unit">{{ c.head.unit }}{% if c.head.lo_ns is not none %} {{ c.head.lo_ns|nsround }}–{{ c.head.hi_ns|nsround }}{% endif %}</span></span>
+        {% endif %}
+      </figcaption>
+      <div class="chart-plot" role="group" aria-label="{{ c.title }} — {{ c.subtitle }}">
+        <div class="ch-area">
+          {# Stretched to the column (`none`): `non-scaling-stroke` keeps every line one weight
+             however wide that is, and the bars and labels are page elements, so nothing distorts. #}
+          <svg class="ch-svg" viewBox="{{ charts.viewbox }}" preserveAspectRatio="none" aria-hidden="true">
+            {% for t in c.yticks %}
+            <line class="ch-grid" x1="{{ box.x0 }}" x2="{{ box.x1 }}" y1="{{ t.at }}" y2="{{ t.at }}"></line>
+            {% endfor %}
+            <line class="ch-axis" x1="{{ box.x0 }}" x2="{{ box.x1 }}" y1="{{ box.y1 }}" y2="{{ box.y1 }}"></line>
+            {% if c.form == 'cdf' %}
+            <g class="ch-lines">
+              {% if c.series|length == 1 %}<polygon class="ch-wash{% if c.series[0].kind %} k-{{ c.series[0].kind }}{% endif %}" points="{{ c.series[0].area }}"></polygon>{% endif %}
+              {% for s in c.series %}
+              <polyline class="ch-line{% if s.kind %} k-{{ s.kind }}{% endif %}" points="{{ s.points }}"></polyline>
+              {% endfor %}
+            </g>
+            {% endif %}
+          </svg>
+          {% for t in c.yticks %}<span class="ch-lab ch-y" style="top:{{ box.top(t.at) }}%">{{ t.text }}</span>{% endfor %}
+          {% if c.marker %}
+          {% set m_at = box.left(c.marker.at) %}
+          <div class="ch-marker{{ ' flip' if m_at > 62 }}" style="left:{{ m_at }}%"><span>{{ c.marker.word }} {{ c.marker.ns|nsround }}</span></div>
+          {% endif %}
+          {% if c.form == 'histogram' %}
+          <div class="ch-cols">
+            {% for col in c.columns %}
+            {% set at = box.left(col.x) %}
+            <div class="ch-col" tabindex="0" role="img" style="left:{{ at }}%;width:{{ box.width(col.w) }}%;--i:{{ loop.index0 }}"
+                 aria-label="{{ col.lo_ns|nsround }} to {{ col.hi_ns|nsround }}: {% if col.share %}{{ col.share }} of summed span time, {% endif %}{{ col.count }} span{{ '' if col.count == 1 else 's' }}">
+              <div class="ch-stack">
+                {% for b in col.segs %}<span class="ch-seg{% if b.kind %} k-{{ b.kind }}{% endif %}{{ ' cap' if loop.last }}" style="top:{{ box.top(b.y) }}%;height:{{ box.height(b.h) }}%"></span>{% endfor %}
+              </div>
+              <div class="ch-tip{{ ' at-start' if at < 22 else ' at-end' if at > 72 }}">
+                <b>{{ col.share or (col.count ~ (' span' if col.count == 1 else ' spans')) }}</b>
+                <span class="ch-tip-sub">{{ col.lo_ns|nsround }}–{{ col.hi_ns|nsround }}{% if col.share %} · {{ col.count }} span{{ '' if col.count == 1 else 's' }}{% endif %}</span>
+                {% if col.segs|length > 1 or col.segs[0].kind %}
+                {% for b in col.segs|reverse %}<span class="ch-tip-row"><i class="ch-key k-{{ b.kind }}"></i><b>{{ b.ns|nsdur if col.share else b.count }}</b> {{ b.kind }}</span>{% endfor %}
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="ch-zones">
+            {% for r in c.readouts %}
+            {% set at = box.left(r.x) %}
+            <div class="ch-zone" tabindex="0" role="img" style="left:{{ box.left(r.left) }}%;width:{{ box.width(r.right - r.left) }}%;--at:{{ r.at }}%"
+                 aria-label="{{ r.ns|nsround }} or shorter: {% for row in r.rows %}{{ row.share }} {{ row.label }}{{ ', ' if not loop.last }}{% endfor %}">
+              <i class="ch-cross"></i>
+              {% for row in r.rows if row.on_line %}<i class="ch-dot{% if row.kind %} k-{{ row.kind }}{% endif %}" style="top:{{ box.top(row.y) }}%"></i>{% endfor %}
+              <div class="ch-tip{{ ' at-start' if at < 22 else ' at-end' if at > 72 }}">
+                <span class="ch-tip-sub">{{ r.ns|nsround }} or shorter</span>
+                {% for row in r.rows %}<span class="ch-tip-row"><i class="ch-key{% if row.kind %} k-{{ row.kind }}{% endif %}"></i><b>{{ row.share }}</b> {{ row.label }}</span>{% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <div class="ch-x">
+          {% for t in c.xticks %}<span class="ch-lab {{ t.anchor }}" style="left:{{ box.left(t.at) }}%">{{ t.ns|nsround }}</span>{% endfor %}
+        </div>
+        <p class="ch-x-title">How long one call took{% if c.x_step %}, each mark {{ c.x_step }}× the last{% endif %}</p>
+      </div>
+      {# A control, not a key: each chip drops its kind from *this* chart and the
+         chart rescales to what is left. Its own query key, because it changes
+         one chart and not the trace — the waterfall, the breakdown and
+         save-trace are all blind to it. #}
+      {% if c.kinds %}
+      <div class="legend chart-legend">
+        {% for k in c.kinds %}
+        <a class="chip k-{{ k.kind }}{% if k.off %} off{% endif %}"
+           href="{{ url(filt, chart_filter.toggled(c.key, k.kind)) }}#chart-{{ c.key }}"
+           title="{{ 'Draw' if k.off else 'Leave out' }} the {{ k.n }} {{ k.kind }} span{{ '' if k.n == 1 else 's' }} in this chart — the trace itself is untouched">{{ k.kind }} <b>{{ k.n }}</b></a>
+        {% endfor %}
+        {% if c.hidden_kinds %}
+        <a class="chip clear" href="{{ url(filt, chart_filter.cleared(c.key)) }}#chart-{{ c.key }}"
+           title="Draw every kind in this chart again">all ×</a>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% if c.key_kinds|length > 1 %}
+      <div class="legend chart-legend chart-key">{% for k in c.key_kinds %}<span class="chip k-{{ k.kind }}">{{ k.kind }}</span>{% endfor %}</div>
+      {% endif %}
+      {% if c.note %}<p class="muted small chart-note">{{ c.note }}</p>{% endif %}
+    </figure>
+    {% endfor %}
+  </div>
+  {# The one thing these charts could be misread as. #}
+  <p class="muted small chart-foot">These durations are how long each call lasted, not moments in the run.
+    The {{ charts.summed_ns|nsdur }} they add up to is <b>not</b> wall clock: calls overlap and leave gaps. {{ tail }}
+    {% if charts.note %}{{ charts.note }}{% endif %}
+    {% if chart_filter.active %}
+    <a class="linkish" href="{{ url(filt, chart_filter.cleared()) }}">Draw every kind again ×</a>
+    {% endif %}</p>
+  <details class="tc chart-values">
+    <summary><span class="name">Values</span></summary>
+    {% for c in charts.items %}
+    <table class="grid compact">
+      <caption>{{ c.title }}</caption>
+      {% if c.form == 'histogram' %}
+      <thead><tr><th>Duration</th><th class="num">Spans</th><th class="num">Span time</th>{% if c.columns and c.columns[0].share %}<th class="num">Share</th>{% endif %}</tr></thead>
+      <tbody>{% for col in c.columns %}<tr><td>{{ col.lo_ns|nsround }}–{{ col.hi_ns|nsround }}</td><td class="num">{{ col.count }}</td><td class="num">{{ col.ns|nsdur }}</td>{% if col.share %}<td class="num">{{ col.share }}</td>{% endif %}</tr>{% endfor %}</tbody>
+      {% else %}
+      <thead><tr><th>No longer than</th>{% for s in c.series %}<th class="num">{{ s.label }}</th>{% endfor %}</tr></thead>
+      <tbody>{% for r in c.readouts %}<tr><td>{{ r.ns|nsround }}</td>{% for row in r.rows %}<td class="num">{{ row.share }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      {% endif %}
+    </table>
+    {% endfor %}
+  </details>
+  {% else %}
+  <p class="muted" style="margin:0">
+    {% if empty_note %}{{ empty_note }}
+    {% elif charts.total %}None of the {{ charts.total }} span{{ '' if charts.total == 1 else 's' }}
+    in this view is a call with a known duration — there is nothing to plot.
+    {% else %}Every span is filtered out — nothing left to plot.{% endif %}</p>
+  {% endif %}
+</div>
+{% endmacro %}

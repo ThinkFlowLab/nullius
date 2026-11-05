@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Classifier vs judge · {{ job.job_id }} — Nullius{% endblock %}
+{% block crumb %}/ <a href="{{ url_for('job', job_id=job.job_id) }}">{{ job.job_id }}</a> / classifier vs judge{% endblock %}
+{% block head %}
+<style>
+  .rec-counts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 18px; font-size: 13px; }
+  .rec-counts .fk { color: var(--text-dim); font-size: 10px; letter-spacing: .7px; text-transform: uppercase; display: block; margin-bottom: 4px; }
+  .rec-threshold { display: inline-flex; gap: 8px; align-items: center; }
+  .rec-threshold input { width: 5em; }
+  .rec-section h2 { margin: 22px 0 8px; }
+  .rec-section p.faint { margin: 0 0 8px; }
+  .rec-compatible { color: var(--text-dim); }
+  .rec-suggest { font-style: italic; }
+  details.rec-fold summary { cursor: pointer; }
+</style>
+{% endblock %}
+{% block body %}
+<header class="run-header">
+  <div class="page-title"><h1>Classifier vs judge <span class="badge">experimental</span></h1><span class="mono">{{ job.job_id }}</span></div>
+  <p class="subtitle" id="reconcile-meaning">
+    The <strong>recorded outcome</strong> is the classifier's deterministic reading of the exception, verifier and patch; the judge's
+    <span class="mono">failure_cause</span> is its reading of the transcript. Where they <strong>disagree</strong> is listed first. The recorded outcome never changes.
+  </p>
+</header>
+
+{% if not view.applies %}
+<div class="alert warn" id="reconcile-not-applicable">This is a control run ({{ job.agent_label }}): its outcomes are a check on the tasks and the verifier, not an agent's attempt, so a failure cause over its transcript has nothing to reconcile with.</div>
+{% else %}
+{% set c = view.counts %}
+<div class="rec-counts" id="reconcile-counts" aria-label="What was compared">
+  <div><span class="fk">Trials</span><span data-count="trials">{{ c.trials }}</span></div>
+  <div><span class="fk">Asked failure cause</span><span data-count="asked">{{ c.asked }}</span> <span class="faint">(unresolved; a resolved trial is not asked)</span></div>
+  <div><span class="fk">Judged</span><span data-count="judged">{{ c.judged }}</span>{% if c.unjudged %} <span class="faint">· <span data-count="unjudged">{{ c.unjudged }}</span> not judged</span>{% endif %}</div>
+  <div><span class="fk">Comparable</span><span data-count="comparable">{{ c.comparable }}</span></div>
+  <div><span class="fk">Agree</span><span data-count="agree">{{ c.agree }}</span></div>
+  <div><span class="fk">Disagree</span><span data-count="disagree">{{ c.disagree }}</span></div>
+  <div><span class="fk">Suggested</span><span data-count="suggested">{{ c.suggested }}</span></div>
+  <div><span class="fk">Below threshold</span><span data-count="gated">{{ c.gated }}</span></div>
+  <div><span class="fk">Not comparable</span><span data-count="not_comparable">{{ c.not_comparable }}</span></div>
+  <div><span class="fk">Confidence threshold</span>
+    <form method="get" class="rec-threshold" id="reconcile-threshold"><input type="number" name="threshold" min="0" max="1" step="0.05" value="{{ '%.2f'|format(view.threshold) }}" aria-label="Confidence threshold"><button class="btn sm ghost" type="submit">Apply</button>{% if view.threshold != default_threshold %}<a class="small faint" href="{{ url_for('reconcile_page', job_id=job.job_id) }}">default {{ '%.2f'|format(default_threshold) }}</a>{% endif %}</form>
+    <span class="faint small">the judge's own confidence on the pick; a disagreement below it is listed as noise, not as a finding</span></div>
+</div>
+
+{% macro rows_table(rows, id, with_suggests=False) %}
+<div class="table-wrap" role="region" tabindex="0">
+<table class="grid" id="{{ id }}">
+  <thead><tr>
+    <th>Trial</th><th>Recorded outcome</th><th title="The failure_cause options this outcome does not contradict">Compatible with</th>
+    <th>Judge's pick</th><th title="The confidence the judge returned with the pick">Confidence</th><th title="The probability the judge put on the pick">p(pick)</th>
+    {% if with_suggests %}<th>Suggests <span class="badge">experimental</span></th>{% endif %}
+  </tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr data-trial="{{ r.trial_name }}" data-status="{{ r.status }}" data-outcome="{{ r.outcome }}" data-choice="{{ r.choice or '' }}">
+      <td><a class="mono" href="{{ url_for('trial', job_id=job.job_id, trial_name=r.trial_name) }}">{{ r.task }}</a></td>
+      <td><span class="tag oc-{{ r.outcome }}">{{ r.outcome_label }}</span></td>
+      <td class="rec-compatible mono small">{{ r.compatible|join(' · ') if r.compatible else '—' }}</td>
+      <td>{% if r.choice %}<strong class="mono">{{ r.choice }}</strong>{% if r.version and r.version != QUESTIONS_VERSION %} <span class="badge" title="Judged under an earlier question vocabulary">{{ r.version }}</span>{% endif %}{% else %}<span class="faint">not judged</span>{% endif %}</td>
+      <td class="mono small">{% if r.confidence is not none %}{{ '%.0f'|format(r.confidence * 100) }}%{% else %}—{% endif %}</td>
+      <td class="mono small">{% if r.p is not none %}{{ '%.0f'|format(r.p * 100) }}%{% else %}—{% endif %}</td>
+      {% if with_suggests %}<td class="rec-suggest">{% if r.suggests %}{% for s in r.suggests %}<span class="tag oc-{{ s }}">{{ C_LABELS[s] }}</span>{% if not loop.last %} or {% endif %}{% endfor %}{% if r.likely %} <span class="mono small" title="likely_outcome: the judge's own pick over the classifier's labels, {{ '%.0f'|format((r.likely_p or 0) * 100) }}% with confidence {{ '%.0f'|format((r.likely_confidence or 0) * 100) }}%; experimental, never the recorded outcome">direct {{ '%.0f'|format((r.likely_p or 0) * 100) }}%</span>{% endif %} <span class="faint small">— a suggestion from the transcript; the recorded outcome stays {{ r.outcome_label }}</span>{% else %}—{% endif %}</td>{% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endmacro %}
+
+<section class="rec-section" id="reconcile-disagree">
+  <h2>Disagreements <span class="mono small">{{ c.disagree }}</span></h2>
+  <p class="faint">The judge's pick is not one the recorded outcome allows. Strongest first: by the judge's confidence, then the probability on the pick.</p>
+  {% if view.rows.disagree %}{{ rows_table(view.rows.disagree, 'reconcile-disagreements') }}{% else %}<p class="footnote">None above the threshold.</p>{% endif %}
+</section>
+
+{% if view.rows.other %}
+<section class="rec-section" id="reconcile-other">
+  <h2>Cause outside the list <span class="mono small">{{ c.other }}</span></h2>
+  <p class="faint">The judge chose <span class="mono">other</span>: a cause none of its options describes. Not a claim about which option the classifier should have used, so listed apart from the disagreements.</p>
+  {{ rows_table(view.rows.other, 'reconcile-others') }}
+</section>
+{% endif %}
+
+{% if view.rows.suggestion %}
+<section class="rec-section" id="reconcile-suggestions">
+  <h2>Suggestions for unknown outcomes <span class="mono small">{{ c.suggested }}</span> <span class="badge">experimental</span></h2>
+  <p class="faint">The classifier could not place these trials. The judge's pick names the outcome labels it is compatible with — a place to look, never a reclassification: the recorded outcome stays <span class="tag oc-unknown">{{ C_LABELS.unknown }}</span>.</p>
+  {{ rows_table(view.rows.suggestion, 'reconcile-suggested', with_suggests=True) }}
+</section>
+{% endif %}
+
+<section class="rec-section" id="reconcile-agree">
+  <details class="rec-fold"><summary>Agreements <span class="mono small">{{ c.agree }}</span> — the pick is one the outcome allows</summary>
+  {% if view.rows.agree %}{{ rows_table(view.rows.agree, 'reconcile-agreements') }}{% else %}<p class="footnote">None.</p>{% endif %}
+  </details>
+</section>
+
+<section class="rec-section" id="reconcile-gated">
+  <details class="rec-fold"><summary>Below the confidence threshold <span class="mono small">{{ c.gated }}</span> — judged, but at a confidence under {{ '%.2f'|format(view.threshold) }}; listed here rather than dropped</summary>
+  {% if view.rows.gated %}{{ rows_table(view.rows.gated, 'reconcile-gated-rows', with_suggests=True) }}{% else %}<p class="footnote">None.</p>{% endif %}
+  </details>
+</section>
+
+<section class="rec-section" id="reconcile-not-comparable">
+  <details class="rec-fold"><summary>Not comparable <span class="mono small">{{ c.not_comparable }}</span> — the recorded outcome makes no claim a failure cause could contradict, and the pick suggests no label</summary>
+  {% if view.rows.not_comparable %}{{ rows_table(view.rows.not_comparable, 'reconcile-not-comparable-rows') }}{% else %}<p class="footnote">None.</p>{% endif %}
+  </details>
+</section>
+
+<section class="rec-section" id="reconcile-not-judged">
+  <details class="rec-fold"><summary>Not judged <span class="mono small">{{ view.rows.not_judged|length }}</span> — no failure cause stored (resolved trials are never asked one)</summary>
+  {% if view.rows.not_judged %}{{ rows_table(view.rows.not_judged, 'reconcile-not-judged-rows') }}{% else %}<p class="footnote">None.</p>{% endif %}
+  </details>
+</section>
+
+<h2>How the two vocabularies meet</h2>
+<div class="glossary">
+  <p class="faint">The classifier's labels and the judge's options are not the same list, so a trial <em>agrees</em> when the pick is one its outcome does not contradict. A label with several compatible options is one the classifier cannot split further; a label with none is not comparable.</p>
+  <dl class="cols" id="reconcile-table">
+    {% for k in C_ORDER %}<div><dt><span class="tag oc-{{ k }}">{{ C_LABELS[k] }}</span></dt><dd class="mono small">{{ COMPATIBLE[k]|join(' · ') if COMPATIBLE[k] else 'no correspondence — not comparable' }}</dd></div>{% endfor %}
+  </dl>
+</div>
+{% endif %}
+{% endblock %}

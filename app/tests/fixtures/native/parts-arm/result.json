@@ -1,0 +1,13 @@
+{
+ "id": "parts-arm",
+ "started_at": "2026-10-19T09:27:31.292732+00:00",
+ "finished_at": "2026-10-19T09:27:31.296646+00:00",
+ "n_total_trials": 2,
+ "stats": {
+  "n_completed_trials": 2,
+  "n_errored_trials": 0,
+  "n_cancelled_trials": 0,
+  "n_running_trials": 0,
+  "n_pending_trials": 0
+ }
+}

@@ -1,0 +1,89 @@
+{
+ "job": "prep-oracle-x4",
+ "now": "2026-09-14T08:35:10.108618Z",
+ "state": "preparing",
+ "launched_at": "2026-09-14T08:35:10.101636Z",
+ "preparing": {
+  "stage": "tasks",
+  "since": "2026-09-14T08:35:10.104439Z",
+  "elapsed_sec": 0.004179
+ },
+ "started_at": null,
+ "finished_at": null,
+ "running": false,
+ "n_concurrent": 4,
+ "wall_sec": null,
+ "budget": null,
+ "agents": [
+  "oracle"
+ ],
+ "counts": {
+  "total": null,
+  "running": 0,
+  "pending": 0,
+  "completed": 0,
+  "resolved": 0,
+  "unresolved": 0,
+  "errored": 0,
+  "cancelled": 0
+ },
+ "mean_reward": null,
+ "totals": {
+  "n_input_tokens": null,
+  "n_cache_tokens": null,
+  "n_output_tokens": null,
+  "cost_usd": null
+ },
+ "tokens_per_sec": null,
+ "elapsed_sec": 0.006982,
+ "eta_sec": null,
+ "trials": [],
+ "lanes": [
+  {
+   "agent": "oracle",
+   "trials": [],
+   "counts": {
+    "total": 0,
+    "running": 0,
+    "pending": 0,
+    "completed": 0,
+    "resolved": 0,
+    "unresolved": 0,
+    "errored": 0,
+    "cancelled": 0
+   },
+   "mean_reward": null,
+   "totals": {
+    "n_input_tokens": null,
+    "n_cache_tokens": null,
+    "n_output_tokens": null,
+    "cost_usd": null
+   },
+   "wins": 0
+  }
+ ],
+ "winners": [],
+ "tail": [
+  {
+   "ts": "2026-09-14T08:35:10.101636Z",
+   "seq": 1,
+   "job": "prep-oracle-x4",
+   "trial": null,
+   "event": "job.prepare",
+   "stage": "dataset",
+   "n_concurrent": 4,
+   "agents": [
+    "oracle"
+   ]
+  },
+  {
+   "ts": "2026-09-14T08:35:10.104439Z",
+   "seq": 2,
+   "job": "prep-oracle-x4",
+   "trial": null,
+   "event": "job.prepare",
+   "stage": "tasks"
+  }
+ ],
+ "notices": []
+}

@@ -1,0 +1,66 @@
+# Benchmark results — large, machine-specific, regenerated on every run, and
+# their logs can contain credentials. No leading slash: Harbor writes jobs/
+# relative to wherever it was invoked, so this must match at any depth.
+jobs/
+jobs_*/
+trials/
+
+# The log tree an agent framework writes under the cwd on a bare run (a
+# debugging session at the repo root). Framework noise — one was committed by
+# accident once.
+logs/
+
+# Git worktrees. Claude Code puts these *inside* the repo, where git's usual
+# "a worktree is elsewhere" assumption doesn't hold — so without this, `git add
+# -A` from the root stages a second full checkout into the current branch.
+.claude/worktrees/
+# Per-machine overrides. settings.json is shared and tracked — it carries the
+# attribution policy — but a local file must never be committed over it.
+.claude/settings.local.json
+
+# A cache an upstream writes beside its working directory (tau2's embeddings):
+# regenerated, large, and never part of a catalogue entry.
+.embeddings_cache/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+.venv/
+venv/
+.env
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+
+# machine-specific notes; not project knowledge
+*.local.md
+
+jobs_imported/
+
+# Editor swap files. A vim swap of a .env holds the .env, and `.env`
+# alone does not match `.env.swp` — which is how one reached a commit.
+*.swp
+*.swo
+*~
+.*.sw[a-p]
+
+# app workspaces: cached parses, imported runs, judgements
+workspaces/
+
+
+
+# Runs started from the builder (Run on the Review step): the script, the log
+# and the job, mirrored back from a host or written here. RUNS_DIR moves it.
+/runs/
+/runners/
+# The Harbor a recipe pins, built here: its wheels and its scan. HARBOR_PINS moves it.
+/harbor-pins/
+# This repository's app/ at a commit, unpacked to be sent to a host for a standard run.
+/standard-app/

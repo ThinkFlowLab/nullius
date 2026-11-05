@@ -1,0 +1,639 @@
+[
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--domain airline",
+    "values": "a registered domain",
+    "default": "none (required)",
+    "nullius": "dataset:airline"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--domain retail",
+    "values": "a registered domain",
+    "default": "none (required)",
+    "nullius": "dataset:retail"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--domain telecom",
+    "values": "a registered domain",
+    "default": "none (required)",
+    "nullius": "dataset:telecom"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--domain telecom-workflow",
+    "values": "a registered domain (registry.py: the telecom tasks under the workflow policy)",
+    "default": "none (required)",
+    "nullius": "dataset:telecom-workflow"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--domain banking_knowledge",
+    "values": "a registered domain",
+    "default": "none (required)",
+    "nullius": "dataset:banking_knowledge"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--domain mock",
+    "values": "a registered domain",
+    "default": "none (required)",
+    "nullius": "not offered - the upstream's test fixture (10 tasks for its own tests), not part of the benchmark or the leaderboard"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--num-trials",
+    "values": "an integer from 1",
+    "default": "1 (DEFAULT_NUM_TRIALS)",
+    "nullius": "fixed:1 trial per attempt - a run's --repeat K (the builder's Attempts per unit) runs each unit K times, attempt N being the upstream's trial N-1 at the seed run_tasks draws for it (limits.attempts); the job's result.json carries pass^k"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--agent",
+    "values": "llm_agent, llm_agent_gt, llm_agent_solo, discrete_time_audio_native_agent",
+    "default": "llm_agent",
+    "nullius": "option:upstream_agent"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--agent discrete_time_audio_native_agent",
+    "values": "an agent",
+    "default": "llm_agent",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--agent-llm",
+    "values": "any litellm model name",
+    "default": "gpt-4.1-2025-04-14 (DEFAULT_LLM_AGENT)",
+    "nullius": "setup:original"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--agent-llm-args reasoning_effort",
+    "values": "minimal, low, medium, high, xhigh (what the model accepts)",
+    "default": "not sent",
+    "nullius": "option:agent_reasoning_effort"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--agent-llm-args (temperature and any other key)",
+    "values": "a JSON object",
+    "default": "{\"temperature\": 0.0} (DEFAULT_LLM_ARGS_AGENT)",
+    "nullius": "fixed:{\"temperature\": 0.0} - the upstream's default, sent unless a reasoning effort is chosen (the JSON then replaces it, as the CLI's does); other keys are free-form and no leaderboard row of a standard submission documents one"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--user",
+    "values": "user_simulator, dummy_user",
+    "default": "user_simulator",
+    "nullius": "fixed:user_simulator - the upstream's default; dummy_user only pairs with llm_agent_solo, which the upstream_agent option sets with it"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--user-llm",
+    "values": "any litellm model name",
+    "default": "gpt-4.1-2025-04-14 (DEFAULT_LLM_USER)",
+    "nullius": "fixed:gpt-4.1-2025-04-14 - the upstream's default, a run's --simulator-model (the builder's user simulator model) puts another in its place, as the leaderboard's gpt-5.2; the job records it"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--user-llm-args reasoning_effort",
+    "values": "minimal, low, medium, high, xhigh",
+    "default": "not sent",
+    "nullius": "option:user_reasoning_effort"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--user-llm-args (temperature and any other key)",
+    "values": "a JSON object",
+    "default": "{\"temperature\": 0.0} (DEFAULT_LLM_ARGS_USER)",
+    "nullius": "fixed:{\"temperature\": 0.0} - the upstream's default, sent unless a reasoning effort is chosen"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--task-set-name (a domain's own)",
+    "values": "a registered task set",
+    "default": "the domain's",
+    "nullius": "fixed:the dataset's domain - each dataset is its domain's task set, as tau2 run loads it when the flag is left out"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--task-set-name telecom_full",
+    "values": "a registered task set",
+    "default": "the domain's",
+    "nullius": "not offered - at v1.0.1 the upstream's loader raises TypeError (get_tasks_full() got an unexpected keyword argument 'task_split_name'); the same 2285 tasks are telecom with task_split full"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--task-set-name telecom_small",
+    "values": "a registered task set",
+    "default": "the domain's",
+    "nullius": "not offered - at v1.0.1 the upstream's loader raises TypeError (get_tasks_small() got an unexpected keyword argument 'task_split_name'); the same 20 tasks are telecom with task_split small"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--task-split-name",
+    "values": "base, train, test (telecom also small, full)",
+    "default": "base",
+    "nullius": "option:task_split"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--task-ids",
+    "values": "task ids",
+    "default": "every task",
+    "nullius": "fixed:every task of the split - a run's --limit and shards pick units by position; the leaderboard asks for every task"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--num-tasks",
+    "values": "an integer",
+    "default": "every task",
+    "nullius": "fixed:every task of the split - a run's --limit N runs the first N, the same cut"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--max-steps",
+    "values": "an integer",
+    "default": "200 (DEFAULT_MAX_STEPS)",
+    "nullius": "fixed:200 - the upstream's default, the leaderboard's; limits.turns (100) lets its limit be the one met"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--max-errors",
+    "values": "an integer",
+    "default": "10 (DEFAULT_MAX_ERRORS)",
+    "nullius": "fixed:10 - the upstream's default"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--timeout",
+    "values": "seconds",
+    "default": "none",
+    "nullius": "fixed:none - the upstream's default; a run's turn limit (600 s an agent turn, 7200 s an original conversation) ends a unit that hangs, as the unit's error"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--save-to",
+    "values": "a path",
+    "default": "data/simulations/<name>",
+    "nullius": "fixed:none - the SimulationRun is written beside the trial's verdict (verifier/simulation.json)"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--max-concurrency",
+    "values": "an integer",
+    "default": "3 (DEFAULT_MAX_CONCURRENCY)",
+    "nullius": "fixed:1 - each unit is its own batch run; a run's -j runs units side by side"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--seed",
+    "values": "an integer",
+    "default": "300 (DEFAULT_SEED)",
+    "nullius": "fixed:300 - the upstream's default and nearly every leaderboard row's"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--log-level",
+    "values": "a loguru level",
+    "default": "ERROR (DEFAULT_LOG_LEVEL)",
+    "nullius": "fixed:ERROR - the upstream's default, into the driver's log"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--verbose-logs",
+    "values": "a flag",
+    "default": "off",
+    "nullius": "fixed:off - the relay records every model call of the unit"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--llm-log-mode",
+    "values": "all, latest",
+    "default": "latest",
+    "nullius": "fixed:latest - acts only with --verbose-logs"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--max-retries",
+    "values": "an integer",
+    "default": "3 (DEFAULT_RETRY_ATTEMPTS)",
+    "nullius": "fixed:3 - the upstream's default: an attempt that raises is made again, then INFRASTRUCTURE_ERROR is the unit's error"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retry-delay",
+    "values": "seconds",
+    "default": "1.0 (DEFAULT_RETRY_MIN_WAIT)",
+    "nullius": "fixed:1.0 - the upstream's default"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--enforce-communication-protocol",
+    "values": "a flag",
+    "default": "off",
+    "nullius": "fixed:off - the upstream's default and the leaderboard's"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--user-persona",
+    "values": "a JSON persona",
+    "default": "none",
+    "nullius": "fixed:none - at v1.0.1 tau2 run parses it and passes it to no text run (cli.py builds the PersonaConfig, noqa F841); personas act in voice mode only"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--auto-resume",
+    "values": "a flag",
+    "default": "off",
+    "nullius": "fixed:off - each unit is a fresh run"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--auto-review",
+    "values": "a flag",
+    "default": "off",
+    "nullius": "not offered - an LLM review written beside each simulation (claude-opus-4-5 by default); it does not change the reward"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--review-mode",
+    "values": "full, user",
+    "default": "full",
+    "nullius": "not offered - acts only with --auto-review"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--review-model",
+    "values": "a model",
+    "default": "claude-opus-4-5 (DEFAULT_LLM_EVAL_USER_SIMULATOR)",
+    "nullius": "not offered - acts only with --auto-review"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--hallucination-retries",
+    "values": "an integer",
+    "default": "3",
+    "nullius": "fixed:3 - the upstream's default; it acts on full-duplex runs only"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config",
+    "values": "the retrieval variants (retrieval.py)",
+    "default": "alltools (DEFAULT_RETRIEVAL_VARIANT) for banking_knowledge",
+    "nullius": "option:retrieval"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config qwen_embeddings",
+    "values": "a retrieval variant",
+    "default": "alltools",
+    "nullius": "not offered - its embedder calls OpenRouter at a fixed address with OPENROUTER_API_KEY (openrouter_embedder.py), past the relay, which never hands a driver a key"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config qwen_embeddings_grep",
+    "values": "a retrieval variant",
+    "default": "alltools",
+    "nullius": "not offered - its embedder calls OpenRouter at a fixed address with OPENROUTER_API_KEY (openrouter_embedder.py), past the relay, which never hands a driver a key"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config qwen_embeddings_reranker",
+    "values": "a retrieval variant",
+    "default": "alltools",
+    "nullius": "not offered - its embedder calls OpenRouter at a fixed address with OPENROUTER_API_KEY (openrouter_embedder.py), past the relay, which never hands a driver a key"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config qwen_embeddings_reranker_grep",
+    "values": "a retrieval variant",
+    "default": "alltools",
+    "nullius": "not offered - its embedder calls OpenRouter at a fixed address with OPENROUTER_API_KEY (openrouter_embedder.py), past the relay, which never hands a driver a key"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config alltools-qwen",
+    "values": "a retrieval variant",
+    "default": "alltools",
+    "nullius": "not offered - its embedder calls OpenRouter at a fixed address with OPENROUTER_API_KEY (openrouter_embedder.py), past the relay, which never hands a driver a key"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config openai_embeddings_reranker",
+    "values": "a retrieval variant",
+    "default": "alltools",
+    "nullius": "not offered - its pointwise reranker asks gpt-5.2 through the OpenAI client (OPENAI_BASE_URL), which in a run is the embeddings route the relay sends as text-embedding-3-large, or no route at all; it needs a route of its own on the run's relay"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config openai_embeddings_reranker_grep",
+    "values": "a retrieval variant",
+    "default": "alltools",
+    "nullius": "not offered - its pointwise reranker asks gpt-5.2 through the OpenAI client (OPENAI_BASE_URL), which in a run is the embeddings route the relay sends as text-embedding-3-large, or no route at all; it needs a route of its own on the run's relay"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config bm25_reranker",
+    "values": "a retrieval variant",
+    "default": "alltools",
+    "nullius": "not offered - its pointwise reranker asks gpt-5.2 through the OpenAI client (OPENAI_BASE_URL), which in a run is the embeddings route the relay sends as text-embedding-3-large, or no route at all; it needs a route of its own on the run's relay"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config bm25_reranker_grep",
+    "values": "a retrieval variant",
+    "default": "alltools",
+    "nullius": "not offered - its pointwise reranker asks gpt-5.2 through the OpenAI client (OPENAI_BASE_URL), which in a run is the embeddings route the relay sends as text-embedding-3-large, or no route at all; it needs a route of its own on the run's relay"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--retrieval-config-kwargs",
+    "values": "JSON: top_k, grep_top_k, case_sensitive, reranker_min_score",
+    "default": "none",
+    "nullius": "not offered - free-form overrides of a variant's constructor; the leaderboard's rows run every variant at its own values, which a score is compared at"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--audio-native",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--audio-native-provider",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--cascaded-config",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--audio-native-model",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--reasoning-effort",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--tick-duration",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--max-steps-seconds",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--speech-complexity",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--pcm-sample-rate",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--telephony-rate",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--wait-to-respond-other",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--wait-to-respond-self",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--yield-when-interrupted",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--yield-when-interrupting",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--interruption-check-interval",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--integration-duration",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--silence-annotation-threshold",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--xml-prompt",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--no-xml-prompt",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--audio-debug",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "tau2 run (src/tau2/cli.py)",
+    "setting": "--audio-taps",
+    "values": "voice mode",
+    "default": "off / its default",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "src/tau2/config.py",
+    "setting": "DEFAULT_LLM_NL_ASSERTIONS",
+    "values": "a model",
+    "default": "gpt-4.1-2025-04-14",
+    "nullius": "fixed:gpt-4.1-2025-04-14 - the upstream's NL-assertion judge (score.judge); a run's --judge-model puts another in its place, recorded in the job"
+  },
+  {
+    "entry": "src/tau2/config.py",
+    "setting": "DEFAULT_LLM_NL_ASSERTIONS_ARGS",
+    "values": "a JSON object",
+    "default": "{\"temperature\": 0.0}",
+    "nullius": "fixed:{\"temperature\": 0.0} - the upstream's"
+  },
+  {
+    "entry": "src/tau2/config.py",
+    "setting": "DEFAULT_LLM_ENV_INTERFACE (and its args)",
+    "values": "a model",
+    "default": "gpt-4.1-2025-04-14",
+    "nullius": "not offered - the upstream's interactive interface agent (tau2 play), not part of a run"
+  },
+  {
+    "entry": "src/tau2/config.py",
+    "setting": "DEFAULT_MAX_RETRIES (litellm num_retries)",
+    "values": "an integer",
+    "default": "3",
+    "nullius": "fixed:3 - the upstream's, each model call retried by litellm"
+  },
+  {
+    "entry": "src/tau2/config.py",
+    "setting": "DEFAULT_RETRY_ATTEMPTS / MIN_WAIT / MAX_WAIT / MULTIPLIER",
+    "values": "numbers",
+    "default": "3 / 1.0 / 10.0 / 1.0",
+    "nullius": "fixed:3 / 1.0 / 10.0 / 1.0 - the upstream's constants"
+  },
+  {
+    "entry": "src/tau2/config.py",
+    "setting": "LLM_CACHE_ENABLED (redis)",
+    "values": "a boolean",
+    "default": "False",
+    "nullius": "fixed:False - the upstream's default: every call is made"
+  },
+  {
+    "entry": "src/tau2/config.py",
+    "setting": "USE_LANGFUSE",
+    "values": "a boolean",
+    "default": "False",
+    "nullius": "fixed:False - the upstream's default"
+  },
+  {
+    "entry": "src/tau2/config.py",
+    "setting": "DEFAULT_VOICE_* and audio-native constants",
+    "values": "voice settings",
+    "default": "theirs",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "environment variables read by src/tau2",
+    "setting": "OPENAI_API_KEY",
+    "values": "a key",
+    "default": "unset",
+    "nullius": "fixed:the relay's placeholder - every model and embedding call goes through the run's relay, which holds the key"
+  },
+  {
+    "entry": "environment variables read by src/tau2",
+    "setting": "OPENROUTER_API_KEY",
+    "values": "a key",
+    "default": "unset",
+    "nullius": "not offered - read only by the qwen embedder, whose variants are not offered (above)"
+  },
+  {
+    "entry": "environment variables read by src/tau2",
+    "setting": "TAU2_DATA_DIR",
+    "values": "a path",
+    "default": "the upstream's data/",
+    "nullius": "fixed:the upstream's data/ at its pin - the datasets' sha256 are checked"
+  },
+  {
+    "entry": "environment variables read by src/tau2",
+    "setting": "BASETEN_API_KEY / BGE_RERANKER_API_KEY / QWEN_RERANKER_API_KEY",
+    "values": "keys",
+    "default": "unset",
+    "nullius": "not offered - rerankers on Sierra's own hosted endpoints, used by no retrieval variant tau2 run offers"
+  },
+  {
+    "entry": "environment variables read by src/tau2",
+    "setting": "ELEVENLABS / DEEPGRAM / GEMINI / XAI / DASHSCOPE / GOOGLE / AWS keys",
+    "values": "keys",
+    "default": "unset",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  },
+  {
+    "entry": "docs/leaderboard-submission.md",
+    "setting": "submission_type standard",
+    "values": "standard, custom",
+    "default": "standard",
+    "nullius": "setup:original"
+  },
+  {
+    "entry": "docs/leaderboard-submission.md",
+    "setting": "trials (4 or more)",
+    "values": "an integer",
+    "default": "4",
+    "nullius": "fixed:1 a unit's attempt - --repeat 4 runs the leaderboard's four trials (limits.attempts)"
+  },
+  {
+    "entry": "docs/leaderboard-submission.md",
+    "setting": "user simulator gpt-5.2 at reasoning_effort low",
+    "values": "a model and its arguments",
+    "default": "recommended",
+    "nullius": "option:user_reasoning_effort"
+  },
+  {
+    "entry": "docs/leaderboard-submission.md",
+    "setting": "every task, base split",
+    "values": "the split",
+    "default": "base",
+    "nullius": "option:task_split"
+  },
+  {
+    "entry": "docs/leaderboard-submission.md",
+    "setting": "banking_knowledge retrieval_config",
+    "values": "a variant",
+    "default": "reported as a badge",
+    "nullius": "option:retrieval"
+  },
+  {
+    "entry": "docs/leaderboard-submission.md",
+    "setting": "voice: speech complexity regular",
+    "values": "control, regular",
+    "default": "regular",
+    "nullius": "not offered - voice (audio-native, full-duplex) mode only: Nullius runs the text, half-duplex benchmark"
+  }
+]

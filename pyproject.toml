@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nullius"
+version = "0.1.0.dev0"
+description = "Bring anything, run it, prove it."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "app/static/fonts/*-OFL.txt"]
+classifiers = ["Private :: Do Not Upload"]
+dynamic = ["dependencies"]
+
+[project.scripts]
+nullius = "nullius.cli:main"
+
+[tool.uv]
+# Source commands keep their explicit --with-requirements environment; they
+# must not silently install a second nullius beside PYTHONPATH=app.
+managed = false
+
+[tool.setuptools]
+include-package-data = false
+packages = [
+  "nullius", "nullius.catalogue", "nullius.compare", "nullius.harbor",
+  "nullius.importers", "nullius.judge", "nullius.recipes", "nullius.runs",
+  "nullius.standard", "nullius.traces", "_nullius_app", "_nullius_app.web",
+]
+
+[tool.setuptools.package-dir]
+nullius = "app/nullius"
+_nullius_app = "app"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["app/requirements.txt"]}
+
+[tool.setuptools.package-data]
+"nullius.catalogue" = ["agents/*/*.json", "agents/*/*.py", "agents/*/*.toml", "agents/*/*.yaml", "benchmarks/*/*.json", "benchmarks/*/*.py", "capabilities/*/*.json", "capabilities/*/*.py"]
+"nullius.standard" = ["kits/*/*.json", "kits/*/*.py"]
+"nullius.judge" = ["floors.json"]
+_nullius_app = ["templates/**/*.html", "static/**/*.css", "static/**/*.js", "static/**/*.svg", "static/**/*.png", "static/**/*.json", "static/**/*.woff2", "static/**/*.ttf", "static/**/*.txt", "static/**/*.md", "requirements.txt", ".env.example"]

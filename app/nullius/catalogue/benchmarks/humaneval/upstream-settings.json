@@ -1,0 +1,72 @@
+[
+ {
+  "entry": "evaluate_functional_correctness",
+  "setting": "--problem_file",
+  "values": "data/HumanEval.jsonl.gz; data/example_problem.jsonl (a sanity fixture)",
+  "default": "HumanEval.jsonl.gz",
+  "nullius": "dataset:humaneval"
+ },
+ {
+  "entry": "evaluate_functional_correctness",
+  "setting": "--k",
+  "values": "1,10,100",
+  "default": "1,10,100",
+  "nullius": "fixed:pass@1 to pass@n with n the run's attempts (cli run --repeat n, the builder's Attempts per problem) - the job's result.json reports it, 1 - C(n-c, k)/C(n, k) as estimate_pass_at_k reads it; one attempt by default, pass@1"
+ },
+ {
+  "entry": "README",
+  "setting": "num_samples_per_task",
+  "values": "200",
+  "default": "200",
+  "nullius": "fixed:the run's attempts (--repeat), 1 by default - 200 agent runs per problem are offered, never assumed"
+ },
+ {
+  "entry": "evaluate_functional_correctness",
+  "setting": "--timeout",
+  "values": "seconds",
+  "default": "3.0",
+  "nullius": "fixed:3.0 - the upstream's default, read from its source"
+ },
+ {
+  "entry": "evaluate_functional_correctness",
+  "setting": "--n_workers",
+  "values": "threads",
+  "default": "4",
+  "nullius": "fixed:the run's concurrency - how many problems at once, not what is measured"
+ },
+ {
+  "entry": "human_eval/execution.py",
+  "setting": "reliability_guard (maximum_memory_bytes)",
+  "values": "None",
+  "default": "None",
+  "nullius": "fixed:None - the upstream's check_correctness, called as published"
+ },
+ {
+  "entry": "README",
+  "setting": "generate_one_completion (the answerer)",
+  "values": "a stub the user writes",
+  "default": "",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "paper",
+  "setting": "the paper's models (Codex 12M to 12B)",
+  "values": "",
+  "default": "",
+  "nullius": "not offered - never released; the Codex API they were served by is retired"
+ },
+ {
+  "entry": "paper",
+  "setting": "sampling (temperature 0.2 for pass@1, 0.8 for pass@100, top_p 0.95, stop sequences)",
+  "values": "",
+  "default": "",
+  "nullius": "option:temperature"
+ },
+ {
+  "entry": "driver (ours)",
+  "setting": "completion glue",
+  "values": "the agent's solution.py after the prompt, else the whole file",
+  "default": "",
+  "nullius": "fixed:Nullius's - the upstream reads a completion string; said in the limitations"
+ }
+]

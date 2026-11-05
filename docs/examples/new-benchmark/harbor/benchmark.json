@@ -1,0 +1,28 @@
+{
+  "key": "example-harbor",
+  "title": "Example Harbor Bench",
+  "category": "Coding",
+  "domain": "One line on what the tasks ask: fix a failing test in a small repository.",
+  "scoring": "Test script",
+  "harness": [
+    "harbor"
+  ],
+  "origin": "experiment",
+  "limitations": [
+    "What a reader must know before trusting a score: no internet in the task container."
+  ],
+  "datasets": [
+    {
+      "key": "example-harbor-v1",
+      "title": "Example Harbor Bench v1",
+      "tasks": 50,
+      "official": "https://github.com/example-org/example-bench",
+      "source": "Harbor registry",
+      "registry": "example-harbor@1.0",
+      "hub": "",
+      "verifier": "Each task's own test script, run after the agent stops."
+    }
+  ],
+  "citation": "@misc{example2026,\n  title={Example Harbor Bench},\n  year={2026}\n}",
+  "citation_source": "https://github.com/example-org/example-bench"
+}

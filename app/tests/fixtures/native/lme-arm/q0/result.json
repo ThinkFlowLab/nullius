@@ -1,0 +1,32 @@
+{
+ "task_name": "longmemeval/q0",
+ "trial_name": "q0",
+ "source": "longmemeval",
+ "agent_info": {
+  "name": "oracle",
+  "model_info": {
+   "name": "openai/gpt-4o-2024-08-06"
+  }
+ },
+ "agent_execution": {
+  "started_at": "1970-01-01T00:16:41+00:00",
+  "finished_at": "1970-01-01T00:16:41.500000+00:00"
+ },
+ "verifier_result": {
+  "rewards": {
+   "reward": 0.0
+  }
+ },
+ "started_at": "1970-01-01T00:16:41+00:00",
+ "finished_at": "1970-01-01T00:16:43.500000+00:00",
+ "agent_result": {
+  "n_input_tokens": 120,
+  "n_output_tokens": 8,
+  "n_cache_tokens": 60,
+  "cost_usd": 0.0004
+ },
+ "verifier": {
+  "started_at": "1970-01-01T00:16:43+00:00",
+  "finished_at": "1970-01-01T00:16:43.500000+00:00"
+ }
+}

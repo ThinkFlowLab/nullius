@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 576" width="720" height="576" role="img" aria-labelledby="judge-flow-title judge-flow-desc" class="dg">
+<title id="judge-flow-title">From a trial to an answer</title>
+<desc id="judge-flow-desc">The trial’s files are redacted and trimmed into a state, the page’s questions and two hygiene checks go to the judge in one call, and the record is kept and shown.</desc>
+<defs><marker id="judge-flow-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#596471" class="head"/></marker><marker id="judge-flow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#36577d" class="head accent"/></marker><marker id="judge-flow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#596471" stroke-width="1.2" class="arrow"/></marker></defs>
+<style>
+.dg{--p:var(--paper,#f7f8fa);--i:var(--ink,#25282e);--m:var(--muted,#596471);--a:var(--md-typeset-a-color,#36577d);--n:#fff;
+ --sans:'DM Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:'Instrument Serif',Georgia,serif}
+[data-md-color-scheme=slate] .dg{--n:color-mix(in srgb,var(--i) 7%,var(--p))}
+.dg .paper{fill:var(--p)}
+.dg .zone{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 14%,transparent);stroke-width:.8}
+.dg .eyebrow{fill:var(--m);font:500 8px var(--mono);letter-spacing:.14em}
+.dg .box{fill:var(--n);stroke:var(--i);stroke-width:1}
+.dg .focal{fill:color-mix(in srgb,var(--a) 12%,transparent);stroke:var(--a);stroke-width:1}
+.dg .store{fill:color-mix(in srgb,var(--i) 5%,transparent);stroke:var(--m);stroke-width:1}
+.dg .ext{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 40%,transparent);stroke-width:1}
+.dg .input{fill:color-mix(in srgb,var(--m) 10%,transparent);stroke:var(--m);stroke-width:1}
+.dg .name{fill:var(--i);font:500 12px var(--sans)}
+.dg .sub{fill:var(--m);font:9px var(--mono)}
+.dg .lbl{fill:var(--m);font:8px var(--mono);letter-spacing:.06em}
+.dg .lbl.accent{fill:var(--a)}
+.dg .arrow{fill:none;stroke:var(--m);stroke-width:1.2}
+.dg .arrow.accent{stroke:var(--a)}
+.dg .arrow.dashed{stroke-dasharray:5 4;stroke-width:1}
+.dg .arrow.bus{stroke-width:1}
+.dg .head{fill:var(--m)}
+.dg .head.accent{fill:var(--a)}
+.dg .dot{fill:var(--i)}
+.dg .life{stroke:color-mix(in srgb,var(--i) 25%,transparent);stroke-width:1;stroke-dasharray:3 3}
+.dg .act{fill:color-mix(in srgb,var(--i) 6%,transparent);stroke:var(--m);stroke-width:.8}
+.dg .frame{fill:color-mix(in srgb,var(--i) 2%,transparent);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .tab{fill:var(--p);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .guard{fill:var(--m);font:8px var(--mono);letter-spacing:.04em}
+.dg .note{fill:var(--m);font:13px var(--sans)}
+.dg .rule{stroke:color-mix(in srgb,var(--i) 12%,transparent);stroke-width:.8}
+.dg .legend{fill:var(--m);font:9px var(--sans)}
+</style>
+<rect width="100%" height="100%" fill="#f7f8fa" class="paper"/>
+<rect x="24" y="136" width="672" height="96" rx="8" fill="#e6e6e8" stroke="#cfd0d2" class="zone"/>
+<rect x="36" y="140" width="119" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="44" y="149" text-anchor="start" class="eyebrow">1 · BUILD A STATE</text>
+<rect x="24" y="248" width="672" height="96" rx="8" fill="#e6e6e8" stroke="#cfd0d2" class="zone"/>
+<rect x="36" y="252" width="150" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="44" y="261" text-anchor="start" class="eyebrow">2 · ONE CALL PER STATE</text>
+<rect x="24" y="432" width="672" height="96" rx="8" fill="#e6e6e8" stroke="#cfd0d2" class="zone"/>
+<rect x="36" y="436" width="132" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="44" y="445" text-anchor="start" class="eyebrow">3 · RECORD AND SHOW</text>
+<path d="M136,88 L136,116 Q136,124 144,124 L204,124 Q212,124 212,132 L212,168" fill="none" stroke="#596471" marker-end="url(#judge-flow-arrow)" class="arrow"/>
+<path d="M360,88 L360,104 Q360,112 352,112 L264,112 Q256,112 256,120 L256,168" fill="none" stroke="#596471" marker-end="url(#judge-flow-arrow)" class="arrow"/>
+<path d="M584,88 L584,124 Q584,132 576,132 L308,132 Q300,132 300,140 L300,168" fill="none" stroke="#596471" marker-end="url(#judge-flow-arrow)" class="arrow"/>
+<path d="M344,192 L376,192" fill="none" stroke="#596471" marker-end="url(#judge-flow-arrow)" class="arrow"/>
+<path d="M428,216 L428,236 Q428,244 420,244 L264,244 Q256,244 256,252 L256,280" fill="none" stroke="#596471" marker-end="url(#judge-flow-arrow)" class="arrow"/>
+<path d="M464,216 L464,280" fill="none" stroke="#596471" marker-end="url(#judge-flow-arrow)" class="arrow"/>
+<path d="M256,328 L256,340 Q256,348 264,348 L312,348 Q320,348 320,356 L320,368" fill="none" stroke="#36577d" marker-end="url(#judge-flow-accent)" class="arrow accent"/>
+<path d="M464,328 L464,340 Q464,348 456,348 L408,348 Q400,348 400,356 L400,368" fill="none" stroke="#36577d" marker-end="url(#judge-flow-accent)" class="arrow accent"/>
+<path d="M360,416 L360,432 Q360,440 352,440 L296,440 Q288,440 288,448 L288,464" fill="none" stroke="#596471" marker-end="url(#judge-flow-arrow)" class="arrow"/>
+<path d="M408,488 L448,488" fill="none" stroke="#596471" marker-end="url(#judge-flow-arrow)" class="arrow"/>
+<rect x="40" y="40" width="192" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="40" y="40" width="192" height="48" rx="6" fill="#dedfe1" stroke="#596471" class="input"/>
+<text x="136" y="62" text-anchor="middle" class="name">Trajectory</text>
+<text x="136" y="76" text-anchor="middle" class="sub">agent/trajectory.json</text>
+<rect x="264" y="40" width="192" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="264" y="40" width="192" height="48" rx="6" fill="#dedfe1" stroke="#596471" class="input"/>
+<text x="360" y="62" text-anchor="middle" class="name">Result</text>
+<text x="360" y="76" text-anchor="middle" class="sub">result.json, verifier output</text>
+<rect x="488" y="40" width="192" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="488" y="40" width="192" height="48" rx="6" fill="#dedfe1" stroke="#596471" class="input"/>
+<text x="584" y="62" text-anchor="middle" class="name">Task</text>
+<text x="584" y="76" text-anchor="middle" class="sub">its instruction</text>
+<rect x="168" y="168" width="176" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="168" y="168" width="176" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="256" y="196" text-anchor="middle" class="name">Redact secrets</text>
+<rect x="376" y="168" width="176" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="376" y="168" width="176" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="464" y="190" text-anchor="middle" class="name">Trim</text>
+<text x="464" y="204" text-anchor="middle" class="sub">what bears on the question</text>
+<rect x="168" y="280" width="176" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="168" y="280" width="176" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="256" y="308" text-anchor="middle" class="name">The page’s questions</text>
+<rect x="376" y="280" width="176" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="376" y="280" width="176" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="464" y="308" text-anchor="middle" class="name">Two hygiene checks</text>
+<rect x="272" y="368" width="176" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="272" y="368" width="176" height="48" rx="6" fill="#e8edf4" stroke="#36577d" class="focal"/>
+<text x="360" y="390" text-anchor="middle" class="name">Judge client</text>
+<text x="360" y="404" text-anchor="middle" class="sub">one call per state</text>
+<rect x="168" y="464" width="240" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="168" y="464" width="240" height="48" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="288" y="486" text-anchor="middle" class="name">Judgement record</text>
+<text x="288" y="500" text-anchor="middle" class="sub">workspaces/&lt;name&gt;/judgements/</text>
+<rect x="448" y="464" width="192" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="448" y="464" width="192" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="544" y="486" text-anchor="middle" class="name">Shown on the page</text>
+<text x="544" y="500" text-anchor="middle" class="sub">answer, confidence, model, time</text>
+<text x="24" y="28" text-anchor="start" class="eyebrow">INPUT · THE TRIAL AS RECORDED</text>
+<line x1="24" y1="540" x2="696" y2="540" stroke="#d6d7d9" class="rule"/>
+<text x="24" y="560" text-anchor="start" class="eyebrow">LEGEND</text>
+<rect x="96" y="552" width="16" height="10" rx="2" fill="#dedfe1" stroke="#596471" class="input"/>
+<text x="118" y="561" text-anchor="start" class="legend">The trial</text>
+<rect x="190" y="552" width="16" height="10" rx="2" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="212" y="561" text-anchor="start" class="legend">Step</text>
+<rect x="257" y="552" width="16" height="10" rx="2" fill="#e8edf4" stroke="#36577d" class="focal"/>
+<text x="279" y="561" text-anchor="start" class="legend">The call</text>
+<rect x="346" y="552" width="16" height="10" rx="2" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="368" y="561" text-anchor="start" class="legend">Kept</text>
+</svg>

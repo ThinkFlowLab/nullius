@@ -1,0 +1,98 @@
+{
+  "correctness": {
+    "kind": "group",
+    "score": 1.0,
+    "aggregation": "weighted_mean",
+    "components": [
+      {
+        "name": "$checks",
+        "weight": 2.0,
+        "detail": {
+          "score": 1.0,
+          "criteria": [
+            {
+              "name": "most_common_correct",
+              "value": 1.0,
+              "raw": 1.0,
+              "weight": 2.0,
+              "description": "most_common_correct"
+            },
+            {
+              "name": "word_count_correct",
+              "value": 1.0,
+              "raw": 1.0,
+              "weight": 3.0,
+              "description": "word_count_correct"
+            }
+          ],
+          "kind": "programmatic"
+        }
+      },
+      {
+        "name": "pipeline",
+        "weight": 1.0,
+        "detail": {
+          "score": 1.0,
+          "criteria": [
+            {
+              "name": "command_succeeds:python analyze.py",
+              "value": 1.0,
+              "raw": true,
+              "weight": 2.0,
+              "description": "Check that the command `python analyze.py` exits with code 0"
+            },
+            {
+              "name": "json_key_equals:results.json",
+              "value": 1.0,
+              "raw": true,
+              "weight": 2.0,
+              "description": "Check that results.json has key 'most_common' equal to 'the'"
+            }
+          ],
+          "kind": "programmatic"
+        }
+      }
+    ]
+  },
+  "structure": {
+    "score": 1.0,
+    "criteria": [
+      {
+        "name": "file_exists:textstats.py",
+        "value": 1.0,
+        "raw": true,
+        "weight": 1.0,
+        "description": "Check that textstats.py exists in the workspace"
+      },
+      {
+        "name": "file_exists:analyze.py",
+        "value": 1.0,
+        "raw": true,
+        "weight": 1.0,
+        "description": "Check that analyze.py exists in the workspace"
+      },
+      {
+        "name": "file_exists:results.json",
+        "value": 1.0,
+        "raw": true,
+        "weight": 1.0,
+        "description": "Check that results.json exists in the workspace"
+      },
+      {
+        "name": "file_contains:textstats.py",
+        "value": 1.0,
+        "raw": true,
+        "weight": 1.0,
+        "description": "Check that textstats.py contains the text 'def word_count'"
+      },
+      {
+        "name": "file_contains:textstats.py",
+        "value": 1.0,
+        "raw": true,
+        "weight": 1.0,
+        "description": "Check that textstats.py contains the text 'def most_common'"
+      }
+    ],
+    "kind": "programmatic"
+  }
+}

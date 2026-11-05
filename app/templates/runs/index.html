@@ -1,0 +1,609 @@
+{% from 'runs/_runtime.html' import what_ran %}
+{% extends "base.html" %}
+{% block title %}Runs — Nullius{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">{% endblock %}
+
+{# Value filter for one column: a caret in the header opening a checkbox list.
+   Values start all-checked; unchecking hides the matching rows. #}
+{% macro filter_button(col) %}
+<span class="th-filter">
+  <button class="filter-btn" type="button" data-filter="{{ col }}"
+          aria-haspopup="true" aria-expanded="false" aria-label="Filter by {{ col }}">▼</button>
+  <div class="menu filter-menu" data-filter-menu="{{ col }}" hidden>
+    <div class="menu-head">
+      <button type="button" class="linkish" data-all="{{ col }}">All</button>
+      <button type="button" class="linkish" data-none="{{ col }}">None</button>
+    </div>
+    {% for value, label in choices[col] %}
+    <label><input type="checkbox" data-value="{{ value }}" checked> {{ label }}</label>
+    {% endfor %}
+  </div>
+</span>
+{% endmacro %}
+
+{% block body %}
+
+<div class="page-title runs-head"><h1>Runs</h1>
+  <span class="runs-acts">
+    <a class="btn sm ghost" href="{{ url_for('import_page') }}">Import</a>
+    <a class="btn sm" href="{{ url_for('new_run') }}">New run</a>
+  </span></div>
+{# Agents only: a control's trials are a check on the tasks, not results, and
+   are shown as their launch's task checks. #}
+<p class="subtitle" id="counts"
+   data-runs="{{ n_agent_runs }}" data-trials="{{ n_trials }}">
+  {{ n_agent_runs }} runs<span class="dot">·</span>{{ n_trials }} trials
+</p>
+<p class="runs-glance" id="glance">
+  {%- if workspace %}<span>in <b>{{ workspace.label }}</b></span>{% endif -%}
+  <span><b>{{ launches|length }}</b> launch{{ '' if launches|length == 1 else 'es' }}</span>
+  {%- for s, n in states|dictsort %}<span class="st-{{ s }}"><b>{{ n }}</b> {{ s }}</span>{% endfor -%}
+  <span title="Launches whose nop and oracle controls behaved on every task">task checks <b>{{ n_checked }}</b> of {{ launches|length }}</span>
+</p>
+
+<div class="bar">
+  {% for k in ORDER %}{% if totals[k] %}
+    <button class="seg oc-{{ k }}" style="flex:{{ totals[k] }}" data-outcome="{{ k }}"
+            title="{{ LABELS[k] }}: {{ totals[k] }} — click to filter"></button>
+  {% endif %}{% endfor %}
+</div>
+<div class="legend">
+  {% for k in ORDER %}{% if totals[k] %}
+    <button class="chip oc-{{ k }}" data-outcome="{{ k }}"
+            title="Show runs containing a {{ LABELS[k]|lower }} trial">{{ LABELS[k] }} <b>{{ totals[k] }}</b></button>
+  {% endif %}{% endfor %}
+  {% set n_regr = jobs|map(attribute='n_regressions')|sum %}
+  {% if n_regr %}
+    <button class="chip regression-chip" data-outcome="regression"
+            title="Runs containing a patch that broke previously-passing tests">⚠ Broke tests <b>{{ n_regr }}</b></button>
+  {% endif %}
+  <button class="chip clear" id="clear-filter" hidden>Clear filter ×</button>
+</div>
+
+<div class="runs-views" role="group" aria-label="View">
+  <a class="rv{{ ' on' if view == 'launch' }}" href="?view=launch" data-view="launch" aria-pressed="{{ 'true' if view == 'launch' else 'false' }}">By launch</a>
+  <a class="rv{{ ' on' if view == 'all' }}" href="?view=all" data-view="all" aria-pressed="{{ 'true' if view == 'all' else 'false' }}">All runs</a>
+</div>
+
+{#- By launch: runs started together ran the same tasks. Each launch is one block - its task checks (the nop and oracle
+    controls), then its agents on one 0-100% scale, then the runs its record named that Harbor has not written yet. -#}
+<div id="view-launch" class="launches"{% if view != 'launch' %} hidden{% endif %}>
+  {% for g in launches %}{% set L = g.launch %}
+  <section class="launch" data-launch="{{ L.key }}" aria-label="Launch {{ L.title }}">
+    {% set by_runner = g.agents|map(attribute='job')|select|map(attribute='runner')|select|first %}
+    {% set words = g.agents|map(attribute='job')|select|map(attribute='runner_items')|select|first %}
+    <header class="launch-head">
+      <h2>{{ g.dataset_title if L.dataset else (L.name or g.dataset_title) }}{% if g.n_tasks %} · {{ g.n_tasks }} {% if words %}{{ words[0] if g.n_tasks == 1 else words[1] }}{% else %}task{{ '' if g.n_tasks == 1 else 's' }}{% endif %}{% endif %}</h2>
+      <span class="launch-id mono" title="{{ 'Launched together by one Run from the builder' if L.source == 'record' and not L.launch_ids else 'Shards of one launch, run on several machines' if L.launch_ids else 'Grouped: the same dataset, started within half an hour of the first' }}">{{ L.title }}</span>
+      <span class="launch-when">{% if L.started %}{{ L.started|dt }} · {% endif %}{{ L.job_ids|length + L.pending|length }} run{{ '' if (L.job_ids|length + L.pending|length) == 1 else 's' }}</span>
+    </header>
+    {# a runner's launch is checked by its own floor and ceiling, which are arms in its table #}
+    {% if not by_runner %}
+    {#- the controls themselves are rows at the top of the table; this line says what they add up to #}
+    <div class="launch-checks{{ ' none' if not g.controls }}">
+      <span class="lc-label">Task checks</span>
+      <span class="lc-verdict {{ 'ok' if g.checked else 'open' }}">{{ g.verdict or 'No nop or oracle ran with this launch: its tasks are not checked.' }}{% if g.feasibility %} <a href="{{ url_for('feasibility_page', job_id=g.feasibility) }}">Feasibility</a>{% endif %}</span>
+    </div>
+    {% endif %}
+    {% if g.agents or g.controls %}
+    <div class="launch-table">
+    <table class="launch-agents">
+      <thead><tr><th>Agent</th><th class="lh-state">State</th><th title="Solved ÷ trials that actually ran; the tick is the raw rate, solved ÷ all trials">Adjusted solve rate</th><th class="lh-mix">Outcomes</th><th class="num">Solved</th><th class="num lh-more">Tokens</th><th class="num lh-more">Cost</th><th class="num lh-more">Time</th><th></th></tr></thead>
+      <tbody>
+      {#- the task checks first: their verdict where an agent has its rate, never ranked, kept once they end #}
+      {% for r in g.controls if not by_runner %}{% set j = r.job %}{% set v = r.verdict %}
+      <tr class="la-control st-{{ r.state }}" data-control="{{ r.control }}" data-state="{{ v.state if v else 'pending' }}">
+        <td><div class="la-who"><span class="la-name"><a href="{{ url_for('job', job_id=r.job_id) }}">{{ r.control }}</a> <span class="la-kind">task check</span></span>
+          <small class="mono">{{ r.job_id }}</small></div></td>
+        <td class="lh-state"><span class="la-state {{ r.state|replace(' ', '-') }}"><i aria-hidden="true"></i>{{ r.state }}</span></td>
+        <td><div class="la-verdict control-verdict {{ v.state if v else 'pending' }}"><span class="lc-mark" aria-hidden="true">{{ '✓' if v and v.state == 'ok' else ('⚠' if v and v.state == 'warn' else '○') }}</span>
+          {%- if v %}<b>{{ v.label }}</b>{% else %}<span class="faint">{{ 'must reject every task' if r.control == 'nop' else 'must pass every task' }}</span>{% endif %}</div></td>
+        <td class="lh-mix">{% if j and j.trials %}<span class="la-mix" role="img" aria-label="{% for k in ORDER %}{% if j.counts[k] %}{{ LABELS[k] }} {{ j.counts[k] }}{{ ', ' if not loop.last }}{% endif %}{% endfor %}">{% for k in ORDER %}{% if j.counts[k] %}<span class="oc-{{ k }}" style="flex:{{ j.counts[k] }}"></span>{% endif %}{% endfor %}</span>{% else %}<span class="la-mix"></span>{% endif %}</td>
+        <td class="num"><span class="faint" title="A check on the tasks, not a score">—</span></td>
+        <td class="num lh-more">{% if j and (j.total_input_tokens or j.total_output_tokens) %}{{ (j.total_input_tokens + j.total_output_tokens)|tokens(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="num lh-more">{% if j and j.total_cost_usd is not none %}{{ j.total_cost_usd|usd(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="num lh-more">{% if j and j.duration_min %}{{ j.duration_min|runtime }}{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="la-go"><a href="{{ url_for('job', job_id=r.job_id) }}">Open →</a></td>
+      </tr>
+      {% endfor %}
+      {% for r in g.agents %}{% set j = r.job %}
+      <tr class="st-{{ r.state }}" data-outcomes="{% if j %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}">
+        <td><div class="la-who"><span class="la-name"><a href="{{ url_for('job', job_id=r.job_id) }}">{{ j.agent_label if j and j.agent_label else r.job_id[L.prefix|length - 1:] if L.prefix.endswith('*') and r.job_id.startswith(L.prefix[:-1]) else r.job_id }}</a>
+          {%- if j and j.runner %} {{ what_ran(j) }}{% elif j and j.agent_version %} <span class="la-ver mono">{{ j.agent_version }}</span>{% endif %}</span>
+          <small class="mono">{{ r.job_id }}</small></div></td>
+        <td class="lh-state"><span class="la-state {{ r.state|replace(' ', '-') }}"{% if r.state == 'not in this workspace' %} title="Its run ended, and Harbor's job for it is not under this workspace's roots"{% elif r.state == 'refused' %} title="Refused before it started: {{ r.why }}"{% endif %}><i aria-hidden="true"></i>{{ r.state }}</span></td>
+        <td>{% if j and j.scored_only %}
+          <div class="la-rate la-score" title="This benchmark gives a score and no pass or fail: the mean score{% if j.n_scored_parts %} over its {{ j.n_scored_parts }} scored{% endif %}, no solve rate"><b>{{ '%.2f'|format(j.mean_score) }}</b><span class="la-scale"><i style="width:{{ '%.1f'|format(100 * j.mean_score) }}%"></i></span></div>
+          {%- elif j and j.adjusted_solve_rate is not none %}
+          <div class="la-rate"><b>{{ j.adjusted_solve_rate|pct }}</b><span class="la-scale" title="Adjusted {{ j.adjusted_solve_rate|pct }} (the bar), raw {{ j.raw_solve_rate|pct }} (the tick)"><i style="width:{{ '%.1f'|format(100 * j.adjusted_solve_rate) }}%"></i><s style="left:{{ '%.1f'|format(100 * j.raw_solve_rate) }}%"></s></span></div>
+          {%- else %}<div class="la-rate na"><b>—</b><span class="la-scale"></span></div>{% endif %}
+          {%- if j and j.trials and not j.scored_only and j.counts.unknown and j.counts.unknown * 4 >= j.trials|length %}<span class="la-flag" title="Trials the classifier could not give an outcome: no verifier record, no exception">⚠ {{ j.counts.unknown }} of {{ j.trials|length }} have no verdict</span>{% endif %}</td>
+        <td class="lh-mix">{% if j and j.trials %}<span class="la-mix" role="img" aria-label="{% for k in ORDER %}{% if j.counts[k] %}{{ LABELS[k] }} {{ j.counts[k] }}{{ ', ' if not loop.last }}{% endif %}{% endfor %}">{% for k in ORDER %}{% if j.counts[k] %}<span class="oc-{{ k }}" style="flex:{{ j.counts[k] }}"></span>{% endif %}{% endfor %}</span>{% else %}<span class="la-mix"></span>{% endif %}</td>
+        <td class="num">{% if j and j.scored_only %}<span class="faint" title="Scored, not solved: no pass or fail in this benchmark">—</span>{% elif j %}{{ j.n_resolved }}<span class="faint">/{{ j.n_planned or j.trials|length }}</span>{% else %}<span class="faint">0{% if g.n_tasks %}/{{ g.n_tasks }}{% endif %}</span>{% endif %}</td>
+        <td class="num lh-more">{% if j and (j.total_input_tokens or j.total_output_tokens) %}{{ (j.total_input_tokens + j.total_output_tokens)|tokens(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="num lh-more">{% if j and j.total_cost_usd is not none %}{{ j.total_cost_usd|usd(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="num lh-more">{% if j and j.duration_min %}{{ j.duration_min|runtime }}{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="la-go">{% if r.state != 'not in this workspace' %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ 'Open to resume' if r.state == 'paused' else 'Open →' }}</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+    <footer class="launch-foot">
+      <span>{{ g.summary or 'controls only' }}</span>
+      {% if g.paused %}<span class="launch-paused">Paused after a failure: <a href="{{ url_for('job', job_id=g.paused) }}">continue or stop</a></span>{% endif %}
+      <span class="header-spacer"></span>
+      {% if g.recipe %}<a href="{{ url_for('new_run', run=g.recipe) }}">Open this launch's recipe</a>{% endif %}
+      {% if g.compare|length >= 2 %}<a class="btn sm" href="{{ url_for('compare', job=g.compare) }}">Compare these {{ g.compare|length }}</a>
+      {% elif g.agents %}<span class="faint" title="Two finished agents with a verdict are needed">Compare needs two finished agents</span>{% endif %}
+    </footer>
+  </section>
+  {% endfor %}
+</div>
+
+<div id="view-all"{% if view != 'all' %} hidden{% endif %}>
+<div class="table-tools">
+  <div class="menu-wrap">
+    <button class="btn ghost sm" id="col-btn" aria-haspopup="true" aria-expanded="false">▦ Columns</button>
+  </div>
+  <div class="menu-wrap">
+    <button class="btn ghost sm" id="density-btn" aria-pressed="false" title="Fit more columns on screen">⇔ Compact</button>
+    <div class="menu" id="col-menu" hidden>
+      {% for col, label in COLUMNS %}
+      <label><input type="checkbox" data-col="{{ col }}"> {{ label }}</label>
+      {% endfor %}
+    </div>
+  </div>
+  <span class="table-note" id="filter-note"></span>
+  <span class="header-spacer"></span>
+  <form action="{{ url_for('compare') }}" method="get" id="compare-form" class="compare-bar">
+    <span class="table-note" id="pick-note">Tick two or more runs to compare</span>
+    <button class="btn sm" type="submit" id="compare-btn" disabled>Compare</button>
+  </form>
+</div>
+
+<div class="table-wrap">
+<table class="grid sortable" id="runs">
+  <thead>
+    <tr>
+      <th class="pick-col">
+        <input type="checkbox" id="pick-all" aria-label="Select all runs for comparison"
+               title="Select / unselect all">
+      </th>
+      <th data-col="run" data-type="text">Run</th>
+      <th data-col="agent" data-type="text">Agent{{ filter_button('agent') }}</th>
+      <th data-col="version" data-type="text" title="The agent's version as the run recorded it, or the runner and its commit">Version</th>
+      <th data-col="start" data-type="num">Start</th>
+      <th data-col="end" data-type="num">End</th>
+      <th data-col="time" data-type="num" class="num">Time</th>
+      <th data-col="model" data-type="text">
+        Model{{ filter_button('model') }}
+      </th>
+      <th data-col="dataset" data-type="text">
+        Dataset{{ filter_button('dataset') }}
+      </th>
+      <th data-col="mix" data-type="num">Mix</th>
+      <th data-col="trials" data-type="num" class="num">Trials</th>
+      <th data-col="solved" data-type="num" class="num">Solved</th>
+      <th data-col="raw" data-type="num" class="num" title="Solved ÷ all trials">Raw</th>
+      <th data-col="adjusted" data-type="num" class="num"
+          title="Solved ÷ trials that actually ran (excludes infra failures)">Adjusted</th>
+      <th data-col="infra" data-type="num" class="num"
+          title="Trials that never got a fair attempt — rate limits and setup failures. Excluded from Adjusted.">Infra errors</th>
+      <th data-col="broke" data-type="num" class="num"
+          title="Trials whose patch broke previously-passing tests">Broke tests</th>
+      <th data-col="tokens" data-type="num" class="num"
+          title="Input + output tokens across the run">Tokens</th>
+      <th data-col="cost" data-type="num" class="num"
+          title="Only recorded by agents that report it">Cost</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for j in jobs %}
+    {# A control row carries no outcomes to filter by: the chips count the
+       agents' trials, and a nop's rejections are not failed verifications. #}
+    {% set v = verdicts[j.job_id] %}
+    <tr data-outcomes="{% if not v %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"
+        data-f-dataset="{{ j.dataset }}" data-f-model="{{ j.model_name }}"
+        data-f-agent="{{ j.agent_label }}"{% if v %} class="control-row" data-control="{{ v.control }}" data-state="{{ v.state }}"{% endif %}>
+      <td class="pick-col"><input type="checkbox" class="pick-run" value="{{ j.job_id }}"
+             aria-label="Compare {{ j.job_id }}"></td>
+      <td data-col="run"><a href="{{ url_for('job', job_id=j.job_id) }}">{{ j.job_id }}</a>
+        {%- if j.is_preparing %} <span class="badge"
+          title="Launched: Harbor has written this run's configuration and nothing else yet. No trial has started; the row will change on its own.">preparing</span>
+        {%- elif j.is_running and ended[j.job_id] %} <span class="badge"
+          title="The run that wrote this job was {{ ended[j.job_id][0] }} at {{ ended[j.job_id][1].strftime('%H:%M:%S') }}Z; Harbor never closed it, so its record still names {{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending — those trials will not run">{{ ended[j.job_id][0] }}</span>
+        {%- elif j.is_running %} <span class="badge warn"
+          title="{{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending — this run is not finished; its numbers are partial">running</span>{% endif %}</td>
+      <td data-col="agent"><span>{{ j.agent_label or '—' }}</span>
+        {%- if j.is_control %} <span class="chip-control"
+          title="Harbor control: applies the gold patch or does nothing. Never calls a model.">control</span>{% endif %}</td>
+      <td data-col="version">{% if j.runner %}{{ what_ran(j) }}{% elif j.agent_version %}<span class="mono small">{{ j.agent_version }}</span>{% else %}<span class="faint">—</span>{% endif %}</td>
+      <td data-col="start" data-sort="{{ j.started_at|ts }}" class="faint nowrap">{{ j.started_at|dt }}</td>
+      <td data-col="end" data-sort="{{ j.finished_at|ts }}" class="faint nowrap">{{ j.finished_at|dt }}</td>
+      <td data-col="time" data-sort="{{ j.duration_min or -1 }}" class="num faint">
+        {%- if j.duration_min %}{{ j.duration_min|runtime }}{% else %}—{% endif -%}
+      </td>
+      <td data-col="model" class="mono faint">{{ j.model_name }}</td>
+      <td data-col="dataset" data-sort="{{ j.dataset|dsname }}" title="{{ j.dataset }}">{{ j.dataset|dsname }}</td>
+      {# A control's mix is its verdict in the control colour — behaved
+         against not — and sorts below every agent row (-1) so the column
+         orders agents by what they solved and leaves the controls apart. #}
+      {% if v %}
+      <td data-col="mix" data-sort="-1">
+        <span class="minibar control-bar" title="{{ v.control }}: {{ v.label }}">
+          {%- if v.n_behaved %}<span class="seg ctl-ok" style="flex:{{ v.n_behaved }}"></span>{% endif -%}
+          {%- if v.n - v.n_behaved %}<span class="seg ctl-warn" style="flex:{{ v.n - v.n_behaved }}"></span>{% endif -%}
+        </span>
+      </td>
+      {% else %}
+      <td data-col="mix" data-sort="{{ j.n_resolved }}">
+        <span class="minibar" title="{% for k in ORDER %}{% if j.counts[k] %}{{ LABELS[k] }}: {{ j.counts[k] }}&#10;{% endif %}{% endfor %}">
+          {%- for k in ORDER %}{% if j.counts[k] %}<span class="seg oc-{{ k }}" style="flex:{{ j.counts[k] }}"></span>{% endif %}{% endfor -%}
+        </span>
+      </td>
+      {% endif %}
+      {# present/planned exposes a partial run; the tooltip carries Harbor's
+         retry and error counters, which have nowhere else to live. #}
+      <td data-col="trials" data-sort="{{ j.trials|length }}" class="num"
+          title="{{ j.trials|length }} on disk{% if j.n_planned %} of {{ j.n_planned }} planned{% endif %}{% if j.n_retries %} · {{ j.n_retries }} retried{% endif %}{% if j.n_errored_trials %} · {{ j.n_errored_trials }} errored{% endif %}">
+        {{- j.trials|length }}{% if j.n_planned and j.n_planned != j.trials|length %}<small class="faint">/{{ j.n_planned }}</small>{% endif -%}
+      </td>
+      {% if v %}
+      {# A control has a verdict, not a score: Solved says whether it behaved
+         and the two rates show absence with the verdict in their tooltip.
+         All three sort at -2 — below the agents and below a run nothing
+         scored (-1) — so the columns keep the controls apart. #}
+      {% set ctl_title = v.control ~ " is a Harbor control: it must be " ~ v.expected ~ " on every task — " ~ v.label ~ ". Not a score." %}
+      <td data-col="solved" data-sort="-2" class="control-verdict {{ v.state }}" title="{{ ctl_title }}">{{ v.label }}</td>
+      <td data-col="raw" data-sort="-2" class="num faint" title="{{ ctl_title }}">—</td>
+      <td data-col="adjusted" data-sort="-2" class="num faint" title="{{ ctl_title }}">—</td>
+      {% elif j.scored_only %}
+      {# A benchmark that gives a score and no pass or fail: the mean score where the rate would be, and nothing solved #}
+      {% set score_title = "This benchmark gives a score and no pass or fail: the mean score" ~ (" over its " ~ j.n_scored_parts ~ " scored" if j.n_scored_parts else "") ~ ", no solve rate" %}
+      <td data-col="solved" data-sort="-1" class="num faint" title="{{ score_title }}">—</td>
+      <td data-col="raw" data-sort="-1" class="num faint" title="{{ score_title }}">—</td>
+      <td data-col="adjusted" data-sort="{{ j.mean_score }}" class="num strong" title="{{ score_title }}">{{ '%.2f'|format(j.mean_score) }}</td>
+      {% else %}
+      <td data-col="solved" data-sort="{{ j.n_resolved }}" class="num">{{ j.n_resolved }}</td>
+      {# A run nothing scored (a standalone trajectory, a span export) has no
+         rate, not a rate of zero: it shows absence and sorts below a measured 0%. #}
+      <td data-col="raw" data-sort="{{ -1 if j.raw_solve_rate is none else j.raw_solve_rate }}" class="num faint"
+          {%- if j.raw_solve_rate is none %} title="No trial in this run carries a verdict"{% endif %}>{{ j.raw_solve_rate|pct }}</td>
+      <td data-col="adjusted" data-sort="{{ -1 if j.adjusted_solve_rate is none else j.adjusted_solve_rate }}" class="num {{ 'faint' if j.adjusted_solve_rate is none else 'strong' }}"
+          {%- if j.adjusted_solve_rate is none %} title="No trial in this run carries a verdict"{% endif %}>{{ j.adjusted_solve_rate|pct }}</td>
+      {% endif %}
+      {# Zero infra errors is a measured fact, and a good one — every trial has
+         an outcome, so the count is always knowable. #}
+      <td data-col="infra" data-sort="{{ j.n_infra }}" class="num {% if j.n_infra %}warn{% else %}faint{% endif %}">{{ j.n_infra }}</td>
+      {# Zero regressions is only a fact for a benchmark that checks for them.
+         Where none were reported the column shows absence, not a reassuring 0. #}
+      <td data-col="broke" data-sort="{{ j.n_regressions }}" class="num">
+        {%- if j.n_regressions %}<span class="badge danger" title="Broke previously-passing tests">⚠ {{ j.n_regressions }}</span>
+        {%- elif j.reports_regressions %}<span class="faint">0</span>
+        {%- else %}<span class="faint" title="This benchmark does not report previously-passing tests">—</span>{% endif -%}
+      </td>
+      <td data-col="tokens" data-sort="{{ j.total_input_tokens + j.total_output_tokens }}"
+          class="num faint"
+          title="in {{ j.total_input_tokens }} · cached {{ j.total_cache_tokens }} · out {{ j.total_output_tokens }}">
+        {{ (j.total_input_tokens + j.total_output_tokens)|tokens(j.kind) }}</td>
+      {# A control's real $0.00 sorts as zero; an unmeasured agent sorts last. #}
+      <td data-col="cost" data-sort="{{ j.total_cost_usd if j.total_cost_usd is not none else (0 if j.is_control else -1) }}"
+          class="num {{ '' if (j.total_cost_usd or j.is_control) else 'faint' }}">{{ j.total_cost_usd|usd(j.kind) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="empty-note" id="empty-note" hidden>No runs contain that outcome.</p>
+</div>
+
+{% if datasets %}
+<h2>Datasets in these runs</h2>
+<div class="datasets">
+  {% for d in datasets %}
+  <section class="dataset">
+    <div class="dataset-head">
+      <h3 class="dataset-name">{{ d.info.title }}</h3>
+      <span class="mono faint">{{ d.name }}</span>
+      <span class="header-spacer"></span>
+      <span class="dataset-count">{{ d.runs }} run{{ '' if d.runs == 1 else 's' }}<span class="dot">·</span>{{ d.trials }} trial{{ '' if d.trials == 1 else 's' }}</span>
+    </div>
+    <p>{{ d.info.what }}</p>
+    {% if d.info.scored %}<p><span class="lede">How it's scored</span> {{ d.info.scored }}</p>{% endif %}
+    {% if d.info.note %}<p class="muted">{{ d.info.note }}</p>{% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% endif %}
+
+<script>
+(() => {
+  const table = document.getElementById('runs');
+  let rows = [...table.tBodies[0].rows];
+  // what the server last sent for each piece, set aside before the filters and columns below change the page
+  const sent = new Map([...document.querySelectorAll('.launch')].map(l => [l.dataset.launch, l.outerHTML]));
+  sent.set('tbody', table.tBodies[0].innerHTML);
+  const counts = document.getElementById('counts');
+  const note = document.getElementById('filter-note');
+  const emptyNote = document.getElementById('empty-note');
+  const clearBtn = document.getElementById('clear-filter');
+  const HIDDEN_BY_DEFAULT = ['end', 'model', 'dataset', 'raw'];
+
+  const colBtn = document.getElementById('col-btn');
+  const colMenu = document.getElementById('col-menu');
+  const stored = JSON.parse(localStorage.getItem('runs.cols') || 'null');
+
+  function setCol(col, on) {
+    table.querySelectorAll(`[data-col="${col}"]`).forEach(el => el.style.display = on ? '' : 'none');
+  }
+  const showCols = () => colMenu.querySelectorAll('input[data-col]').forEach(cb => setCol(cb.dataset.col, cb.checked));
+  colMenu.querySelectorAll('input[data-col]').forEach(cb => {
+    const col = cb.dataset.col;
+    cb.checked = stored ? stored.includes(col) : !HIDDEN_BY_DEFAULT.includes(col);
+    setCol(col, cb.checked);
+    cb.addEventListener('change', () => {
+      setCol(col, cb.checked);
+      localStorage.setItem('runs.cols', JSON.stringify(
+        [...colMenu.querySelectorAll('input:checked')].map(i => i.dataset.col)));
+    });
+  });
+  const densityBtn = document.getElementById('density-btn');
+  const setDensity = on => {
+    table.classList.toggle('compact', on);
+    densityBtn.setAttribute('aria-pressed', String(on));
+    densityBtn.textContent = on ? '⇔ Comfortable' : '⇔ Compact';
+  };
+  setDensity(localStorage.getItem('runs.compact') === '1');
+  densityBtn.addEventListener('click', () => {
+    const on = !table.classList.contains('compact');
+    setDensity(on);
+    localStorage.setItem('runs.compact', on ? '1' : '0');
+  });
+
+  colBtn.addEventListener('click', () => {
+    const open = colMenu.hidden;
+    colMenu.hidden = !open;
+    colBtn.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', e => {
+    if (!colMenu.hidden && !colMenu.contains(e.target) && e.target !== colBtn) {
+      colMenu.hidden = true;
+      colBtn.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  let sortCol = null, sortDir = 1;
+  const sortRows = () => {
+    if (sortCol === null) return;
+    const type = table.tHead.rows[0].cells[sortCol].dataset.type || 'text';
+    rows.sort((a, b) => {
+      const x = key(a, sortCol, type), y = key(b, sortCol, type);
+      return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+    }).forEach(r => table.tBodies[0].appendChild(r));
+  };
+  const key = (row, idx, type) => {
+    const cell = row.cells[idx];
+    const raw = cell.dataset.sort ?? cell.textContent.trim();
+    return type === 'num' ? parseFloat(raw) || 0 : raw.toLowerCase();
+  };
+  [...table.tHead.rows[0].cells].forEach((th, idx) => {
+    th.tabIndex = 0;
+    const sort = () => {
+      const type = th.dataset.type || 'text';
+      sortDir = sortCol === idx ? -sortDir : (type === 'num' ? -1 : 1);
+      sortCol = idx;
+      [...table.tHead.rows[0].cells].forEach(c => c.removeAttribute('data-sorted'));
+      th.dataset.sorted = sortDir > 0 ? 'asc' : 'desc';
+      sortRows();
+    };
+    th.addEventListener('click', sort);
+    th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sort(); } });
+  });
+
+  /* ---- filters: outcome (from the bar/chips) + per-column value menus ----
+     A run matches an outcome if ANY of its trials had it. Column filters are
+     sets of allowed values; all must pass. */
+  let active = null;
+  const colFilters = {};   // col -> Set of allowed values, or absent for "all"
+
+  function applyFilter() {
+    let shown = 0;
+    rows.forEach(r => {
+      let hit = !active || r.dataset.outcomes.split(' ').includes(active);
+      if (hit) {
+        for (const [col, allowed] of Object.entries(colFilters)) {
+          if (allowed && !allowed.has(r.getAttribute('data-f-' + col))) { hit = false; break; }
+        }
+      }
+      r.hidden = !hit;
+      if (hit) shown++;
+    });
+    document.querySelectorAll('[data-outcome]').forEach(el =>
+      el.classList.toggle('active', el.dataset.outcome === active));
+    // the launch view's rows: dimmed rather than hidden, so a launch keeps its shape
+    document.querySelectorAll('.launch-agents tbody tr').forEach(r =>
+      r.classList.toggle('dim', !!active && !(r.dataset.outcomes || '').split(' ').includes(active)));
+    const filtered = active || Object.values(colFilters).some(Boolean);
+    clearBtn.hidden = !filtered;
+    emptyNote.hidden = shown > 0;
+    note.textContent = filtered ? `${shown} of ${rows.length} runs` : '';
+    counts.textContent = filtered
+      ? `${shown} of ${counts.dataset.runs} runs shown`
+      : `${counts.dataset.runs} runs · ${counts.dataset.trials} trials`;
+    syncPicks();   // the header checkbox tracks visible rows only
+  }
+  // on the document: the bar and the chips are replaced as the runs move
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-outcome]');
+    if (!el) return;
+    active = active === el.dataset.outcome ? null : el.dataset.outcome;
+    applyFilter();
+  });
+
+  document.querySelectorAll('.filter-menu').forEach(menu => {
+    const col = menu.dataset.filterMenu;
+    const boxes = () => [...menu.querySelectorAll('input[data-value]')];
+    const btn = document.querySelector(`.filter-btn[data-filter="${col}"]`);
+
+    const sync = () => {
+      const on = boxes().filter(b => b.checked).map(b => b.dataset.value);
+      // All checked means "no filter" — keeps the active marker honest.
+      colFilters[col] = on.length === boxes().length ? null : new Set(on);
+      btn.classList.toggle('on', Boolean(colFilters[col]));
+      applyFilter();
+    };
+    menu.addEventListener('change', sync);
+    menu.addEventListener('click', e => {
+      if (e.target.closest('[data-all]')) { boxes().forEach(b => b.checked = true); sync(); }
+      if (e.target.closest('[data-none]')) { boxes().forEach(b => b.checked = false); sync(); }
+    });
+
+    btn.addEventListener('click', e => {
+      e.stopPropagation();          // the th itself sorts; don't sort on filter
+      const open = menu.hidden;
+      document.querySelectorAll('.filter-menu').forEach(m => m.hidden = true);
+      menu.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+    });
+    menu.addEventListener('click', e => e.stopPropagation());
+    document.addEventListener('click', () => {
+      menu.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    });
+  });
+
+  /* ---- the two views, switched in place and kept in the address ---- */
+  document.querySelectorAll('.runs-views [data-view]').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    const v = a.dataset.view;
+    document.querySelectorAll('.runs-views [data-view]').forEach(x => { const on = x === a; x.classList.toggle('on', on); x.setAttribute('aria-pressed', String(on)); });
+    document.getElementById('view-launch').hidden = v !== 'launch';
+    document.getElementById('view-all').hidden = v !== 'all';
+    const u = new URL(location.href); u.searchParams.set('view', v); history.replaceState(null, '', u);
+  }));
+
+  const form = document.getElementById('compare-form');
+  const compareBtn = document.getElementById('compare-btn');
+  const pickNote = document.getElementById('pick-note');
+  let picks = [...document.querySelectorAll('.pick-run')];
+
+  const pickAll = document.getElementById('pick-all');
+  const selectable = () => picks.filter(p => !p.closest('tr').hidden);
+
+  function syncPicks() {
+    const on = picks.filter(p => p.checked);
+    compareBtn.disabled = on.length < 2;
+    pickNote.textContent = on.length
+      ? `${on.length} selected`
+      : 'Tick two or more runs to compare';
+    // Header box reflects the visible rows: all, none, or partial.
+    const vis = selectable();
+    const hit = vis.filter(p => p.checked).length;
+    pickAll.checked = vis.length > 0 && hit === vis.length;
+    pickAll.indeterminate = hit > 0 && hit < vis.length;
+    // Rebuild the querystring: ?job=…&job=… in the order they were ticked.
+    form.querySelectorAll('input[name="job"]').forEach(i => i.remove());
+    on.forEach(p => {
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = 'job';
+      hidden.value = p.value;
+      form.appendChild(hidden);
+    });
+  }
+  table.addEventListener('change', e => { if (e.target.matches('.pick-run')) syncPicks(); });
+
+  // Select/unselect all — scoped to rows the current filter leaves visible.
+  pickAll.addEventListener('change', () => {
+    selectable().forEach(p => p.checked = pickAll.checked);
+    syncPicks();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    active = null;
+    document.querySelectorAll('.filter-menu').forEach(menu => {
+      menu.querySelectorAll('input[data-value]').forEach(b => b.checked = true);
+      colFilters[menu.dataset.filterMenu] = null;
+    });
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('on'));
+    applyFilter();
+  });
+
+  /* ---- the list keeps up by itself ----
+     A run launched elsewhere shows up here on its own: every few seconds the page
+     asks what the job roots look like now and, when that changes (a new directory,
+     a feed growing, a result landing), reads itself again and puts in only what
+     moved. No reload: the scroll, the view, the filters, the sort and the ticks
+     stay. A hidden tab does not ask, and a selection is left to be copied. */
+  function refreshLaunches(fresh) {
+    const wrap = document.getElementById('view-launch');
+    const coming = [...fresh.querySelectorAll('#view-launch > .launch')], keys = new Set(coming.map(l => l.dataset.launch));
+    wrap.querySelectorAll(':scope > .launch').forEach(l => { if (!keys.has(l.dataset.launch)) l.remove(); });
+    let before = null;
+    coming.forEach(l => {
+      const name = l.dataset.launch, html = l.outerHTML;
+      let el = wrap.querySelector(`:scope > .launch[data-launch="${CSS.escape(name)}"]`);
+      if (el && sent.get(name) !== html) { el.replaceWith(l); el = l; }
+      el = el || l;
+      sent.set(name, html);
+      const next = before ? before.nextElementSibling : wrap.firstElementChild;
+      if (next !== el) wrap.insertBefore(el, next);
+      before = el;
+    });
+  }
+  function refreshRows(fresh) {
+    document.querySelectorAll('.filter-menu').forEach(menu => {
+      const col = menu.dataset.filterMenu;
+      const next = fresh.querySelector(`[data-filter-menu="${col}"]`);
+      if (!next) return;
+      menu.innerHTML = next.innerHTML;
+      menu.querySelectorAll('input[data-value]').forEach(b => {
+        b.checked = !colFilters[col] || colFilters[col].has(b.dataset.value);
+      });
+    });
+    const html = fresh.querySelector('#runs tbody').innerHTML;
+    if (sent.get('tbody') === html) return;
+    sent.set('tbody', html);
+    const ticked = picks.filter(p => p.checked).map(p => p.value);
+    table.tBodies[0].innerHTML = html;
+    rows = [...table.tBodies[0].rows];
+    picks = [...document.querySelectorAll('.pick-run')];
+    picks.forEach(p => { p.checked = ticked.includes(p.value); });
+    showCols();
+    sortRows();
+  }
+  function refreshHead(fresh) {
+    document.getElementById('glance').replaceWith(fresh.getElementById('glance'));
+    document.querySelector('.bar').replaceWith(fresh.querySelector('.bar'));
+    const legend = document.querySelector('.legend');
+    legend.querySelectorAll('.chip:not(.clear)').forEach(c => c.remove());
+    clearBtn.before(...fresh.querySelectorAll('.legend .chip:not(.clear)'));
+    const now = fresh.getElementById('counts');
+    counts.dataset.runs = now.dataset.runs;
+    counts.dataset.trials = now.dataset.trials;
+  }
+  let seen = {{ pulse | tojson }}, asking = false;
+  setInterval(async () => {
+    if (asking || document.hidden || !getSelection().isCollapsed) return;
+    asking = true;
+    try {
+      const pulse = await fetch({{ url_for('runs_pulse') | tojson }}, {cache: 'no-store'});
+      const {signature} = pulse.ok ? await pulse.json() : {signature: seen};
+      if (signature !== seen) {
+        const page = await fetch(location.href, {cache: 'no-store'});
+        const fresh = new DOMParser().parseFromString(await page.text(), 'text/html');
+        if (!page.ok || !fresh.getElementById('view-launch')) return location.reload();   // no longer the list: the workspace emptied
+        refreshLaunches(fresh);
+        refreshRows(fresh);
+        refreshHead(fresh);
+        applyFilter();
+        seen = signature;
+      }
+    } catch {}
+    asking = false;
+  }, 3000);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,63 @@
+{
+ "schema_version": "harbor-trace-v1",
+ "producer": "nullius relay, sums",
+ "trial_name": "t2",
+ "agent": {
+  "name": "baseline",
+  "version": ""
+ },
+ "clock": {
+  "source": "the relay timed each call it forwarded"
+ },
+ "spans": [
+  {
+   "span_id": "t2",
+   "name": "sums.task",
+   "kind": "session",
+   "start_ns": 1002000000000,
+   "end_ns": 1002500000000,
+   "duration_ns": 500000000,
+   "timing_quality": "measured",
+   "source": "relay",
+   "attributes": {
+    "item": "t2"
+   },
+   "children": [
+    {
+     "span_id": "t2-reader1",
+     "parent_span_id": "t2",
+     "name": "reader",
+     "kind": "llm_request",
+     "start_ns": 1002000000000,
+     "end_ns": 1002500000000,
+     "duration_ns": 500000000,
+     "timing_quality": "measured",
+     "source": "relay",
+     "attributes": {
+      "gen_ai.request.model": "m"
+     },
+     "tokens": {
+      "input_tokens": 40,
+      "output_tokens": 2
+     },
+     "content": {
+      "output": "{\"0\": \"6\"}"
+     }
+    }
+   ]
+  }
+ ],
+ "totals": {
+  "wall_ns": 500000000,
+  "llm_ns": 500000000,
+  "tool_ns": 0,
+  "reasoning_ns": 0,
+  "idle_ns": 0,
+  "span_count": 2,
+  "measured_span_count": 1,
+  "tokens": {
+   "input_tokens": 40,
+   "output_tokens": 2
+  }
+ }
+}

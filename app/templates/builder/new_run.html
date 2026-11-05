@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Run builder — Nullius{% endblock %}
+{% block crumb %}/ run builder{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='builder/command-builder.css') }}">{% endblock %}
+{% block body %}
+<div id="nullius-builder" data-agent-marks="{{ agent_marks|tojson|forceescape }}">
+  <header class="nb-heading">
+    <div><h1>Set up the next experiment.</h1><p>Choose what to test. Keep every setting explicit.</p></div>
+    <div class="nb-headingactions">
+      <button class="nb-button" id="nb-saved-toggle" aria-haspopup="dialog" aria-controls="nb-saved">Saved recipes</button>
+      <button class="nb-button" id="nb-import">Import recipe</button>
+      <button class="nb-button" id="nb-save">Save recipe</button>
+      <button class="nb-button" id="nb-startover" title="Forget the recipe on this page and start from the defaults">Start over</button>
+      <input type="file" accept=".json,application/json" id="nb-import-file" hidden aria-label="Import a recipe JSON file">
+    </div>
+  </header>
+  {#- a message is a toast at the bottom left: it goes after a few seconds, its bar counting them, or on its ×.
+       A popover, so it shows above the Saved recipes dialog too -#}
+  <div id="nb-status" class="nb-toast" role="status" aria-live="polite" popover="manual"><span class="nb-toast-text"></span><button type="button" class="nb-toast-close" aria-label="Dismiss">×</button><span class="nb-toast-bar" aria-hidden="true"></span></div>
+  <dialog id="nb-saved" class="nb-dialog nb-saved" aria-labelledby="nb-saved-title">
+    <div class="nb-dialoghead"><h2 id="nb-saved-title">Saved recipes</h2><button type="button" class="nb-dialogclose" id="nb-saved-close" aria-label="Close">×</button></div>
+    <div id="nb-saved-list"></div>
+  </dialog>
+  <dialog id="nb-save-dialog" class="nb-dialog" aria-labelledby="nb-save-title">
+    <form id="nb-save-form">
+      <div class="nb-kicker">Your experiment</div>
+      <h2 id="nb-save-title">Give this recipe a name.</h2>
+      <p class="nb-note">A name you will recognise in your saved recipes.</p>
+      <label class="nb-field" for="nb-recipe-title">Recipe name
+        <input id="nb-recipe-title" type="text" required maxlength="80" autocomplete="off" placeholder="driver vs reference">
+      </label>
+      <p class="nb-note" id="nb-save-message" aria-live="polite"></p>
+      <div class="nb-dialogactions"><button class="nb-button" id="nb-save-cancel" type="button">Cancel</button><button class="nb-button nb-primary" id="nb-save-submit" type="submit">Save recipe</button></div>
+    </form>
+  </dialog>
+  <nav class="nb-steps" aria-label="Recipe sections"></nav>
+  <div class="nb-layout">
+    <section class="nb-editor" aria-label="Recipe configuration">
+      <div id="nb-form"></div>
+      <footer class="nb-bottom"><span></span><div><button class="nb-button" id="nb-back">Back</button> <button class="nb-button nb-primary" id="nb-next">Dataset →</button></div></footer>
+    </section>
+
+  </div>
+  <datalist id="nb-models">{% for model in builder_data.models %}<option value="{{ model }}"></option>{% endfor %}</datalist>
+  <datalist id="nb-paths">{% for path in builder_data.seenLocal %}<option value="{{ path }}"></option>{% endfor %}</datalist>
+  <datalist id="nb-registry">{% for dataset in builder_data.datasets if dataset.registry %}<option value="{{ dataset.registry }}">{{ dataset.title }}</option>{% endfor %}{% for name in builder_data.seenRegistry %}<option value="{{ name }}"></option>{% endfor %}</datalist>
+  <noscript><p class="nb-notice">Enable JavaScript to build a recipe. Nothing runs from this page.</p></noscript>
+</div>
+<script id="nb-schema" type="application/json">{{ builder_data|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='builder/command-builder-core.js') }}"></script>
+<script src="{{ url_for('static', filename='builder/command-builder.js') }}"></script>
+<script src="{{ url_for('static', filename='builder/model-picker.js') }}"></script>
+{% endblock %}

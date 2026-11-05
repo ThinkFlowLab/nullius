@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "harness": "harbor",
+  "name": "harbor-terminal-bench-limits",
+  "title": "Terminal-Bench 2.0 · limits and repeats",
+  "benchmark": "terminal-bench",
+  "source": "registry",
+  "dataset": "terminal-bench@2.0",
+  "path": "",
+  "generatorRoot": "",
+  "agents": [
+    "custom-0"
+  ],
+  "customAgents": [
+    "my_agent:MyAgent"
+  ],
+  "model": "openai/test-model",
+  "userModel": "",
+  "evalModel": "",
+  "keyEnv": "API_TOKEN",
+  "urlEnv": "API_URL",
+  "tasks": 5,
+  "concurrency": 2,
+  "retries": 1,
+  "timeoutMultiplier": 2,
+  "agentMinutes": "",
+  "attempts": 3,
+  "setupTimeoutMultiplier": "",
+  "verifierTimeoutMultiplier": 1.5,
+  "buildTimeoutMultiplier": "",
+  "harborDev": "",
+  "include": "",
+  "output": "jobs",
+  "where": "local",
+  "params": {
+    "mcp_timeout_s": 300
+  },
+  "custom": [
+    {
+      "scope": "environment",
+      "key": "memory",
+      "type": "string",
+      "value": "8g"
+    },
+    {
+      "scope": "harness",
+      "key": "quiet",
+      "type": "flag",
+      "value": ""
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+ "job": "prep-x2",
+ "now": "2026-09-14T08:00:20Z",
+ "state": "preparing",
+ "launched_at": "2026-09-14T08:00:00Z",
+ "preparing": {
+  "stage": "image",
+  "since": "2026-09-14T08:00:12Z",
+  "elapsed_sec": 8.0
+ },
+ "started_at": null,
+ "finished_at": null,
+ "running": false,
+ "n_concurrent": 2,
+ "wall_sec": null,
+ "budget": null,
+ "agents": [
+  "my-agent"
+ ],
+ "counts": {
+  "total": 2,
+  "running": 0,
+  "pending": 2,
+  "completed": 0,
+  "resolved": 0,
+  "unresolved": 0,
+  "errored": 0,
+  "cancelled": 0
+ },
+ "mean_reward": null,
+ "totals": {
+  "n_input_tokens": null,
+  "n_cache_tokens": null,
+  "n_output_tokens": null,
+  "cost_usd": null
+ },
+ "tokens_per_sec": null,
+ "elapsed_sec": 20.0,
+ "eta_sec": null,
+ "trials": [],
+ "lanes": [
+  {
+   "agent": "my-agent",
+   "trials": [],
+   "counts": {
+    "total": 0,
+    "running": 0,
+    "pending": 0,
+    "completed": 0,
+    "resolved": 0,
+    "unresolved": 0,
+    "errored": 0,
+    "cancelled": 0
+   },
+   "mean_reward": null,
+   "totals": {
+    "n_input_tokens": null,
+    "n_cache_tokens": null,
+    "n_output_tokens": null,
+    "cost_usd": null
+   },
+   "wins": 0
+  }
+ ],
+ "winners": [],
+ "tail": [
+  {
+   "ts": "2026-09-14T08:00:00Z",
+   "seq": 1,
+   "job": "prep-x2",
+   "trial": null,
+   "event": "job.prepare",
+   "stage": "dataset",
+   "n_total": 2,
+   "n_concurrent": 2,
+   "agents": [
+    "my-agent"
+   ],
+   "tasks": [
+    "hello-world",
+    "hello-user"
+   ]
+  },
+  {
+   "ts": "2026-09-14T08:00:12Z",
+   "seq": 2,
+   "job": "prep-x2",
+   "trial": null,
+   "event": "job.prepare",
+   "stage": "image"
+  }
+ ],
+ "notices": []
+}

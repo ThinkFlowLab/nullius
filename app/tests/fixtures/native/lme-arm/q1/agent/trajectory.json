@@ -1,0 +1,36 @@
+{
+ "schema_version": "ATIF-v1.6",
+ "session_id": "lme-arm/q1",
+ "agent": {
+  "name": "oracle",
+  "model_name": "openai/gpt-4o-2024-08-06"
+ },
+ "steps": [
+  {
+   "step_id": 1,
+   "timestamp": "1970-01-01T00:16:42+00:00",
+   "source": "user",
+   "message": "History Chats: ...\nQuestion: Which car did I buy?\nAnswer:"
+  },
+  {
+   "step_id": 2,
+   "timestamp": "1970-01-01T00:16:42.500000+00:00",
+   "source": "agent",
+   "model_name": "openai/gpt-4o-2024-08-06",
+   "message": "h",
+   "metrics": {
+    "prompt_tokens": 120,
+    "completion_tokens": 8,
+    "cached_tokens": 60,
+    "cost_usd": 0.0004
+   }
+  }
+ ],
+ "final_metrics": {
+  "total_prompt_tokens": 120,
+  "total_completion_tokens": 8,
+  "total_cached_tokens": 60,
+  "total_cost_usd": 0.0004,
+  "total_steps": 2
+ }
+}

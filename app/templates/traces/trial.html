@@ -1,0 +1,838 @@
+{% from 'runs/_runtime.html' import what_ran %}
+{% extends "base.html" %}
+{% block title %}{{ trial.task_base }} — Nullius{% endblock %}
+{% block crumb %}/ <a href="{{ url_for('job', job_id=job.job_id) }}">{{ job.job_id }}</a> / {{ trial.task_base }}{% endblock %}
+
+{# The chart grid and the label chips are shared with the compare page's
+   sides, so there is one definition of each and the two cannot drift apart.
+   They take `view_url` below as their link builder. #}
+{% import "traces/_charts.html" as ui %}
+
+{# Every filter control is a link to this same page with a different `hide` set,
+   so a filtered view has a URL — shareable, bookmarkable, and exactly what
+   save-trace writes out. `viewing` rides along so toggling a chip while reading a
+   saved view does not silently drop back to the producer's capture.
+
+   `cf` is the charts' own legend state, which is a different query key and a
+   different thing: it changes what one chart draws, never what the trace
+   contains. It defaults to the current one so a control that only means to
+   change `hide` carries the legend through untouched, and vice versa. #}
+{% macro view_url(f, cf=none) -%}
+{{ url_for('trial', job_id=job.job_id, trial_name=trial.trial_name, trace=viewing or none, tab='trace',
+           **view_query(f, cf if cf is not none else chart_filter)) }}
+{%- endmacro %}
+
+{% from 'traces/_judgement.html' import judgement_panel %}
+{% block body %}
+<link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
+
+
+<div class="page-title">
+  <h1>{{ trial.task_base }}</h1>
+  <span class="tag oc-{{ trial.outcome }}">{{ trial.outcome_label }}</span>
+  {# The recorded exception type, beside the label that came from it. For an
+     Unknown it says which class the classifier has no side for, so a reader
+     can place it (classify._AGENT_EXCEPTIONS / _INFRA_EXCEPTIONS) instead of
+     guessing from the colour. #}
+  {% if trial.exception_type %}<span class="mono faint exception-type"
+    title="{% if trial.outcome == 'unknown' %}Harbor recorded this exception on the trial and the classifier has no side for it, so the trial counts and is charged to nobody. To place it, add the name to _AGENT_EXCEPTIONS or _INFRA_EXCEPTIONS in app/nullius/runs/classify.py.{% else %}Harbor recorded this exception on the trial; the outcome label follows from it.{% endif %}">{{ trial.exception_type }}</span>{% endif %}
+</div>
+{# The trial records a bare model name ("gpt-5.6-luna"); the job keeps the
+   provider-qualified one ("openai/gpt-5.6-luna"). Prefer the fuller id. #}
+{% set model = job.model_name if job.model_name and job.model_name.endswith(trial.model_name or '~')
+               else (trial.model_name or job.model_name) %}
+<p class="subtitle">
+  <span class="mono">{{ model }}</span><span class="dot">·</span>
+  <span title="{{ trial.source }}">{{ trial.source|dsname }}</span>
+  {%- if trial.agent_version %}<span class="dot">·</span><span class="mono faint"
+    title="The agent's version as the trial's agent_info reports it">v{{ trial.agent_version }}</span>{% endif %}
+  {%- if job.runner %}<span class="dot">·</span>{{ what_ran(job) }}{% endif %}
+</p>
+
+<div class="cards">
+  {# The check cards speak the dataset's language: labels come from its
+     Vocabulary, and a category it doesn't have (a verifier with no
+     regression guard and no patches; a session-derived trial has neither)
+     is not drawn at all rather than dashed under a foreign name. The dash
+     inside a drawn card still means "this trial reported nothing". #}
+  {% set vocab = trial.vocab %}
+  {% if vocab.gained %}
+  <div class="card"><div class="k">{{ vocab.gained }}</div><div class="v">{% if trial.f2p_pass or trial.f2p_fail %}<span class="ok">{{ trial.f2p_pass }}</span><small>/{{ trial.f2p_fail }}</small>{% else %}—{% endif %}</div></div>
+  {% endif %}
+  {% if vocab.held %}
+  <div class="card"><div class="k">{{ vocab.held }}</div><div class="v">{% if trial.p2p_pass or trial.p2p_fail %}<span class="ok">{{ trial.p2p_pass }}</span><small>/{{ trial.p2p_fail }}</small>{% else %}—{% endif %}</div></div>
+  {% endif %}
+  {% if vocab.has_patch %}
+  <div class="card"><div class="k">Patch applied</div><div class="v">{% if trial.patch_exists is none %}—{% else %}{{ 'Yes' if trial.patch_applied else 'No' }}{% endif %}</div></div>
+  {% endif %}
+  {# The verifier's numeric score. Mostly redundant with the outcome tag on
+     a pass/fail verifier (0 or 1), but it's the number Harbor's mean is built from, and
+     partial-credit verifiers make it a real scalar. #}
+  <div class="card" title="{{ "The judge's verdict on this answer: 1 when it said the answer is right" if job.runner else "The verifier's reward for this trial — what Harbor's headline mean averages" }}">
+    <div class="k">Reward</div>
+    <div class="v">{{ trial.reward if trial.reward is not none else '—' }}</div>
+  </div>
+  <div class="card"><div class="k">Agent time</div><div class="v">{{ trial.dur_agent|secs }}</div></div>
+  {% if traj and not traj.error %}
+  <div class="card"><div class="k">Steps</div><div class="v">{{ traj.n_steps }}</div></div>
+  <div class="card"><div class="k">Tool calls</div><div class="v">{{ traj.n_tool_calls }}</div></div>
+  {% endif %}
+</div>
+
+<div class="evidence-strip" aria-label="Evidence recorded">
+  <span>Trajectory · {{ 'recorded' if trial.has_trajectory else 'absent' }}</span>
+  <span>Trace · {{ 'recorded' if trial.has_trace else 'absent' }}</span>
+  <span>Reward · {{ 'recorded' if trial.reward is not none else 'absent' }}</span>
+  {# Rate limits the agent's SDK retried and the run survived. They are in the
+     gateway log and nowhere else — result.json records only the 429 that
+     killed a run — so a trial without that log reads as unmeasured, not clean. #}
+  {% if trial.n_rate_limited_retries is none %}
+  <span class="rate-limits" title="No agent/gateway.log in this trial, so retried rate limits cannot be counted">Rate limits · not recorded</span>
+  {% elif trial.n_rate_limited_retries %}
+  <span class="rate-limits" title="Rate-limit records in agent/gateway.log — 429s the agent's SDK retried below the harness. The run survived them; the outcome does not show them."><b class="warn">{{ trial.n_rate_limited_retries }} rate-limited call{{ '' if trial.n_rate_limited_retries == 1 else 's' }} retried</b></span>
+  {% else %}
+  <span class="rate-limits" title="agent/gateway.log carries no rate-limit record">Rate limits · none logged</span>
+  {% endif %}
+</div>
+<nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
+  {% for name, label in [('overview', 'Overview'), ('judgement', 'System One judge'), ('llm-judge', 'LLM judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] %}
+  <button id="tab-{{ name }}" role="tab" type="button" data-tab="{{ name }}" aria-controls="trial-{{ name }}" aria-selected="{{ 'true' if name == 'overview' else 'false' }}" tabindex="{{ '0' if name == 'overview' else '-1' }}">{{ label }}</button>
+  {% endfor %}
+</nav>
+<section class="trial-tab" id="trial-overview" role="tabpanel" aria-labelledby="tab-overview">
+{% if trial.is_regression %}
+<div class="panel danger-panel">
+  <h3 style="margin-top:0">⚠ This patch broke {{ trial.p2p_fail }} previously-passing test{{ '' if trial.p2p_fail == 1 else 's' }}</h3>
+  <p class="muted small" style="margin-top:0">These passed before the patch was applied and fail after it — a
+    regression, not just a missed fix.</p>
+  <ul class="test-list">
+    {% for name in trial.p2p_failures %}<li class="mono bad">{{ name }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if trial.f2p_failures %}
+<div class="panel">
+  <h3 style="margin-top:0">Tests that had to pass, still failing</h3>
+  <ul class="test-list">
+    {% for name in trial.f2p_failures %}<li class="mono faint">{{ name }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if trial.exception_type %}
+<div class="panel err">
+  <h3 style="margin-top:0">{{ trial.exception_type }}</h3>
+  <pre>{{ trial.exception_message }}</pre>
+</div>
+{% endif %}
+
+<h2>Shape of the run</h2>
+
+{# The phase bar reads only trial.*, so it renders whether or not a trajectory
+   was recorded: a trial that failed before writing one still shows its timing. #}
+{% set total = trial.dur_phases + trial.dur_other %}
+{% if total %}
+<div class="panel">
+  <h3 style="margin-top:0">Where the time went</h3>
+  {# All four phases Harbor records. Leaving agent_setup out understated the
+     bar by a third on some agents, and it is the most actionable number in
+     the set — installing the agent can cost more than solving the task. #}
+  <div class="bar phases">
+    {# A 0s phase emits no segment at all, so a control's empty setup leaves
+       no stray sliver. #}
+    {% if trial.dur_env|phase %}<span class="seg ph-env" style="flex:{{ trial.dur_env|phase }}" title="Environment build: {{ trial.dur_env|secs }}"></span>{% endif %}
+    {% if trial.dur_agent_setup|phase %}<span class="seg ph-setup" style="flex:{{ trial.dur_agent_setup|phase }}" title="Agent setup (installing the agent): {{ trial.dur_agent_setup|secs }}"></span>{% endif %}
+    {% if trial.dur_agent|phase %}<span class="seg ph-agent" style="flex:{{ trial.dur_agent|phase }}" title="Agent working: {{ trial.dur_agent|secs }}"></span>{% endif %}
+    {% if trial.dur_verifier|phase %}<span class="seg ph-verify" style="flex:{{ trial.dur_verifier|phase }}" title="Verifier: {{ trial.dur_verifier|secs }}"></span>{% endif %}
+    {% set items = job.runner_items[1] if job.runner_items else 'items' %}
+    {% set other_is = 'the wait between the answer and its judgement: the judge reads the answers once its share of the ' ~ items ~ ' is answered' if job.runner else 'time Harbor does not attribute to a phase: image pull, container start and teardown, artifact collection' %}
+    {% if trial.dur_other|phase %}<span class="seg ph-other" style="flex:{{ trial.dur_other|phase }}" title="Other: {{ trial.dur_other|secs }} — {{ other_is }}"></span>{% endif %}
+  </div>
+  <div class="legend" style="margin-bottom:0">
+    <span class="chip ph-env">Env <b>{{ trial.dur_env|secs }}</b></span>
+    <span class="chip ph-setup">Setup <b>{{ trial.dur_agent_setup|secs }}</b></span>
+    <span class="chip ph-agent">Agent <b>{{ trial.dur_agent|secs }}</b></span>
+    <span class="chip ph-verify">Verify <b>{{ trial.dur_verifier|secs }}</b></span>
+    <span class="chip ph-other"
+          title="{{ other_is|capitalize }}">Other <b>{{ trial.dur_other|secs }}</b></span>
+  </div>
+  <p class="muted small">The bar spans the trial's full {{ trial.dur_total|secs }}.
+    {% if job.runner %}“Other” is the wait for the judge, which reads the answers once its share of the {{ items }} is answered.{% else %}“Other” is harness overhead Harbor doesn't break out — the same tax for every agent.{% endif %}
+    {% if trace and trace.has_spans %}The Trace tab shows recorded span timing and its
+    measured or inferred provenance.{% elif traj and traj.has_step_clock %}Conversation
+    reports time between source steps; these are not per-tool durations.{% else %}No
+    per-step clock is available. Conversation preserves the recorded order.{% endif %}</p>
+</div>
+{% endif %}
+
+{% if traj and traj.error %}
+  <div class="panel err"><h3 style="margin-top:0">Trajectory unreadable</h3><pre>{{ traj.error }}</pre></div>
+{% elif traj %}
+  <div class="panel">
+    {% set has_growth = traj.token_series|length > 1 %}
+    {% if has_growth %}
+    <h3 style="margin-top:0">Prompt growth</h3>
+    {% set max_sent = traj.token_series|map(attribute='sent')|max %}
+    <div class="spark">
+      {% for p in traj.token_series %}
+        {% set h = (56 * p.sent / max_sent)|round(1) if max_sent else 0 %}
+        {% set ch = (56 * p.cached / max_sent)|round(1) if max_sent else 0 %}
+        <span class="spark-col"
+              title="step {{ p.step_id }} · input {{ p.sent|tokens('control') }} ({{ p.cached|tokens('control') }} cached, {{ p.new|tokens('control') }} new) · output {{ p.completion|tokens('control') }}">
+          <span class="sp-fresh" style="height:{{ [h - ch, 1]|max }}px"></span>
+          {% if ch >= 1 %}<span class="sp-cached" style="height:{{ ch }}px"></span>{% endif %}
+        </span>
+      {% endfor %}
+    </div>
+    <div class="legend" style="margin:.6rem 0 0">
+      <span class="chip sp-fresh-chip">new tokens</span>
+      <span class="chip sp-cached-chip">served from cache</span>
+      {% if traj.cache and traj.cache.hit is not none %}
+        <span class="chip" title="Reads ÷ every input token, both usage conventions on the same ruler: {{ traj.cache.reads|tokens('control') }} read from cache, {{ traj.cache.new|tokens('control') }} new (cache writes + fresh)">
+          cache hit <b>{{ traj.cache.hit|hitrate }}</b></span>
+        {% if traj.cache.reported_diverges %}
+          <span class="chip" title="{% if traj.cache.convention == 'anthropic' %}The file's own cached ÷ prompt: this agent reports Anthropic-style usage, whose prompt_tokens excludes cache writes, so the ratio is ~100% by construction{% else %}The file's own cached ÷ prompt: its final_metrics disagree with the per-call series{% endif %}">
+            reported {{ traj.cache.reported_hit|hitrate }}</span>
+        {% endif %}
+      {% endif %}
+      {% if traj.total_reasoning_tokens is not none %}
+        <span class="chip" title="Summed from per-step metrics, or the trajectory's final metrics">reasoning <b>{{ traj.total_reasoning_tokens|tokens('control') }}</b></span>
+      {% endif %}
+    </div>
+    <p class="muted small">One column per LLM step, height ∝ input tokens; the gray band is what came from cache.
+      {%- if traj.cache and traj.cache.convention == 'anthropic' %} Anthropic-style usage: cache writes are added back onto the step that paid for them.{%- endif %}</p>
+    {% elif traj.token_series or traj.total_reasoning_tokens is not none %}
+    {# one call: no growth to draw, so the call itself - what came from cache, what was new, what the model wrote #}
+    {% set p = traj.token_series[0] if traj.token_series else none %}
+    <h3 style="margin-top:0">Usage</h3>
+    {% if p and p.sent %}
+    <div class="mix-bar" id="usage-mix" role="img" aria-label="Input {{ p.sent }} tokens, {{ p.cached }} from cache; output {{ p.completion }} tokens">
+      {% if p.cached %}<span class="mix-cached" style="flex:{{ p.cached }}" title="served from cache: {{ p.cached|tokens('control') }}"></span>{% endif %}
+      {% if p.new %}<span class="mix-new" style="flex:{{ p.new }}" title="new input: {{ p.new|tokens('control') }}"></span>{% endif %}
+      {% if p.completion %}<span class="mix-out" style="flex:{{ p.completion }}" title="output: {{ p.completion|tokens('control') }}"></span>{% endif %}
+    </div>
+    {% endif %}
+    <div class="legend">
+      {% if p %}<span class="chip sp-cached-chip">served from cache <b>{{ p.cached|tokens('control') }}</b></span>
+      <span class="chip sp-fresh-chip">new input <b>{{ p.new|tokens('control') }}</b></span>
+      <span class="chip mix-out-chip">output <b>{{ p.completion|tokens('control') }}</b></span>
+      {% if p.sent %}<span class="chip" title="Served from cache ÷ input">cache hit <b>{{ (p.cached / p.sent)|hitrate }}</b></span>{% endif %}{% endif %}
+      {% if traj.total_reasoning_tokens is not none %}<span class="chip" title="From the trajectory's final metrics">reasoning <b>{{ traj.total_reasoning_tokens|tokens('control') }}</b></span>{% endif %}
+    </div>
+    <p class="muted small">{% if job.runner %}{{ job.runner }} asks its model once for each of its {{ job.runner_items[1] if job.runner_items else 'items' }}, so the bar is that one call: its input, from cache or new, and what it wrote. An agent's run charts its calls one after another instead, as its context grows.{% else %}One step carried usage: the bar is that call; the growth strip needs two.{% endif %}</p>
+    {% endif %}
+
+    {% if traj.calls %}
+    <h3{% if not has_growth %} style="margin-top:0"{% endif %}>Tool calls</h3>
+    <div class="flow">
+      {% for c in traj.calls %}
+        <span class="flow-cell cat-{{ c.category }}{% if c.failure %} failed{% endif %}"
+              title="#{{ c.step_id }} {{ c.category }}{% if c.target %} · {{ c.target[:70] }}{% endif %}{% if c.failure %} — FAILED{% endif %}"></span>
+      {% endfor %}
+    </div>
+    {# Tool summary. Grouped by category, never by the agent's own tool names:
+       OpenCode writes `bash`, Claude Code `Bash`, another agent a
+       sentence, so a count by name compares nothing across agents. The names
+       stay beside each category as the evidence of what it folded — in the
+       chip's hover and in the table below — so the fold can be checked. #}
+    <div class="legend tool-summary" style="margin:.6rem 0 0" aria-label="Tool calls by category">
+      {% for cat, n in traj.category_freq.most_common() %}
+        <span class="chip cat-{{ cat }}" data-category="{{ cat }}" data-count="{{ n }}"
+              title="{{ cat }}: {% for name, k in traj.names_of(cat) %}{{ name[:80] }} ×{{ k }}{{ ', ' if not loop.last }}{% endfor %}">{{ cat }} <b>{{ n }}</b></span>
+      {% endfor %}
+      {% if traj.n_failed_calls %}<span class="chip failed-chip">failed <b>{{ traj.n_failed_calls }}</b></span>{% endif %}
+    </div>
+    {% if traj.name_freq %}
+    {# Each tool once, under the server that offers it. An agent's spellings of a name are its hover: evidence, never a comparison key. #}
+    <table class="grid compact tool-names" style="margin-top:.6rem">
+      <thead><tr><th>Tool</th><th>Category</th><th class="num">Calls</th><th class="num">Failed</th><th class="num">Time</th></tr></thead>
+      <tbody>
+      {% for t in traj.tools %}
+        {% if t.server and (loop.first or traj.tools[loop.index0 - 1].server != t.server) %}<tr class="tool-server"><td colspan="5" class="muted small">{{ t.server }}</td></tr>{% endif %}
+        <tr data-category="{{ t.category }}" data-name="{{ t.name }}">
+          <td class="mono clip" title="{{ t.spellings|join(', ') }}">{{ t.name[:80] }}{% if t.name|length > 80 %}…{% endif %}</td>
+          <td><span class="cat-tag cat-{{ t.category }}"><span class="cat-dot"></span>{{ t.category }}</span></td>
+          <td class="num">{{ t.calls }}</td>
+          <td class="num{{ ' bad' if t.failed }}">{{ t.failed or '—' }}</td>
+          <td class="num">{{ t.ns|nsdur if t.ns is not none else '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% endif %}
+  </div>
+
+
+
+  {% if loc %}
+  <div class="panel">
+    <h3 style="margin-top:0">Against the gold patch</h3>
+    <ul class="files">
+      {% for f in loc.hit %}<li class="mono"><span class="ok">✓</span> {{ f }}</li>{% endfor %}
+      {% for f in loc.missed %}<li class="mono"><span class="bad">×</span> {{ f }} <span class="faint">— in the gold patch, never edited</span></li>{% endfor %}
+      {% for f in loc.extra %}<li class="mono faint">{{ f }} <span class="faint">— edited, not in the gold patch</span></li>{% endfor %}
+    </ul>
+    <p class="muted small">The gold patch is <em>a</em> correct answer, not the only one.</p>
+  </div>
+  {% endif %}
+
+  {% if traj.files_touched %}
+  <div class="panel">
+    <h3 style="margin-top:0">Files the agent edited</h3>
+    <ul class="files">
+      {% for f in traj.files_touched %}<li class="mono">{{ f }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+{% else %}
+  <div class="panel"><p class="muted" style="margin:0">No trajectory recorded for this trial.</p></div>
+{% endif %}
+</section>
+<section class="trial-tab" id="trial-judgement" role="tabpanel" aria-labelledby="tab-judgement">
+{% if job.runner and bench_parts %}
+{#- scored part by part by the benchmark's own script: the score is the mean of these, each as the script wrote it #}
+<div class="panel" id="runner-verdict">
+  <h3 style="margin-top:0">{{ job.runner }}'s score <span class="badge">gives the outcome</span></h3>
+  <p class="small muted">{% if bench_parts.says %}{{ bench_parts.says }}. {% endif %}{% if trial.score is not none %}This one scored <b class="mono">{{ '%.3f'|format(trial.score) }}</b>: the mean over its {{ bench_parts.parts|length }} {{ bench_parts.nouns }}, one without a score counting nothing.{% endif %}</p>
+  <details class="tc" open><summary class="small">Its {{ bench_parts.parts|length }} {{ bench_parts.nouns }}</summary>
+  <table class="grid compact" id="runner-parts" style="margin-top:.4rem">
+    <thead><tr><th class="num">#</th><th>Asked</th><th>Answered</th>{% for k in bench_parts.shows %}<th>{{ k|capitalize }}</th>{% endfor %}<th class="num">Score</th></tr></thead>
+    <tbody>
+    {% for x in bench_parts.parts %}
+    <tr><td class="num mono">{{ x.n }}</td><td>{{ x.text }}</td><td>{% if x.said is not none %}{{ x.said }}{% else %}<span class="faint">no answer</span>{% endif %}</td>
+      {%- for k in bench_parts.shows %}<td>{% if x.shows and x.shows[k] is not none %}{{ x.shows[k] }}{% endif %}</td>{% endfor -%}
+      <td class="num mono">{% if x.score is not none %}{{ '%.3f'|format(x.score) }}{% else %}<span class="faint">—</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></details>
+  <p class="small muted" style="margin-bottom:0">Below, Nullius's own trajectory judge: experimental, asked on a click.</p>
+</div>
+{% elif job.runner %}
+<div class="panel" id="runner-verdict">
+  <h3 style="margin-top:0">{{ job.runner }}'s judge <span class="badge">gives the outcome</span></h3>
+  {% if bench_judge %}
+  <p class="small muted">{{ bench_judge.judge or job.runner_judge }}{% if bench_judge.model %} · sent as <span class="mono">{{ bench_judge.model }}</span>{% endif %}</p>
+  <p>Said <b class="mono">{{ (bench_judge.said or '—')[:200] }}</b>: {{ 'resolved' if trial.outcome == 'resolved' else trial.outcome|replace('_', ' ') }}.</p>
+  <details class="tc"><summary class="small">What it was asked</summary><pre class="wrap">{{ bench_judge.asked }}</pre></details>
+  {% else %}
+  <p class="small muted">{% if job.runner_judge %}{{ job.runner_judge }}. {% endif %}No record of its call for this one{% if trial.outcome not in ('resolved', 'failed_verification') %}: it never got to judge it{% endif %}.</p>
+  {% endif %}
+  <p class="small muted" style="margin-bottom:0">Below, Nullius's own trajectory judge: experimental, asked on a click.</p>
+</div>
+{% endif %}
+{{ judgement_panel(judgement, job, trial, csrf) }}
+</section>
+{#- the second judgement: the same questions, asked of the LLM judge Settings names, its records apart -#}
+<section class="trial-tab" id="trial-llm-judge" role="tabpanel" aria-labelledby="tab-llm-judge">
+{{ judgement_panel(llm_judgement, job, trial, csrf) }}
+</section>
+<section class="trial-tab" id="trial-task" role="tabpanel" aria-labelledby="tab-task">
+{# The task's instruction, scored on its own text: once per dataset and task, the same for every attempt,
+   nothing of any run read. An unclear instruction caps every agent on this task - a finding about the
+   benchmark, not this trial. The score changes no outcome. #}
+{% set tt = task_tab(job, trial, traj) %}
+{% set tq = tt.quality %}
+<div class="judgement" id="task-quality">
+  <div class="judgement-head">
+    <div>
+      <h2>Task instruction <span class="badge">experimental</span></h2>
+      <p class="muted small">How clearly the task says what is wanted, judged from its text alone: once per dataset and task, shared by every trial of it.
+        An unclear instruction caps every agent's score on this task, a finding about the benchmark, not about this agent. It changes no outcome.</p>
+    </div>
+  </div>
+  {% if job.is_control %}
+  <p class="small faint">A control run: its trials are a check on the tasks, so the instruction is scored from an agent's run of the same dataset.</p>
+  {% endif %}
+  <div class="jcards">
+    <div class="jcard tone-{{ 'bad' if tq and tq.level == 0 else ('warn' if tq and tq.level == 1 else 'none') }}" data-question="instruction_quality">
+      <div class="jcard-title">Instruction quality</div>
+      {% if tq %}
+      <div class="jcard-value"><span class="jnum"><strong>{{ '%.1f'|format(tq.score) }}</strong></span><span class="junit">/ {{ tq.top }}</span></div>
+      <div class="jcard-blurb muted small">{{ tq.label }}</div>
+      <div class="jcard-foot small">{% if tq.confidence is not none %}<span class="muted">Confidence</span><span class="mono">{{ '%.0f'|format(tq.confidence * 100) }}%</span>{% endif %}<span class="muted">{{ tq.model }} · asked {{ tq.asked_at[:16]|replace('T', ' ') }}Z</span></div>
+      {% else %}
+      <div class="jcard-value"><span class="faint">not scored</span></div>
+      <div class="jcard-blurb muted small"><em>Score instructions</em> on the <a href="{{ url_for('job', job_id=job.job_id) }}#task-quality">run page</a> asks the judge about each task's text once.</div>
+      {% endif %}
+    </div>
+  </div>
+  <h3>Rubric</h3>
+  <ol class="rubric" start="0">
+    {% for level in tt.rubric %}<li class="rubric-level{{ ' current' if tq and tq.level == loop.index0 }}"><span class="mono small">{{ loop.index0 }}</span> {{ level }}</li>{% endfor %}
+  </ol>
+  <h3>The instruction, as the agent received it</h3>
+  {% if tt.instruction %}<pre class="instruction" id="task-instruction-text">{{ tt.instruction }}</pre>
+  {% else %}<p class="small faint" id="task-instruction-text">No instruction can be read from this trial's trajectory.</p>{% endif %}
+</div>
+</section>
+<section class="trial-tab" id="trial-trace" role="tabpanel" aria-labelledby="tab-trace">
+{% if trace and trace.error %}
+<div class="panel err">
+  <h3 style="margin-top:0">Trace unreadable</h3>
+  <pre>{{ trace.error }}</pre>
+</div>
+{# `visible`, not `has_spans`: a filter may legitimately hide every span, and the
+   panel that vanished would take the control to undo it with. #}
+{% elif trace and trace.visible %}
+{% set filt = trace.filter %}
+{# A trace whose producer measured nothing — a session transcript reconstructed
+   from record arrival times — must not have its totals captioned as measured
+   anywhere below: the banner says so once, and this word says so wherever the
+   wall clock is named. #}
+{% set clocked = 'inferred' if trace.zero_measured else 'measured' %}
+
+{% if trace.zero_measured %}
+<div class="panel warn-panel">
+  <h3 style="margin-top:0">⚠ Nothing was measured</h3>
+  <p class="muted small" style="margin:0">All {{ trace.totals.span_count }} spans are
+    <b>inferred</b> — the exporter captured nothing and the producer fell back to reading
+    the agent's own logs. Every duration below is approximate, and simply wrong wherever
+    tool calls ran in parallel.</p>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h3 style="margin-top:0">Filter</h3>
+  {% if viewing %}
+  <p class="muted small" style="margin:-.15rem 0 .8rem">Rendering
+    <span class="mono">{{ viewing }}</span> — a view saved from this trial, not the producer's capture.
+    <a class="linkish" href="{{ url_for('trial', job_id=job.job_id, trial_name=trial.trial_name) }}">Back to trace.json</a></p>
+  {% endif %}
+  {{ ui.facet_chips(trace.facets, filt, chart_filter, view_url) }}
+  {% if trace.hidden_spans %}
+  {# Hidden one at a time rather than by label — these need their own controls,
+     since no chip above represents them. #}
+  <div class="legend facets" style="margin:.55rem 0 0">
+    {% for sid, label in trace.hidden_spans %}
+    <a class="chip off" href="{{ view_url(filt.toggled_span(sid)) }}" title="Show this span again">
+      {{ label }} <span class="mono faint">{{ sid[:12] }}</span></a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <p class="muted small" style="margin:.75rem 0 0">
+    {% if filt.active %}
+    {# `shown` counts the filtered view whole — a zoom narrows the waterfall, not
+       the filter, so this sentence must not shrink with it. #}
+    <b>{{ trace.shown }}</b> span{{ '' if trace.shown == 1 else 's' }} shown,
+    <b>{{ trace.hidden_count }}</b> left out.
+    <a class="linkish" href="{{ view_url(filt.cleared()) }}">Clear ×</a>
+    {% else %}
+    Click a label to leave out every span carrying it, or the <span class="mono">×</span> on a
+    waterfall row — alt-click its bar — to leave out one call. Either way what it called goes with
+    it, and the breakdown is recomputed without it. The producer's own totals stay as reported.
+    {% endif %}
+  </p>
+  {% if filt.active %}
+  <form class="wf-save" method="post"
+        action="{{ url_for('save_trace', job_id=job.job_id, trial_name=trial.trial_name) }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    {# The view is reproduced from these, not from a session — the file written is
+       the file this page is showing. #}
+    {% for name in filt.names %}<input type="hidden" name="hide" value="{{ name }}">{% endfor %}
+    {% for sid in filt.span_ids %}<input type="hidden" name="hide_span" value="{{ sid }}">{% endfor %}
+    {% if filt.zoom %}<input type="hidden" name="zoom" value="{{ filt.zoom }}">{% endif %}
+    {% if viewing %}<input type="hidden" name="trace" value="{{ viewing }}">{% endif %}
+    <label for="save-as">Save this view as</label>
+    <input id="save-as" type="text" name="filename" value="{{ default_save_name }}" required
+           pattern="[A-Za-z0-9][A-Za-z0-9._-]*" spellcheck="false" autocomplete="off"
+           title="A plain filename — letters, digits, dot, dash and underscore">
+    <button class="btn sm" type="submit">Save</button>
+  </form>
+  <p class="muted small" style="margin:.55rem 0 0">Writes a new
+    <span class="mono">harbor-trace-v1</span> file beside the trial's own, in
+    <span class="mono">agent/</span>: the hidden spans gone, <span class="mono">totals</span>
+    recomputed over what is left, and the producer's numbers kept under
+    <span class="mono">filtered.source_totals</span>. Nothing is overwritten — least of all
+    <span class="mono">trace.json</span>, which is a capture that cannot be taken again.
+    {% if trace.zoomed %}The zoom is not written: it is a way of looking at the file, and the
+    link carries it.{% endif %}</p>
+  {% endif %}
+</div>
+
+{# ---- distributions ----
+   The population of calls, not the timeline: how long a typical call runs and
+   where the summed time sits. Deliberately above the waterfall, since it is the
+   summary you read before scrolling one. It draws from `trace.roots`, which is
+   already pruned by the same query string the page rendered from.
+
+   The same macro draws each side of the compare page. Only the closing
+   sentence differs, because only this page has a Time breakdown strip to point
+   at — a page without one must not claim it. #}
+{% if charts %}
+{% set breakdown_tail %}The waterfall below is the timeline. <b>Time breakdown</b> is the accounting of where the seconds went; this is the shape of the calls that spent them.{% endset %}
+{{ ui.charts_panel(charts, chart_filter, filt, view_url, tail=breakdown_tail) }}
+{% endif %}
+
+<div class="panel">
+  <h3 style="margin-top:0">Time breakdown
+    <span class="muted" style="font-weight:400">· not a timeline{% if trace.zero_measured %} · inferred, not measured{% endif %}</span></h3>
+  {% if trace.totals.segments %}
+  <div class="bar strip">
+    {% for s in trace.totals.segments %}
+    <span class="seg tt-{{ s.key }}" style="flex:{{ s.ns }}"
+          title="{{ s.label }}: {{ s.ns|nsdur }} · {{ s.pct|share }} of the {{ trace.totals.wall_ns|nsdur }} {{ clocked }}"></span>
+    {% endfor %}
+  </div>
+  {# Shares are of the wall clock, not of the segments' own sum, so categories
+     that don't close read as short of 100% instead of being rescaled to fill it. #}
+  <div class="legend" style="margin-bottom:0">
+    {% for s in trace.totals.segments %}
+    <span class="chip tt-{{ s.key }}">{{ s.label }} <b>{{ s.ns|nsdur }}</b> <span class="faint">{{ s.pct|share }}</span></span>
+    {% endfor %}
+  </div>
+  <p class="muted small">Categories, not a sequence. Reported by the trace, never summed from the bars below: spans nest.{% if trace.totals.unaccounted_ns %} Unaccounted is wall clock outside the instrumented spans.{% endif %}</p>
+  {% else %}
+  <p class="muted" style="margin:0">The trace reports no totals.</p>
+  {% endif %}
+
+  {% if filt.active %}
+  <h3>Without the {{ trace.hidden_count }} span{{ '' if trace.hidden_count == 1 else 's' }} left out
+    <span class="muted" style="font-weight:400">· recomputed here</span></h3>
+  {# Each Δ is against the same partition run over the unfiltered tree, so it is
+     the filter's effect alone — not the gap between this arithmetic and the
+     producer's, which is a different quantity and can be much larger. #}
+  {% set changed = trace.view.compared_to(trace.baseline) %}
+  {% if changed %}
+  <div class="bar strip">
+    {% for s in changed %}{% if s.ns %}
+    <span class="seg tt-{{ s.key }}" style="flex:{{ s.ns }}" title="{{ s.label }}: {{ s.ns|nsdur }} · {{ s.pct|share }}{% if s.delta_ns %} · {{ s.delta_ns|nsdelta }} against the unfiltered run{% endif %}"></span>
+    {% endif %}{% endfor %}
+  </div>
+  <div class="legend" style="margin-bottom:0">
+    {% for s in changed %}
+    <span class="chip tt-{{ s.key }}">{{ s.label }} <b>{{ s.ns|nsdur }}</b>
+      <span class="faint">{{ s.pct|share }}</span>
+      {% if s.delta_ns %}<span class="delta">{{ s.delta_ns|nsdelta }}</span>{% endif %}</span>
+    {% endfor %}
+  </div>
+  <p class="muted small">Derived from the {{ trace.view.span_count }} remaining span{{ '' if trace.view.span_count == 1 else 's' }}.
+    Each Δ is measured against this same arithmetic over the whole trace, so it is what the filter
+    took out — read the absolute numbers against the strip above instead, which is the producer's own
+    accounting and can differ from this one by a lot: time no span covers is “Unaccounted” here,
+    where a producer may know it was a wait for a prompt and call it idle.
+    Every instant is charged to exactly one category (waiting on a human beats real work, which beats
+    the call it ran inside), because summing spans that nest or overlap attributes more than the run.
+    So hiding a span moves its time into “Unaccounted” rather than out of the total: the run took just
+    as long.</p>
+  {% else %}
+  <p class="muted" style="margin:0">Nothing is left to break down.</p>
+  {% endif %}
+  {% endif %}
+
+  {% if trace.coverage_pct %}
+  {% set uncovered = trace.totals.wall_ns - trace.instrumented_ns %}
+  <h3>Coverage</h3>
+  <div class="bar strip">
+    <span class="seg cov-in" style="flex:{{ trace.instrumented_ns }}"
+          title="Instrumented: {{ trace.instrumented_ns|nsdur }}"></span>
+    {% if uncovered > 0 %}
+    <span class="seg cov-out" style="flex:{{ uncovered }}"
+          title="Not instrumented: {{ uncovered|nsdur }} — startup, queueing and teardown the agent emitted no spans for"></span>
+    {% endif %}
+  </div>
+  {# `wall_ns` is the run the trace itself measures — the agent's own window,
+     not the trial total, which also carries image pull, setup and the verifier. #}
+  <p class="muted small">The waterfall covers <b>{{ trace.instrumented_ns|nsdur }}</b> of the
+    {{ trace.totals.wall_ns|nsdur }} the trace {{ 'infers' if trace.zero_measured else 'measures' }} — {{ '%.1f'|format(trace.coverage_pct) }}%. The axis is the captured window, not the run.</p>
+  {% endif %}
+
+  {% if trace.has_spans %}
+  <h3>Waterfall</h3>
+  <style>
+    /* The zoom control mirrors `.wf-hide` (style.css): present in the DOM at
+       all times so the keyboard path exists, visible on hover or focus. */
+    .wf-zoom {
+      flex: none; padding: 0 .1rem; margin-left: auto;
+      color: var(--text-faint); font-size: .72rem; line-height: 1;
+      text-decoration: none; opacity: 0; transition: opacity .12s;
+    }
+    .wf-zoom + .wf-hide { margin-left: 0; }
+    .wf-row:hover .wf-zoom, .wf-zoom:focus-visible { opacity: 1; }
+    @media (prefers-reduced-motion: reduce) { .wf-zoom { transition: none; } }
+    .wf-zoom:hover { color: var(--accent); }
+    .wf-zoomchip { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: 0 0 .6rem; }
+  </style>
+  {# ---- zoom ----
+     A second, explicit window on the axis (`?zoom=<span id>`), for the trace
+     where one global axis over an hour makes a 20ms Read a hairline. It is
+     not the filter and not a re-scaling of it: the rows are the zoomed span's
+     subtree alone, placed on that span's own extent, and everything outside it
+     is left out rather than squeezed in. The strips above are untouched — the
+     totals and the breakdown are over the whole filtered view, the coverage
+     strip describes the capture. Offsets on the axis and in the rows count from
+     the zoomed span's start; the chip says where that is in the capture. #}
+  {% if trace.zoomed %}
+  <p class="wf-zoomchip">
+    <span class="chip on">Zoomed to <b>{{ trace.zoomed.label }}</b>
+      <span class="mono faint">{{ trace.zoomed.span_id[:12] }}</span></span>
+    <span class="muted small">{{ trace.rows|length }} of {{ trace.shown }} span{{ '' if trace.shown == 1 else 's' }}
+      · starts <b>{{ trace.zoom_offset_ns|nsoff }}</b> into the capture
+      · <b>{{ trace.axis.span_ns|nsdur }}</b> wide — offsets below count from its start</span>
+    <a class="linkish" href="{{ view_url(filt.unzoomed()) }}">Reset zoom ×</a>
+  </p>
+  {% elif trace.zoom_lost %}
+  <p class="wf-zoomchip">
+    <span class="chip off">No span <span class="mono">{{ trace.zoom_lost[:24] }}</span> in this view</span>
+    <span class="muted small">— nothing to zoom to, so this is the whole trace. It may be hidden by the
+      filter, or belong to another trace file.</span>
+    <a class="linkish" href="{{ view_url(filt.unzoomed()) }}">Clear ×</a>
+  </p>
+  {% endif %}
+  <div class="wf-toolbar">
+    <button class="linkish" id="wf-toggle-all" type="button">Collapse all</button>
+    <span class="muted small">{{ trace.rows|length }} span{{ '' if trace.rows|length == 1 else 's' }}{% if trace.run_id %} · <span class="mono">{{ trace.run_id }}</span>{% endif %}
+      · alt-click a bar to leave it out · shift-click, or <span class="mono">⤢</span>, to zoom the axis to it</span>
+  </div>
+  <div class="wf-head">
+    <div>Span</div>
+    <div class="wf-axis">
+      {% for t in trace.ticks %}<span class="wf-tick" style="left:{{ t.pct }}%">{{ t.ns|nsoff }}</span>{% endfor %}
+    </div>
+    <div class="wf-dur">Duration</div>
+  </div>
+  {# One global axis: every bar is positioned against the whole trace, so a
+     child that starts before its parent renders early instead of being
+     clamped into a tidy lie. Zoomed, the axis is the one span's extent and
+     the rows are its subtree — still one axis for every row shown. #}
+  <div class="wf" id="wf">
+    {% for r in trace.rows %}
+    <div class="wf-row k-{{ r.span.kind }} q-{{ r.span.timing_quality }}{% if r.is_instant %} instant{% endif %}"
+         data-span="{{ r.span.span_id }}"
+         data-parent="{{ r.span.parent_span_id }}"
+         data-label-filter="{{ view_url(filt.toggled_name(r.span.label)) }}"
+         data-tip="{{ r.span.label }} · {{ r.span.kind }} · {{ r.span.timing_quality }} · {{ r.span.source }} · at {{ r.offset_ns|nsoff }} · {{ r.span.duration_ns|nsdur }}"
+         style="--depth:{{ r.depth }};--left:{{ r.left_pct }}%;--width:{{ r.width_pct }}%">
+      <div class="wf-gutter">
+        {% if r.has_children %}<button class="wf-chev" type="button" aria-expanded="true" aria-label="Collapse subtree"></button>{% else %}<span class="wf-chev-gap"></span>{% endif %}
+        <span class="wf-dot"></span>
+        <button class="wf-label" type="button" title="{{ r.span.label }}">{{ r.span.label }}</button>
+        {# Links, not buttons: the filter and the zoom live in the URL, so these
+           work with middle-click and keyboard navigation and need no script. #}
+        {% if r.has_children and r.span.span_id != filt.zoom %}
+        <a class="wf-zoom" href="{{ view_url(filt.zoomed_to(r.span.span_id)) }}"
+           title="Zoom the axis to this span and what it called" aria-label="Zoom to this span">⤢</a>
+        {% endif %}
+        <a class="wf-hide" href="{{ view_url(filt.toggled_span(r.span.span_id)) }}"
+           title="Leave this span, and what it called, out" aria-label="Leave this span out">×</a>
+      </div>
+      <div class="wf-track"><span class="wf-bar"></span></div>
+      <div class="wf-dur">{{ r.span.duration_ns|nsdur }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% if trace.truncated %}
+  <p class="muted small">{{ trace.truncated }} further span{{ '' if trace.truncated == 1 else 's' }} not shown — the trace exceeds the render cap.</p>
+  {% endif %}
+
+  <div class="legend" style="margin:.7rem 0 .2rem">
+    {% for k in trace.kinds_present %}<span class="chip k-{{ k }}">{{ k }}</span>{% endfor %}
+  </div>
+  {# Said once, where the kind first appears. A reader who does not know what the
+     suffix means reads the wrapper and the call inside it as two calls, which is
+     the misreading the re-kinding exists to stop. #}
+  {% if 'group' in trace.kinds_present %}
+  <p class="muted small" style="margin:.3rem 0 0">A <b>group</b> only brackets what
+    is inside it — <span class="mono">claude_code.tool</span> holds the wait for
+    permission and the execution, and a request whose whole response was one block
+    holds that block — so it is charged no time of its own and the row below it is
+    the same measurement. Hiding a group takes its contents with it; hiding the
+    contents leaves the bracket.</p>
+  {% endif %}
+  <div class="legend" style="margin:0">
+    {% for q in trace.qualities_present %}<span class="chip q-{{ q }}">{{ q }}</span>{% endfor %}
+  </div>
+  {% else %}
+  <h3>Waterfall</h3>
+  <p class="muted" style="margin:0">Every span is filtered out — nothing left to draw.</p>
+  {% endif %}
+</div>
+
+{# Content is fetched for the selected normalised span only. A large trace
+   must not inline every prompt/result into hidden DOM (A15). #}
+{% if trace.has_spans %}
+<div class="panel wf-detail" id="wf-detail"
+     data-endpoint="{{ url_for('trace_span_data', job_id=job.job_id, trial_name=trial.trial_name) }}">
+  <p class="muted" style="margin:0">Select a span to load its recorded detail.</p>
+</div>
+{% endif %}
+{% endif %}
+{% if not trace %}<div class="panel"><h2>No trace recorded</h2><p class="muted">This trial has no trace sidecar. Its recorded trajectory, when available, is in Conversation. Missing span clocks are not reconstructed here.</p></div>{% endif %}
+{% if trace and not trace.error and not trace.visible %}<div class="panel"><h2>No spans recorded</h2><p class="muted">The trace file contains no recorded spans to display.</p></div>{% endif %}
+</section>
+<section class="trial-tab" id="trial-conversation" role="tabpanel" aria-labelledby="tab-conversation">
+{% include 'traces/_conversation.html' %}
+</section>
+<section class="trial-tab" id="trial-artifacts" role="tabpanel" aria-labelledby="tab-artifacts">
+  <div class="reader-heading"><div><h2>Artifacts</h2><p class="muted small">Read the recorded source files. Content is redacted and paged; source files remain intact.</p></div></div>
+  <div class="panel">
+    <table class="grid"><thead><tr><th>Record</th><th>Availability</th><th class="num">Size</th><th></th></tr></thead><tbody>
+    {% for artifact in artifacts %}
+      <tr><td>{{ artifact.label }}</td><td class="muted">{{ 'Recorded' if artifact.exists else 'Not recorded' }}</td><td class="num mono muted">{{ ((artifact.size / 1024)|round(1)) ~ ' KB' if artifact.exists else '—' }}</td><td>{% if artifact.exists %}<a href="{{ artifact.url }}">Read →</a>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody></table>
+  </div>
+</section>
+<script src="{{ url_for('static', filename='traces/conversation.js') }}"></script>
+<script>
+(() => {
+  /* Every filter and zoom control is a link to this page with another query (the
+     filter lives in the URL: the top of this file). Followed here, it puts in the
+     Trace tab that URL renders and keeps the page around it: no reload, no jump. */
+  const panel = document.getElementById('trial-trace');
+  async function showView(url, push = true) {
+    let fresh = null;
+    try {
+      const r = await fetch(url, {cache: 'no-store'});
+      if (r.ok) fresh = new DOMParser().parseFromString(await r.text(), 'text/html').getElementById('trial-trace');
+    } catch {}
+    if (!fresh) { location.href = url; return; }
+    const y = scrollY;
+    panel.replaceChildren(...fresh.childNodes);
+    if (push) history.pushState(null, '', url);
+    bindWaterfall();
+    scrollTo(0, y);
+  }
+  panel.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href]');
+    if (!a || e.ctrlKey || e.metaKey || e.shiftKey || a.target) return;
+    if (a.pathname !== location.pathname || a.search === location.search) return;
+    e.preventDefault();
+    showView(a.href);
+  });
+  addEventListener('popstate', () => showView(location.href, false));
+
+  // One tooltip for the table, not one per row: a per-row component with
+  // hover-intent delay is unusable on a dense timeline.
+  const tip = document.createElement('div');
+  tip.className = 'wf-tip';
+  tip.hidden = true;
+  document.body.appendChild(tip);
+
+  function bindWaterfall() {
+  tip.hidden = true;
+  const wf = document.getElementById('wf');
+  if (!wf) return;
+
+  const rows = Array.from(wf.querySelectorAll('.wf-row'));
+  // Span ids are opaque: log-derived ones look like `block:<uuid>:0`. A colon is
+  // legal in an id and in a fragment but breaks a CSS selector, so every lookup
+  // here goes through this Map — never querySelector('#...').
+  const byId = new Map(rows.map(r => [r.dataset.span, r]));
+  const kids = new Map();
+  rows.forEach(r => {
+    const p = r.dataset.parent;
+    if (!p) return;
+    if (!kids.has(p)) kids.set(p, []);
+    kids.get(p).push(r);
+  });
+
+  const descendants = (row) => {
+    const out = [];
+    const stack = (kids.get(row.dataset.span) || []).slice();
+    while (stack.length) {
+      const node = stack.pop();
+      out.push(node);
+      const next = kids.get(node.dataset.span);
+      if (next) stack.push(...next);
+    }
+    return out;
+  };
+
+  const applyVisibility = () => {
+    rows.forEach(r => { r.hidden = false; });
+    rows.forEach(r => {
+      if (r.classList.contains('collapsed')) descendants(r).forEach(d => { d.hidden = true; });
+    });
+  };
+
+  const setCollapsed = (row, collapsed) => {
+    row.classList.toggle('collapsed', collapsed);
+    const chev = row.querySelector('.wf-chev');
+    if (chev) chev.setAttribute('aria-expanded', String(!collapsed));
+  };
+
+  const detail = document.getElementById('wf-detail');
+
+
+  const select = (id, push) => {
+    const row = byId.get(id);
+    if (!row) return;
+    // A deep link can point inside a collapsed subtree, which would otherwise
+    // show nothing at all. Walk up and open every ancestor first.
+    let parent = byId.get(row.dataset.parent);
+    while (parent) {
+      setCollapsed(parent, false);
+      parent = byId.get(parent.dataset.parent);
+    }
+    applyVisibility();
+    rows.forEach(r => r.classList.toggle('selected', r === row));
+    window.NulliusEvidence.selectSpan(detail, id);
+    if (push !== false) history.replaceState(null, '', '#span=' + encodeURIComponent(id));
+  };
+
+  wf.addEventListener('click', (e) => {
+    // The × and alt-click both navigate to a filtered URL. The href is read off
+    // the row's own link rather than rebuilt here, so there is one place where a
+    // filter URL is constructed and it is the server's.
+    if (e.target.closest('.wf-hide') || e.target.closest('.wf-zoom')) return;
+    const hide = (e.altKey || e.metaKey) && e.target.closest('.wf-track')
+      ? e.target.closest('.wf-row').querySelector('.wf-hide') : null;
+    if (hide) { e.preventDefault(); showView(hide.href); return; }
+    // Shift-click zooms the same way: the row's own link, built by the server.
+    // A leaf has no zoom link — its extent is its bar — so the click falls
+    // through to selection.
+    const zoom = e.shiftKey && e.target.closest('.wf-track')
+      ? e.target.closest('.wf-row').querySelector('.wf-zoom') : null;
+    if (zoom) { e.preventDefault(); showView(zoom.href); return; }
+
+    const chev = e.target.closest('.wf-chev');
+    if (chev) {
+      const row = chev.closest('.wf-row');
+      setCollapsed(row, !row.classList.contains('collapsed'));
+      applyVisibility();
+      return;
+    }
+    const row = e.target.closest('.wf-row');
+    if (row && (e.target.closest('.wf-label') || e.target.closest('.wf-track'))) {
+      select(row.dataset.span);
+    }
+  });
+
+  const toggleAll = document.getElementById('wf-toggle-all');
+  let allCollapsed = false;
+  toggleAll.addEventListener('click', () => {
+    allCollapsed = !allCollapsed;
+    rows.forEach(r => { if (kids.has(r.dataset.span)) setCollapsed(r, allCollapsed); });
+    applyVisibility();
+    toggleAll.textContent = allCollapsed ? 'Expand all' : 'Collapse all';
+  });
+
+  wf.addEventListener('mousemove', (e) => {
+    const row = e.target.closest('.wf-row');
+    if (!row) { tip.hidden = true; return; }
+    tip.textContent = row.dataset.tip;
+    tip.hidden = false;
+    const box = row.getBoundingClientRect();
+    const width = tip.offsetWidth;
+    let x = e.clientX + 14;
+    if (x + width > window.innerWidth - 8) x = Math.max(8, window.innerWidth - width - 8);
+    tip.style.left = x + 'px';
+    tip.style.top = (box.bottom + 6) + 'px';
+  });
+  wf.addEventListener('mouseleave', () => { tip.hidden = true; });
+
+  if (location.hash.startsWith('#span=')) {
+    const id = decodeURIComponent(location.hash.slice('#span='.length));
+    if (byId.has(id)) {
+      select(id, false);
+      byId.get(id).scrollIntoView({ block: 'center' });
+    }
+  }
+  }
+  bindWaterfall();
+})();
+</script>
+{% endblock %}

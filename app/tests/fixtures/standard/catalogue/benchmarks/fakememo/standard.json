@@ -1,0 +1,12 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "fakememo",
+  "label": "Fake memory bench",
+  "summary": "Two questions over a three-session history, read by the model through the relay.",
+  "family": "capability",
+  "needs": ["cap.memory/v1"],
+  "driver": {"command": ["python3", "{here}/driver.py"]},
+  "datasets": [{"id": "all", "units": 2}],
+  "units": {"noun": "question", "nouns": "questions"},
+  "score": {"kind": "score", "says": "1 when the reader's answer names the colour"}
+}

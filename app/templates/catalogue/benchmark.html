@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% from "catalogue/use_bundle.html" import use_bundle %}
+{% block title %}{{ b.title }} — Nullius{% endblock %}
+{% block crumb %}/ <a href="{{ url_for('benchmarks_page') }}">benchmarks</a> / {{ b.key }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
+{% block body %}
+{% set ds = cat.datasets_of(b) %}{% set tasks = cat.tasks_of(b) %}{% set files = cat.files(b.key) %}
+{% set ways = (['the Nullius standard'] if 'standard' in b.harness else []) + (['Harbor'] if 'harbor' in b.harness else []) %}{% set runs_with = ways|join(' or ') if ways else 'no harness here' %}
+<article class="bench-page" data-route-case="{{ b.route_case }}">
+  <header class="bench-head">
+    <div class="bench-head-copy">
+      <div class="bench-tags">{% if b.category %}<span class="cat-tag">{{ b.category }}</span>{% endif %}<span class="origin-tag {{ b.origin }}">{{ b.label }}</span></div>
+      <h1><svg class="bench-mark" aria-hidden="true"><use href="{{ url_for('static', filename='catalogue/marks.svg') }}#bm-{{ b.key }}"/></svg>{{ b.title }}</h1>
+      {% if b.domain %}<p class="bench-domain">{{ b.domain }}</p>{% endif %}
+    </div>
+    <div class="bench-actions">
+      {% if b.usable_routes %}<a class="btn" href="{{ url_for('new_run', standard=b.key) if 'standard' in b.harness else url_for('new_run', dataset=(b.datasets[0] if b.datasets else none)) }}">Build a run <span aria-hidden="true">→</span></a>{% endif %}
+      {% if b.citation %}<a class="btn ghost" href="#citation">Cite</a>{% endif %}
+      {% if editable %}<a class="btn ghost" href="{{ url_for('benchmark_edit', key=b.key) }}">Edit</a>{% endif %}
+      {#- deleting asks first, in place: the button opens the question, never a dialog #}
+      {% if restore_bundle %}{% if local %}{{ use_bundle('benchmarks', b.key, csrf) }}{% endif %}
+      {% elif editable and deletable %}<details class="bench-delete">
+        <summary class="btn ghost danger">Delete</summary>
+        <form method="post" action="{{ url_for('benchmark_delete', key=b.key) }}" class="bench-delete-ask">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <span>Delete <b>{{ b.key }}</b> and its folder? Runs made from it stay.</span>
+          <button type="submit" class="btn danger">Yes, delete</button>
+          <button type="button" class="btn ghost" onclick="this.closest('details').open = false">Keep it</button>
+        </form>
+      </details>{% endif %}
+    </div>
+  </header>
+  {% if b.blocker %}<p class="bench-blocked" role="note">No usable route — {{ b.blocker }}</p>{% endif %}
+
+  <div class="bench-body">
+    <div class="bench-main">
+
+      {% if std %}
+      {#- The standard's proofs of it, per dataset (standard/prove.py): its controls as chips, their source in the title - the
+          builder's dataset step draws the same - then its units and leak checks; and Prove it, cli prove as a run. -#}
+      {% macro proof(rec, failed, expect) -%}
+        {%- if rec %}<span class="std-proof std-proof-ok" title="proven on {{ rec.on }}{% if rec.limit %}, over the first {{ rec.limit }}{% endif %}{% if rec.shard %}, shard {{ rec.shard }}{% endif %}">✓ {{ rec.passed }}{% if rec.limit %} · first {{ rec.limit }}{% endif %}</span>
+        {%- elif failed and failed.value is defined %}{% set e = (failed.expect or expect or {'at_least': 1}) %}{% set k = e|list|first %}<span class="std-proof std-proof-no" title="not proven: {{ ([failed.passed, failed.on] + (failed.problems or []))|select|join(' · ') }}">✕ {{ failed.value }} {{ '>' if k == 'at_most' else '<' }} {{ e[k] }}</span>
+        {%- elif failed %}<span class="std-proof std-proof-no" title="{{ (failed.problems or [])|join(' · ') }}">✕ not proven</span>
+        {%- else %}<span class="std-proof std-proof-none">not run</span>{% endif -%}
+      {%- endmacro %}
+      {% macro chip(c) -%}
+        <span class="std-ctl" title="{{ {'nop': 'no answer at all: must score nothing', 'oracle': 'the reference answers: must score everything'}.get(c.key, '') }} - {{ {'official': 'from the authors', 'adapter': 'from Harbor\'s adapter', 'nullius': 'made by Nullius'}.get(c.source, c.source) }}: {{ c.from }}"><b>{{ c.key }}</b>{{ proof(c.proven, c.failed, c.expect) }}</span>
+      {%- endmacro %}
+      {% macro check(name, says, rec, failed) -%}
+        <span class="std-ctl std-checkchip"><b>{{ name }}</b>{% if rec %}<span class="std-proof std-proof-ok" title="{{ says }} · {{ rec.passed }} · on {{ rec.on }}">✓</span>{% else %}{{ proof(rec, failed) }}{% endif %}</span>
+      {%- endmacro %}
+      {%- if std.setups %}
+      <section class="bench-section std-setups" id="setups" aria-labelledby="setups-title">
+        <h2 id="setups-title">Setup</h2>
+        {% set x = std.setups[0] %}
+        <div class="std-setup-list"><div class="std-setup-row">
+          <h3>Original</h3>
+          <div class="std-setup-meta"><span><b>Model</b> Choose in the run builder</span></div>
+        </div></div>
+          <details class="std-setup-detail"><summary>How it runs</summary>
+            <div class="std-setup-description">
+            <p>{{ x.summary }}</p>
+            <small class="mono">{{ std.ref }}:original</small>
+            </div>
+          </details>
+      </section>
+      {%- endif %}
+      <section class="bench-section std-proofs" id="standard" aria-labelledby="standard-title">
+        <h2 id="standard-title">Proofs</h2>
+        {% if std.upstream.repository %}<p class="mono bench-runner-repo" title="The upstream it runs: the release tag, and the commit it was checked at">{{ std.upstream.repository|replace('https://github.com/', '') }} @ {% if std.upstream.tag %}{{ std.upstream.tag }} · {% endif %}{{ std.upstream.tested[:7] }}</p>{% endif %}
+        <p class="bench-ds-note">Null and reference controls check the scorer; stability and leak checks validate the tasks.</p>
+
+        <table class="std-prooftable">
+          <tbody>
+          {% for d in std.datasets %}
+            <tr>
+              <th scope="row">{{ d.label }}{% if d.units %}<small>{{ d.units }} {{ std.units.nouns }}</small>{% endif %}</th>
+              <td><div class="std-ctls">
+                {{ check('stable', 'the same ids twice, each unique', d.proofs.units, (d.failed or {}).units) }}
+                {% if std.controls|selectattr('key', 'equalto', 'oracle')|list %}{{ check('no leak', 'nothing of the reference shows before the run', d.proofs.leak, (d.failed or {}).leak) }}{% endif %}
+                {% for c in d.controls %}{{ chip(c) }}{% endfor %}
+              </div>
+              {%- for c in d.controls if c.proven and c.proven.job in std_jobs %}<a class="std-joblink" href="{{ url_for('job', job_id=c.proven.job) }}">{{ c.key }}'s job</a>{% endfor %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% if local %}
+        <details class="std-check">
+          <summary>Run control checks</summary>
+          <form method="post" action="{{ url_for('benchmark_prove', key=b.key) }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <p>Check dataset stability, answer leaks and control scores. Results update the recorded proofs.
+              {% if std.judged %}The judge needs a model key.{% else %}No model calls or key required.{% endif %}</p>
+            <div class="std-form">
+              {% if std.datasets|length == 1 %}
+              <input type="hidden" name="dataset" value="{{ std.datasets[0].id }}">
+              <div class="std-fixed-dataset"><span>Dataset</span><b>{{ std.datasets[0].label }}</b></div>
+              {% else %}
+              <label>Dataset<select name="dataset"><option value="">All datasets</option>{% for d in std.datasets %}<option value="{{ d.id }}">{{ d.label }}</option>{% endfor %}</select></label>
+              {% endif %}
+              <label>{{ std.units.nouns|capitalize }}<input name="limit" type="number" min="1" placeholder="all" autocomplete="off"></label>
+              {% if std.judged %}
+              {% if providers %}<label>Judge's provider<select name="provider">{% for p, label in providers %}<option value="{{ p }}">{{ label }}</option>{% endfor %}</select></label>{% endif %}
+              <label>Judge model<input name="judge_model" placeholder="its own" autocomplete="off" spellcheck="false"></label>
+              {% endif %}
+            </div>
+            {% if std.judged and not providers %}<p>The judge needs a model key first: set one in <a href="{{ url_for('settings_page') }}">Settings</a>.</p>
+            {% else %}<button class="btn" type="submit">Run checks</button>{% endif %}
+          </form>
+        </details>
+        {% endif %}
+      </section>
+      {% if std.options %}
+      {#- Its own options (a search, a mode): each value, a line on it, what it needs; the machine setup some need. -#}
+      <section class="bench-section std-benchopts" id="options" aria-labelledby="options-title">
+        <h2 id="options-title">Options</h2>
+        {% for n, o in std.options.items() %}
+        <h3 class="std-optname">{{ o.label }}{% if o.datasets %} <small>{{ o.datasets|join(', ') }}</small>{% endif %}</h3>
+        <p class="bench-ds-note">{{ o.summary }}</p>
+        {% if o.pattern %}
+        <div class="std-option-range"><span class="std-tag">{{ 'Provider default' if n == 'temperature' and o.default == 'default' else o.default }}</span>
+          {% if n == 'temperature' %}<span>Custom decimal, e.g. <code>0.5</code></span>{% else %}<code>{{ o.pattern }}</code>{% endif %}
+        </div>
+        {% else %}
+        <ul class="std-optvals{{ ' std-optvals-detailed' if o.about or o.needs else '' }}">
+          {% for v in o['values'] %}{% set need = o.needs.get(v) or {} %}
+          <li><b class="mono">{{ v }}</b>{% if v == o.default and v != 'default' %} <span class="std-tag">default</span>{% endif %}
+            {% if need.embeddings %}<span class="run-tag" title="its embedding calls go through the run's relay">OpenAI key · {{ need.embeddings }}</span>{% endif %}
+            {% for h in need.host or [] %}<a class="std-need" href="#setup-{{ h }}" title="{{ std.host[h].summary }}">needs {{ h }}</a>{% endfor %}
+            {% if o.about.get(v) %}<small>{{ o.about[v] }}</small>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% endfor %}
+        {% for h, r in std.host.items() %}
+        <div class="std-hostreq" id="setup-{{ h }}">
+          <h3 class="std-optname">Setup: {{ h }}</h3>
+          <p class="bench-ds-note">{{ r.summary }} Checked by {{ r.check|join(', ') }} on PATH, on each machine a run uses; the builder's Where step checks it{% if r.install %} and can install it{% else %}: a machine's own hardware, nothing installs it{% endif %}.</p>
+          {% if r.install %}<div class="std-code"><div class="std-code-head"><span>install, on each machine</span><button type="button" class="std-copy">Copy</button></div><pre><code>{{ r.install|join('\n') }}</code></pre></div>{% endif %}
+        </div>
+        {% endfor %}
+      </section>
+      {% endif %}
+      {% if licences %}
+      {#- Its licences, per environment: kept for this benchmark alone, outside the repository; a value is never shown back. #}
+      <section class="bench-section std-licences" id="licences" aria-labelledby="licences-title">
+        <h2 id="licences-title">Licences</h2>
+        <p class="bench-ds-note">What {{ std.label }}'s environments need of licensed software. Each is kept for {{ std.label }} alone, in your licence storage outside the application, and sent only where it says, to the units whose environment needs it. A unit whose licence is missing is recorded as not run - no one's result.</p>
+        {% for e in licences %}
+        <h3 class="std-licenv"><span class="mono">{{ e.environment }}</span><small>{{ e.summary }}</small></h3>
+        <ul class="std-liclist">
+          {% for s in e.needs %}
+          <li class="std-lic{% if not s.status.set %} std-lic-missing{% endif %}">
+            <div class="std-lichead">
+              <b class="mono">{{ s.name }}</b>
+              <span class="std-lickind">{{ {'value': 'a key', 'file': 'a licence file', 'server': 'a licence server'}[s.kind] }}</span>
+              <span class="std-licstate">{% if s.status.set %}set {{ s.status.on }}{% if s.status.filename %} · {{ s.status.filename }}{% endif %}{% if s.status.expires %} · {% if s.status.expired %}<em class="std-licexpired">expired {{ s.status.expires }}</em>{% else %}expires {{ s.status.expires }}{% endif %}{% endif %}{% else %}missing{% endif %}</span>
+            </div>
+            <small>{% if s.summary %}{{ s.summary }} · {% endif %}{% if s.kind == 'file' %}{% if s.to == 'agent' %}mounted read-only at <span class="mono">{{ s.path }}</span> in the agent's container{% if s.env %}, its path in <span class="mono">{{ s.env }}</span>{% endif %}{% else %}to the driver, which scores: its path in <span class="mono">{{ s.env }}</span>{% endif %}{% elif s.kind == 'server' %}host:port, as <span class="mono">{{ s.name }}</span>{% if s.to == 'agent' %} - on docker the one address the agent's container may reach{% else %} to the driver, which scores{% endif %}{% else %}as <span class="mono">{{ s.name }}</span>, to the {{ "agent's container" if s.to == 'agent' else 'driver, which scores' }}{% endif %}</small>
+            {% if local %}
+            <div class="std-licforms">
+              <form method="post" action="{{ url_for('benchmark_licence', key=b.key) }}" {% if s.kind == 'file' %}enctype="multipart/form-data"{% endif %} class="std-licset">
+                <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ s.name }}"><input type="hidden" name="action" value="set">
+                {% if s.kind == 'file' %}<input type="file" name="file" required aria-label="{{ s.name }}: the licence file">
+                {% else %}<input name="value" type="password" required autocomplete="off" spellcheck="false" aria-label="{{ s.name }}" placeholder="{{ 'host:port' if s.kind == 'server' else ('replace it' if s.status.set else 'its value') }}">{% endif %}
+                <label class="std-licexp">expires<input name="expires" type="date"></label>
+                <button class="btn" type="submit">{{ 'Replace' if s.status.set else 'Set' }}</button>
+              </form>
+              {% if s.status.set %}<form method="post" action="{{ url_for('benchmark_licence', key=b.key) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ s.name }}"><input type="hidden" name="action" value="delete"><button class="btn std-licquiet" type="submit">Remove</button></form>{% endif %}
+              {% if s.name in movable %}<form method="post" action="{{ url_for('benchmark_licence', key=b.key) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ s.name }}"><input type="hidden" name="action" value="move"><button class="btn std-licquiet" type="submit" title="Saved settings hold {{ s.name }}: move its value here and remove it there">Move from saved settings</button></form>{% endif %}
+            </div>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endfor %}
+        {% if not local %}<p class="bench-ds-note">Licences are set from a browser on the application host only.</p>{% endif %}
+      </section>
+      {% endif %}
+      {% endif %}
+
+      {% if ds %}
+      <section class="bench-section" aria-labelledby="datasets">
+        <h2 id="datasets">{{ 'Datasets' if ds|length > 1 else 'Dataset' }}{% if ds|length > 1 %} <span class="bench-n">{{ ds|length }}</span>{% endif %}</h2>
+        {# Several datasets are tabs, #<dataset key> selecting one; without the
+           script they are stacked, each under its title. #}
+        {% if ds|length > 1 %}<div class="bench-tabs" role="tablist" aria-label="Datasets" hidden>{% for d in ds %}<button type="button" role="tab" id="tab-{{ d.key }}" aria-controls="{{ d.key }}" aria-selected="{{ 'true' if loop.first else 'false' }}">{{ d.title }}</button>{% endfor %}</div>{% endif %}
+        {% for d in ds %}
+        <section class="cat-dataset" id="{{ d.key }}" aria-label="Dataset: {{ d.title }}"{% if ds|length > 1 %} role="tabpanel" aria-labelledby="tab-{{ d.key }}"{% endif %}>
+          <h3 class="bench-ds-title">{{ d.title }}</h3>
+          <div class="bench-facts">
+            <div><span>Tasks</span><b>{{ '{:,}'.format(d.tasks) if d.tasks else '—' }}</b></div>
+            {% if not data[d.key] %}<div><span>Source</span><b>{{ d.source }}</b></div>{% endif %}
+            {% if d.official %}<div><span>Official</span><a href="{{ d.official }}">{{ d.official|replace('https://', '') }}</a></div>{% endif %}
+          </div>
+          {% if d.notes %}<p class="bench-ds-note">{{ d.notes }}</p>{% endif %}
+          <dl class="bench-rows">
+            {% if d.verifier %}<div><dt>Verifier</dt><dd>{{ d.verifier }}</dd></div>{% endif %}
+            {#- One row per way it runs: where that harness reads the data, at which pin. The harness
+                fetches it when a run starts; nobody downloads anything by hand. #}
+            {% if data[d.key] %}<div><dt>Data</dt><dd>
+              <ul class="bench-sources">
+                {% for r in data[d.key] %}
+                <li>
+                  <span class="run-tag rt-{{ r.way }}" title="Runs with {{ r.label }}">{{ r.label }}</span>
+                  <span class="src-from">{{ r.from }}</span>
+                  {% if r.href %}<a class="mono" href="{{ r.href }}">{{ r.name }}</a>{% else %}<b class="mono">{{ r.name }}</b>{% endif %}
+                  {% if r.pin %}<span class="src-pin mono">{{ r.pin }}</span>{% endif %}
+                  <small class="src-by">{{ r.by }}{% if r.files %} · {% for f in r.files %}<span class="mono">{{ f.name }}</span>{% if f.size %} {{ f.size }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if r.files|selectattr('checked')|list|length == r.files|length %}, checked by sha256{% endif %}{% endif %}</small>
+                </li>
+                {% endfor %}
+              </ul>
+            </dd></div>{% endif %}
+          </dl>
+        </section>
+        {% endfor %}
+      </section>
+      {% endif %}
+
+      {% if b.good_to_know %}
+      <section class="bench-section" aria-labelledby="good-to-know">
+        <h2 id="good-to-know">Good to know</h2>
+        <ul class="bench-list">{% for note in b.good_to_know %}<li>{{ note }}</li>{% endfor %}</ul>
+      </section>
+      {% endif %}
+      <div class="bench-cols one">
+        {% if b.upstream_limitations %}
+        <section class="bench-section" aria-labelledby="upstream-limitations">
+          <h2 id="upstream-limitations">Upstream limitations</h2>
+          <ul class="bench-list">{% for l in b.upstream_limitations %}<li>{{ l }}</li>{% endfor %}</ul>
+        </section>
+        {% endif %}
+        <section class="bench-section" aria-labelledby="limitations">
+          <h2 id="limitations">Nullius limitations</h2>
+          <ul class="bench-list">{% for l in b.limitations %}<li>{{ l }}</li>{% else %}<li class="faint">none recorded</li>{% endfor %}</ul>
+        </section>
+      </div>
+
+      {% if b.citation %}
+      <section class="bench-section cat-citation" id="citation" aria-labelledby="citation-title">
+        <div class="bench-section-head"><h2 id="citation-title">Citation</h2>{% if papers|length > 1 %}<button class="btn ghost sm" type="button" data-copy="{{ b.citation }}">Copy all {{ papers|length }} BibTeX</button>{% endif %}</div>
+        {%- if papers %}{% set p = papers[0] %}
+        {#- the venue seal: the venue, year and kind turning slowly round the year, beside the paper as a reader names it #}
+        <div class="cite-seal">
+          <div class="cite-emblem" role="img" aria-label="{{ p.venue_short }} {{ p.year }}, {{ p.kind_label|lower }}">
+            <svg viewBox="0 0 170 170" aria-hidden="true">
+              <circle class="ring" cx="85" cy="85" r="80" stroke-width="2"/><circle class="ring" cx="85" cy="85" r="48" stroke-width="1"/>
+              <text class="yr" x="85" y="98" text-anchor="middle" font-size="36">{{ p.year }}</text>
+            </svg>
+            <div class="spin" aria-hidden="true"><svg viewBox="0 0 170 170">
+              <defs><path id="cite-arc" d="M85,85 m-62,0 a62,62 0 1,1 124,0 a62,62 0 1,1 -124,0"/></defs>
+              {%- set ring = (p.venue_short ~ ' · ' ~ p.year ~ ' · ' ~ p.kind_label ~ ' · ')|upper %}
+              <text font-size="10.5"><textPath href="#cite-arc" textLength="386" lengthAdjust="spacing">{{ ring * (2 if ring|length < 28 else 1) }}</textPath></text>
+            </svg></div>
+          </div>
+          <div class="cite-seal-text">
+            <h3 class="cite-title">{{ p.title }}</h3>
+            <p class="cite-who">{{ p.authors_short }}</p>
+            <p class="cite-venue">{{ p.venue }}</p>
+            <div class="cite-actions"><button class="btn sm" type="button" data-copy="{{ p.bibtex }}">Copy BibTeX</button>{% if p.url %}<a class="btn ghost sm" href="{{ p.url }}" target="_blank" rel="noopener">Read the paper ↗</a>{% endif %}</div>
+          </div>
+        </div>
+        {% if papers|length > 1 %}
+        <ul class="cite-more">
+          {% for q in papers[1:] %}<li><span><b>{{ q.title }}</b> <span class="faint">{{ q.venue_short }} {{ q.year }}</span></span><button class="btn ghost sm" type="button" data-copy="{{ q.bibtex }}">Copy BibTeX</button></li>{% endfor %}
+        </ul>
+        {% endif %}
+        {%- else %}
+        <pre class="bench-bibtex">{{ b.citation }}</pre>
+        {%- endif %}
+      </section>
+      {% endif %}
+      {%- if b.published %}
+      {#- A Harbor benchmark runs as published through Harbor's own agent for it, on any model: the builder names it. -#}
+      <section class="bench-section std-setups" id="published" aria-labelledby="published-title">
+        <h2 id="published-title">As published</h2>
+        <p>Harbor's <span class="mono">{{ b.published.agent }}</span>: {{ b.published.says }}</p>
+      </section>
+      {%- endif %}
+    </div>
+
+    <aside class="bench-aside" aria-label="At a glance">
+      <dl class="bench-glance">
+        <div><dt>Tasks</dt><dd>{{ tasks[0] }}{{ ' each' if tasks[1] == 'tasks each' }}</dd></div>
+        <div><dt>{{ 'Datasets' if ds|length != 1 else 'Dataset' }}</dt><dd>{{ ds|length }}</dd></div>
+        {% if b.scoring %}<div><dt>Scored by</dt><dd>{{ b.scoring }}</dd></div>{% endif %}
+        <div><dt>Runs with</dt><dd class="run-tags">{% if 'standard' in b.harness %}<span class="run-tag rt-standard" title="Runs with the Nullius standard">Nullius</span>{% endif %}{% if 'harbor' in b.harness %}<span class="run-tag rt-harbor" title="Runs with Harbor">Harbor</span>{% endif %}</dd></div>
+        {% if b.citation_source %}<div><dt>Official</dt><dd><a href="{{ b.citation_source }}">{{ b.citation_source|replace('https://', '')|replace('github.com/', '') }}</a></dd></div>{% endif %}
+      </dl>
+      {% if files %}<div class="bench-tree-box">
+        <div class="bench-tree-label">Catalogue files</div>
+        <pre class="bench-tree">benchmarks/{{ b.key }}/{% for f in files %}
+{{ '└─ ' if loop.last else '├─ ' }}{{ f }}{% endfor %}</pre>
+      </div>{% endif %}
+    </aside>
+  </div>
+</article>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='catalogue/catalogue.js') }}"></script>{% endblock %}

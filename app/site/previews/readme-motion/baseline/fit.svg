@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 350" width="800" height="350" role="img" aria-labelledby="t d"><title id="t">Prove it fits</title><desc id="d">A required port meets a proven port. Conceptual animation, not an evaluation result.</desc><style>text{font-family:Arial,sans-serif;fill:#dedfe2;font-size:17px} .muted{fill:#a1a7b1;font-size:13px}.line{stroke:#474d56;stroke-width:1.5;fill:none}.ink{stroke:#dedfe2;stroke-width:1.6;fill:none}.blue{stroke:#a7bddb;stroke-width:2;fill:none}.fill{fill:#202328;stroke:#474d56;stroke-width:1.5}.dot{fill:#a7bddb}.ok{stroke:#a6c5ad;fill:none;stroke-width:2}.warn{stroke:#dab47b;fill:none;stroke-width:2} .float{animation:float 6s cubic-bezier(.22,1,.36,1) infinite}.arrive{animation:arrive 6s cubic-bezier(.22,1,.36,1) infinite}.reveal{animation:reveal 6s ease infinite}.scan{animation:scan 6s ease-in-out infinite}.pulse{animation:pulse 6s ease infinite}.draw{stroke-dasharray:200;animation:draw 6s ease infinite}.left{animation:left 6s cubic-bezier(.22,1,.36,1) infinite}.right{animation:right 6s cubic-bezier(.22,1,.36,1) infinite}.delay{animation-delay:-2s}.delay2{animation-delay:-4s}.packet{animation:packet 6s ease-in-out infinite} .expand{animation:expand 6s cubic-bezier(.22,1,.36,1) infinite;transform-box:fill-box;transform-origin:center}.slide{animation:slide 6s ease-in-out infinite}
+@keyframes float{0%,12%,92%,100%{transform:translateY(-12px)}40%,72%{transform:translateY(0)}}
+@keyframes arrive{0%,10%,94%,100%{transform:translateX(-70px);opacity:.65}38%,76%{transform:translateX(0);opacity:1}}
+@keyframes reveal{0%,24%,90%,100%{opacity:.4}40%,78%{opacity:1}}
+@keyframes scan{0%,12%,100%{transform:translateX(-110px)}65%,82%{transform:translateX(110px)}}
+@keyframes pulse{0%,25%,90%,100%{opacity:.5}42%,78%{opacity:1}}
+@keyframes draw{0%,22%,100%{stroke-dashoffset:200;opacity:.2}50%,82%{stroke-dashoffset:0;opacity:1}}
+@keyframes left{0%,10%,95%,100%{transform:translateX(-45px)}38%,80%{transform:translateX(0)}}
+@keyframes right{0%,10%,95%,100%{transform:translateX(45px)}38%,80%{transform:translateX(0)}}
+@keyframes packet{0%,8%{offset-distance:0%;opacity:0}15%{opacity:1}70%{offset-distance:100%;opacity:1}83%,100%{offset-distance:100%;opacity:0}}
+@keyframes expand{0%,12%,96%,100%{transform:scaleX(.75);opacity:.6}42%,78%{transform:scaleX(1);opacity:1}}
+@keyframes slide{0%,10%,95%,100%{transform:translateY(16px);opacity:.4}40%,80%{transform:translateY(0);opacity:1}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;opacity:1!important}}</style><rect width="800" height="350" fill="#18191b"/><text x="240" y="90" text-anchor="middle">A benchmark</text><text x="570" y="90" text-anchor="middle">An agent</text>
+<g class="left"><path d="M150 127H305V151H326V191H305V215H150Z" class="fill"/><path d="M175 151H263M175 170H250M175 189H263" class="line"/></g>
+<g class="right"><path d="M490 127H645V215H490V191H469V151H490Z" class="fill"/><path d="M531 151H620M543 170H620M531 189H620" class="line"/></g>
+<path d="M332 170H463" class="blue draw"/><g class="reveal"><circle cx="398" cy="170" r="19" fill="#18191b" stroke="#a6c5ad"/><path d="m389 170 6 6 12-13" class="ok"/></g>
+<text x="400" y="271" text-anchor="middle" class="muted">agent.workspace/v1</text></svg>

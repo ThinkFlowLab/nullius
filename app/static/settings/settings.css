@@ -1,0 +1,229 @@
+/* Settings: a section per thing a run needs, an index beside them, and what a run can use today above.
+   Colours are the app's tokens (style.css). */
+.st-page { width: 100%; max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.st-page .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.st-head { display: flex; flex-direction: column; gap: 14px; }
+.st-head h1 { margin: 0; }
+.st-ready { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 12px 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); }
+.st-ready-t { font-weight: 500; }
+.st-ready-i { font-size: 13px; color: var(--nav-text); text-decoration: none; }
+.st-ready-i:hover { color: var(--text); text-decoration: none; }
+.st-ready-i.on { color: var(--text); }
+.st-ready-i.on > span:first-child { color: var(--ok); }
+
+.st-layout { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+.st-index { flex: 1 1 200px; max-width: 240px; position: sticky; top: 16px; display: flex; flex-direction: column; gap: 2px; padding: 6px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); }
+.st-index a { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; box-sizing: border-box; padding: 0 12px; border-radius: 8px; color: var(--nav-text); text-decoration: none; }
+.st-index a:hover { background: var(--nav-hover); color: var(--text); text-decoration: none; }
+.st-index a[aria-current="page"] { background: var(--accent-soft); color: var(--text); }
+.st-index a span { font-size: 12.5px; color: var(--text-dim); }
+.st-index a span.mono { font-size: 11.5px; }
+.st-main { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 28px; }
+.st-main > form { display: flex; flex-direction: column; gap: 28px; }
+
+.st-section { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 16px; }
+.st-section[hidden] { display: none; }
+.st-section-head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.st-section-head h2 { margin: 0; font-size: 20px; font-weight: 500; letter-spacing: -.01em; text-transform: none; color: var(--text); }
+.st-section-head p { margin: 0; max-width: 64ch; color: var(--text-dim); }
+
+.st-card { margin: 0; padding: 16px 20px 14px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.st-card legend { display: inline-flex; align-items: center; gap: 9px; padding: 0 6px; font-weight: 500; font-size: 15px; }
+.st-logo { width: 20px; height: 20px; flex: none; color: var(--text); }
+.st-icon { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim); }
+.st-card-unset { border-style: dashed; background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }
+/* a card's rows: a label, then what it holds - an endpoint, a key, a field */
+.st-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 16px; align-items: center; }
+.st-row-label { font-size: 14px; font-weight: 500; color: var(--text); }
+#AGENT_KEYS { display: grid; gap: 24px; }
+.st-row-value { min-width: 0; display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
+.st-row-value.mono { display: block; font-size: 13px; }
+.st-about { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-faint); }
+@media (max-width: 560px) { .st-row { grid-template-columns: minmax(0, 1fr); } }
+
+.st-field { scroll-margin-top: 16px; }
+.st-field:target { border-radius: 8px; outline: 2px solid var(--accent); outline-offset: 4px; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.st-value { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.st-shown { font-family: var(--mono); font-size: 13px; letter-spacing: .08em; margin-right: auto; }
+.st-field.removed .st-shown { letter-spacing: 0; font-family: var(--sans); color: var(--bad); }
+.st-input { min-height: 40px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: 13px var(--mono); }
+.st-input:focus { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.st-input[hidden] { display: none; }
+.st-note { margin: 0; font-size: 12px; color: var(--text-dim); }
+
+/* run hosts: a row each - its name tests it, the result says what answered */
+.st-hosts { padding: 14px 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); }
+.settings-page.st-page .host-pills { flex-direction: column; flex-wrap: nowrap; gap: 0; }
+.settings-page.st-page .host-pill { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 4px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; background: none; color: var(--text); }
+.settings-page.st-page .host-pill .host-name { font-size: 14px; text-decoration: underline dotted var(--text-faint); text-underline-offset: 4px; }
+.settings-page.st-page .host-pill .settings-test { flex: 1; font-size: 12.5px; color: var(--text-dim); overflow-wrap: anywhere; }
+.settings-page.st-page .host-pill.st-runs .settings-test { color: var(--ok); }
+.settings-page.st-page .host-pill.st-blocked .settings-test { color: var(--bad); }
+.settings-page.st-page .host-pill .host-remove { margin-left: auto; width: 28px; height: 28px; }
+.st-hosts .host-actions { padding-top: 10px; }
+
+.st-savebar[hidden] { display: none; }
+.st-savebar { position: sticky; bottom: 12px; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); box-shadow: 0 10px 30px var(--shadow, rgba(0, 0, 0, .25)); }
+.st-changes { font-size: 13px; color: var(--text-dim); }
+.st-savebar.dirty { border-color: var(--accent); }
+.st-savebar.dirty .st-changes { color: var(--text); }
+
+@media (max-width: 760px) {
+  .st-index { position: static; max-width: none; flex-direction: row; flex-wrap: wrap; }
+  .st-index a { padding: 6px 10px; border: 1px solid var(--border-soft); }
+}
+
+.settings-dialog { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); padding: 0; width: min(560px, 92vw); font-size: 13px; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); }
+.settings-dialog::backdrop { background: rgba(0, 0, 0, .5); backdrop-filter: blur(2px); }
+.settings-dialog .dialog-head { padding: 18px 22px 0; }
+.settings-dialog h3 { margin: 0; font-size: 16px; }
+.settings-dialog .dialog-head p { margin: 2px 0 0; font-size: 12px; }
+.settings-dialog .dialog-tabs { display: inline-flex; gap: 2px; margin: 14px 22px 0; padding: 3px; border-radius: 8px; background: var(--surface-2); }
+.settings-dialog .dialog-tab { background: none; border: 0; border-radius: 6px; color: var(--text-dim); font: inherit; font-size: 12px; padding: 5px 12px; cursor: pointer; }
+.settings-dialog .dialog-tab.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+/* Each panel scrolls independently; a large SSH config never expands the dialog. */
+.settings-dialog[open] { display: flex; flex-direction: column; height: min(720px, 92dvh); max-height: 92dvh; overflow: hidden; }
+.settings-dialog .dialog-head, .settings-dialog .dialog-tabs, .settings-dialog .dialog-foot { flex: none; }
+.settings-dialog .dialog-tabs { align-self: flex-start; }
+.settings-dialog .dialog-panels { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.settings-dialog .dialog-panel { min-width: 0; padding: 20px 22px 4px; }
+.settings-dialog .dialog-panel[hidden], .settings-dialog .pick[hidden] { display: none; }
+.settings-dialog .host-picker { margin-top: 8px; }
+.settings-dialog .host-picker-trigger { display: flex; justify-content: space-between; align-items: center; gap: 16px; width: 100%; min-height: 60px; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.settings-dialog #host-picked { min-width: 0; }
+.settings-dialog .host-options { margin-top: 7px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; }
+.settings-dialog .host-search { width: 100%; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; background: transparent; color: var(--text); font: 13px var(--sans); }
+.settings-dialog .host-count { margin: 10px 14px 6px; color: var(--text-dim); font-size: 12px; }
+.settings-dialog .host-options-list { max-height: 244px; overflow-y: auto; overscroll-behavior: contain; padding: 4px 6px 8px; }
+.settings-dialog .pick { width: 100%; min-width: 0; overflow-wrap: anywhere; display: grid; gap: 5px; text-align: left; padding: 11px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.settings-dialog .pick:hover, .settings-dialog .pick:focus-visible { background: var(--nav-hover); }
+.settings-dialog .pick.on { background: var(--accent-soft); }
+.settings-dialog .pick-name { display: block; font: 500 14px var(--sans); overflow-wrap: anywhere; }
+.settings-dialog .pick-sub { display: block; font-size: 12px; color: var(--text-dim); overflow-wrap: anywhere; margin-top: 3px; }
+.settings-dialog [data-no-matches] { padding: 12px 14px; }
+.settings-dialog .host-field { margin-bottom: 16px; }
+.settings-dialog h3 { text-transform: none; letter-spacing: -.02em; font-size: 20px; }
+.settings-dialog .fl { text-transform: none; letter-spacing: normal; font: 500 13px var(--sans); }
+.settings-dialog .host-advanced { margin-top: 6px; }
+.settings-dialog .host-advanced summary { color: var(--text-dim); cursor: pointer; padding: 8px 0; font-size: 12px; }
+.settings-dialog .field-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.settings-dialog .field { display: grid; gap: 4px; flex: 1 1 10ch; min-width: 0; }
+.settings-dialog .field.grow { flex: 2 1 16ch; }
+.settings-dialog .field.port { flex: 0 0 90px; }
+.settings-dialog .fl { margin-bottom: 0; }
+.settings-dialog input[type=text], .settings-dialog input[type=password], .settings-dialog input[type=number] { width: 100%; box-sizing: border-box; font: 14px/1.4 var(--sans); padding: 11px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text); }
+.settings-dialog input:focus { outline: none; border-color: var(--accent); }
+.settings-dialog .auth-cards { display: grid; gap: 6px; margin-top: 6px; }
+.settings-dialog .auth-card { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); cursor: pointer; }
+.settings-dialog .auth-card:has(:checked) { border-color: var(--accent); }
+.settings-dialog .auth-card input[type=radio] { margin: 3px 0 0; accent-color: var(--accent); }
+.settings-dialog .auth-body { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.settings-dialog .auth-title { font-weight: 500; }
+.settings-dialog .auth-sub { font-size: 11px; color: var(--text-dim); }
+.settings-dialog .auth-card input[type=file] { max-width: 100%; font-size: 12px; color: var(--text-dim); }
+.settings-dialog .auth-card { transition: border-color .18s ease; }
+.settings-dialog .auth-more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s ease; }
+.settings-dialog .auth-more > span { overflow: hidden; min-height: 0; }
+.settings-dialog .auth-more input { margin-top: 2px; }
+.settings-dialog .auth-card:has(:checked) .auth-more { grid-template-rows: 1fr; }
+@media (prefers-reduced-motion: reduce) { .settings-dialog .auth-more { transition: none; } }
+.settings-dialog .dialog-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 14px 22px 18px; }
+.settings-dialog .dialog-status { flex: 1 0 100%; min-width: 0; overflow-wrap: anywhere; }
+.settings-dialog .dialog-status:empty { display: none; }
+.settings-dialog [data-cancel] { margin-left: auto; }
+
+/* the judge in use: two cards, one checked once JUDGE is set; the one in use says so either way */
+.st-judges { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px; margin: 0 0 16px; }
+.st-judge { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.st-judge:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.st-judge input { margin-top: 3px; }
+.st-judge b { font-weight: 500; }
+.st-judge small { display: block; color: var(--text-dim); font-size: 12px; margin-top: 3px; }
+
+[data-when][hidden] { display: none; }
+.st-judge small { overflow-wrap: anywhere; }
+.st-judge > span { min-width: 0; }
+
+/* Grouped settings navigation, shared by the modal and direct page. */
+.st-index .st-nav-group { display: flex; flex-direction: column; gap: 2px; }
+.st-nav-label { margin: 20px 12px 6px; font-size: 12px; color: var(--text-faint); }
+.st-index a { justify-content: flex-start; gap: 10px; }
+.st-index a span { color: inherit; font-size: 15px; }
+.st-index a .ic { flex: none; width: 17px; height: 17px; }
+.st-index [hidden] { display: none; }
+.st-search { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--surface-2); color: var(--text-dim); }
+.st-search .ic { flex: none; width: 17px; height: 17px; }
+.st-search input { min-width: 0; width: 100%; padding: 0; border: 0; background: transparent; color: var(--text); font: 13px var(--sans); }
+.st-search input:focus-visible { outline: none; }
+.st-search:focus-within { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.st-search-empty { padding: 8px 12px; font-size: 13px; color: var(--text-dim); }
+.st-theme-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.st-theme-options .btn[aria-pressed="true"] { border-color: transparent; background: var(--accent-soft); color: var(--text); }
+@media (max-width: 760px) {
+  .st-index .st-nav-group { flex: 1 1 130px; }
+  .st-index .st-search { flex: 1 0 calc(100% - 16px); }
+  .st-nav-label { margin: 8px 10px 6px; }
+}
+
+/* Palette previews use the same surface and accent colors as the app. */
+.st-theme-options .btn { display: flex; flex-direction: column; align-items: stretch; gap: 10px; text-align: left; padding: 12px; }
+.st-theme-swatch { display: flex; width: 112px; height: 48px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--preview-bg); }
+.st-theme-swatch i:nth-child(1) { width: 28%; background: var(--preview-surface); }
+.st-theme-swatch i:nth-child(2) { flex: 1; margin: 10px 6px; background: var(--preview-surface); border-radius: 3px; }
+.st-theme-swatch i:nth-child(3) { width: 12px; height: 12px; margin: 10px 8px 0 0; border-radius: 50%; background: var(--preview-accent); }
+[data-swatch="charcoal"] { --preview-bg: #0d0d0f; --preview-surface: #202024; --preview-accent: #aac7f4; }
+[data-swatch="graphite"] { --preview-bg: #0b0e13; --preview-surface: #191f29; --preview-accent: #81b4fa; }
+[data-swatch="midnight"] { --preview-bg: #080e1a; --preview-surface: #18263c; --preview-accent: #91bcff; }
+[data-swatch="light"] { --preview-bg: #faf9f6; --preview-surface: #eae8e3; --preview-accent: #355f9b; }
+[data-swatch="system"] { --preview-surface: #202024; --preview-accent: #aac7f4; background: linear-gradient(90deg, #0d0d0f 50%, #faf9f6 50%); }
+
+.st-theme-options .btn.ghost:hover { background: var(--nav-hover); color: var(--text); }
+.st-theme-options .btn.ghost[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
+
+/* Quiet scrollbars and clear section boundaries in every appearance. */
+.settings-embedded, .settings-page { --settings-scroll-thumb: color-mix(in srgb, var(--text-faint) 45%, var(--bg)); }
+.settings-embedded *, .settings-page * { scrollbar-width: thin; scrollbar-color: var(--settings-scroll-thumb) transparent; }
+.settings-embedded ::-webkit-scrollbar, .settings-page ::-webkit-scrollbar { width: 6px; height: 6px; }
+.settings-embedded ::-webkit-scrollbar-thumb, .settings-page ::-webkit-scrollbar-thumb { background: var(--settings-scroll-thumb); border-radius: 8px; }
+.settings-embedded ::-webkit-scrollbar-track, .settings-page ::-webkit-scrollbar-track { background: transparent; }
+.st-card, .st-hosts { border-color: var(--border); box-shadow: 0 3px 10px rgba(0, 0, 0, .18); }
+.st-card-unset { background: var(--surface); border-style: solid; }
+
+/* A catalogue selects a connection; configured providers stay compact. */
+.st-provider-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.st-provider-heading h2 { min-width: 0; }
+.st-provider-add { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; font-size: 13px; }
+.st-provider-add span { font-size: 18px; font-weight: 400; line-height: 1; }
+.st-provider-back { align-self: flex-start; }
+.st-provider-catalogue, .st-provider-fields { display: flex; flex-direction: column; gap: 18px; }
+.st-provider-catalogue h3, .st-provider-summary h3 { margin: 0; font: 500 15px/1.5 var(--sans); color: var(--text); text-transform: none; letter-spacing: normal; }
+.st-provider-catalogue .st-search { margin: 0; }
+.st-provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.st-provider-choice { display: flex; align-items: center; gap: 12px; padding: 18px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: 500 14px/1.5 var(--sans); text-align: left; cursor: pointer; }
+.st-provider-choice:hover { background: var(--nav-hover); border-color: var(--text-faint); }
+.st-provider-choice .st-logo { width: 28px; height: 28px; }
+.st-provider-summary { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.st-provider-summary > div { flex: 1; min-width: 0; }
+.st-provider-summary h3 { overflow-wrap: anywhere; }
+.st-provider-summary .st-about { margin-top: 3px; }
+.st-provider-done { align-self: flex-end; }
+.st-judge-single { margin-bottom: 0; }
+.st-judge-single .st-judge { border: 0; padding: 0; background: transparent; }
+.st-judge-single input { display: none; }
+
+/* Labels follow the action row, not the combined action and status height. */
+.st-guidance .st-row { align-items: start; }
+.st-guidance .st-row-label, .st-guidance .onb-state { line-height: 32px; }
+.st-guidance .btn { min-height: 32px; }
+
+/* Compact aligned settings rows, with room for long keys and paths. */
+.st-card > .st-row + .st-row { padding-top: 14px; border-top: 1px solid var(--border-soft); }
+.st-row { grid-template-columns: minmax(120px, 1fr) minmax(0, 1.5fr); }
+.st-input { min-height: 34px; }
+@media (max-width: 560px) { .st-row { grid-template-columns: minmax(0, 1fr); } }
+/* Sandbox: rows inside a form or a list keep the card's row rhythm */
+.st-sandbox-rows { display: grid; gap: 14px; }
+.st-sandbox-rows > .st-row + .st-row { padding-top: 14px; border-top: 1px solid var(--border-soft); }
+.settings-page .st-sandbox-rows .st-input { height: 34px; min-height: 34px; padding-block: 0; }
+.settings-page #sandbox .st-row-value.st-value { flex-direction: row; justify-content: flex-start; align-items: center; }
+.st-input[list]::-webkit-calendar-picker-indicator { opacity: 1; display: block; cursor: pointer; }

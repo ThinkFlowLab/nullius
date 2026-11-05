@@ -1,0 +1,34 @@
+{
+  "key": "gsm8k",
+  "title": "GSM8K",
+  "category": "Math",
+  "domain": "Grade-school math word problems that take two to eight steps of basic arithmetic, each with a single numeric answer.",
+  "scoring": "Solve rate (exact final answer)",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "limitations": [
+    "The prompt asking for the '#### <number>' line is Nullius's wording. The paper's models were fine-tuned to write it.",
+    "The paper's trained verifier, which picks the best of several answers, is not reproduced. Several attempts per problem report pass@k instead."
+  ],
+  "datasets": [
+    {
+      "key": "test",
+      "title": "GSM8K test",
+      "tasks": 1319,
+      "official": "https://github.com/openai/grade-school-math",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The upstream's extract_answer and is_correct, applied to the agent's last message and the problem's reference answer.",
+      "notes": "1,319 problems. MIT License."
+    }
+  ],
+  "citation": "@article{cobbe2021gsm8k,\n  title={Training Verifiers to Solve Math Word Problems},\n  author={Cobbe, Karl and Kosaraju, Vineet and Bavarian, Mohammad and Chen, Mark and Jun, Heewoo and Kaiser, Lukasz and Plappert, Matthias and Tworek, Jerry and Hilton, Jacob and Nakano, Reiichiro and Hesse, Christopher and Schulman, John},\n  journal={arXiv preprint arXiv:2110.14168},\n  year={2021}\n}",
+  "citation_source": "https://github.com/openai/grade-school-math",
+  "good_to_know": [
+    "Answers must end with a line '#### <number>'. The number is compared as text, so 18.00 does not match 18.",
+    "The test split is run. The Socratic variant has the same questions and answers, with different worked explanations."
+  ]
+}

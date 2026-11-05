@@ -1,0 +1,477 @@
+{% macro agent_mark(kind, key, label, css='agent-logo') -%}
+  {% set source = agent_marks.get(key.split('@')[0]) if kind == 'agent' else none %}
+  {% if source and '#' in source %}<svg class="{{ css }}" aria-hidden="true"><use href="{{ url_for('static', filename=source.split('#')[0]) }}#{{ source.split('#')[1] }}"/></svg>
+  {% elif source %}<img class="{{ css }}" src="{{ url_for('static', filename=source) }}" alt="" aria-hidden="true">
+  {% else %}{{ label[:1] }}{% endif %}
+{%- endmacro %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Nullius{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='brand/favicon.svg') }}">
+  <script>
+    // Runs before first paint so the page never flashes the wrong theme or
+    // the wrong rail width. Stored choices win; otherwise follow the OS.
+    (() => {
+      let saved, rail;
+      try { saved = localStorage.getItem('theme'); rail = localStorage.getItem('rail'); } catch {}
+      const palettes = ['charcoal', 'graphite', 'midnight'];
+      let dark;
+      try { dark = localStorage.getItem('dark-palette'); } catch {}
+      if (!palettes.includes(dark)) dark = 'charcoal';
+      const explicitDark = palettes.includes(saved) || saved === 'dark';
+      document.documentElement.dataset.theme = saved === 'light' ? 'light' : explicitDark ? 'dark' : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.palette = palettes.includes(saved) ? saved : dark;
+      document.documentElement.dataset.rail = rail === 'collapsed' ? 'collapsed' : 'open';
+    })();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='fonts.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='onboarding.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='settings/modal.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body{% if embedded %} class="settings-embedded"{% endif %}>
+<a class="skip-link" href="#main-content">Skip to content</a>
+{# ---- icons: one symbol each, referenced by <use>. Hand-drawn on a 24-grid,
+     stroke only, so they take the item's colour and weight. ---- #}
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-runs" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></symbol>
+    <symbol id="i-compare" viewBox="0 0 24 24"><rect x="3" y="4" width="7.5" height="16" rx="1.5"/><rect x="13.5" y="4" width="7.5" height="16" rx="1.5"/><path d="M6.75 9v6M17.25 9v6"/></symbol>
+    <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M4 20h16"/></symbol>
+    <symbol id="i-newrun" viewBox="0 0 24 24"><path d="M4 17l6-5-6-5M12 19h8"/></symbol>
+    <symbol id="i-ws" viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.7-6M20 4v5h-5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M4 12h12M18 5v14"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M8 10l4 4 4-4"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M13 7l5 5-5 5M6 7l5 5-5 5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M6 18L18 6"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></symbol>
+    <symbol id="i-agent" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="2.5"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01M9.5 16.5h5"/></symbol>
+    <symbol id="i-capability" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></symbol>
+    <symbol id="i-kit" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="m8 13 3 3 5-6"/></symbol>
+    <symbol id="i-bench" viewBox="0 0 24 24"><path d="M5 21V4M5 4h13l-3 4 3 4H5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  </defs>
+</svg>
+
+<div class="shell">
+  {% set ep = request.endpoint or '' %}
+  {# The rail: brand, the open workspace as a switcher, the pages in groups,
+     and the controls at the foot. Collapses to icons (Ctrl/⌘ B); every item
+     keeps its name as a tooltip, so nothing is lost, only width. #}
+  <aside class="side" id="side">
+    <div class="side-top">
+      <a class="brand" href="{{ url_for('home') }}" aria-label="Nullius home">
+        <span class="brand-mark" aria-hidden="true"></span><span class="brand-word" aria-hidden="true"></span>
+      </a>
+      <button class="rail-toggle" id="rail-toggle" type="button" aria-label="Collapse the sidebar" aria-controls="side-nav" aria-expanded="true">
+        <svg class="ic ic-collapse"><use href="#i-collapse"/></svg>
+        <svg class="ic ic-expand"><use href="#i-expand"/></svg>
+      </button>
+      <button class="icon-btn only-mobile" id="rail-close" type="button" aria-label="Close the menu">
+        <svg class="ic"><use href="#i-x"/></svg>
+      </button>
+    </div>
+
+    <div class="ws-switch" id="ws-switch">
+      {% if workspace %}
+      <button class="ws-btn" type="button" id="ws-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="ws-pop"
+              aria-label="Workspace: {{ workspace.label }}"
+              data-label="{{ workspace.label }}">
+        <span class="ws-avatar" style="--hue:{{ ws_hue(workspace.name) }}">{{ workspace.label[:2]|upper }}</span>
+        <span class="ws-text"><span class="ws-caption">Workspace</span><span class="ws-label">{{ workspace.label }}</span></span>
+        <svg class="ic ws-chev"><use href="#i-chev"/></svg>
+      </button>
+      {% else %}
+      <button class="ws-btn ws-none" type="button" id="ws-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="ws-pop"
+              aria-label="Choose a workspace" data-label="Open a workspace">
+        <span class="ws-avatar ws-avatar-empty"><svg class="ic"><use href="#i-plus"/></svg></span>
+        <span class="ws-text"><span class="ws-caption">Workspace</span><span class="ws-label">Open a workspace</span></span>
+        <svg class="ic ws-chev"><use href="#i-chev"/></svg>
+      </button>
+      {% endif %}
+      <div class="ws-pop" id="ws-pop" role="menu" aria-label="Workspaces" hidden>
+        {% if workspace %}
+        <div class="pop-head">Workspace</div>
+        <form method="post" action="{{ url_for('workspace_refresh') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="pop-item" type="submit" role="menuitem"><svg class="ic"><use href="#i-refresh"/></svg>Refresh runs</button></form>
+        <form method="post" action="{{ url_for('change_source') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="pop-item" type="submit" role="menuitem"><svg class="ic"><use href="#i-close"/></svg>Close</button></form>
+        <div class="pop-sep"></div>
+        {% endif %}
+        <div class="pop-head">Switch to</div>
+        {% for ws in workspaces if not (workspace and ws.name == workspace.name) %}
+        <form method="post" action="{{ url_for('workspace_open', name=ws.name) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="pop-item" type="submit" role="menuitem"><span class="ws-avatar sm" style="--hue:{{ ws_hue(ws.name) }}">{{ ws.label[:2]|upper }}</span><span class="pop-text"><span>{{ ws.label }}</span><span class="pop-sub mono">{{ ws.name }}</span></span></button></form>
+        {% else %}
+        <div class="pop-empty">{% if workspace %}No other workspace yet.{% else %}No workspace yet.{% endif %}</div>
+        {% endfor %}
+        <div class="pop-sep"></div>
+        <a class="pop-item" role="menuitem" href="{{ url_for('import_page', new=1) }}"><svg class="ic"><use href="#i-plus"/></svg>New workspace</a>
+        <a class="pop-item" role="menuitem" href="{{ url_for('workspaces_page') }}"><svg class="ic"><use href="#i-ws"/></svg>All workspaces</a>
+      </div>
+    </div>
+
+    <nav class="nav" id="side-nav" aria-label="Pages">
+      {# First steps: shown by onboarding.js once the first-open question is answered; opens the checklist #}
+      <div class="onb-rail" id="onb-rail" hidden>
+        <button class="nav-item" id="onb-open" type="button" data-label="First steps" aria-controls="onb-panel" aria-expanded="false"><svg class="ic"><use href="#i-check"/></svg><span class="lbl">First steps</span><span class="onb-count"></span></button>
+        <button class="onb-x" type="button" data-onb="dismiss" aria-label="Remove First steps"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Analyse</div>
+        <a class="nav-item {{ 'on' if ep in ('index', 'job', 'trial', 'save_trace') }}" href="{{ url_for('index') }}" data-label="Runs" aria-label="Runs"><svg class="ic"><use href="#i-runs"/></svg><span class="lbl">Runs</span></a>
+        <a class="nav-item {{ 'on' if ep in ('compare', 'compare_task', 'compare_picker') }}" href="{{ url_for('compare') }}" data-label="Compare" aria-label="Compare"><svg class="ic"><use href="#i-compare"/></svg><span class="lbl">Compare</span></a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Run</div>
+        <a class="nav-item {{ 'on' if ep.startswith('new_run') }}" href="{{ url_for('new_run') }}" data-label="Run builder" aria-label="Run builder"><svg class="ic"><use href="#i-newrun"/></svg><span class="lbl">Run builder</span></a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Catalogue</div>
+        {# The benchmarks as leaves, alphabetical, each opening its own page. #}
+        {% set tree_open = ep in ('benchmarks_page', 'benchmark_page') %}
+        <div class="nav-tree{{ '' if tree_open else ' folded' }}" data-tree="nav-bench">
+          <div class="nav-row">
+            <a class="nav-item {{ 'on' if ep in ('benchmarks_page', 'benchmark_page') }}" href="{{ url_for('benchmarks_page') }}" data-label="Benchmarks" aria-label="Benchmarks"><svg class="ic"><use href="#i-bench"/></svg><span class="lbl">Benchmarks</span></a>
+            <button class="tree-caret" type="button" aria-expanded="{{ 'true' if tree_open else 'false' }}" aria-label="{{ 'Fold' if tree_open else 'Unfold' }} the benchmark list"><svg class="ic"><use href="#i-chev"/></svg></button>
+          </div>
+          <div class="tree-kids"{% if not tree_open %} hidden{% endif %}>
+            {% for b in (nav_catalog.listed_benchmarks if nav_catalog else []) %}
+            <a class="tree-item leaf st-{{ b.origin }}{{ ' on' if ep == 'benchmark_page' and request.view_args.get('key') == b.key }}" href="{{ url_for('benchmark_page', key=b.key) }}">
+              <span class="leaf-dot"></span><span class="lbl">{{ b.title }}</span>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% for kind, label, list_ep, entry_ep, icon in [('agent', 'Agents', 'agents_page', 'agent_page', 'agent'), ('capability', 'Capabilities', 'features_page', 'feature_page', 'capability')] %}
+        {% set tree_open = ep in (list_ep, entry_ep) %}
+        <div class="nav-tree{{ '' if tree_open else ' folded' }}" data-tree="nav-{{ kind }}">
+          <div class="nav-row">
+            <a class="nav-item {{ 'on' if ep in (list_ep, entry_ep) }}" href="{{ url_for(list_ep) }}" data-label="{{ label }}" aria-label="{{ label }}"><svg class="ic"><use href="#i-{{ icon }}"/></svg><span class="lbl">{{ label }}</span></a>
+            <button class="tree-caret" type="button" aria-expanded="{{ 'true' if tree_open else 'false' }}" aria-label="{{ 'Fold' if tree_open else 'Unfold' }} the {{ label|lower }} list"><svg class="ic"><use href="#i-chev"/></svg></button>
+          </div>
+          <div class="tree-kids"{% if not tree_open %} hidden{% endif %}>
+            {% for item in nav_definitions[kind] %}
+            <a class="tree-item leaf{{ ' on' if ep == entry_ep and request.view_args.get('key') == item.key }}" href="{{ url_for(entry_ep, key=item.key) }}">
+              {% if kind == 'agent' and agent_marks.get(item.key) %}{{ agent_mark(kind, item.key, item.label, 'agent-logo nav-agent-logo') }}{% else %}<span class="leaf-dot"></span>{% endif %}<span class="lbl">{{ item.label }}</span>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+        {% set tree_open = ep in ('kits_page', 'kit_page') %}
+        <div class="nav-tree{{ '' if tree_open else ' folded' }}" data-tree="nav-kits">
+          <div class="nav-row">
+            <a class="nav-item {{ 'on' if ep in ('kits_page', 'kit_page') }}" href="{{ url_for('kits_page') }}" data-label="Kits" aria-label="Kits"><svg class="ic"><use href="#i-kit"/></svg><span class="lbl">Kits</span></a>
+            <button class="tree-caret" type="button" aria-expanded="{{ 'true' if tree_open else 'false' }}" aria-label="{{ 'Fold' if tree_open else 'Unfold' }} the kits list"><svg class="ic"><use href="#i-chev"/></svg></button>
+          </div>
+          <div class="tree-kids"{% if not tree_open %} hidden{% endif %}>
+            {% for item in nav_kits %}<a class="tree-item leaf{{ ' on' if ep == 'kit_page' and request.view_args.get('key') == item.key }}" href="{{ url_for('kit_page', key=item.key) }}"><span class="leaf-dot"></span><span class="lbl">{{ item.label }}</span></a>{% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Manage</div>
+        {# A tree: every workspace as a folder, the open one expanded to its
+           runs. Clicking a closed one switches; the caret folds the tree and
+           the fold is remembered. #}
+        <div class="nav-tree folded" data-tree="nav-ws">
+          <div class="nav-row">
+            <a class="nav-item {{ 'on' if ep.startswith('workspace') }}" href="{{ url_for('workspaces_page') }}" data-label="Workspaces" aria-label="Workspaces"><svg class="ic"><use href="#i-ws"/></svg><span class="lbl">Workspaces</span></a>
+            <button class="tree-caret" type="button" aria-expanded="false"
+                    aria-label="Fold the workspace list"><svg class="ic"><use href="#i-chev"/></svg></button>
+          </div>
+          <div class="tree-kids" hidden>
+            {% for ws in workspaces %}
+            {% set cur = workspace and ws.name == workspace.name %}
+            {% if cur %}
+            <a class="tree-item ws-item cur {{ 'on' if ep in ('index',) }}" href="{{ url_for('index') }}">
+              <span class="ws-avatar sm" style="--hue:{{ ws_hue(ws.name) }}">{{ ws.label[:2]|upper }}</span>
+              <span class="lbl">{{ ws.label }}</span><svg class="ic tree-check"><use href="#i-check"/></svg>
+            </a>
+            <div class="tree-runs">
+              {% for r in nav_runs %}
+              <a class="tree-item run-item {{ 'on' if (ep in ('job', 'trial', 'save_trace') and request.view_args.get('job_id') == r.job_id) }}"
+                 href="{{ url_for('job', job_id=r.job_id) }}">
+                <span class="tree-guide"></span><span class="lbl mono">{{ r.job_id }}</span><span class="tree-n">{{ r.n_trials }}</span>
+              </a>
+              {% else %}
+              <span class="tree-item run-item faint"><span class="tree-guide"></span><span class="lbl">no runs read yet</span></span>
+              {% endfor %}
+            </div>
+            {% else %}
+            <form method="post" action="{{ url_for('workspace_open', name=ws.name) }}" class="tree-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+              <button class="tree-item ws-item" type="submit">
+                <span class="ws-avatar sm" style="--hue:{{ ws_hue(ws.name) }}">{{ ws.label[:2]|upper }}</span>
+                <span class="lbl">{{ ws.label }}</span>
+              </button>
+            </form>
+            {% endif %}
+            {% endfor %}
+            <a class="tree-item ws-item add" href="{{ url_for('import_page', new=1) }}">
+              <span class="ws-avatar sm ws-avatar-empty"><svg class="ic"><use href="#i-plus"/></svg></span><span class="lbl">New workspace</span>
+            </a>
+          </div>
+        </div>
+        <a class="nav-item {{ 'on' if ep.startswith('settings') }}" href="{{ url_for('settings_page') }}" data-label="Settings" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg><span class="lbl">Settings</span></a>
+      </div>
+    </nav>
+
+  </aside>
+
+  <div class="content">
+    <header class="topbar">
+      <button class="icon-btn only-mobile" id="rail-open" type="button" aria-label="Open the menu" title="Menu" aria-controls="side" aria-expanded="false">
+        <svg class="ic"><use href="#i-runs"/></svg>
+      </button>
+      <span class="crumb">{% block crumb %}{% endblock %}</span>
+      <span class="header-spacer"></span>
+    </header>
+    <main id="main-content" tabindex="-1">
+      {% if record_workspace and (not workspace or record_workspace.name != workspace.name) %}
+      <p class="record-workspace">Source workspace: <strong>{{ record_workspace.label }}</strong> <span class="mono faint">{{ record_workspace.name }}</span></p>
+      {% endif %}
+      {% block body %}{% endblock %}
+    </main>
+  </div>
+  <div class="scrim" id="scrim" hidden></div>
+</div>
+  <script src="{{ url_for('static', filename='disclosures.js') }}"></script>
+  <script>
+  (() => {
+    const root = document.documentElement;
+    const readPreference = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
+    const remember = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
+    const systemTheme = matchMedia('(prefers-color-scheme: light)');
+    const darkPalettes = ['charcoal', 'graphite', 'midnight'];
+    const preferredDark = () => darkPalettes.includes(readPreference('dark-palette')) ? readPreference('dark-palette') : 'charcoal';
+    function applyTheme(preference, save = false) {
+      if (preference === 'dark') preference = preferredDark();
+      if (!['light', 'system', null, ...darkPalettes].includes(preference)) return;
+      if (save) {
+        remember('theme', preference);
+        if (darkPalettes.includes(preference)) remember('dark-palette', preference);
+      }
+      root.dataset.theme = preference === 'light' ? 'light' : darkPalettes.includes(preference) ? 'dark' : systemTheme.matches ? 'light' : 'dark';
+      root.dataset.palette = darkPalettes.includes(preference) ? preference : preferredDark();
+      document.dispatchEvent(new Event('nullius-theme-updated'));
+    }
+    document.addEventListener('nullius-theme-change', event => applyTheme(event.detail, true));
+    window.addEventListener('storage', event => {
+      if (['theme', 'dark-palette', null].includes(event.key)) applyTheme(readPreference('theme'));
+    });
+    systemTheme.addEventListener('change', () => {
+      if (![...darkPalettes, 'light', 'dark'].includes(readPreference('theme'))) applyTheme('system');
+    });
+
+    // The rail: collapse to icons, remembered; Ctrl/⌘ B toggles it.
+    // Accessible names remain available when the rail is collapsed.
+    const railToggle = document.getElementById('rail-toggle');
+    const setRail = (state, save = true) => {
+      root.dataset.rail = state;
+      if (save) remember('rail', state);
+      railToggle?.setAttribute('aria-label',
+        state === 'collapsed' ? 'Expand the sidebar' : 'Collapse the sidebar');
+      railToggle?.setAttribute('aria-expanded', String(state !== 'collapsed'));
+    };
+    setRail(root.dataset.rail, false);
+    railToggle?.addEventListener('click', () =>
+      setRail(root.dataset.rail === 'collapsed' ? 'open' : 'collapsed'));
+    document.addEventListener('keydown', (e) => {
+      if (railToggle && !matchMedia('(max-width: 900px)').matches
+          && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b'
+          && !/^(input|textarea|select)$/i.test(document.activeElement?.tagName || '')
+          && !document.activeElement?.isContentEditable) {
+        e.preventDefault();
+        setRail(root.dataset.rail === 'collapsed' ? 'open' : 'collapsed');
+      }
+    });
+
+    // Active catalogue trees arrive open from the server to avoid a first-paint jump;
+    // a fold or unfold lasts until the next page.
+    document.querySelectorAll('[data-tree]').forEach(tree => {
+      const caret = tree.querySelector('.tree-caret'), kids = tree.querySelector('.tree-kids');
+      const label = caret.getAttribute('aria-label').replace(/^(Fold|Unfold) /, '');
+      const set = (open, animate = true) => {
+        if (animate) NulliusDisclosure.setHidden(kids, open);
+        else { kids.hidden = !open; kids.inert = !open; }
+        caret.setAttribute('aria-expanded', String(open));
+        caret.setAttribute('aria-label', `${open ? 'Fold' : 'Unfold'} ${label}`);
+        tree.classList.toggle('folded', !open);
+      };
+      set(!!tree.querySelector('.nav-item.on, .tree-item.on'), false);
+      caret.addEventListener('click', () => set(caret.getAttribute('aria-expanded') !== 'true'));
+    });
+    // A leaf that points at the card on screen is the current one.
+    const markLeaf = () => {
+      const here = location.pathname, hash = location.hash.slice(1);
+      document.querySelectorAll('.tree-item.leaf').forEach(a => {
+        const url = new URL(a.href);
+        a.classList.toggle('on', url.pathname === here && url.hash.slice(1) === hash);
+      });
+    };
+    markLeaf();
+    addEventListener('hashchange', markLeaf);
+    document.querySelectorAll('.nav-item[data-label]').forEach(a => a.setAttribute('aria-label', a.dataset.label));
+    document.querySelectorAll('.nav-item.on, .tree-item.on').forEach(a =>
+      a.setAttribute('aria-current', new URL(a.href).pathname === location.pathname ? 'page' : 'location'));
+
+    // The workspace switcher: a popover, closed by a click outside or Escape.
+    const wsBtn = document.getElementById('ws-btn');
+    const wsPop = document.getElementById('ws-pop');
+    const closePop = (restoreFocus = false) => {
+      if (wsPop && !wsPop.hidden) {
+        wsPop.hidden = true;
+        wsBtn?.setAttribute('aria-expanded', 'false');
+        if (restoreFocus) wsBtn?.focus({ preventScroll: true });
+      }
+    };
+    if (wsBtn && wsPop) {
+      const menuItems = () => [...wsPop.querySelectorAll('[role="menuitem"]')];
+      const openPop = (last = false) => {
+        wsPop.hidden = false;
+        wsBtn.setAttribute('aria-expanded', 'true');
+        const items = menuItems();
+        items[last ? items.length - 1 : 0]?.focus({ preventScroll: true });
+      };
+      wsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (wsPop.hidden) openPop(); else closePop();
+      });
+      wsBtn.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          openPop(e.key === 'ArrowUp');
+        }
+      });
+      wsPop.addEventListener('keydown', e => {
+        const items = menuItems(), current = items.indexOf(document.activeElement);
+        if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+          e.preventDefault();
+          const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1
+            : (current + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+          items[next]?.focus();
+        }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePop(true); }
+      });
+      document.addEventListener('click', (e) => { if (!wsPop.contains(e.target)) closePop(); });
+      document.addEventListener('focusin', e => {
+        if (e.target !== wsBtn && !wsPop.contains(e.target)) closePop();
+      });
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !wsPop.hidden) {
+          e.preventDefault(); e.stopImmediatePropagation(); closePop(true);
+        }
+      });
+    }
+
+    // Small screens: the rail is a drawer behind a menu button.
+    const side = document.getElementById('side'), scrim = document.getElementById('scrim');
+    const railOpen = document.getElementById('rail-open'), content = document.querySelector('.content');
+    const mobile = matchMedia('(max-width: 900px)');
+    const openDrawer = (on, restoreFocus = true) => {
+      if (!side || !scrim) return;
+      closePop();
+      side.classList.toggle('drawer-open', on);
+      scrim.hidden = !on;
+      content.inert = on;
+      side.inert = mobile.matches && !on;
+      document.body.classList.toggle('drawer-active', on);
+      railOpen?.setAttribute('aria-expanded', String(on));
+      if (on) side.querySelector('a, button')?.focus();
+      else if (restoreFocus) railOpen?.focus();
+    };
+    if (side) side.inert = mobile.matches;
+    railOpen?.addEventListener('click', () => openDrawer(true));
+    document.getElementById('rail-close')?.addEventListener('click', () => openDrawer(false));
+    scrim?.addEventListener('click', () => openDrawer(false));
+    mobile.addEventListener('change', () => openDrawer(false, false));
+    document.addEventListener('keydown', e => {
+      if (!side?.classList.contains('drawer-open')) return;
+      if (e.key === 'Escape') { e.preventDefault(); openDrawer(false); }
+      if (e.key === 'Tab') {
+        const items = [...side.querySelectorAll('a, button')].filter(item => item.getClientRects().length && !item.disabled);
+        const first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
+    });
+
+    // One handler for every [data-copy] button: put the text on the
+    // clipboard and confirm inline. The execCommand fallback covers
+    // non-secure origins, where navigator.clipboard is undefined.
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-copy]');
+      if (!btn) return;
+      const text = btn.dataset.copy;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      const label = btn.textContent;
+      btn.textContent = 'copied ✓';
+      setTimeout(() => { btn.textContent = label; }, 1200);
+    });
+  })();
+  </script>
+  {% block scripts %}{% endblock %}
+{#- The tour's stops: each page's own address and the rail item that names it; the last is the checklist. #}
+{% set onb_tour = [
+  {'url': url_for('index'), 'sel': '.nav-item[href="' ~ url_for('index') ~ '"]', 'k': 'Runs', 'h': 'Every run you made or brought in',
+   'p': "Each job, its solve rate and what failed. Open one to watch its trials live, then any trial's trace."},
+  {'url': url_for('benchmarks_page'), 'sel': '.nav-item[href="' ~ url_for('benchmarks_page') ~ '"]', 'k': 'Benchmarks', 'h': 'The catalogue',
+   'p': 'What can be run, each benchmark with what runs it and how it is scored. One of your own is added here too.'},
+  {'url': url_for('new_run'), 'sel': '.nav-item[href="' ~ url_for('new_run') ~ '"]', 'k': 'Run builder', 'h': 'Build a run, step by step',
+   'p': 'Benchmark, agents, model, where it runs. Review shows the exact script, and Run starts it.'},
+  {'url': url_for('compare'), 'sel': '.nav-item[href="' ~ url_for('compare') ~ '"]', 'k': 'Compare', 'h': 'Runs side by side, on the same tasks',
+   'p': "Matched task by task, so a difference is the agent's and not a different set of tasks."},
+  {'url': url_for('settings_page'), 'sel': '.nav-item[href="' ~ url_for('settings_page') ~ '"]', 'k': 'Settings', 'h': 'Keys, hosts and judges',
+   'p': 'Model providers, the machines that run benchmarks, and the two judges. Keys stay in a file on this machine.'},
+  {'url': url_for('settings_page'), 'sel': '#onb-panel', 'k': 'First steps', 'h': 'What is left to do',
+   'p': 'Click a step: Nullius opens its page and points at what to do next. Hide it any time; it stays in the rail.'},
+] %}
+{% if not embedded %}
+<script src="{{ url_for('static', filename='onboarding.js') }}" data-state="{{ url_for('onboarding_state') }}" data-tour="{{ onb_tour|tojson|forceescape }}"></script>
+{% endif %}
+{#- Every notice a page is sent (Flask's flash) is a toast at the bottom left, as the builder's: it goes after a
+    few seconds - an error after twice as many - its bar counting them, paused while pointed at, or on its ×. #}
+{% set notices = get_flashed_messages(with_categories=true) %}
+{% if notices %}
+<div class="toasts" role="status" aria-live="polite">
+  {% for category, message in notices %}<div class="toast {{ 'bad' if category == 'error' else 'ok' }}"><span class="toast-text">{{ message }}</span><button type="button" class="toast-close" aria-label="Dismiss">×</button><span class="toast-bar" aria-hidden="true"></span></div>{% endfor %}
+</div>
+<script>
+document.querySelectorAll('.toast').forEach(t => {
+  const gone = () => { t.remove(); document.querySelector('.toasts:empty')?.remove(); };
+  t.querySelector('.toast-close').addEventListener('click', gone);
+  t.querySelector('.toast-bar').addEventListener('animationend', gone);
+});
+</script>
+{% endif %}
+<script src="{{ url_for('static', filename='notifications.js') }}"></script>
+<script src="{{ url_for('static', filename='controls.js') }}"></script>
+{% if not embedded %}
+<dialog id="settings-modal" class="settings-modal" aria-labelledby="settings-modal-title">
+  <header class="settings-modal-head">
+    <h2 id="settings-modal-title" tabindex="-1" autofocus>Settings</h2>
+    <button type="button" class="icon-btn" data-settings-close aria-label="Close Settings">×</button>
+  </header>
+  <iframe aria-label="Settings" id="settings-frame"></iframe>
+</dialog>
+<script src="{{ url_for('static', filename='settings/modal.js') }}"></script>
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,68 @@
+{
+  "schema": "nullius.agent/v1",
+  "key": "mini-swe-agent",
+  "label": "mini-swe-agent",
+  "summary": "Princeton's 100-line agent, bash only.",
+  "upstream": {
+    "package": "mini-swe-agent",
+    "version": "2.4.6",
+    "license": "MIT"
+  },
+  "install": {
+    "python": "3.12",
+    "pip": [
+      "mini-swe-agent==2.4.6",
+      "litellm==1.105.7"
+    ]
+  },
+  "start": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/run.py",
+      "{prompt}"
+    ]
+  },
+  "model": {
+    "apis": [
+      "chat"
+    ],
+    "env": {
+      "MSWEA_MODEL_NAME": "openai/{model}",
+      "OPENAI_API_BASE": "{base_url}",
+      "OPENAI_API_KEY": "{key}",
+      "MSWEA_CONFIGURED": "true",
+      "MSWEA_COST_TRACKING": "ignore_errors",
+      "MSWEA_SILENT_STARTUP": "1",
+      "NULLIUS_REASONING_EFFORT": "{opt_reasoning_effort}"
+    }
+  },
+  "options": {
+    "reasoning_effort": {
+      "summary": "How much reasoning a supported model uses before answering, with `default` leaving the choice to the provider.",
+      "values": [
+        "default",
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "default"
+    }
+  },
+  "only_for": ["swe-bench-verified"],
+  "offers": [
+    "agent.workspace/v1"
+  ],
+  "proven": {
+    "agent.workspace/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "2.4.6",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__14-21-58__kit__agent-workspace-v1__mini-swe-agent"
+    }
+  }
+}

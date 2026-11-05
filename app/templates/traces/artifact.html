@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ artifact.label }} — Nullius{% endblock %}
+{% block crumb %}/ runs / {{ job.job_id }} / {{ trial.task_base }} / artifacts{% endblock %}
+{% block body %}
+<p><a href="{{ url_for('trial', job_id=job.job_id, trial_name=trial.trial_name, workspace=request.args.get('workspace')) }}#artifacts">← Back to trial artifacts</a></p>
+<div class="page-title"><h1>{{ artifact.label }}</h1></div>
+<p class="subtitle"><span class="mono">{{ artifact.filename }}</span> · source record · credential-shaped values redacted</p>
+{% if artifact.truncated %}<p class="alert">This record exceeds the viewer’s 16 MiB limit. The first portion is available here; the original file is intact.</p>{% endif %}
+<div class="table-tools" aria-label="Artifact pages">
+  <span class="table-note">Page {{ artifact.page }} of {{ artifact.pages }} · characters {{ artifact.start + 1 if artifact.characters else 0 }}–{{ artifact.end }} of {{ artifact.characters }}</span>
+  {% if artifact.page > 1 %}<a class="btn ghost sm" href="{{ url_for('artifact_page', job_id=job.job_id, trial_name=trial.trial_name, key=artifact.key, page=artifact.page - 1, workspace=request.args.get('workspace')) }}">Previous</a>{% endif %}
+  {% if artifact.page < artifact.pages %}<a class="btn ghost sm" href="{{ url_for('artifact_page', job_id=job.job_id, trial_name=trial.trial_name, key=artifact.key, page=artifact.page + 1, workspace=request.args.get('workspace')) }}">Next</a>{% endif %}
+</div>
+{% if artifact.empty %}<p class="empty">This record is empty.</p>{% else %}<pre class="artifact-text" style="white-space:pre-wrap;overflow-wrap:anywhere">{{ artifact.text }}</pre>{% endif %}
+{% endblock %}

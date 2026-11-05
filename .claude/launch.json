@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "app",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with-requirements",
+        "app/requirements.txt",
+        "app/app.py",
+        "jobs",
+        "--no-debug"
+      ],
+      "port": 5057
+    }
+  ]
+}

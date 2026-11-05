@@ -1,0 +1,64 @@
+name: UI sweep
+
+on:
+  workflow_dispatch:
+    inputs:
+      benchmark:
+        description: "Benchmark key (leave empty for the full sweep)"
+        required: false
+        type: string
+  schedule:
+    - cron: '17 2 * * *'  # Nightly at 02:17 UTC.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-sweep-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install app and browser dependencies
+        run: |
+          python -m pip install --quiet -r app/requirements.txt
+          python -m venv "$RUNNER_TEMP/ui-sweep-browser"
+          "$RUNNER_TEMP/ui-sweep-browser/bin/python" -m pip install --quiet playwright
+          "$RUNNER_TEMP/ui-sweep-browser/bin/python" -m playwright install --with-deps chromium
+      - name: Sweep the interface
+        env:
+          SWEEP_BENCHMARK: ${{ inputs.benchmark }}
+          WORKSPACES_DIR: ${{ runner.temp }}/ui-sweep-workspaces
+        run: |
+          mkdir -p "$RUNNER_TEMP/ui-sweep"
+          python app/app.py --host 127.0.0.1 --port 8791 --no-debug > "$RUNNER_TEMP/ui-sweep/server.log" 2>&1 &
+          sweep_server_pid=$!
+          trap 'kill "$sweep_server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:8791/new-run > /dev/null; then
+              break
+            fi
+            if ! kill -0 "$sweep_server_pid" 2>/dev/null || [ "$attempt" -eq 30 ]; then
+              cat "$RUNNER_TEMP/ui-sweep/server.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          sweep_args=()
+          if [ -n "$SWEEP_BENCHMARK" ]; then
+            sweep_args+=(--only "$SWEEP_BENCHMARK")
+          fi
+          "$RUNNER_TEMP/ui-sweep-browser/bin/python" .claude/skills/ui-sweep/scripts/sweep.py \
+            --url http://127.0.0.1:8791 --out "$RUNNER_TEMP/ui-sweep" "${sweep_args[@]}"
+      # Nothing is kept: artifacts count against the account's storage. The
+      # report goes to the log; screenshots are the local sweep's.
+      - name: Print the report
+        if: always()
+        run: cat "$RUNNER_TEMP/ui-sweep/report.json" 2>/dev/null || echo "no report written"

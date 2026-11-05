@@ -1,0 +1,495 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "tau3-bench",
+  "label": "\u03c4\u00b3-bench",
+  "summary": "Each task is a customer's call, held by the upstream's own batch runner and orchestrator: its user simulator plays the customer from the task's scenario, the agent answers through the domain's tools (served over MCP, each call executed by the orchestrator's environment), and the upstream's evaluator scores the database the agent left and what it said.",
+  "family": "agent",
+  "needs": [
+    "agent.tools/v1",
+    "agent.conversation/v1"
+  ],
+  "upstream": {
+    "repository": "https://github.com/sierra-research/tau2-bench",
+    "tag": "v1.0.1",
+    "tested": "fc0055dc4e0a316c3f83133267fbd6faaa770992",
+    "tested_date": "2026-10-13",
+    "license": "MIT"
+  },
+  "driver": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/driver.py"
+    ],
+    "install": {
+      "python": "3.12",
+      "project": ".",
+      "extras": [
+        "knowledge"
+      ],
+      "locked": true,
+      "pip": [
+        "mcp==1.30.0"
+      ]
+    }
+  },
+  "mcp_servers": {
+    "domain": {
+      "command": [
+        "{install}/.venv/bin/python",
+        "{here}/mcp_server.py"
+      ],
+      "summary": "The domain's tools: the upstream's own schemas, served over MCP by the official SDK; each call passed to the driver, where the upstream's Orchestrator executes it in its environment and answers."
+    }
+  },
+  "datasets": [
+    {
+      "id": "airline",
+      "label": "Airline",
+      "path": "data/tau2/domains/airline/tasks.json",
+      "sha256": "ccd8ba737b4cc371415af70151187788f728d6108d0916e73bb4317b40542052",
+      "units": 50
+    },
+    {
+      "id": "retail",
+      "label": "Retail",
+      "path": "data/tau2/domains/retail/tasks.json",
+      "sha256": "8e03ebce7901bd6218e7a7dc3105faa9324091a68058f7fe61c65262868812e8",
+      "units": 114
+    },
+    {
+      "id": "telecom",
+      "label": "Telecom",
+      "path": "data/tau2/domains/telecom/tasks.json",
+      "sha256": "37e562e1ae3242577407e1303b1548bc64e7ea68e37d36173e6747990ceaf8a4",
+      "units": 114
+    },
+    {
+      "id": "telecom-workflow",
+      "label": "Telecom (workflow policy)",
+      "path": "data/tau2/domains/telecom/tasks.json",
+      "sha256": "37e562e1ae3242577407e1303b1548bc64e7ea68e37d36173e6747990ceaf8a4",
+      "units": 114,
+      "summary": "The telecom tasks, with a tech-support workflow as the agent's policy."
+    },
+    {
+      "id": "banking_knowledge",
+      "label": "Banking knowledge",
+      "summary": "97 tasks. How the agent searches the bank's documents is an option, bm25 by default.",
+      "units": 97
+    }
+  ],
+  "units": {
+    "noun": "task",
+    "nouns": "tasks"
+  },
+  "simulator": {
+    "model": "gpt-4.1-2025-04-14",
+    "says": "the customer: the upstream's own user simulator, built by its build_text_orchestrator (its guidelines and the task's scenario), its default model at its default arguments (temperature 0)"
+  },
+  "leaderboard": {
+    "says": "the \u03c4-bench leaderboard (taubench.com), a standard submission: the upstream's docs/leaderboard-submission.md recommends gpt-5.2 as the user simulator, its submissions run it at reasoning effort low, and it asks for 4 trials per domain",
+    "simulator": "gpt-5.2",
+    "bench_options": {
+      "user_reasoning_effort": "low"
+    },
+    "repeat": 4
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "Nullius: no agent runs and nothing is said; there is no conversation for the upstream's orchestrator to record, and an empty one, ended by the agent's error, is scored 0 by the upstream's evaluator."
+    },
+    "oracle": {
+      "source": "nullius",
+      "from": "Nullius, from the authors' answers: the task's gold actions (evaluation_criteria.actions), made through the upstream's environment, and a message carrying each fact in its communicate_info; scored by the upstream's evaluator as ALL_IGNORE_BASIS (database, actions, facts said), without the NL assertions: the reference has no conversation to ask them of."
+    }
+  },
+  "score": {
+    "kind": "pass",
+    "says": "the upstream's own batch runner, run_tasks, on the task: its Orchestrator holds the conversation by its rules (max steps 200, max errors 10, the user's stop) at the trial's seed run_tasks draws, an attempt that raises is made again (3 retries) and the last recorded INFRASTRUCTURE_ERROR, which is the unit's error, never a score; its evaluator (evaluate_simulation, ALL) scores the SimulationRun the Orchestrator returns: 0 unless the user ended it (the upstream's agent never does); else the product of the task's reward_basis - the database after the agent's calls, replayed by the upstream's environment, hashes as after the gold actions (DB), each required fact is in one of the agent's messages (COMMUNICATE), the judge finds each NL assertion met (NL_ASSERTION)",
+    "judge": {
+      "model": "gpt-4.1-2025-04-14",
+      "says": "the upstream's NL-assertion evaluator (evaluator_nl_assertions.py, its prompt, its call and its own model name), reached through the judge's route, at temperature 0, asked only for a task whose reward_basis names NL_ASSERTION and that has assertions"
+    }
+  },
+  "limits": {
+    "turn_seconds": 600,
+    "turns": 100,
+    "attempts": "The upstream's batch runner draws one seed per trial from its base seed 300 (run_tasks: random.seed(300), then randint(0, 1000000) per trial, in order) and gives it to the agent and the user simulator: attempt N of a unit is its trial N-1 at that seed, as --num-trials runs it, so --repeat 4 is the leaderboard's four trials and pass^k is computed as the upstream's metrics compute it."
+  },
+  "setups": {
+    "original": {
+      "summary": "The upstream's own agent (LLMAgent at its defaults, temperature 0) as the run's model, in the upstream's batch runner exactly as tau2 run runs it: its Orchestrator, user simulator, evaluator and judge, nothing of Nullius's in the conversation - the leaderboard's standard submission, which ranks models.",
+      "providers": {
+        "openai": "",
+        "openrouter": "",
+        "custom": ""
+      },
+      "turn_seconds": 7200,
+      "paper": "the \u03c4\u00b2-bench paper (arXiv 2506.07982)",
+      "reference_agent": "τ³-bench LLM agent"
+    }
+  },
+  "options": {
+    "retrieval": {
+      "summary": "How the agent searches the bank's documents in banking_knowledge tasks.",
+      "datasets": [
+        "banking_knowledge"
+      ],
+      "values": [
+        "bm25",
+        "bm25_grep",
+        "grep_only",
+        "no_knowledge",
+        "full_kb",
+        "golden_retrieval",
+        "openai_embeddings",
+        "openai_embeddings_grep",
+        "alltools",
+        "terminal_use",
+        "terminal_use_write"
+      ],
+      "default": "bm25",
+      "about": {
+        "bm25": "Word matching over the documents, one search tool. Offline: no key, nothing to install.",
+        "bm25_grep": "Word matching and a grep tool over the documents. Offline.",
+        "grep_only": "Only a grep tool over the documents. Offline.",
+        "no_knowledge": "No search and no documents: the agent has its policy only - the upstream's lower bound. Offline.",
+        "full_kb": "Every document written into the agent's policy, no search tool. Offline; a very long prompt.",
+        "golden_retrieval": "The documents the task needs written into the agent's policy, no search tool - the upstream's upper bound. Offline.",
+        "openai_embeddings": "Meaning search with OpenAI's text-embedding-3-large, one search tool. Its embedding calls go through the run's relay, on the OpenAI provider.",
+        "openai_embeddings_grep": "Meaning search with text-embedding-3-large and a grep tool. Its embedding calls go through the run's relay, on the OpenAI provider.",
+        "alltools": "The upstream's default and the leaderboard's: word search, meaning search and a read-only shell over the documents. Needs the OpenAI provider and the sandbox tools on the machine.",
+        "terminal_use": "Only a read-only shell over the documents: the agent greps and reads them itself. Needs the sandbox tools on the machine.",
+        "terminal_use_write": "A shell over the documents that may also write (a copy of them). Needs the sandbox tools on the machine."
+      },
+      "needs": {
+        "openai_embeddings": {
+          "embeddings": "text-embedding-3-large"
+        },
+        "openai_embeddings_grep": {
+          "embeddings": "text-embedding-3-large"
+        },
+        "alltools": {
+          "embeddings": "text-embedding-3-large",
+          "host": [
+            "sandbox"
+          ]
+        },
+        "terminal_use": {
+          "host": [
+            "sandbox"
+          ]
+        },
+        "terminal_use_write": {
+          "host": [
+            "sandbox"
+          ]
+        }
+      },
+      "setups": [
+        "original",
+        "yours"
+      ]
+    },
+    "task_split": {
+      "summary": "Which group of tasks to run within the selected domain.",
+      "datasets": [
+        "airline",
+        "retail",
+        "telecom",
+        "telecom-workflow"
+      ],
+      "setups": [
+        "original",
+        "yours"
+      ],
+      "values": [
+        "base",
+        "train",
+        "test",
+        "small",
+        "full"
+      ],
+      "default": "base",
+      "about": {
+        "base": "The upstream's default: airline 50, retail 114, telecom 114 tasks.",
+        "train": "airline 30, retail 74, telecom 74.",
+        "test": "airline 20, retail 40, telecom 40.",
+        "small": "telecom only: 20 tasks.",
+        "full": "telecom only: all 2285 tasks of its generated set."
+      }
+    },
+    "user_reasoning_effort": {
+      "summary": "How much reasoning the simulated user's model uses, with `default` keeping the upstream settings.",
+      "setups": [
+        "original",
+        "yours"
+      ],
+      "values": [
+        "default",
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "default": "default",
+      "about": {
+        "default": "The upstream's own arguments: temperature 0, no effort sent."
+      }
+    },
+    "agent_reasoning_effort": {
+      "summary": "How much reasoning the benchmark's own agent model uses, with `default` keeping the upstream settings.",
+      "setups": [
+        "original"
+      ],
+      "values": [
+        "default",
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "default": "default",
+      "about": {
+        "default": "The upstream's own arguments: temperature 0, no effort sent."
+      }
+    },
+    "upstream_agent": {
+      "summary": "Whether the benchmark's own agent runs normally, receives the reference actions, or works alone with the user's tools.",
+      "setups": [
+        "original"
+      ],
+      "values": [
+        "llm_agent",
+        "llm_agent_gt",
+        "llm_agent_solo"
+      ],
+      "default": "llm_agent",
+      "about": {
+        "llm_agent": "The upstream's LLMAgent: its instructions, the domain's policy and tools.",
+        "llm_agent_gt": "LLMGTAgent: the task's expected actions in its prompt; tasks with at least one action.",
+        "llm_agent_solo": "LLMSoloAgent: no conversation, the ticket and both sides' tools; tasks with a ticket (telecom)."
+      }
+    }
+  },
+  "host": {
+    "sandbox": {
+      "summary": "Anthropic's sandbox-runtime, which the upstream runs the agent's read-only shell in, with the programs it needs on Linux (ripgrep, bubblewrap, socat): installed on the machine the benchmark's driver runs on, whatever the backend.",
+      "check": [
+        "srt",
+        "rg",
+        "bwrap",
+        "socat"
+      ],
+      "install": {
+        "apt": [
+          "ripgrep",
+          "bubblewrap",
+          "socat"
+        ],
+        "npm": [
+          "@anthropic-ai/sandbox-runtime@0.0.23"
+        ]
+      }
+    }
+  },
+  "proven": {
+    "airline": {
+      "units": {
+        "units": 50,
+        "passed": "50 ids, the same twice, unique",
+        "on": "2026-10-13"
+      },
+      "leak": {
+        "units": 50,
+        "looked_for": 46,
+        "short": 4,
+        "passed": "50/50",
+        "note": "4 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-10-13"
+      },
+      "nop": {
+        "passed": "0/50",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 50,
+        "job": "2026-10-13__14-48-52__tau3-bench__airline__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-4.1-2025-04-14",
+        "on": "2026-10-13"
+      },
+      "oracle": {
+        "passed": "50/50",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 50,
+        "job": "2026-10-13__14-48-52__tau3-bench__airline__prove-oracle",
+        "source": "nullius",
+        "judge": "gpt-4.1-2025-04-14",
+        "on": "2026-10-13"
+      }
+    },
+    "retail": {
+      "units": {
+        "units": 114,
+        "passed": "114 ids, the same twice, unique",
+        "on": "2026-10-13"
+      },
+      "leak": {
+        "units": 114,
+        "looked_for": 97,
+        "short": 17,
+        "passed": "114/114",
+        "note": "17 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-10-13"
+      },
+      "nop": {
+        "passed": "0/114",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 114,
+        "job": "2026-10-13__14-48-52__tau3-bench__retail__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-4.1-2025-04-14",
+        "on": "2026-10-13"
+      },
+      "oracle": {
+        "passed": "114/114",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 114,
+        "job": "2026-10-13__14-48-52__tau3-bench__retail__prove-oracle",
+        "source": "nullius",
+        "judge": "gpt-4.1-2025-04-14",
+        "on": "2026-10-13"
+      }
+    },
+    "telecom": {
+      "units": {
+        "units": 114,
+        "passed": "114 ids, the same twice, unique",
+        "on": "2026-10-14"
+      },
+      "leak": {
+        "units": 114,
+        "looked_for": 114,
+        "short": 0,
+        "passed": "114/114",
+        "on": "2026-10-14"
+      },
+      "nop": {
+        "passed": "0/114",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 114,
+        "job": "2026-10-14__09-00-42__tau3-bench__telecom__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-4.1-2025-04-14",
+        "on": "2026-10-14"
+      },
+      "oracle": {
+        "passed": "114/114",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 114,
+        "job": "2026-10-14__09-00-42__tau3-bench__telecom__prove-oracle",
+        "source": "nullius",
+        "judge": "gpt-4.1-2025-04-14",
+        "on": "2026-10-14"
+      }
+    },
+    "banking_knowledge": {
+      "units": {
+        "units": 97,
+        "passed": "97 ids, the same twice, unique",
+        "on": "2026-10-14"
+      },
+      "leak": {
+        "units": 97,
+        "looked_for": 97,
+        "short": 0,
+        "passed": "97/97",
+        "on": "2026-10-14"
+      },
+      "nop": {
+        "passed": "0/97",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 97,
+        "job": "2026-10-14__09-10-48__tau3-bench__banking_knowledge__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-4.1-2025-04-14",
+        "on": "2026-10-14"
+      },
+      "oracle": {
+        "passed": "97/97",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 97,
+        "job": "2026-10-14__09-10-48__tau3-bench__banking_knowledge__prove-oracle",
+        "source": "nullius",
+        "judge": "gpt-4.1-2025-04-14",
+        "on": "2026-10-14"
+      }
+    },
+    "telecom-workflow": {
+      "units": {
+        "units": 114,
+        "passed": "114 ids, the same twice, unique",
+        "on": "2026-10-16"
+      },
+      "leak": {
+        "units": 114,
+        "looked_for": 114,
+        "short": 0,
+        "passed": "114/114",
+        "on": "2026-10-16"
+      },
+      "nop": {
+        "passed": "0/114",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 114,
+        "job": "2026-10-16__15-32-40__tau3-bench__telecom-workflow__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-4.1-2025-04-14",
+        "on": "2026-10-16"
+      },
+      "oracle": {
+        "passed": "114/114",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 114,
+        "job": "2026-10-16__15-32-40__tau3-bench__telecom-workflow__prove-oracle",
+        "source": "nullius",
+        "judge": "gpt-4.1-2025-04-14",
+        "on": "2026-10-16"
+      }
+    }
+  }
+}

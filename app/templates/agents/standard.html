@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% set plural = 'Agents' if kind == 'agent' else 'Capabilities' %}
+{% block title %}{{ plural }} — Nullius{% endblock %}
+{% block crumb %}/ {{ plural|lower }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
+{% block body %}
+{# The standard's agents (or capabilities) as cards, as the benchmarks are; a card opens its own page. docs/standard.md #}
+<div class="bench-index">
+  <header class="bench-index-head">
+    <div>
+      <h1>{{ plural }}</h1>
+      <p class="bench-count">{{ entries|length }} {{ plural|lower if entries|length != 1 else kind }} ·
+        {% if kind == 'agent' %}driven over ACP, the benchmark's tools served over MCP{% else %}driven over JSON lines{% endif %} · every model call through the relay</p>
+    </div>
+    <div class="bench-head-tools">
+      <button type="button" class="btn" id="std-how-open" aria-haspopup="dialog">+ Add {{ 'an agent' if kind == 'agent' else 'a capability' }}</button>
+    </div>
+  </header>
+
+  {% from "catalogue/add_dialog.html" import add_dialog %}
+  {% set a = 'an agent' if kind == 'agent' else 'a capability' %}
+  {% call add_dialog(a, prompts, kind) %}
+    <p>Commands use the installed <code>nullius</code> command. Your entries go in <code>{{ catalogue_dir }}</code>. Everything below uses <code>my-{{ 'agent' if kind == 'agent' else 'memory' }}</code> as the key: put yours.</p>
+    <ol class="std-steps">
+    {% for st in how %}
+      <li>
+        <b>{{ st.title }}</b>
+        <p>{{ st.text|safe }}</p>
+        <div class="std-code">
+          <div class="std-code-head"><span>{{ st.file or st.lang }}</span><button type="button" class="std-copy">Copy</button></div>
+          <pre><code>{{ st.code }}</code></pre>
+        </div>
+      </li>
+    {% endfor %}
+    </ol>
+    <p class="std-how-more">The whole contract: <code>docs/standard.md</code> in the source checkout. A bundled example to read: <code style="overflow-wrap: anywhere">{{ example_dir }}</code>.</p>
+  {% endcall %}
+
+  {% if problems %}<div class="std-problems"><strong>Not offered: a definition with problems</strong><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if not entries %}<p class="bench-none">No {{ kind }} yet.</p>{% endif %}
+
+  <div class="bench-grid">
+    {% for e in entries %}{% set d = e.d %}{% set proven = e.ports|selectattr('state', 'equalto', 'proven')|list %}{% set runs = e.fits|rejectattr('why')|list %}
+    <a class="bench-card" id="{{ d.key }}" href="{{ url_for('agent_page' if kind == 'agent' else 'feature_page', key=d.key) }}">
+      <div class="bench-card-top"><span class="bench-card-tags">{% if kind == 'capability' %}<span class="cat-tag">{{ d.kind }}</span>{% endif %}<span class="std-tag">{{ e.protocol }}</span>{% if d.example %}<span class="std-tag" title="Nullius's own, to read or copy - not an agent to compare">example</span>{% endif %}</span><span class="bench-harness">{{ ('v' ~ d.upstream.version if d.upstream and d.upstream.version else '') ~ (' · ' ~ d._versions|length ~ ' versions' if d._versions|length > 1 else '') }}</span></div>
+      <div class="bench-card-title"><span class="std-mark small" aria-hidden="true">{{ agent_mark(kind, d.key, d.label) }}</span>{{ d.label }}</div>
+      <div class="bench-card-domain std-clamp">{{ d.summary }}</div>
+      <div class="bench-stats">
+        <div><b>{{ proven|length }}/{{ e.ports|length }}</b><span>ports proven</span></div>
+        <div><b>{{ runs|length }}/{{ e.fits|length }}</b><span>benchmarks it runs</span></div>
+        <div><b class="word">{{ 'yes' if e.install else 'no' }}</b><span>installs</span></div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='catalogue/add.js') }}"></script>{% endblock %}

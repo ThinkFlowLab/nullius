@@ -1,0 +1,11 @@
+{"seq": 1, "ts": "2026-10-19T09:27:31.047Z", "job": "lme-arm", "event": "job.prepare", "trial": null, "stage": "questions chosen", "agents": ["oracle"], "n_concurrent": 1}
+{"seq": 2, "ts": "2026-10-19T09:27:31.047Z", "job": "lme-arm", "event": "job.start", "trial": null, "n_total": 2, "n_concurrent": 1, "agents": ["oracle"], "tasks": ["q0", "q1"]}
+{"seq": 3, "ts": "2026-10-19T09:27:31.047Z", "job": "lme-arm", "event": "trial.queued", "trial": "q0", "agent": "oracle", "position": 0}
+{"seq": 4, "ts": "2026-10-19T09:27:31.047Z", "job": "lme-arm", "event": "trial.queued", "trial": "q1", "agent": "oracle", "position": 1}
+{"seq": 5, "ts": "2026-10-19T09:27:31.047Z", "job": "lme-arm", "event": "trial.phase", "trial": "q0", "task": "q0", "agent": "oracle", "phase": "agent_run"}
+{"seq": 6, "ts": "2026-10-19T09:27:31.047Z", "job": "lme-arm", "event": "trial.phase", "trial": "q0", "task": "q0", "agent": "oracle", "phase": "verify"}
+{"seq": 7, "ts": "2026-10-19T09:27:31.047Z", "job": "lme-arm", "event": "trial.phase", "trial": "q1", "task": "q1", "agent": "oracle", "phase": "agent_run"}
+{"seq": 8, "ts": "2026-10-19T09:27:31.047Z", "job": "lme-arm", "event": "trial.phase", "trial": "q1", "task": "q1", "agent": "oracle", "phase": "verify"}
+{"seq": 9, "ts": "2026-10-19T09:27:31.047Z", "job": "lme-arm", "event": "trial.end", "trial": "q0", "task": "q0", "agent": "oracle", "outcome": "unresolved", "reward": 0.0, "evidence": "judge: no"}
+{"seq": 10, "ts": "2026-10-19T09:27:31.047Z", "job": "lme-arm", "event": "trial.end", "trial": "q1", "task": "q1", "agent": "oracle", "outcome": "resolved", "reward": 1.0, "evidence": "judge: yes"}
+{"seq": 11, "ts": "2026-10-19T09:27:31.053Z", "job": "lme-arm", "event": "job.end", "trial": null}

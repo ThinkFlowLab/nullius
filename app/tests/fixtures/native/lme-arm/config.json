@@ -1,0 +1,25 @@
+{
+  "job_name": "lme-arm",
+  "runner": "longmemeval",
+  "runner_label": "LongMemEval",
+  "runner_commit": "9e0b455f4ef0e2ab8f2e582289761153549043fc",
+  "n_concurrent_trials": 1,
+  "runner_judge": "official gpt-4o \u00b7 evaluate_qa.py",
+  "questions_from": "longmemeval_s",
+  "runner_items": [
+    "question",
+    "questions"
+  ],
+  "agents": [
+    {
+      "name": "oracle",
+      "model_name": "openai/gpt-4o-2024-08-06"
+    }
+  ],
+  "datasets": [
+    {
+      "name": "longmemeval_oracle",
+      "n_tasks": 2
+    }
+  ]
+}

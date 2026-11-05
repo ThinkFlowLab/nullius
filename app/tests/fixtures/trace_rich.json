@@ -1,0 +1,269 @@
+{
+  "schema_version": "harbor-trace-v1",
+  "trial_name": "hello-world__k6TfusL",
+  "session_id": "06f69643-92ef-4b70-9b7e-8895ec3e4095",
+  "agent": {
+    "name": "claude-code",
+    "version": "2.1.228"
+  },
+  "clock": {
+    "container_epoch_ns": 1786526144116000000,
+    "container_monotonic_ns": 6056447977239,
+    "host_started_at": "2026-08-12T09:15:44.434113Z"
+  },
+  "spans": [
+    {
+      "span_id": "7b77d45d7608c5ee",
+      "trace_id": "ae329268401a85a55d84f4504a2259ac",
+      "name": "claude_code.interaction",
+      "kind": "session",
+      "start_ns": 1786526145486000000,
+      "end_ns": 1786526148731292834,
+      "duration_ns": 3245292834,
+      "timing_quality": "measured",
+      "source": "otel",
+      "attributes": {
+        "session.id": "06f69643-92ef-4b70-9b7e-8895ec3e4095",
+        "terminal.type": "non-interactive",
+        "span.type": "interaction",
+        "user_prompt": "<REDACTED>",
+        "user_prompt_length": 68,
+        "interaction.sequence": 1,
+        "interaction.duration_ms": 3245,
+        "otel.scope.name": "com.anthropic.claude_code.tracing",
+        "service.name": "claude-code"
+      },
+      "children": [
+        {
+          "span_id": "session:06f69643-92ef-4b70-9b7e-8895ec3e4095",
+          "parent_span_id": "7b77d45d7608c5ee",
+          "trace_id": "ae329268401a85a55d84f4504a2259ac",
+          "name": "session",
+          "kind": "session",
+          "start_ns": 1786526145512999936,
+          "end_ns": 1786526148713999872,
+          "duration_ns": 3200999936,
+          "timing_quality": "inferred",
+          "source": "log",
+          "attributes": {
+            "session.id": "06f69643-92ef-4b70-9b7e-8895ec3e4095"
+          },
+          "children": []
+        },
+        {
+          "span_id": "aa6520d8a3413bac",
+          "parent_span_id": "7b77d45d7608c5ee",
+          "trace_id": "ae329268401a85a55d84f4504a2259ac",
+          "name": "claude_code.llm_request",
+          "kind": "llm_request",
+          "start_ns": 1786526145536000000,
+          "end_ns": 1786526147641519315,
+          "duration_ns": 2105519315,
+          "timing_quality": "measured",
+          "source": "otel",
+          "attributes": {
+            "session.id": "06f69643-92ef-4b70-9b7e-8895ec3e4095",
+            "terminal.type": "non-interactive",
+            "span.type": "llm_request",
+            "model": "claude-sonnet-5",
+            "gen_ai.system": "anthropic",
+            "gen_ai.request.model": "claude-sonnet-5",
+            "llm_request.context": "interaction",
+            "speed": "normal",
+            "duration_ms": 2105,
+            "input_tokens": 2,
+            "output_tokens": 81,
+            "cache_read_tokens": 22300,
+            "cache_creation_tokens": 7956,
+            "success": true,
+            "attempt": 1,
+            "request_id": "req_011CdxbpWJH5SXrYf4FYVRDD",
+            "gen_ai.response.id": "req_011CdxbpWJH5SXrYf4FYVRDD",
+            "client_request_id": "482bf2cc-c025-4ce3-be21-a06206ab30e5",
+            "ttft_ms": 1046,
+            "stop_reason": "tool_use",
+            "gen_ai.response.finish_reasons": [
+              "tool_use"
+            ],
+            "otel.scope.name": "com.anthropic.claude_code.tracing",
+            "service.name": "claude-code",
+            "message.id": "msg_011CdxbpXCrP9ktKkAsv8CNc",
+            "harbor.merged_from": "request:req_011CdxbpWJH5SXrYf4FYVRDD"
+          },
+          "tokens": {
+            "input_tokens": 2,
+            "output_tokens": 81,
+            "cache_read_tokens": 22300,
+            "cache_write_tokens": 7956
+          },
+          "children": []
+        },
+        {
+          "span_id": "fbe9aa3b5d05bfec",
+          "parent_span_id": "7b77d45d7608c5ee",
+          "trace_id": "ae329268401a85a55d84f4504a2259ac",
+          "name": "claude_code.tool",
+          "kind": "tool",
+          "start_ns": 1786526147632000000,
+          "end_ns": 1786526147655281491,
+          "duration_ns": 23281491,
+          "timing_quality": "measured",
+          "source": "otel",
+          "attributes": {
+            "session.id": "06f69643-92ef-4b70-9b7e-8895ec3e4095",
+            "terminal.type": "non-interactive",
+            "span.type": "tool",
+            "tool_name": "Write",
+            "tool_use_id": "toolu_01GjvvTEjwAe8GPSn5gWNDjY",
+            "gen_ai.tool.call.id": "toolu_01GjvvTEjwAe8GPSn5gWNDjY",
+            "duration_ms": 23,
+            "otel.scope.name": "com.anthropic.claude_code.tracing",
+            "service.name": "claude-code"
+          },
+          "children": [
+            {
+              "span_id": "80ab6e382cf0adc7",
+              "parent_span_id": "fbe9aa3b5d05bfec",
+              "trace_id": "ae329268401a85a55d84f4504a2259ac",
+              "name": "claude_code.tool.blocked_on_user",
+              "kind": "tool",
+              "start_ns": 1786526147633000000,
+              "end_ns": 1786526147637733777,
+              "duration_ns": 4733777,
+              "timing_quality": "measured",
+              "source": "otel",
+              "attributes": {
+                "session.id": "06f69643-92ef-4b70-9b7e-8895ec3e4095",
+                "terminal.type": "non-interactive",
+                "span.type": "tool.blocked_on_user",
+                "duration_ms": 5,
+                "decision": "unknown",
+                "source": "unknown",
+                "otel.scope.name": "com.anthropic.claude_code.tracing",
+                "service.name": "claude-code"
+              },
+              "children": []
+            },
+            {
+              "span_id": "b8485ddca72125ef",
+              "parent_span_id": "fbe9aa3b5d05bfec",
+              "trace_id": "ae329268401a85a55d84f4504a2259ac",
+              "name": "Write",
+              "kind": "tool",
+              "start_ns": 1786526147638000000,
+              "end_ns": 1786526147656131419,
+              "duration_ns": 18131419,
+              "timing_quality": "measured",
+              "source": "otel",
+              "attributes": {
+                "session.id": "06f69643-92ef-4b70-9b7e-8895ec3e4095",
+                "terminal.type": "non-interactive",
+                "span.type": "tool.execution",
+                "tool_use_id": "toolu_01GjvvTEjwAe8GPSn5gWNDjY",
+                "gen_ai.tool.call.id": "toolu_01GjvvTEjwAe8GPSn5gWNDjY",
+                "duration_ms": 18,
+                "success": true,
+                "otel.scope.name": "com.anthropic.claude_code.tracing",
+                "service.name": "claude-code",
+                "tool_name": "Write",
+                "block.index": 0,
+                "harbor.merged_from": "tool:toolu_01GjvvTEjwAe8GPSn5gWNDjY"
+              },
+              "content": {
+                "arguments": {
+                  "file_path": "/app/hello.txt",
+                  "content": "Hello, world!"
+                },
+                "result": "File created successfully at: /app/hello.txt (file state is current in your context \u2014 no need to Read it back)"
+              },
+              "children": []
+            }
+          ]
+        },
+        {
+          "span_id": "bc000785dbfa7ad7",
+          "parent_span_id": "7b77d45d7608c5ee",
+          "trace_id": "ae329268401a85a55d84f4504a2259ac",
+          "name": "claude_code.llm_request",
+          "kind": "llm_request",
+          "start_ns": 1786526147663000000,
+          "end_ns": 1786526148729798535,
+          "duration_ns": 1066798535,
+          "timing_quality": "measured",
+          "source": "otel",
+          "attributes": {
+            "session.id": "06f69643-92ef-4b70-9b7e-8895ec3e4095",
+            "terminal.type": "non-interactive",
+            "span.type": "llm_request",
+            "model": "claude-sonnet-5",
+            "gen_ai.system": "anthropic",
+            "gen_ai.request.model": "claude-sonnet-5",
+            "llm_request.context": "interaction",
+            "speed": "normal",
+            "duration_ms": 1067,
+            "input_tokens": 2,
+            "output_tokens": 23,
+            "cache_read_tokens": 30256,
+            "cache_creation_tokens": 118,
+            "success": true,
+            "attempt": 1,
+            "request_id": "req_011CdxbpeyB8mvKH5vdPaQMP",
+            "gen_ai.response.id": "req_011CdxbpeyB8mvKH5vdPaQMP",
+            "client_request_id": "59e61412-466b-44e9-9854-1a9739fb6889",
+            "ttft_ms": 862,
+            "stop_reason": "end_turn",
+            "gen_ai.response.finish_reasons": [
+              "end_turn"
+            ],
+            "otel.scope.name": "com.anthropic.claude_code.tracing",
+            "service.name": "claude-code",
+            "message.id": "msg_011CdxbpfpXEnK3Vp3qcbUSb",
+            "harbor.merged_from": "request:req_011CdxbpeyB8mvKH5vdPaQMP"
+          },
+          "tokens": {
+            "input_tokens": 2,
+            "output_tokens": 23,
+            "cache_read_tokens": 30256,
+            "cache_write_tokens": 118
+          },
+          "children": [
+            {
+              "span_id": "block:28bda920-a4fa-4918-9e96-4036d44013fe:0",
+              "parent_span_id": "bc000785dbfa7ad7",
+              "trace_id": "ae329268401a85a55d84f4504a2259ac",
+              "name": "output",
+              "kind": "output",
+              "start_ns": 1786526147657000192,
+              "end_ns": 1786526148713999872,
+              "duration_ns": 1056999680,
+              "timing_quality": "inferred",
+              "source": "log",
+              "attributes": {
+                "block.index": 0
+              },
+              "content": {
+                "output": "Created `/app/hello.txt` with \"Hello, world!\"."
+              },
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "wall_ns": 6473652000,
+    "llm_ns": 3172317850,
+    "tool_ns": 23281491,
+    "reasoning_ns": 0,
+    "idle_ns": 3228359166,
+    "span_count": 8,
+    "measured_span_count": 6,
+    "tokens": {
+      "input_tokens": 4,
+      "output_tokens": 104,
+      "cache_read_tokens": 52556,
+      "cache_write_tokens": 8074
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "schema": "nullius.capability/v1",
+  "key": "fakemem",
+  "label": "Fake memory",
+  "summary": "Keeps every session; recalls the ones sharing a word with the question.",
+  "kind": "memory",
+  "start": {"command": ["python3", "{here}/capability.py"]},
+  "offers": ["cap.memory/v1"],
+  "proven": {"cap.memory/v1": {"on": "2026-10-10", "passed": "1/1"}}
+}

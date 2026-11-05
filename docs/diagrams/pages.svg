@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 656 296" width="656" height="296" role="img" aria-labelledby="pages-title pages-desc" class="dg">
+<title id="pages-title">Page by page</title>
+<desc id="pages-desc">The runs page opens a job, a job opens its trials, live board, reconcile and feasibility views, and the runs page also opens the comparison.</desc>
+<defs><marker id="pages-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#596471" class="head"/></marker><marker id="pages-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#36577d" class="head accent"/></marker><marker id="pages-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#596471" stroke-width="1.2" class="arrow"/></marker></defs>
+<style>
+.dg{--p:var(--paper,#f7f8fa);--i:var(--ink,#25282e);--m:var(--muted,#596471);--a:var(--md-typeset-a-color,#36577d);--n:#fff;
+ --sans:'DM Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:'Instrument Serif',Georgia,serif}
+[data-md-color-scheme=slate] .dg{--n:color-mix(in srgb,var(--i) 7%,var(--p))}
+.dg .paper{fill:var(--p)}
+.dg .zone{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 14%,transparent);stroke-width:.8}
+.dg .eyebrow{fill:var(--m);font:500 8px var(--mono);letter-spacing:.14em}
+.dg .box{fill:var(--n);stroke:var(--i);stroke-width:1}
+.dg .focal{fill:color-mix(in srgb,var(--a) 12%,transparent);stroke:var(--a);stroke-width:1}
+.dg .store{fill:color-mix(in srgb,var(--i) 5%,transparent);stroke:var(--m);stroke-width:1}
+.dg .ext{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 40%,transparent);stroke-width:1}
+.dg .input{fill:color-mix(in srgb,var(--m) 10%,transparent);stroke:var(--m);stroke-width:1}
+.dg .name{fill:var(--i);font:500 12px var(--sans)}
+.dg .sub{fill:var(--m);font:9px var(--mono)}
+.dg .lbl{fill:var(--m);font:8px var(--mono);letter-spacing:.06em}
+.dg .lbl.accent{fill:var(--a)}
+.dg .arrow{fill:none;stroke:var(--m);stroke-width:1.2}
+.dg .arrow.accent{stroke:var(--a)}
+.dg .arrow.dashed{stroke-dasharray:5 4;stroke-width:1}
+.dg .arrow.bus{stroke-width:1}
+.dg .head{fill:var(--m)}
+.dg .head.accent{fill:var(--a)}
+.dg .dot{fill:var(--i)}
+.dg .life{stroke:color-mix(in srgb,var(--i) 25%,transparent);stroke-width:1;stroke-dasharray:3 3}
+.dg .act{fill:color-mix(in srgb,var(--i) 6%,transparent);stroke:var(--m);stroke-width:.8}
+.dg .frame{fill:color-mix(in srgb,var(--i) 2%,transparent);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .tab{fill:var(--p);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .guard{fill:var(--m);font:8px var(--mono);letter-spacing:.04em}
+.dg .note{fill:var(--m);font:13px var(--sans)}
+.dg .rule{stroke:color-mix(in srgb,var(--i) 12%,transparent);stroke-width:.8}
+.dg .legend{fill:var(--m);font:9px var(--sans)}
+</style>
+<rect width="100%" height="100%" fill="#f7f8fa" class="paper"/>
+<path d="M160,56 L208,56" fill="none" stroke="#596471" marker-end="url(#pages-arrow)" class="arrow"/>
+<path d="M92,80 L92,104" fill="none" stroke="#596471" marker-end="url(#pages-arrow)" class="arrow"/>
+<path d="M384,56 L456,56" fill="none" stroke="#36577d" marker-end="url(#pages-accent)" class="arrow accent"/>
+<path d="M224,80 L224,252" fill="none" stroke="#596471" class="arrow bus"/>
+<path d="M224,124 L240,124" fill="none" stroke="#596471" marker-end="url(#pages-arrow)" class="arrow"/>
+<path d="M224,188 L240,188" fill="none" stroke="#596471" marker-end="url(#pages-arrow)" class="arrow"/>
+<path d="M224,252 L240,252" fill="none" stroke="#596471" marker-end="url(#pages-arrow)" class="arrow"/>
+<rect x="24" y="32" width="136" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="24" y="32" width="136" height="48" rx="6" fill="#dedfe1" stroke="#596471" class="input"/>
+<text x="92" y="54" text-anchor="middle" class="name">Runs</text>
+<text x="92" y="68" text-anchor="middle" class="sub">/runs</text>
+<rect x="24" y="104" width="136" height="40" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="24" y="104" width="136" height="40" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="92" y="122" text-anchor="middle" class="name">Compare</text>
+<text x="92" y="136" text-anchor="middle" class="sub">/compare</text>
+<rect x="208" y="32" width="176" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="208" y="32" width="176" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="296" y="54" text-anchor="middle" class="name">Job</text>
+<text x="296" y="68" text-anchor="middle" class="sub">/job/&lt;id&gt;</text>
+<rect x="240" y="104" width="176" height="40" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="240" y="104" width="176" height="40" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="328" y="122" text-anchor="middle" class="name">Live board</text>
+<text x="328" y="136" text-anchor="middle" class="sub">while it runs</text>
+<rect x="240" y="168" width="176" height="40" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="240" y="168" width="176" height="40" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="328" y="186" text-anchor="middle" class="name">Reconcile</text>
+<text x="328" y="200" text-anchor="middle" class="sub">/job/&lt;id&gt;/reconcile</text>
+<rect x="240" y="232" width="176" height="40" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="240" y="232" width="176" height="40" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="328" y="250" text-anchor="middle" class="name">Feasibility</text>
+<text x="328" y="264" text-anchor="middle" class="sub">/job/&lt;id&gt;/feasibility</text>
+<rect x="456" y="20" width="176" height="72" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="456" y="20" width="176" height="72" rx="6" fill="#e8edf4" stroke="#36577d" class="focal"/>
+<text x="544" y="43" text-anchor="middle" class="name">Trial</text>
+<text x="544" y="57" text-anchor="middle" class="sub">/trial/&lt;job&gt;/&lt;name&gt;</text>
+<text x="544" y="68" text-anchor="middle" class="sub">conversation, trace,</text>
+<text x="544" y="79" text-anchor="middle" class="sub">artifacts, judgement</text>
+</svg>

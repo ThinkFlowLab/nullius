@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{#- one form, two uses: `editing` is the key of the entry being changed, or none to add one #}
+{% block title %}{{ 'Edit ' ~ values.get('title', editing) if editing else 'Add a Harbor benchmark' }} — Nullius{% endblock %}
+{% block crumb %}/ <a href="{{ url_for('benchmarks_page') }}">benchmarks</a> / {% if editing %}<a href="{{ url_for('benchmark_page', key=editing) }}">{{ editing }}</a> / edit{% else %}add{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
+{% block body %}
+{% set v = values %}
+{% macro radio(name, value, title, sub='', disabled=false) %}
+<label class="nb-opt{{ ' off' if disabled }}"><input type="radio" name="{{ name }}" value="{{ value }}"{{ ' checked' if v.get(name) == value }}{{ ' disabled' if disabled }}>
+  <span><b>{{ title }}</b>{% if sub %}<small>{{ sub }}</small>{% endif %}</span></label>
+{% endmacro %}
+<div class="bench-index bench-new">
+  <header class="bench-index-head">
+    <div>
+      {% if editing %}
+      <h1>Edit {{ values.get('title') or editing }}</h1>
+      <p class="bench-count">Saving writes <span class="mono">{{ catalogue_dir }}/benchmarks/{{ editing }}/benchmark.json</span>; the entry's other files and fields are kept.</p>
+      {% else %}
+      <h1>Add a Harbor benchmark</h1>
+      <p class="bench-count">Name the dataset, read it from Harbor, check the entry. Saving writes <span class="mono">{{ catalogue_dir }}/benchmarks/&lt;key&gt;/benchmark.json</span>.</p>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if not writable %}<p class="nb-errors">Benchmarks are added from a browser on the application host only.</p>{% endif %}
+  {% if errors %}
+  <div class="nb-errors" role="alert"><b>Nothing was saved.</b>
+    <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('benchmark_edit_save', key=editing) if editing else url_for('benchmark_new_save') }}" enctype="multipart/form-data" id="nb-form" data-read="{{ url_for('benchmark_new_read') }}" data-keys="{{ cat.benchmarks|map(attribute='key')|list|tojson|forceescape }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+
+    <section class="nb-step">
+      <h2><span>1</span>Where Harbor gets it</h2>
+      <div class="nb-choices" role="radiogroup" aria-label="Source">
+        {{ radio('source', 'hub', 'Harbor hub', 'org/name, as on hub.harborframework.com') }}
+        {{ radio('source', 'registry', 'Harbor registry', 'name@version, as Harbor\'s registry lists it') }}
+      </div>
+      <div class="nb-read">
+        <input type="text" name="ref" id="nb-ref" value="{{ v.get('ref', '') }}" placeholder="org/name or name@version" spellcheck="false" autocomplete="off" required>
+        <button type="button" class="btn" id="nb-read">Read from Harbor</button>
+      </div>
+      <p class="nb-said" id="nb-said" aria-live="polite"></p>
+    </section>
+
+    <section class="nb-step">
+      <h2><span>2</span>Catalogue entry</h2>
+      {% if not editing and routable %}
+      {#- a benchmark already run on the Nullius standard gets this dataset as its Harbor route: one benchmark, one card #}
+      <label class="nb-route">Which benchmark is this?
+        <select name="route_for" id="nb-route-for">
+          <option value="">A new benchmark</option>
+          {% for key, title in routable %}<option value="{{ key }}"{{ ' selected' if v.get('route_for') == key }}>{{ title }}: run it with Harbor too</option>{% endfor %}
+        </select>
+        <span class="nb-msg" id="nb-route-msg" hidden>The dataset below is added to that benchmark beside its Nullius route; what the benchmark says stays as it is.</span></label>
+      {% endif %}
+      <div class="nb-grid nb-entry">
+        {#- labels carry no hints, so every box starts on the same line: a hint is the box's placeholder, and a
+            field says something below itself only when there is something to say (nb-msg) #}
+        <label>Key
+          <input type="text" name="key" id="nb-key" value="{{ v.get('key', '') }}" data-was="{{ editing or '' }}" pattern="[a-z0-9][a-z0-9-]*" required spellcheck="false" placeholder="lowercase-with-dashes">
+          <span class="nb-msg" id="nb-key-msg" hidden></span></label>
+        <label>Title
+          <input type="text" name="title" value="{{ v.get('title', '') }}" required></label>
+        <label>Category
+          <select name="category">
+            {% for c in cat.categories %}<option{{ ' selected' if v.get('category') == c }}>{{ c }}</option>{% endfor %}
+          </select></label>
+        <label>Or a new category
+          <input type="text" name="category_new" value="{{ v.get('category_new', '') }}" placeholder="leave empty to keep the one chosen"></label>
+      </div>
+
+      <fieldset class="nb-set nb-entry"><legend>Harness</legend>
+        <div class="nb-choices">
+          <label class="nb-opt"><input type="radio" name="harness" value="harbor" checked><span><b>Harbor</b><small>its tasks run as Harbor trials</small></span></label>
+          <label class="nb-opt off"><input type="radio" disabled><span><b>Nullius</b><small>its own scripts as its Original setup: the /import-standard skill</small></span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="nb-set nb-entry"><legend>Origin</legend>
+        <div class="nb-choices">
+          {% for o in origins %}{{ radio('origin', o, o|capitalize, 'the publisher\'s, run the way it certifies' if o == 'official' else 'found and adapted here: published, flaws still to find') }}{% endfor %}
+        </div>
+      </fieldset>
+
+      <div class="nb-grid">
+        <label class="wide nb-entry">Domain
+          <input type="text" name="domain" value="{{ v.get('domain', '') }}" required placeholder="One line on the tasks"></label>
+        <label class="nb-entry">Scoring
+          <input type="text" name="scoring" value="{{ v.get('scoring', '') }}" required placeholder="e.g. Tests"></label>
+        <label>Tasks
+          <input type="number" name="tasks" min="1" value="{{ v.get('tasks', '') }}" required></label>
+        <label class="wide">Verifier
+          <input type="text" name="verifier" value="{{ v.get('verifier', '') }}" required
+                 placeholder="e.g. The failing tests must pass and the passing ones keep passing."></label>
+        <label class="wide">Official page
+          <input type="url" name="official" value="{{ v.get('official', '') }}" placeholder="https:// the benchmark's own repository or site"></label>
+      </div>
+
+      <fieldset class="nb-set"><legend>Timeouts, seconds <small id="nb-from">as the dataset's tasks declare them: read from Harbor</small></legend>
+        <div class="nb-grid four">
+          {% for key, label in [('env_setup', 'Environment setup'), ('agent_setup', 'Agent setup'), ('agent_run', 'Agent'), ('verify', 'Verifier')] %}
+          <label>{{ label }}<input type="number" min="1" name="timeout_{{ key }}" value="{{ v.get('timeout_' ~ key, '') }}"></label>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <div class="nb-grid nb-entry">
+        <label>Upstream limitations
+          <textarea name="upstream_limitations" rows="3" placeholder="One per line: what the benchmark as published gets wrong or leaves out">{{ v.get('upstream_limitations', '') }}</textarea></label>
+        <label>Nullius limitations
+          <textarea name="limitations" rows="3" placeholder="One per line: where running it here differs, or what is not offered yet">{{ v.get('limitations', '') }}</textarea></label>
+        <label class="wide">Citation
+          <textarea name="citation" rows="4" spellcheck="false" class="mono" placeholder="@article{...}  BibTeX">{{ v.get('citation', '') }}</textarea></label>
+        <label>Citation from <input type="url" name="citation_source" value="{{ v.get('citation_source', '') }}" placeholder="https://"></label>
+        <label>Logo
+          <input type="file" name="logo" id="nb-logo" accept=".png,.jpg,.jpeg,.svg" data-max="200000">
+          <span class="nb-msg" id="nb-logo-msg"{% if not (v.get('logo_kept') or editing) %} hidden{% endif %}>
+            {%- if v.get('logo_kept') %}<b>{{ v.get('logo_kept_name') }}</b> is kept; choose another file to replace it
+            {%- elif editing %}Its current logo stays unless you choose a file{% endif %}</span></label>
+        {% if v.get('logo_kept') %}<input type="hidden" name="logo_kept" value="{{ v.get('logo_kept') }}"><input type="hidden" name="logo_kept_name" value="{{ v.get('logo_kept_name') }}">{% endif %}
+      </div>
+
+      <details class="nb-more"><summary>Dataset key and title</summary>
+        <div class="nb-grid">
+          <label>Dataset key<input type="text" name="dataset_key" value="{{ v.get('dataset_key', '') }}" spellcheck="false" placeholder="the benchmark's key"></label>
+          <label>Dataset title<input type="text" name="dataset_title" value="{{ v.get('dataset_title', '') }}" placeholder="the benchmark's title"></label>
+        </div>
+      </details>
+    </section>
+
+    <div class="nb-save">
+      <a class="btn ghost" href="{{ url_for('benchmark_page', key=editing) if editing else url_for('benchmarks_page') }}">Cancel</a>
+      <button type="submit" class="btn"{{ ' disabled' if not writable }}>{{ 'Save the changes' if editing else 'Save the entry' }}</button>
+    </div>
+  </form>
+</div>
+<script src="{{ url_for('static', filename='catalogue/new.js') }}"></script>
+{% endblock %}

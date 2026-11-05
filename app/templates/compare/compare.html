@@ -1,0 +1,298 @@
+{% from 'runs/_runtime.html' import what_ran %}
+{% extends "base.html" %}
+{% block title %}Compare {{ jobs|length }} runs — Nullius{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">{% endblock %}
+{% block crumb %}/ compare{% endblock %}
+{% block body %}
+{% macro comparison_columns() %}
+  <colgroup>
+    <col class="compare-label-col">
+    {% for j in jobs %}<col>{% endfor %}
+  </colgroup>
+{% endmacro %}
+
+<div class="page-title compare-title"><h1>Comparing {{ jobs|length }} runs</h1><a class="btn ghost sm" href="{{ url_for('compare_picker', pick=picks, cohort=cohort) }}">Choose runs</a></div>
+<p class="subtitle">
+  {{ n_shared }} task{{ '' if n_shared == 1 else 's' }} run by every side<span class="dot">·</span>
+  <strong class="{{ 'warn' if n_differing else 'muted' }}">{{ n_differing }} where they disagree</strong>
+</p>
+<div class="cohort-tools">
+  <nav class="cohort-switch" aria-label="Comparison cohort">
+    <a href="{{ url_for('compare', pick=picks, cohort='whole') }}" aria-current="{{ 'true' if cohort == 'whole' else 'false' }}">Whole runs</a>
+    <a href="{{ url_for('compare', pick=picks, cohort='matched') }}" aria-current="{{ 'true' if cohort == 'matched' else 'false' }}">Matched tasks</a>
+  </nav>
+</div>
+<div class="cohort-note">
+  {% if cohort == 'matched' %}
+  <p><strong>{{ n_shared }} matched task{{ '' if n_shared == 1 else 's' }}.</strong> Rates, cost and tokens include every attempt on those tasks. The full run’s wall time is omitted.</p>
+  {% else %}
+  <p>These numbers describe each full run, including tasks the other runs did not cover. Switch to matched tasks to compare the same recorded task IDs.</p>
+  {% endif %}
+  {% if not comparison.datasets_known %}<p>A run has no recorded dataset identity. Its task names are kept separate because their identity cannot be verified.</p>
+  {% elif not comparison.datasets_match %}<p>The recorded datasets differ. Matching requires exact dataset names and versions; identical task names from different datasets are kept separate.</p>{% endif %}
+  {% if cohort == 'matched' and not n_shared %}<p>No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
+  {% if comparison.repeated_trials|sum %}<p>Some tasks have repeated attempts. All attempts count in the summaries; each task row and its detail show the <strong>last indexed attempt</strong>, not necessarily the latest by timestamp.</p>{% endif %}
+  <p>Adjusted rate excludes only rate limits, API errors and setup errors. Unknown outcomes stay in its denominator. Controls are never ranked.</p>
+</div>
+
+<h2>Side by side</h2>
+{% if n_agents > 1 %}
+<div class="table-tools">
+  <span class="table-note">Order columns:</span>
+  <a class="btn ghost sm" href="{{ url_for('compare', pick=order_grouped, cohort=cohort) }}">Group by agent</a>
+  <a class="btn ghost sm" href="{{ url_for('compare', pick=order_alternating, cohort=cohort) }}">Alternate agents</a>
+</div>
+{% endif %}
+<div class="table-wrap compare-table-wrap" role="region" aria-label="Run comparison" tabindex="0">
+<table class="grid compare" style="--cols: {{ jobs|length }}">
+  {{ comparison_columns() }}
+  <thead>
+    <tr>
+      <th></th>
+      {% for j in jobs %}
+      {% set selection = selections[loop.index0] %}
+      <th class="draggable-col" draggable="true" data-job="{{ selection.value }}"
+          title="Drag to reorder">
+        <div class="col-head">
+          <span class="strong">{{ j.agent_label or '—' }}
+            {%- if j.is_control %} <span class="chip-control"
+              title="Harbor control: applies the gold patch or does nothing. Never calls a model, and never ranked.">control</span>{% endif %}</span>
+          <a class="faint mono col-id" href="{{ url_for('job', job_id=j.job_id, workspace=selection.workspace) }}">{{ j.job_id }}</a>
+          <span class="compare-workspace">{{ selection.workspace_label }}</span>
+          {% if cohort == 'matched' %}<span class="compare-excluded">{{ comparison.excluded_trials[loop.index0] }} of {{ selection.job.trials|length }} trials outside this cohort</span>{% endif %}
+        </div>
+      </th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% macro row(label, values, hint='') %}
+    <tr>
+      <th class="rowhead" {% if hint %}title="{{ hint }}"{% endif %}>{{ label }}</th>
+      {% for v in values %}<td>{{ v }}</td>{% endfor %}
+    </tr>
+    {% endmacro %}
+
+    <tr>
+      <th class="rowhead">Agent</th>
+      {% for j in jobs %}
+      <td><span class="strong">{{ j.agent_label or '—' }}</span>
+        {%- if j.is_control %} <span class="chip-control"
+          title="Harbor control — excluded from every ranking below">control</span>{% endif %}
+        {%- if j.reasoning_effort %} <span class="faint">· effort {{ j.reasoning_effort }}</span>{% endif %}</td>
+      {% endfor %}
+    </tr>
+    {{ row('Model', jobs|map(attribute='model_name')|list) }}
+    <tr>
+      <th class="rowhead">Dataset</th>
+      {% for j in jobs %}<td title="{{ j.dataset }}">{{ j.dataset|dsname }}</td>{% endfor %}
+    </tr>
+    {% if jobs|selectattr('runner')|list %}
+    <tr>
+      <th class="rowhead" title="What ran: the runner, and the upstream commit its install resolved">Runner</th>
+      {% for j in jobs %}<td>{% if j.runner %}{{ what_ran(j) }}{% else %}<span class="faint">—</span>{% endif %}</td>{% endfor %}
+    </tr>
+    {% endif %}
+    <tr>
+      <th class="rowhead">Outcome mix</th>
+      {% for j in jobs %}
+      <td><span class="minibar">
+        {%- for k in ORDER %}{% if j.counts[k] %}<span class="seg oc-{{ k }}" style="flex:{{ j.counts[k] }}"
+          title="{{ LABELS[k] }}: {{ j.counts[k] }}"></span>{% endif %}{% endfor -%}
+      </span></td>
+      {% endfor %}
+    </tr>
+    {% for r in summary %}
+    <tr>
+      <th class="rowhead" {% if r.hint %}title="{{ r.hint }}"{% endif %}>{{ r.label }}</th>
+      {% for v in r.cells %}<td class="{{ r.classes[loop.index0] }}">{{ v }}</td>{% endfor %}
+    </tr>
+    {% endfor %}
+    <tr>
+      <th class="rowhead" title="The recorded invocation — a foreign harness's own command verbatim, or the harbor run reconstructed from this run's recorded config — copy it to run the same benchmark again">Rerun</th>
+      {% for j in jobs %}
+      <td>{% if j.harbor_command %}<button class="btn ghost sm" data-copy="{{ j.harbor_command }}"
+          title="{{ j.harbor_command }}">copy command</button>{% else %}<span class="faint">—</span>{% endif %}</td>
+      {% endfor %}
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Task by task</h2>
+<p class="subtitle">Tasks where the runs disagree are listed first. A blank cell means that run
+  didn't include the task.</p>
+{% if judgement %}
+<div class="judgement-job" id="judgement">
+  <span class="small"><strong>Judgement</strong> <span class="badge">experimental</span>
+    · {{ judgement.judged }} of {{ judgement.pairs }} matched pair{{ '' if judgement.pairs == 1 else 's' }} judged{% if judgement.unjudged %}, {{ judgement.unjudged }} not judged{% endif %}{% if judgement.earlier %} ({{ judgement.earlier }} under an earlier vocabulary){% endif %}</span>
+  {% if judgement.unjudged and judgement.keyed %}
+  <form method="post" action="{{ url_for('judge_compare_route', pick=picks, cohort=cohort) }}" class="header-form" id="judge-all">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn sm ghost" type="submit">Judge {{ judgement.unjudged }} pair{{ '' if judgement.unjudged == 1 else 's' }}</button>
+  </form>
+  {% elif judgement.unjudged %}<span class="small faint">System One not configured — <a href="{{ url_for('settings_page') }}#judge">set its key in Settings</a></span><button class="btn sm ghost" type="button" disabled title="System One not configured: Settings, Judge">Judge all</button>{% endif %}
+</div>
+{% endif %}
+<div class="table-wrap compare-table-wrap" role="region" aria-label="Task comparison" tabindex="0">
+<table class="grid compare tasks" style="--cols: {{ jobs|length }}">
+  {{ comparison_columns() }}
+  <thead>
+    <tr>
+      <th>Task</th>
+      {% for j in jobs %}
+      <th class="draggable-col" draggable="true" data-job="{{ selections[loop.index0].value }}" title="Drag to reorder">
+        {{ j.agent_label or j.job_id }}
+        {%- if j.is_control %} <span class="chip-control">control</span>{% endif %}
+      </th>
+      {% endfor %}
+      {% if judgement %}<th class="judgement-col" title="Each side scored alone on {{ judgement.question }}, 0 to 3; the higher score by at least {{ judgement.margin }} wins, else a tie">Better of two</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for taskrow in tasks %}
+    {% set task_index = loop.index0 %}
+    {% set row = taskrow.trials %}
+    {% set outcomes = row|select|map(attribute='outcome')|list %}
+    <tr class="compare-task-row {% if outcomes|unique|list|length > 1 %}row-differs{% endif %}">
+      <td class="mono">
+        <div class="compare-task-name">
+        {# One glyph, rotated by CSS on aria-expanded. #}
+        <button type="button" class="disclose" aria-expanded="false"
+                data-task="{{ loop.index0 }}" aria-controls="compare-detail-{{ loop.index0 }}"
+                aria-label="Compare details for {{ taskrow.task }}" title="Compare details">▼</button>
+        <span class="compare-task-label" title="{{ taskrow.task }}">{{ taskrow.task }}</span>
+        </div>
+        {% if not comparison.datasets_match or not comparison.datasets_known %}<span class="compare-task-dataset">{{ 'Dataset not recorded' if taskrow.dataset.startswith('[unidentified:') else taskrow.dataset|dsname }}</span>{% endif %}
+      </td>
+      {% for t in row %}
+      <td>
+        {% if t %}
+          <div class="compare-run-cell">
+          <div class="compare-cell-summary">
+          <div class="compare-cell-outcome">
+          <a class="cell-outcome" href="{{ url_for('trial', job_id=t.job_id, trial_name=t.trial_name, workspace=selections[loop.index0].workspace) }}">
+            <span class="tag oc-{{ t.outcome }}">{{ t.outcome_label }}</span>
+          </a>
+          {% if t.score is not none %}<span class="badge trial-score" title="{% if t.n_parts %}The mean score of its {{ t.n_parts }} parts{% else %}Its score{% endif %}, as the benchmark's own scorer gave it">{{ '%.2f'|format(t.score) }}</span>{% endif %}
+          {% if t.f2p_pass or t.f2p_fail %}
+            <span class="faint small">{{ t.f2p_pass }}/{{ t.f2p_pass + t.f2p_fail }} {{ t.vocab.gained_abbr or t.vocab.gained }}</span>
+          {% endif %}
+          {% if t.is_regression %}<span class="badge danger" title="Broke {{ t.p2p_fail }} passing tests">⚠</span>{% endif %}
+          </div>
+          <span class="compare-quick-metric" title="Recorded total trial duration"><span>Total time</span><strong>{{ t.dur_total|secs }}</strong></span>
+          {% set used_tokens = (t.n_input_tokens or 0) + (t.n_output_tokens or 0) %}
+          <span class="compare-quick-metric" title="{% if used_tokens or jobs[loop.index0].is_control %}Input {{ t.n_input_tokens or 0 }} · Output {{ t.n_output_tokens or 0 }} · Cached input {{ t.n_cache_tokens or 0 }} (included in input){% else %}Token usage not recorded{% endif %}"><span>Tokens</span><strong>{{ used_tokens|tokens(jobs[loop.index0].kind) }}</strong></span>
+          </div>
+          </div>
+          {% if taskrow.attempts[loop.index0] > 1 %}<span class="compare-attempts">{{ taskrow.attempts[loop.index0] }} attempts · last indexed shown</span>{% endif %}
+        {% else %}
+          <span class="faint">—</span>
+        {% endif %}
+      </td>
+      {% endfor %}
+      {% if judgement %}<td class="judgement-cell">{% set jr = judgement.rows.get(taskrow.task) %}
+        {% if jr and jr.earlier %}<strong>{{ {'A': jobs[0].agent_label or 'A', 'B': jobs[1].agent_label or 'B', 'same': 'same'}[jr.choice] if jr.choice in ('A', 'B', 'same') else jr.choice }}</strong> <span class="mono small" title="{% for k, v in jr.probabilities.items() %}{{ k }} {{ '%.0f'|format(v * 100) }}%{{ ' · ' if not loop.last }}{% endfor %}">{{ '%.0f'|format((jr.p or 0) * 100) }}%</span>
+          <span class="badge" title="Asked under {{ jr.questions }} as one pair state, the pick the model's own; the current vocabulary scores each side alone. Judging again scores both sides.">earlier vocabulary</span>
+        {% elif jr %}
+          {% if jr.verdict == 'same' %}<strong title="The two scores are within {{ judgement.margin }} of a level: a tie, not a pick">tie</strong>
+          {% elif jr.verdict %}<strong>{{ (jobs[0] if jr.verdict == 'A' else jobs[1]).agent_label or jr.verdict }}</strong>
+          {% else %}<span class="faint">one side judged</span>{% endif %}
+          <div class="judgement-sides">
+          {% for side, j in ((jr.a, jobs[0]), (jr.b, jobs[1])) %}
+            <span class="small" title="{% if side %}{{ j.agent_label or j.job_id }}: {{ side.label }} — {{ '%.2f'|format(side.score) }} of {{ side.top }}{% if side.confidence is not none %}, confidence {{ '%.0f'|format(side.confidence * 100) }}%{% endif %} · {{ side.model }}{% else %}{{ j.agent_label or j.job_id }}: not judged{% endif %}">
+              <span class="muted">{{ 'A' if loop.first else 'B' }}</span>
+              {% if side %}<span class="mono">{{ '%.1f'|format(side.score) }}</span><span class="faint">/{{ side.top }}</span>{% if side.confidence is not none %} <span class="mono faint">{{ '%.0f'|format(side.confidence * 100) }}%</span>{% endif %}
+              {% else %}<span class="faint">not judged</span>{% endif %}</span>
+          {% endfor %}
+          </div>
+        {% else %}<span class="faint">not judged</span>{% endif %}</td>{% endif %}
+    </tr>
+
+    {# detail rows: the same metrics for each side, so differences line up #}
+    <tr class="detail-row" id="compare-detail-{{ loop.index0 }}" data-detail="{{ loop.index0 }}" hidden>
+      <td colspan="{{ jobs|length + 1 }}">
+        <div class="detail-body" data-detail-url="{{ url_for('compare_detail_row', index=task_index, pick=picks, cohort=cohort) }}"><p class="faint small">Loading…</p></div>
+        <p class="detail-more">
+          <a class="btn ghost sm" href="{{ url_for('compare_task', task=taskrow.task, dataset=taskrow.dataset, pick=picks, cohort=cohort) }}">Open trials side by side →</a>
+        </p>
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="{{ jobs|length + 1 }}" class="empty-note">No tasks in this comparison cohort.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+
+<script>
+  /* ---- drag a column header to reorder ----
+     Order is carried by qualified ?pick= params, so a drop navigates to the
+     reordered URL. Both tables and every detail row follow automatically, and
+     the arrangement stays shareable. The Group / Alternate buttons above the
+     table are the pointer-free path. */
+  (() => {
+    const ORDER = {{ picks|tojson }};
+    let dragged = null;
+
+    const clear = () => document.querySelectorAll('.draggable-col').forEach(th => {
+      th.classList.remove('dragging', 'drop-before', 'drop-after');
+    });
+
+    document.querySelectorAll('.draggable-col').forEach(th => {
+      th.addEventListener('dragstart', e => {
+        dragged = th.dataset.job;
+        th.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox needs data set for the drag to start at all.
+        e.dataTransfer.setData('text/plain', dragged);
+      });
+      th.addEventListener('dragend', clear);
+
+      th.addEventListener('dragover', e => {
+        if (!dragged || th.dataset.job === dragged) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const box = th.getBoundingClientRect();
+        const after = e.clientX > box.left + box.width / 2;
+        th.classList.toggle('drop-before', !after);
+        th.classList.toggle('drop-after', after);
+      });
+      th.addEventListener('dragleave', () =>
+        th.classList.remove('drop-before', 'drop-after'));
+
+      th.addEventListener('drop', e => {
+        e.preventDefault();
+        const target = th.dataset.job;
+        if (!dragged || target === dragged) return clear();
+        const box = th.getBoundingClientRect();
+        const after = e.clientX > box.left + box.width / 2;
+
+        const next = ORDER.filter(id => id !== dragged);
+        const at = next.indexOf(target) + (after ? 1 : 0);
+        next.splice(at, 0, dragged);
+
+        const url = new URL('{{ url_for("compare") }}', location.origin);
+        next.forEach(id => url.searchParams.append('pick', id));
+        url.searchParams.set('cohort', {{ cohort|tojson }});
+        location.href = url;
+      });
+    });
+  })();
+
+  document.querySelectorAll('.disclose').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = document.querySelector(`[data-detail="${btn.dataset.task}"]`);
+      const open = row.hidden;
+      row.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+      // the detail is built when it is first opened: every row's at once read every trajectory of both runs
+      const body = row.querySelector('[data-detail-url]');
+      if (open && body && !body.dataset.loaded) {
+        body.dataset.loaded = '1';
+        fetch(body.dataset.detailUrl).then(r => r.ok ? r.text() : Promise.reject(r.status))
+          .then(html => { body.innerHTML = html; })
+          .catch(() => { body.dataset.loaded = ''; body.innerHTML = '<p class="faint small">The detail could not be read; open the row again.</p>'; });
+      }
+    });
+  });
+</script>
+{% endblock %}

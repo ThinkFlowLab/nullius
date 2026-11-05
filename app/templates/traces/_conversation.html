@@ -1,0 +1,37 @@
+<section class="conversation-reader" id="conversation-reader"
+         data-endpoint="{{ url_for('conversation_data', job_id=job.job_id, trial_name=trial.trial_name) }}"
+         aria-label="Conversation reader">
+  <div class="reader-heading">
+    <div><h2>Conversation</h2><p class="muted small">One source step at a time, with its tool calls and results. Search reads the full recorded content.</p></div>
+    <span class="reader-total mono">{{ traj.n_steps if traj and not traj.error else '—' }} steps</span>
+  </div>
+  {% if not traj or traj.error %}
+  <div class="panel"><p class="muted" style="margin:0">{% if traj and traj.error %}Trajectory unreadable: {{ traj.error }}{% elif trial.agent_type == 'control' %}This control has no recorded conversation.{% else %}No trajectory recorded for this trial.{% endif %}</p></div>
+  {% else %}
+  <form class="reader-search" role="search">
+    <label for="conversation-search" class="reader-sr">Search the full conversation</label>
+    <input id="conversation-search" name="q" type="search" placeholder="Search messages, tools, results…" maxlength="500" autocomplete="off">
+    <button type="submit" class="btn sm">Search</button>
+    <button type="button" class="linkish" data-clear-search>Clear</button>
+  </form>
+  <div class="reader-toolbar">
+    <div class="reader-filters" role="group" aria-label="Conversation filter">
+      <button type="button" data-kind="all" aria-pressed="true">All steps</button>
+      <button type="button" data-kind="messages" aria-pressed="false">Messages</button>
+      <button type="button" data-kind="tools" aria-pressed="false">Tools</button>
+      <button type="button" data-kind="errors" aria-pressed="false" title="Tool failures flagged by the existing trajectory reader, not benchmark verdicts">Errors</button>
+    </div>
+    <form class="reader-jump"><label for="conversation-jump">Source step</label><input id="conversation-jump" name="step" placeholder="e.g. 42" aria-label="Source step id" autocomplete="off"><button type="submit" class="btn sm">Go</button></form>
+  </div>
+  <p class="reader-status muted small" role="status" aria-live="polite">Open this tab to load the conversation.</p>
+  <div class="reader-layout">
+    <aside class="reader-index" aria-label="Recorded steps">
+      <div class="reader-rows"></div>
+      <nav class="reader-pages" aria-label="Conversation index pages"><button type="button" class="btn sm" data-page="previous">←</button><span></span><button type="button" class="btn sm" data-page="next">→</button></nav>
+    </aside>
+    <div class="reader-selected" tabindex="-1"><p class="muted">Select a step to inspect its recorded evidence.</p></div>
+  </div>
+  <p class="muted small reader-footnote">Step numbers and tool-call IDs come from the source. “Errors” uses the reader’s tool-failure signals; it does not change the trial’s verdict. Content is redacted before search and paging.</p>
+  <noscript><p class="alert">Enable JavaScript to use the paged conversation reader. The trial summary remains available above.</p></noscript>
+  {% endif %}
+</section>

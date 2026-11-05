@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 416" width="640" height="416" role="img" aria-labelledby="path-run-host-title path-run-host-desc" class="dg">
+<title id="path-run-host-title">Path 3: the same on an SSH host</title>
+<desc id="path-run-host-desc">Execution probes the host, sends the part and the key, starts it detached, then tails the log and pulls the jobs back every ten seconds.</desc>
+<defs><marker id="path-run-host-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#596471" class="head"/></marker><marker id="path-run-host-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#36577d" class="head accent"/></marker><marker id="path-run-host-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#596471" stroke-width="1.2" class="arrow"/></marker></defs>
+<style>
+.dg{--p:var(--paper,#f7f8fa);--i:var(--ink,#25282e);--m:var(--muted,#596471);--a:var(--md-typeset-a-color,#36577d);--n:#fff;
+ --sans:'DM Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:'Instrument Serif',Georgia,serif}
+[data-md-color-scheme=slate] .dg{--n:color-mix(in srgb,var(--i) 7%,var(--p))}
+.dg .paper{fill:var(--p)}
+.dg .zone{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 14%,transparent);stroke-width:.8}
+.dg .eyebrow{fill:var(--m);font:500 8px var(--mono);letter-spacing:.14em}
+.dg .box{fill:var(--n);stroke:var(--i);stroke-width:1}
+.dg .focal{fill:color-mix(in srgb,var(--a) 12%,transparent);stroke:var(--a);stroke-width:1}
+.dg .store{fill:color-mix(in srgb,var(--i) 5%,transparent);stroke:var(--m);stroke-width:1}
+.dg .ext{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 40%,transparent);stroke-width:1}
+.dg .input{fill:color-mix(in srgb,var(--m) 10%,transparent);stroke:var(--m);stroke-width:1}
+.dg .name{fill:var(--i);font:500 12px var(--sans)}
+.dg .sub{fill:var(--m);font:9px var(--mono)}
+.dg .lbl{fill:var(--m);font:8px var(--mono);letter-spacing:.06em}
+.dg .lbl.accent{fill:var(--a)}
+.dg .arrow{fill:none;stroke:var(--m);stroke-width:1.2}
+.dg .arrow.accent{stroke:var(--a)}
+.dg .arrow.dashed{stroke-dasharray:5 4;stroke-width:1}
+.dg .arrow.bus{stroke-width:1}
+.dg .head{fill:var(--m)}
+.dg .head.accent{fill:var(--a)}
+.dg .dot{fill:var(--i)}
+.dg .life{stroke:color-mix(in srgb,var(--i) 25%,transparent);stroke-width:1;stroke-dasharray:3 3}
+.dg .act{fill:color-mix(in srgb,var(--i) 6%,transparent);stroke:var(--m);stroke-width:.8}
+.dg .frame{fill:color-mix(in srgb,var(--i) 2%,transparent);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .tab{fill:var(--p);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .guard{fill:var(--m);font:8px var(--mono);letter-spacing:.04em}
+.dg .note{fill:var(--m);font:13px var(--sans)}
+.dg .rule{stroke:color-mix(in srgb,var(--i) 12%,transparent);stroke-width:.8}
+.dg .legend{fill:var(--m);font:9px var(--sans)}
+</style>
+<rect width="100%" height="100%" fill="#f7f8fa" class="paper"/>
+<line x1="160" y1="72" x2="160" y2="368" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<line x1="480" y1="72" x2="480" y2="368" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<rect x="156" y="104" width="8" height="240" fill="#e0e1e3" stroke="#596471" class="act"/>
+<rect x="476" y="184" width="8" height="160" fill="#e0e1e3" stroke="#596471" class="act"/>
+<rect x="136" y="224" width="368" height="120" rx="4" fill="#e7e7e9" stroke="#b9babd" class="frame"/>
+<rect x="136" y="224" width="40" height="16" rx="2" fill="#f7f8fa" stroke="#b9babd" class="tab"/>
+<text x="156" y="236" text-anchor="middle" class="eyebrow">LOOP</text>
+<text x="148" y="256" text-anchor="start" class="guard">[every 10 s]</text>
+<path d="M164,112 L476,112" fill="none" stroke="#596471" marker-end="url(#path-run-host-arrow)" class="arrow"/>
+<path d="M164,152 L476,152" fill="none" stroke="#596471" marker-end="url(#path-run-host-arrow)" class="arrow"/>
+<path d="M164,192 L476,192" fill="none" stroke="#596471" marker-end="url(#path-run-host-arrow)" class="arrow"/>
+<path d="M164,280 L476,280" fill="none" stroke="#596471" marker-end="url(#path-run-host-arrow)" class="arrow"/>
+<path d="M476,320 L164,320" fill="none" stroke="#596471" stroke-dasharray="5 4" marker-end="url(#path-run-host-arrow)" class="arrow dashed"/>
+<rect x="216" y="92" width="208" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="320" y="102" text-anchor="middle" class="lbl">PROBE: DOCKER, UV (INSTALLED IF MISSING)</text>
+<rect x="196" y="132" width="248" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="320" y="142" text-anchor="middle" class="lbl">SEND WHEELS, TASKS, RUN-PART.SH · KEY OVER STDIN</text>
+<rect x="248" y="172" width="144" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="320" y="182" text-anchor="middle" class="lbl">START RUN-PART.SH, DETACHED</text>
+<rect x="236" y="260" width="168" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="320" y="270" text-anchor="middle" class="lbl">TAIL THE LOG, READ THE EXIT FILE</text>
+<rect x="232" y="300" width="176" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="320" y="310" text-anchor="middle" class="lbl">RSYNC JOBS/ INTO RUNS/&lt;NAME&gt;/JOBS/</text>
+<rect x="100" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="100" y="24" width="120" height="48" rx="6" fill="#e8edf4" stroke="#36577d" class="focal"/>
+<text x="160" y="46" text-anchor="middle" class="name">Execution</text>
+<text x="160" y="60" text-anchor="middle" class="sub">nullius/execution</text>
+<rect x="420" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="420" y="24" width="120" height="48" rx="6" fill="#e4e5e7" stroke="#7a7c80" class="ext"/>
+<text x="480" y="46" text-anchor="middle" class="name">SSH host</text>
+<text x="480" y="60" text-anchor="middle" class="sub">~/.nullius/</text>
+<text x="320" y="392" text-anchor="middle" class="note">Nullius closed: the part keeps running, and a restart picks it up.</text>
+</svg>

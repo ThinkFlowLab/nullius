@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "harness": "harbor",
+  "name": "harbor-swe-bench-local-controls",
+  "title": "SWE-bench Verified · local · agent with both controls",
+  "benchmark": "swe-bench-verified",
+  "source": "local",
+  "dataset": "swebench-verified@1.0",
+  "path": "../harbor-datasets/swe-bench-verified",
+  "generatorRoot": "",
+  "agents": [
+    "custom-0",
+    "oracle",
+    "nop"
+  ],
+  "customAgents": [
+    "my_agent:MyAgent"
+  ],
+  "model": "openai/test-model",
+  "userModel": "",
+  "evalModel": "",
+  "keyEnv": "API_TOKEN",
+  "urlEnv": "API_URL",
+  "tasks": 7,
+  "concurrency": 1,
+  "retries": 3,
+  "timeoutMultiplier": 1,
+  "agentMinutes": "",
+  "attempts": "",
+  "setupTimeoutMultiplier": "",
+  "verifierTimeoutMultiplier": "",
+  "buildTimeoutMultiplier": "",
+  "harborDev": "",
+  "include": "django*",
+  "output": "jobs",
+  "where": "local",
+  "params": {
+    "mcp_timeout_s": 300
+  },
+  "custom": []
+}

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 432" width="640" height="432" role="img" aria-labelledby="path-open-title path-open-desc" class="dg">
+<title id="path-open-title">Path 1: open results that exist</title>
+<desc id="path-open-desc">Roots given to the runs pages are recognised, converted when foreign, parsed into the workspace cache, and the pages read that cache back.</desc>
+<defs><marker id="path-open-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#596471" class="head"/></marker><marker id="path-open-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#36577d" class="head accent"/></marker><marker id="path-open-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#596471" stroke-width="1.2" class="arrow"/></marker></defs>
+<style>
+.dg{--p:var(--paper,#f7f8fa);--i:var(--ink,#25282e);--m:var(--muted,#596471);--a:var(--md-typeset-a-color,#36577d);--n:#fff;
+ --sans:'DM Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:'Instrument Serif',Georgia,serif}
+[data-md-color-scheme=slate] .dg{--n:color-mix(in srgb,var(--i) 7%,var(--p))}
+.dg .paper{fill:var(--p)}
+.dg .zone{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 14%,transparent);stroke-width:.8}
+.dg .eyebrow{fill:var(--m);font:500 8px var(--mono);letter-spacing:.14em}
+.dg .box{fill:var(--n);stroke:var(--i);stroke-width:1}
+.dg .focal{fill:color-mix(in srgb,var(--a) 12%,transparent);stroke:var(--a);stroke-width:1}
+.dg .store{fill:color-mix(in srgb,var(--i) 5%,transparent);stroke:var(--m);stroke-width:1}
+.dg .ext{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 40%,transparent);stroke-width:1}
+.dg .input{fill:color-mix(in srgb,var(--m) 10%,transparent);stroke:var(--m);stroke-width:1}
+.dg .name{fill:var(--i);font:500 12px var(--sans)}
+.dg .sub{fill:var(--m);font:9px var(--mono)}
+.dg .lbl{fill:var(--m);font:8px var(--mono);letter-spacing:.06em}
+.dg .lbl.accent{fill:var(--a)}
+.dg .arrow{fill:none;stroke:var(--m);stroke-width:1.2}
+.dg .arrow.accent{stroke:var(--a)}
+.dg .arrow.dashed{stroke-dasharray:5 4;stroke-width:1}
+.dg .arrow.bus{stroke-width:1}
+.dg .head{fill:var(--m)}
+.dg .head.accent{fill:var(--a)}
+.dg .dot{fill:var(--i)}
+.dg .life{stroke:color-mix(in srgb,var(--i) 25%,transparent);stroke-width:1;stroke-dasharray:3 3}
+.dg .act{fill:color-mix(in srgb,var(--i) 6%,transparent);stroke:var(--m);stroke-width:.8}
+.dg .frame{fill:color-mix(in srgb,var(--i) 2%,transparent);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .tab{fill:var(--p);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .guard{fill:var(--m);font:8px var(--mono);letter-spacing:.04em}
+.dg .note{fill:var(--m);font:13px var(--sans)}
+.dg .rule{stroke:color-mix(in srgb,var(--i) 12%,transparent);stroke-width:.8}
+.dg .legend{fill:var(--m);font:9px var(--sans)}
+</style>
+<rect width="100%" height="100%" fill="#f7f8fa" class="paper"/>
+<line x1="80" y1="72" x2="80" y2="384" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<line x1="200" y1="72" x2="200" y2="384" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<line x1="320" y1="72" x2="320" y2="384" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<line x1="440" y1="72" x2="440" y2="384" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<line x1="560" y1="72" x2="560" y2="384" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<rect x="196" y="104" width="8" height="96" fill="#e0e1e3" stroke="#596471" class="act"/>
+<rect x="316" y="144" width="8" height="56" fill="#e0e1e3" stroke="#596471" class="act"/>
+<rect x="436" y="224" width="8" height="56" fill="#e0e1e3" stroke="#596471" class="act"/>
+<rect x="196" y="224" width="8" height="136" fill="#e0e1e3" stroke="#596471" class="act"/>
+<path d="M80,112 L196,112" fill="none" stroke="#596471" marker-end="url(#path-open-arrow)" class="arrow"/>
+<path d="M204,152 L316,152" fill="none" stroke="#596471" marker-end="url(#path-open-arrow)" class="arrow"/>
+<path d="M324,192 L560,192" fill="none" stroke="#596471" stroke-dasharray="5 4" marker-end="url(#path-open-arrow)" class="arrow dashed"/>
+<path d="M204,232 L436,232" fill="none" stroke="#596471" marker-end="url(#path-open-arrow)" class="arrow"/>
+<path d="M444,272 L560,272" fill="none" stroke="#596471" stroke-dasharray="5 4" marker-end="url(#path-open-arrow)" class="arrow dashed"/>
+<path d="M80,312 L196,312" fill="none" stroke="#596471" marker-end="url(#path-open-arrow)" class="arrow"/>
+<path d="M204,352 L560,352" fill="none" stroke="#596471" marker-end="url(#path-open-arrow)" class="arrow"/>
+<rect x="96" y="92" width="84" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="138" y="102" text-anchor="middle" class="lbl">/IMPORT · ROOTS</text>
+<rect x="228" y="132" width="64" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="260" y="142" text-anchor="middle" class="lbl">RECOGNISED?</text>
+<rect x="340" y="172" width="80" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="380" y="182" text-anchor="middle" class="lbl">INTO IMPORTED/</text>
+<rect x="220" y="212" width="80" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="260" y="222" text-anchor="middle" class="lbl">PARSE EACH JOB</text>
+<rect x="470" y="252" width="64" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="502" y="262" text-anchor="middle" class="lbl">PARSE CACHE</text>
+<rect x="92" y="292" width="92" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="138" y="302" text-anchor="middle" class="lbl">/RUNS /JOB /TRIAL</text>
+<rect x="340" y="332" width="84" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="382" y="342" text-anchor="middle" class="lbl">READ · RE-PARSE</text>
+<rect x="20" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="20" y="24" width="120" height="48" rx="6" fill="#dedfe1" stroke="#596471" class="input"/>
+<text x="80" y="52" text-anchor="middle" class="name">You</text>
+<rect x="140" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="140" y="24" width="120" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="200" y="46" text-anchor="middle" class="name">Runs pages</text>
+<text x="200" y="60" text-anchor="middle" class="sub">web/runs</text>
+<rect x="260" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="260" y="24" width="120" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="320" y="46" text-anchor="middle" class="name">Importers</text>
+<text x="320" y="60" text-anchor="middle" class="sub">nullius/importers</text>
+<rect x="380" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="380" y="24" width="120" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="440" y="46" text-anchor="middle" class="name">Parser</text>
+<text x="440" y="60" text-anchor="middle" class="sub">parse, classify</text>
+<rect x="500" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="500" y="24" width="120" height="48" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="560" y="46" text-anchor="middle" class="name">Workspace</text>
+<text x="560" y="60" text-anchor="middle" class="sub">workspaces/&lt;name&gt;/</text>
+<line x1="24" y1="396" x2="616" y2="396" stroke="#d6d7d9" class="rule"/>
+<text x="24" y="416" text-anchor="start" class="eyebrow">LEGEND</text>
+<path d="M96,413 L124,413" fill="none" stroke="#596471" marker-end="url(#path-open-arrow)" class="arrow"/>
+<text x="130" y="417" text-anchor="start" class="legend">Call</text>
+<path d="M175,413 L203,413" fill="none" stroke="#596471" stroke-dasharray="5 4" marker-end="url(#path-open-arrow)" class="arrow dashed"/>
+<text x="209" y="417" text-anchor="start" class="legend">Write</text>
+</svg>

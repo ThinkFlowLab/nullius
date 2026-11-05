@@ -1,0 +1,87 @@
+{
+  "key": "swe-bench-verified",
+  "title": "SWE-bench Verified",
+  "category": "Coding",
+  "domain": "Software engineering: fix a real GitHub issue so the failing tests pass.",
+  "scoring": "Tests",
+  "harness": [
+    "standard",
+    "harbor"
+  ],
+  "origin": "official",
+  "published": {
+    "agent": "swe-agent",
+    "says": "SWE-agent, the SWE-bench authors' own agent and the paper's agent baseline, which Harbor registers; a model of your choice runs it."
+  },
+  "upstream_limitations": [
+    "django__django-10097 passes with no change: the tests it grades pass without the fix, and the URL tests its fix is for are not among them."
+  ],
+  "limitations": [
+    "On a shared API key, rate limits cause most failures: run few trials at once.",
+    "gpt-5.x models need the Responses API to reason while using tools.",
+    "On Nullius, the agent works in the instance's own container and the tests run there after it. Test files are reset first, so editing them does not help.",
+    "On Nullius, the agent can reach only its model. The tests get internet access after the agent ends.",
+    "The prompt is the issue's title and body, without the hints, as on the leaderboard.",
+    "Each instance's image is pinned. An image the authors rebuild is not used until the pin is refreshed.",
+    "SWE-agent, the authors' own agent, runs only on Harbor."
+  ],
+  "datasets": [
+    {
+      "key": "swe-bench-verified",
+      "title": "SWE-bench Verified",
+      "tasks": 500,
+      "official": "https://github.com/SWE-bench/SWE-bench",
+      "registry": "swebench-verified@1.0",
+      "hub": "",
+      "verifier": "The failing tests must pass and the passing ones keep passing.",
+      "notes": "500 human-verified tasks from 12 Python projects.",
+      "source": "Harbor registry"
+    }
+  ],
+  "report": {
+    "sources": [
+      "swe-bench",
+      "swebench",
+      "swebench-verified",
+      "swe-bench-verified"
+    ],
+    "file": "verifier/report.json",
+    "required": true,
+    "under_task": true,
+    "succeeded": "resolved",
+    "produced": "patch_exists",
+    "produced_unless": "patch_is_None",
+    "usable": "patch_successfully_applied",
+    "gained": {
+      "pass": [
+        "tests_status.FAIL_TO_PASS.success"
+      ],
+      "fail": [
+        "tests_status.FAIL_TO_PASS.failure"
+      ]
+    },
+    "held": {
+      "pass": [
+        "tests_status.PASS_TO_PASS.success"
+      ],
+      "fail": [
+        "tests_status.PASS_TO_PASS.failure",
+        "tests_status.PASS_TO_FAIL.success",
+        "tests_status.PASS_TO_FAIL.failure",
+        "tests_status.FAIL_TO_FAIL.success",
+        "tests_status.FAIL_TO_FAIL.failure"
+      ]
+    },
+    "words": {
+      "gained": "Fail → Pass",
+      "gained_abbr": "F→P",
+      "gained_term": "FAIL_TO_PASS",
+      "held": "Pass → Pass",
+      "held_abbr": "P→P",
+      "held_term": "PASS_TO_PASS",
+      "has_patch": true
+    }
+  },
+  "citation": "@inproceedings{\n    jimenez2024swebench,\n    title={{SWE}-bench: Can Language Models Resolve Real-world Github Issues?},\n    author={Carlos E Jimenez and John Yang and Alexander Wettig and Shunyu Yao and Kexin Pei and Ofir Press and Karthik R Narasimhan},\n    booktitle={The Twelfth International Conference on Learning Representations},\n    year={2024},\n    url={https://openreview.net/forum?id=VTF8yNQM66}\n}",
+  "citation_source": "https://github.com/SWE-bench/SWE-bench"
+}

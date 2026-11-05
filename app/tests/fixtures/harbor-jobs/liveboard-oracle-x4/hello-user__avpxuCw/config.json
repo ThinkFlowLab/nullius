@@ -1,0 +1,9 @@
+{
+    "task": {
+        "path": "/home/ubuntu/harbor-pilot/datasets/oracle-x4/hello-user",
+        "source": "oracle-x4"
+    },
+    "trial_name": "hello-user__avpxuCw",
+    "trials_dir": "/home/ubuntu/harbor-pilot/jobs/liveboard-oracle-x4",
+    "job_id": "3d4141f3-ad55-4216-8019-c9b5ddf9cd60"
+}

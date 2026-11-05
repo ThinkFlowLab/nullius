@@ -1,0 +1,49 @@
+{
+  "key": "tau3-bench",
+  "title": "τ³-bench",
+  "category": "Customer service",
+  "domain": "Customer service with domain tools and a simulated user: airline, retail, telecom, banking.",
+  "scoring": "τ² evaluator",
+  "harness": [
+    "standard",
+    "harbor"
+  ],
+  "origin": "official",
+  "good_to_know": [
+    "Scores depend on the simulated user's and the evaluator's models: keep both fixed when comparing.",
+    "Conversations run in the upstream's own runner, release v1.0.1, at its defaults: 200 steps, 10 tool errors, seed 300.",
+    "Original is the upstream's own agent with your model, as in a leaderboard submission.",
+    "Several attempts per task report pass^k, as the leaderboard's 4 trials do. Each attempt is a new conversation.",
+    "A task whose retries all fail is an infrastructure error, not a score.",
+    "A tool call after the conversation has ended returns an error. An agent that keeps calling until its time runs out is not scored."
+  ],
+  "upstream_limitations": [
+    "The agent must answer the user through the user tool, or the episode ends early.",
+    "Tool calls must be one at a time: the evaluator refuses concurrent ones."
+  ],
+  "limitations": [
+    "All five domains run: airline, retail, telecom, telecom-workflow and banking_knowledge. The mock domain and voice mode are not run.",
+    "banking_knowledge's search method is an option, bm25 by default. Scores compare only between runs with the same search. The qwen and reranker methods are not offered.",
+    "Another agent replaces the upstream's agent. It gets the upstream's instructions and policy, plus two lines from Nullius: where its tools are, and that its last message in a turn goes to the user."
+  ],
+  "datasets": [
+    {
+      "key": "tau3-bench",
+      "title": "τ³-bench",
+      "tasks": 375,
+      "official": "https://github.com/sierra-research/tau2-bench",
+      "registry": "sierra-research/tau3-bench",
+      "hub": "sierra-research/tau3-bench",
+      "verifier": "τ²'s evaluator: the database state and the conversation's assertions.",
+      "source": "Harbor hub"
+    }
+  ],
+  "timeouts": {
+    "env_setup": 600,
+    "agent_setup": 1200,
+    "agent_run": 3600,
+    "verify": 300
+  },
+  "citation": "@misc{barres2025tau2,\n      title={$\\tau^2$-Bench: Evaluating Conversational Agents in a Dual-Control Environment},\n      author={Victor Barres and Honghua Dong and Soham Ray and Xujie Si and Karthik Narasimhan},\n      year={2025},\n      eprint={2506.07982},\n      archivePrefix={arXiv},\n      primaryClass={cs.AI},\n      url={https://arxiv.org/abs/2506.07982},\n}\n\n@misc{yao2024tau,\n      title={$\\tau$-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains},\n      author={Shunyu Yao and Noah Shinn and Pedram Razavi and Karthik Narasimhan},\n      year={2024},\n      eprint={2406.12045},\n      archivePrefix={arXiv},\n      primaryClass={cs.AI},\n      url={https://arxiv.org/abs/2406.12045},\n}\n\n@article{shi2026tau,\n  title={$\\tau$-Knowledge: Evaluating Conversational Agents over Unstructured Knowledge},\n  author={Shi, Quan and Zytek, Alexandra and Razavi, Pedram and Narasimhan, Karthik and Barres, Victor},\n  journal={arXiv preprint arXiv:2603.04370},\n  year={2026}\n}",
+  "citation_source": "https://github.com/sierra-research/tau2-bench"
+}

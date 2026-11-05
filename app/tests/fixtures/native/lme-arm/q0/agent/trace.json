@@ -1,0 +1,86 @@
+{
+ "schema_version": "harbor-trace-v1",
+ "producer": "nullius relay, longmemeval",
+ "trial_name": "q0",
+ "agent": {
+  "name": "oracle",
+  "version": ""
+ },
+ "clock": {
+  "source": "the relay timed each call it forwarded"
+ },
+ "spans": [
+  {
+   "span_id": "q0",
+   "name": "longmemeval.question",
+   "kind": "session",
+   "start_ns": 1001000000000,
+   "end_ns": 1003500000000,
+   "duration_ns": 2500000000,
+   "timing_quality": "measured",
+   "source": "relay",
+   "attributes": {
+    "item": "q0"
+   },
+   "children": [
+    {
+     "span_id": "q0-reader1",
+     "parent_span_id": "q0",
+     "name": "reader",
+     "kind": "llm_request",
+     "start_ns": 1001000000000,
+     "end_ns": 1001500000000,
+     "duration_ns": 500000000,
+     "timing_quality": "measured",
+     "source": "relay",
+     "attributes": {
+      "gen_ai.request.model": "openai/gpt-4o-2024-08-06",
+      "cost_usd": 0.0004
+     },
+     "tokens": {
+      "input_tokens": 120,
+      "output_tokens": 8
+     },
+     "content": {
+      "output": "h"
+     }
+    },
+    {
+     "span_id": "q0-judge1",
+     "parent_span_id": "q0",
+     "name": "judge",
+     "kind": "llm_request",
+     "start_ns": 1003000000000,
+     "end_ns": 1003500000000,
+     "duration_ns": 500000000,
+     "timing_quality": "measured",
+     "source": "relay",
+     "attributes": {
+      "gen_ai.request.model": "openai/gpt-4o-2024-08-06",
+      "cost_usd": 0.0004
+     },
+     "tokens": {
+      "input_tokens": 120,
+      "output_tokens": 8
+     },
+     "content": {
+      "output": "no"
+     }
+    }
+   ]
+  }
+ ],
+ "totals": {
+  "wall_ns": 2500000000,
+  "llm_ns": 1000000000,
+  "tool_ns": 0,
+  "reasoning_ns": 0,
+  "idle_ns": 1500000000,
+  "span_count": 3,
+  "measured_span_count": 2,
+  "tokens": {
+   "input_tokens": 240,
+   "output_tokens": 16
+  }
+ }
+}

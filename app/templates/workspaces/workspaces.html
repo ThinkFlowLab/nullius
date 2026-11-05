@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Workspaces — Nullius{% endblock %}
+{% block crumb %}/ workspaces{% endblock %}
+{% block body %}
+
+
+<div class="page-title"><h1>Workspaces</h1></div>
+<p class="subtitle">A named set of run roots and what was read from them. <a href="{{ url_for('import_page', new=1) }}">New workspace →</a></p>
+
+{% if workspaces %}
+<table class="grid">
+  <thead>
+    <tr><th></th><th>Workspace</th><th>Name</th><th>Roots</th><th class="num" title="Parsed runs held in the cache">Cached runs</th><th>Last opened</th><th></th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for ws in workspaces %}
+    {% set current = workspace and ws.name == workspace.name %}
+    <tr class="{{ 'ws-current' if current }}">
+      <td class="ws-mark">{% if current %}<span class="ok" title="open">●</span>{% endif %}</td>
+      <td>
+        {# every workspace renames from its own row, open or not; its directory follows the name #}
+        <form method="post" action="{{ url_for('workspace_rename') }}" class="ws-rename">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ ws.name }}">
+          <input type="text" name="label" value="{{ ws.label }}" aria-label="Rename the workspace {{ ws.label }}" spellcheck="false" autocomplete="off">
+          <button class="linkish" type="submit">rename</button>
+        </form>
+      </td>
+      <td class="mono faint">{{ ws.name }}</td>
+      <td class="ws-roots" title="{{ ws.roots|join('&#10;') }}">{% for r in ws.roots %}<span class="mono">{{ r }}</span>{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+      <td class="num">{{ ws.n_cached }}</td>
+      <td class="mono faint">{{ ws.opened[:16]|replace('T', ' ') }}</td>
+      <td class="arrow">
+        {% if current %}<a href="{{ url_for('index') }}">runs →</a>
+        {% else %}<form method="post" action="{{ url_for('workspace_open', name=ws.name) }}" class="header-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sm" type="submit">Open</button></form>{% endif %}
+      </td>
+      <td class="ws-delete">
+        {# removes the workspace's cache, imports and export record; the job roots stay where they are #}
+        <form method="post" action="{{ url_for('workspace_delete', name=ws.name) }}" class="header-form" data-confirm="Remove the workspace {{ ws.label }}? Its cached parses, converted imports and export record go; the job directories it read stay.">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="ws-remove" type="submit" title="Remove this workspace (its job roots are untouched)" aria-label="Remove workspace {{ ws.label }}">×</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="alert">No workspace yet.</div>
+{% endif %}
+<script>
+  document.querySelectorAll('form[data-confirm]').forEach(f => f.addEventListener('submit', e => { if (!confirm(f.dataset.confirm)) e.preventDefault(); }));
+</script>
+
+{% endblock %}

@@ -1,0 +1,72 @@
+{# The Judgement tab: the judge's answers beside the recorded evidence, never in its place.
+   Outcome questions as cards (the answer, a pill saying how it reads, the judge's own confidence or
+   Nullius's decisiveness for a yes/no), then the behaviour flags as a table (a human name, a result pill,
+   the likelihood as a bar, a row that opens on the question's own wording and the hygiene reading of its
+   state). "Not judged" until asked; Judge asks. Every count is Nullius's; the judge is never asked how many. #}
+{% macro pill(r) -%}
+<span class="jpill {{ 'warn' if r.undecided else ('bad' if r.tone == 'bad' else ('good' if r.tone == 'good' else 'none')) }}" title="{% if r.undecided %}Undecided: within the judge's measured run-to-run spread of the 50% line (±{{ '%.0f'|format(r.floor * 100) }} points on this question), so another ask could land on the other side{% elif r.flag and r.floor is not none %}{{ r.pill }} by more than the judge's measured spread on this question (±{{ '%.0f'|format(r.floor * 100) }} points){% elif r.flag %}{{ r.pill }}: probability {{ 'at or above' if r.raised else 'below' }} 50%; no run-to-run spread has been measured for this question{% else %}{{ r.pill }}{% endif %}">{% if r.undecided %}—{% elif r.flag and r.raised %}⚑{% elif r.flag %}✓{% endif %} {{ r.pill }}</span>
+{%- endmacro %}
+{% macro judgement_panel(j, job, trial, csrf) %}
+{%- set llm = j.lane == 'llm' %}
+<div class="judgement" id="{{ 'llm-judgement' if llm else 'judgement' }}">
+  <div class="judgement-head">
+    <div>
+      <h2>{{ 'LLM judge' if llm else 'System One judge' }} <span class="badge" title="A judge model's answers: experimental, beside the recorded reward and outcome, which they never change">experimental</span></h2>
+      <p class="muted small">{% if llm %}The same questions, asked of {{ j.judge.label if j.keyed else 'the LLM judge Settings names' }}. Its numbers are what the model states, not calibrated: a choice or a score carries no confidence.{% else %}Task outcome, answer quality, and behaviour — as TypeSafe's System One reads the transcript.{% endif %} Experimental: the recorded outcome and reward stand.</p>
+    </div>
+    {% if j.keyed %}
+    <form method="post" action="{{ url_for('judge_trial_route', job_id=job.job_id, trial_name=trial.trial_name) }}" class="header-form"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="lane" value="{{ j.lane }}"><button class="btn sm {{ 'ghost' if j.judged }}" type="submit" title="One click, one judge call per state the questions read; the answers replace the ones shown">{{ 'Judge again' if j.judged else 'Judge' }}</button></form>
+    {% else %}<span class="small faint">{{ 'LLM judge' if llm else 'System One' }} not configured{% if j.judge is not none and j.judge.missing %}: needs {{ j.judge.missing }}{% endif %} — <a href="{{ url_for('settings_page') }}#judge">set it in Settings</a></span><button class="btn sm ghost" type="button" disabled title="Not configured: Settings, Judge">Judge</button>{% endif %}
+  </div>
+  {% if j.record %}<p class="small muted judgement-provenance">{{ j.record.judge.model }}{% if j.record.judge.provider not in ('typesafe.ai', 'typesafe') %} via {{ {'openrouter': 'OpenRouter', 'openai': 'OpenAI', 'local': 'a local endpoint'}.get(j.record.judge.provider, j.record.judge.provider) }}{% endif %} · {{ j.record.questions }}{% if j.earlier %} <span class="badge" title="Asked under an earlier question vocabulary; the answers are shown as they were given. Judge again asks the current questions.">earlier vocabulary</span>{% endif %} · asked {{ j.record.asked_at[:16]|replace('T', ' ') }}Z{% if j.record.truncated %} · state truncated{% if j.record.states %} ({% for kind, k in j.record.states.items() if k.truncated %}{{ kind }}{{ ', ' if not loop.last }}{% endfor %}){% endif %}{% endif %}{% if j.record.usage and j.record.usage.input_tokens %} · {{ j.record.usage.input_tokens }} input tokens{% endif %}</p>{% endif %}
+  {% if j.hygiene and j.hygiene.kinds %}<p class="small judgement-hygiene" title="Two yes/no readings ride every judge call over every state: does the state contain text addressed to whoever judges it, and does it still show what looks like a credential after the regex pass. State is untrusted text from the job directory; this makes the risk visible on the answers drawn from it. It does not make the judge robust, and it changes no answer.">
+    {% if j.hygiene.flagged %}<span class="hygiene warn">⚠ state hygiene</span> {% for kind, raised in j.hygiene.flagged.items() %}<span class="mono small">`{{ kind }}`</span> state: {% for id, label, p, decided in raised %}{{ label }} <span class="mono small">{{ '%.0f'|format(p * 100) }}%</span>{% if not decided %} <span class="faint" title="Within the judge's measured run-to-run spread of the 50% line on this question: another ask could read it the other way">(undecided)</span>{% endif %}{{ '; ' if not loop.last }}{% endfor %}{{ ' · ' if not loop.last }}{% endfor %} <span class="faint">— the answers from that state are marked ⚠; none is changed</span>
+    {% else %}<span class="hygiene clear">state hygiene</span> <span class="faint">nothing read as addressing the judge or showing a credential on {{ j.hygiene.kinds|join(', ') }}</span>{% endif %}</p>{% endif %}
+
+  <div class="jcards">
+    {% for r in j.cards %}
+    <div class="jcard tone-{{ r.tone }}{{ ' hygiene-warned' if r.warnings }}" data-question="{{ r.id }}">
+      <div class="jcard-title">{{ r.label }}{% if r.warnings %} <span class="hygiene warn" title="Drawn from the `{{ r.state }}` state, which the judge read as: {% for id, label, p, decided in r.warnings %}{{ label }} ({{ '%.0f'|format(p * 100) }}%{{ ', undecided' if not decided }}){{ '; ' if not loop.last }}{% endfor %}. The answer is shown as given; weigh it knowing the state may be arguing its own case.">⚠</span>{% endif %}</div>
+      {% if r.answer %}
+      <div class="jcard-value"><span class="jnum">{{ r.headline }}</span><span class="junit">{{ r.unit }}</span> {{ pill(r) }}</div>
+      <div class="jcard-blurb muted small">{% if r.type == 'score' %}{{ r.pill }}{% else %}{{ r.blurb }}{% endif %}</div>
+      <div class="jcard-foot small">{% if r.measure is not none %}<span class="muted" title="{% if r.measure_label == 'Decisiveness' %}How far the yes/no probability sits from 50%, derived by Nullius. A yes/no question returns a probability only, no confidence; a decisive answer can still be wrong{% else %}The confidence the judge returned with this answer{% endif %}">{{ r.measure_label }}</span><span class="mono">{{ '%.0f'|format(r.measure * 100) }}%</span>{% endif %}</div>
+      {% else %}
+      <div class="jcard-value"><span class="faint">not judged</span></div>
+      <div class="jcard-blurb muted small">{{ r.blurb }}</div>
+      <div class="jcard-foot small"><span class="faint">asked on Judge</span></div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="jflags-head">
+    <h3>Behaviour flags <span class="faint small" title="One yes/no each, asked of every trial on the same call as the questions above; a yes is a flag raised. Every count stays in code: the judge is never asked how many.">— yes/no, each one thing</span></h3>
+    {% if j.flags_judged %}<span class="small muted judgement-flags-summary">{{ j.raised|length }} raised · {{ j.undecided|length }} undecided · {{ j.cleared|length }} clear</span>{% endif %}
+  </div>
+  <table class="jflags">
+    <thead><tr><th>Check</th><th>Result</th><th>Likelihood of flag</th><th></th></tr></thead>
+    <tbody>
+    {% for r in j.flags %}
+    <tr class="jflag tone-{{ r.tone }}{{ ' raised' if r.raised and not r.undecided }}{{ ' undecided' if r.undecided }}{{ ' hygiene-warned' if r.warnings }}" data-question="{{ r.id }}">
+      <td><span class="jdot"></span> {{ r.label }}{% if r.warnings %} <span class="hygiene warn" title="Drawn from the `{{ r.state }}` state, which the judge read as: {% for id, label, p, decided in r.warnings %}{{ label }} ({{ '%.0f'|format(p * 100) }}%{{ ', undecided' if not decided }}){{ '; ' if not loop.last }}{% endfor %}. The answer is shown as given; weigh it knowing the state may be arguing its own case.">⚠</span>{% endif %}</td>
+      <td>{% if r.answer %}{{ pill(r) }}{% else %}<span class="faint">not judged</span>{% endif %}</td>
+      <td>{% if r.answer %}<span class="mono small">{{ r.headline }}%</span> <span class="jbar" title="{% if r.floor is not none %}The shaded band is the judge's measured run-to-run spread about 50%, ±{{ '%.0f'|format(r.floor * 100) }} points: an answer inside it is undecided{% else %}No run-to-run spread has been measured for this question{% endif %}">{% if r.floor is not none %}<i class="floor" style="left: {{ '%.0f'|format((0.5 - r.floor) * 100) }}%; width: {{ '%.0f'|format(r.floor * 200) }}%"></i>{% endif %}<i class="fill" style="width: {{ r.headline }}%"></i></span>{% if r.floor is not none %} <span class="mono small faint" title="The judge's measured run-to-run spread on this question">±{{ '%.0f'|format(r.floor * 100) }}</span>{% else %}<span class="small faint" title="No measured spread for this question">±?</span>{% endif %}{% endif %}</td>
+      <td class="jmore"><button type="button" class="jdisclose" aria-expanded="false" aria-controls="jflag-{{ j.lane }}-{{ r.id }}" title="The question as the judge was asked it">›</button></td>
+    </tr>
+    <tr class="jflag-detail" id="jflag-{{ j.lane }}-{{ r.id }}" hidden>
+      <td colspan="4"><span class="mono small">{{ r.id }}</span> · <span class="small muted">{{ r.instructions }}</span>{% if r.floor is not none %} <span class="small faint">· undecided zone {{ '%.0f'|format((0.5 - r.floor) * 100) }}–{{ '%.0f'|format((0.5 + r.floor) * 100) }}%</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<script>
+  // a flag's row opens on the question's own wording; no request, nothing asked. The page holds two
+  // panels (System One, the LLM judge): each script binds its own, the panel just before it.
+  document.currentScript.previousElementSibling.querySelectorAll('.jdisclose').forEach(b => b.addEventListener('click', () => {
+    const open = b.getAttribute('aria-expanded') !== 'true'; b.setAttribute('aria-expanded', String(open));
+    const d = document.getElementById(b.getAttribute('aria-controls')); if (d) d.hidden = !open;
+  }));
+</script>
+{% endmacro %}

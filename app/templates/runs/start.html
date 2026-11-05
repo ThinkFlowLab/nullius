@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Runs — Nullius{% endblock %}
+{% block crumb %}/ runs{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/start.css') }}">{% endblock %}
+{% block body %}
+{# No workspace open: the two ways to have runs - start one, or bring the ones
+   made elsewhere - then the workspaces already here, and the mark last. #}
+<div class="start">
+  <header class="start-head">
+    <div class="start-title"><h1>Runs</h1><span class="start-count">0 runs</span></div>
+    <p>Your next experiment starts here.</p>
+  </header>
+
+  <div class="start-ways">
+    <section class="start-card" aria-labelledby="start-build">
+      <span class="start-ic" aria-hidden="true"><svg class="ic"><use href="#i-newrun"/></svg></span>
+      <h2 class="start-t" id="start-build">Build a run</h2>
+      <p class="start-d">Choose a benchmark, an agent and a model. Follow the results here.</p>
+      <a class="start-action start-primary" href="{{ url_for('new_run') }}">Open run builder <span aria-hidden="true">→</span></a>
+    </section>
+    <section class="start-card" aria-labelledby="start-bring">
+      <span class="start-ic" aria-hidden="true"><svg class="ic"><use href="#i-import"/></svg></span>
+      <h2 class="start-t" id="start-bring">Import results</h2>
+      <p class="start-d">Bring in ATIF trajectories or OpenTelemetry exports.</p>
+      <a class="start-action" href="{{ url_for('import_page', new=1) }}">Choose files or folder <span aria-hidden="true">↗</span></a>
+    </section>
+  </div>
+
+  {% if workspaces %}
+  <section class="start-ws" aria-labelledby="start-ws-title">
+    <h2 id="start-ws-title">Or open a workspace</h2>
+    <ul>
+      {% for ws in workspaces[:6] %}
+      <li><form method="post" action="{{ url_for('workspace_open', name=ws.name) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <button class="start-ws-row" type="submit">
+          <span class="ws-avatar" style="--hue:{{ ws_hue(ws.name) }}">{{ ws.label[:2]|upper }}</span>
+          <span class="start-ws-text"><span>{{ ws.label }}</span><small>{{ ws.n_cached }} run{{ '' if ws.n_cached == 1 else 's' }} · {{ ws.roots|length }} folder{{ '' if ws.roots|length == 1 else 's' }}{% if ws.opened %} · opened {{ ws.opened[:10] }}{% endif %}</small></span>
+          <span class="start-go">Open →</span>
+        </button>
+      </form></li>
+      {% endfor %}
+    </ul>
+    {% if workspaces|length > 6 %}<a class="start-all" href="{{ url_for('workspaces_page') }}">All {{ workspaces|length }} workspaces →</a>{% endif %}
+  </section>
+  {% endif %}
+
+  <div class="start-signature" aria-hidden="true">
+    {% include 'runs/ascii-mark.html' %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,42 @@
+{
+  "key": "locomo",
+  "title": "LoCoMo",
+  "category": "Memory",
+  "domain": "Very long-term conversational memory over conversations of 19 to 32 sessions.",
+  "scoring": "Token F1",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "good_to_know": [
+    "Each conversation is one task, with its questions inside. The smallest run is one conversation.",
+    "The score is the mean token F1 over the questions, as in the paper. There is no pass or fail.",
+    "What goes into the memory is an option: the conversation itself by default, or the authors' released facts or session summaries."
+  ],
+  "upstream_limitations": [
+    "The 446 adversarial questions are left out, because the published file has no answer for them. 1,540 of the 1,986 questions remain.",
+    "The reader's model name must contain gpt-4 or gpt-3.5, as LoCoMo's own code requires. Any other model fails every question.",
+    "The paper's readers, gpt-4-turbo and gpt-3.5-turbo, now point to newer models. Scores can differ from the paper's for that reason.",
+    "The reader gets 32 tokens per answer. A reasoning model can spend them all reasoning, and that question fails.",
+    "One unreadable reply stops the whole conversation, because LoCoMo's script writes its answers only at the end.",
+    "Original memory runs the paper's retrieval setup and needs a CUDA GPU. It writes facts and summaries anew each run, so they differ from the authors' released ones."
+  ],
+  "limitations": [
+    "The paper's other readers are not offered. Claude 3 Sonnet and Gemini Pro 1.0 are retired, and the Llama 3 and Mistral readers run only as local weights."
+  ],
+  "datasets": [
+    {
+      "key": "locomo10",
+      "title": "LoCoMo-10",
+      "tasks": 10,
+      "official": "https://github.com/snap-research/locomo",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "LoCoMo's own task_eval/evaluate_qa.py: the token F1 of each answer against the reference; no judge model.",
+      "notes": "Ten conversations. CC BY-NC 4.0."
+    }
+  ],
+  "citation": "@article{maharana2024evaluating,\n  title={Evaluating very long-term conversational memory of llm agents},\n  author={Maharana, Adyasha and Lee, Dong-Ho and Tulyakov, Sergey and Bansal, Mohit and Barbieri, Francesco and Fang, Yuwei},\n  journal={arXiv preprint arXiv:2402.17753},\n  year={2024}\n}",
+  "citation_source": "https://github.com/snap-research/locomo"
+}

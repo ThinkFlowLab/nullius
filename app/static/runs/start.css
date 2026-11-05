@@ -1,0 +1,38 @@
+/* Runs with no workspace open: build a run, or bring the ones made elsewhere,
+   or open a workspace already here. Colours are the app's tokens (style.css). */
+.start { width: 100%; max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+.start-head { display: flex; flex-direction: column; gap: 8px; }
+.start-head h1 { margin: 0; }
+.start-head p { margin: 0; font-size: 15px; color: var(--text-dim); }
+.start-ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 18px; }
+.start-card { display: flex; flex-direction: column; gap: 14px; padding: clamp(24px, 2vw, 36px); border: 1px solid var(--border-soft); border-radius: 14px; background: var(--surface); color: var(--text); }
+.start-ic { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent-strong); }
+.start-ic .ic { width: 20px; height: 20px; }
+.start-t { margin: 0; font-size: 19px; font-weight: 500; letter-spacing: -.01em; text-transform: none; color: var(--text); }
+.start-d { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-dim); }
+.start-go { margin-top: auto; font-size: 14px; color: var(--accent); white-space: nowrap; }
+.start-ws { display: flex; flex-direction: column; gap: 10px; }
+.start-ws h2 { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text); }
+.start-ws ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border-soft); }
+.start-ws li { border-bottom: 1px solid var(--border-soft); }
+.start-ws form { margin: 0; }
+.start-ws-row { width: 100%; display: flex; align-items: center; gap: 14px; padding: 14px 6px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; border-radius: 8px; }
+.start-ws-row:hover { background: var(--surface); }
+.start-ws-row:hover .start-go { color: var(--accent-strong); }
+.start-ws-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 15px; }
+.start-ws-text small { font-size: 12.5px; color: var(--text-dim); }
+.start-all { font-size: 13px; }
+.start .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.start-title { display: flex; align-items: center; gap: 12px; }
+.start-count { border: 1px solid var(--border-soft); border-radius: 20px; padding: 3px 9px; font-size: 12px; color: var(--text-dim); }
+.start-card { min-height: clamp(256px, 22vh, 320px); box-shadow: var(--shadow); }
+.start-ic { flex: none; width: 42px; height: 42px; border: 1px solid color-mix(in srgb, var(--accent) 15%, transparent); }
+.start-ic .ic { width: 22px; height: 22px; }
+.start-action { display: inline-flex; align-items: center; gap: 16px; align-self: flex-start; margin-top: auto; padding: 10px 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 13px; font-weight: 500; }
+.start-action:hover { text-decoration: none; border-color: var(--accent); }
+.start-primary { background: var(--accent); color: var(--btn-fg); border-color: transparent; }
+.start-primary:hover { background: var(--accent-strong); }
+.start-signature { display: flex; align-items: center; justify-content: center; color: var(--text-dim); user-select: none; pointer-events: none; }
+.start-ascii { flex: 0 0 auto; width: clamp(320px, 32vw, 560px); max-width: 100%; height: auto; aspect-ratio: 1; opacity: .75; font: 8px monospace; }
+@media (max-width: 520px) { .start-card { min-height: 236px; } }

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% from "catalogue/use_bundle.html" import use_bundle %}
+{% set plural = 'Agents' if kind == 'agent' else 'Capabilities' %}
+{% block title %}{{ title }} — Nullius{% endblock %}
+{% block crumb %}/ <a href="{{ url_for('agents_page' if kind == 'agent' else 'features_page') }}">{{ plural|lower }}</a> / {{ e.d.key }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
+{% block body %}
+{# One of the standard's agents (or capabilities): its definition, the ports it proved, what it can run. docs/standard.md #}
+<div class="std-index">
+  {% set d = e.d %}
+  <section class="std-card" id="{{ d.key }}" aria-labelledby="std-{{ d.key }}">
+    <div class="std-head std-entry-head">
+      <span class="std-mark" aria-hidden="true">{{ agent_mark(kind, d.key, d.label) }}</span>
+      <div>
+        <h1 id="std-{{ d.key }}">{{ d.label }}</h1>
+        <div class="std-tags">
+          {% if kind == 'capability' %}<span class="cat-tag">{{ d.kind }}</span>{% endif %}
+          <span class="std-tag">{{ e.protocol }}</span>
+          {% if d.example %}<span class="std-tag" title="Nullius's own, to read or copy - not an agent to compare">example</span>{% endif %}
+          {% if versions %}<span class="std-tag">{{ 'default version' if d._version == d._default else 'not the default version' }}</span>{% endif %}
+        </div>
+      </div>
+      {% if restore_bundle and local %}<div class="bench-actions">{{ use_bundle('agents' if kind == 'agent' else 'capabilities', d.key, csrf) }}</div>{% endif %}
+    </div>
+    <p class="std-summary">{{ d.summary }}</p>
+    {% if versions %}
+    {# Each version has its own pins and its own proofs: a new release is offered only once it has proven its ports. #}
+    <nav class="std-versions" aria-label="Versions">
+      <span>Versions</span>
+      {% for x in versions %}<a href="{{ url_for('agent_page' if kind == 'agent' else 'feature_page', key=d.key, v=x.v) }}"{% if x.current %} aria-current="page"{% endif %}><b>{{ x.v }}</b><small>{{ x.proven }}/{{ x.ports }} proven{{ ' · default' if x.default else '' }}</small></a>{% endfor %}
+    </nav>
+    {% endif %}
+    {% set upstream = d.get('upstream', {}) %}
+    {% set install = d.get('install', {}) %}
+    {% if upstream or install %}
+    <section class="std-source" aria-labelledby="source-title">
+      <h2 id="source-title">Source</h2>
+      <dl class="std-source-grid">
+        {% if upstream.repository %}<div><dt>Repository</dt><dd>{% if upstream.repository.startswith(('https://', 'http://')) %}<a href="{{ upstream.repository }}">{{ upstream.repository|replace('https://github.com/', '')|replace('https://', '') }}</a>{% else %}<code>{{ upstream.repository }}</code>{% endif %}</dd></div>{% endif %}
+        {% if upstream.package %}<div><dt>Package</dt><dd><code>{{ upstream.package }}</code></dd></div>{% endif %}
+        {% set version = upstream.tag or upstream.version %}
+        {% if version and not (upstream.tested and upstream.tested.startswith(version)) %}<div><dt>Version</dt><dd><code>{{ version }}</code></dd></div>{% endif %}
+        {% if upstream.tested %}<div><dt>Commit</dt><dd><code title="{{ upstream.tested }}">{{ upstream.tested[:12] }}</code></dd></div>{% endif %}
+        {% if upstream.license and upstream.license != 'unknown' %}<div><dt>Licence</dt><dd>{{ upstream.license }}</dd></div>{% endif %}
+      </dl>
+      {% if install %}
+      <details class="std-source-install">
+        <summary>Installation</summary>
+        <dl class="std-source-grid">
+          {% if install.python %}<div><dt>Python</dt><dd>{{ install.python }}</dd></div>{% endif %}
+          {% if install.project %}<div><dt>Project</dt><dd><code>{{ install.project }}{% if install.extras %}[{{ install.extras|join(', ') }}]{% endif %}</code></dd></div>{% endif %}
+          {% for label, packages in [('npm', install.get('npm', [])), ('pip', install.get('pip', []))] %}{% if packages %}<div><dt>{{ label }}</dt><dd>{% for package in packages %}<code>{{ package }}</code>{% if not loop.last %}<br>{% endif %}{% endfor %}</dd></div>{% endif %}{% endfor %}
+          {% for index in install.get('indexes', []) %}<div><dt>Package index</dt><dd><code>{{ index.packages|join(', ') }}</code><small>{{ index.url }}</small></dd></div>{% endfor %}
+          {% if install.prefetch %}<div><dt>Models</dt><dd>{% for model in install.prefetch %}<code>{{ model }}</code>{% if not loop.last %}<br>{% endif %}{% endfor %}</dd></div>{% endif %}
+        </dl>
+      </details>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <div class="std-cols">
+      <div>
+        <table class="std-ports">
+          <thead><tr><th scope="col">Ports</th><th scope="col">Proven</th></tr></thead>
+          <tbody>
+          {% for r in e.ports %}
+            <tr class="st-{{ r.state|replace(' ', '-') }}">
+              <td><b class="std-portname"{% if r.kit %} title="Kit v{{ r.kit.version }} · {{ r.kit.checks }} checks: {{ r.kit.says }}"{% endif %}>{% if r.kit %}<a href="{{ url_for('kit_page', key=r.kit.key) }}">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %}</b> <code class="std-portid">{{ r.port }}</code><small>{{ r.summary }}</small>
+                  {% if r.skills %}<small class="std-skills">Skills: {% for s in r.skills %}<span class="std-fidelity {{ 'ok' if s.shown else 'no' }}" title="{{ s.id }}{% if s.passed %} · {{ s.passed }}{% endif %}">{{ s.says }} {{ '✓' if s.shown else '✗' }}</span>{{ ' · ' if not loop.last }}{% endfor %}</small>{% endif %}
+                  {% if not r.kit %}<small class="std-kit">No kit yet: nothing can prove it until a benchmark needs it.</small>{% endif %}</td>
+              <td>{% if r.record %}<b title="proven on {{ r.record.on }}{% if r.record.model %} with {{ r.record.model }}{% endif %}, kit v{{ r.proof_kit }}{% if r.record.backend %}, {{ 'docker' if r.record.backend == 'docker' else 'local processes' }}{% endif %}">{{ r.record.passed }}</b>{% if r.older_kit %}<small class="std-kit" title="{{ r.older_kit }}">newer kit: worth running again</small>{% endif %}{% if r.job %}<small><a href="{{ url_for('job', job_id=r.job) }}">its job</a></small>{% endif %}
+                  {%- else %}<b>{{ r.state }}</b>{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% if e.fidelity %}
+        {# cli fidelity: the same tasks driven over ACP and through the agent's own command, the model's requests compared #}
+        <h3 class="std-subhead">Fidelity</h3>
+        <p class="std-fid {{ 'ok' if e.fidelity.verdict == 'same' else 'no' }}"><b>ACP {{ '= its own CLI ✓' if e.fidelity.verdict == 'same' else '≠ its own CLI: ' ~ e.fidelity.verdict }}</b>
+          <small title="{{ e.fidelity.on }} · {{ e.fidelity.model }}{% if e.fidelity.passes %} · {{ e.fidelity.passes }} passes each way{% endif %}">Its model gets the same requests over ACP as from its own command line{% if e.fidelity.differs %}; differs in {{ e.fidelity.differs|join(', ') }}{% endif %}.</small></p>
+        {% endif %}
+        {% if e.options %}
+        <h3 class="std-subhead">Options</h3>
+        <ul class="std-optlist">
+          {% for x in e.options %}<li><code>{{ x.name }}</code> <span class="std-tag">{{ x.default }} (its default)</span>{% if x['values'] %}<small>takes {{ x['values']|join(', ') }}</small>{% elif x.pattern %}<small>takes <code>{{ x.pattern }}</code></small>{% endif %}<small title="{{ x.summary }}">{{ x.summary.split(':')[0].split(';')[0].split('.')[0] }}.</small></li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      <div>
+        <h3>Runs</h3>
+        {% if not e.fits %}<p class="std-none">No benchmark of the standard takes {{ 'an agent' if kind == 'agent' else 'a capability' }} yet.</p>{% endif %}
+        <ul class="std-fits">
+        {% for f in e.fits %}
+          {% if not f.why %}<li class="fit"><svg class="bench-mark" aria-hidden="true"><use href="{{ url_for('static', filename='catalogue/marks.svg') }}#bm-{{ f.key }}"/></svg><span><b>{{ f.label }}</b><small>needs {{ f.needs|join(', ') }}</small></span><a class="btn ghost" href="{{ url_for('new_run', standard=f.key, other=d._ref) }}">New run</a></li>
+          {% else %}<li class="unfit"><svg class="bench-mark" aria-hidden="true"><use href="{{ url_for('static', filename='catalogue/marks.svg') }}#bm-{{ f.key }}"/></svg><span><b>{{ f.label }}</b><small>{{ f.why|join('; ') }}</small></span></li>{% endif %}
+        {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    {% if local %}
+    <details class="std-check">
+      <summary>Prove its ports</summary>
+      <form method="post" action="{{ url_for('agent_check' if kind == 'agent' else 'feature_check', key=d.key) }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        {% if versions %}<input type="hidden" name="version" value="{{ d._version }}">{% endif %}
+        <p>Test its ports with the selected model. Results update its proofs.</p>
+        {% if providers %}
+        <div class="std-form">
+          <label>Run in<select name="backend"><option value="local">Local processes</option><option value="docker">Docker</option></select></label>
+          <label>Provider<select name="provider">{% for p, label in providers %}<option value="{{ p }}">{{ label }}</option>{% endfor %}</select></label>
+          <label>Model<input name="model" required autocomplete="off" spellcheck="false" placeholder="gpt-5-mini"></label>
+        </div>
+        {% if kind == 'agent' %}<label class="std-consent"><input type="checkbox" name="unsandboxed" value="yes" required> Run it on this machine, as me: the local backend is not a sandbox, and its permission requests are granted.</label>{% endif %}
+        <button class="btn" type="submit">Prove its ports</button>
+        {% else %}<p>A model key is needed first: set one in <a href="{{ url_for('settings_page') }}">Settings</a>.</p>{% endif %}
+      </form>
+    </details>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='catalogue/versions.js') }}"></script>
+{% if kind == 'agent' %}
+<script>
+(() => {
+  const form = document.querySelector('.std-check form');
+  const backend = form?.querySelector('[name="backend"]');
+  const consent = form?.querySelector('[name="unsandboxed"]');
+  if (!backend || !consent) return;
+  const sync = () => {
+    const local = backend.value === 'local';
+    consent.closest('label').hidden = !local;
+    consent.required = local;
+    consent.disabled = !local;
+  };
+  backend.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endif %}
+{% endblock %}

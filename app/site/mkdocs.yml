@@ -1,0 +1,125 @@
+site_name: nullius
+site_description: Bring anything. Run it. Prove it. An open-source lab for AI agents.
+repo_url: https://github.com/agtai/nullius
+repo_name: agtai/nullius
+edit_uri: edit/main/
+strict: true
+use_directory_urls: true
+theme:
+  name: material
+  custom_dir: overrides
+  font: false
+  favicon: assets/favicon.png
+  logo: assets/mark.svg
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+plugins:
+  - search
+hooks:
+  - hooks.py
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      pygments_lang_class: true
+  - pymdownx.superfences
+extra_javascript:
+  - assets/navigation.js
+extra_css:
+  - assets/fonts.css
+  - assets/site.css
+extra:
+  generator: false
+  homepage: https://thinkflowlab.ai/nullius/
+copyright: Nullius · Bring anything. Run it. Prove it.
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+nav:
+  - Home: https://thinkflowlab.ai/nullius/
+  - Documentation:
+      - Get started:
+          - Introduction: README.md
+          - Quickstart: getting-started.md
+          - Core concepts: concepts.md
+      - Run evaluations:
+          - Run builder: builder.md
+      - Understand results:
+          - Read results: results.md
+          - Judgement: judgement.md
+      - Benchmarks:
+          - Supported benchmarks: benchmarks/supported/README.md
+          - Add manually: benchmarks/add-manually.md
+          - Add with an assistant: benchmarks/add-with-assistant.md
+      - Agents:
+          - Supported agents: agents/supported/README.md
+          - Add manually: agents/add-manually.md
+          - Add with an assistant: agents/add-with-assistant.md
+      - Capabilities:
+          - Supported capabilities: capabilities/supported/README.md
+          - Add manually: capabilities/add-manually.md
+          - Add with an assistant: capabilities/add-with-assistant.md
+      - CLI:
+          - cli/README.md
+          - Read jobs: cli/read-jobs.md
+          - Import a run: cli/import.md
+          - Definitions: cli/definitions.md
+          - Run a benchmark: cli/run.md
+          - Prove a benchmark: cli/prove.md
+          - Conform an agent or a capability: cli/conform.md
+          - Fidelity: cli/fidelity.md
+          - Shard and merge: cli/shard-and-merge.md
+          - Pages from a shell: cli/pages.md
+          - Exit codes and output: cli/exit-codes.md
+      - Settings:
+          - Overview: settings/README.md
+          - Model providers: settings/model-providers.md
+          - System One provider: settings/system-one.md
+          - LLM judge provider: settings/llm-judge.md
+          - Agent keys: settings/agent-keys.md
+          - Run hosts: settings/run-hosts.md
+          - Sandbox: settings/sandbox.md
+          - Other: settings/other.md
+  - Reference:
+      - Interfaces:
+          - The standard: standard.md
+      - Examples:
+          - Harbor benchmark entry: examples/new-benchmark/README.md
+      - Internals:
+          - Architecture: how-it-works.md
+      - Metrics:
+          - Metric field guide: field-guide.md
