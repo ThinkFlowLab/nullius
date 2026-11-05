@@ -684,14 +684,15 @@ class Unit:
 
     def _forward(self, i: int, address: str) -> str:
         """A licence server's forwarder, started and on the unit's network
-        under the server's name: the address the agent reaches it by."""
+        under the server's name: the address the agent reaches it by. It joins
+        that network once it listens, after it resolves the server's name."""
         alias, host, port = server_alias(address, i)
         name = f"{self.names['agent']}-lic{i}"
         self.started.append(name)
         _docker(forward_argv(self.image, name=name, job=self.job, port=port)[1:],
                 env=client_env({"NULLIUS_FORWARD_TO": f"{host}:{port}"}))
-        _docker(["network", "connect", "--alias", alias, self.names["network"], name])
         self._wait(name, "the licence server's forwarder")
+        _docker(["network", "connect", "--alias", alias, self.names["network"], name])
         return f"{alias}:{port}"
 
     def _door(self, i: int, alias: str, port: int, sock: str) -> None:
