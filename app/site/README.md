@@ -52,7 +52,8 @@ path to the build script. Generated output is ignored by Git.
   the shared navigation, table of contents, theme and search.
 - The documentation tab is titled "Nullius - Docs". Home, the header logo and
   the wordmark link to the landing page at `https://thinkflowlab.ai/nullius/`.
-  PNG favicons and an Apple touch icon support browsers that do not use SVG icons.
+  Tabs use one PNG favicon, with a versioned URL to refresh cached icons.
+  An Apple touch icon covers saved shortcuts.
   Safari's pinned tabs use a separate black-on-transparent SVG mask.
 - Fonts and their licences come from `app/static/fonts/`. No external font
   service is used. The README’s six animations use one fixed dark palette and live under
