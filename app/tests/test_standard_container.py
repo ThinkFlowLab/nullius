@@ -127,8 +127,8 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual((door.base, door.hosts), ("http://user@host.docker.internal:11434/v1?x=1", {"host.docker.internal": "host-gateway"}))
         door.stop()
 
-    def test_the_loopback_forwarder_passes_each_connection_to_the_endpoint(self):
-        import http.server, threading, urllib.request
+    def test_the_loopback_forwarder_passes_connections_until_it_stops(self):
+        import http.server, socket, threading, urllib.request
         class Ok(http.server.BaseHTTPRequestHandler):
             def log_message(self, *a): pass
             def do_GET(self):
@@ -142,6 +142,9 @@ class ArgvTest(unittest.TestCase):
         port = int(door.base.rsplit(":", 1)[1].split("/")[0])
         self.assertEqual(door.hosts, {"host.docker.internal": "127.0.0.2"})
         self.assertEqual(urllib.request.urlopen(f"http://127.0.0.2:{port}/v1", timeout=10).read(), b"ok")
+        door.stop()                                                                    # after it, nothing listens on the gateway
+        with self.assertRaises(ConnectionRefusedError):
+            socket.create_connection(("127.0.0.2", port), timeout=2).close()
 
     def test_wrap_passes_values_in_the_docker_programs_environment_and_leaves_host_paths_out(self):
         u = container.Unit("job one", "u0002", os.path.join(self.tmp, "rec"), image="img", app="/app", base="b", key="sk-real")

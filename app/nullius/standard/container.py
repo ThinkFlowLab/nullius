@@ -590,6 +590,10 @@ class Loopback:
     def stop(self) -> None:
         server, self._server = self._server, None
         if server is not None:
+            try:
+                server.shutdown(socket.SHUT_RDWR)        # wakes the accept, which a close alone does not on Linux
+            except OSError:
+                pass
             server.close()
 
 
