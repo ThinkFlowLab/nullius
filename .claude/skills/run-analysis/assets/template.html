@@ -1,0 +1,154 @@
+<title>{{TITLE}}</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f7f8f6; --surface:#ffffff; --ink:#151a21; --ink-2:#4d5563; --muted:#7a8291; --rule:#d8dde2; --rule-soft:#e9ecef;
+  --c0:#2a78d6; --c1:#eb6834; --c2:#8a5cd6; --c3:#b8860b; --c4:#d6457a; --c5:#2a9fb0; --ref:#1baf7a;
+  --crit:#b3261e; --code-bg:#eef1f4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#15181d; --surface:#1c2027; --ink:#eceef1; --ink-2:#b7bdc7; --muted:#8a919d; --rule:#333a44; --rule-soft:#272d36;
+    --c0:#3987e5; --c1:#d95926; --c2:#9b75e0; --c3:#c9a227; --c4:#e0608f; --c5:#3bb3c4; --ref:#199e70;
+    --crit:#e66767; --code-bg:#252b34;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#15181d; --surface:#1c2027; --ink:#eceef1; --ink-2:#b7bdc7; --muted:#8a919d; --rule:#333a44; --rule-soft:#272d36;
+  --c0:#3987e5; --c1:#d95926; --c2:#9b75e0; --c3:#c9a227; --c4:#e0608f; --c5:#3bb3c4; --ref:#199e70;
+  --crit:#e66767; --code-bg:#252b34;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"Source Serif 4",Georgia,"Times New Roman",serif;font-size:17px;line-height:1.55;margin:0}
+main{max-width:900px;margin:0 auto;padding:44px 24px 80px}
+h1,h2,h3{font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;text-wrap:balance;margin:0}
+h1{font-size:32px;font-weight:600;line-height:1.15;letter-spacing:-.01em}
+h2{font-size:21px;font-weight:600;margin-top:48px;padding-top:16px;border-top:1px solid var(--rule)}
+p{max-width:70ch;margin:10px 0}
+.eyebrow{font-family:"IBM Plex Sans",sans-serif;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.lede{font-size:17px;color:var(--ink-2);margin:14px 0 0;padding-left:1.2em;max-width:70ch}
+.lede li{margin:4px 0}
+.meta{font-family:"IBM Plex Mono",Menlo,Consolas,monospace;font-size:13px;color:var(--muted);margin-top:16px;display:flex;flex-wrap:wrap;gap:6px 20px}
+code{font-family:"IBM Plex Mono",Menlo,Consolas,monospace;font-size:.86em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+.sw.c0{background:var(--c0)} .sw.c1{background:var(--c1)} .sw.c2{background:var(--c2)} .sw.c3{background:var(--c3)} .sw.c4{background:var(--c4)} .sw.c5{background:var(--c5)} .sw.ref{background:var(--ref)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin-top:28px}
+.tile{background:var(--surface);padding:14px 16px;min-width:0;overflow:hidden}
+.tile .lab{font-family:"IBM Plex Sans",sans-serif;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .pair{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;margin-top:6px;font-family:"IBM Plex Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;font-size:20px;font-weight:500;line-height:1.2}
+.tile .pair span{white-space:nowrap}
+.tile .sub{font-family:"IBM Plex Sans",sans-serif;font-size:12px;color:var(--ink-2);margin-top:4px}
+.crit{color:var(--crit)}
+.tw{overflow-x:auto;margin-top:14px}
+table{border-collapse:collapse;width:100%;font-family:"IBM Plex Sans",sans-serif;font-size:14px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--rule-soft);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+th{font-weight:500;color:var(--muted);font-size:12px;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid var(--rule)}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+td.num{font-family:"IBM Plex Mono",Menlo,Consolas,monospace;font-size:13px}
+td.worse{color:var(--crit);font-weight:500}
+.note{font-family:"IBM Plex Sans",sans-serif;font-size:13px;color:var(--muted);margin-top:8px;max-width:80ch}
+figure{margin:18px 0 0}
+figcaption{font-family:"IBM Plex Sans",sans-serif;font-size:13px;color:var(--muted);margin-top:6px}
+.legend{font-family:"IBM Plex Sans",sans-serif;font-size:13px;color:var(--ink-2);display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:6px}
+.chart{overflow-x:auto}
+.chart svg{width:100%;min-width:520px;height:auto;display:block}
+.chart text{font-family:"IBM Plex Sans",sans-serif;fill:var(--ink-2);font-size:12px}
+.chart .val{font-family:"IBM Plex Mono",Menlo,Consolas,monospace;fill:var(--ink);font-size:11px}
+.chart .grid{stroke:var(--rule-soft);stroke-width:1}
+.chart .axis{stroke:var(--rule);stroke-width:1}
+.chart .bar.c0{fill:var(--c0)} .chart .bar.c1{fill:var(--c1)} .chart .bar.c2{fill:var(--c2)} .chart .bar.c3{fill:var(--c3)} .chart .bar.c4{fill:var(--c4)} .chart .bar.c5{fill:var(--c5)} .chart .bar.ref{fill:var(--ref)}
+.paired{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--rule);border:1px solid var(--rule);margin-top:14px;font-family:"IBM Plex Sans",sans-serif}
+.paired div{background:var(--surface);padding:10px 14px}
+.paired .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.paired .v{font-family:"IBM Plex Mono",Menlo,Consolas,monospace;font-size:22px;margin-top:2px}
+.paired .s{font-size:12px;color:var(--ink-2)}
+ol.issues{list-style:none;padding:0;margin:8px 0 0}
+h3.fam{font-size:17px;font-weight:600;margin-top:30px;color:var(--ink)}
+ol.issues li{border-top:1px solid var(--rule);padding:14px 0 16px;display:grid;grid-template-columns:40px 1fr;gap:10px}
+ol.issues li::before{content:attr(data-n);font-family:"IBM Plex Mono",Menlo,Consolas,monospace;font-size:20px;color:var(--muted);line-height:1.2}
+ol.issues h3{font-size:16px;font-weight:600;margin:0 0 4px}
+ol.issues p{margin:4px 0;max-width:100ch;font-size:15px;line-height:1.45;font-family:"IBM Plex Sans",sans-serif}
+ol.issues p b{color:var(--crit);font-weight:600}
+.fix{font-family:"IBM Plex Sans",sans-serif;font-size:14px;line-height:1.45;max-width:100ch;margin-top:6px;padding-left:10px;border-left:3px solid var(--c1)}
+.fix strong{font-weight:600}
+ol.issues ul.idea{margin:4px 0 0;padding-left:18px;list-style:disc;font-family:"IBM Plex Sans",sans-serif;font-size:15px;line-height:1.45;max-width:100ch}
+ol.issues ul.idea li{display:list-item;border:0;padding:3px 0;grid-template-columns:none}
+ol.issues ul.idea li::before{content:none}
+/* an unfilled prose slot is loud on purpose */
+.slot{font-family:"IBM Plex Mono",Menlo,Consolas,monospace;font-size:13px;color:var(--crit);border:1px dashed var(--crit);padding:8px 10px;max-width:none}
+@media (max-width:640px){.paired{grid-template-columns:repeat(2,1fr)} h1{font-size:27px} main{padding:32px 16px 64px}}
+</style>
+
+<main>
+<div class="eyebrow">{{EYEBROW}}</div>
+<h1>{{H1}}</h1>
+<!-- LEDE: replace the slot with <ul class="lede"><li>…</li><li>…</li><li>…</li></ul>. Three bullets, one fact each. -->
+{{LEDE}}
+<div class="meta">{{META}}</div>
+
+<div class="tiles">{{TILES}}</div>
+
+<h2>Overall</h2>
+<div class="tw"><table>
+<thead><tr><th>metric</th>{{HEAD}}</tr></thead>
+<tbody>
+{{OVERALL_ROWS}}
+</tbody></table></div>
+<!-- NOTES: replace each note slot with <p class="note">…</p>, or delete the slot when there is nothing to add. -->
+{{OVERALL_NOTE}}
+
+<h2>By task group</h2>
+<figure>
+<div class="legend">{{LEGEND}}</div>
+<div class="chart">{{CHART}}</div>
+<!-- Replace with <figcaption>…</figcaption>. -->
+{{CHART_CAPTION}}
+</figure>
+<div class="tw"><table>
+<thead><tr>{{GROUP_HEAD}}</tr></thead>
+<tbody>
+{{GROUP_ROWS}}
+</tbody></table></div>
+
+<h2>Outcomes</h2>
+{{OUTCOMES}}
+{{OUTCOMES_NOTE}}
+
+<h2>Timing</h2>
+<div class="tw"><table>
+<thead><tr><th>seconds</th>{{HEAD}}</tr></thead>
+<tbody>
+{{LATENCY_ROWS}}
+</tbody></table></div>
+{{LATENCY_NOTE}}
+
+<h2>Issues and fixes</h2>
+<!-- ISSUES: replace the slot with one or more families, numbered continuously across families:
+
+<h3 class="fam">Family name, e.g. Harness reliability</h3>
+<ol class="issues">
+<li data-n="1"><div>
+  <h3>Short title of the finding</h3>
+  <p>Evidence with counts, in one to three sentences. <b>Impact in one bold sentence, with a number.</b></p>
+  <div class="fix"><strong>Fix:</strong> what to change.</div>
+</div></li>
+</ol>
+
+Optional extra sections (next steps, ideas) go after this one as <h2> blocks and may reuse ol.issues with
+<ul class="idea"><li><strong>Label.</strong> one sentence</li></ul> inside each item. -->
+{{ISSUES}}
+
+<h2>Run details</h2>
+<div class="tw"><table>
+<thead><tr><th>item</th>{{HEAD}}</tr></thead>
+<tbody>
+{{DETAIL_ROWS}}
+</tbody></table></div>
+{{CONFIG_DIFF}}
+<p class="note">{{NOISE_NOTE}}</p>
+
+<h2>Method</h2>
+<p class="note">{{METHOD}}</p>
+</main>

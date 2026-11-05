@@ -1,0 +1,20 @@
+{"ts": "2026-09-12T18:26:00Z", "seq": 1, "job": "demo-x3", "trial": null, "event": "job.start", "n_total": 3, "n_concurrent": 2, "agents": ["my-agent"], "tasks": ["airline-0", "retail-0", "banking-001"], "wall_sec": 1200}
+{"ts": "2026-09-12T18:26:00Z", "seq": 2, "job": "demo-x3", "trial": "airline-0__a1", "event": "trial.queued", "task": "tau3-bench__tau3-airline-0", "agent": "my-agent", "model": "openai/meta/muse-spark-1.3-contributor", "position": 1}
+{"ts": "2026-09-12T18:26:00Z", "seq": 3, "job": "demo-x3", "trial": "retail-0__r1", "event": "trial.queued", "task": "tau3-bench__tau3-retail-0", "agent": "my-agent", "model": "openai/meta/muse-spark-1.3-contributor", "position": 2}
+{"ts": "2026-09-12T18:26:00Z", "seq": 4, "job": "demo-x3", "trial": "banking-001__b1", "event": "trial.queued", "task": "tau3-bench__tau3-banking_knowledge-task-001", "agent": "my-agent", "model": "openai/meta/muse-spark-1.3-contributor", "position": 3}
+{"ts": "2026-09-12T18:26:01Z", "seq": 5, "job": "demo-x3", "trial": "airline-0__a1", "event": "trial.phase", "phase": "env_setup", "timeout_sec": 300}
+{"ts": "2026-09-12T18:26:01Z", "seq": 6, "job": "demo-x3", "trial": "retail-0__r1", "event": "trial.phase", "phase": "env_setup", "timeout_sec": 300}
+{"ts": "2026-09-12T18:26:03Z", "seq": 7, "job": "demo-x3", "trial": "airline-0__a1", "event": "trial.phase", "phase": "agent_setup", "timeout_sec": 1200}
+{"ts": "2026-09-12T18:26:03Z", "seq": 8, "job": "demo-x3", "trial": "retail-0__r1", "event": "trial.phase", "phase": "agent_setup", "timeout_sec": 1200}
+{"ts": "2026-09-12T18:26:20Z", "seq": 9, "job": "demo-x3", "trial": "airline-0__a1", "event": "trial.phase", "phase": "agent_run", "timeout_sec": 540}
+{"ts": "2026-09-12T18:26:21Z", "seq": 10, "job": "demo-x3", "trial": "retail-0__r1", "event": "trial.phase", "phase": "agent_run", "timeout_sec": 540}
+{"ts": "2026-09-12T18:26:40Z", "seq": 11, "job": "demo-x3", "trial": "airline-0__a1", "event": "trial.progress", "step": 3, "n_input_tokens": 61000, "n_cache_tokens": 40000, "n_output_tokens": 900, "activity": "get_reservation_details(\"HAT123\")"}
+{"ts": "2026-09-12T18:26:42Z", "seq": 12, "job": "demo-x3", "trial": "retail-0__r1", "event": "trial.log", "phase": "agent_run", "stream": "stdout", "line": "[gateway] session ready, key sk-abcdefghijklmnopqrstuvwxyz1234567890 loaded"}
+{"ts": "2026-09-12T18:28:10Z", "seq": 13, "job": "demo-x3", "trial": "airline-0__a1", "event": "trial.progress", "step": 14, "n_input_tokens": 340000, "n_cache_tokens": 300000, "n_output_tokens": 4100, "activity": "send_message_to_user(\"Your reservation HAT123 has been changed…\")"}
+{"ts": "2026-09-12T18:28:30Z", "seq": 14, "job": "demo-x3", "trial": "airline-0__a1", "event": "trial.phase", "phase": "verify", "timeout_sec": 120}
+{"ts": "2026-09-12T18:28:57Z", "seq": 15, "job": "demo-x3", "trial": "airline-0__a1", "event": "trial.end", "outcome": "resolved", "reward": 1.0, "durations": {"env_setup": 2.0, "agent_setup": 17.0, "agent_run": 130.0, "verify": 27.0}, "n_input_tokens": 384000, "n_cache_tokens": 340000, "n_output_tokens": 4600}
+{"ts": "2026-09-12T18:28:58Z", "seq": 16, "job": "demo-x3", "trial": "banking-001__b1", "event": "trial.phase", "phase": "env_setup", "timeout_sec": 300}
+{"ts": "2026-09-12T18:29:00Z", "seq": 17, "job": "demo-x3", "trial": "banking-001__b1", "event": "trial.phase", "phase": "agent_setup", "timeout_sec": 1200}
+{"ts": "2026-09-12T18:29:05Z", "seq": 18, "job": "demo-x3", "trial": "retail-0__r1", "event": "trial.progress", "step": 16, "n_input_tokens": 420000, "n_cache_tokens": 380000, "n_output_tokens": 5200, "activity": "send_message_to_user(\"Your card ending 4471 was…\")"}
+{"ts": "2026-09-12T18:29:10Z", "seq": 19, "job": "demo-x3", "trial": "retail-0__r1", "event": "trial.progress", "step": 17, "n_input_tokens": 462000, "n_cache_tokens": 410000, "n_output_tokens": 5600}
+{"ts": "2026-09-12T18:29:12Z", "seq": 20, "job": "demo-x3", "trial": "retail-0__r1", "event": "trial.pha

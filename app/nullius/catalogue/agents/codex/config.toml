@@ -1,0 +1,25 @@
+# Codex's configuration for a Nullius run, written into the home it is given.
+# Its model calls go to the relay, a provider of its own: Codex's built-in
+# OpenAI provider does not follow OPENAI_BASE_URL and would call OpenAI
+# directly. The relay holds the key. Codex runs without its own sandbox
+# (which needs bubblewrap) and without asking: the run is the isolation, and
+# no one is there to answer. The reasoning effort is always written (the
+# option reasoning_effort, its default Codex's own): left out, codex-acp and
+# Codex's CLI would each fill it in their own way. Its plugins are off: with
+# them on, Codex 0.160 fetches OpenAI's curated plugins repository (about
+# 103 MB) into .codex/.tmp/plugins at every start - a download per unit, into
+# every unit's home - and a run gives it no plugin to use.
+model = "{model}"
+model_reasoning_effort = "{opt_reasoning_effort}"
+model_provider = "nullius"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[features]
+plugins = false
+
+[model_providers.nullius]
+name = "Nullius relay"
+base_url = "{base_url}"
+env_key = "NULLIUS_RELAY_KEY"
+wire_api = "responses"

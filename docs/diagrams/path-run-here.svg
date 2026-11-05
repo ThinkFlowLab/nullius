@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 528" width="640" height="528" role="img" aria-labelledby="path-run-here-title path-run-here-desc" class="dg">
+<title id="path-run-here-title">Path 2: build a recipe and run it here</title>
+<desc id="path-run-here-desc">The builder posts the recipe, execution records the run and starts each part through the pinned Harbor, which calls the model, and the job page follows it live.</desc>
+<defs><marker id="path-run-here-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#596471" class="head"/></marker><marker id="path-run-here-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#36577d" class="head accent"/></marker><marker id="path-run-here-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#596471" stroke-width="1.2" class="arrow"/></marker></defs>
+<style>
+.dg{--p:var(--paper,#f7f8fa);--i:var(--ink,#25282e);--m:var(--muted,#596471);--a:var(--md-typeset-a-color,#36577d);--n:#fff;
+ --sans:'DM Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:'Instrument Serif',Georgia,serif}
+[data-md-color-scheme=slate] .dg{--n:color-mix(in srgb,var(--i) 7%,var(--p))}
+.dg .paper{fill:var(--p)}
+.dg .zone{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 14%,transparent);stroke-width:.8}
+.dg .eyebrow{fill:var(--m);font:500 8px var(--mono);letter-spacing:.14em}
+.dg .box{fill:var(--n);stroke:var(--i);stroke-width:1}
+.dg .focal{fill:color-mix(in srgb,var(--a) 12%,transparent);stroke:var(--a);stroke-width:1}
+.dg .store{fill:color-mix(in srgb,var(--i) 5%,transparent);stroke:var(--m);stroke-width:1}
+.dg .ext{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 40%,transparent);stroke-width:1}
+.dg .input{fill:color-mix(in srgb,var(--m) 10%,transparent);stroke:var(--m);stroke-width:1}
+.dg .name{fill:var(--i);font:500 12px var(--sans)}
+.dg .sub{fill:var(--m);font:9px var(--mono)}
+.dg .lbl{fill:var(--m);font:8px var(--mono);letter-spacing:.06em}
+.dg .lbl.accent{fill:var(--a)}
+.dg .arrow{fill:none;stroke:var(--m);stroke-width:1.2}
+.dg .arrow.accent{stroke:var(--a)}
+.dg .arrow.dashed{stroke-dasharray:5 4;stroke-width:1}
+.dg .arrow.bus{stroke-width:1}
+.dg .head{fill:var(--m)}
+.dg .head.accent{fill:var(--a)}
+.dg .dot{fill:var(--i)}
+.dg .life{stroke:color-mix(in srgb,var(--i) 25%,transparent);stroke-width:1;stroke-dasharray:3 3}
+.dg .act{fill:color-mix(in srgb,var(--i) 6%,transparent);stroke:var(--m);stroke-width:.8}
+.dg .frame{fill:color-mix(in srgb,var(--i) 2%,transparent);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .tab{fill:var(--p);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .guard{fill:var(--m);font:8px var(--mono);letter-spacing:.04em}
+.dg .note{fill:var(--m);font:13px var(--sans)}
+.dg .rule{stroke:color-mix(in srgb,var(--i) 12%,transparent);stroke-width:.8}
+.dg .legend{fill:var(--m);font:9px var(--sans)}
+</style>
+<rect width="100%" height="100%" fill="#f7f8fa" class="paper"/>
+<line x1="80" y1="72" x2="80" y2="480" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<line x1="200" y1="72" x2="200" y2="480" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<line x1="320" y1="72" x2="320" y2="480" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<line x1="440" y1="72" x2="440" y2="480" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<line x1="560" y1="72" x2="560" y2="480" stroke="#b4b5b8" stroke-dasharray="3 3" class="life"/>
+<rect x="196" y="104" width="8" height="96" fill="#e0e1e3" stroke="#596471" class="act"/>
+<rect x="316" y="184" width="8" height="296" fill="#e0e1e3" stroke="#596471" class="act"/>
+<rect x="436" y="312" width="8" height="96" fill="#e0e1e3" stroke="#596471" class="act"/>
+<rect x="296" y="264" width="288" height="160" rx="4" fill="#e7e7e9" stroke="#b9babd" class="frame"/>
+<rect x="296" y="264" width="40" height="16" rx="2" fill="#f7f8fa" stroke="#b9babd" class="tab"/>
+<text x="316" y="276" text-anchor="middle" class="eyebrow">LOOP</text>
+<text x="308" y="296" text-anchor="start" class="guard">[nop, oracle, then the agents]</text>
+<path d="M80,112 L196,112" fill="none" stroke="#596471" marker-end="url(#path-run-here-arrow)" class="arrow"/>
+<path d="M80,152 L196,152" fill="none" stroke="#596471" marker-end="url(#path-run-here-arrow)" class="arrow"/>
+<path d="M204,192 L316,192" fill="none" stroke="#596471" marker-end="url(#path-run-here-arrow)" class="arrow"/>
+<path d="M324,224 L340,224 Q348,224 348,232 L348,232 Q348,240 340,240 L328,240" fill="none" stroke="#596471" marker-end="url(#path-run-here-arrow)" class="arrow"/>
+<path d="M324,320 L436,320" fill="none" stroke="#596471" marker-end="url(#path-run-here-arrow)" class="arrow"/>
+<path d="M444,360 L560,360" fill="none" stroke="#596471" marker-end="url(#path-run-here-arrow)" class="arrow"/>
+<path d="M436,400 L324,400" fill="none" stroke="#596471" stroke-dasharray="5 4" marker-end="url(#path-run-here-arrow)" class="arrow dashed"/>
+<path d="M316,464 L80,464" fill="none" stroke="#36577d" marker-end="url(#path-run-here-accent)" class="arrow accent"/>
+<rect x="92" y="92" width="92" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="138" y="102" text-anchor="middle" class="lbl">EACH STEP, REVIEW</text>
+<rect x="126" y="132" width="24" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="138" y="142" text-anchor="middle" class="lbl">RUN</text>
+<rect x="234" y="172" width="52" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="260" y="182" text-anchor="middle" class="lbl">POST /RUN</text>
+<rect x="356" y="226" width="80" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="360" y="236" text-anchor="start" class="lbl">RUN.JSON · KEY</text>
+<rect x="348" y="300" width="64" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="380" y="310" text-anchor="middle" class="lbl">RUN-PART.SH</text>
+<rect x="470" y="340" width="64" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="502" y="350" text-anchor="middle" class="lbl">MODEL CALLS</text>
+<rect x="334" y="380" width="92" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="380" y="390" text-anchor="middle" class="lbl">JOBS/, EVERY 10 S</text>
+<rect x="218" y="444" width="84" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="260" y="454" text-anchor="middle" class="lbl accent">JOB PAGE · LIVE</text>
+<rect x="20" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="20" y="24" width="120" height="48" rx="6" fill="#dedfe1" stroke="#596471" class="input"/>
+<text x="80" y="52" text-anchor="middle" class="name">You</text>
+<rect x="140" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="140" y="24" width="120" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="200" y="46" text-anchor="middle" class="name">Builder</text>
+<text x="200" y="60" text-anchor="middle" class="sub">page, recipe core</text>
+<rect x="260" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="260" y="24" width="120" height="48" rx="6" fill="#e8edf4" stroke="#36577d" class="focal"/>
+<text x="320" y="46" text-anchor="middle" class="name">Execution</text>
+<text x="320" y="60" text-anchor="middle" class="sub">nullius/execution</text>
+<rect x="380" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="380" y="24" width="120" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="440" y="46" text-anchor="middle" class="name">Harbor</text>
+<text x="440" y="60" text-anchor="middle" class="sub">pinned, via uvx</text>
+<rect x="500" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="500" y="24" width="120" height="48" rx="6" fill="#e4e5e7" stroke="#7a7c80" class="ext"/>
+<text x="560" y="52" text-anchor="middle" class="name">Model provider</text>
+<line x1="24" y1="492" x2="616" y2="492" stroke="#d6d7d9" class="rule"/>
+<text x="24" y="512" text-anchor="start" class="eyebrow">LEGEND</text>
+<path d="M96,509 L124,509" fill="none" stroke="#596471" marker-end="url(#path-run-here-arrow)" class="arrow"/>
+<text x="130" y="513" text-anchor="start" class="legend">Call</text>
+<path d="M175,509 L203,509" fill="none" stroke="#596471" stroke-dasharray="5 4" marker-end="url(#path-run-here-arrow)" class="arrow dashed"/>
+<text x="209" y="513" text-anchor="start" class="legend">Return</text>
+<path d="M265,509 L293,509" fill="none" stroke="#36577d" marker-end="url(#path-run-here-accent)" class="arrow accent"/>
+<text x="299" y="513" text-anchor="start" class="legend">What you see</text>
+<rect x="387" y="502" width="20" height="14" rx="2" fill="#e7e7e9" stroke="#b9babd" class="frame"/>
+<text x="409" y="513" text-anchor="start" class="legend">Loop</text>
+</svg>

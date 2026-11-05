@@ -1,0 +1,64 @@
+{
+  "key": "longmemeval",
+  "title": "LongMemEval",
+  "category": "Memory",
+  "domain": "Long-term chat memory: questions over timestamped chat histories.",
+  "scoring": "GPT-4o judge",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "good_to_know": [
+    "The S, M and oracle files run cleaned, and S and M also as first released. The paper's numbers come from the files as first released.",
+    "An M file is 2.7 GB and needs about 5.5 GB of free disk. STANDARD_DATA_DIR moves the datasets to a disk with room.",
+    "Reading is chain-of-note by default, or direct. Separate notes work with Original memory only.",
+    "Original memory offers the paper's Contriever and Stella retrievers and needs a CUDA GPU. Stella needs more than 11 GB of GPU memory."
+  ],
+  "upstream_limitations": [
+    "Scores compare with the paper only with its reader, GPT-4o or GPT-4o-mini, and its judge, GPT-4o.",
+    "A reader you choose must take about 126,200 tokens. The history is not cut to fit, so a longer recall fails at the model.",
+    "An empty reply from the reader fails the question.",
+    "Three combinations fail as published: merge expansion with a full-history retriever, user-only with flat-bm25-turn, and separate notes with chain-of-note reading and nl history.",
+    "The judge, a model, rejects about one right answer in twenty, and passes an empty answer now and then."
+  ],
+  "limitations": [
+    "The GTE retriever, the index and query expansions, and the open-weight readers are not offered."
+  ],
+  "datasets": [
+    {
+      "key": "longmemeval-s",
+      "title": "LongMemEval-S (cleaned)",
+      "tasks": 500,
+      "official": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "LongMemEval's own judge, GPT-4o (gpt-4o-2024-08-06): yes or no per answer.",
+      "notes": "About 40 sessions and 115k tokens of history per question."
+    },
+    {
+      "key": "longmemeval-m",
+      "title": "LongMemEval-M (cleaned)",
+      "tasks": 500,
+      "official": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "LongMemEval's own judge, GPT-4o (gpt-4o-2024-08-06): yes or no per answer.",
+      "notes": "About 500 sessions per question."
+    },
+    {
+      "key": "longmemeval-oracle",
+      "title": "LongMemEval oracle \u00b7 evidence sessions only",
+      "tasks": 500,
+      "official": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "LongMemEval's own judge, GPT-4o (gpt-4o-2024-08-06): yes or no per answer.",
+      "notes": "Only the evidence sessions: the ceiling a memory layer is read against."
+    }
+  ],
+  "citation": "@article{wu2024longmemeval,\n      title={LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory},\n      author={Di Wu and Hongwei Wang and Wenhao Yu and Yuwei Zhang and Kai-Wei Chang and Dong Yu},\n      year={2024},\n      eprint={2410.10813},\n      archivePrefix={arXiv},\n      primaryClass={cs.CL},\n      url={https://arxiv.org/abs/2410.10813},\n}",
+  "citation_source": "https://github.com/xiaowu0162/LongMemEval"
+}

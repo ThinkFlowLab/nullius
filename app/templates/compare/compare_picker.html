@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Choose runs to compare — Nullius{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">{% endblock %}
+{% block crumb %}/ compare{% endblock %}
+{% block body %}
+<div class="compare-picker">
+  <div class="page-title"><h1>Compare runs</h1></div>
+  <p class="subtitle">Choose two runs from any saved workspace. Compare their full results or restrict the numbers to tasks both runs covered.</p>
+  <form class="panel" action="{{ url_for('compare_picker') }}" method="get">
+    <p class="compare-pick-step">01 / Choose workspaces</p>
+    <input type="hidden" name="cohort" value="{{ cohort }}">
+    <div class="compare-pick-grid">
+      {% for side in choices %}
+      <div class="compare-pick-side">
+        <label for="compare-workspace-{{ loop.index }}">{{ 'Left' if loop.first else 'Right' }} workspace</label>
+        <select id="compare-workspace-{{ loop.index }}" name="{{ 'left' if loop.first else 'right' }}">
+          {% for ws in workspace_options %}
+          <option value="{{ ws.name }}" {% if ws.name == side.name %}selected{% endif %}>{{ ws.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="compare-pick-actions"><button class="btn ghost sm" type="submit">Show runs</button><span class="compare-pick-caption">Uses the runs already read by each workspace.</span></div>
+  </form>
+  <form class="panel" action="{{ url_for('compare') }}" method="get">
+    <p class="compare-pick-step">02 / Choose runs</p>
+    <div class="compare-pick-grid">
+      {% for side in choices %}
+      <div class="compare-pick-side">
+        <label for="compare-run-{{ loop.index }}">{{ 'Left' if loop.first else 'Right' }} run · {{ side.label }}</label>
+        <select id="compare-run-{{ loop.index }}" name="pick" required {% if not side.jobs %}disabled{% endif %}>
+          {% for run in side.jobs %}
+          {% set reference = side.name ~ ':' ~ run.job_id %}
+          <option value="{{ reference }}" {% if reference == side.selected %}selected{% endif %}>{{ run.agent_label or 'Unknown agent' }} · {{ run.job_id }} · {{ run.trials|length }} trials</option>
+          {% else %}<option value="">No runs available</option>{% endfor %}
+        </select>
+        <p class="compare-pick-caption">{{ side.jobs|length }} run{{ '' if side.jobs|length == 1 else 's' }} available{% if side.name %} · {{ side.name }}{% endif %}</p>
+        {% if not side.jobs %}<p class="compare-pick-caption">Open this workspace and refresh its runs, or <a href="{{ url_for('import_page') }}">import a run</a>.</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="compare-pick-actions">
+      <label><input type="radio" name="cohort" value="whole" {% if cohort == 'whole' %}checked{% endif %}> Whole runs</label>
+      <label><input type="radio" name="cohort" value="matched" {% if cohort == 'matched' %}checked{% endif %}> Matched tasks</label>
+      <button class="btn" type="submit" {% if not choices[0].jobs or not choices[1].jobs %}disabled{% endif %}>Compare runs →</button>
+    </div>
+  </form>
+  <p class="compare-pick-caption">Matched tasks require the same recorded dataset and task IDs. Every attempt stays in the totals, and control runs remain unranked.</p>
+</div>
+{% endblock %}

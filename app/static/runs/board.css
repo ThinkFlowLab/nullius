@@ -1,0 +1,354 @@
+/* The run page: a scoreboard, the trials it scopes, and two disclosures.
+   Grammar: solid = recorded, hollow ring = judge reading. A recorded outcome is solid, in its hue (swatch, bar segment, dot,
+   the pin at the start of its lanes). A judge reading is a neutral hollow ring and its cause in plain dim text, no box;
+   dotted is kept for a reading below the confidence gate. The connector between them is a neutral 2px line: straight = the
+   reading agrees, a 45° jog into the right-hand lane = it disagrees. What is not a finding about the claim (not asked, not
+   judged, below the gate, an Unknown's reading) stops in the gutter, left of both lanes. Every count comes from reconcile.
+   Everything here is scoped to .rp so the page's names never reach another page. */
+.rp {
+  --hush: color-mix(in srgb, var(--text-faint) 80%, var(--surface));
+  --hair: var(--border-soft);
+  --hair-in: color-mix(in srgb, var(--border-soft) 62%, var(--surface));
+  --link: color-mix(in srgb, var(--text-faint) 70%, var(--surface));
+  --line: color-mix(in srgb, var(--text-faint) 88%, var(--surface));     /* the judge's ring and the keys: neutral, never a data hue */
+  --conn: var(--text-dim);                                                 /* the lanes' connectors */
+  --mag: color-mix(in srgb, var(--text-faint) 62%, var(--surface));       /* the Tokens and Total bars */
+  --track-res: color-mix(in srgb, var(--resolved) 22%, var(--surface));   /* the solved meter's unfilled step */
+  --ffill: color-mix(in srgb, var(--text-faint) 78%, var(--surface));     /* flags: one neutral series */
+  --ftrack: color-mix(in srgb, var(--text-faint) 20%, var(--surface));    /* …and its track */
+  --pip-on: var(--ffill);
+  --pip-off: color-mix(in srgb, var(--text-faint) 45%, var(--surface));
+  --unknown-mark: color-mix(in srgb, var(--unknown) 75%, var(--text-faint));
+  --ease: cubic-bezier(.22, .8, .24, 1);
+  margin-top: 14px;
+}
+.rp a { color: inherit; text-decoration: none; }
+.rp button.plain { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: inherit; }
+.rp [hidden] { display: none !important; }
+.rp .mono { font-family: var(--mono); }
+.rp .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rp .def { text-decoration: underline dotted var(--text-faint); text-underline-offset: 4px; }
+.rp [data-tip] { cursor: help; }
+.rp a[data-tip], .rp button[data-tip], .rp summary[data-tip], .rp .fx { cursor: pointer; }
+.rp details > summary { list-style: none; cursor: pointer; }
+.rp details > summary::-webkit-details-marker { display: none; }
+.rp .tw::before { content: "\25B8"; display: inline-block; width: 1em; color: var(--hush); font-size: .8em; }
+.rp details[open] > summary .tw::before { content: "\25BE"; }
+
+.rp .oc-resolved { --oc: var(--resolved); } .rp .oc-patch_failed_tests { --oc: var(--patch_failed_tests); }
+.rp .oc-failed_verification { --oc: var(--failed_verification); } .rp .oc-patch_not_applied { --oc: var(--patch_not_applied); }
+.rp .oc-no_patch { --oc: var(--no_patch); } .rp .oc-agent_error { --oc: var(--agent_error); }
+.rp .oc-rate_limited { --oc: var(--rate_limited); } .rp .oc-api_error { --oc: var(--api_error); }
+.rp .oc-setup_error { --oc: var(--setup_error); } .rp .oc-unknown { --oc: var(--unknown-mark); }
+.rp .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--oc); flex: none; }
+.rp .odot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--oc); flex: none; }
+.rp .adv { display: inline-block; font: 500 10.5px/16px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint);
+  padding: 0 5px; border-radius: 4px; border: 1px solid var(--hair); white-space: nowrap; }
+.rp .infra { display: inline-block; font: 500 10.5px/16px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim);
+  padding: 0 5px; border-radius: 4px; background: var(--surface-2); white-space: nowrap; }
+/* flag slots: one square per flag in the vocabulary's order, every slot drawn. Each slot owns a 16px band of one 24px-tall
+   strip, so the pointer's x picks the slot. Raised: filled neutral ink carrying the flag's number. Not raised: a faint dot. */
+.rp .slots { display: inline-flex; flex-wrap: nowrap; height: 24px; margin: -2px 0; vertical-align: top; }
+.rp .pip { display: inline-grid; place-items: center; width: 16px; height: 24px; flex: none; border-radius: 2px; }
+.rp .pip:last-child { width: 14px; }
+.rp .pip::before { content: ""; box-sizing: border-box; display: grid; place-items: center; width: 14px; height: 14px; margin-right: 2px; border-radius: 2px;
+  background: radial-gradient(circle, var(--pip-off) 0 2px, transparent 2.6px); font: 500 9.5px/14px var(--sans); color: var(--surface); text-align: center; font-variant-numeric: tabular-nums; }
+.rp .pip:last-child::before { margin-right: 0; }
+.rp .pip.on::before { content: attr(data-n); background: var(--pip-on); }
+.rp .rows .pip:hover::before, .rp .rows .pip:focus::before, .rp .rows .pip.hot::before { box-shadow: 0 0 0 1.5px var(--text); }
+.rp .rows .pip.on:hover::before, .rp .rows .pip.on:focus::before, .rp .rows .pip.on.hot::before { background: var(--text); }
+.rp .pip.key-n { width: 14px; height: 14px; }
+.rp .pip.key-n::before { margin: 0; }
+/* the connector keys, in the lanes' own strokes */
+.rp .key { width: 16px; height: 10px; flex: none; overflow: visible; }
+.rp .key path, .rp .key circle { fill: none; stroke: var(--line); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rp .key .dt { stroke-dasharray: .1 3.5; }
+.rp .key .rg { stroke-dasharray: 1.6 1.4; stroke-linecap: butt; stroke-width: 1.5; }
+.rp .key .op { stroke-width: 1.5; }
+
+/* ---- the scoreboard: rate | outcomes → judge (lanes · flags), and run totals as its footer line.
+       Outcomes and lanes keep one row pitch (label 44 · slot 30 · outcome rows 45, +30 per extra reading · total 34),
+       so an outcome, its readings and the tally share a line. ---- */
+.rp .rp-card { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--radius); }
+.rp .bw { container: board / inline-size; }
+.rp .board { display: grid; grid-template-columns: 150px minmax(0, 2fr) minmax(0, 3fr); grid-template-areas: "rate out judge" "tot tot tot"; }
+.rp .board.no-judge { grid-template-columns: 150px minmax(0, 1fr); grid-template-areas: "rate out" "tot tot"; }
+.rp .b-rate { grid-area: rate; padding-bottom: 14px; } .rp .b-out { grid-area: out; border-left: 1px solid var(--hair); }
+.rp .b-judge { grid-area: judge; border-left: 1px solid var(--hair); min-width: 0; } .rp .b-tot { grid-area: tot; border-top: 1px solid var(--hair); }
+.rp .blk { min-width: 0; }
+.rp .lab { height: 44px; padding: 0 18px; display: flex; align-items: center; gap: 8px; font: 500 12.5px/18px var(--sans); color: var(--text-dim); white-space: nowrap; }
+.rp .lab .aside { margin-left: auto; display: flex; align-items: center; gap: 14px; font: 400 12px/18px var(--sans); color: var(--text-faint); }
+.rp .lab .aside b { font: 500 12px var(--sans); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.rp .slot .end { margin-left: auto; }
+.rp .slot { height: 30px; padding: 0 18px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+.rp .row { width: 100%; height: 34px; padding: 0 18px; border-top: 1px solid var(--hair-in); display: grid; align-items: center; white-space: nowrap; }
+
+/* hero: the one figure; under it the solved meter and the health notes (plain words, not controls) */
+.rp .hero { padding: 4px 18px 0; font: 500 60px/1 var(--sans); letter-spacing: -.035em; color: var(--text); }
+.rp .hero.none { color: var(--text-faint); }
+.rp .hero.long { padding-top: 14px; font-size: 42px; letter-spacing: -.03em; }       /* "100%", "59/60": fits the 150px column */
+.rp .hero small { font-size: 26px; color: var(--text-faint); letter-spacing: 0; }
+.rp .control-verdict.behaved .hero { color: var(--ok); }
+.rp .control-verdict.misbehaved .hero { color: var(--warn); }
+.rp .meter { margin: 12px 18px 0; display: flex; align-items: center; gap: 8px; }
+.rp .meter .mu { flex: 1 1 auto; min-width: 0; max-width: calc(var(--n) * 18px); display: flex; gap: 2px; height: 10px; }
+.rp .meter .mu i { flex: 1 1 0; max-width: 16px; min-width: 4px; border-radius: 2px; background: var(--track-res); transition: box-shadow .15s; }
+.rp .meter .mu i.s { background: var(--resolved); }
+.rp .meter .mu i.x { background: none; box-shadow: inset 0 0 0 1.5px var(--track-res); }
+.rp .meter .mu .gap { flex: 0 0 6px; }
+.rp .meter .bar1 { flex: 1 1 auto; max-width: 110px; display: flex; gap: 6px; height: 10px; }
+.rp .meter .bar1 span { position: relative; display: block; height: 100%; border-radius: 2px; background: var(--track-res); overflow: hidden; }
+.rp .meter .bar1 span i { position: absolute; inset: 0 auto 0 0; background: var(--resolved); border-radius: 0 2px 2px 0; }
+.rp .meter .bar1 span.x { background: none; box-shadow: inset 0 0 0 1.5px var(--track-res); }
+.rp .meter b { font: 500 13px/1 var(--sans); color: var(--text); white-space: nowrap; }
+.rp .board.pv .meter i.lit { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text); }
+.rp .hk { margin: 14px 18px 0; font-size: 12px; line-height: 22px; }
+.rp .hk p { margin: 0; color: var(--text-faint); white-space: nowrap; }
+.rp .hk dl { display: grid; grid-template-columns: auto auto; justify-content: start; column-gap: 6px; margin: 0; }
+.rp .hk dt { color: var(--text-faint); white-space: nowrap; }
+.rp .hk dd { margin: 0; color: var(--text-dim); white-space: nowrap; }
+.rp .hk .em { color: var(--text); font-weight: 500; }
+.rp .hk .warn { color: var(--warn); font-weight: 500; }
+.rp .hk .bad { color: var(--bad); font-weight: 500; }
+
+/* outcomes: the bar, and its legend rows, which are the filter and each the start of its lanes */
+.rp .mix { flex: 1; display: flex; gap: 2px; height: 12px; }
+.rp .mseg { position: relative; height: 100%; background: var(--oc); transition: filter .15s, opacity .15s; }
+.rp .mseg::after { content: ""; position: absolute; inset: -7px 0; }
+.rp .mseg:first-child { border-radius: 4px 0 0 4px; } .rp .mseg:last-child { border-radius: 0 4px 4px 0; } .rp .mseg:only-child { border-radius: 4px; }
+.rp .mseg:hover, .rp .mseg.hot { filter: brightness(1.18); }
+.rp .lg { height: 45px; grid-template-columns: 10px 2.2em minmax(0, 1fr); column-gap: 10px; align-content: start; padding-top: 12px; font-size: 13px; color: var(--text); }
+.rp .lg b, .rp .tot b { font: 500 13px/20px var(--sans); color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
+.rp .lg > span { overflow: hidden; text-overflow: ellipsis; line-height: 20px; }
+.rp .lg > .sw { align-self: start; margin-top: 5px; }
+.rp .tot { grid-template-columns: 10px 2.2em minmax(0, 1fr); column-gap: 10px; font-size: 12px; color: var(--text-faint); }
+.rp .lg > b, .rp .tot > b { grid-row: 1; grid-column: 2; } .rp .lg > span, .rp .tot > span { grid-row: 1; grid-column: 3; }
+.rp .lg .infra { margin-left: 6px; }
+.rp .tot b { color: var(--text-dim); }
+.rp .lg:hover, .rp .lg.hot, .rp .lg.lit, .rp .fr:hover, .rp .fr.hot, .rp .fr.lit { background: var(--surface-2); }
+.rp .lg.on, .rp .fr.on { background: var(--accent-soft); }
+
+/* judge: one advisory group. The lanes sit on the outcomes' row lines, flags beside them (under them when narrower) */
+.rp .b-judge .lab { padding-left: 20px; }
+.rp .xl { display: inline-flex; align-items: center; min-height: 24px; font: 500 12px var(--sans); color: var(--accent); white-space: nowrap; }
+.rp .xl:hover { color: var(--accent-strong); text-decoration: underline; text-underline-offset: 3px; }
+.rp .jcols { display: flex; flex-wrap: wrap; }
+.rp .jb { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px 12px; border-top: 1px solid var(--hair-in); font-size: 12px; color: var(--text-faint); }
+.rp .jb form { margin: 0; }
+
+/* The lanes: one grid, so the two lanes line up down every outcome. Columns: the gutter, the agrees lane, the disagrees lane.
+   A lane no reading reaches has no width, so a jog then leaves straight from the gutter. Each reading is a 30px line; an
+   outcome's block adds 7px above and below and a 1px rule, so its first line sits at 22px, level with its legend row. */
+.rp .lanes { margin: 0; flex: 1 1 auto; display: grid; grid-template-columns: minmax(28px, max-content) max-content max-content minmax(0, 1fr); padding-right: 14px; min-width: 0; }
+.rp .lh { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; height: 30px; font-size: 11.5px; color: var(--text-faint); align-items: center; }
+.rp .lh span { padding-left: 14px; white-space: nowrap; }
+.rp .lh .ah { grid-column: 2; } .rp .lh .dh { grid-column: 3; color: var(--text-dim); }
+.rp .lr { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; position: relative; padding: 7px 0; border-top: 1px solid var(--hair-in); transition: background .15s; }
+.rp .lr.hot, .rp .lr.lit { background: var(--surface-2); }
+.rp .lr::before { content: ""; position: absolute; left: -3px; top: 11px; bottom: 11px; width: 5px; border-radius: 2.5px; background: var(--oc); box-shadow: 0 0 0 2px var(--surface); }
+.rp .lr.hot::before, .rp .lr.lit::before { box-shadow: 0 0 0 2px var(--surface-2); }
+.rp .ll { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; height: 30px; align-items: center; }
+/* a connector: a 2px neutral line from the pin; straight along the line, or leaving 9px above it and jogging 45° down onto it */
+.rp .cx { position: relative; align-self: stretch; min-width: 0; }
+.rp .cx::before { content: ""; position: absolute; left: 3px; right: 2px; top: 14px; height: 2px; border-radius: 1px; background: var(--conn); transition: background .15s; }
+.rp .cx.jog::before { right: 11px; top: 5px; }
+.rp .cx.jog::after { content: ""; position: absolute; right: 1px; top: 9px; width: 13px; height: 2px; border-radius: 1px; background: var(--conn);
+  transform: rotate(45deg); transform-origin: center; transition: background .15s; }
+.rp .cx.a { grid-column: 1 / 2; } .rp .cx.d { grid-column: 1 / 3; }
+.rp .ll.hot .cx::before, .rp .ll.hot .cx::after, .rp .ll.lit .cx::before, .rp .ll.lit .cx::after { background: var(--text); }
+/* the gutter: what is not a finding about the claim; a short stub, never reaching a lane, and a quiet word */
+.rp .na { grid-column: 1; display: inline-flex; align-items: center; gap: 5px; padding-left: 12px; padding-right: 10px; font-size: 11px; line-height: 20px; color: var(--text-faint); white-space: nowrap; }
+.rp .na b { font-weight: 500; color: var(--text-dim); }
+.rp .na .key { width: 14px; }
+.rp .na .key path, .rp .na .key circle { stroke: var(--link); }
+/* a cause: the line ends in a hollow ring (the judge's mark), then the cause as plain dim mono text and its count.
+   Ring + text + count is the (outcome, cause, status) filter, shown by an underline and a lift, never by a border. */
+.rp .cn { position: relative; height: 20px; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px 0 1px; font: 11px/18px var(--mono);
+  color: var(--text-dim); white-space: nowrap; transition: color .15s; }
+.rp .cn::after { content: ""; position: absolute; inset: -3px 4px -3px -1px; }
+.rp .cn.a { grid-column: 2; } .rp .cn.d { grid-column: 3; }
+.rp .cn .rg { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1.5px var(--line); transition: box-shadow .15s; }
+.rp .cn > span { text-decoration: underline transparent; text-decoration-thickness: 1px; text-underline-offset: 3px; transition: text-decoration-color .15s; }
+.rp .cn b { font: 500 11.5px/18px var(--sans); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.rp .cn:hover, .rp .cn:focus-visible, .rp .cn.hot, .rp .cn.lit, .rp .cn.on { color: var(--text); }
+.rp .cn:hover > span, .rp .cn:focus-visible > span, .rp .cn.hot > span { text-decoration-color: var(--hush); }
+.rp .cn:hover .rg, .rp .cn:focus-visible .rg, .rp .cn.hot .rg, .rp .cn.lit .rg { box-shadow: inset 0 0 0 1.5px var(--text); }
+.rp .cn:hover b, .rp .cn.hot b, .rp .cn.lit b { color: var(--text); }
+.rp .cn.on > span { text-decoration-color: var(--accent); text-decoration-thickness: 2px; }
+.rp .cn.on .rg { box-shadow: inset 0 0 0 2px var(--accent); }
+/* the tally: reconcile's counts, each group after the line it is drawn with; never larger than the recorded counts */
+.rp .tally { grid-column: 1 / -1; height: 34px; border-top: 1px solid var(--hair-in); display: flex; align-items: center; gap: 16px; padding-left: 14px; white-space: nowrap; }
+.rp .tg { display: inline-flex; align-items: center; gap: 7px; }
+.rp .tli { display: inline-flex; align-items: baseline; min-height: 24px; line-height: 24px; gap: 5px; font-size: 12px; color: var(--text-faint); }
+.rp .tli b { font: 500 13px var(--sans); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.rp .tli small { font-size: 12px; color: var(--text-faint); margin-left: -4px; }
+.rp .tli + .tli { margin-left: 6px; }
+.rp .tli.lead, .rp .tli.lead b { color: var(--text); }
+.rp a.tli:hover { color: var(--text); text-decoration: underline; text-decoration-color: var(--hush); text-underline-offset: 4px; }
+
+/* flags: the raised ones, most raised first, each keeping its fixed number. The bar's track is every judged trial. */
+.rp .b-flags { flex: 1 1 300px; min-width: 0; border-left: 1px solid var(--hair-in); display: grid; grid-template-columns: max-content minmax(0, max-content) minmax(56px, 1fr) 1.6em;
+  align-content: start; column-gap: 10px; padding: 0 14px 6px; }
+.rp .b-flags .slot { grid-column: 1 / -1; padding: 0; }
+.rp .fr { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; min-height: 28px; margin: 0 -14px; padding: 0 14px; font: 11px/1 var(--mono); }
+.rp .fr .fn { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp .fr.lit .key-n::before, .rp .fr:hover .key-n::before, .rp .fr.hot .key-n::before, .rp .fr.on .key-n::before { background: var(--text); }
+.rp .fr:hover .fn, .rp .fr.on .fn, .rp .fr.hot .fn, .rp .fr.lit .fn { color: var(--text); }
+.rp .fb { position: relative; height: 6px; background: var(--ftrack); }
+.rp .fb i { position: absolute; left: 0; top: 0; bottom: 0; min-width: 2px; background: var(--ffill); border-radius: 0 4px 4px 0; }
+.rp .fc { font: 500 12px var(--sans); color: var(--text-dim); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* totals: the board's footer line; the token split is a disclosure with the three sums */
+.rp .b-tot { display: flex; flex-wrap: wrap; align-items: center; column-gap: 28px; padding: 0 18px; min-height: 44px; }
+.rp .b-tot .lab { padding: 0; height: 44px; }
+.rp .kv { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.rp .kv .k { font-size: 12.5px; color: var(--text-faint); }
+.rp .kv .v { font: 500 15px/1 var(--sans); color: var(--text); }
+.rp .b-tot .sp { margin-left: -16px; }
+.rp .pop { position: relative; }
+.rp .pop > summary { display: inline-flex; align-items: center; min-height: 24px; font: 12px var(--sans); color: var(--text-dim); white-space: nowrap; }
+.rp .pop > summary:hover, .rp .pop[open] > summary { color: var(--text); }
+.rp .popm { position: absolute; z-index: 6; left: 0; top: calc(100% + 4px); display: grid; grid-template-columns: auto auto; gap: 4px 14px; padding: 9px 12px;
+  border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+.rp .popm b { font: 500 12px var(--mono); color: var(--text); text-align: right; }
+
+/* linked preview: a hovered row lights its board marks and dims the rest; board counts never change */
+.rp .board.pv .hl:not(.lr) { opacity: .28; }
+.rp .board.pv .hl.lit { opacity: 1; }
+
+/* narrower: the flags drop under the lanes, and the totals take the space under the record */
+@container board (max-width: 1240px) {
+  .rp .b-flags { flex-basis: 100%; border-left: 0; border-top: 1px solid var(--hair-in); padding-bottom: 10px; }
+  .rp .board:not(.no-judge) { grid-template-areas: "rate out judge" "tot tot judge"; grid-template-rows: auto 1fr; }
+  .rp .board:not(.no-judge) .b-tot { display: grid; grid-template-columns: 6em max-content max-content; align-content: start; column-gap: 12px; padding: 0 18px 12px; }
+  .rp .board:not(.no-judge) .b-tot .lab { grid-column: 1 / -1; height: 30px; font-weight: 400; font-size: 12px; color: var(--text-faint); }
+  .rp .board:not(.no-judge) .b-tot .kv { display: contents; }
+  .rp .board:not(.no-judge) .b-tot .kv > * { height: 28px; display: flex; align-items: center; }
+  .rp .board:not(.no-judge) .b-tot .sp { grid-column: 3; margin: 0; height: 28px; display: flex; align-items: center; }
+  .rp .board:not(.no-judge) .b-tot .kv > .k { grid-column: 1; }
+}
+@container board (max-width: 760px) {
+  .rp .board, .rp .board.no-judge, .rp .board:not(.no-judge) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rate" "out" "judge" "tot"; grid-template-rows: none; }
+  .rp .lab .aside { gap: 10px; }
+  .rp .b-judge .lab { flex-wrap: wrap; height: auto; min-height: 44px; padding-block: 8px; }
+  .rp .b-out, .rp .b-judge { border-left: 0; border-top: 1px solid var(--hair); }
+  .rp .lanes { overflow-x: auto; }
+}
+
+/* ---- trials: one filter row above the table it scopes ---- */
+.rp .trials { margin-top: 14px; container: trials / inline-size; }
+.rp .tbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px 10px 18px; border-bottom: 1px solid var(--hair); flex-wrap: wrap; }
+.rp .tbar h2 { margin: 0; font: 500 14px var(--sans); color: var(--text); }
+.rp .tbar h2:focus { outline: none; }
+.rp .cnt { font: 500 12px/20px var(--sans); color: var(--text-dim); background: var(--surface-2); border-radius: 5px; padding: 0 7px; margin-right: 6px; white-space: nowrap; }
+.rp .facet { position: relative; display: inline-flex; align-items: center; height: 28px; border-radius: 7px; border: 1px solid var(--hair); }
+.rp .facet:hover { background: var(--surface-2); }
+.rp .fsum { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12.5px; color: var(--text); white-space: nowrap; }
+.rp .fsum .k { color: var(--text-faint); }
+.rp .fsum .v { color: var(--text-dim); display: inline-flex; align-items: center; gap: 6px; }
+.rp .facet.j.set .fsum .v { font: 11.5px var(--mono); }
+.rp .fsum .car { color: var(--hush); font-size: 10px; }
+.rp .facet.set { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
+.rp .facet.set .fsum { padding-right: 4px; }
+.rp .facet.set .fsum .v { color: var(--text); }
+.rp .facet .x { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: 1px; border-radius: 5px; color: var(--text-faint); font-size: 11px; }
+.rp .facet .x:hover { color: var(--text); background: var(--surface-2); }
+.rp .fmenu { position: absolute; z-index: 5; top: calc(100% + 6px); left: -1px; min-width: 100%; padding: 5px; border-radius: 8px;
+  background: var(--surface-2); border: 1px solid var(--border); box-shadow: var(--shadow); display: grid; gap: 1px; }
+.rp .fmenu a { display: flex; align-items: center; gap: 9px; min-height: 28px; padding: 0 9px; border-radius: 5px; font-size: 12.5px; color: var(--text); white-space: nowrap; }
+.rp .fmenu a:hover, .rp .fmenu a.on { background: var(--surface); }
+.rp .fmenu .mono { font-size: 11.5px; color: var(--text-dim); }
+.rp .fmenu b { margin-left: auto; padding-left: 18px; font: 500 12px var(--sans); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.rp .fclear { display: inline-flex; align-items: center; height: 28px; padding: 0 6px; border-radius: 6px; font: 12.5px var(--sans); color: var(--accent); white-space: nowrap; }
+.rp .fclear:hover { color: var(--accent-strong); text-decoration: underline; text-underline-offset: 3px; }
+
+.rp .tscroll { position: relative; overflow-x: auto; }
+/* auto layout: the other columns keep their widths as minimums and Task takes the rest; past that the table scrolls */
+.rp table.tt { width: 100%; border-collapse: collapse; }
+.rp .w-out { width: 206px; } .rp .w-cause { width: 168px; } .rp .w-flags { width: 132px; } .rp .w-chk { width: 64px; } .rp .w-ins { width: 78px; } .rp .w-tok { width: 80px; }
+.rp .w-tm { width: 68px; } .rp .w-env { width: 54px; } .rp .w-ag { width: 58px; } .rp .w-ver { width: 56px; } .rp .w-go { width: 36px; }
+.rp .tt th { font: 400 12px/1.3 var(--sans); color: var(--text-faint); text-align: left; padding: 0 10px 7px; white-space: nowrap; }
+.rp .tt thead tr.grp th { padding-top: 12px; padding-bottom: 0; }
+.rp .tt thead tr.grp .gl { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--hair); font-weight: 500; color: var(--text-dim); }
+.rp .tt thead tr.grp .gl .gx { margin-left: auto; font-weight: 400; color: var(--text-faint); }
+.rp .tt thead tr.grp .gl .gx b { font-weight: 500; color: var(--text-dim); }
+.rp .tt thead tr.cols th { padding-top: 7px; border-bottom: 1px solid var(--hair); }
+.rp .tt th.num { text-align: right; }
+.rp .sort { display: inline-flex; align-items: center; min-height: 24px; color: var(--text-dim); }
+.rp .sort::after { content: "\2195"; margin-left: 3px; color: var(--hush); font-size: 10px; }
+.rp .sort:hover { color: var(--text); }
+.rp th[aria-sort="descending"] .sort::after { content: "\2193"; color: var(--text); }
+.rp th[aria-sort="ascending"] .sort::after { content: "\2191"; color: var(--text); }
+.rp .tt td { padding: 10px; vertical-align: top; border-bottom: 1px solid var(--hair-in); font-size: 13px; line-height: 20px; transition: background .15s, opacity .15s; }
+.rp .tt tbody tr:last-child td { border-bottom: 0; }
+.rp .tt th:first-child, .rp .tt td:first-child { padding-left: 18px; }
+.rp .tt th:last-child, .rp .tt td:last-child { padding-right: 12px; }
+.rp .tt tbody tr[data-outcome]:hover td, .rp .tt tbody tr[data-outcome]:focus-within td, .rp .tt tbody tr.lit td { background: var(--surface-2); }
+.rp .tt tbody.pv tr[data-outcome]:not(.lit) td { opacity: .34; }
+.rp .tt td.num { text-align: right; font: 12.5px/20px var(--mono); font-variant-numeric: tabular-nums; }
+.rp .task { font: 12.5px/20px var(--mono); color: var(--text); overflow-wrap: break-word; }
+.rp .tt td:first-child { min-width: 150px; }
+.rp tr:hover .task { text-decoration: underline; text-decoration-color: var(--hush); text-underline-offset: 4px; }
+.rp .tt .badge { margin-left: 6px; }
+.rp .oc { display: inline-flex; align-items: center; gap: 8px; color: var(--text); white-space: nowrap; }
+.rp .oc i { width: 8px; height: 8px; border-radius: 50%; background: var(--oc); flex: none; }
+.rp .exd summary { display: flex; align-items: center; min-height: 20px; font: 11px/20px var(--mono); color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp .exd summary .tw { width: 12px; flex: none; }
+.rp .exd summary:hover { color: var(--text-dim); }
+.rp .exd code { display: block; margin: 2px 0 2px 12px; font: 11px/16px var(--mono); color: var(--text-dim); overflow-wrap: anywhere; white-space: normal; }
+.rp .exn { display: block; font: 11px/20px var(--mono); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the Cause cell: the board's connector in miniature, straight or jogged, ending in the judge's ring */
+.rp .rc { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; vertical-align: top; }
+.rp .kg { width: 22px; height: 14px; flex: none; overflow: visible; }
+.rp .kg path, .rp .kg circle { fill: none; stroke: var(--line); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rp .kg circle { stroke-width: 1.5; }
+.rp .kg .dt { stroke-dasharray: .1 3.5; }
+.rp tr:hover .kg path, .rp tr.lit .kg path, .rp tr:hover .kg circle, .rp tr.lit .kg circle { stroke: var(--text-dim); }
+.rp .rc .ctag { font: 11px/20px var(--mono); color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp .rc .na { padding: 0; font-size: 12px; }
+.rp .ins { color: var(--text-dim); }
+.rp .ins small { color: var(--hush); font-size: 11px; }
+.rp .tt td.tot { color: var(--text); }
+.rp .chk .ok { color: var(--ok); } .rp .chk .bad { color: var(--bad); }
+/* Tokens and Total: a thin zero-based bar under the value on a faint track the width of the cell: one scale per column */
+.rp .mg { position: relative; display: block; }
+.rp .mg::before, .rp .mg::after { content: ""; position: absolute; left: 0; top: calc(100% + 4px); height: 4px; }
+.rp .mg::before { right: 0; background: var(--ftrack); }
+.rp .mg::after { width: max(2px, calc(var(--v) * 100%)); background: var(--mag); border-radius: 0 2px 2px 0; }
+.rp .tt td.phase { color: var(--text-faint); }
+.rp .go { text-align: right; }
+.rp .go a { display: inline-grid; place-items: center; width: 28px; height: 28px; margin: -4px -4px -4px 0; border-radius: 6px; color: var(--hush); font-size: 14px; }
+.rp tr:hover .go a { color: var(--text); background: var(--surface); }
+.rp .empty td { padding: 22px 18px; font-size: 13px; color: var(--text-faint); }
+/* narrower: the Flags column folds into the Cause cell's second line, as the exception does under the outcome */
+.rp .slots.nf, .rp .nfh { display: none; }
+@container trials (max-width: 1240px) {
+  .rp .w-flags { width: 0; }
+  .rp .tt .c-flags { padding: 0; width: 0; overflow: hidden; }
+  .rp .tt .c-flags > * { display: none; }
+  .rp .slots.nf { display: flex; width: max-content; margin-top: 4px; }
+  .rp .nfh { display: inline; }
+}
+
+.rp .more { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.rp .more > details { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--radius); padding: 7px 16px; }
+.rp .more > details > summary { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-dim); min-height: 26px; }
+.rp .more > details > summary:hover { color: var(--text); }
+.rp .more summary .end { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; font-size: 12px; color: var(--text-faint); }
+.rp .more summary .end .off { font: 11.5px var(--mono); color: var(--text); }
+.rp .more > details[open] { grid-column: 1 / -1; }
+.rp .rcmd { display: flex; align-items: flex-start; gap: 10px; margin: 10px 0 6px; }
+.rp .rcmd code { flex: 1; min-width: 0; white-space: pre-wrap; padding: 7px 10px; border-radius: 6px; background: var(--rail); border: 1px solid var(--hair); font: 11.5px/1.5 var(--mono); color: var(--text-dim); overflow-wrap: anywhere; }
+.rp dl.gl { margin: 12px 0 4px; display: grid; grid-template-columns: 13rem minmax(0, 54rem); gap: 10px 20px; font-size: 12.5px; }
+.rp dl.gl dt { color: var(--text); display: flex; gap: 8px; align-items: baseline; align-self: start; }
+.rp dl.gl dt .sw { align-self: center; flex: none; }
+.rp dl.gl dd { margin: 0; color: var(--text-dim); }
+.rp dl.gl .gs, .rp dl.gl .gs + dd { border-top: 1px solid var(--hair); padding-top: 10px; }
+.rp dl.gl .mk { display: inline-flex; align-items: center; gap: 7px; margin: 0 18px 6px 0; color: var(--text); white-space: nowrap; }
+@media (max-width: 760px) { .rp .more { grid-template-columns: 1fr; } .rp dl.gl { grid-template-columns: 1fr; } }
+
+/* ---- one tooltip: hover and keyboard focus show the same words; it repeats the page, never gates it ---- */
+.rp-tip { position: fixed; z-index: 40; max-width: 340px; padding: 7px 10px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border);
+  box-shadow: var(--shadow); font: 12px/1.45 var(--sans); color: var(--text); pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) { .rp *, .rp *::before, .rp *::after { transition: none !important; } }

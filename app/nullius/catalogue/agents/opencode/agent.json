@@ -1,0 +1,124 @@
+{
+  "schema": "nullius.agent/v1",
+  "key": "opencode",
+  "label": "OpenCode",
+  "summary": "The open-source terminal coding agent.",
+  "upstream": {
+    "package": "opencode-ai",
+    "version": "1.18.35",
+    "license": "MIT"
+  },
+  "install": {
+    "npm": [
+      "opencode-ai@1.18.35"
+    ]
+  },
+  "start": {
+    "acp": [
+      "{install}/node_modules/.bin/opencode",
+      "acp"
+    ]
+  },
+  "model": {
+    "apis": [
+      "responses"
+    ],
+    "env": {
+      "OPENCODE_CONFIG": "{home}/.config/opencode/opencode.json",
+      "XDG_CONFIG_HOME": "{home}/.config",
+      "XDG_DATA_HOME": "{home}/.local/share",
+      "XDG_CACHE_HOME": "{home}/.cache",
+      "XDG_STATE_HOME": "{home}/.local/state",
+      "NULLIUS_RELAY_KEY": "{key}",
+      "OPENCODE_DISABLE_AUTOUPDATE": "1",
+      "OPENCODE_DISABLE_SHARE": "1",
+      "OPENCODE_DISABLE_MODELS_FETCH": "1",
+      "OPENCODE_DISABLE_LSP_DOWNLOAD": "1",
+      "OPENCODE_DISABLE_DEFAULT_PLUGINS": "1",
+      "OPENCODE_DISABLE_CLAUDE_CODE": "1"
+    },
+    "files": {
+      "{home}/.config/opencode/opencode.json": "opencode.json"
+    }
+  },
+  "caches": [
+    "{home}/.npm",
+    "{home}/.config/opencode/node_modules"
+  ],
+  "options": {
+    "reasoning_effort": {
+      "summary": "How much reasoning a supported model uses before answering.",
+      "values": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "default": "medium"
+    }
+  },
+  "offers": [
+    "agent.task/v1",
+    "agent.workspace/v1",
+    "agent.tools/v1",
+    "agent.conversation/v1"
+  ],
+  "proven": {
+    "agent.task/v1": {
+      "passed": "3/3",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1.18.35",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__14-10-35__kit__agent-task-v1__opencode"
+    },
+    "agent.workspace/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1.18.35",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__14-12-08__kit__agent-workspace-v1__opencode"
+    },
+    "agent.tools/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1.18.35",
+      "kit_version": 2,
+      "backend": "docker",
+      "job": "2026-11-02__14-12-40__kit__agent-tools-v1__opencode",
+      "skills": {
+        "decoys": {
+          "passed": "1/1",
+          "ok": true
+        },
+        "chain": {
+          "passed": "1/1",
+          "ok": true
+        },
+        "retry": {
+          "passed": "1/1",
+          "ok": true
+        }
+      }
+    },
+    "agent.conversation/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1.18.35",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__14-14-07__kit__agent-conversation-v1__opencode"
+    }
+  }
+}

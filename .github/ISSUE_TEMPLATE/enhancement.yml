@@ -1,0 +1,55 @@
+name: Enhancement
+description: Something the application should do, or do better.
+labels: ["enhancement"]
+type: Feature
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How deep it reaches. low, the surface (docs, templates, static files) · medium, the web layer or the catalogue · high, the backend · extreme, what runs and proves (the standard, execution, hosts, keys).
+      options: [low, medium, high, extreme]
+    validations:
+      required: true
+  - type: checkboxes
+    id: components
+    attributes:
+      label: Components
+      description: What it touches.
+      options:
+        - label: app/nullius (backend)
+        - label: app/web (routes)
+        - label: templates and static files
+        - label: docs and the site
+        - label: catalogue (benchmarks, agents, capabilities)
+        - label: the standard (ports, kits, relay, runs)
+        - label: CI, workflows and skills
+  - type: textarea
+    id: today
+    attributes:
+      label: Today
+      description: What the application does now, quoted or pictured where it is visible. No key, no address, no private link.
+    validations:
+      required: true
+  - type: textarea
+    id: wanted
+    attributes:
+      label: Wanted
+      description: What it should do, and for whom. A sketch or a screenshot of the target when it is visible.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: One box per criterion. The judge gives each its own row on the pull request that closes this.
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: related
+    attributes:
+      label: Dependencies and related
+      description: Issues or pull requests this waits on or touches, with their state.
+      placeholder: none

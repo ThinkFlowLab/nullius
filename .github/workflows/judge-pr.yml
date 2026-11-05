@@ -1,0 +1,75 @@
+name: judge-pr
+
+# The PR judge, this repository's own (.github/scripts/judge_pr.py): a merge
+# risk and a priority, then the questions (the linked issue's acceptance
+# criteria, the issue against the PR, the description against the diff,
+# scope, tests, docs, risk named, before and after), each asked of the
+# TypeSafe judge k=3 times over the redacted issue, description and diff;
+# plus the script's own checks. The verdict is posted on the pull request as
+# a new comment on every run, the earlier ones collapsed as outdated, never
+# deleted, and kept as the step summary with the cost. No artifact: they
+# count against the account's storage.
+#
+# Experimental by construction: the one step that can fail runs with
+# continue-on-error, so a missing key, a busy judge or a refused comment
+# annotates the run and leaves it green. Never make this a required check.
+#
+# Two ways in: a non-draft pull request event, and a `/judge` comment on a pull
+# request from an owner, member or collaborator, which asks again on the
+# same commit, including a draft (a 👀 reaction, the answer below the request). The
+# comment body is read only by the job's `if` expression, never by a shell
+# line. Because issue_comment runs the workflow from the default branch,
+# `/judge` works only once this file is on main.
+#
+# One secret, the repository owner's to add: TYPESAFE_API_KEY, the judge
+# key (API_KEY_TYPESAFE, the older name, is read too). Without it the run
+# says "not configured" and stays green.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write   # the result comment on the PR, one per run
+  issues: write          # the 👀 reaction, and collapsing earlier verdicts
+
+jobs:
+  judge:
+    if: ${{ (github.event_name == 'pull_request' && !github.event.pull_request.draft) || (github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/judge') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) }}
+    # Admit the event before it can cancel another job. Ordinary or unauthorized
+    # comments must not interrupt a valid judgement; both accepted event types
+    # share the same PR group, including /judge events on the default branch.
+    concurrency:
+      group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: seen
+        if: ${{ github.event_name == 'issue_comment' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: gh api -X POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes >/dev/null
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: judge
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY || secrets.API_KEY_TYPESAFE }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          if [ -z "$TYPESAFE_API_KEY" ]; then
+            echo "## PR judge: not configured" >> "$GITHUB_STEP_SUMMARY"
+            echo "No judge key in this repository's secrets; nothing was asked. Experimental check, nothing blocks." >> "$GITHUB_STEP_SUMMARY"
+            exit 3
+          fi
+          python3 .github/scripts/judge_pr.py --pr "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --k 3 --quiet --comment \
+            || { echo "## PR judge: could not ask" >> "$GITHUB_STEP_SUMMARY"; echo "See the step log. Experimental check, nothing blocks." >> "$GITHUB_STEP_SUMMARY"; exit 3; }

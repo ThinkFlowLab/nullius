@@ -1,0 +1,25 @@
+{
+  "job_name": "parts-arm",
+  "runner": "sums",
+  "runner_label": "Sums",
+  "runner_commit": "cccccccccccccccccccccccccccccccccccccccc",
+  "n_concurrent_trials": 1,
+  "runner_judge": "marks, the mean over a task's cases",
+  "questions_from": "sums",
+  "runner_items": [
+    "task",
+    "tasks"
+  ],
+  "agents": [
+    {
+      "name": "baseline",
+      "model_name": "m"
+    }
+  ],
+  "datasets": [
+    {
+      "name": "sums",
+      "n_tasks": 2
+    }
+  ]
+}

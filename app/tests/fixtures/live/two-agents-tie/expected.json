@@ -1,0 +1,575 @@
+{
+ "job": "duel-tie-x6",
+ "now": "2026-09-14T11:06:00Z",
+ "state": "running",
+ "launched_at": null,
+ "preparing": null,
+ "started_at": "2026-09-14T11:00:00Z",
+ "finished_at": null,
+ "running": true,
+ "n_concurrent": 2,
+ "wall_sec": 1200.0,
+ "budget": null,
+ "agents": [
+  "my-agent",
+  "opencode"
+ ],
+ "counts": {
+  "total": 6,
+  "running": 0,
+  "pending": 2,
+  "completed": 4,
+  "resolved": 2,
+  "unresolved": 2,
+  "errored": 0,
+  "cancelled": 0
+ },
+ "mean_reward": 0.5,
+ "totals": {
+  "n_input_tokens": 1110000,
+  "n_cache_tokens": 550000,
+  "n_output_tokens": 15500,
+  "cost_usd": null
+ },
+ "tokens_per_sec": null,
+ "elapsed_sec": 360.0,
+ "eta_sec": 155.0,
+ "trials": [
+  {
+   "trial": "airline-0__js",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "my-agent",
+   "model": "openai/meta/muse-spark-1.3-contributor",
+   "position": 0,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 300.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": 300000,
+   "n_cache_tokens": 250000,
+   "n_output_tokens": 4000,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 15.0,
+    "agent_setup": 20.0,
+    "agent_run": 100.0,
+    "verify": 20.0
+   },
+   "total_sec": 155.0
+  },
+  {
+   "trial": "airline-0__oc",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "opencode",
+   "model": "openai/gpt-5.6-luna",
+   "position": 1,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 300.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": 200000,
+   "n_cache_tokens": null,
+   "n_output_tokens": 3000,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 15.0,
+    "agent_setup": 29.0,
+    "agent_run": 120.0,
+    "verify": 20.0
+   },
+   "total_sec": 184.0
+  },
+  {
+   "trial": "retail-0__js",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "my-agent",
+   "model": "openai/meta/muse-spark-1.3-contributor",
+   "position": 2,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 300.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": 350000,
+   "n_cache_tokens": 300000,
+   "n_output_tokens": 5000,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "unresolved",
+   "reward": 0.0,
+   "durations": {
+    "env_setup": 15.0,
+    "agent_setup": 20.0,
+    "agent_run": 90.0,
+    "verify": 20.0
+   },
+   "total_sec": 145.0
+  },
+  {
+   "trial": "retail-0__oc",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "opencode",
+   "model": "openai/gpt-5.6-luna",
+   "position": 3,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 300.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": 260000,
+   "n_cache_tokens": null,
+   "n_output_tokens": 3500,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "unresolved",
+   "reward": 0.0,
+   "durations": {
+    "env_setup": 15.0,
+    "agent_setup": 20.0,
+    "agent_run": 100.0,
+    "verify": 20.0
+   },
+   "total_sec": 155.0
+  }
+ ],
+ "lanes": [
+  {
+   "agent": "my-agent",
+   "trials": [
+    "airline-0__js",
+    "retail-0__js"
+   ],
+   "counts": {
+    "total": 2,
+    "running": 0,
+    "pending": 0,
+    "completed": 2,
+    "resolved": 1,
+    "unresolved": 1,
+    "errored": 0,
+    "cancelled": 0
+   },
+   "mean_reward": 0.5,
+   "totals": {
+    "n_input_tokens": 650000,
+    "n_cache_tokens": 550000,
+    "n_output_tokens": 9000,
+    "cost_usd": null
+   },
+   "wins": 0
+  },
+  {
+   "agent": "opencode",
+   "trials": [
+    "airline-0__oc",
+    "retail-0__oc"
+   ],
+   "counts": {
+    "total": 2,
+    "running": 0,
+    "pending": 0,
+    "completed": 2,
+    "resolved": 1,
+    "unresolved": 1,
+    "errored": 0,
+    "cancelled": 0
+   },
+   "mean_reward": 0.5,
+   "totals": {
+    "n_input_tokens": 460000,
+    "n_cache_tokens": null,
+    "n_output_tokens": 6500,
+    "cost_usd": null
+   },
+   "wins": 0
+  }
+ ],
+ "winners": [
+  {
+   "task": "tau3-bench__tau3-airline-0",
+   "agents": [
+    "my-agent",
+    "opencode"
+   ],
+   "rewards": {
+    "my-agent": 1.0,
+    "opencode": 1.0
+   },
+   "decided": true,
+   "winner": null
+  },
+  {
+   "task": "tau3-bench__tau3-retail-0",
+   "agents": [
+    "my-agent",
+    "opencode"
+   ],
+   "rewards": {
+    "my-agent": 0.0,
+    "opencode": 0.0
+   },
+   "decided": true,
+   "winner": null
+  }
+ ],
+ "tail": [
+  {
+   "ts": "2026-09-14T11:00:00Z",
+   "seq": 1,
+   "job": "duel-tie-x6",
+   "trial": null,
+   "event": "job.start",
+   "n_total": 6,
+   "n_concurrent": 2,
+   "agents": [
+    "my-agent",
+    "opencode"
+   ],
+   "tasks": [
+    "tau3-bench__tau3-airline-0",
+    "tau3-bench__tau3-retail-0",
+    "tau3-bench__tau3-telecom-0"
+   ],
+   "wall_sec": 1200
+  },
+  {
+   "ts": "2026-09-14T11:00:00Z",
+   "seq": 2,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__js",
+   "event": "trial.queued",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "my-agent",
+   "model": "openai/meta/muse-spark-1.3-contributor",
+   "position": 0
+  },
+  {
+   "ts": "2026-09-14T11:00:00Z",
+   "seq": 3,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__oc",
+   "event": "trial.queued",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "opencode",
+   "model": "openai/gpt-5.6-luna",
+   "position": 1
+  },
+  {
+   "ts": "2026-09-14T11:00:00Z",
+   "seq": 4,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__js",
+   "event": "trial.queued",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "my-agent",
+   "model": "openai/meta/muse-spark-1.3-contributor",
+   "position": 2
+  },
+  {
+   "ts": "2026-09-14T11:00:00Z",
+   "seq": 5,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__oc",
+   "event": "trial.queued",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "opencode",
+   "model": "openai/gpt-5.6-luna",
+   "position": 3
+  },
+  {
+   "ts": "2026-09-14T11:00:05Z",
+   "seq": 6,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__js",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "my-agent",
+   "phase": "env_setup",
+   "timeout_sec": 600
+  },
+  {
+   "ts": "2026-09-14T11:00:06Z",
+   "seq": 7,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__oc",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "opencode",
+   "phase": "env_setup",
+   "timeout_sec": 600
+  },
+  {
+   "ts": "2026-09-14T11:00:20Z",
+   "seq": 8,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__js",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "my-agent",
+   "phase": "agent_setup",
+   "timeout_sec": 1200
+  },
+  {
+   "ts": "2026-09-14T11:00:21Z",
+   "seq": 9,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__oc",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "opencode",
+   "phase": "agent_setup",
+   "timeout_sec": 1200
+  },
+  {
+   "ts": "2026-09-14T11:00:40Z",
+   "seq": 10,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__js",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "my-agent",
+   "phase": "agent_run",
+   "timeout_sec": 3600
+  },
+  {
+   "ts": "2026-09-14T11:00:50Z",
+   "seq": 11,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__oc",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "opencode",
+   "phase": "agent_run",
+   "timeout_sec": 3600
+  },
+  {
+   "ts": "2026-09-14T11:02:20Z",
+   "seq": 12,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__js",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "my-agent",
+   "phase": "verify",
+   "timeout_sec": 300
+  },
+  {
+   "ts": "2026-09-14T11:02:40Z",
+   "seq": 13,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__js",
+   "event": "trial.end",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "my-agent",
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 15,
+    "agent_setup": 20,
+    "agent_run": 100,
+    "verify": 20
+   },
+   "n_input_tokens": 300000,
+   "n_cache_tokens": 250000,
+   "n_output_tokens": 4000
+  },
+  {
+   "ts": "2026-09-14T11:02:45Z",
+   "seq": 14,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__js",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "my-agent",
+   "phase": "env_setup",
+   "timeout_sec": 600
+  },
+  {
+   "ts": "2026-09-14T11:02:50Z",
+   "seq": 15,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__oc",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "opencode",
+   "phase": "verify",
+   "timeout_sec": 300
+  },
+  {
+   "ts": "2026-09-14T11:03:00Z",
+   "seq": 16,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__js",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "my-agent",
+   "phase": "agent_setup",
+   "timeout_sec": 1200
+  },
+  {
+   "ts": "2026-09-14T11:03:10Z",
+   "seq": 17,
+   "job": "duel-tie-x6",
+   "trial": "airline-0__oc",
+   "event": "trial.end",
+   "task": "tau3-bench__tau3-airline-0",
+   "agent": "opencode",
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 15,
+    "agent_setup": 29,
+    "agent_run": 120,
+    "verify": 20
+   },
+   "n_input_tokens": 200000,
+   "n_output_tokens": 3000
+  },
+  {
+   "ts": "2026-09-14T11:03:15Z",
+   "seq": 18,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__oc",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "opencode",
+   "phase": "env_setup",
+   "timeout_sec": 600
+  },
+  {
+   "ts": "2026-09-14T11:03:20Z",
+   "seq": 19,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__js",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "my-agent",
+   "phase": "agent_run",
+   "timeout_sec": 3600
+  },
+  {
+   "ts": "2026-09-14T11:03:30Z",
+   "seq": 20,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__oc",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "opencode",
+   "phase": "agent_setup",
+   "timeout_sec": 1200
+  },
+  {
+   "ts": "2026-09-14T11:03:50Z",
+   "seq": 21,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__oc",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "opencode",
+   "phase": "agent_run",
+   "timeout_sec": 3600
+  },
+  {
+   "ts": "2026-09-14T11:04:50Z",
+   "seq": 22,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__js",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "my-agent",
+   "phase": "verify",
+   "timeout_sec": 300
+  },
+  {
+   "ts": "2026-09-14T11:05:10Z",
+   "seq": 23,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__js",
+   "event": "trial.end",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "my-agent",
+   "outcome": "unresolved",
+   "reward": 0.0,
+   "durations": {
+    "env_setup": 15,
+    "agent_setup": 20,
+    "agent_run": 90,
+    "verify": 20
+   },
+   "n_input_tokens": 350000,
+   "n_cache_tokens": 300000,
+   "n_output_tokens": 5000
+  },
+  {
+   "ts": "2026-09-14T11:05:30Z",
+   "seq": 24,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__oc",
+   "event": "trial.phase",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "opencode",
+   "phase": "verify",
+   "timeout_sec": 300
+  },
+  {
+   "ts": "2026-09-14T11:05:50Z",
+   "seq": 25,
+   "job": "duel-tie-x6",
+   "trial": "retail-0__oc",
+   "event": "trial.end",
+   "task": "tau3-bench__tau3-retail-0",
+   "agent": "opencode",
+   "outcome": "unresolved",
+   "reward": 0.0,
+   "durations": {
+    "env_setup": 15,
+    "agent_setup": 20,
+    "agent_run": 100,
+    "verify": 20
+   },
+   "n_input_tokens": 260000,
+   "n_output_tokens": 3500
+  }
+ ],
+ "notices": []
+}

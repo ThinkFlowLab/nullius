@@ -1,0 +1,32 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "envbench",
+  "label": "Environment bench",
+  "summary": "Three units, each in its own environment: one needs a tool the base image lacks, one a licence, one nothing.",
+  "family": "agent",
+  "needs": ["agent.task/v1", "agent.workspace/v1"],
+  "driver": {"command": ["python3", "{here}/driver.py"]},
+  "datasets": [{"id": "all", "units": 3}],
+  "units": {"noun": "unit", "nouns": "units"},
+  "score": {"kind": "pass", "says": "the unit's probe saw what its environment should give it, and nothing more"},
+  "limits": {"turn_seconds": 60},
+  "environments": {
+    "tool": {
+      "summary": "The base image and jq, a tool it lacks.",
+      "dockerfile": "env/tool.Dockerfile"
+    },
+    "licensed": {
+      "summary": "The base image and a licensed tool's marker file; the tool's key, licence file and licence server go to the agent, the scorer's token to the driver.",
+      "dockerfile": "env/licensed.Dockerfile",
+      "files": ["env/marker.txt"],
+      "needs_secrets": [
+        {"name": "FAKE_TOOL_LICENSE", "to": "agent", "summary": "the licensed tool's key"},
+        {"name": "FAKE_TOOL_LICENSE_FILE", "kind": "file", "to": "agent", "path": "/opt/licensed-tool/license.lic",
+         "env": "FAKE_TOOL_LICENSE_PATH", "summary": "the licensed tool's licence file"},
+        {"name": "FAKE_LICENSE_SERVER", "kind": "server", "to": "agent", "summary": "the licensed tool's licence server"},
+        {"name": "FAKE_SCORER_TOKEN", "to": "driver", "summary": "the scorer's own token"}
+      ],
+      "local_ok": true
+    }
+  }
+}

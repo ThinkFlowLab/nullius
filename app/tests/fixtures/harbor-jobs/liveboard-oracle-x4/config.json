@@ -1,0 +1,10 @@
+{
+    "job_name": "liveboard-oracle-x4",
+    "jobs_dir": "/home/ubuntu/harbor-pilot/jobs",
+    "quiet": true,
+    "datasets": [
+        {
+            "path": "/home/ubuntu/harbor-pilot/datasets/oracle-x4"
+        }
+    ]
+}

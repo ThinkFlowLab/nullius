@@ -1,0 +1,15 @@
+{
+ "says": "marks, the mean over a task's cases",
+ "nouns": "cases",
+ "parts": [
+  {
+   "n": 1,
+   "text": "Add 3 and 3.",
+   "said": "6",
+   "score": 1.0,
+   "shows": {
+    "expected": "6"
+   }
+  }
+ ]
+}

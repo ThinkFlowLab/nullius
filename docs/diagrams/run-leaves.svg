@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 392" width="640" height="392" role="img" aria-labelledby="run-leaves-title run-leaves-desc" class="dg">
+<title id="run-leaves-title">What a run leaves behind</title>
+<desc id="run-leaves-desc">A run directory holds its record and one job directory, whose trials each keep the agent’s output, the verifier’s and the artifacts.</desc>
+<defs><marker id="run-leaves-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#596471" class="head"/></marker><marker id="run-leaves-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#36577d" class="head accent"/></marker><marker id="run-leaves-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#596471" stroke-width="1.2" class="arrow"/></marker></defs>
+<style>
+.dg{--p:var(--paper,#f7f8fa);--i:var(--ink,#25282e);--m:var(--muted,#596471);--a:var(--md-typeset-a-color,#36577d);--n:#fff;
+ --sans:'DM Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:'Instrument Serif',Georgia,serif}
+[data-md-color-scheme=slate] .dg{--n:color-mix(in srgb,var(--i) 7%,var(--p))}
+.dg .paper{fill:var(--p)}
+.dg .zone{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 14%,transparent);stroke-width:.8}
+.dg .eyebrow{fill:var(--m);font:500 8px var(--mono);letter-spacing:.14em}
+.dg .box{fill:var(--n);stroke:var(--i);stroke-width:1}
+.dg .focal{fill:color-mix(in srgb,var(--a) 12%,transparent);stroke:var(--a);stroke-width:1}
+.dg .store{fill:color-mix(in srgb,var(--i) 5%,transparent);stroke:var(--m);stroke-width:1}
+.dg .ext{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 40%,transparent);stroke-width:1}
+.dg .input{fill:color-mix(in srgb,var(--m) 10%,transparent);stroke:var(--m);stroke-width:1}
+.dg .name{fill:var(--i);font:500 12px var(--sans)}
+.dg .sub{fill:var(--m);font:9px var(--mono)}
+.dg .lbl{fill:var(--m);font:8px var(--mono);letter-spacing:.06em}
+.dg .lbl.accent{fill:var(--a)}
+.dg .arrow{fill:none;stroke:var(--m);stroke-width:1.2}
+.dg .arrow.accent{stroke:var(--a)}
+.dg .arrow.dashed{stroke-dasharray:5 4;stroke-width:1}
+.dg .arrow.bus{stroke-width:1}
+.dg .head{fill:var(--m)}
+.dg .head.accent{fill:var(--a)}
+.dg .dot{fill:var(--i)}
+.dg .life{stroke:color-mix(in srgb,var(--i) 25%,transparent);stroke-width:1;stroke-dasharray:3 3}
+.dg .act{fill:color-mix(in srgb,var(--i) 6%,transparent);stroke:var(--m);stroke-width:.8}
+.dg .frame{fill:color-mix(in srgb,var(--i) 2%,transparent);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .tab{fill:var(--p);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .guard{fill:var(--m);font:8px var(--mono);letter-spacing:.04em}
+.dg .note{fill:var(--m);font:13px var(--sans)}
+.dg .rule{stroke:color-mix(in srgb,var(--i) 12%,transparent);stroke-width:.8}
+.dg .legend{fill:var(--m);font:9px var(--sans)}
+</style>
+<rect width="100%" height="100%" fill="#f7f8fa" class="paper"/>
+<path d="M320,88 L320,120" fill="none" stroke="#596471" marker-end="url(#run-leaves-arrow)" class="arrow"/>
+<path d="M320,184 L320,216" fill="none" stroke="#596471" marker-end="url(#run-leaves-arrow)" class="arrow"/>
+<path d="M320,280 L320,296" fill="none" stroke="#596471" class="arrow bus"/>
+<path d="M120,296 L520,296" fill="none" stroke="#596471" class="arrow bus"/>
+<path d="M120,296 L120,312" fill="none" stroke="#596471" marker-end="url(#run-leaves-arrow)" class="arrow"/>
+<path d="M320,296 L320,312" fill="none" stroke="#596471" marker-end="url(#run-leaves-arrow)" class="arrow"/>
+<path d="M520,296 L520,312" fill="none" stroke="#596471" marker-end="url(#run-leaves-arrow)" class="arrow"/>
+<rect x="232" y="24" width="176" height="64" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="232" y="24" width="176" height="64" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="320" y="48" text-anchor="middle" class="name">runs/&lt;name&gt;/</text>
+<text x="320" y="62" text-anchor="middle" class="sub">run.json: plan and state</text>
+<text x="320" y="73" text-anchor="middle" class="sub">run-part.sh, log, exit file</text>
+<rect x="232" y="120" width="176" height="64" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="232" y="120" width="176" height="64" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="320" y="144" text-anchor="middle" class="name">jobs/&lt;job-name&gt;/</text>
+<text x="320" y="158" text-anchor="middle" class="sub">config.json, result.json,</text>
+<text x="320" y="169" text-anchor="middle" class="sub">events.jsonl</text>
+<rect x="232" y="216" width="176" height="64" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="232" y="216" width="176" height="64" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="320" y="240" text-anchor="middle" class="name">&lt;trial&gt;/</text>
+<text x="320" y="254" text-anchor="middle" class="sub">result.json, trial.log,</text>
+<text x="320" y="265" text-anchor="middle" class="sub">exception.txt</text>
+<rect x="40" y="312" width="160" height="56" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="40" y="312" width="160" height="56" rx="6" fill="#e8edf4" stroke="#36577d" class="focal"/>
+<text x="120" y="332" text-anchor="middle" class="name">agent/</text>
+<text x="120" y="346" text-anchor="middle" class="sub">trajectory.json, logs,</text>
+<text x="120" y="357" text-anchor="middle" class="sub">traces</text>
+<rect x="240" y="312" width="160" height="56" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="240" y="312" width="160" height="56" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="320" y="338" text-anchor="middle" class="name">verifier/</text>
+<text x="320" y="352" text-anchor="middle" class="sub">reward, test output</text>
+<rect x="440" y="312" width="160" height="56" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="440" y="312" width="160" height="56" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="520" y="344" text-anchor="middle" class="name">artifacts/</text>
+</svg>

@@ -1,0 +1,35 @@
+{
+ "schema_version": "ATIF-v1.6",
+ "session_id": "parts-arm/t2",
+ "agent": {
+  "name": "baseline",
+  "model_name": "m"
+ },
+ "steps": [
+  {
+   "step_id": 1,
+   "timestamp": "1970-01-01T00:16:42+00:00",
+   "source": "user",
+   "message": "0: Add 3 and 3."
+  },
+  {
+   "step_id": 2,
+   "timestamp": "1970-01-01T00:16:42.500000+00:00",
+   "source": "agent",
+   "model_name": "m",
+   "message": "{\"0\": \"6\"}",
+   "metrics": {
+    "prompt_tokens": 40,
+    "completion_tokens": 2,
+    "cached_tokens": 0
+   }
+  }
+ ],
+ "final_metrics": {
+  "total_prompt_tokens": 40,
+  "total_completion_tokens": 2,
+  "total_cached_tokens": 0,
+  "total_cost_usd": null,
+  "total_steps": 2
+ }
+}

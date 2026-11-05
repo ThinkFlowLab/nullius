@@ -1,0 +1,37 @@
+{#- One task's detail, the same metrics for each side so differences line up: asked for when its row opens (/compare/detail/<index>), never built for every row of the page. -#}
+<table class="grid inner" style="--cols: {{ jobs|length }}">
+  <colgroup>
+    <col class="compare-label-col">
+    {% for j in jobs %}<col>{% endfor %}
+  </colgroup>
+  <tbody>
+    {% for r in d.rows %}
+    <tr>
+      <th class="rowhead" {% if r.hint %}title="{{ r.hint }}"{% endif %}>{{ r.label }}</th>
+      {% for v in r.cells %}
+      <td class="{{ r.classes[loop.index0] }}{% if r.cells|unique|list|length > 1 %} cell-differs{% endif %}">{{ v }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+    <tr>
+      <th class="rowhead">Files edited</th>
+      {% for files in d.files %}
+      <td>
+        {% if files %}<ul class="files tight">{% for f in files %}<li class="mono">{{ f }}</li>{% endfor %}</ul>
+        {% else %}<span class="faint">—</span>{% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+    {% if d.broke|select|list %}
+    <tr>
+      <th class="rowhead">Broke</th>
+      {% for names in d.broke %}
+      <td>
+        {% if names %}<ul class="files tight">{% for f in names %}<li class="mono bad">{{ f }}</li>{% endfor %}</ul>
+        {% else %}<span class="faint">—</span>{% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+    {% endif %}
+  </tbody>
+</table>

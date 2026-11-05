@@ -1,0 +1,32 @@
+{#- The Add dialog of the Benchmarks, Agents and Capabilities pages: two ways in, as tabs. With an assistant: a
+    prompt for any coding assistant, built from three fields (howto.prompt, filled by catalogue/add.js); by
+    hand: what the caller puts in. docs/standard.md, "Import by hand" and "With an assistant". -#}
+{% macro add_dialog(a, prompts, kind) -%}
+<dialog class="std-how" id="std-how" aria-labelledby="std-how-h">
+  <div class="std-how-head"><h2 id="std-how-h">Add to catalogue</h2><button type="button" class="std-how-x" id="std-how-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button></div>
+  <div class="std-how-tabs" role="tablist" aria-label="How to add {{ a }}">
+    <button type="button" role="tab" id="std-tab-assist" aria-controls="std-pane-assist" aria-selected="true">With an assistant</button>
+    <button type="button" role="tab" id="std-tab-hand" aria-controls="std-pane-hand" aria-selected="false" tabindex="-1">By hand</button>
+  </div>
+
+  <section id="std-pane-assist" role="tabpanel" aria-labelledby="std-tab-assist" class="std-pane">
+    <p>Say what to add. Paste the prompt below into your coding assistant (Claude Code, Codex, Cursor…). It includes your catalogue's location.</p>
+    <div class="std-add-fields">
+      <label for="std-add-kind">Add<select id="std-add-kind">{% for key in prompts %}<option value="{{ key }}"{% if key == kind %} selected{% endif %}>{{ key|capitalize }}</option>{% endfor %}</select></label>
+      <label for="std-add-name">Name<input type="text" id="std-add-name" autocomplete="off" required></label>
+      <label for="std-add-source" class="wide">Source <small>a link: its git repository, its Hugging Face page, its package, or any other</small><input type="text" id="std-add-source" autocomplete="off" spellcheck="false" required></label>
+      <label for="std-add-remark" class="wide">Remark <small>optional: anything the assistant should know; it reads what it is from the source</small><textarea id="std-add-remark" rows="3"></textarea></label>
+    </div>
+    <div class="std-code std-prompt">
+      <div class="std-code-head"><span>prompt</span><button type="button" class="std-copy" id="std-add-copy" disabled>Copy</button></div>
+      <pre><code id="std-add-prompt" aria-live="polite"></code></pre>
+    </div>
+    {% for key, prompt in prompts.items() %}<template data-add-kind="{{ key }}">{{ prompt }}</template>{% endfor %}
+    <p class="std-add-hint" id="std-add-hint">Fill in the name and the source to copy it.</p>
+  </section>
+
+  <section id="std-pane-hand" role="tabpanel" aria-labelledby="std-tab-hand" class="std-pane" hidden>
+    {{ caller() }}
+  </section>
+</dialog>
+{%- endmacro %}

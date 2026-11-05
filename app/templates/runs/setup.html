@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block title %}{{ 'New workspace' if mode == 'new' else 'Import runs' }} — Nullius{% endblock %}
+{% block crumb %}/ {{ 'new workspace' if mode == 'new' else 'import' }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
+{% block body %}
+<div class="setup-wrap import-setup">
+  {% if mode == 'add' %}
+  <h1>Add runs to {{ workspace.label }}</h1>
+  <p class="subtitle">Harbor{% if IMPORTERS %}, {{ IMPORTERS|join(' and ') }}{% endif %} output, recognised by shape.</p>
+  {% elif mode == 'new' %}
+  <h1>New workspace</h1>
+  <p class="subtitle">Point it at run folders on this machine, or drop them here.</p>
+  {% else %}
+  <h1>Import runs</h1>
+  <p class="subtitle">Point it at run folders on this machine, or drop them here.</p>
+  {% endif %}
+
+  <div class="setup-card">
+    {# a notice of this request is the base layout's, as a toast; this card says only when there is none #}
+    {% set flashes = get_flashed_messages(with_categories=true) %}
+    {% if not flashes and scanned %}
+      <div class="alert warn">Nothing job-shaped under the scanned path.</div>
+    {% endif %}
+
+    <!-- novalidate: `required` stays for assistive tech, but we render the
+         message ourselves instead of the browser's native bubble. -->
+    <form method="post" action="{{ url_for('use_path') }}" id="pathform" novalidate><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="new" id="ws-new" value="{{ '1' if mode == 'new' else '0' }}">
+      {% if mode != 'add' %}
+      <label class="field-label" for="ws-name">Workspace name</label>
+      <input type="text" name="name" id="ws-name" placeholder="optional — two random words otherwise" autocomplete="off" spellcheck="false" style="margin-bottom:1rem">
+      {% endif %}
+      <label class="field-label" for="path">Run folders</label>
+      <div id="path-list" data-suggestions-url="{{ url_for('folder_suggestions') }}">
+        <div class="path-row">
+          <input type="text" name="path" id="path" placeholder="/path/to/jobs — or a pattern: …/jobs_*, …/**/jobs"
+                 required autofocus autocomplete="off" spellcheck="false"
+                 aria-describedby="path-error">
+          <button type="button" class="row-x" aria-label="Remove this path" hidden>×</button>
+          <button type="button" class="add-btn" title="Add another path"
+                  aria-label="Add another path">+</button>
+        </div>
+      </div>
+      <p class="field-error" id="path-error" role="alert" hidden></p>
+    </form>
+
+    <div class="divider">or</div>
+
+    <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" id="up"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <label class="drop" id="drop">
+        <input type="file" id="picker" name="files" webkitdirectory directory multiple hidden>
+        <div><strong>Drop folders here</strong> or click to browse</div>
+      </label>
+    </form>
+    <ul class="staged" id="staged"></ul>
+
+    <div class="path-actions submit-row">
+      <button class="btn primary" type="button" id="parse-btn" data-label="{{ 'Add runs' if mode == 'add' else 'Open workspace' }}">{{ 'Add runs' if mode == 'add' else 'Open workspace' }}</button>
+      <button class="btn ghost sm" type="button" id="clear-staged" hidden>Clear folders</button>
+      <span class="footnote" id="status"></span>
+    </div>
+  </div>
+
+  <div class="import-next"><span>No run yet?</span><a href="{{ url_for('new_run') }}">Build one <span aria-hidden="true">→</span></a></div>
+</div>
+
+<div id="path-suggestions" class="ui-select-menu path-suggestions" role="listbox" aria-label="Folders" hidden></div>
+<script src="{{ url_for('static', filename='runs/path-suggestions.js') }}" defer></script>
+<script>
+  const drop = document.getElementById('drop');
+  const picker = document.getElementById('picker');
+  const status = document.getElementById('status');
+
+  /* ---- repeatable path rows: × on every row but the only one, + on the last ---- */
+  const pathList = document.getElementById('path-list');
+
+  pathList.addEventListener('click', e => {
+    if (e.target.matches('.add-btn')) {
+      const row = pathList.firstElementChild.cloneNode(true);
+      const field = row.querySelector('input');
+      field.value = '';
+      field.removeAttribute('id');        // ids must stay unique
+      field.removeAttribute('required');  // only the first row is mandatory
+      field.removeAttribute('autofocus');
+      field.setAttribute('aria-label', 'Additional path');
+      pathList.appendChild(row);
+      field.focus();
+      syncRowButtons();
+    } else if (e.target.matches('.row-x')) {
+      e.target.closest('.path-row').remove();
+      syncRowButtons();
+    }
+  });
+
+  function syncRowButtons() {
+    const rows = [...pathList.children];
+    rows.forEach((row, i) => {
+      row.querySelector('.row-x').hidden = rows.length === 1;
+      row.querySelector('.add-btn').hidden = i !== rows.length - 1;
+    });
+  }
+  syncRowButtons();
+
+  // --- path field validation, in-page rather than the native bubble ---
+  const pathForm = document.getElementById('pathform');
+  const pathInput = document.getElementById('path');
+  const pathError = document.getElementById('path-error');
+
+  function fieldError(msg) {
+    pathError.textContent = msg;
+    pathError.hidden = false;
+    pathInput.classList.add('invalid');
+    pathInput.setAttribute('aria-invalid', 'true');
+    pathInput.focus();
+  }
+  function clearFieldError() {
+    if (pathError.hidden) return;
+    pathError.hidden = true;
+    pathInput.classList.remove('invalid');
+    pathInput.removeAttribute('aria-invalid');
+  }
+  pathInput.addEventListener('input', clearFieldError);
+
+  // Server-side messages are dismissible; they also clear once you retype.
+  document.querySelectorAll('.alert').forEach(alert => {
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'alert-x';
+    x.setAttribute('aria-label', 'Dismiss');
+    x.addEventListener('click', () => alert.remove());
+    alert.appendChild(x);
+  });
+  pathInput.addEventListener('input', () =>
+    document.querySelectorAll('.alert.error').forEach(a => a.remove()), { once: true });
+
+  // dragenter/dragleave fire again for every descendant the cursor crosses, so a
+  // plain add/remove pair flickers. Count depth instead and clear on drop.
+  let depth = 0;
+  drop.addEventListener('dragenter', ev => {
+    ev.preventDefault();
+    if (++depth === 1) drop.classList.add('over');
+  });
+  drop.addEventListener('dragover', ev => ev.preventDefault());
+  drop.addEventListener('dragleave', ev => {
+    ev.preventDefault();
+    if (--depth <= 0) { depth = 0; drop.classList.remove('over'); }
+  });
+
+  // A file dropped anywhere else would otherwise navigate the tab to that file.
+  ['dragover', 'drop'].forEach(e =>
+    document.addEventListener(e, ev => ev.preventDefault()));
+
+  drop.addEventListener('drop', async ev => {
+    ev.preventDefault();
+    depth = 0;
+    drop.classList.remove('over');
+    const items = [...ev.dataTransfer.items].map(i => i.webkitGetAsEntry()).filter(Boolean);
+    status.textContent = 'Reading folders…';
+    for (const entry of items) {
+      const files = [];
+      await walk(entry, files);
+      if (files.length) stage(entry.name, files);
+    }
+    status.textContent = '';
+  });
+
+  // Recurse a dropped directory, tagging each file with its relative path.
+  function walk(entry, out, prefix = '') {
+    return new Promise(resolve => {
+      if (entry.isFile) {
+        entry.file(f => { out.push([f, prefix + entry.name]); resolve(); });
+      } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        const readAll = () => reader.readEntries(async batch => {
+          if (!batch.length) return resolve();
+          for (const e of batch) await walk(e, out, prefix + entry.name + '/');
+          readAll();
+        });
+        readAll();
+      } else resolve();
+    });
+  }
+
+  /* ---- staging: collect folders, upload only on demand ---- */
+  const stagedList = document.getElementById('staged');
+  const parseBtn = document.getElementById('parse-btn');
+  const clearBtn = document.getElementById('clear-staged');
+  let staged = [];   // [{ name, files: [[File, relativePath], …] }]
+
+  // The picker hands back a flat FileList; group it by its top-level folder so
+  // selecting several folders in a row stages them separately.
+  picker.addEventListener('change', () => {
+    const groups = new Map();
+    for (const f of picker.files) {
+      const rel = f.webkitRelativePath || f.name;
+      const top = rel.split('/')[0];
+      if (!groups.has(top)) groups.set(top, []);
+      groups.get(top).push([f, rel]);
+    }
+    groups.forEach((files, name) => stage(name, files));
+    picker.value = '';   // let the same folder be re-picked later
+  });
+
+  function stage(name, files) {
+    if (staged.some(s => s.name === name)) {
+      status.textContent = `“${name}” is already staged.`;
+      return;
+    }
+    status.textContent = '';
+    staged.push({ name, files });
+    renderStaged();
+  }
+
+  function renderStaged() {
+    stagedList.innerHTML = '';
+    staged.forEach((s, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="staged-name mono"></span>
+                      <span class="staged-count faint"></span>
+                      <button type="button" class="row-x" aria-label="Remove">×</button>`;
+      li.querySelector('.staged-name').textContent = s.name;
+      li.querySelector('.staged-count').textContent =
+        `${s.files.length} file${s.files.length === 1 ? '' : 's'}`;
+      li.querySelector('.row-x').addEventListener('click', () => {
+        staged.splice(i, 1);
+        renderStaged();
+      });
+      stagedList.appendChild(li);
+    });
+    clearBtn.hidden = staged.length === 0;
+    const total = staged.reduce((n, s) => n + s.files.length, 0);
+    parseBtn.textContent = staged.length
+      ? `Upload ${staged.length} folder${staged.length === 1 ? '' : 's'} (${total} files)`
+      : parseBtn.dataset.label;
+  }
+
+  clearBtn.addEventListener('click', () => {
+    staged = [];
+    status.textContent = '';
+    renderStaged();
+  });
+
+  const typedPaths = () =>
+    [...pathList.querySelectorAll('input[name=path]')].map(i => i.value.trim()).filter(Boolean);
+
+  /* One button for the whole card: uploads staged folders when there are any,
+     carrying typed paths along; otherwise just submits the paths. */
+  parseBtn.addEventListener('click', async () => {
+    const paths = typedPaths();
+    if (!staged.length) {
+      if (!paths.length) return fieldError('Enter a path, or add a folder below.');
+      return pathForm.submit();
+    }
+    const fd = new FormData();
+    let total = 0;
+    for (const s of staged) {
+      for (const [f, path] of s.files) { fd.append('files', f, path); total++; }
+    }
+    paths.forEach(p => fd.append('path', p));
+    const nameField = document.getElementById('ws-name');
+    fd.append('name', nameField ? nameField.value.trim() : '');
+    fd.append('new', document.getElementById('ws-new').value);
+    fd.append('csrf', '{{ csrf_token() }}');
+    parseBtn.disabled = true;
+    status.textContent = `Uploading ${total} files…`;
+    const res = await fetch('{{ url_for("upload") }}', { method: 'POST', body: fd });
+    if (res.redirected) location.href = res.url;
+    else document.open(), document.write(await res.text()), document.close();
+  });
+  renderStaged();
+</script>
+{% endblock %}

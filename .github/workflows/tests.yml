@@ -1,0 +1,63 @@
+# The application's two suites and installable package, on every PR and push
+# to main. There are no model calls or containers: the docker tier is the
+# nightly docker-tests workflow. Hosted runner time uses
+# the account's Actions allowance. uv is a test tool; Flask is the app's
+# only Python dependency.
+#
+# Nothing shared is installed, because nothing shared is imported: the backend
+# is this repository's own code under app/nullius/ and imports only the
+# standard library. The Harbor build tests invoke uv against offline fixtures;
+# only the route suite needs Flask.
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NULLIUS_HOME: /tmp/nullius-test-profile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: actionlint
+        # Lints the workflow YAML and its ${{ }} expressions — a class of
+        # error nothing else catches until it runs. Checksum-pinned binary
+        # rather than a third-party action (repo law: GitHub-owned actions
+        # only).
+        run: |
+          curl -sLO https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint_1.7.12_linux_amd64.tar.gz" | sha256sum -c -
+          tar xzf actionlint_1.7.12_linux_amd64.tar.gz actionlint
+          ./actionlint -shellcheck= .github/workflows/*.yml
+      - name: install test tool
+        # Offline Harbor build fixtures need uv/uvx, not an installed Harbor.
+        run: python -m pip install --quiet uv==0.13.1
+      - name: backend suite
+        # No application dependencies: the backend imports the standard library.
+        run: python3 app/tests/parallel.py
+      - name: install Flask
+        # The only dependency, and only the route suite needs it.
+        run: pip install --quiet -r app/requirements.txt
+      - name: route suite
+        # Includes the recipe-compilation tests, which need Node.
+        run: python3 app/tests/parallel.py app/ui_tests
+      - name: installed package
+        # Temporary installs only; no publication or stored artifact.
+        run: |
+          uv build --wheel --out-dir "$RUNNER_TEMP/nullius-dist"
+          python3 app/packaging/verify.py "$RUNNER_TEMP/nullius-dist/"*.whl

@@ -1,0 +1,10 @@
+{
+  "schema": "nullius.agent/v1",
+  "key": "worker",
+  "label": "Worker",
+  "summary": "A command agent that does the task where it is started: the image's working directory, which it says, and whether it can see the task's check.",
+  "start": {"command": ["sh", "{here}/work.sh", "{prompt}"]},
+  "model": {"apis": ["chat"], "env": {"OPENAI_BASE_URL": "{base_url}"}},
+  "offers": ["agent.task/v1", "agent.workspace/v1"],
+  "proven": {"agent.task/v1": {"on": "2026-10-12", "passed": "1/1"}, "agent.workspace/v1": {"on": "2026-10-12", "passed": "1/1"}}
+}

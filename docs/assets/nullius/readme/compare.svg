@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 350" width="800" height="350" role="img" aria-labelledby="compare-title compare-desc"><title id="compare-title">Compare</title><desc id="compare-desc">Compare the same task, spot the different outcome, then open each trial’s evidence. Conceptual animation, not an evaluation result.</desc><style>
+text{font-family:Arial,sans-serif;fill:#dedfe2;font-size:17px} .muted{fill:#a1a7b1;font-size:13px}.line{stroke:#474d56;stroke-width:1.5;fill:none}.ink{stroke:#dedfe2;stroke-width:1.6;fill:none}.blue{stroke:#96b8e8;stroke-width:2;fill:none}.fill{fill:#202328;stroke:#474d56;stroke-width:1.5}.dot{fill:#96b8e8}.ok{stroke:#a1cca9;fill:none;stroke-width:2}.warn{stroke:#dfb680;fill:none;stroke-width:2} .float{animation:float 6s cubic-bezier(.22,1,.36,1) infinite}.arrive{animation:arrive 6s cubic-bezier(.22,1,.36,1) infinite}.reveal{animation:reveal 6s ease infinite}.scan{animation:scan 6s ease-in-out infinite}.pulse{animation:pulse 6s ease infinite}.draw{stroke-dasharray:200;animation:draw 6s ease infinite}.left{animation:left 6s cubic-bezier(.22,1,.36,1) infinite}.right{animation:right 6s cubic-bezier(.22,1,.36,1) infinite}.delay{animation-delay:-2s}.delay2{animation-delay:-4s}.packet{animation:packet 6s ease-in-out infinite} .expand{animation:expand 6s cubic-bezier(.22,1,.36,1) infinite;transform-box:fill-box;transform-origin:center}.slide{animation:slide 6s ease-in-out infinite}
+@keyframes float{0%,12%,92%,100%{transform:translateY(-12px)}40%,72%{transform:translateY(0)}}
+@keyframes arrive{0%,10%,94%,100%{transform:translateX(-70px);opacity:.65}38%,76%{transform:translateX(0);opacity:1}}
+@keyframes reveal{0%,24%,90%,100%{opacity:.4}40%,78%{opacity:1}}
+@keyframes scan{0%,12%,100%{transform:translateX(-110px)}65%,82%{transform:translateX(110px)}}
+@keyframes pulse{0%,25%,90%,100%{opacity:.5}42%,78%{opacity:1}}
+@keyframes draw{0%,22%,100%{stroke-dashoffset:200;opacity:.2}50%,82%{stroke-dashoffset:0;opacity:1}}
+@keyframes left{0%,10%,95%,100%{transform:translateX(-45px)}38%,80%{transform:translateX(0)}}
+@keyframes right{0%,10%,95%,100%{transform:translateX(45px)}38%,80%{transform:translateX(0)}}
+@keyframes packet{0%,8%{offset-distance:0%;opacity:0}15%{opacity:1}70%{offset-distance:100%;opacity:1}83%,100%{offset-distance:100%;opacity:0}}
+@keyframes expand{0%,12%,96%,100%{transform:scaleX(.75);opacity:.6}42%,78%{transform:scaleX(1);opacity:1}}
+@keyframes slide{0%,10%,95%,100%{transform:translateY(16px);opacity:.4}40%,80%{transform:translateY(0);opacity:1}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;opacity:1!important}}
+.tone-blue{stroke:#96b8e8!important;fill:#222d3c!important}.tone-teal{stroke:#89c8bd!important;fill:#20312f!important}.tone-amber{stroke:#dfb680!important;fill:#332d24!important}.signal{fill:#96b8e8}.signal-teal{fill:#89c8bd}.signal-amber{fill:#dfb680}.tone-green{stroke:#a1cca9!important}.ring{fill:none;stroke:#a1cca9;stroke-width:1.4;transform-box:fill-box;transform-origin:center;animation:ring 6s ease-out infinite}.flowline{stroke-dasharray:5 9;animation:flowline 6s linear infinite}.ink-in{stroke-dasharray:70;animation:ink-in 6s ease infinite}.settle{animation:settle 6s ease infinite}.late{animation-delay:-.7s}.later{animation-delay:-1.4s}
+@keyframes ring{0%,32%,100%{transform:scale(.8);opacity:0}42%{transform:scale(1);opacity:.6}72%,90%{transform:scale(1.45);opacity:0}}
+@keyframes flowline{0%{stroke-dashoffset:0}100%{stroke-dashoffset:-84}}
+@keyframes ink-in{0%,30%,98%,100%{stroke-dashoffset:70;opacity:.3}52%,82%{stroke-dashoffset:0;opacity:1}}
+@keyframes settle{0%,32%,95%,100%{opacity:.25}52%,82%{opacity:1}}
+.evidence-focus{fill:#96b8e8;fill-opacity:.07;stroke:#96b8e8;stroke-width:1.5;animation:evidence-focus 8s cubic-bezier(.22,1,.36,1) infinite}.difference-focus{stroke:#dfb680;stroke-width:1.3;animation:difference-focus 6s ease infinite}
+@keyframes evidence-focus{0%,18%{transform:translateY(0);stroke:#96b8e8}25%,43%{transform:translateY(62px);stroke:#89c8bd}50%,68%{transform:translateY(124px);stroke:#dfb680}75%,93%{transform:translateY(186px);stroke:#a1cca9}100%{transform:translateY(0);stroke:#96b8e8}}
+@keyframes difference-focus{0%,15%,95%,100%{opacity:.1}35%,80%{opacity:.8}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;opacity:1!important}.evidence-focus{stroke:#474d56;fill:none}.difference-focus{opacity:.3!important}}
+</style><rect width="800" height="350" fill="#18191b"/><text x="400" y="33" text-anchor="middle" class="muted">Same benchmark · same task</text>
+<rect x="65" y="53" width="670" height="217" rx="4" class="fill"/>
+<path d="M65 95H735M65 142H735M65 187H735M65 229H735M226 53V270M480 53V270" class="line"/>
+<text x="85" y="80" class="muted">Shared task</text><text x="353" y="80" text-anchor="middle">Run A</text><text x="608" y="80" text-anchor="middle">Run B</text>
+<text x="85" y="124" style="font-size:14px">A shared task</text>
+<path d="M251 119H456M505 119H710" class="blue flowline"/>
+<text x="85" y="170" class="muted">Outcome</text><g><circle cx="259" cy="165" r="4" fill="#a1cca9"/><text x="275" y="171">Resolved</text><circle cx="514" cy="165" r="4" fill="#dfb680"/><text x="530" y="171">Agent error</text></g>
+<text x="85" y="214" class="muted">Total time</text><text x="253" y="215">3.1m</text><text x="508" y="215">4.7m</text>
+<text x="85" y="256" class="muted">Tokens</text><text x="253" y="256">178.9k</text><text x="508" y="256">—</text>
+<rect x="227" y="143" width="507" height="43" fill="#332d24" fill-opacity=".12" class="difference-focus"/>
+<path d="M353 272V294M608 272V294" class="blue ink-in"/><text x="353" y="315" text-anchor="middle" class="muted">Open trial evidence</text><text x="608" y="315" text-anchor="middle" class="muted">Open trial evidence</text></svg>

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ entry.label ~ ' kit' if entry else 'Kits' }} — Nullius{% endblock %}
+{% block crumb %}/ <a href="{{ url_for('kits_page') }}">kits</a>{% if entry %} / {{ entry.label }}{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
+{% block body %}
+{% if entry %}
+{% set d = entry.d %}
+<div class="std-index"><section class="std-card">
+  <div class="std-head"><div><h1>{{ entry.label }} kit</h1><div class="std-tags"><code class="std-tag">{{ entry.port }}</code><span class="std-tag">v{{ entry.version }}</span><span class="std-tag">{{ d.datasets|sum(attribute='units') }} checks</span></div></div></div>
+  <p class="std-summary">{{ d.summary }}</p>
+  <section class="std-source"><h2>Pass criteria</h2><p>{{ d.score.says }}.</p><p>Every basic check must pass to prove this port.</p></section>
+  {% if d.get('skills') %}<section class="std-source"><h2>Skills</h2><dl class="std-source-grid">{% for name, description in d.skills.items() %}<div><dt>{{ name }}</dt><dd>{{ description }}</dd></div>{% endfor %}</dl><p>Skills are recorded separately from the basic port proof.</p></section>{% endif %}
+  {% if d.get('controls') %}<section class="std-source"><h2>Controls</h2><dl class="std-source-grid">
+    {% for key, label in [('nop', 'Null control'), ('oracle', 'Reference control')] %}{% set control = d.controls.get(key) %}
+    {% if control %}<div><dt>{{ label }}</dt><dd>{{ control['from'] }}</dd></div>{% endif %}
+    {% endfor %}
+  </dl></section>{% endif %}
+  <p>Run this kit from {{ 'an' if d.family == 'agent' else 'a' }} <a href="{{ url_for('agents_page' if d.family == 'agent' else 'features_page') }}">{{ 'agent' if d.family == 'agent' else 'capability' }}</a>’s <b>Prove its ports</b> section.</p>
+</section>
+  {% if d.get('check_details') %}
+  <section class="std-card kit-checks" aria-labelledby="kit-checks-title">
+    <h2 id="kit-checks-title">Checks</h2>
+    {% for id, check in d.check_details.items() %}
+    <details class="kit-check">
+      <summary class="kit-check-heading"><span class="kit-check-name">{{ check.label }}</span><code>{{ id }}</code><span class="std-tag">{{ 'Skill' if id in d.get('skills', {}) else 'Basic' }}</span></summary>
+      <p>{{ check.task }}</p><p class="muted"><b>Pass:</b> {{ check.passes }}</p>
+    </details>
+    {% endfor %}
+    <details class="kit-check-source kit-shared-source">
+      <summary class="kit-check-heading">Shared test source</summary>
+      {% for source in entry.sources %}<h4>{{ source.name }}</h4><pre tabindex="0" aria-label="{{ source.name }}"><code>{% for token in source.tokens %}{% if token.kind %}<span class="py-{{ token.kind }}">{{ token.text }}</span>{% else %}{{ token.text }}{% endif %}{% endfor %}</code></pre>{% endfor %}
+    </details>
+  </section>
+  {% endif %}
+</div>
+{% else %}
+<div class="bench-index">
+  <header class="bench-index-head"><div><h1>Kits</h1><p class="bench-count">{{ entries|length }} conformance kits</p></div><label class="bench-find">Find<input type="search" id="bench-find" placeholder="Name, port, check" autocomplete="off"></label></header>
+  <div class="bench-filters"><div class="bench-cats" role="group" aria-label="Kit family" data-filter="family">
+    {% for value, label in [('', 'All'), ('agent', 'Agents'), ('capability', 'Capabilities')] %}<button type="button" class="bench-cat{{ ' on' if not value }}" data-value="{{ value }}" aria-pressed="{{ 'false' if value else 'true' }}">{{ label }}</button>{% endfor %}
+  </div></div>
+  <div class="bench-grid">
+    {% for e in entries %}<a class="bench-card" data-keys="{{ e.d.key }}" data-family="{{ e.d.family }}" data-find="{{ (e.label ~ ' ' ~ e.port ~ ' ' ~ e.d.summary ~ ' ' ~ e.d.get('check_details', {}))|lower }}" href="{{ url_for('kit_page', key=e.d.key) }}">
+      <div class="bench-card-top"><span class="std-tag">{{ e.d.family }}</span><span class="bench-harness">v{{ e.version }}</span></div>
+      <div class="bench-card-title">{{ e.label }}</div>
+      <div class="bench-card-domain"><code>{{ e.port }}</code></div>
+      <div class="bench-stats"><div><b>{{ e.d.datasets|sum(attribute='units') }}</b><span>checks</span></div></div>
+    </a>{% endfor %}
+  </div>
+  <p class="bench-none" id="bench-none" hidden>No kits match.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}{% if not entry %}<script src="{{ url_for('static', filename='catalogue/catalogue.js') }}"></script>{% endif %}{% endblock %}

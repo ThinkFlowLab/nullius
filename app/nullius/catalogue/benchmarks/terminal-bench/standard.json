@@ -1,0 +1,160 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "terminal-bench",
+  "label": "Terminal-Bench 2.0",
+  "summary": "Each task is its own container, built from the task's Dockerfile as published; the agent works in it from the image's working directory, and the task's own tests are copied in and run there once it has ended.",
+  "family": "agent",
+  "needs": [
+    "agent.workspace/v1"
+  ],
+  "upstream": {
+    "repository": "https://github.com/laude-institute/terminal-bench-2",
+    "tested": "2fd12b88aafdd04a52c298e3940bcb189f9766d6",
+    "tested_date": "2026-04-29",
+    "license": "Apache-2.0"
+  },
+  "driver": {
+    "command": [
+      "python3",
+      "{here}/driver.py"
+    ]
+  },
+  "datasets": [
+    {
+      "id": "small",
+      "label": "Eight tasks that build fast",
+      "units": 8,
+      "environment": "task"
+    },
+    {
+      "id": "offline",
+      "label": "Every task whose reference solution downloads nothing",
+      "units": 53,
+      "environment": "task"
+    }
+  ],
+  "units": {
+    "noun": "task",
+    "nouns": "tasks"
+  },
+  "environments": {
+    "task": {
+      "summary": "The task's own image, built from its environment folder at the pinned commit - its own FROM, as published - with the agent added at run time.",
+      "image": "own"
+    }
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "Nullius: no agent runs; the task's tests run on its container as its image left it."
+    },
+    "oracle": {
+      "source": "official",
+      "from": "The task's solution/solve.sh, the authors' reference solution, run in the task's container."
+    }
+  },
+  "score": {
+    "kind": "pass",
+    "says": "the task's own tests/test.sh, run in its container after the agent ends, writes reward 1"
+  },
+  "limits": {
+    "turn_seconds": 900
+  },
+  "options": {
+    "image": {
+      "summary": "Whether each task uses its pinned prebuilt container image or builds one from its published Dockerfile.",
+      "values": [
+        "pull",
+        "build"
+      ],
+      "default": "pull",
+      "about": {
+        "pull": "The authors' prebuilt image, as they froze it: what Harbor runs.",
+        "build": "Built now from the task's Dockerfile: its packages are whatever the mirrors serve today."
+      }
+    }
+  },
+  "proven": {
+    "small": {
+      "units": {
+        "units": 8,
+        "passed": "8 ids, the same twice, unique",
+        "on": "2026-11-03"
+      },
+      "leak": {
+        "units": 8,
+        "looked_for": 0,
+        "short": 0,
+        "passed": "8/8",
+        "note": "8 unit(s) whose oracle gave nothing to look for",
+        "on": "2026-11-03"
+      },
+      "nop": {
+        "passed": "0/8",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 8,
+        "job": "2026-11-03__05-20-12__terminal-bench__small__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-03"
+      },
+      "oracle": {
+        "passed": "8/8",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 8,
+        "job": "2026-11-03__05-20-12__terminal-bench__small__prove-oracle",
+        "source": "official",
+        "on": "2026-11-03"
+      }
+    },
+    "offline": {
+      "units": {
+        "units": 53,
+        "passed": "53 ids, the same twice, unique",
+        "on": "2026-11-03"
+      },
+      "leak": {
+        "units": 53,
+        "looked_for": 0,
+        "short": 0,
+        "passed": "53/53",
+        "note": "53 unit(s) whose oracle gave nothing to look for",
+        "on": "2026-11-03"
+      },
+      "failed": {
+        "nop": {
+          "passed": "0/53",
+          "value": 0.0,
+          "expect": {
+            "at_most": 0.0
+          },
+          "units": 53,
+          "job": "2026-11-03__05-20-12__terminal-bench__offline__prove-nop",
+          "on": "2026-11-03",
+          "problems": [
+            "2 unit(s) ended in an error before the score: read the job's trials"
+          ]
+        },
+        "oracle": {
+          "passed": "45/53",
+          "value": 0.8491,
+          "expect": {
+            "at_least": 1.0
+          },
+          "units": 53,
+          "job": "2026-11-03__05-20-12__terminal-bench__offline__prove-oracle",
+          "on": "2026-11-03",
+          "problems": [
+            "3 unit(s) ended in an error before the score: read the job's trials",
+            "pass rate 0.8491, expected at least 1.0"
+          ]
+        }
+      }
+    }
+  }
+}

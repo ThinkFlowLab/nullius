@@ -1,0 +1,20 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "ownbench",
+  "label": "Own-image bench",
+  "summary": "One task in its own image: the agent leaves a file in the image's working directory, and the task's check, copied in afterwards, looks for it there.",
+  "family": "agent",
+  "needs": ["agent.task/v1", "agent.workspace/v1"],
+  "driver": {"command": ["python3", "{here}/driver.py"]},
+  "datasets": [{"id": "all", "units": 2, "environment": "task"}],
+  "units": {"noun": "task", "nouns": "tasks"},
+  "score": {"kind": "pass", "says": "the task's check found the file in its container, and the agent never saw the check"},
+  "limits": {"turn_seconds": 60},
+  "environments": {
+    "task": {"summary": "The task's own image, from its environment folder.", "image": "own"}
+  },
+  "controls": {
+    "nop": {"source": "nullius", "from": "nothing"},
+    "oracle": {"source": "official", "from": "the task's solve.sh, run in its container"}
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "schema": "nullius.agent/v1",
+  "key": "reference",
+  "label": "Example agent",
+  "example": true,
+  "summary": "Nullius's example of the protocol, to read or copy.",
+  "upstream": {
+    "version": "1",
+    "license": "same as Nullius"
+  },
+  "start": {
+    "acp": [
+      "python3",
+      "{here}/agent.py"
+    ]
+  },
+  "model": {
+    "apis": [
+      "chat"
+    ],
+    "env": {
+      "OPENAI_BASE_URL": "{base_url}",
+      "OPENAI_API_KEY": "{key}",
+      "REFERENCE_MODEL": "{model}"
+    }
+  },
+  "offers": [
+    "agent.task/v1",
+    "agent.workspace/v1",
+    "agent.tools/v1",
+    "agent.conversation/v1"
+  ],
+  "proven": {
+    "agent.task/v1": {
+      "passed": "3/3",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__14-14-35__kit__agent-task-v1__reference"
+    },
+    "agent.workspace/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__14-15-19__kit__agent-workspace-v1__reference"
+    },
+    "agent.tools/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1",
+      "kit_version": 2,
+      "backend": "docker",
+      "job": "2026-11-02__14-15-59__kit__agent-tools-v1__reference",
+      "skills": {
+        "decoys": {
+          "passed": "1/1",
+          "ok": true
+        },
+        "chain": {
+          "passed": "1/1",
+          "ok": true
+        },
+        "retry": {
+          "passed": "1/1",
+          "ok": true
+        }
+      }
+    },
+    "agent.conversation/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__14-17-27__kit__agent-conversation-v1__reference"
+    }
+  }
+}

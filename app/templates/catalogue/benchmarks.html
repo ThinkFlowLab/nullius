@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Benchmarks — Nullius{% endblock %}
+{% block crumb %}/ benchmarks{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
+{% block body %}
+{% set listed = cat.listed_benchmarks %}
+{#- a route's name, the same on the filter chips and on the cards' bubbles #}
+{% set run_labels = {'harbor': 'Harbor', 'standard': 'Nullius'} %}
+{% set run_names = {'harbor': 'Harbor', 'standard': 'the Nullius standard'} %}
+{% set count = namespace(datasets=0) %}{% for b in listed %}{% set count.datasets = count.datasets + b.datasets|length %}{% endfor %}
+<div class="bench-index">
+  <header class="bench-index-head">
+    <div>
+      <h1>Benchmarks</h1>
+      <p class="bench-count">{{ listed|length }} benchmarks · {{ count.datasets }} datasets</p>
+    </div>
+    <div class="bench-head-tools">
+      <label class="bench-find">Find
+        <input type="search" id="bench-find" placeholder="Name, category, dataset" autocomplete="off">
+      </label>
+      <button type="button" class="btn" id="std-how-open" aria-haspopup="dialog">+ Add a benchmark</button>
+    </div>
+  </header>
+
+  {#- Two routes in: the Nullius standard (a paper's own scripts as its Original setup), or Harbor. The assistant asks
+      which (the import-benchmark skill); by hand, each route has its own way. #}
+  {% from "catalogue/add_dialog.html" import add_dialog %}
+  {% call add_dialog('a benchmark', prompts, 'benchmark') %}
+    <p>Two ways a benchmark runs here. Pick its route, then follow it.</p>
+    <ul class="std-routes">
+      <li><span class="run-tag rt-standard">Nullius</span><div><b>Through the Nullius standard</b>
+        <p>Any agent over ACP, the benchmark's own code as its driver: a <code>standard.json</code> and a <code>driver.py</code> in <code>{{ catalogue_dir }}/benchmarks/&lt;key&gt;/</code>, its controls proven with <code>cli prove</code>. A paper's own scripts run as its Original setup.</p>
+        <p>The steps: <code>docs/standard.md</code>, "Import by hand", "A benchmark".</p></div></li>
+      <li><span class="run-tag rt-harbor">Harbor</span><div><b>A dataset Harbor already runs</b>
+        <p>In Harbor's registry or Hub: name it, read it from Harbor, check the entry, save.</p>
+        <a class="btn" href="{{ url_for('benchmark_new') }}">Add a Harbor benchmark</a></div></li>
+    </ul>
+  {% endcall %}
+
+  <div class="bench-filters">
+    <div class="bench-cats" role="group" aria-label="Category" data-filter="category">
+      <button type="button" class="bench-cat on" data-value="" aria-pressed="true">All</button>
+      {% for c in cat.categories %}<button type="button" class="bench-cat" data-value="{{ c }}" aria-pressed="false">{{ c }}</button>
+      {% endfor %}
+    </div>
+    <div class="bench-cats" role="group" aria-label="Runs with" data-filter="runs">
+      <button type="button" class="bench-cat on" data-value="" aria-pressed="true">Any runner</button>
+      {% for r in ['standard', 'harbor'] %}<button type="button" class="bench-cat" data-value="{{ r }}" aria-pressed="false" title="Runs with {{ run_names[r] }}">{{ run_labels[r] }}</button>
+      {% endfor %}
+    </div>
+    <div class="bench-cats" role="group" aria-label="Origin" data-filter="origin">
+      <button type="button" class="bench-cat on" data-value="" aria-pressed="true">Any origin</button>
+      {% for o in origins %}<button type="button" class="bench-cat" data-value="{{ o }}" aria-pressed="false">{{ o|capitalize }}</button>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# Two shelves: the official benchmarks, then the experiments - adapted here,
+     flaws still to find. A card opens the benchmark's own page. #}
+  {% for state, heading in [('official', 'Official'), ('experiment', 'Experiments')] %}
+  {% set shelf = listed|selectattr('origin', 'equalto', state)|list %}
+  {% if shelf %}
+  <section class="bench-shelf st-{{ state }}" data-shelf="{{ state }}" aria-labelledby="shelf-{{ state }}">
+    <h2 id="shelf-{{ state }}"><span class="shelf-dot" aria-hidden="true"></span>{{ heading }} <span class="shelf-n">{{ shelf|length }}</span></h2>
+    <div class="bench-grid">
+      {% for b in shelf %}{% set ds = cat.datasets_of(b) %}{% set tasks = cat.tasks_of(b) %}
+      <a class="bench-card" href="{{ url_for('benchmark_page', key=b.key) }}" data-category="{{ b.category }}" data-origin="{{ b.origin }}" data-runs="{{ ((['standard'] if 'standard' in b.harness else []) + (['harbor'] if 'harbor' in b.harness else []))|join(' ') }}"
+         data-keys="{{ ([b.key] + b.datasets)|join(' ') }}"
+         data-find="{{ ([b.title, b.category, b.key] + ds|map(attribute='title')|list + b.datasets)|join(' ')|lower }}">
+        {% set runs = (['harbor'] if 'harbor' in b.harness else []) + (['standard'] if 'standard' in b.harness else []) %}
+        <div class="bench-card-tags">{% if b.category %}<span class="cat-tag">{{ b.category }}</span>{% endif %}<span class="origin-tag {{ b.origin }}">{{ b.origin|capitalize }}</span></div>
+        <div class="bench-card-title"><svg class="bench-mark" aria-hidden="true"><use href="{{ url_for('static', filename='catalogue/marks.svg') }}#bm-{{ b.key }}"/></svg>{{ b.title }}</div>
+        {% if b.domain %}<div class="bench-card-domain">{{ b.domain }}</div>{% endif %}
+        <div class="bench-card-runs run-tags" aria-label="Runs with">{% for r in runs %}<span class="run-tag rt-{{ r }}" title="Runs with {{ run_names[r] }}">{{ run_labels[r] }}</span>{% endfor %}
+</div>
+        {% if setup.get(b.key) %}<div class="bench-card-setup" title="Some of its options need {{ setup[b.key]|join(', ') }} installed on the machine it runs on: see its page"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10.5 2.5a3 3 0 0 0-3.9 3.9L2.5 10.5v3h3l4.1-4.1a3 3 0 0 0 3.9-3.9l-2 2-2-.5-.5-2z"/></svg>needs {{ setup[b.key]|join(', ') }}</div>{% endif %}
+        <div class="bench-stats">
+          <div><b>{{ tasks[0] }}</b><span>{{ tasks[1] }}</span></div>
+          <div><b>{{ ds|length }}</b><span>{{ 'datasets' if ds|length != 1 else 'dataset' }}</span></div>
+          {% if b.scoring %}<div><b class="word">{{ b.scoring }}</b><span>scored by</span></div>{% endif %}
+        </div>
+        {% if b.blocker %}<div class="bench-card-blocker">{{ b.blocker[:1]|upper ~ b.blocker[1:] }}</div>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% endfor %}
+  <p class="bench-none" id="bench-none" hidden>No benchmark matches.</p>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='catalogue/catalogue.js') }}"></script><script src="{{ url_for('static', filename='catalogue/add.js') }}"></script>{% endblock %}

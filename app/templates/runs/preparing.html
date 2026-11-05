@@ -1,0 +1,14 @@
+{% from 'runs/_execution.html' import execution_strip %}
+{% extends "base.html" %}
+{% block title %}{{ job_id }} — Nullius{% endblock %}
+{% block crumb %}/ {{ job_id }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/live-board.css') }}">{% endblock %}
+{% block body %}
+<header class="run-header">
+  <div class="page-title"><h1>{{ job_id }}</h1></div>
+  {% if ex.plan.runner == 'harbor' %}<p class="subtitle">Started from the builder. This page becomes the live board as soon as Harbor writes the job.</p>
+  {% elif ex.plan.runner == 'standard' %}<p class="subtitle">Started from the builder with Nullius. This page becomes the live board as soon as the install is done and the run starts.</p>
+  {% else %}<p class="subtitle">Started from the builder with the {{ ex.plan.runner }} runner. This page becomes the live board as soon as this arm's questions are chosen, after the install.</p>{% endif %}
+</header>
+{{ execution_strip(ex, csrf, waiting=true, own=own) }}
+{% endblock %}

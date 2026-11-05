@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nullius-eval"
+version = "0.1.0rc1"
+description = "Bring anything, run it, prove it."
+readme = "app/packaging/PYPI.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "app/static/fonts/*-OFL.txt"]
+maintainers = [{name = "ThinkFlowLab", email = "nullius.thinkflowlab@proton.me"}]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://thinkflowlab.ai/nullius/"
+Documentation = "https://thinkflowlab.ai/nullius/docs/"
+Repository = "https://github.com/thinkflowlab/nullius"
+Issues = "https://github.com/thinkflowlab/nullius/issues"
+Releases = "https://github.com/thinkflowlab/nullius/releases"
+
+[project.scripts]
+nullius = "nullius.cli:main"
+
+[tool.uv]
+# Source commands keep their explicit --with-requirements environment; they
+# must not silently install a second nullius beside PYTHONPATH=app.
+managed = false
+
+[tool.setuptools]
+include-package-data = false
+packages = [
+  "nullius", "nullius.catalogue", "nullius.compare", "nullius.harbor",
+  "nullius.importers", "nullius.judge", "nullius.recipes", "nullius.runs",
+  "nullius.standard", "nullius.traces", "_nullius_app", "_nullius_app.web",
+]
+
+[tool.setuptools.package-dir]
+nullius = "app/nullius"
+_nullius_app = "app"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["app/requirements.txt"]}
+
+[tool.setuptools.package-data]
+"nullius.catalogue" = ["agents/*/*.json", "agents/*/*.py", "agents/*/*.toml", "agents/*/*.yaml", "benchmarks/*/*.json", "benchmarks/*/*.py", "capabilities/*/*.json", "capabilities/*/*.py"]
+"nullius.standard" = ["kits/*/*.json", "kits/*/*.py"]
+"nullius.judge" = ["floors.json"]
+_nullius_app = ["templates/**/*.html", "static/**/*.css", "static/**/*.js", "static/**/*.svg", "static/**/*.png", "static/**/*.json", "static/**/*.woff2", "static/**/*.ttf", "static/**/*.txt", "static/**/*.md", "requirements.txt", ".env.example"]

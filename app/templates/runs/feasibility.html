@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Feasibility · {{ job.job_id }} — Nullius{% endblock %}
+{% block crumb %}/ <a href="{{ url_for('job', job_id=job.job_id) }}">{{ job.job_id }}</a> / feasibility{% endblock %}
+{% block head %}
+<style>
+  .feas-controls { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 18px; font-size: 13px; }
+  .feas-controls .fk { color: var(--text-dim); font-size: 10px; letter-spacing: .7px; text-transform: uppercase; display: block; margin-bottom: 4px; }
+  .feas-controls > div { min-width: 0; }
+  .feas-side { white-space: nowrap; }
+  .feas-side.absent { color: var(--text-dim); font-style: italic; }
+  .feas-summary { align-items: center; }
+  .feas-headline { margin-right: 8px; font-size: 14px; }
+  .feas-headline strong { font-size: 20px; font-weight: 500; }
+  .tag.fv-feasible { --outcome-color: var(--resolved); }
+  .tag.fv-unexpected_reward { --outcome-color: var(--patch_failed_tests); }
+  .tag.fv-task_broken { --outcome-color: var(--agent_error); }
+  .tag.fv-reference_rejected { --outcome-color: var(--failed_verification); }
+  .tag.fv-setup_failure { --outcome-color: var(--setup_error); }
+  .tag.fv-missing { --outcome-color: var(--unknown); }
+  .chip.fv-feasible::before { background: var(--resolved); }
+  .chip.fv-unexpected_reward::before { background: var(--patch_failed_tests); }
+  .chip.fv-task_broken::before { background: var(--agent_error); }
+  /* the class tags carry their colour like outcome tags do */
+  .tag[class*="fv-"] {
+    color: color-mix(in srgb, var(--outcome-color) 75%, var(--text));
+    background: color-mix(in srgb, var(--outcome-color) 16%, var(--surface));
+    border-color: color-mix(in srgb, var(--outcome-color) 42%, var(--border));
+    font-family: var(--sans); font-size: 12px; font-weight: 500; line-height: 1.45; padding: .22rem .55rem; border-radius: 5px;
+  }
+  .tag[class*="fv-"]::before { width: 7px; height: 7px; flex: none; background: var(--outcome-color); }
+  td[data-side] .badge { white-space: nowrap; display: inline-block; margin-top: 3px; }
+  .feas-broke { margin: .3rem 0 0; padding-left: 1rem; }
+  .feas-broke li { margin: .1rem 0; word-break: break-all; }
+  .chip.fv-reference_rejected::before { background: var(--failed_verification); }
+  .chip.fv-setup_failure::before { background: var(--setup_error); }
+  .chip.fv-missing::before { background: var(--unknown); }
+</style>
+{% endblock %}
+{% block body %}
+<header class="run-header">
+  <div class="page-title"><h1>Feasibility check</h1><span class="mono">{{ job.job_id }}</span></div>
+  <p class="subtitle" id="feasibility-meaning">
+    Is each task feasible: can an empty solution <strong>fail</strong>, and can a reference solution <strong>pass</strong>?
+    Harbor's <span class="mono">nop</span> and <span class="mono">oracle</span> controls answer that per task. It says nothing about whether an agent will succeed.
+  </p>
+</header>
+
+<div class="feas-controls" id="feasibility-executed" aria-label="Scope and controls">
+  <div><span class="fk">Task scope</span><span id="feasibility-scope">{{ report.scope }}</span></div>
+  <div><span class="fk">Controls executed</span>
+    {% for c in report.executed %}<span class="mono" data-control="{{ c.control }}" title="{{ c.summary }}">{{ c.short }}</span>{% if not loop.last %}<span class="faint">&ensp;·&ensp;</span>{% endif %}{% else %}<span class="faint">none</span>{% endfor %}
+    {% for c in report.not_run %}<span class="faint">&ensp;·&ensp;</span><span class="faint" data-control-missing="{{ c }}">{{ c }} · not run</span>{% endfor %}
+  </div>
+</div>
+
+{% if report.caveat %}
+<div class="alert warn" id="feasibility-caveat">{{ report.caveat }}</div>
+{% endif %}
+
+{% if triage and triage.sides %}
+{# The judge's triage of the sides that did not behave: why, over that control's own small state.
+   The verdict column is feasibility.verdict's and stays so; this sits beside it, advisory. #}
+<div class="judgement-job" id="triage">
+  <span class="small"><strong>Triage</strong> <span class="badge" title="A judge model's reading of why a control side did not behave — bad task, bad environment, bad verifier — from that control's own recorded error, verifier text and transcript. Experimental beside the verdict, which it never changes.">experimental</span>
+    · {{ triage.judged }} of {{ triage.sides }} misbehaving control side{{ '' if triage.sides == 1 else 's' }} judged{% if triage.unjudged %}, {{ triage.unjudged }} not judged{% endif %}</span>
+  {% if triage.unjudged and triage.keyed %}
+  <form method="post" action="{{ url_for('judge_feasibility_route', job_id=job.job_id) }}" class="header-form" id="judge-triage">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn sm ghost" type="submit" title="Ask why each unjudged control side misbehaved: one call per side over its own state">Triage {{ triage.unjudged }} side{{ '' if triage.unjudged == 1 else 's' }}</button>
+  </form>
+  {% elif triage.unjudged %}<span class="small faint">System One not configured — <a href="{{ url_for('settings_page') }}#judge">set its key in Settings</a></span>{% endif %}
+</div>
+{% endif %}
+
+<div class="legend feas-summary" role="group" aria-label="Feasibility classes">
+  <span class="feas-headline" id="feasibility-count"><strong>{{ report.n_feasible }}</strong><span class="faint">/{{ report.rows|length }}</span> feasible</span>
+  {% for k in F_ORDER %}{% if report.counts[k] %}<span class="chip fv-{{ k }}">{{ F_LABELS[k] }} <b>{{ report.counts[k] }}</b></span>{% endif %}{% endfor %}
+</div>
+
+{% if report.rows %}
+<div class="table-wrap" role="region" aria-label="Bracketed tasks" tabindex="0">
+<table class="grid" id="feasibility-tasks">
+  <thead>
+    <tr>
+      <th>Task</th>
+      <th title="What the verifier said about doing nothing. It must reject, and no previously-passing test may fail.">nop</th>
+      <th title="What the verifier said about the reference solution. It must accept.">oracle</th>
+      <th>Feasibility</th>
+      <th>Why</th>
+      {% if triage and triage.sides %}<th title="The judge's reading of why a misbehaving control side did so: experimental, beside the verdict, never in its place">Triage <span class="badge">experimental</span></th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in report.rows %}
+    <tr data-task="{{ r.task_base }}" data-verdict="{{ r.verdict }}" data-validated="{{ 'yes' if r.validated else 'no' }}">
+      <td><span class="run-task-name" title="{{ r.task_name }}">{{ r.task_base }}</span></td>
+      {% for s in (r.nop, r.oracle) %}
+      <td data-side="{{ s.control }}">
+        {% if s.present %}<a class="feas-side" href="{{ url_for('trial', job_id=s.job_id, trial_name=s.trial_name) }}"><span class="tag oc-{{ s.outcome }}">{{ s.label }}</span></a>{% if s.exception_type %} <span class="err">{{ s.exception_type }}</span>{% endif %}{% if s.broke_tests %} <span class="badge danger" data-broke="{{ s.p2p_fail }}" title="Broke {{ s.p2p_fail }} previously-passing test(s): {{ s.p2p_failures|join(', ') }}">⚠ broke {{ s.p2p_fail }}</span>{% endif %}
+        {% else %}<span class="feas-side absent">not run</span>{% endif %}
+      </td>
+      {% endfor %}
+      <td><span class="tag fv-{{ r.verdict }}">{{ r.label }}</span></td>
+      <td class="faint">{% if r.verdict == 'task_broken' %}nop broke {{ r.nop.p2p_fail }} passing test{{ '' if r.nop.p2p_fail == 1 else 's' }}:<ul class="feas-broke">{% for name in r.nop.p2p_failures %}<li class="mono bad">{{ name }}</li>{% endfor %}</ul>{% else %}{{ r.why }}{% endif %}</td>
+      {% if triage and triage.sides %}<td class="triage-cell">
+        {%- set tr = triage.rows.get(r.task_base) or {} -%}
+        {%- for c in ('nop', 'oracle') if c in tr %}{% set a = tr[c] %}
+        <span class="small" data-triage="{{ c }}" data-cause="{{ a.answer.choice }}" title="{{ c }}: {{ a.answer.choice }} {{ '%.0f'|format((a.p or 0) * 100) }}%{% if a.confidence is not none %}, confidence {{ '%.0f'|format(a.confidence * 100) }}%{% endif %} — {% for k, v in a.answer.probabilities.items() %}{{ k }} {{ '%.0f'|format(v * 100) }}%{{ ' · ' if not loop.last }}{% endfor %}"><span class="muted">{{ c }}</span> <strong>{{ a.answer.choice }}</strong> <span class="mono small">{{ '%.0f'|format((a.p or 0) * 100) }}%</span></span>
+        {%- else %}{% if r.verdict != 'feasible' %}<span class="faint small">not judged</span>{% endif %}{% endfor -%}
+      </td>{% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="footnote">No control recorded a task for this run.</p>
+{% endif %}
+
+<h2>Feasibility classes</h2>
+<div class="glossary">
+  <dl class="cols">
+    {% for k in F_ORDER %}<div><dt><span class="tag fv-{{ k }}">{{ F_LABELS[k] }}</span></dt><dd>{{ F_DESCRIPTIONS[k] }}</dd></div>{% endfor %}
+  </dl>
+  <p class="footnote">A task is validated only when both controls are present and right; a missing or failed side is never ignored to call the other one enough.</p>
+</div>
+{% endblock %}

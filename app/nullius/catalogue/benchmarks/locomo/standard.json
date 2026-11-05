@@ -1,0 +1,265 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "locomo",
+  "label": "LoCoMo",
+  "summary": "Each question is a unit: its conversation's sessions go into the memory under test, the question is recalled against it, and LoCoMo's reader prompt answers from what came back; the answer is scored by token F1.",
+  "family": "capability",
+  "needs": [
+    "cap.memory/v1"
+  ],
+  "upstream": {
+    "repository": "https://github.com/snap-research/locomo",
+    "tested": "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376",
+    "tested_date": "2024-08-13",
+    "license": "CC-BY-NC-4.0"
+  },
+  "driver": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/driver.py"
+    ],
+    "install": {
+      "python": "3.9",
+      "pip": [
+        "torch==2.0.1",
+        "numpy==1.26.0",
+        "regex==2022.10.31",
+        "nltk==3.8.1",
+        "bert-score==0.3.13",
+        "transformers==4.35.0",
+        "tokenizers==0.14.1",
+        "huggingface-hub==0.17.3",
+        "pandas==2.1.2",
+        "matplotlib==3.7.0",
+        "requests==2.31.0",
+        "tqdm==4.64.1",
+        "tiktoken==0.5.2",
+        "openai==0.28.0",
+        "anthropic==0.32.0",
+        "google-generativeai==0.7.2",
+        "scipy==1.11.3",
+        "httpx==0.25.0",
+        "pydantic==1.10.13"
+      ]
+    }
+  },
+  "datasets": [
+    {
+      "id": "locomo10",
+      "label": "LoCoMo-10",
+      "path": "data/locomo10.json",
+      "sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+      "units": 1540
+    }
+  ],
+  "units": {
+    "noun": "question",
+    "nouns": "questions"
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "Nullius: no capability runs and nothing is recalled; the answer is empty."
+    },
+    "oracle": {
+      "source": "nullius",
+      "from": "Nullius, from the authors' answers: the question's answer field in the authors' locomo10.json, as their evaluation scores against it (task_eval/evaluation.py): for a category-3 question, the part before the first ';' - in 11 of them the field goes on with the authors' reasoning, which their scorer cuts off. Given to the scorer as the answer.",
+      "in_prompt": "A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+    }
+  },
+  "score": {
+    "kind": "score",
+    "says": "token F1 of the answer against the reference, by LoCoMo's own eval_question_answering (task_eval/evaluation.py): its normalisation and Porter stemming, category 1 by comma-separated parts, category 3 against the reference's part before the first ';' (categories 1 to 4)"
+  },
+  "options": {
+    "rag_mode": {
+      "label": "RAG mode",
+      "summary": "Whether the memory stores conversation turns, extracted facts, or session summaries.",
+      "values": [
+        "dialog",
+        "observation",
+        "summary"
+      ],
+      "default": "dialog",
+      "about": {
+        "dialog": "Each session's turns, speaker by speaker, with its date. What every earlier run fed.",
+        "observation": "Each session's observations: the facts about each speaker the authors extracted, one turn a fact, its speaker's.",
+        "summary": "Each session's summary, written by the authors, one turn a session (its role: summary)."
+      }
+    },
+    "retrieval": {
+      "summary": "Whether the model receives the whole conversation or retrieves relevant turns, extracted facts, or session summaries.",
+      "values": [
+        "none",
+        "dialog",
+        "observation",
+        "summary"
+      ],
+      "default": "none",
+      "about": {
+        "none": "The whole conversation in the prompt, as the paper's long-context rows.",
+        "dialog": "Each turn embedded, with its date; the reader gets the top-k turns.",
+        "observation": "The upstream's get_facts.py first writes each session's observations (gpt-3.5-turbo, as published), embedded with their dates; the reader gets the top-k.",
+        "summary": "The upstream's get_session_summaries.py first writes a summary of each session (gpt-3.5-turbo, temperature 1, as published); the reader gets the top-k summaries."
+      },
+      "needs": {
+        "dialog": {
+          "host": [
+            "cuda_gpu"
+          ]
+        },
+        "observation": {
+          "host": [
+            "cuda_gpu"
+          ]
+        },
+        "summary": {
+          "host": [
+            "cuda_gpu"
+          ]
+        }
+      },
+      "setups": [
+        "original",
+        "model"
+      ]
+    },
+    "retriever": {
+      "when": {
+        "retrieval": [
+          "dialog",
+          "observation",
+          "summary"
+        ]
+      },
+      "summary": "The embedding model used to find relevant entries when retrieval is enabled.",
+      "values": [
+        "dragon",
+        "dpr"
+      ],
+      "default": "dragon",
+      "about": {
+        "dragon": "facebook/dragon-plus context and query encoders, as scripts/evaluate_rag_gpts.sh runs.",
+        "dpr": "facebook/dpr-ctx_encoder and question_encoder, single-nq-base."
+      },
+      "setups": [
+        "original",
+        "model"
+      ]
+    },
+    "top_k": {
+      "label": "Top-k",
+      "when": {
+        "retrieval": [
+          "dialog",
+          "observation",
+          "summary"
+        ]
+      },
+      "summary": "The maximum number of entries the model receives per question when retrieval is enabled.",
+      "values": [
+        "2",
+        "5",
+        "10",
+        "25",
+        "50"
+      ],
+      "default": "5",
+      "setups": [
+        "original",
+        "model"
+      ]
+    }
+  },
+  "host": {
+    "cuda_gpu": {
+      "summary": "An NVIDIA GPU with CUDA, for LoCoMo's retrievers: the upstream loads their encoders with .cuda(). Its driver's nvidia-smi on PATH; the driver's own torch (2.0.1, CUDA 11.7) brings the rest.",
+      "check": [
+        "nvidia-smi"
+      ]
+    }
+  },
+  "setups": {
+    "original": {
+      "summary": "LoCoMo's question answering as the paper ran it: its own task_eval/evaluate_qa.py on a whole conversation - the conversation in the prompt, cut to the reader's window, its questions 20 a call (10 for the gpt-3.5-turbo windows), or, with retrieval, the top-k of a database its own code builds, one question a call, as its RAG rows ran with gpt-3.5-turbo - its prompts, temperature 0 and token budget, scored by its own eval_question_answering, the mean token F1 over the conversation's questions of categories 1 to 4.",
+      "models": [
+        "gpt-4-turbo",
+        "gpt-3.5-turbo",
+        "gpt-3.5-turbo-16k",
+        "gpt-3.5-turbo-12k",
+        "gpt-3.5-turbo-8k",
+        "gpt-3.5-turbo-4k"
+      ],
+      "default": "gpt-4-turbo",
+      "served_as": {
+        "gpt-3.5-turbo-16k": "gpt-3.5-turbo",
+        "gpt-3.5-turbo-12k": "gpt-3.5-turbo",
+        "gpt-3.5-turbo-8k": "gpt-3.5-turbo",
+        "gpt-3.5-turbo-4k": "gpt-3.5-turbo"
+      },
+      "providers": {
+        "openai": "",
+        "openrouter": "openai/"
+      },
+      "units": {
+        "noun": "conversation",
+        "nouns": "conversations"
+      },
+      "turn_seconds": 3600,
+      "side_models": [
+        "gpt-3.5-turbo"
+      ]
+    },
+    "model": {
+      "summary": "The same pipeline with any model in the reader's place: LoCoMo's code asks for gpt-4-turbo - its 128k window, 20 questions a call, its token budget - and the relay sends the model chosen; with retrieval, the observations and summaries its code writes are asked of the model chosen too. Its scores compare with other runs of this setup, not with the paper.",
+      "runs_as": "gpt-4-turbo"
+    }
+  },
+  "proven": {
+    "locomo10": {
+      "units": {
+        "units": 1540,
+        "passed": "1540 ids, the same twice, unique",
+        "on": "2026-11-02"
+      },
+      "leak": {
+        "units": 1540,
+        "looked_for": 1144,
+        "short": 396,
+        "passed": "1540/1540",
+        "in_prompt": {
+          "units": 2,
+          "first": [
+            "conv-49:10",
+            "conv-50:39"
+          ],
+          "why": "A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+        },
+        "note": "396 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 2 prompt(s) name their answer, as the benchmark says they may: A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it.",
+        "on": "2026-11-02"
+      },
+      "nop": {
+        "passed": "0/1540",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 1540,
+        "job": "2026-11-02__15-03-51__locomo__locomo10__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-02"
+      },
+      "oracle": {
+        "passed": "1540/1540",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 1540,
+        "job": "2026-11-02__15-03-51__locomo__locomo10__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-02"
+      }
+    }
+  }
+}

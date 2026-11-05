@@ -1,0 +1,11 @@
+{"seq": 1, "ts": "2026-10-19T09:27:31.292Z", "job": "parts-arm", "event": "job.prepare", "trial": null, "stage": "tasks chosen", "agents": ["baseline"], "n_concurrent": 1}
+{"seq": 2, "ts": "2026-10-19T09:27:31.292Z", "job": "parts-arm", "event": "job.start", "trial": null, "n_total": 2, "n_concurrent": 1, "agents": ["baseline"], "tasks": ["t1", "t2"]}
+{"seq": 3, "ts": "2026-10-19T09:27:31.292Z", "job": "parts-arm", "event": "trial.queued", "trial": "t1", "agent": "baseline", "position": 0}
+{"seq": 4, "ts": "2026-10-19T09:27:31.293Z", "job": "parts-arm", "event": "trial.queued", "trial": "t2", "agent": "baseline", "position": 1}
+{"seq": 5, "ts": "2026-10-19T09:27:31.293Z", "job": "parts-arm", "event": "trial.phase", "trial": "t1", "task": "t1", "agent": "baseline", "phase": "verify"}
+{"seq": 6, "ts": "2026-10-19T09:27:31.294Z", "job": "parts-arm", "event": "trial.phase", "trial": "t2", "task": "t2", "agent": "baseline", "phase": "verify"}
+{"seq": 7, "ts": "2026-10-19T09:27:31.294Z", "job": "parts-arm", "event": "trial.progress", "trial": "t1", "activity": "2 of 2 cases asked"}
+{"seq": 8, "ts": "2026-10-19T09:27:31.295Z", "job": "parts-arm", "event": "trial.progress", "trial": "t2", "activity": "1 of 1 cases asked"}
+{"seq": 9, "ts": "2026-10-19T09:27:31.295Z", "job": "parts-arm", "event": "trial.end", "trial": "t1", "task": "t1", "agent": "baseline", "outcome": "scored", "score": 0.5, "evidence": "score 0.5 over 2 cases", "parts": 2}
+{"seq": 10, "ts": "2026-10-19T09:27:31.296Z", "job": "parts-arm", "event": "trial.end", "trial": "t2", "task": "t2", "agent": "baseline", "outcome": "scored", "score": 1.0, "evidence": "score 1 over 1 cases", "parts": 1}
+{"seq": 11, "ts": "2026-10-19T09:27:31.299Z", "job": "parts-arm", "event": "job.end", "trial": null}

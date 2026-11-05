@@ -1,0 +1,115 @@
+{
+  "schema": "nullius.agent/v1",
+  "key": "jiuwenswarm",
+  "label": "JiuwenSwarm",
+  "summary": "openJiuwen's agent.",
+  "upstream": {
+    "repository": "https://github.com/openJiuwen-ai/jiuwenswarm",
+    "tested": "2aa7fea7e55fbe1edaae0d468ef666b088c76fa9",
+    "tested_date": "2026-10-10",
+    "package": "workswarm",
+    "version": "0.2.7",
+    "license": "Apache-2.0"
+  },
+  "install": {
+    "python": "3.12",
+    "pip": [
+      "workswarm==0.2.7"
+    ]
+  },
+  "start": {
+    "acp": [
+      "{install}/.venv/bin/python",
+      "{here}/agent.py"
+    ]
+  },
+  "model": {
+    "apis": [
+      "chat"
+    ],
+    "env": {
+      "NULLIUS_BASE_URL": "{base_url}",
+      "NULLIUS_KEY": "{key}",
+      "NULLIUS_MODEL": "{model}",
+      "NULLIUS_REASONING": "{opt_reasoning_effort}"
+    }
+  },
+  "options": {
+    "reasoning_effort": {
+      "summary": "How much reasoning the model uses before answering, with `default` leaving the choice to the provider.",
+      "values": [
+        "default",
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "default"
+    }
+  },
+  "offers": [
+    "agent.task/v1",
+    "agent.workspace/v1",
+    "agent.tools/v1",
+    "agent.conversation/v1"
+  ],
+  "proven": {
+    "agent.task/v1": {
+      "passed": "3/3",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "0.2.7",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__13-28-04__kit__agent-task-v1__jiuwenswarm"
+    },
+    "agent.conversation/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "0.2.7",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__13-36-28__kit__agent-conversation-v1__jiuwenswarm"
+    },
+    "agent.workspace/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "0.2.7",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__13-41-01__kit__agent-workspace-v1__jiuwenswarm"
+    },
+    "agent.tools/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "0.2.7",
+      "kit_version": 2,
+      "backend": "docker",
+      "job": "2026-11-02__13-33-45__kit__agent-tools-v1__jiuwenswarm",
+      "skills": {
+        "decoys": {
+          "passed": "1/1",
+          "ok": true
+        },
+        "chain": {
+          "passed": "1/1",
+          "ok": true
+        },
+        "retry": {
+          "passed": "1/1",
+          "ok": true
+        }
+      }
+    }
+  }
+}

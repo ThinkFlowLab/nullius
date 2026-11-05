@@ -1,0 +1,78 @@
+# Prepare a release candidate for review. Publishing the draft is a separate,
+# manual action; this workflow never publishes to PyPI.
+name: draft release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release candidate tag matching pyproject.toml
+        required: true
+        default: v0.1.0rc1
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: draft-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      NULLIUS_HOME: /tmp/nullius-release-test-profile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Install test and build tool
+        run: python -m pip install --quiet uv==0.13.1
+      - name: Backend suite
+        run: python3 app/tests/parallel.py
+      - name: Install Flask
+        run: python -m pip install --quiet -r app/requirements.txt
+      - name: Route suite
+        run: python3 app/tests/parallel.py app/ui_tests
+      - name: Build and verify release downloads
+        run: >-
+          python3 app/packaging/release.py build
+          --tag "$RELEASE_TAG"
+          --out-dir "$RUNNER_TEMP/nullius-release"
+      - name: Create draft prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Refuse existing tags or releases, including drafts. No assets are replaced.
+        run: |
+          refs=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG" --jq '.[].ref')
+          while IFS= read -r ref; do
+            if [[ "$ref" == "refs/tags/$RELEASE_TAG" ]]; then
+              echo "::error::Tag $RELEASE_TAG already exists; refusing to attach a different build."
+              exit 1
+            fi
+          done <<< "$refs"
+          releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name')
+          while IFS= read -r tag; do
+            if [[ "$tag" == "$RELEASE_TAG" ]]; then
+              echo "::error::Release $RELEASE_TAG already exists; review it instead of replacing its assets."
+              exit 1
+            fi
+          done <<< "$releases"
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Nullius $RELEASE_TAG" \
+            --draft --prerelease --latest=false \
+            --notes-file "app/packaging/notes/$RELEASE_TAG.md" \
+            "$RUNNER_TEMP/nullius-release/"*.whl \
+            "$RUNNER_TEMP/nullius-release/"*.tar.gz \
+            "$RUNNER_TEMP/nullius-release/SHA256SUMS"

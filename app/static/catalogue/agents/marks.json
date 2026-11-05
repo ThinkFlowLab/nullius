@@ -1,0 +1,8 @@
+{
+  "goose": "catalogue/agents/goose.svg",
+  "jiuwenswarm": "catalogue/agents/jiuwenswarm.svg",
+  "mini-swe-agent": "catalogue/agents/mini-swe-agent.svg",
+  "opencode": "catalogue/agents/opencode.svg",
+  "codex": "brand/marks.svg#openai",
+  "terminus-2": "brand/marks.svg#harbor"
+}

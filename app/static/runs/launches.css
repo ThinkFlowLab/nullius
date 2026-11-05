@@ -1,0 +1,87 @@
+/* The Runs page: runs grouped by the launch that made them. A launch is one block - its task checks, its agents
+   on one 0-100% scale, raw as a tick on the adjusted bar - and the flat table is the second view. */
+.runs-head { justify-content: space-between; }
+.runs-acts { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.runs-glance { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -1.2rem 0 1rem; font-size: 13px; color: var(--text-dim); }
+.runs-glance b { color: var(--text); font-weight: 500; }
+.runs-glance .st-paused b, .runs-glance .st-stopping b { color: var(--patch_failed_tests); }
+.runs-glance .st-stopped b, .runs-glance .st-failed b, .runs-glance .st-not b { color: var(--bad); }
+
+.runs-views { display: inline-flex; gap: 2px; padding: 2px; margin: 4px 0 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.runs-views .rv { padding: 4px 12px; border-radius: 6px; font-size: 13px; color: var(--text-dim); text-decoration: none; }
+.runs-views .rv.on { background: var(--accent-soft); color: var(--text); }
+
+.launches { display: grid; gap: 14px; margin-bottom: 1.5rem; }
+.launch { border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.launch-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; padding: 14px 18px 12px; }
+.launch-head h2 { margin: 0; font: 500 16px/1.3 var(--sans); }
+.launch-id { font-size: 12.5px; color: var(--text-faint); overflow-wrap: anywhere; }
+.launch-when { margin-left: auto; font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+
+.launch-checks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 9px 18px; border-top: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--surface-2) 45%, var(--surface)); font-size: 12.5px; color: var(--text-dim); }
+.lc-label { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); }
+.lc-mark { width: 1em; text-align: center; }
+.lc-verdict { margin-left: auto; color: var(--text); }
+.lc-verdict.open { color: var(--text-faint); }
+
+.launch-table { overflow-x: auto; }
+.launch-agents { width: 100%; border-collapse: collapse; }
+.launch-agents th { text-align: left; font: 400 11.5px var(--sans); color: var(--text-dim); padding: 8px 12px 6px; border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+.launch-agents td { padding: 10px 12px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; font-size: 13px; }
+.launch-agents tbody tr:last-child td { border-bottom: 0; }
+.launch-agents th:first-child, .launch-agents td:first-child { padding-left: 18px; }
+.launch-agents th:last-child, .launch-agents td:last-child { padding-right: 18px; }
+.launch-agents .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.launch-agents tbody tr:hover td { background: var(--surface-2); }
+.launch-agents tr.dim { opacity: .3; }
+.la-who { display: grid; gap: 2px; min-width: 0; }
+.la-name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.la-who a { font-weight: 500; color: var(--text); text-decoration: none; }
+.la-who a:hover { text-decoration: underline; }
+.la-who small { font-size: 11.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 26rem; }
+.la-ver { font-size: 11px; padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim); }
+.la-state { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; color: var(--text-dim); white-space: nowrap; }
+.la-state i { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
+.la-state.finished i { background: var(--resolved); }
+.la-state.running i, .la-state.preparing i { background: var(--resolved); animation: la-beat 2s infinite; }
+.la-state.paused i, .la-state.stopping i { background: var(--patch_failed_tests); }
+.la-state.stopped i, .la-state.failed i, .la-state.refused i, .la-state.not-run i { background: var(--bad); }
+.la-state.not-run, .launch-paused { color: var(--bad); }
+@keyframes la-beat { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--resolved) 55%, transparent); } 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.la-rate { display: grid; grid-template-columns: 3.2em minmax(90px, 1fr); gap: 10px; align-items: center; min-width: 160px; }
+.la-rate b { font: 500 15px var(--sans); text-align: right; font-variant-numeric: tabular-nums; }
+.la-rate.na b { color: var(--text-faint); font-weight: 400; }
+.la-scale { position: relative; height: 8px; border-radius: 2px; background: color-mix(in srgb, var(--text-faint) 16%, var(--surface)); }
+.la-scale i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 0 3px 3px 0; }
+.la-scale s { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text); opacity: .6; text-decoration: none; }
+.la-flag { display: block; margin-top: 4px; font-size: 11.5px; color: var(--patch_failed_tests); }
+.la-mix { display: flex; min-width: 110px; height: 8px; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, var(--text-faint) 16%, var(--surface)); }
+.la-mix span { height: 100%; background: var(--c, var(--text-faint)); }
+.la-mix .oc-resolved { background: var(--resolved); } .la-mix .oc-patch_failed_tests { background: var(--patch_failed_tests); }
+.la-mix .oc-failed_verification { background: var(--failed_verification); } .la-mix .oc-patch_not_applied { background: var(--patch_not_applied); }
+.la-mix .oc-no_patch { background: var(--no_patch); } .la-mix .oc-agent_error { background: var(--agent_error); }
+.la-mix .oc-rate_limited { background: var(--rate_limited); } .la-mix .oc-api_error { background: var(--api_error); }
+.la-mix .oc-setup_error { background: var(--setup_error); } .la-mix .oc-unknown { background: var(--unknown); }
+.la-mix span + span { box-shadow: inset 1.5px 0 0 var(--surface); }
+.la-go { text-align: right; white-space: nowrap; font-size: 12.5px; }
+.launch-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 18px; border-top: 1px solid var(--border-soft); font-size: 12.5px; color: var(--text-dim); }
+
+@media (max-width: 900px) { .launch-agents .lh-more { display: none; } }
+@media (max-width: 640px) {
+  .launch-agents .lh-state, .launch-agents .lh-mix { display: none; }
+  .launch-when, .lc-verdict { margin-left: 0; }
+  .la-rate { min-width: 120px; grid-template-columns: 2.8em minmax(50px, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .la-state i { animation: none !important; } }
+
+/* a task check's row: above the agents, set apart by a rule, its verdict where an agent has its rate */
+.launch-agents tr.la-control td { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+.launch-agents tr.la-control + tr:not(.la-control) td { border-top: 2px solid var(--border); }
+.la-kind { font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint); margin-left: 6px; }
+.la-verdict { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.la-verdict b { font-weight: 500; }
+.la-verdict.ok .lc-mark { color: var(--ok); }
+.la-verdict.warn .lc-mark { color: var(--bad); }
+.la-verdict.pending .lc-mark { color: var(--text-faint); }

@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% block title %}{{ task }} side by side — Nullius{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">
+<style>
+  /* The distributions panel is the trial page's, unchanged; inside a grid cell
+     its own box would double the cell's. */
+  .cmp-cell > .panel { border: 0; padding: 0; margin: 0; background: transparent; }
+  .cmp-cell .strip-caption { margin: .9rem 0 .35rem; font-size: .78rem; color: var(--text-dim); }
+  .cmp-cell .strip-caption:first-child { margin-top: 0; }
+</style>{% endblock %}
+{% block crumb %}/ <a href="{{ url_for('compare', pick=picks, cohort=cohort) }}">compare</a> / {{ task }}{% endblock %}
+{% import "traces/_charts.html" as ui %}
+
+{# Same shape as the trial page's `view_url`, so the shared chart macros can
+   call it without knowing which page they are on. Only the legend state rides
+   in it: this page has no trace filter, so `f` is always the empty one. #}
+{% macro view_url(f, cf=none) -%}
+{{ url_for('compare_task', task=task, pick=picks, cohort=cohort, dataset=dataset,
+           **((cf if cf is not none else chart_filter).query)) }}
+{%- endmacro %}
+
+{% block body %}
+
+<div class="page-title"><h1 class="mono">{{ task }}</h1></div>
+<p class="subtitle">{{ panels|length }} runs side by side<span class="dot">·</span>
+  <a href="{{ url_for('compare', pick=picks, cohort=cohort) }}">back to the comparison</a><span class="dot">·</span>
+  <span class="faint">drag a column header to reorder</span></p>
+<div class="cohort-note">
+  <p>{{ 'Dataset not recorded' if dataset.startswith('[unidentified:') else dataset }} · {{ 'Matched tasks' if cohort == 'matched' else 'Whole runs' }}</p>
+  {% if panels|selectattr('attempts', 'gt', 1)|list %}<p>A run has repeated attempts on this task. This page shows the last indexed attempt, matching the task table; all attempts remain in the comparison totals.</p>{% endif %}
+</div>
+
+{# One grid, sections as full-width rows. Each section's cells land on the same
+   grid row, so every run's "Files edited" starts at the same y — which separate
+   per-run cards can never guarantee. #}
+<div class="table-wrap">
+<div class="cmp-grid" style="--cols: {{ panels|length }}">
+
+  {% for p in panels %}
+  <div class="cmp-head draggable-col" draggable="true" data-job="{{ p.selection.value }}" title="Drag to reorder">
+    <div class="pane-title compare-trial-heading">
+      <h2>{{ p.job.agent_label or p.job.job_id }}</h2>
+      <span class="compare-trial-tags">
+      {% if p.job.is_control %}<span class="chip-control"
+        title="Harbor control: applies the gold patch or does nothing. Never calls a model, and never ranked.">control</span>{% endif %}
+      {% if p.trial %}
+        <span class="tag oc-{{ p.trial.outcome }}">{{ p.trial.outcome_label }}</span>
+        {% if p.trial.is_regression %}<span class="badge danger">⚠ broke {{ p.trial.p2p_fail }}</span>{% endif %}
+      {% else %}<span class="tag">not run</span>{% endif %}
+      </span>
+    </div>
+    <div class="pane-links">
+      <a class="pane-id faint mono" href="{{ url_for('job', job_id=p.job.job_id, workspace=p.selection.workspace) }}"
+         title="{{ p.job.job_id }}">{{ p.job.job_id }}</a>
+      {% if p.trial %}
+        <a class="pane-open" href="{{ url_for('trial', job_id=p.trial.job_id, trial_name=p.trial.trial_name, workspace=p.selection.workspace) }}"
+           title="Every step, tool call and observation for this run">Open full trial →</a>
+      {% endif %}
+    </div>
+    <p class="compare-workspace">{{ p.selection.workspace_label }}{% if p.attempts > 1 %} · {{ p.attempts }} attempts, last indexed shown{% endif %}</p>
+  </div>
+  {% endfor %}
+
+  <h3 class="cmp-section">Result</h3>
+  {% for p in panels %}
+  <div class="cmp-cell">
+    {% if not p.trial %}<p class="muted" style="margin:0">Didn't include this task.</p>{% else %}
+    {# Check rows come from the dataset's Vocabulary. Panels compare one task,
+       so every panel shares a dataset and the conditional rows stay aligned
+       across the grid — the same property the unconditional rows below rely
+       on. #}
+    {% set vocab = p.trial.vocab %}
+    <dl class="pane-stats">
+      {% if vocab.gained %}<div><dt>{{ vocab.gained }}</dt><dd>{% if p.trial.f2p_pass or p.trial.f2p_fail %}<span class="ok">{{ p.trial.f2p_pass }}</span>/<span class="bad">{{ p.trial.f2p_fail }}</span>{% else %}<span class="faint">—</span>{% endif %}</dd></div>{% endif %}
+      {% if vocab.held %}<div><dt>{{ vocab.held }}</dt><dd>{% if p.trial.p2p_pass or p.trial.p2p_fail %}<span class="ok">{{ p.trial.p2p_pass }}</span>/<span class="bad">{{ p.trial.p2p_fail }}</span>{% else %}<span class="faint">—</span>{% endif %}</dd></div>{% endif %}
+      {% if vocab.has_patch %}<div><dt>Patch applied</dt><dd>{% if p.trial.patch_exists is none %}—{% else %}{{ 'Yes' if p.trial.patch_applied else 'No' }}{% endif %}</dd></div>{% endif %}
+      <div><dt>Agent time</dt><dd>{{ p.trial.dur_agent|secs }}</dd></div>
+      {# Emit these two unconditionally. pane-stats is a grid, so a panel with
+         fewer items shifts every later metric up a row and the columns stop
+         lining up — an agent's "Tool calls" ends up level with the oracle's
+         "Prompt size", and the oracle looks like it made tool calls. #}
+      <div><dt>Steps</dt><dd>{% if p.traj %}{{ p.traj.n_steps }}{% else %}<span class="faint">—</span>{% endif %}</dd></div>
+      <div><dt>Tool calls</dt><dd>
+        {%- if p.traj %}{{ p.traj.calls|length }}
+        {%- if p.traj.n_failed_calls %} <span class="bad">({{ p.traj.n_failed_calls }} failed)</span>{% endif %}
+        {%- else %}<span class="faint">—</span>{% endif -%}
+      </dd></div>
+      <div><dt>Prompt size</dt><dd>{{ p.trial.n_input_tokens|tokens(p.job.kind) }}</dd></div>
+      <div><dt>Fresh prompt</dt><dd>{{ (p.trial.n_input_tokens - p.trial.n_cache_tokens)|tokens(p.job.kind) }}</dd></div>
+      <div><dt>Cached</dt><dd>{{ p.trial.n_cache_tokens|tokens(p.job.kind) }}</dd></div>
+      <div><dt>Cached ratio</dt><dd>
+        {# 0 cached over 0 prompt is undefined, not 0% — controls get "—" here
+           even though their token counts are real zeros. #}
+        {%- if p.trial.n_input_tokens %}{{ (100 * p.trial.n_cache_tokens / p.trial.n_input_tokens)|round|int }}%{% else %}—{% endif -%}
+      </dd></div>
+      <div><dt>Output tokens</dt><dd>{{ p.trial.n_output_tokens|tokens(p.job.kind) }}</dd></div>
+      <div><dt title="An estimate: priced by the agent from its price table over the recorded usage, not a figure from the provider. — where the agent recorded none">Cost (estimated)</dt>
+        <dd class="{{ '' if (p.trial.cost_usd or p.job.is_control) else 'faint' }}">{{ p.trial.cost_usd|usd(p.job.kind) }}</dd></div>
+    </dl>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <h3 class="cmp-section">Where the time went</h3>
+  {% for p in panels %}
+  <div class="cmp-cell">
+    {% if p.trial %}
+    {# Four phases in execution order. A 0s phase emits no segment, so a
+       control's empty setup leaves no stray sliver. #}
+    <div class="bar phases">
+      {% if p.trial.dur_env|phase %}<span class="seg ph-env" style="flex:{{ p.trial.dur_env|phase }}" title="Env {{ p.trial.dur_env|secs }}"></span>{% endif %}
+      {% if p.trial.dur_agent_setup|phase %}<span class="seg ph-setup" style="flex:{{ p.trial.dur_agent_setup|phase }}" title="Agent setup {{ p.trial.dur_agent_setup|secs }}"></span>{% endif %}
+      {% if p.trial.dur_agent|phase %}<span class="seg ph-agent" style="flex:{{ p.trial.dur_agent|phase }}" title="Agent {{ p.trial.dur_agent|secs }}"></span>{% endif %}
+      {% if p.trial.dur_verifier|phase %}<span class="seg ph-verify" style="flex:{{ p.trial.dur_verifier|phase }}" title="Verify {{ p.trial.dur_verifier|secs }}"></span>{% endif %}
+      {% if p.trial.dur_other|phase %}<span class="seg ph-other" style="flex:{{ p.trial.dur_other|phase }}" title="Other {{ p.trial.dur_other|secs }} — time in the trial that Harbor does not attribute to a phase: image pull, container start and teardown, artifact collection"></span>{% endif %}
+    </div>
+    <div class="legend" style="margin:.5rem 0 0">
+      <span class="chip ph-env">Env <b>{{ p.trial.dur_env|secs }}</b></span>
+      <span class="chip ph-setup">Setup <b>{{ p.trial.dur_agent_setup|secs }}</b></span>
+      <span class="chip ph-agent">Agent <b>{{ p.trial.dur_agent|secs }}</b></span>
+      <span class="chip ph-verify">Verify <b>{{ p.trial.dur_verifier|secs }}</b></span>
+      <span class="chip ph-other"
+            title="Time Harbor does not attribute to a phase: image pull, container start and teardown, artifact collection">Other <b>{{ p.trial.dur_other|secs }}</b></span>
+    </div>
+    {% else %}<span class="faint">—</span>{% endif %}
+  </div>
+  {% endfor %}
+
+  {# ---- traces, side by side ----
+     Two sections from each side's own trace.json, and nothing across them.
+     The charts are the trial page's, through the same macro over the same
+     `charts_of` — a side here draws what the trial's own page draws for it.
+     Each side is loaded alone: two trials never shared a clock,
+     so there is no pooled population, no combined wall clock and no waterfall.
+     A side without a trace says so in its own cell rather than vanishing. #}
+  <h3 class="cmp-section">Traces
+    <span class="muted" style="font-weight:400">· each side from its own capture, nothing pooled across them</span></h3>
+  {% for p in panels %}
+  <div class="cmp-cell">
+    {% if p.charts %}
+    {% set breakdown_tail %}<b>Time breakdown</b> below is this side's accounting of where its seconds went; this is the shape of the calls that spent them.{% endset %}
+    {# `empty_note` names this page's one reason for an empty plot: there is no
+       filter here, so "every span is filtered out" could never be it. #}
+    {{ ui.charts_panel(p.charts, chart_filter, no_filter, view_url, tail=breakdown_tail,
+                       empty_note="None of the " ~ p.charts.total ~ " spans in this trace has a known duration — there is nothing to plot.") }}
+    {% else %}<p class="muted" style="margin:0">{{ p.absent }}</p>{% endif %}
+  </div>
+  {% endfor %}
+
+  {# Two strips per side, never mixed and never compared by a Δ. The first is
+     the producer's `totals`, verbatim — its own arithmetic, which differs by
+     producer: one sums its LLM spans and can exceed its wall clock, another
+     partitions. The second is this reader's partition over the whole tree,
+     the same arithmetic on both sides, which is the one strip two producers'
+     traces can honestly be read across. Shares are of each side's own wall
+     clock; no number here adds one side's clock to the other's. #}
+  <h3 class="cmp-section">Time breakdown
+    <span class="muted" style="font-weight:400">· categories, not a timeline</span></h3>
+  {% for p in panels %}
+  <div class="cmp-cell">
+    {% if p.trace and not p.trace.error %}
+    {% set tr = p.trace %}
+    {% set clocked = 'inferred' if tr.zero_measured else 'measured' %}
+    <p class="strip-caption">Reported by the trace
+      {%- if tr.totals.wall_ns %} · <b>{{ tr.totals.wall_ns|nsdur }}</b> {{ clocked }}{% endif %}
+      {%- if tr.zero_measured %} · <span class="bad">inferred, not measured</span>{% endif %}</p>
+    {% if tr.totals.segments %}
+    <div class="bar strip">
+      {% for s in tr.totals.segments %}
+      <span class="seg tt-{{ s.key }}" style="flex:{{ s.ns }}"
+            title="{{ s.label }}: {{ s.ns|nsdur }} · {{ s.pct|share }} of the {{ tr.totals.wall_ns|nsdur }} {{ clocked }}"></span>
+      {% endfor %}
+    </div>
+    <div class="legend" style="margin-bottom:0">
+      {% for s in tr.totals.segments %}
+      <span class="chip tt-{{ s.key }}">{{ s.label }} <b>{{ s.ns|nsdur }}</b> <span class="faint">{{ s.pct|share }}</span></span>
+      {% endfor %}
+    </div>
+    {% else %}<p class="muted small" style="margin:0">The trace reports no totals.</p>{% endif %}
+
+    <p class="strip-caption">Partitioned here <span class="faint">· every instant charged once</span></p>
+    {% set part = tr.baseline.segments %}
+    {% if part %}
+    <div class="bar strip">
+      {% for s in part %}
+      <span class="seg tt-{{ s.key }}" style="flex:{{ s.ns }}"
+            title="{{ s.label }}: {{ s.ns|nsdur }} · {{ s.pct|share }} of the {{ tr.baseline.wall_ns|nsdur }} {{ clocked }}"></span>
+      {% endfor %}
+    </div>
+    <div class="legend" style="margin-bottom:0">
+      {% for s in part %}
+      <span class="chip tt-{{ s.key }}">{{ s.label }} <b>{{ s.ns|nsdur }}</b> <span class="faint">{{ s.pct|share }}</span></span>
+      {% endfor %}
+    </div>
+    {% else %}<p class="muted small" style="margin:0">No span carries a usable clock — nothing to partition.</p>{% endif %}
+    <p class="muted small" style="margin:.75rem 0 0">Two accountings of the same {{ tr.totals.wall_ns|nsdur if tr.totals.wall_ns else 'run' }},
+      shown apart and never mixed. The first is the producer's own and is displayed as reported —
+      producers differ, and one that sums its LLM spans can exceed its wall clock. The second charges
+      every instant to exactly one category (waiting on a human beats real work, which beats the
+      call it ran inside) and is the same arithmetic on every side of this page, so it is the strip
+      to read across. Neither is summed from the charts above: spans nest, so adding them up
+      double-counts.</p>
+    {% else %}<p class="muted" style="margin:0">{{ p.absent }}</p>{% endif %}
+  </div>
+  {% endfor %}
+
+  <h3 class="cmp-section">Flow</h3>
+  {% for p in panels %}
+  <div class="cmp-cell">
+    {% if p.traj %}
+    <div class="flow">
+      {% for c in p.traj.calls %}
+      <span class="flow-cell cat-{{ c.category }}{% if c.failure %} failed{% endif %}"
+            title="#{{ c.step_id }} {{ c.category }}{% if c.target %} · {{ c.target[:70] }}{% endif %}{% if c.failure %} — {{ c.failure[:80] }}{% endif %}"></span>
+      {% endfor %}
+    </div>
+    <div class="legend" style="margin:.6rem 0 0">
+      {% for cat, n in p.traj.category_freq.most_common() %}
+        <span class="chip cat-{{ cat }}">{{ cat }} <b>{{ n }}</b></span>
+      {% endfor %}
+    </div>
+    {% else %}<span class="faint">—</span>{% endif %}
+  </div>
+  {% endfor %}
+
+  {% if panels|selectattr('trial')|selectattr('trial.p2p_failures')|list
+     or panels|selectattr('trial')|selectattr('trial.f2p_failures')|list %}
+  <h3 class="cmp-section">Tests still failing</h3>
+  {% for p in panels %}
+  <div class="cmp-cell">
+    {% if p.trial and p.trial.p2p_failures %}
+      <p class="bad small" style="margin:0 0 .3rem">Broke {{ p.trial.p2p_fail }} passing:</p>
+      <ul class="files tight">{% for f in p.trial.p2p_failures %}<li class="mono bad">{{ f }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if p.trial and p.trial.f2p_failures %}
+      <ul class="files tight">{% for f in p.trial.f2p_failures %}<li class="mono faint">{{ f }}</li>{% endfor %}</ul>
+    {% elif not (p.trial and p.trial.p2p_failures) %}<span class="faint">—</span>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <h3 class="cmp-section">Files edited</h3>
+  {% for p in panels %}
+  <div class="cmp-cell">
+    {% if p.traj and p.traj.files_touched %}
+      <ul class="files tight">{% for f in p.traj.files_touched %}<li class="mono">{{ f }}</li>{% endfor %}</ul>
+    {% else %}<span class="faint">None recorded.</span>{% endif %}
+  </div>
+  {% endfor %}
+
+  <h3 class="cmp-section">Tool calls</h3>
+  {% for p in panels %}
+  <div class="cmp-cell">
+    {% if p.traj %}
+    <div class="calls-scroll">
+      <table class="grid compact calls">
+        <thead><tr><th class="c-n">#</th><th class="c-kind">Kind</th><th>Target</th><th class="c-res">Result</th></tr></thead>
+        <tbody>
+          {% for c in p.traj.calls %}
+          <tr class="{% if c.failure %}row-failed{% endif %}">
+            <td class="num faint">{{ c.step_id }}</td>
+            <td><span class="cat-tag cat-{{ c.category }}"><span class="cat-dot"></span>{{ c.category }}</span></td>
+            <td class="mono faint clip" title="{{ c.target }}">{{ c.target or '—' }}</td>
+            <td class="clip">{% if c.failure %}<span class="bad" title="{{ c.failure }}">× {{ c.failure }}</span>
+                {%- else %}<span class="faint">ok</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<span class="faint">—</span>{% endif %}
+  </div>
+  {% endfor %}
+
+  <h3 class="cmp-section">Final message</h3>
+  {% for p in panels %}
+  <div class="cmp-cell">
+    {% if p.traj and p.traj.last_agent_message %}
+      <details class="tc"><summary><span class="name">Show</span></summary>
+        <pre class="msg">{{ p.traj.last_agent_message }}</pre></details>
+    {% else %}<span class="faint">—</span>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+</div>
+
+<script>
+  /* Drag a column header to reorder — same URL-driven approach as /compare. */
+  (() => {
+    const ORDER = {{ picks|tojson }};
+    let dragged = null;
+    const clear = () => document.querySelectorAll('.draggable-col').forEach(el =>
+      el.classList.remove('dragging', 'drop-before', 'drop-after'));
+
+    document.querySelectorAll('.draggable-col').forEach(el => {
+      el.addEventListener('dragstart', e => {
+        dragged = el.dataset.job;
+        el.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragged);
+      });
+      el.addEventListener('dragend', clear);
+      el.addEventListener('dragover', e => {
+        if (!dragged || el.dataset.job === dragged) return;
+        e.preventDefault();
+        const box = el.getBoundingClientRect();
+        const after = e.clientX > box.left + box.width / 2;
+        el.classList.toggle('drop-before', !after);
+        el.classList.toggle('drop-after', after);
+      });
+      el.addEventListener('dragleave', () => el.classList.remove('drop-before', 'drop-after'));
+      el.addEventListener('drop', e => {
+        e.preventDefault();
+        const target = el.dataset.job;
+        if (!dragged || target === dragged) return clear();
+        const box = el.getBoundingClientRect();
+        const after = e.clientX > box.left + box.width / 2;
+        const next = ORDER.filter(id => id !== dragged);
+        next.splice(next.indexOf(target) + (after ? 1 : 0), 0, dragged);
+        const url = new URL({{ url_for('compare_task', task=task)|tojson }}, location.origin);
+        next.forEach(id => url.searchParams.append('pick', id));
+        url.searchParams.set('cohort', {{ cohort|tojson }});
+        url.searchParams.set('dataset', {{ dataset|tojson }});
+        location.href = url;
+      });
+    });
+  })();
+</script>
+{% endblock %}

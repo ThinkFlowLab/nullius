@@ -1,0 +1,108 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "swe-bench-verified",
+  "label": "SWE-bench Verified",
+  "summary": "Each instance is a GitHub issue and the authors' container for it, the repository at the issue's base commit in /testbed; the agent fixes it there, and the harness's own eval script and grading say whether the failing tests now pass and the passing ones still do.",
+  "family": "agent",
+  "needs": [
+    "agent.workspace/v1"
+  ],
+  "upstream": {
+    "repository": "https://github.com/SWE-bench/SWE-bench",
+    "tag": "v5.0.1",
+    "tested": "87ab1f6ced28f75ba73ca899dc759b019310944a",
+    "tested_date": "2026-10-23",
+    "license": "MIT"
+  },
+  "driver": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/driver.py"
+    ],
+    "install": {
+      "python": "3.12",
+      "pip": [
+        "swebench==5.0.1"
+      ]
+    }
+  },
+  "datasets": [
+    {
+      "id": "verified",
+      "label": "SWE-bench Verified",
+      "url": "https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified/resolve/78f471bf655a3137b2e8a75af1501690ec009ec3/data/test-00000-of-00001.parquet",
+      "sha256": "030cfd7f2a704c4c0226e7f104c725a3b41230b1d3517f9c915ad7ea5be3fa25",
+      "units": 500,
+      "environment": "task"
+    }
+  ],
+  "units": {
+    "noun": "instance",
+    "nouns": "instances"
+  },
+  "environments": {
+    "task": {
+      "summary": "The authors' prebuilt image for the instance (swebench/sweb.eval.x86_64.<instance>), pulled by the digest its tag had when pinned here, with the agent added at run time.",
+      "image": "own"
+    }
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "Nullius: no agent runs; the instance's tests run on its container as its image left it."
+    },
+    "oracle": {
+      "source": "official",
+      "from": "The instance's gold patch, the pull request that closed the issue minus its tests, applied in the container with git apply."
+    }
+  },
+  "score": {
+    "kind": "pass",
+    "says": "the harness's own eval script, run in the instance's container after the agent ends, and its grading: every FAIL_TO_PASS test passes and every PASS_TO_PASS test still passes"
+  },
+  "limits": {
+    "turn_seconds": 1800
+  },
+  "proven": {
+    "verified": {
+      "units": {
+        "units": 500,
+        "passed": "500 ids, the same twice, unique",
+        "on": "2026-10-23"
+      },
+      "leak": {
+        "units": 2,
+        "looked_for": 0,
+        "short": 0,
+        "passed": "2/2",
+        "note": "2 unit(s) whose oracle gave nothing to look for",
+        "on": "2026-10-23",
+        "limit": 2
+      },
+      "nop": {
+        "passed": "0/2",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 2,
+        "job": "2026-10-23__15-24-36__swe-bench-verified__verified__prove-nop",
+        "source": "nullius",
+        "on": "2026-10-23",
+        "limit": 2
+      },
+      "oracle": {
+        "passed": "2/2",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 2,
+        "job": "2026-10-23__15-24-36__swe-bench-verified__verified__prove-oracle",
+        "source": "official",
+        "on": "2026-10-23",
+        "limit": 2
+      }
+    }
+  }
+}

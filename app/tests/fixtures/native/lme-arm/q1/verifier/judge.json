@@ -1,0 +1,6 @@
+{
+ "judge": "official gpt-4o \u00b7 evaluate_qa.py",
+ "model": "openai/gpt-4o-2024-08-06",
+ "asked": "History Chats: ...\nQuestion: Which car did I buy?\nAnswer:",
+ "said": "yes"
+}

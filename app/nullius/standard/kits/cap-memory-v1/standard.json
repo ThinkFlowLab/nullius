@@ -1,0 +1,91 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "cap-memory-v1",
+  "kit_version": 1,
+  "label": "Kit: cap.memory/v1",
+  "summary": "Six sessions, one fact among distractors: what the memory recalls for a question about it must carry the fact.",
+  "family": "capability",
+  "needs": [
+    "cap.memory/v1"
+  ],
+  "driver": {
+    "command": [
+      "python3",
+      "{here}/driver.py"
+    ]
+  },
+  "datasets": [
+    {
+      "id": "kit",
+      "units": 2
+    }
+  ],
+  "units": {
+    "noun": "check",
+    "nouns": "checks"
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "Nullius: no capability runs and nothing is recalled; the answer is empty."
+    },
+    "oracle": {
+      "source": "nullius",
+      "from": "The fact the kit added among its distractors, given back as the answer."
+    }
+  },
+  "score": {
+    "kind": "pass",
+    "says": "the recalled memory holds the fact"
+  },
+  "proven": {
+    "kit": {
+      "units": {
+        "units": 2,
+        "passed": "2 ids, the same twice, unique",
+        "on": "2026-10-12"
+      },
+      "leak": {
+        "units": 2,
+        "looked_for": 2,
+        "short": 0,
+        "passed": "2/2",
+        "on": "2026-10-12"
+      },
+      "nop": {
+        "passed": "0/2",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 2,
+        "job": "2026-10-12__16-13-29__feature-memory-v1__kit__prove-nop",
+        "source": "nullius",
+        "on": "2026-10-12"
+      },
+      "oracle": {
+        "passed": "2/2",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 2,
+        "job": "2026-10-12__16-13-29__feature-memory-v1__kit__prove-oracle",
+        "source": "nullius",
+        "on": "2026-10-12"
+      }
+    }
+  },
+  "check_details": {
+    "m1": {
+      "label": "Recall a place",
+      "task": "Store six sessions, including “My sister Ines moved to Lisbon in March.” Ask where Ines moved.",
+      "passes": "The recalled memory contains Lisbon, ignoring case."
+    },
+    "m2": {
+      "label": "Recall a password",
+      "task": "Store six sessions, including the cabin Wi-Fi password tern-river-9. Ask for that password.",
+      "passes": "The recalled memory contains tern-river-9, ignoring case."
+    }
+  }
+}

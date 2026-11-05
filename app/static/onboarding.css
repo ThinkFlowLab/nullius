@@ -1,0 +1,78 @@
+/* First steps: the first-open question, the tour's spotlight, the checklist panel docked on the right,
+   and the pointer at what to do. Colours from the page's own tokens, so both themes follow. */
+.onb-scrim { position: fixed; inset: 0; z-index: 90; background: rgba(0, 0, 0, .55); display: grid; place-items: center; padding: 16px; }
+.onb-dialog { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 14px; padding: 1.6rem; max-width: 440px; width: 100%;
+  display: grid; gap: .9rem; box-shadow: 0 20px 60px rgba(0, 0, 0, .35); }
+.onb-dialog .onb-mark { font-size: 1.9rem; line-height: 1; }
+.onb-dialog h2 { margin: 0; font-size: 1.35rem; text-wrap: balance; }
+.onb-dialog p { margin: 0; color: var(--text-dim); }
+.onb-dialog ul { margin: 0; padding-left: 1.1rem; color: var(--text-dim); font-size: .88rem; display: grid; gap: .2rem; }
+.onb-actions { display: flex; gap: .6rem; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+
+.onb-spot { position: fixed; z-index: 91; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .55); pointer-events: none; transition: all .3s ease; }
+.onb-pop { position: fixed; z-index: 92; width: min(340px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px;
+  padding: 1rem; display: grid; gap: .5rem; box-shadow: 0 14px 40px rgba(0, 0, 0, .35); }
+.onb-pop .onb-k { font-size: .7rem; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.onb-pop h3 { margin: 0; font-size: 1rem; text-transform: none; letter-spacing: 0; }
+.onb-pop p { margin: 0; color: var(--text-dim); font-size: .86rem; }
+.onb-pop .onb-actions { justify-content: space-between; }
+.onb-dots { display: flex; gap: 4px; }
+.onb-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.onb-dots i.on { background: var(--accent); }
+
+.onb-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 30; width: 310px; max-width: 100vw; overflow-y: auto;
+  background: var(--surface); border-left: 1px solid var(--border-soft); padding: 1.1rem 1rem 1.4rem; display: flex; flex-direction: column; gap: .75rem; }
+body.onb-open .shell { margin-right: 310px; }
+@media (max-width: 1100px) { body.onb-open .shell { margin-right: 0; } .onb-panel { box-shadow: -10px 0 40px rgba(0, 0, 0, .3); } }
+.onb-panel header { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
+.onb-panel h2 { margin: 0; font-size: 1rem; }
+.onb-hide { border: 0; background: none; color: var(--text-faint); font-size: .8rem; cursor: pointer; }
+.onb-prog { display: flex; align-items: center; gap: .6rem; font-size: .78rem; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.onb-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.onb-bar i { display: block; height: 100%; background: var(--ok); }
+.onb-done { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); border-radius: 8px; padding: .6rem .75rem; font-size: .84rem; font-weight: 500; }
+.onb-cat { border: 1px solid var(--border-soft); border-radius: 9px; }
+.onb-cat.now { border-color: var(--accent); }
+.onb-cat > button { width: 100%; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; padding: .65rem .75rem;
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: .6rem; align-items: center; border-radius: 9px; font: inherit; }
+.onb-cat > button:hover { background: var(--surface-2); }
+.onb-ring { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--text-faint); display: grid; place-items: center; font-size: .7rem; font-weight: 500; }
+.onb-cat.done .onb-ring { background: var(--ok); border-color: var(--ok); color: var(--surface); }
+.onb-cat.now .onb-ring { border-color: var(--accent); color: var(--accent); }
+.onb-name { font-weight: 500; font-size: .86rem; display: block; }
+.onb-where { font-size: .73rem; color: var(--text-faint); }
+.onb-cnt { font-family: var(--mono, ui-monospace, monospace); font-size: .75rem; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.onb-subs { list-style: none; margin: 0; padding: 0 .75rem .6rem 2.75rem; display: grid; gap: 1px; }
+.onb-subs button { border: 0; background: none; color: inherit; cursor: pointer; padding: .2rem 0; text-align: left; font: inherit; font-size: .82rem;
+  display: flex; gap: .5rem; align-items: baseline; width: 100%; }
+.onb-tick { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid var(--text-faint); flex: none; transform: translateY(2px); display: grid; place-items: center; font-size: .55rem; }
+.onb-subs li.done button { color: var(--text-faint); }
+.onb-subs li.done .onb-tick { background: var(--ok); border-color: var(--ok); color: var(--surface); }
+.onb-subs li.next button { font-weight: 500; }
+.onb-opt { font-size: .7rem; color: var(--text-faint); font-weight: 400; }
+.onb-hint { font-size: .76rem; color: var(--text-faint); border-top: 1px solid var(--border-soft); padding-top: .6rem; }
+.onb-restart { border: 0; background: none; color: var(--text-faint); font-size: .76rem; cursor: pointer; text-decoration: underline; padding: 0; align-self: flex-start; }
+
+.onb-todo { outline: 2px solid var(--accent) !important; outline-offset: 3px; border-radius: 6px; animation: onb-pulse 1.6s ease-in-out infinite; }
+@keyframes onb-pulse { 50% { outline-color: color-mix(in srgb, var(--accent) 35%, transparent); } }
+.onb-label { position: absolute; z-index: 25; background: var(--accent); color: var(--btn-fg); font-size: .76rem; font-weight: 500; padding: .25rem .6rem;
+  border-radius: 6px; pointer-events: none; max-width: min(440px, calc(100vw - 32px)); box-shadow: var(--shadow); }
+.onb-rail { position: relative; }
+.onb-rail .onb-x { position: absolute; right: .35rem; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; display: grid; place-items: center;
+  border: 0; border-radius: 5px; background: none; color: var(--text-faint); cursor: pointer; padding: 0; }
+.onb-rail .onb-x .ic { width: 13px; height: 13px; }
+.onb-rail .onb-count { margin-right: 22px; }
+.onb-rail .onb-x:hover { background: var(--surface-2); color: var(--text); }
+:root[data-rail="collapsed"] .onb-rail .onb-x { display: none; }
+.onb-state { color: var(--text-dim); margin-right: .6rem; }
+button.nav-item#onb-open { border: 0; background: none; width: 100%; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+button.nav-item#onb-open[aria-expanded="true"] { background: var(--accent-soft); }
+.nav-item .onb-count { margin-left: auto; font-size: .72rem; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .onb-todo { animation: none; } .onb-spot { transition: none; } }
+:root[data-rail="collapsed"] .nav-item .onb-count { display: none; }
+#other .st-row-value { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: .6rem; flex-wrap: wrap; text-align: left; }
+#other .st-row-value .btn { width: auto; flex: none; }
+
+.onb-mark { font-size: 0; width: 32px; height: 32px; background: currentColor; mask: url(brand/mark-dark.svg) center / contain no-repeat; }
+
+#onb-open .lbl { white-space: nowrap; }

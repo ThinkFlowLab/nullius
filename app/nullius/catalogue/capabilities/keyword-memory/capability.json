@@ -1,0 +1,33 @@
+{
+  "schema": "nullius.capability/v1",
+  "key": "keyword-memory",
+  "label": "Example memory",
+  "example": true,
+  "summary": "Nullius's example memory, to read or copy: BM25 over whole sessions.",
+  "upstream": {
+    "version": "1",
+    "license": "same as Nullius"
+  },
+  "kind": "memory",
+  "start": {
+    "command": [
+      "python3",
+      "{here}/capability.py"
+    ]
+  },
+  "offers": [
+    "cap.memory/v1"
+  ],
+  "proven": {
+    "cap.memory/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__14-19-42__kit__cap-memory-v1__keyword-memory"
+    }
+  }
+}

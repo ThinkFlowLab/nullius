@@ -1,0 +1,64 @@
+{
+  "schema": "nullius.agent/v1",
+  "key": "terminus-2",
+  "label": "Terminus 2",
+  "summary": "Harbor's terminal agent, used by Terminal-Bench.",
+  "upstream": {
+    "package": "harbor",
+    "version": "0.24.0",
+    "license": "Apache-2.0"
+  },
+  "install": {
+    "python": "3.12",
+    "pip": [
+      "harbor==0.24.0"
+    ]
+  },
+  "start": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/run.py",
+      "{prompt}"
+    ]
+  },
+  "model": {
+    "apis": [
+      "chat"
+    ],
+    "env": {
+      "OPENAI_API_BASE": "{base_url}",
+      "OPENAI_API_KEY": "{key}",
+      "NULLIUS_MODEL": "{model}",
+      "NULLIUS_REASONING_EFFORT": "{opt_reasoning_effort}"
+    }
+  },
+  "options": {
+    "reasoning_effort": {
+      "summary": "How much reasoning the model uses before answering, with `default` leaving the choice to the provider.",
+      "values": [
+        "default",
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "default"
+    }
+  },
+  "only_for": ["terminal-bench"],
+  "offers": [
+    "agent.workspace/v1"
+  ],
+  "proven": {
+    "agent.workspace/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "0.24.0",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__14-57-08__kit__agent-workspace-v1__terminus-2"
+    }
+  }
+}

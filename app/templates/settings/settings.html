@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+{% block title %}Settings — Nullius{% endblock %}
+{% block crumb %}/ settings{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='settings/settings.css') }}">{% endblock %}
+{% block body %}
+{#- A section per thing a run needs - the model providers, the judge, the run hosts - and the file they
+    are kept in, one at a time from the menu beside them; the strip above says what a run can use today.
+    The menu's entries are links to the sections, so without a script every section shows. -#}
+{% set by = {} %}{% set held = [] %}
+{% for group, rows in groups %}{% for r in rows %}{% set _ = by.update({r.name: r}) %}{% if r.source != 'unset' %}{% set _ = held.append(r.name) %}{% endif %}{% endfor %}{% endfor %}
+{% set marks = url_for('static', filename='brand/marks.svg') %}
+{% set hosts_row = by.get('HOSTS') %}
+{% set chosen = (hosts_row.shown.split(',') | map('trim') | select | list) if hosts_row else [] %}
+{% set providers = [('typesafe', 'TypeSafe AI', 'https://api.typesafe.ai/v1/systemone', [('TYPESAFE_API_KEY', 'Key')]), ('openrouter', 'OpenRouter', 'https://openrouter.ai/api/v1', [('OPENROUTER_API_KEY', 'Key')]),
+                    ('openai', 'OpenAI', 'https://api.openai.com/v1', [('OPENAI_API_KEY', 'Key')]),
+                    ('anthropic', 'Anthropic', 'https://api.anthropic.com/v1', [('ANTHROPIC_API_KEY', 'Key')]),
+                    ('local', 'Local or self-hosted', '', [('MODEL_API_URL', 'Endpoint'), ('MODEL_API_KEY', 'Key')])] %}
+
+{% macro field(r, label, writable, options=none) %}
+<article class="st-field st-row" id="{{ r.name }}" data-source="{{ r.source }}" data-secret="{{ 'yes' if r.secret else 'no' }}">
+  <label class="st-row-label" for="value-{{ r.name }}">{{ label }}</label>
+  <div class="st-row-value">
+  {% if writable %}
+    {% if r.source != 'unset' %}
+    <div class="st-value" data-held>
+      <span class="st-shown">{{ r.shown }}</span>
+      <button type="button" class="btn sm ghost" data-replace>Replace</button>
+      <input type="hidden" name="clear:{{ r.name }}" value=""><button type="button" class="btn sm ghost st-remove" data-unset="{{ r.name }}">Remove</button>
+    </div>
+    {% endif %}
+    <input class="st-input" id="value-{{ r.name }}" type="{{ 'password' if r.secret else 'text' }}" name="value:{{ r.name }}" aria-label="{{ 'New value for ' if r.source != 'unset' }}{{ r.name }}"{% if r.secret %} autocomplete="off" data-1p-ignore data-lpignore="true"{% endif %} spellcheck="false" {% if not r.secret %}maxlength="4000"{% endif %}{% if r.name == 'MODEL_API_KEY' %} placeholder="(optional)"{% endif %}{% if options is not none %} list="options-{{ r.name }}"{% endif %}{% if r.source != 'unset' %} hidden{% endif %}>
+    {% if options is not none %}<datalist id="options-{{ r.name }}">{% for o in options %}<option value="{{ o }}"></option>{% endfor %}</datalist>{% endif %}
+    {% if r.source == 'environment' %}<p class="st-note" title="Held by the process the application runs in; the file cannot override it">Also set in the process environment: the running process keeps that value until it is restarted; the file applies then.</p>{% endif %}
+    {% if r.shadowed %}<p class="st-note">The file holds a different value, shadowed by the environment.</p>{% endif %}
+    {% if r.advice %}<p class="st-note">{{ r.advice }}</p>{% endif %}
+  {% else %}
+    <span class="st-shown">{{ r.shown or 'not set' }}</span>
+  {% endif %}
+  </div>
+</article>
+{% endmacro %}
+
+<div class="settings-page st-page">
+<header class="st-head">
+  <h1>Settings</h1>
+  <div class="st-ready" role="group" aria-label="What a run can use">
+    <span class="st-ready-t">Ready to run</span>
+    {% for label, name in [('OpenRouter', 'OPENROUTER_API_KEY'), ('OpenAI', 'OPENAI_API_KEY'), ('Anthropic', 'ANTHROPIC_API_KEY'), ('Local endpoint', 'MODEL_API_URL')] %}
+    <a href="#{{ name }}" class="st-ready-i{{ ' on' if name in held }}"><span aria-hidden="true">{{ '✓' if name in held else '○' }}</span> {{ label }}<span class="sr">{{ ': set' if name in held else ': not set' }}</span></a>
+    {% endfor %}
+    {% for jj, name in [(judges[0], 'System One'), (judges[1], 'LLM judge')] %}<a href="#judge" class="st-ready-i{{ ' on' if jj }}"><span aria-hidden="true">{{ '✓' if jj else '○' }}</span> {{ name }}<span class="sr">{{ ': set' if jj else ': not set' }}</span></a>{% endfor %}
+    {% for item in chosen %}<a href="#HOSTS" class="st-ready-i on"><span aria-hidden="true">✓</span> <span class="mono">{{ item.split('=', 1)[0] if '=' in item.split('@', 1)[0] else item.split(':/')[0].split(':~')[0] }}</span></a>{% else %}<a href="#HOSTS" class="st-ready-i"><span aria-hidden="true">○</span> no run host</a>{% endfor %}
+  </div>
+</header>
+{% if not writable %}
+<div class="harbor-state harbor-state-network"><strong>Read-only from here.</strong> Settings are written from a browser on the application host only.</div>
+{% endif %}
+{% if unread %}
+<div class="harbor-state harbor-state-network" id="settings-unread"><strong>Not read by Nullius.</strong> <span class="mono">{{ env_file }}</span> holds {% for u in unread %}<span class="mono">{{ u.name }}</span>{% if u.startup %} (Nullius reads <span class="mono">{{ u.instead }}</span> at start){% elif u.instead %} (this page reads <a class="mono" href="#{{ u.instead }}">{{ u.instead }}</a>){% endif %}{{ ', ' if not loop.last }}{% endfor %}. No setting reads {{ 'it' if unread|length == 1 else 'them' }}.{% set passed = unread|selectattr('inherited')|map(attribute='name')|list %}{% if passed %} A run Nullius starts still inherits {% for n in passed %}<span class="mono">{{ n }}</span>{{ ', ' if not loop.last }}{% endfor %} in its environment.{% endif %}</div>
+{% endif %}
+
+<div class="st-layout">
+  <nav class="st-index" aria-label="Settings sections">
+    <label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="settings-search" placeholder="Search settings" aria-label="Search settings" autocomplete="off"></label>
+    {% macro section_link(id, title, icon, keywords) %}
+    <a href="#{{ id }}" data-section="{{ id }}" data-search="{{ keywords }}"><svg class="ic" aria-hidden="true"><use href="#i-{{ icon }}"/></svg><span>{{ title }}</span></a>
+    {% endmacro %}
+    <div class="st-nav-group">
+      {{ section_link('general', 'General', 'gear', 'onboarding tour checklist first steps getting started') }}
+      {{ section_link('appearance', 'Appearance', 'sun', 'theme light dark system') }}
+    </div>
+    <div class="st-nav-group">
+      <div class="st-nav-label">Evaluation</div>
+      {{ section_link('providers', 'Model providers', 'capability', 'openrouter openai anthropic local endpoint api key model_api_url') }}
+      {{ section_link('agent-keys', 'Agent keys', 'agent', 'credentials cursor copilot token agent_keys') }}
+      {{ section_link('judge', 'Judges', 'compare', 'typesafe system one llm model judgement') }}
+    </div>
+    <div class="st-nav-group">
+      <div class="st-nav-label">Execution</div>
+      {{ section_link('hosts', 'Run hosts', 'runs', 'ssh remote machines server hosts') }}
+      {{ section_link('sandbox', 'Sandbox', 'kit', 'docker hub login registry images disk pull limit container') }}
+    </div>
+    <div class="st-nav-group">
+      <div class="st-nav-label">Application</div>
+      {{ section_link('storage', 'Local data', 'ws', 'settings.json config catalogue workspaces runs cache licences storage paths file') }}
+    </div>
+    <p class="st-search-empty" role="status" hidden>No settings found.</p>
+  </nav>
+
+  <div class="st-main">
+  {% if writable %}<form method="post" action="{{ url_for('settings_save') }}" class="settings-form" autocomplete="off" id="settings-form">
+  {% if embedded %}<input type="hidden" name="embedded" value="1">{% endif %}
+  <input type="hidden" name="csrf" value="{{ csrf }}">{% endif %}
+
+  <section class="st-section" id="providers" aria-labelledby="providers-h">
+    <div class="st-section-head">
+      <div class="st-provider-heading"><h2 id="providers-h">Model providers</h2><button type="button" class="btn sm ghost st-provider-add" data-provider-add aria-label="Add a provider" hidden><span aria-hidden="true">+</span> Add</button></div>
+      <p>Manage the providers available for runs and judges.</p>
+    </div>
+
+    {% macro provider_logo(key) %}{% if key == 'typesafe' %}<img class="st-logo" src="{{ url_for('static', filename='brand/typesafe.png') }}" alt="" width="28" height="28">{% elif key == 'local' %}<svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>{% else %}<svg class="st-logo" aria-hidden="true"><use href="{{ marks }}#{{ key }}"/></svg>{% endif %}{% endmacro %}
+    <button type="button" class="btn ghost st-provider-back" data-provider-back hidden>← Model providers</button>
+    <p class="st-about" data-provider-empty hidden>No providers added yet.</p>
+    <div class="st-provider-catalogue" hidden>
+      <h3>Add a provider</h3>
+      <label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-provider-search placeholder="Search providers…" aria-label="Search providers" autocomplete="off"></label>
+      <div class="st-provider-grid">
+      {% for key, title, endpoint, names in providers %}
+        <button type="button" class="st-provider-choice" data-provider-select="{{ key }}" data-provider-name="{{ title }}">{{ provider_logo(key) }}<span>{{ title }}</span></button>
+      {% endfor %}
+      </div>
+      <p class="st-about" data-provider-no-results hidden>No providers found.</p>
+    </div>
+    {% for key, title, endpoint, names in providers %}
+    {% set any_set = names | map(attribute=0) | select('in', held) | list %}
+    {% set ready = (names[0][0] in held) %}
+    <div class="st-card st-provider-card" data-provider-card="{{ key }}" data-configured="{{ 'true' if any_set else 'false' }}" data-ready="{{ 'true' if ready else 'false' }}">
+      <div class="st-provider-summary">
+        {{ provider_logo(key) }}
+        <div><h3>{{ title }}</h3><p class="st-about" data-provider-state>{{ ('Endpoint saved' if key == 'local' else 'Key saved') if ready else ('Endpoint required' if any_set else 'Not configured') }}</p></div>
+        <button type="button" class="btn sm ghost" data-provider-edit="{{ key }}" hidden>{{ 'Edit' if writable else 'View' }}</button>
+      </div>
+      <div class="st-provider-fields">
+        {% if endpoint %}<div class="st-row"><span class="st-row-label">Endpoint</span><span class="st-row-value mono">{{ endpoint }}</span></div>{% endif %}
+        {% for name, label in names %}{% if by.get(name) %}{{ field(by[name], label, writable) }}{% endif %}{% endfor %}
+      </div>
+      <button type="button" class="btn ghost st-provider-done" data-provider-done hidden>Done</button>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="st-section" id="judge" aria-labelledby="judge-h">
+    <div class="st-section-head">
+      <h2 id="judge-h">Judges</h2>
+      <p>Choose the judges that evaluate trial evidence.</p>
+    </div>
+    {% set s1, llm = judges %}
+
+    {% macro picker(name, providers, judge, label) %}
+    <div class="st-judges" role="radiogroup" aria-label="{{ label }}" data-picker>
+      {% for key, d in providers.items() %}
+      {% set available = (d.get('url_var') or d['key']) in held %}
+      <label class="st-judge" data-provider="{{ key }}" data-available="{{ 'true' if available else 'false' }}"{% if not available %} hidden{% endif %}><input type="radio" name="value:{{ name }}" value="{{ key }}"{{ ' checked' if judge.provider == key and available }}{{ ' disabled' if not writable or not available }}
+        data-default="{{ d.get('model', '') }}" data-models="{{ d.get('models', [])|join('|') }}">
+        <span><b>{{ 'TypeSafe AI' if key == 'typesafe' else d.label }}</b></span></label>
+      {% endfor %}
+    </div>
+    <p class="st-about" data-no-judge-provider>No compatible provider added. <a href="#providers">Add a provider</a></p>
+    {% endmacro %}
+    {% set srow = by.get('SYSTEM_ONE_PROVIDER') %}
+    {% if srow and by.get('SYSTEM_ONE_MODEL') %}
+    <fieldset class="st-card{{ ' st-card-unset' if not s1 }}" data-judge-card>
+      <legend><svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v18M7 21h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/></svg>System One</legend>
+      <article class="st-field" id="SYSTEM_ONE_PROVIDER" data-source="{{ srow.source }}" data-secret="no">{{ picker('SYSTEM_ONE_PROVIDER', s1_providers, s1, 'Where System One is asked') }}</article>
+      {{ field(by['SYSTEM_ONE_MODEL'], 'Model', writable, s1_providers[s1.provider].models) }}
+    </fieldset>
+    {% endif %}
+    {% set prow = by.get('LLM_JUDGE_PROVIDER') %}
+    {% if prow and by.get('LLM_JUDGE_MODEL') %}
+    <fieldset class="st-card{{ ' st-card-unset' if not llm }}" data-judge-card>
+      <legend><svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01M9 15c1.5 1.2 4.5 1.2 6 0"/></svg>LLM judge</legend>
+      <article class="st-field" id="LLM_JUDGE_PROVIDER" data-source="{{ prow.source }}" data-secret="no">{{ picker('LLM_JUDGE_PROVIDER', llm_providers, llm, "The LLM judge's provider") }}</article>
+
+      {{ field(by['LLM_JUDGE_MODEL'], 'Model', writable, []) }}
+
+    </fieldset>
+    {% endif %}
+  </section>
+
+  <section class="st-section" id="agent-keys" aria-labelledby="agent-keys-h">
+    <div class="st-section-head">
+      <h2 id="agent-keys-h">Agent keys</h2>
+      <p>Some agents may require additional keys.</p>
+    </div>
+    <div id="AGENT_KEYS">
+    {% for name in agent_keys %}{% if by.get(name) %}
+    <fieldset class="st-card"><legend>{{ name }}</legend>{{ field(by[name], 'Key', writable) }}</fieldset>
+    {% endif %}{% endfor %}
+    {% if writable %}
+    <fieldset class="st-card st-card-unset st-agent-add">
+      <legend>Add a key</legend>
+      <div class="st-row"><label class="st-row-label" for="agent-key-name">Name</label>
+        <div class="st-row-value"><input class="st-input" id="agent-key-name" name="agent_key_name" type="text" spellcheck="false" autocomplete="off" pattern="[A-Za-z_][A-Za-z0-9_]*"></div></div>
+      <div class="st-row"><label class="st-row-label" for="agent-key-value">Key</label>
+        <div class="st-row-value"><input class="st-input" id="agent-key-value" name="agent_key_value" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false"></div></div>
+    </fieldset>
+    {% elif not agent_keys %}<p class="faint">No agent key yet.</p>{% endif %}
+    </div>
+  </section>
+
+  <section class="st-section" id="hosts" aria-labelledby="hosts-h">
+    <div class="st-section-head">
+      <h2 id="hosts-h">Run hosts</h2>
+      <p>Machines a recipe can run on, over ssh. A host's name tests it.</p>
+    </div>
+    {% if hosts_row %}
+    <article class="st-field st-hosts" id="HOSTS" data-source="{{ hosts_row.source }}" data-secret="no">
+      {% if writable %}
+      <div class="settings-list" data-list="HOSTS" data-kind="hosts">
+        <div class="host-pills">{% for item in chosen %}<span class="chip st-watch host-pill" data-entry="{{ item }}" title="{{ item }}"><button type="button" class="host-name" data-test-host>{{ item.split('=', 1)[0] if '=' in item.split('@', 1)[0] else item.split(':/')[0].split(':~')[0] }}</button><span class="settings-test"></span><button type="button" class="host-remove" data-remove-item aria-label="Remove this host">×</button></span>{% endfor %}</div>
+        <div class="host-actions"><button type="button" class="btn sm" data-add-host>+ Add host</button><button type="button" class="btn sm ghost" data-test-all{% if not chosen %} hidden{% endif %}>Test all</button></div>
+        <input type="hidden" name="value:HOSTS" value="{{ hosts_row.shown }}">
+      </div>
+      {% else %}
+      <p class="mono">{{ chosen | join(', ') or '—' }}</p>
+      {% endif %}
+    </article>
+    <p class="st-about">HOSTS. An alias from ~/.ssh/config, or user@host[:port]. Only the name is stored; keys stay where they are.</p>
+    {% endif %}
+  </section>
+
+  {% if writable %}
+  <div class="st-savebar" role="status" aria-live="polite"><span class="st-changes" data-changes></span><button class="btn" type="submit" data-settings-retry hidden>Retry save</button><noscript><button class="btn" type="submit">Save</button></noscript></div>
+  </form>
+  {% endif %}
+  {# docker on this machine, outside the form: asked when the section opens (sandbox.js); a login goes to docker, never to the file #}
+  <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}"{% if writable %} data-csrf="{{ csrf }}" data-login="{{ url_for('settings_sandbox_login') }}" data-logout="{{ url_for('settings_sandbox_logout') }}" data-remove="{{ url_for('settings_sandbox_remove') }}"{% endif %}>
+    <div class="st-section-head"><h2 id="sandbox-h">Sandbox</h2><p>Where agents run, apart from this machine.</p></div>
+    <div class="st-card">
+      <div class="st-row"><span class="st-row-label">Docker</span><span class="st-row-value" data-docker-state>Checking…</span></div>
+    </div>
+    <fieldset class="st-card" data-hub hidden>
+      <legend>Docker Hub</legend>
+      <div class="st-row" data-hub-user hidden><span class="st-row-label">Account</span><span class="st-row-value st-value"><span class="mono" data-hub-name></span>{% if writable %} <button type="button" class="btn sm ghost" data-hub-logout>Log out</button>{% endif %}</span></div>
+      {% if writable %}
+      <form class="st-sandbox-rows" data-hub-login autocomplete="off" hidden>
+        <div class="st-row"><label class="st-row-label" for="hub-user">Username</label>
+          <div class="st-row-value"><input class="st-input" id="hub-user" name="username" type="text" spellcheck="false" autocomplete="off" maxlength="64" required></div></div>
+        <div class="st-row"><label class="st-row-label" for="hub-token">Access token</label>
+          <div class="st-row-value"><input class="st-input" id="hub-token" name="token" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false" required title="A read-only personal access token from your Docker Hub account settings"></div></div>
+        <div class="st-row"><span class="st-row-label"></span><span class="st-row-value st-value"><button type="submit" class="btn sm">Log in</button></span></div>
+      </form>
+      {% else %}<p class="st-about" data-hub-none hidden>Not logged in.</p>{% endif %}
+    </fieldset>
+    <fieldset class="st-card" data-images hidden>
+      <legend>Images</legend>
+      <div class="st-sandbox-rows" data-image-rows></div>
+      <p class="st-about" data-images-none hidden>No images yet.</p>
+    </fieldset>
+  </section>
+
+  {# kept in this browser, not in the file: onboarding.js fills the state and answers the buttons #}
+  <section class="st-section" id="general" aria-labelledby="general-h">
+    <div class="st-section-head">
+      <h2 id="general-h">General</h2>
+      <p>First steps and guidance.</p>
+    </div>
+    <div class="st-card st-guidance">
+      <div class="st-row"><span class="st-row-label">Onboarding</span><span class="st-row-value"><button class="btn sm ghost" type="button" data-onb="replay" title="Ask again whether to be guided, then the tour of the main pages">Replay the onboarding</button></span></div>
+      <div class="st-row"><span class="st-row-label">First steps</span><span class="st-row-value"><button class="btn sm ghost" type="button" data-onb="restore" id="onb-restore" hidden>Show it again</button>
+        <span class="onb-state" id="onb-state"></span></span></div>
+    </div>
+  </section>
+
+  <section class="st-section" id="appearance" aria-labelledby="appearance-h">
+    <div class="st-section-head"><h2 id="appearance-h">Appearance</h2><p>Choose how Nullius looks on this device.</p></div>
+    <div class="st-card">
+      <div class="st-row"><span class="st-row-label">Theme</span>
+        <div class="st-theme-options" role="group" aria-label="Theme">
+          {% for theme, label in [('system', 'System'), ('light', 'Light'), ('charcoal', 'Neutral charcoal'), ('graphite', 'Cool graphite'), ('midnight', 'Midnight blue')] %}<button type="button" class="btn ghost" data-theme-choice="{{ theme }}" aria-pressed="false"><span class="st-theme-swatch" data-swatch="{{ theme }}" aria-hidden="true"><i></i><i></i><i></i></span>{{ label }}</button>{% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="st-section" id="storage" aria-labelledby="storage-h">
+    <div class="st-section-head"><h2 id="storage-h">Local data</h2><p>Active storage locations on this machine.</p></div>
+    {% for label, path in storage_paths %}
+    <div class="st-card"><div class="st-row"><span class="st-row-label">{{ label }}</span><span class="st-row-value mono">{{ path }}</span></div></div>
+    {% endfor %}
+    <p class="st-about">Read-only paths. Personal data stays outside the installation and survives upgrades.</p>
+  </section>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='settings/judges.js') }}"></script>
+<script src="{{ url_for('static', filename='settings/navigation.js') }}"></script>
+<script src="{{ url_for('static', filename='settings/providers.js') }}"></script>
+<script src="{{ url_for('static', filename='settings/sandbox.js') }}"></script>
+{% if writable %}
+<dialog id="add-host" class="settings-dialog">
+  {# a host: one of the ssh config's, or by hand — who and where, and how ssh gets in without a prompt. Test before Add; no password is ever stored, one is used once to put this machine's key on the host. #}
+  <div class="dialog-head"><h3>Add host</h3><p class="faint">Choose a machine for your runs.</p></div>
+  {# The tabs and the config panel exist only when the ssh config names a
+     host; `dialog-panels` wraps the panels either way, or its closing tag
+     below would close an ancestor and take the dialog's own footer — and
+     the script's `[data-cancel]` — out of it. #}
+  {% if ssh_hosts %}<div class="dialog-tabs" role="tablist">
+    <button type="button" class="dialog-tab on" data-tab="config" role="tab" aria-selected="true">From SSH config</button>
+    <button type="button" class="dialog-tab" data-tab="manual" role="tab" aria-selected="false">Enter manually</button>
+  </div>{% endif %}
+  <div class="dialog-panels">
+  {% if ssh_hosts %}<div class="dialog-panel" data-panel="config">
+    <label class="fl" id="host-picker-label">Host</label>
+    <div class="host-picker">
+      <button type="button" class="host-picker-trigger" aria-labelledby="host-picker-label host-picked" aria-expanded="false" aria-controls="host-options"><span id="host-picked">Select a host</span><span aria-hidden="true">⌄</span></button>
+      <div id="host-options" class="host-options" hidden>
+        <input type="search" class="host-search" aria-label="Filter hosts by name, user or address" placeholder="Filter by name, user or address…" autocomplete="off">
+        <p class="host-count" aria-live="polite"></p>
+        <div class="host-options-list" role="listbox" aria-label="SSH hosts">{% for h in ssh_hosts %}<button type="button" class="pick" role="option" data-host-chip="{{ h.alias }}" aria-selected="false"><span class="pick-name">{{ h.alias }}</span><span class="pick-sub">{{ h.user ~ ' @ ' if h.user }}{{ h.hostname or h.alias }}{{ ' · ' ~ h.port if h.port }}</span></button>{% endfor %}</div>
+        <p class="faint small" data-no-matches hidden>No hosts match your search.</p>
+      </div>
+    </div>
+    <p class="faint small" data-all-chosen hidden>Every host in the config is already in the list.</p>
+  </div>{% endif %}
+  <form autocomplete="off" class="dialog-panel" data-panel="manual"{% if ssh_hosts %} hidden{% endif %}>
+    <label class="field host-field"><span class="fl">Host name</span><input type="text" name="display_name" required maxlength="64" placeholder="e.g. GPU lab" autocomplete="off"></label>
+    <div class="field-row">
+      <label class="field grow"><span class="fl">Address</span><input type="text" name="host" required spellcheck="false" placeholder="IP address or hostname"></label>
+      <label class="field port"><span class="fl">Port</span><input type="number" name="port" min="1" max="65535" value="22" required></label>
+    </div>
+    <label class="field host-field"><span class="fl">User</span><input type="text" name="user" required spellcheck="false" placeholder="e.g. ubuntu" autocomplete="off"></label>
+    <span class="fl">SSH key</span>
+    <div class="auth-cards">
+      <label class="auth-card"><input type="radio" name="auth" value="agent" checked><span class="auth-body"><span class="auth-title">Use SSH agent</span><span class="auth-sub">Use a key already available on this machine.</span></span></label>
+      <label class="auth-card"><input type="radio" name="auth" value="path"><span class="auth-body"><span class="auth-title">Path of the key</span><span class="auth-more"><span><input type="text" name="key_path" aria-label="Path of the key" placeholder="~/.ssh/id_ed25519" spellcheck="false"></span></span></span></label>
+      <label class="auth-card"><input type="radio" name="auth" value="file"><span class="auth-body"><span class="auth-title">Upload a key</span><span class="auth-more"><span><input type="file" name="key_file" aria-label="Upload a key"></span></span></span></label>
+      <details class="host-advanced"><summary>More authentication options</summary><label class="auth-card"><input type="radio" name="auth" value="password"><span class="auth-body"><span class="auth-title">A password, used once</span><span class="auth-sub">puts this machine's key on the host; the password is never stored</span><span class="auth-more"><span><input type="password" name="password" autocomplete="off" data-1p-ignore data-lpignore="true"></span></span></span></label></details>
+    </div>
+  </form>
+  </div>
+  <div class="dialog-foot">
+    <span class="settings-test dialog-status"></span>
+    <button type="button" class="btn sm ghost" data-cancel>Cancel</button>
+    <button type="button" class="btn sm ghost" data-dialog-test disabled>Test connection</button>
+    <button type="button" class="btn sm" data-dialog-add disabled>Add host</button>
+  </div>
+</dialog>
+<script>
+  // The hosts list: the chips that are on; the hidden value is their join, kept current.
+  const csrf = document.querySelector('#settings-form input[name=csrf]').value;
+  document.querySelectorAll('.settings-list').forEach(list => {
+    const hidden = list.querySelector('input[type=hidden]');
+    const sync = () => {
+      const all = list.querySelector('[data-test-all]'); if (all) all.hidden = !list.querySelector('.host-pill');
+      hidden.value = [...list.querySelectorAll('.host-pill')].map(i => i.dataset.entry).filter(Boolean).join(', ');
+      hidden.dispatchEvent(new Event('change', {bubbles: true}));
+    };
+    const label = entry => entry.split('@')[0].includes('=') ? entry.split('=')[0] : entry.split(':/')[0].split(':~')[0];
+    const paint = (pill, result) => {   // grey until tested, green when it answers, red when not
+      pill.classList.remove('st-watch', 'st-runs', 'st-blocked'); pill.classList.add(!result ? 'st-watch' : result.ok ? 'st-runs' : 'st-blocked');
+      const out = pill.querySelector('.settings-test'); out.textContent = !result ? '' : result.ok ? '✓ ' + result.detail : '✕ ' + result.error;
+      pill.title = !result ? pill.dataset.entry : (result.ok ? result.detail : result.error) + ' — ' + pill.dataset.entry;   // the detail is a hover away
+    };
+    const addHost = (entry, result) => {
+      const pill = document.createElement('span'); pill.className = 'chip host-pill'; pill.dataset.entry = entry; pill.title = entry;
+      pill.innerHTML = '<button type="button" class="host-name" data-test-host></button><span class="settings-test"></span><button type="button" class="host-remove" data-remove-item aria-label="Remove this host">×</button>';
+      pill.querySelector('.host-name').textContent = label(entry);
+      list.querySelector('.host-pills').appendChild(pill); paint(pill, result); sync();
+    };
+    const testPill = pill => { pill.querySelector('.settings-test').textContent = '…'; return testHost(pill.dataset.entry).then(r => paint(pill, r)); };
+    list.addEventListener('click', e => {
+      if (e.target.closest('[data-add-host]')) openAddHost(addHost, () => [...list.querySelectorAll('.host-pill')].map(i => i.dataset.entry));
+      if (e.target.closest('[data-remove-item]')) { e.target.closest('.host-pill').remove(); sync(); }
+      const name = e.target.closest('[data-test-host]');
+      if (name) testPill(name.closest('.host-pill'));
+      const all = e.target.closest('[data-test-all]');
+      if (all) { all.disabled = true; Promise.all([...list.querySelectorAll('.host-pill')].map(testPill)).then(() => { all.disabled = false; }); }
+    });
+  });
+  // One ssh from the application host, nothing stored: whether the host answers, and what it has.
+  const testHost = async entry => {
+    try {
+      const r = await fetch({{ url_for('settings_host_test')|tojson }}, {method: 'POST', headers: {'X-CSRF-Token': csrf}, body: new URLSearchParams({entry})});
+      const j = await r.json();
+      if (!j.ok) return {ok: false, error: j.error || ('HTTP ' + r.status)};
+      const has = k => k + (j[k] ? '' : ' missing');
+      return {ok: true, detail: [j.hostname, has('uv'), j.docker ? (j.docker_ok ? 'docker' : 'docker (no access)') : 'docker missing', j.harbor ? 'harbor ' + (j.harbor_version || '') : 'harbor missing', j.latency_ms + ' ms'].filter(Boolean).join(' · ')};
+    } catch (err) { return {ok: false, error: String(err)}; }
+  };
+  // The Add host dialog. Either panel names one host; Test tries it and Add puts it in the list with what Test found.
+  // Manual: the SSH agent or a key path needs no request; a key file is saved on this machine first; a password is used once to put this machine's key on the host.
+  const dialog = document.getElementById('add-host'), dform = dialog.querySelector('form'), dstatus = dialog.querySelector('.dialog-status');
+  let onAdded = null, panel = 'manual', resolved = null, tested = null;
+  const say = (text, cls) => { dstatus.textContent = text; dstatus.className = 'settings-test dialog-status' + (cls ? ' ' + cls : ''); dstatus.title = ''; };
+  const showTab = name => {
+    panel = name; say('');
+    dialog.querySelectorAll('.dialog-tab').forEach(t => { const on = t.dataset.tab === name; t.classList.toggle('on', on); t.setAttribute('aria-selected', on); });
+    dialog.querySelectorAll('.dialog-panel').forEach(p => { const on = p.dataset.panel === name; p.classList.toggle('on', on); p.hidden = !on; p.inert = !on; });
+    updateHostButtons();
+  };
+  const openAddHost = (cb, chosen) => {
+    onAdded = cb; dform.reset(); resolved = tested = null; say('');
+    const have = chosen(), picks = [...dialog.querySelectorAll('.pick')];
+    picks.forEach(c => { c.dataset.chosen = String(have.includes(c.dataset.hostChip)); c.hidden = c.dataset.chosen === 'true'; c.classList.remove('on'); c.setAttribute('aria-selected', 'false'); });
+    const left = picks.some(c => !c.hidden), all = dialog.querySelector('[data-all-chosen]');
+    if (all) all.hidden = left;
+    if (hostSearch) { hostSearch.value = ''; picked.textContent = 'Select a host'; filterHosts(); toggleHostOptions(false); }
+    showTab(dialog.querySelector('.dialog-tab') && left ? 'config' : 'manual');
+    document.querySelector('[data-add-host]').focus({preventScroll: true});
+    dialog.showModal();
+  };
+  // Some browsers do not focus buttons on pointer clicks. Restore a control,
+  // rather than letting the dialog return focus to the surrounding document.
+  dialog.addEventListener('close', () => document.querySelector('[data-add-host]').focus({preventScroll: true}));
+  dialog.querySelector('[data-cancel]').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', event => {
+    const box = dialog.getBoundingClientRect();
+    if (event.target === dialog && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) dialog.close();
+  });
+  dialog.querySelectorAll('.dialog-tab').forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
+  const hostTrigger = dialog.querySelector('.host-picker-trigger'), hostOptions = dialog.querySelector('#host-options'), hostSearch = dialog.querySelector('.host-search'), picked = dialog.querySelector('#host-picked');
+  const toggleHostOptions = open => { if (!hostOptions) return; hostOptions.hidden = !open; hostTrigger.setAttribute('aria-expanded', String(open)); };
+  const filterHosts = () => {
+    const query = hostSearch.value.trim().toLowerCase(), picks = [...dialog.querySelectorAll('.pick')];
+    const available = picks.filter(c => c.dataset.chosen !== 'true');
+    picks.forEach(c => { c.hidden = c.dataset.chosen === 'true' || !c.textContent.toLowerCase().includes(query); });
+    const count = available.filter(c => !c.hidden).length;
+    dialog.querySelector('.host-count').textContent = query ? `${count} of ${available.length} hosts` : `${available.length} hosts`;
+    dialog.querySelector('[data-no-matches]').hidden = count > 0;
+  };
+  const updateHostButtons = () => {
+    const f = new FormData(dform), auth = f.get('auth');
+    const ready = panel === 'config' ? !!dialog.querySelector('.pick.on') :
+      dform.checkValidity() && f.get('display_name').trim() && !/[,=@]/.test(f.get('display_name')) && f.get('user').trim() && f.get('host').trim() &&
+      (auth !== 'path' || f.get('key_path').trim()) && (auth !== 'file' || f.get('key_file')?.name) && (auth !== 'password' || f.get('password'));
+    dialog.querySelector('[data-dialog-test]').disabled = !ready;
+    dialog.querySelector('[data-dialog-add]').disabled = !ready;
+  };
+  if (hostTrigger) {
+    hostTrigger.addEventListener('click', () => { const open = hostOptions.hidden; toggleHostOptions(open); if (open) hostSearch.focus(); });
+    hostSearch.addEventListener('input', filterHosts);
+    dialog.addEventListener('click', e => { if (!e.target.closest('.host-picker')) toggleHostOptions(false); });
+    dialog.addEventListener('cancel', e => { if (!hostOptions.hidden) { e.preventDefault(); toggleHostOptions(false); hostTrigger.focus(); } });
+    hostOptions.addEventListener('keydown', e => {
+      const options = [...dialog.querySelectorAll('.pick')].filter(c => !c.hidden), index = options.indexOf(document.activeElement);
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+        if (e.target === hostSearch && !['ArrowDown', 'ArrowUp'].includes(e.key)) return;
+        e.preventDefault();
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? options.length - 1 : Math.max(0, Math.min(options.length - 1, index + (e.key === 'ArrowDown' ? 1 : -1)));
+        options[next]?.focus();
+      }
+    });
+  }
+  dialog.querySelectorAll('.pick').forEach(c => c.addEventListener('click', () => {
+    dialog.querySelectorAll('.pick').forEach(o => { o.classList.toggle('on', o === c); o.setAttribute('aria-selected', String(o === c)); });
+    picked.replaceChildren(...[...c.children].map(el => el.cloneNode(true)));
+    resolved = tested = null; say(''); toggleHostOptions(false); updateHostButtons(); hostTrigger.focus();
+  }));
+  dform.querySelectorAll('.auth-card input:not([type=radio])').forEach(i => i.addEventListener('focus', () => { i.closest('.auth-card').querySelector('[type=radio]').checked = true; }));
+  dform.addEventListener('input', () => { resolved = tested = null; updateHostButtons(); });
+  dform.addEventListener('change', () => { resolved = tested = null; updateHostButtons(); });
+  dform.addEventListener('submit', e => { e.preventDefault(); dialog.querySelector('[data-dialog-add]').click(); });
+  // The entry the dialog names right now, or null with the reason said.
+  const entry = async () => {
+    if (panel === 'config') { const c = dialog.querySelector('.pick.on'); if (!c) { say('pick a host', 'bad'); return null; } return c.dataset.hostChip; }
+    if (!dform.reportValidity()) return null;
+    const f = new FormData(dform), auth = f.get('auth'), user = f.get('user').trim(), host = f.get('host').trim(), port = f.get('port').trim();
+    if (!user || !host) { say('user and host are needed', 'bad'); return null; }
+    const name = f.get('display_name').trim();
+    if (!name || /[,=@]/.test(name)) { say('Enter a host name without commas, @ or =.', 'bad'); return null; }
+    const named = value => name + '=' + value;
+    const target = user + '@' + host + (port ? ':' + port : '');
+    if (auth === 'agent') return named(target);
+    if (auth === 'path') { const k = f.get('key_path').trim(); if (!k) { say('Enter the path of the key.', 'bad'); return null; } return named(target + ':' + k); }
+    if (resolved && resolved.target === target && resolved.auth === auth) return named(resolved.entry);
+    const body = new FormData(); body.set('user', user); body.set('host', host); body.set('port', port);
+    let url;
+    if (auth === 'file') { if (!f.get('key_file') || !f.get('key_file').name) { say('choose a key file', 'bad'); return null; } body.set('key', f.get('key_file')); url = {{ url_for('settings_host_key')|tojson }}; }
+    else { if (!f.get('password')) { say('type the password', 'bad'); return null; } body.set('password', f.get('password')); url = {{ url_for('settings_host_enrol')|tojson }}; }
+    say(auth === 'file' ? 'saving the key…' : 'putting this machine\'s key on the host…');
+    try {
+      const r = await fetch(url, {method: 'POST', headers: {'X-CSRF-Token': csrf}, body});
+      const j = await r.json();
+      if (!j.ok) { say('✕ ' + (j.error || ('HTTP ' + r.status)), 'bad'); return null; }
+      resolved = {target, auth, entry: j.entry}; return named(j.entry);
+    } catch (err) { say('✕ ' + err, 'bad'); return null; }
+    finally { dform.querySelector('[name=password]').value = ''; }
+  };
+  dialog.querySelector('[data-dialog-test]').addEventListener('click', async () => {
+    const e = await entry(); if (!e) return;
+    say('testing…'); const r = await testHost(e); tested = {entry: e, result: r};
+    say(r.ok ? '✓ Connected' : '✕ ' + r.error, r.ok ? 'ok' : 'bad'); if (r.ok) dstatus.title = r.detail;
+  });
+  dialog.querySelector('[data-dialog-add]').addEventListener('click', async () => {
+    const e = await entry(); if (!e) return;
+    dialog.close(); onAdded(e, tested && tested.entry === e ? tested.result : null);
+  });
+  // Keep pressed with the pointer leaves the focus in the input, so no change fires for what it discards.
+  document.getElementById('settings-form').addEventListener('pointerdown', event => {
+    const button = event.target.closest('[data-replace]');
+    const input = button && button.closest('.st-field').querySelector('input[name^="value:"]:not([type=hidden])');
+    if (input && !input.hidden) event.preventDefault();
+  });
+  // Delegation keeps Replace and Remove working after a field's saved state refreshes.
+  document.getElementById('settings-form').addEventListener('click', event => {
+    const button = event.target.closest('[data-replace], [data-unset]');
+    if (!button) return;
+    const field = button.closest('.st-field');
+    const input = field.querySelector('input[name^="value:"]:not([type=hidden])');
+    const flag = field.querySelector('input[name^="clear:"]');
+    if (!input || !flag) return;
+    if (button.hasAttribute('data-replace')) {
+      input.value = '';                    // emptied before it hides, so losing the focus changes nothing
+      input.hidden = !input.hidden;
+      button.textContent = input.hidden ? 'Replace' : 'Keep';
+      if (!input.hidden) input.focus();
+    } else {
+      flag.value = '1';
+      input.value = '';
+      input.hidden = true;
+      flag.dispatchEvent(new Event('change', {bubbles: true}));
+    }
+  });
+</script>
+<script src="{{ url_for('static', filename='settings/autosave.js') }}"></script>{% endif %}
+
+</div>
+{% endblock %}

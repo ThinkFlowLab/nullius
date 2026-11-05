@@ -1,0 +1,120 @@
+{
+  "schema": "nullius.agent/v1",
+  "key": "goose",
+  "label": "Goose",
+  "summary": "The AAIF's open-source agent, formerly Block's.",
+  "upstream": {
+    "package": "@aaif/goose-acp",
+    "version": "1.53.0",
+    "license": "Apache-2.0"
+  },
+  "install": {
+    "npm": [
+      "@aaif/goose-acp@1.53.0"
+    ]
+  },
+  "start": {
+    "acp": [
+      "{install}/node_modules/.bin/goose",
+      "acp",
+      "--with-builtin",
+      "developer"
+    ]
+  },
+  "model": {
+    "apis": [
+      "chat"
+    ],
+    "env": {
+      "XDG_CONFIG_HOME": "{home}/.config",
+      "GOOSE_PROVIDER": "openai",
+      "GOOSE_MODEL": "{model}",
+      "OPENAI_HOST": "{base_url}",
+      "OPENAI_BASE_PATH": "chat/completions",
+      "OPENAI_API_KEY": "{key}",
+      "GOOSE_MODE": "auto",
+      "GOOSE_DISABLE_KEYRING": "1",
+      "GOOSE_TELEMETRY_ENABLED": "false",
+      "GOOSE_THINKING_EFFORT": "{opt_reasoning_effort}"
+    },
+    "files": {
+      "{home}/.config/goose/config.yaml": "config.yaml"
+    }
+  },
+  "options": {
+    "reasoning_effort": {
+      "summary": "How much reasoning a supported model uses before answering, with `default` leaving the choice to the provider.",
+      "values": [
+        "default",
+        "off",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "default": "default"
+    }
+  },
+  "offers": [
+    "agent.task/v1",
+    "agent.workspace/v1",
+    "agent.tools/v1",
+    "agent.conversation/v1"
+  ],
+  "proven": {
+    "agent.workspace/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1.53.0",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__13-25-49__kit__agent-workspace-v1__goose"
+    },
+    "agent.task/v1": {
+      "passed": "3/3",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1.53.0",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__13-25-05__kit__agent-task-v1__goose"
+    },
+    "agent.tools/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1.53.0",
+      "kit_version": 2,
+      "backend": "docker",
+      "job": "2026-11-02__13-26-27__kit__agent-tools-v1__goose",
+      "skills": {
+        "decoys": {
+          "passed": "1/1",
+          "ok": true
+        },
+        "chain": {
+          "passed": "1/1",
+          "ok": true
+        },
+        "retry": {
+          "passed": "1/1",
+          "ok": true
+        }
+      }
+    },
+    "agent.conversation/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "1.53.0",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__13-27-36__kit__agent-conversation-v1__goose"
+    }
+  }
+}

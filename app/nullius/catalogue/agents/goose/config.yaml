@@ -1,0 +1,20 @@
+# Goose's configuration for a Nullius run, written into the home it is given.
+# The model is the relay, through Goose's OpenAI provider: OPENAI_HOST is the
+# relay's route (http://127.0.0.1:<port>/<unit>/v1) and Goose joins
+# OPENAI_BASE_PATH onto it, so calls reach <route>/chat/completions. The relay
+# holds the key; the environment carries only its placeholder. Goose acts
+# without asking (no one is there to answer), keeps no keyring and sends no
+# telemetry.
+GOOSE_PROVIDER: openai
+GOOSE_MODEL: "{model}"
+OPENAI_HOST: "{base_url}"
+OPENAI_BASE_PATH: chat/completions
+GOOSE_MODE: auto
+GOOSE_TELEMETRY_ENABLED: false
+extensions:
+  developer:
+    enabled: true
+    name: developer
+    type: builtin
+    timeout: 300
+    bundled: true

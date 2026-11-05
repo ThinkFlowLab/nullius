@@ -1,0 +1,5 @@
+{#- What ran, for a runner's job: the benchmark itself at the commit its
+    install resolved. -#}
+{% macro what_ran(job) -%}
+{%- if job and job.runner %}<span class="mono" title="What ran: the runner, and the upstream commit its install resolved">{{ job.runner }}{% if job.runner_commit %} {{ job.runner_commit }}{% endif %}</span>{% endif -%}
+{%- endmacro %}

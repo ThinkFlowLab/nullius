@@ -1,0 +1,32 @@
+/* Settings keeps the current page alive beneath a native modal dialog. */
+.settings-modal { width: min(1160px, calc(100vw - 64px)); height: min(840px, calc(100dvh - 64px)); max-width: none; max-height: none; padding: 0; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); color: var(--text); box-shadow: 0 24px 80px #0006; }
+.settings-modal[open] { display: flex; flex-direction: column; }
+.settings-modal::backdrop { background: #0008; backdrop-filter: blur(3px); }
+.settings-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--border-soft); }
+.settings-modal-head h2 { margin: 0; font: 500 16px var(--sans); color: var(--text); text-transform: none; letter-spacing: normal; }
+.settings-modal-head [data-settings-close] { font-size: 24px; width: 40px; height: 40px; }
+.settings-modal iframe { border: 0; width: 100%; flex: 1; min-height: 0; background: var(--bg); }
+/* The initial iframe document can paint white before its stylesheet arrives. */
+.settings-modal iframe:not([data-ready]) { visibility: hidden; }
+body:has(.settings-modal[open]) { overflow: hidden; }
+.settings-embedded .side, .settings-embedded .topbar, .settings-embedded .skip-link { display: none; }
+.settings-embedded { height: 100dvh; overflow: hidden; }
+.settings-embedded .shell, :root[data-rail] .settings-embedded .shell { display: block; height: 100%; min-height: 0; }
+.settings-embedded main { height: 100dvh; min-height: 0; padding: 24px; box-sizing: border-box; }
+.settings-embedded .st-page { height: 100%; min-height: 0; }
+.settings-embedded .st-head { display: none; }
+.settings-embedded .st-layout { flex: 1; min-height: 0; flex-wrap: nowrap; gap: 24px; align-items: stretch; }
+.settings-embedded .st-index { flex: 0 0 190px; position: static; min-height: 0; overflow-y: auto; border: 0; background: transparent; padding: 0; }
+.settings-embedded .st-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 0 8px 16px 4px; }
+@media (max-width: 760px) {
+  .settings-modal { width: 100vw; height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+  .settings-embedded main { padding: 16px; }
+  .settings-embedded .st-layout { flex-direction: column; }
+  .settings-embedded .st-index { flex: 0 1 auto; max-height: 38%; width: 100%; box-sizing: border-box; }
+  .settings-embedded .st-main { width: 100%; flex: 1 1 0; }
+}
+
+.settings-modal-head h2:focus { outline: none; }
+
+/* Document containers are not controls; keep focus rings on their controls. */
+.settings-modal iframe:focus, .settings-embedded #main-content:focus { outline: none; }

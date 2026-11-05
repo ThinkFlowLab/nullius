@@ -1,0 +1,523 @@
+{
+ "artifacts": {},
+ "behavior": {
+  "Behavior": [
+   "edit_test_cycles",
+   "exploration_per_edit",
+   "first_edit_call",
+   "n_edit",
+   "n_read",
+   "n_redundant_reads",
+   "n_repeated_failed_calls",
+   "n_search",
+   "time_to_first_edit"
+  ],
+  "Localization": [
+   "extra",
+   "hit",
+   "missed"
+  ]
+ },
+ "benchmarks": {
+  "Verdict": [
+   "gained_fail",
+   "gained_failures",
+   "gained_pass",
+   "held_fail",
+   "held_failures",
+   "held_pass",
+   "produced",
+   "succeeded",
+   "usable"
+  ],
+  "Vocabulary": [
+   "gained",
+   "gained_abbr",
+   "gained_term",
+   "has_patch",
+   "held",
+   "held_abbr",
+   "held_term"
+  ]
+ },
+ "catalog": {
+  "Benchmark": [
+   "blocker",
+   "can_run",
+   "category",
+   "citation",
+   "citation_source",
+   "datasets",
+   "domain",
+   "good_to_know",
+   "harness",
+   "key",
+   "label",
+   "limitations",
+   "origin",
+   "published",
+   "report",
+   "route_case",
+   "routes",
+   "scoring",
+   "timeouts",
+   "title",
+   "upstream_limitations",
+   "usable_routes"
+  ],
+  "Catalog": [
+   "_folders",
+   "benchmarks",
+   "categories",
+   "datasets",
+   "listed_benchmarks",
+   "path"
+  ],
+  "Dataset": [
+   "benchmark",
+   "hub",
+   "key",
+   "notes",
+   "official",
+   "registry",
+   "source",
+   "tasks",
+   "title",
+   "verifier"
+  ],
+  "Route": [
+   "harness",
+   "label",
+   "reason",
+   "summary",
+   "usable"
+  ]
+ },
+ "charts": {
+  "Bar": [
+   "count",
+   "h",
+   "hi_ns",
+   "kind",
+   "lo_ns",
+   "ns",
+   "w",
+   "x",
+   "y"
+  ],
+  "Box": [
+   "h",
+   "w",
+   "x0",
+   "x1",
+   "y0",
+   "y1"
+  ],
+  "Chart": [
+   "bars",
+   "columns",
+   "form",
+   "head",
+   "hidden_kinds",
+   "key",
+   "key_kinds",
+   "kinds",
+   "marker",
+   "note",
+   "readouts",
+   "series",
+   "subtitle",
+   "title",
+   "x_step",
+   "xticks",
+   "yticks"
+  ],
+  "ChartFilter": [
+   "active",
+   "off",
+   "query"
+  ],
+  "Charts": [
+   "box",
+   "edges",
+   "excluded",
+   "has_spans",
+   "items",
+   "note",
+   "plotted",
+   "summed_ns",
+   "total",
+   "viewbox",
+   "wrapped"
+  ],
+  "Column": [
+   "count",
+   "hi_ns",
+   "lo_ns",
+   "ns",
+   "segs",
+   "share",
+   "w",
+   "x"
+  ],
+  "Headline": [
+   "hi_ns",
+   "lo_ns",
+   "ns",
+   "text",
+   "unit"
+  ],
+  "KindFacet": [
+   "kind",
+   "n",
+   "off"
+  ],
+  "Marker": [
+   "at",
+   "ns",
+   "word"
+  ],
+  "Readout": [
+   "at",
+   "left",
+   "ns",
+   "right",
+   "rows",
+   "x"
+  ],
+  "ReadoutRow": [
+   "kind",
+   "label",
+   "on_line",
+   "share",
+   "y"
+  ],
+  "Sample": [
+   "kind",
+   "ns"
+  ],
+  "Series": [
+   "area",
+   "hi_ns",
+   "kind",
+   "label",
+   "lo_ns",
+   "n",
+   "points",
+   "values"
+  ],
+  "Tick": [
+   "anchor",
+   "at",
+   "ns",
+   "text"
+  ]
+ },
+ "classify": {},
+ "comparison": {
+  "Comparison": [
+   "cohort",
+   "datasets_known",
+   "datasets_match",
+   "excluded_trials",
+   "jobs",
+   "n_differing",
+   "references",
+   "repeated_trials",
+   "selected",
+   "shared_tasks",
+   "tasks"
+  ],
+  "RunRef": [
+   "job_id",
+   "value",
+   "workspace"
+  ],
+  "SelectedRun": [
+   "job",
+   "ref",
+   "value",
+   "workspace",
+   "workspace_label"
+  ],
+  "TaskRow": [
+   "attempts",
+   "dataset",
+   "differs",
+   "shared",
+   "task",
+   "trials"
+  ]
+ },
+ "conversation": {},
+ "harnesses": {},
+ "parse": {
+  "Job": [
+   "adjusted_solve_rate",
+   "agent_label",
+   "agent_name",
+   "agent_version",
+   "agents",
+   "control_source",
+   "counts",
+   "dataset",
+   "dataset_path",
+   "dir",
+   "duration_min",
+   "finished_at",
+   "harbor_command",
+   "harbor_editable",
+   "harbor_label",
+   "harbor_version",
+   "has_verdict",
+   "is_control",
+   "is_preparing",
+   "is_running",
+   "job_id",
+   "kind",
+   "launch",
+   "launch_id",
+   "mean_score",
+   "model_name",
+   "n_errored_trials",
+   "n_infra",
+   "n_pending_trials",
+   "n_planned",
+   "n_regressions",
+   "n_resolved",
+   "n_retries",
+   "n_running_trials",
+   "n_scored_parts",
+   "n_tasks",
+   "n_total_trials",
+   "parts_by",
+   "preparing",
+   "questions_from",
+   "raw_solve_rate",
+   "reasoning_effort",
+   "reports_regressions",
+   "runner",
+   "runner_commit",
+   "runner_items",
+   "runner_judge",
+   "score_by_group",
+   "scored_only",
+   "standard",
+   "started_at",
+   "state",
+   "total_cache_tokens",
+   "total_cost_usd",
+   "total_input_tokens",
+   "total_output_tokens",
+   "trials",
+   "vocab"
+  ],
+  "Trial": [
+   "agent_info_name",
+   "agent_version",
+   "cost_usd",
+   "dir",
+   "dur_agent",
+   "dur_agent_setup",
+   "dur_env",
+   "dur_other",
+   "dur_phases",
+   "dur_total",
+   "dur_verifier",
+   "env_type",
+   "exception_message",
+   "exception_type",
+   "f2p_fail",
+   "f2p_failures",
+   "f2p_pass",
+   "finished_at",
+   "has_trace",
+   "has_trajectory",
+   "is_infra",
+   "is_regression",
+   "job_id",
+   "model_name",
+   "n_cache_tokens",
+   "n_input_tokens",
+   "n_output_tokens",
+   "n_parts",
+   "n_rate_limited_retries",
+   "outcome",
+   "outcome_label",
+   "p2p_fail",
+   "p2p_failures",
+   "p2p_pass",
+   "part_groups",
+   "parts_by",
+   "patch_applied",
+   "patch_exists",
+   "phases",
+   "reasoning_effort",
+   "reward",
+   "score",
+   "source",
+   "started_at",
+   "task_base",
+   "task_name",
+   "trace_path",
+   "trajectory_path",
+   "trial_name",
+   "vocab"
+  ]
+ },
+ "trace": {
+  "Breakdown": [
+   "attributed_ns",
+   "idle_ns",
+   "llm_ns",
+   "measured_span_count",
+   "reasoning_ns",
+   "segments",
+   "span_count",
+   "tokens",
+   "tool_ns",
+   "unaccounted_ns",
+   "wall_ns"
+  ],
+  "Extent": [
+   "end_ns",
+   "span_ns",
+   "start_ns"
+  ],
+  "Facet": [
+   "count",
+   "hidden",
+   "kind",
+   "name"
+  ],
+  "Filter": [
+   "active",
+   "names",
+   "query",
+   "span_ids",
+   "zoom"
+  ],
+  "Row": [
+   "depth",
+   "has_children",
+   "is_instant",
+   "left_pct",
+   "offset_ns",
+   "span",
+   "width_pct"
+  ],
+  "Span": [
+   "attributes",
+   "children",
+   "content",
+   "duration_ns",
+   "end_ns",
+   "kind",
+   "label",
+   "merged",
+   "name",
+   "parent_span_id",
+   "source",
+   "span_id",
+   "start_ns",
+   "timing_quality",
+   "tokens"
+  ],
+  "Tick": [
+   "ns",
+   "pct"
+  ],
+  "Totals": [
+   "idle_ns",
+   "llm_ns",
+   "measured_span_count",
+   "reasoning_ns",
+   "segments",
+   "span_count",
+   "tool_ns",
+   "unaccounted_ns",
+   "wall_ns"
+  ],
+  "Trace": [
+   "axis",
+   "baseline",
+   "coverage_pct",
+   "error",
+   "extent",
+   "facets",
+   "filter",
+   "has_spans",
+   "hidden_count",
+   "hidden_spans",
+   "instrumented_ns",
+   "kinds_present",
+   "qualities_present",
+   "roots",
+   "rows",
+   "run_id",
+   "shown",
+   "ticks",
+   "totals",
+   "truncated",
+   "view",
+   "visible",
+   "zero_measured",
+   "zoom_lost",
+   "zoom_offset_ns",
+   "zoomed"
+  ]
+ },
+ "trajectory": {
+  "CacheAccounting": [
+   "convention",
+   "hit",
+   "new",
+   "reads",
+   "reported_cached",
+   "reported_diverges",
+   "reported_hit",
+   "reported_prompt",
+   "total"
+  ],
+  "Step": [
+   "dur",
+   "message",
+   "source",
+   "step_id",
+   "timestamp",
+   "tool_calls"
+  ],
+  "Trajectory": [
+   "cache",
+   "calls",
+   "category_freq",
+   "error",
+   "files_touched",
+   "final_metrics",
+   "has_step_clock",
+   "last_agent_message",
+   "n_failed_calls",
+   "n_steps",
+   "n_tool_calls",
+   "name_freq",
+   "steps",
+   "token_series",
+   "tools",
+   "total_reasoning_tokens"
+  ]
+ },
+ "workspace": {
+  "Workspace": [
+   "created",
+   "dir",
+   "imports_dir",
+   "job_roots",
+   "jobs_dir",
+   "label",
+   "n_cached",
+   "name",
+   "opened",
+   "roots"
+  ]
+ }
+}

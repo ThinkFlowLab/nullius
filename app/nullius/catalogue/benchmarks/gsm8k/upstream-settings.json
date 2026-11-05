@@ -1,0 +1,86 @@
+[
+ {
+  "entry": "grade_school_math/dataset.py",
+  "setting": "split",
+  "values": "test, train",
+  "default": "test",
+  "nullius": "dataset:test"
+ },
+ {
+  "entry": "grade_school_math/dataset.py",
+  "setting": "train split",
+  "values": "train.jsonl (7,473 problems)",
+  "default": "",
+  "nullius": "not offered - a training set: the paper fine-tunes on it and evaluates on test"
+ },
+ {
+  "entry": "grade_school_math/data",
+  "setting": "socratic format",
+  "values": "test_socratic.jsonl, train_socratic.jsonl",
+  "default": "",
+  "nullius": "not offered - the same 1,319 questions and final answers as test.jsonl, only the reference solution is written as sub-questions: a score would not change"
+ },
+ {
+  "entry": "grade_school_math/dataset.py",
+  "setting": "answer extraction (ANS_RE, INVALID_ANS)",
+  "values": "#### (-?[0-9.,]+), commas removed",
+  "default": "",
+  "nullius": "fixed:the upstream's extract_answer and is_correct, imported - scored as published"
+ },
+ {
+  "entry": "grade_school_math/sample.py",
+  "setting": "model",
+  "values": "a fine-tuned GPT-2 checkpoint (model_ckpts), on CUDA",
+  "default": "",
+  "nullius": "not offered - the README says sample.py was not used for any experiment of the paper, and it needs a checkpoint the repository does not ship and a CUDA GPU"
+ },
+ {
+  "entry": "grade_school_math/sample.py",
+  "setting": "sample_len",
+  "values": "100",
+  "default": "100",
+  "nullius": "not offered - sample.py's, not used for the paper's experiments"
+ },
+ {
+  "entry": "grade_school_math/calculator.py",
+  "setting": "calculator annotations (use_calculator)",
+  "values": "<<expr=value>> evaluated while sampling",
+  "default": "",
+  "nullius": "not offered - a sampling aid of sample.py, which the paper's experiments did not use; an agent may compute however it likes"
+ },
+ {
+  "entry": "grade_school_math/train.py",
+  "setting": "fine-tuning (batch 16, AdamW lr 1e-5, 20 epochs)",
+  "values": "",
+  "default": "",
+  "nullius": "not offered - training, not evaluation"
+ },
+ {
+  "entry": "paper",
+  "setting": "verifier reranking over 100 samples",
+  "values": "",
+  "default": "",
+  "nullius": "not offered - not in the repository's code"
+ },
+ {
+  "entry": "driver (ours)",
+  "setting": "prompt",
+  "values": "the question, asked to end with '#### <number>'",
+  "default": "",
+  "nullius": "fixed:Nullius's wording - the upstream has no prompt (the paper fine-tunes), so the agent, and the original's model, are told the answer format its scorer reads; said in the limitations"
+ },
+ {
+  "entry": "paper",
+  "setting": "original setup (the paper's answerer)",
+  "values": "fine-tuned GPT-3 175B / 6B",
+  "default": "",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "paper",
+  "setting": "decoding (greedy at test time)",
+  "values": "temperature 0",
+  "default": "0",
+  "nullius": "option:temperature"
+ }
+]

@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 688 480" width="688" height="480" role="img" aria-labelledby="pieces-title pieces-desc" class="dg">
+<title id="pieces-title">The pieces of the application</title>
+<desc id="pieces-desc">The browser talks to the Flask routes, the backend reads and writes the host’s disk, and reaches a run host, GitHub and PyPI, the model provider and the judge.</desc>
+<defs><marker id="pieces-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#596471" class="head"/></marker><marker id="pieces-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#36577d" class="head accent"/></marker><marker id="pieces-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#596471" stroke-width="1.2" class="arrow"/></marker></defs>
+<style>
+.dg{--p:var(--paper,#f7f8fa);--i:var(--ink,#25282e);--m:var(--muted,#596471);--a:var(--md-typeset-a-color,#36577d);--n:#fff;
+ --sans:'DM Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:'Instrument Serif',Georgia,serif}
+[data-md-color-scheme=slate] .dg{--n:color-mix(in srgb,var(--i) 7%,var(--p))}
+.dg .paper{fill:var(--p)}
+.dg .zone{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 14%,transparent);stroke-width:.8}
+.dg .eyebrow{fill:var(--m);font:500 8px var(--mono);letter-spacing:.14em}
+.dg .box{fill:var(--n);stroke:var(--i);stroke-width:1}
+.dg .focal{fill:color-mix(in srgb,var(--a) 12%,transparent);stroke:var(--a);stroke-width:1}
+.dg .store{fill:color-mix(in srgb,var(--i) 5%,transparent);stroke:var(--m);stroke-width:1}
+.dg .ext{fill:color-mix(in srgb,var(--i) 3%,transparent);stroke:color-mix(in srgb,var(--i) 40%,transparent);stroke-width:1}
+.dg .input{fill:color-mix(in srgb,var(--m) 10%,transparent);stroke:var(--m);stroke-width:1}
+.dg .name{fill:var(--i);font:500 12px var(--sans)}
+.dg .sub{fill:var(--m);font:9px var(--mono)}
+.dg .lbl{fill:var(--m);font:8px var(--mono);letter-spacing:.06em}
+.dg .lbl.accent{fill:var(--a)}
+.dg .arrow{fill:none;stroke:var(--m);stroke-width:1.2}
+.dg .arrow.accent{stroke:var(--a)}
+.dg .arrow.dashed{stroke-dasharray:5 4;stroke-width:1}
+.dg .arrow.bus{stroke-width:1}
+.dg .head{fill:var(--m)}
+.dg .head.accent{fill:var(--a)}
+.dg .dot{fill:var(--i)}
+.dg .life{stroke:color-mix(in srgb,var(--i) 25%,transparent);stroke-width:1;stroke-dasharray:3 3}
+.dg .act{fill:color-mix(in srgb,var(--i) 6%,transparent);stroke:var(--m);stroke-width:.8}
+.dg .frame{fill:color-mix(in srgb,var(--i) 2%,transparent);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .tab{fill:var(--p);stroke:color-mix(in srgb,var(--i) 22%,transparent);stroke-width:1}
+.dg .guard{fill:var(--m);font:8px var(--mono);letter-spacing:.04em}
+.dg .note{fill:var(--m);font:13px var(--sans)}
+.dg .rule{stroke:color-mix(in srgb,var(--i) 12%,transparent);stroke-width:.8}
+.dg .legend{fill:var(--m);font:9px var(--sans)}
+</style>
+<rect width="100%" height="100%" fill="#f7f8fa" class="paper"/>
+<rect x="24" y="24" width="304" height="96" rx="8" fill="#e6e6e8" stroke="#cfd0d2" class="zone"/>
+<rect x="36" y="28" width="125" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="44" y="37" text-anchor="start" class="eyebrow">BROWSER · LOOPBACK</text>
+<rect x="24" y="144" width="304" height="184" rx="8" fill="#e6e6e8" stroke="#cfd0d2" class="zone"/>
+<rect x="36" y="148" width="168" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="44" y="157" text-anchor="start" class="eyebrow">NULLIUS · FLASK · APP/WEB</text>
+<rect x="352" y="24" width="312" height="312" rx="8" fill="#e6e6e8" stroke="#cfd0d2" class="zone"/>
+<rect x="364" y="28" width="156" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="372" y="37" text-anchor="start" class="eyebrow">ON THE APPLICATION HOST</text>
+<rect x="24" y="360" width="640" height="96" rx="8" fill="#e6e6e8" stroke="#cfd0d2" class="zone"/>
+<rect x="36" y="364" width="71" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="44" y="373" text-anchor="start" class="eyebrow">ELSEWHERE</text>
+<path d="M176,104 L176,176" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<path d="M176,224 L176,248" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<path d="M312,260 L316,260 Q320,260 320,252 L320,88 Q320,80 328,80 L368,80" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<path d="M312,272 L324,272 Q332,272 332,264 L332,160 Q332,152 340,152 L368,152" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<path d="M312,284 L336,284 Q344,284 344,276 L344,232 Q344,224 352,224 L368,224" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<path d="M312,296 L368,296" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<path d="M108,312 L108,392" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<path d="M200,312 L200,344 Q200,352 208,352 L256,352 Q264,352 264,360 L264,392" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<path d="M280,312 L280,336 Q280,344 288,344 L412,344 Q420,344 420,352 L420,392" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<path d="M508,320 L508,348 Q508,356 516,356 L572,356 Q580,356 580,364 L580,392" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<path d="M488,416 L512,416" fill="none" stroke="#596471" marker-end="url(#pieces-arrow)" class="arrow"/>
+<rect x="116" y="340" width="48" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="140" y="350" text-anchor="middle" class="lbl">REGISTRY</text>
+<rect x="208" y="332" width="48" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="232" y="342" text-anchor="middle" class="lbl">REDACTED</text>
+<rect x="292" y="324" width="64" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="324" y="334" text-anchor="middle" class="lbl">SSH · RSYNC</text>
+<rect x="514" y="336" width="60" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="544" y="346" text-anchor="middle" class="lbl">HARBOR RUN</text>
+<rect x="40" y="56" width="272" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="40" y="56" width="272" height="48" rx="6" fill="#dedfe1" stroke="#596471" class="input"/>
+<text x="176" y="78" text-anchor="middle" class="name">Pages</text>
+<text x="176" y="92" text-anchor="middle" class="sub">runs, job, trial, compare, builder, settings</text>
+<rect x="40" y="176" width="272" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="40" y="176" width="272" height="48" rx="6" fill="#ffffff" stroke="#25282e" class="box"/>
+<text x="176" y="198" text-anchor="middle" class="name">Routes</text>
+<text x="176" y="212" text-anchor="middle" class="sub">app/web, one module per capability</text>
+<rect x="40" y="248" width="272" height="64" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="40" y="248" width="272" height="64" rx="6" fill="#e8edf4" stroke="#36577d" class="focal"/>
+<text x="176" y="278" text-anchor="middle" class="name">Backend</text>
+<text x="176" y="292" text-anchor="middle" class="sub">app/nullius, imports no Flask</text>
+<rect x="368" y="56" width="280" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="368" y="56" width="280" height="48" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="508" y="78" text-anchor="middle" class="name">settings.json</text>
+<text x="508" y="92" text-anchor="middle" class="sub">user configuration directory</text>
+<rect x="368" y="128" width="280" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="368" y="128" width="280" height="48" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="508" y="150" text-anchor="middle" class="name">workspaces/&lt;name&gt;/</text>
+<text x="508" y="164" text-anchor="middle" class="sub">parse cache, imports, judgements</text>
+<rect x="368" y="200" width="280" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="368" y="200" width="280" height="48" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="508" y="222" text-anchor="middle" class="name">runs/&lt;name&gt;/</text>
+<text x="508" y="236" text-anchor="middle" class="sub">run record, logs, jobs</text>
+<rect x="368" y="272" width="280" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="368" y="272" width="280" height="48" rx="6" fill="#e0e1e3" stroke="#596471" class="store"/>
+<text x="508" y="294" text-anchor="middle" class="name">harbor-pins/&lt;pin&gt;/</text>
+<text x="508" y="308" text-anchor="middle" class="sub">built wheels, run with uvx, detached</text>
+<rect x="40" y="392" width="136" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="40" y="392" width="136" height="48" rx="6" fill="#e4e5e7" stroke="#7a7c80" class="ext"/>
+<text x="108" y="414" text-anchor="middle" class="name">GitHub · PyPI</text>
+<text x="108" y="428" text-anchor="middle" class="sub">refs, releases</text>
+<rect x="196" y="392" width="136" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="196" y="392" width="136" height="48" rx="6" fill="#e4e5e7" stroke="#7a7c80" class="ext"/>
+<text x="264" y="414" text-anchor="middle" class="name">Judge</text>
+<text x="264" y="428" text-anchor="middle" class="sub">TypeSafe.ai</text>
+<rect x="352" y="392" width="136" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="352" y="392" width="136" height="48" rx="6" fill="#e4e5e7" stroke="#7a7c80" class="ext"/>
+<text x="420" y="414" text-anchor="middle" class="name">SSH run host</text>
+<text x="420" y="428" text-anchor="middle" class="sub">harbor run</text>
+<rect x="512" y="392" width="136" height="48" rx="6" fill="#f7f8fa" class="paper"/>
+<rect x="512" y="392" width="136" height="48" rx="6" fill="#e4e5e7" stroke="#7a7c80" class="ext"/>
+<text x="580" y="414" text-anchor="middle" class="name">Model provider</text>
+<text x="580" y="428" text-anchor="middle" class="sub">called by the run</text>
+</svg>

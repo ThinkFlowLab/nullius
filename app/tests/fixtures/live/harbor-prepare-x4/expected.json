@@ -1,0 +1,567 @@
+{
+ "job": "prep-oracle-x4",
+ "now": "2026-09-14T08:35:34.725474Z",
+ "state": "finished",
+ "launched_at": "2026-09-14T08:35:10.101636Z",
+ "preparing": null,
+ "started_at": "2026-09-14T08:35:10.115600Z",
+ "finished_at": "2026-09-14T08:35:34.725474Z",
+ "running": false,
+ "n_concurrent": 4,
+ "wall_sec": null,
+ "budget": null,
+ "agents": [
+  "oracle"
+ ],
+ "counts": {
+  "total": 4,
+  "running": 0,
+  "pending": 0,
+  "completed": 4,
+  "resolved": 4,
+  "unresolved": 0,
+  "errored": 0,
+  "cancelled": 0
+ },
+ "mean_reward": 1.0,
+ "totals": {
+  "n_input_tokens": null,
+  "n_cache_tokens": null,
+  "n_output_tokens": null,
+  "cost_usd": null
+ },
+ "tokens_per_sec": null,
+ "elapsed_sec": 24.623838,
+ "eta_sec": null,
+ "trials": [
+  {
+   "trial": "hello-world__wTsjEsx",
+   "task": "hello-world",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "position": 0,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 120.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": null,
+   "n_cache_tokens": null,
+   "n_output_tokens": null,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 2.199567,
+    "agent_setup": 6e-05,
+    "agent_run": 0.201642,
+    "verify": 11.028026
+   },
+   "total_sec": 24.538231
+  },
+  {
+   "trial": "hello-alpine__wxqCDfg",
+   "task": "hello-alpine",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "position": 1,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 120.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": null,
+   "n_cache_tokens": null,
+   "n_output_tokens": null,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 3.17707,
+    "agent_setup": 4e-05,
+    "agent_run": 0.189113,
+    "verify": 5.839061
+   },
+   "total_sec": 20.244612
+  },
+  {
+   "trial": "reward-kit-example__5TtaVb9",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "position": 2,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 120.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": null,
+   "n_cache_tokens": null,
+   "n_output_tokens": null,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 3.120088,
+    "agent_setup": 3.9e-05,
+    "agent_run": 1.686019,
+    "verify": 7.466444
+   },
+   "total_sec": 23.678342
+  },
+  {
+   "trial": "hello-user__cRK62PQ",
+   "task": "hello-user",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "position": 3,
+   "state": "done",
+   "phase": null,
+   "since": null,
+   "elapsed_sec": null,
+   "timeout_sec": 120.0,
+   "phases_done": [
+    "env_setup",
+    "agent_setup",
+    "agent_run",
+    "verify"
+   ],
+   "step": null,
+   "n_input_tokens": null,
+   "n_cache_tokens": null,
+   "n_output_tokens": null,
+   "cost_usd": null,
+   "activity": null,
+   "last_line": null,
+   "outcome": "resolved",
+   "reward": 1.0,
+   "durations": {
+    "env_setup": 2.233263,
+    "agent_setup": 4.3e-05,
+    "agent_run": 0.210799,
+    "verify": 0.181596
+   },
+   "total_sec": 13.768733
+  }
+ ],
+ "lanes": [
+  {
+   "agent": "oracle",
+   "trials": [
+    "hello-world__wTsjEsx",
+    "hello-alpine__wxqCDfg",
+    "reward-kit-example__5TtaVb9",
+    "hello-user__cRK62PQ"
+   ],
+   "counts": {
+    "total": 4,
+    "running": 0,
+    "pending": 0,
+    "completed": 4,
+    "resolved": 4,
+    "unresolved": 0,
+    "errored": 0,
+    "cancelled": 0
+   },
+   "mean_reward": 1.0,
+   "totals": {
+    "n_input_tokens": null,
+    "n_cache_tokens": null,
+    "n_output_tokens": null,
+    "cost_usd": null
+   },
+   "wins": 0
+  }
+ ],
+ "winners": [],
+ "tail": [
+  {
+   "ts": "2026-09-14T08:35:10.101636Z",
+   "seq": 1,
+   "job": "prep-oracle-x4",
+   "trial": null,
+   "event": "job.prepare",
+   "stage": "dataset",
+   "n_concurrent": 4,
+   "agents": [
+    "oracle"
+   ]
+  },
+  {
+   "ts": "2026-09-14T08:35:10.104439Z",
+   "seq": 2,
+   "job": "prep-oracle-x4",
+   "trial": null,
+   "event": "job.prepare",
+   "stage": "tasks"
+  },
+  {
+   "ts": "2026-09-14T08:35:10.115600Z",
+   "seq": 3,
+   "job": "prep-oracle-x4",
+   "trial": null,
+   "event": "job.start",
+   "n_total": 4,
+   "n_concurrent": 4,
+   "agents": [
+    "oracle"
+   ],
+   "tasks": [
+    "hello-alpine",
+    "hello-user",
+    "hello-world",
+    "reward-kit-example"
+   ]
+  },
+  {
+   "ts": "2026-09-14T08:35:10.115699Z",
+   "seq": 4,
+   "job": "prep-oracle-x4",
+   "trial": "hello-world__wTsjEsx",
+   "event": "trial.queued",
+   "task": "hello-world",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "position": 0
+  },
+  {
+   "ts": "2026-09-14T08:35:10.115759Z",
+   "seq": 5,
+   "job": "prep-oracle-x4",
+   "trial": "hello-alpine__wxqCDfg",
+   "event": "trial.queued",
+   "task": "hello-alpine",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "position": 1
+  },
+  {
+   "ts": "2026-09-14T08:35:10.115810Z",
+   "seq": 6,
+   "job": "prep-oracle-x4",
+   "trial": "reward-kit-example__5TtaVb9",
+   "event": "trial.queued",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "position": 2
+  },
+  {
+   "ts": "2026-09-14T08:35:10.115852Z",
+   "seq": 7,
+   "job": "prep-oracle-x4",
+   "trial": "hello-user__cRK62PQ",
+   "event": "trial.queued",
+   "task": "hello-user",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "position": 3
+  },
+  {
+   "ts": "2026-09-14T08:35:10.185230Z",
+   "seq": 8,
+   "job": "prep-oracle-x4",
+   "trial": "hello-world__wTsjEsx",
+   "event": "trial.phase",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "env_setup",
+   "timeout_sec": 600.0
+  },
+  {
+   "ts": "2026-09-14T08:35:10.223700Z",
+   "seq": 9,
+   "job": "prep-oracle-x4",
+   "trial": "hello-alpine__wxqCDfg",
+   "event": "trial.phase",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "env_setup",
+   "timeout_sec": 600.0
+  },
+  {
+   "ts": "2026-09-14T08:35:10.262814Z",
+   "seq": 10,
+   "job": "prep-oracle-x4",
+   "trial": "reward-kit-example__5TtaVb9",
+   "event": "trial.phase",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "env_setup",
+   "timeout_sec": 600.0
+  },
+  {
+   "ts": "2026-09-14T08:35:10.302465Z",
+   "seq": 11,
+   "job": "prep-oracle-x4",
+   "trial": "hello-user__cRK62PQ",
+   "event": "trial.phase",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "env_setup",
+   "timeout_sec": 600.0
+  },
+  {
+   "ts": "2026-09-14T08:35:12.384993Z",
+   "seq": 12,
+   "job": "prep-oracle-x4",
+   "trial": "hello-world__wTsjEsx",
+   "event": "trial.phase",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "agent_setup",
+   "timeout_sec": 360.0
+  },
+  {
+   "ts": "2026-09-14T08:35:12.385281Z",
+   "seq": 13,
+   "job": "prep-oracle-x4",
+   "trial": "hello-world__wTsjEsx",
+   "event": "trial.phase",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "agent_run",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-14T08:35:12.535939Z",
+   "seq": 14,
+   "job": "prep-oracle-x4",
+   "trial": "hello-user__cRK62PQ",
+   "event": "trial.phase",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "agent_setup",
+   "timeout_sec": 360.0
+  },
+  {
+   "ts": "2026-09-14T08:35:12.536205Z",
+   "seq": 15,
+   "job": "prep-oracle-x4",
+   "trial": "hello-user__cRK62PQ",
+   "event": "trial.phase",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "agent_run",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-14T08:35:12.857448Z",
+   "seq": 16,
+   "job": "prep-oracle-x4",
+   "trial": "hello-world__wTsjEsx",
+   "event": "trial.phase",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "verify",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-14T08:35:13.001680Z",
+   "seq": 17,
+   "job": "prep-oracle-x4",
+   "trial": "hello-user__cRK62PQ",
+   "event": "trial.phase",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "verify",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-14T08:35:13.383116Z",
+   "seq": 18,
+   "job": "prep-oracle-x4",
+   "trial": "reward-kit-example__5TtaVb9",
+   "event": "trial.phase",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "agent_setup",
+   "timeout_sec": 360.0
+  },
+  {
+   "ts": "2026-09-14T08:35:13.383351Z",
+   "seq": 19,
+   "job": "prep-oracle-x4",
+   "trial": "reward-kit-example__5TtaVb9",
+   "event": "trial.phase",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "agent_run",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-14T08:35:13.400971Z",
+   "seq": 20,
+   "job": "prep-oracle-x4",
+   "trial": "hello-alpine__wxqCDfg",
+   "event": "trial.phase",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "agent_setup",
+   "timeout_sec": 360.0
+  },
+  {
+   "ts": "2026-09-14T08:35:13.401219Z",
+   "seq": 21,
+   "job": "prep-oracle-x4",
+   "trial": "hello-alpine__wxqCDfg",
+   "event": "trial.phase",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "agent_run",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-14T08:35:13.834200Z",
+   "seq": 22,
+   "job": "prep-oracle-x4",
+   "trial": "hello-alpine__wxqCDfg",
+   "event": "trial.phase",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "verify",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-14T08:35:15.315885Z",
+   "seq": 23,
+   "job": "prep-oracle-x4",
+   "trial": "reward-kit-example__5TtaVb9",
+   "event": "trial.phase",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "phase": "verify",
+   "timeout_sec": 120.0
+  },
+  {
+   "ts": "2026-09-14T08:35:24.071198Z",
+   "seq": 24,
+   "job": "prep-oracle-x4",
+   "trial": "hello-user__cRK62PQ",
+   "event": "trial.end",
+   "task": "harbor/hello-user",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "outcome": "resolved",
+   "reward": 1.0,
+   "evidence": "reward 1.0 >= 1.0",
+   "durations": {
+    "env_setup": 2.233263,
+    "agent_setup": 4.3e-05,
+    "agent_run": 0.210799,
+    "verify": 0.181596
+   }
+  },
+  {
+   "ts": "2026-09-14T08:35:30.468312Z",
+   "seq": 25,
+   "job": "prep-oracle-x4",
+   "trial": "hello-alpine__wxqCDfg",
+   "event": "trial.end",
+   "task": "harbor/hello-alpine",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "outcome": "resolved",
+   "reward": 1.0,
+   "evidence": "reward 1.0 >= 1.0",
+   "durations": {
+    "env_setup": 3.17707,
+    "agent_setup": 4e-05,
+    "agent_run": 0.189113,
+    "verify": 5.839061
+   }
+  },
+  {
+   "ts": "2026-09-14T08:35:33.941156Z",
+   "seq": 26,
+   "job": "prep-oracle-x4",
+   "trial": "reward-kit-example__5TtaVb9",
+   "event": "trial.end",
+   "task": "reward-kit-example",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "outcome": "resolved",
+   "reward": 1.0,
+   "evidence": "reward 1.0 >= 1.0",
+   "durations": {
+    "env_setup": 3.120088,
+    "agent_setup": 3.9e-05,
+    "agent_run": 1.686019,
+    "verify": 7.466444
+   }
+  },
+  {
+   "ts": "2026-09-14T08:35:34.723461Z",
+   "seq": 27,
+   "job": "prep-oracle-x4",
+   "trial": "hello-world__wTsjEsx",
+   "event": "trial.end",
+   "task": "harbor/hello-world",
+   "agent": "oracle",
+   "model": "anthropic/claude-haiku-4-5",
+   "outcome": "resolved",
+   "reward": 1.0,
+   "evidence": "reward 1.0 >= 1.0",
+   "durations": {
+    "env_setup": 2.199567,
+    "agent_setup": 6e-05,
+    "agent_run": 0.201642,
+    "verify": 11.028026
+   }
+  },
+  {
+   "ts": "2026-09-14T08:35:34.725474Z",
+   "seq": 28,
+   "job": "prep-oracle-x4",
+   "trial": null,
+   "event": "job.end",
+   "n_completed": 4,
+   "n_errored": 0,
+   "n_cancelled": 0
+  }
+ ],
+ "notices": []
+}

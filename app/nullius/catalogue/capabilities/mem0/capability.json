@@ -1,0 +1,135 @@
+{
+  "schema": "nullius.capability/v1",
+  "key": "mem0",
+  "label": "Mem0",
+  "summary": "Mem0's memory layer: an LLM extracts facts from conversations, recalled by hybrid search, optionally reranked.",
+  "kind": "memory",
+  "upstream": {
+    "repository": "https://github.com/mem0ai/mem0",
+    "tag": "v2.2.1",
+    "tested": "94c3fe9f238f3dbf29c9ce98643bd71eb13077cd",
+    "tested_date": "2026-11-02",
+    "package": "mem0ai",
+    "version": "2.2.1",
+    "license": "Apache-2.0"
+  },
+  "install": {
+    "python": "3.12",
+    "pip": [
+      "mem0ai==2.2.1",
+      "fastembed==0.9.1",
+      "spacy==3.8.18"
+    ],
+    "wheels": [
+      {
+        "url": "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+        "sha256": "1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85"
+      }
+    ],
+    "prefetch": [
+      "Qdrant/bm25"
+    ]
+  },
+  "env": {
+    "MEM0_TELEMETRY": "False",
+    "FASTEMBED_CACHE_PATH": "{install}/hf"
+  },
+  "model": {
+    "apis": [
+      "chat"
+    ],
+    "env": {
+      "OPENAI_BASE_URL": "{base_url}",
+      "OPENAI_API_KEY": "{key}",
+      "MEM0_LLM_MODEL": "{model}",
+      "MEM0_REASONING": "{opt_reasoning_effort}",
+      "MEM0_INFER": "{opt_infer}",
+      "MEM0_EMBEDDER": "{opt_embedder}",
+      "MEM0_TOP_K": "{opt_top_k}",
+      "MEM0_THRESHOLD": "{opt_threshold}",
+      "MEM0_RERANK": "{opt_rerank}"
+    },
+    "side_models": [
+      "text-embedding-3-small",
+      "text-embedding-3-large"
+    ]
+  },
+  "options": {
+    "reasoning_effort": {
+      "summary": "How much reasoning the model uses before answering, with `default` leaving the choice to the provider.",
+      "values": [
+        "default",
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "default"
+    },
+    "infer": {
+      "summary": "Whether Mem0's LLM extracts facts from each session (`on`, Mem0's default) or the messages are stored as they are (`off`).",
+      "values": [
+        "on",
+        "off"
+      ],
+      "default": "on"
+    },
+    "embedder": {
+      "summary": "The embedding model Mem0 indexes and searches with; Mem0's default is text-embedding-3-small.",
+      "values": [
+        "text-embedding-3-small",
+        "text-embedding-3-large"
+      ],
+      "default": "text-embedding-3-small"
+    },
+    "top_k": {
+      "summary": "How many memories a search returns at most; Mem0's default is 20.",
+      "values": [
+        "5",
+        "10",
+        "20",
+        "50"
+      ],
+      "default": "20"
+    },
+    "threshold": {
+      "summary": "The lowest score a memory needs to be returned; Mem0's default is 0.1.",
+      "values": [
+        "0",
+        "0.1",
+        "0.3",
+        "0.5"
+      ],
+      "default": "0.1"
+    },
+    "rerank": {
+      "summary": "Whether search results are reranked by Mem0's LLM reranker, with the run's model (`llm`); Mem0 does not rerank by default.",
+      "values": [
+        "off",
+        "llm"
+      ],
+      "default": "off"
+    }
+  },
+  "start": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/capability.py"
+    ]
+  },
+  "offers": [
+    "cap.memory/v1"
+  ],
+  "proven": {
+    "cap.memory/v1": {
+      "passed": "2/2",
+      "on": "2026-11-02",
+      "model": "openai/gpt-5-mini",
+      "provider": "openrouter",
+      "version": "2.2.1",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-02__18-28-27__kit__cap-memory-v1__mem0"
+    }
+  }
+}

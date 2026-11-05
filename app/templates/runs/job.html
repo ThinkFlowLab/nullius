@@ -1,0 +1,446 @@
+{% from 'runs/_execution.html' import execution_strip %}
+{% extends "base.html" %}
+{% block title %}{{ job.job_id }} — Nullius{% endblock %}
+{% block crumb %}/ {{ job.job_id }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/live-board.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='runs/board.css') }}">{% endblock %}
+{% block body %}
+
+<header class="run-header">
+  <div class="page-title"><h1>{{ job.job_id }}</h1></div>
+  <div class="run-meta" aria-label="Run details">
+    {% if job.agent_label %}<span>{{ job.agent_label }}{% if job.agent_version %} <span class="mono faint" title="Resolved agent version, recorded in the trial's agent_info">v{{ job.agent_version }}</span>{% endif %}</span>{% endif %}
+    <span class="mono">{{ job.model_name }}</span>
+    <span title="{{ job.dataset }}">{{ job.dataset|dsname }}</span>
+    {% if control %}<span class="chip-control" title="Harbor control: never calls a model">control</span>
+    <span class="control-verdict {{ control.state }}" id="control-verdict" data-state="{{ control.state }}"
+      title="{{ control.control }} must be {{ control.expected }} on every task; this is a check on the tasks, not a score">{{ control.label }}</span>{% endif %}
+    {% if job.runner %}<span title="What ran: the runner, and the upstream commit its install resolved">{{ job.runner }}{% if job.runner_commit %} <span class="mono">{{ job.runner_commit }}</span>{% endif %}</span>
+    {% else %}<span title="What ran, from the job\'s lock.json">harbor {% if job.harbor_label %}<span class="mono">{{ job.harbor_label }}</span>{% else %}<span class="faint">unknown</span>{% endif %}</span>{% endif %}
+    <span>{{ job.trials|length }}{% if job.n_planned and job.n_planned != job.trials|length %} of {{ job.n_planned }} planned{% endif %} trials</span>
+    {% if job.n_retries %}<span class="warn" title="Trials Harbor restarted after an error">{{ job.n_retries }} retried</span>{% endif %}
+    {% if job.duration_min %}<span>{{ job.duration_min|runtime }}</span>{% endif %}
+  </div>
+  <div class="run-actions" role="group" aria-label="Run actions">
+    {% if execution and execution.plan.recipe %}<a class="btn sm ghost" href="{{ url_for('new_run', run=job.job_id) }}"
+      title="Open the run builder with the recipe this run was started from, every setting as it was; Run gives it a new name">New run like this</a>
+    {% else %}<a class="btn sm ghost" href="{{ url_for('new_run', like=job.job_id, workspace=request.args.get('workspace') or none) }}"
+      title="Open the run builder with what this run recorded: its agents and their parameters, model, dataset and task filter, limits, timeouts and Harbor; anything a recipe cannot say is named there">New run like this</a>{% endif %}
+    {% set controls = feasibility_controls(job) %}{% if controls %}<a class="btn sm ghost" href="{{ url_for('feasibility_page', job_id=job.job_id) }}" title="What the {{ controls|join(' and ') }} control{{ 's' if controls|length > 1 else '' }} said about each task: can an empty solution fail and a reference solution pass">Feasibility · {{ controls|join(' + ') }}</a>{% endif %}
+    {% if job.harbor_command %}<button class="btn sm ghost" type="button" data-copy="{{ job.harbor_command }}"
+      title="{{ job.harbor_command }}">Copy command</button>{% endif %}
+  </div>
+</header>
+
+{% if execution %}{{ execution_strip(execution, csrf, own=own if execution.plan.steps()|length > 1 else none) }}{% endif %}
+{% if job.is_preparing and not live_board and not ended %}
+{# Launched, not started: Harbor has written the configuration and nothing
+   else. There is no result record and no feed to fold yet, so this page
+   waits for the feed and reloads itself when it appears. #}
+<div class="alert warn" id="preparing" data-live="{{ url_for('job_live', job_id=job.job_id) }}">
+  <strong>Preparing</strong> — this run was launched and {{ job.runner or 'Harbor' }} has written its configuration; no trial has started yet.
+  The live board appears here as soon as the first event lands. This page refreshes itself.
+</div>
+{% elif (job.is_running or job.is_preparing) and ended %}
+{# Harbor's record says trials are running; the runner that started it says
+   the run ended. The runner is right: nothing will finish those trials. #}
+<div class="alert" id="ended-by-runner">
+  <strong>This run was {{ ended[0] }}</strong> at {{ ended[1].strftime('%H:%M:%S') }}Z, before Harbor closed the job:
+  {{ job.n_running_trials }} trial{{ '' if job.n_running_trials == 1 else 's' }} cut short, {{ job.n_pending_trials }} never started.
+  The numbers on this page are what was recorded up to then.
+</div>
+{% elif job.is_running and not view %}
+<div class="alert warn">
+  <strong>This run is still going</strong> — {{ job.n_running_trials }} trial{{ '' if job.n_running_trials == 1 else 's' }} running,
+  {{ job.n_pending_trials }} pending. Every number on this page is partial.
+</div>
+{% endif %}
+
+{% if live_board and live_board.error %}
+<div class="alert warn"><strong>The live feed could not be read</strong> — <span class="mono">{{ live_board.error }}</span>. The sections below come from the trial results and are unaffected.</div>
+{% endif %}
+{% if view %}
+{# Two views of one page. Live: the job's events.jsonl folded every second while it runs, and kept once it ended as the
+   record of how it ran. Results: the page rendered from the job's files when this page loaded. ?view= picks; without
+   it, Live while the feed says the job is going. At job.end Live stops asking and says Results is ready; no reload. #}
+<div class="view-tabs" role="tablist" aria-label="Views of this run">
+  <button type="button" role="tab" id="tab-live" data-view-tab="live" aria-controls="view-live" aria-selected="{{ 'true' if view == 'live' else 'false' }}"{% if view != 'live' %} tabindex="-1"{% endif %}><span class="live-dot{{ ' on' if live_board.running }}" id="live-dot" aria-hidden="true"></span>Live</button>
+  <button type="button" role="tab" id="tab-results" data-view-tab="results" aria-controls="view-results" aria-selected="{{ 'true' if view == 'results' else 'false' }}"{% if view != 'results' %} tabindex="-1"{% endif %}>Results <span class="results-badge" id="results-badge" data-trials="{{ job.trials|length }}">{{ 'as of load' if live_board.running else '' }}</span></button>
+</div>
+<div role="tabpanel" id="view-live" aria-labelledby="tab-live"{% if view != 'live' %} hidden{% endif %}>
+<section class="lb" id="live-board" aria-label="Live board" data-state="{{ live_board.initial.state }}"
+         data-endpoint="{{ url_for('job_live', job_id=job.job_id) }}"
+         data-trial-base="{{ '' if job.runner and not job.standard and not job.trials else url_for('job', job_id=job.job_id) }}"
+         data-noun="{{ job.runner_items[0] if job.runner_items else '' }}">
+  <div class="lb-headline">
+    <span class="lb-state"><i aria-hidden="true"></i><span data-lb-state>{{ live_board.initial.state|capitalize }}</span></span>
+    <span class="lb-clock" data-lb-head></span>
+    <span class="lb-meta" data-lb-meta></span>
+  </div>
+  <div class="lb-stats" data-lb-stats></div>
+  <div class="lb-mix">
+    <div class="lb-mixbar" data-lb-mixbar role="img" aria-label="Outcome mix of finished trials, as the feed reports them"></div>
+    <ul class="lb-legend" data-lb-legend aria-label="Filter trials by outcome"></ul>
+    <div class="lb-lanes" data-lb-lanes hidden></div>
+  </div>
+  <div class="lb-body">
+    <div class="lb-main">
+      <div class="lb-tiles-wrap"><span data-lb-tiles-label>All trials</span><div class="lb-tiles" data-lb-tiles></div></div>
+      <div data-lb-flight></div>
+    </div>
+    <aside class="lb-drawer" data-lb-drawer aria-label="Trial detail" hidden></aside>
+  </div>
+  <p class="lb-foot" data-lb-foot hidden><span data-lb-status></span></p>
+</section>
+<script id="live-board-initial" type="application/json">{{ live_board.initial | tojson }}</script>
+</div>
+<div role="tabpanel" id="view-results" aria-labelledby="tab-results"{% if view != 'results' %} hidden{% endif %}>
+{% if job.is_running and not ended %}
+<div class="alert warn">
+  <strong>Results as of this page's load</strong> — the run is still going: {{ job.n_running_trials }} trial{{ '' if job.n_running_trials == 1 else 's' }} running,
+  {{ job.n_pending_trials }} pending. Every number here is partial; Live follows it as it goes.
+</div>
+{% endif %}
+{% endif %}
+{% if job.is_preparing and not live_board and not ended %}
+<script>
+// Ask for the feed every second while preparing. Reload when it appears or
+// the runner reports an end; the settled page no longer starts this poll.
+(() => {
+  const url = document.getElementById('preparing').dataset.live;
+  const tick = async () => { if (document.hidden) return; try { const r = await fetch(url, {cache: 'no-store'}); if (r.ok) location.reload(); } catch {} };
+  setInterval(tick, 1000);
+})();
+</script>
+{% endif %}
+
+{#- The run page below its header: the scoreboard, the trials it scopes, and two disclosures.
+    Board counts are whole-run and never change under a filter; the trial rows are rendered here, and job.js only filters,
+    sorts and links them. Every lane and tally count is nullius.judge.lanes, which is reconcile's. -#}
+{% macro slots(jr, extra) -%}
+<span class="slots{{ extra }}" role="group" aria-label="{% if jr.flags %}Flags raised: {{ jr.flags|join(', ') }}{% else %}No flags raised{% endif %}">
+  {%- for f in judgement.flag_ids %}{% if f in jr.flags %}<span class="pip on" data-n="{{ loop.index }}" data-f="{{ f }}" data-tip="{{ loop.index }} · {{ f }} · raised" aria-label="{{ loop.index }} {{ f }}"></span>
+  {%- else %}<span class="pip" data-n="{{ loop.index }}" data-f="{{ f }}" data-tip="{{ loop.index }} · {{ f }} · not raised" aria-hidden="true"></span>{% endif %}{% endfor -%}
+</span>
+{%- endmacro %}
+{% set vocab = job.vocab %}
+{% set lanes = judgement.lanes if judgement else none %}
+{% set show_judge = judgement and not control %}
+{% set show_ins = job.trials and not control %}
+{% set tq = task_quality_summary(job) if show_ins else none %}
+{% set task_labels = task_labels_for(job) %}
+{% set nlines = {} %}{% if lanes %}{% for r in lanes.rows %}{% set _ = nlines.update({r.outcome: r.lines|length}) %}{% endfor %}{% endif %}
+{% set big = namespace(tok=0, tot=0) %}{% for t in job.trials %}{% set big.tok = [big.tok, (t.n_input_tokens or 0) + (t.n_output_tokens or 0)]|max %}{% set big.tot = [big.tot, t.dur_total or 0]|max %}{% endfor %}
+{% set ANCHOR = {'disagree': 'reconcile-disagree', 'other': 'reconcile-other', 'agree': 'reconcile-agree', 'suggestion': 'reconcile-suggestions',
+                 'gated': 'reconcile-gated', 'not_comparable': 'reconcile-not-comparable', 'not_judged': 'reconcile-not-judged'} %}
+{% set KEY = {'jog': '<path d="M0 1.5H5L10.5 7H16"/>', 'straight': '<path d="M0 5H16"/>', 'dotted': '<path d="M0 5H9" class="dt"/>',
+              'open': '<path d="M0 5H7"/><circle cx="11" cy="5" r="3" class="op"/>', 'ring': '<path d="M0 5H7"/><circle cx="11" cy="5" r="3" class="rg"/>'} %}
+{% set STUB = {'not_judged': 'ring', 'gated': 'dotted', 'suggestion': 'open', 'not_comparable': 'open'} %}
+{% set GLYPH = {'agree': '<path d="M1 7H13"/><circle cx="17" cy="7" r="3.2"/>', 'disagree': '<path d="M1 2.5H6L10.5 7H13"/><circle cx="17" cy="7" r="3.2"/>',
+                'other': '<path d="M1 2.5H6L10.5 7H13"/><circle cx="17" cy="7" r="3.2"/>', 'gated': '<path d="M1 7H13" class="dt"/><circle cx="17" cy="7" r="3.2"/>',
+                'suggestion': '<path d="M1 7H13"/><circle cx="17" cy="7" r="3.2"/>', 'not_comparable': '<path d="M1 7H13"/><circle cx="17" cy="7" r="3.2"/>'} %}
+
+<div class="rp" id="run-page">
+{% if job.n_regressions %}
+<div class="alert error">
+  <strong>{{ job.n_regressions }} trial{{ '' if job.n_regressions == 1 else 's' }} broke previously-passing tests.</strong>
+  A patch that fails {{ vocab.held_term or vocab.held or 'the regression guard' }} is worse than one that changes nothing — it introduced a regression.
+</div>
+{% endif %}
+
+<div class="bw">
+<section class="rp-card board{{ '' if show_judge else ' no-judge' }}" id="board" aria-label="Run summary">
+
+  {# the hero: the adjusted rate; a control's headline is its verdict, and its rates are shown as absence #}
+  {% if control %}
+  <div class="blk b-rate control-verdict {{ control.state }}" id="run-hero" title="{{ control.control }} must be {{ control.expected }} on every task; this is a check on the tasks, not a score">
+    <div class="lab">{{ control.control }} · {{ control.expected }}</div>
+    <div class="hero{{ ' long' if (control.n_behaved ~ '/' ~ control.n)|length > 4 }}">{{ control.n_behaved }}<small>/{{ control.n }}</small></div>
+    <div class="hk"><dl><dt>raw rate</dt><dd>—</dd><dt>adjusted rate</dt><dd>—</dd></dl></div>
+  </div>
+  {% elif job.scored_only %}
+  {#- a benchmark that gives a score and no pass or fail: the mean score is the headline, and the rates are shown as absence #}
+  <div class="blk b-rate" id="run-hero">
+    <div class="lab"><span class="def" data-tip="This benchmark gives each trial a score and no pass or fail, so there is no solve rate: the mean score{% if job.n_scored_parts %}, over every one of the {{ job.n_scored_parts }} scored{% endif %}, stands here.">Mean score</span></div>
+    <div class="hero{{ ' long' if ('%.2f'|format(job.mean_score))|length > 3 }}" id="adjusted-rate">{{ '%.2f'|format(job.mean_score) }}</div>
+    <div class="hk" aria-label="Health">
+      <dl>
+        <dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="No pass or fail in this benchmark: no rate">—</dd>
+        <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors and setup failures">{{ job.n_infra }}</dd>
+      </dl>
+    </div>
+  </div>
+  {% else %}
+  <div class="blk b-rate" id="run-hero">
+    <div class="lab"><span class="def" data-tip="Solves divided by the trials that actually ran: infra outcomes, which failed before the agent could be judged, are left out. Harbor's raw mean counts them as misses.">Adjusted rate</span></div>
+    {% if job.has_verdict %}
+    {% set rate = job.adjusted_solve_rate|pct %}
+    {#- the column holds three characters at full size; "100%" is set smaller rather than cross into Outcomes #}
+    <div class="hero{{ ' long' if rate|length > 3 }}" id="adjusted-rate">{{ rate }}</div>
+    {% set ran = job.trials|length - job.n_infra %}
+    <div class="meter" role="img" aria-label="{{ ran }} trials ran, {{ job.n_resolved }} solved, {{ job.n_infra }} infra"
+         data-tip="Solved {{ job.n_resolved }} of the {{ ran }} trial{{ '' if ran == 1 else 's' }} that ran{% if job.n_infra %}; {{ job.n_infra }} infra, hollow and apart, left out of the adjusted rate{% endif %}.">
+      {% if job.trials|length <= 12 %}
+      <span class="mu" style="--n:{{ job.trials|length }}">
+        {%- for t in job.trials if t.outcome == 'resolved' %}<i class="s hl" data-t="{{ t.trial_name }}"></i>{% endfor -%}
+        {%- for t in job.trials if t.outcome != 'resolved' and not t.is_infra %}<i class="hl" data-t="{{ t.trial_name }}"></i>{% endfor -%}
+        {%- if job.n_infra %}<span class="gap"></span>{% for t in job.trials if t.is_infra %}<i class="x hl" data-t="{{ t.trial_name }}"></i>{% endfor %}{% endif -%}
+      </span>
+      {% else %}
+      <span class="bar1"><span style="flex:{{ ran }}"><i style="width:{{ (100 * job.n_resolved / ran) if ran else 0 }}%"></i></span>{% if job.n_infra %}<span class="x" style="flex:{{ job.n_infra }}"></span>{% endif %}</span>
+      {% endif %}
+      <b>{{ job.n_resolved }}/{{ ran }}</b>
+    </div>
+    {% else %}
+    <div class="hero none" id="adjusted-rate" data-tip="No trial in this run carries a verdict — nothing was scored">—</div>
+    {% endif %}
+    <div class="hk" aria-label="Health">
+      {% if job.has_verdict and job.raw_solve_rate == job.adjusted_solve_rate %}<p id="raw-rate" data-tip="No outcome in this run is infra, so the raw rate is also {{ job.raw_solve_rate|pct }}">raw = adjusted</p>{% endif %}
+      <dl>
+        {% if not job.has_verdict or job.raw_solve_rate != job.adjusted_solve_rate %}<dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="Harbor's mean: resolved over every trial, infra included">{{ job.raw_solve_rate|pct }}</dd>{% endif %}
+        <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors and setup failures">{{ job.n_infra }}</dd>
+        <dt>broke tests</dt><dd{% if job.n_regressions %} class="bad"{% endif %} data-tip="Trials whose patch broke tests that passed before it">{{ job.n_regressions }}</dd>
+      </dl>
+    </div>
+  </div>
+  {% endif %}
+
+  {# the record: the outcome bar, and its legend rows - each filters the trials and starts its own lanes #}
+  <div class="blk b-out">
+    <div class="lab">Outcomes</div>
+    <div class="slot">
+      <div class="mix run-mix" role="group" aria-label="Outcome mix: each segment filters the trials">
+        {% for k in ORDER %}{% if job.counts[k] %}<a class="mseg fx hl oc-{{ k }}" style="flex:{{ job.counts[k] }}" data-o="{{ k }}" href="?outcome={{ k }}" tabindex="-1"
+          aria-label="{{ LABELS[k] }}: {{ job.counts[k] }}" data-tip="{{ LABELS[k] }}: {{ job.counts[k] }}"></a>{% endif %}{% endfor %}
+      </div>
+    </div>
+    <div class="run-outcome-filters" role="group" aria-label="Filter trials by outcome">
+    {% for k in ORDER %}{% if job.counts[k] %}{% set h = 45 + 30 * ((nlines.get(k) or 1) - 1) %}
+      <a class="row lg fx hl oc-{{ k }}" data-o="{{ k }}" href="?outcome={{ k }}"{% if h != 45 %} style="height:{{ h }}px"{% endif %}
+         data-tip="{{ DESCRIPTIONS[k] }}"><i class="sw"></i><b>{{ job.counts[k] }}</b><span>{{ LABELS[k] }}{% if k in INFRA %}<span class="infra">infra</span>{% endif %}</span></a>
+    {% endif %}{% endfor %}
+    </div>
+    <div class="row tot"><b>{{ job.trials|length }}</b><span>Trials{% if job.n_planned and job.n_planned != job.trials|length %} of {{ job.n_planned }} planned{% endif %}</span></div>
+  </div>
+
+  {% if show_judge %}
+  {# the judge: one advisory group. The lanes sit on the outcomes' row lines; the flags beside them #}
+  <div class="blk b-judge" id="judgement">
+    <div class="lab">{{ 'Trajectory judge' if job.runner else 'Judge' }} <span class="adv" data-tip="A judge model's reading of each transcript. Experimental: the recorded outcomes stand, and the rates count only them.">experimental</span>
+      <span class="aside">
+        <span data-tip="Trials the judge has read: each unresolved one for its cause and flags, a resolved one for flags">judged <b>{{ judgement.judged }}/{{ judgement.trials }}</b></span>
+        {% if judgement.truncation and judgement.truncation.truncated %}<span class="def" tabindex="0" data-tip="The trial state given to the judge was cut in {{ judgement.truncation.truncated }} of {{ judgement.truncation.records }} records: {% for kind, k in judgement.truncation.kinds.items() %}{{ kind }}: {{ k.truncated }} of {{ k.calls }} call{{ '' if k.calls == 1 else 's' }} cut to {{ judgement.truncation.limit }} characters (largest {{ k.max_chars }}){{ '; ' if not loop.last }}{% endfor %}{% if judgement.truncation.untyped %}; {{ judgement.truncation.untyped }} earlier record{{ '' if judgement.truncation.untyped == 1 else 's' }} cut, state kind not recorded{% endif %}">state truncated <b>{{ judgement.truncation.truncated }}/{{ judgement.truncation.records }}</b></span>{% endif %}
+        {% if judgement.judged %}<a class="xl" href="{{ url_for('reconcile_page', job_id=job.job_id) }}" data-tip="Trial by trial: the recorded outcome, the judge's cause, its confidence and status, with the confidence gate applied">Classifier vs judge →</a>{% endif %}
+      </span></div>
+    {% if job.runner %}<p class="small muted runner-judge" id="runner-judge">The outcomes are {{ job.runner }}'s own judge{% if job.runner_judge %}: {{ job.runner_judge }}{% endif %}.
+      This one is Nullius's, asked on a click: it reads each conversation for a cause and flags, and changes no outcome.</p>{% endif %}
+    <div class="jcols">
+      {% if lanes %}
+      <figure class="lanes" aria-label="Recorded outcome against the judge's reading">
+        <div class="lh" aria-hidden="true"><span></span>{% if lanes.has_agree %}<span class="ah">agrees</span>{% endif %}{% if lanes.has_disagree %}<span class="dh">disagrees</span>{% endif %}</div>
+        {% for r in lanes.rows %}
+        <div class="lr hl oc-{{ r.outcome }}" data-o="{{ r.outcome }}">
+          {% for g in r.lines %}
+          {% if g.lane == 'gutter' %}
+          {% set tip = {'not_asked': r.label ~ ': never asked a failure cause, so nothing to reconcile.',
+                        'not_judged': g.n ~ ' ' ~ r.label ~ ' not judged yet: no record.',
+                        'gated': g.n ~ ' ' ~ r.label ~ ' read as ' ~ (g.cause or '') ~ ', below the ' ~ lanes.threshold ~ ' confidence gate: noise, counted apart and never ranked.',
+                        'suggestion': g.n ~ ' ' ~ r.label ~ ' read as suggesting ' ~ (LABELS.get(g.suggests, g.suggests) or '') ~ ': no claim to test; experimental, never written back.',
+                        'not_comparable': g.n ~ ' ' ~ r.label ~ ': no claim to test, and the pick names no label.'}[g.status] %}
+          <div class="ll"><span class="na" data-tip="{{ tip }}">{% if STUB.get(g.status) %}<svg class="key" viewBox="0 0 16 10" aria-hidden="true">{{ KEY[STUB[g.status]]|safe }}</svg>{% endif %}{{ g.word }}{% if r.lines|length > 1 %}<b>{{ g.n }}</b>{% endif %}</span></div>
+          {% else %}
+          {% set side = 'a' if g.lane == 'agree' else 'd' %}
+          {% set tip = g.n ~ ' ' ~ r.label ~ ' read as ' ~ g.cause ~ ' · ' ~ g.status_label ~ '. Filters to ' ~ ('that trial.' if g.n == 1 else 'those trials.') %}
+          <div class="ll hl" data-o="{{ r.outcome }}" data-c="{{ g.cause }}" data-s="{{ g.status }}"><span class="cx {{ side }}{{ ' jog' if side == 'd' }}" aria-hidden="true"></span><a
+            class="cn {{ side }} fx hl" href="?outcome={{ r.outcome }}&amp;cause={{ g.cause }}&amp;status={{ g.status }}" data-o="{{ r.outcome }}" data-c="{{ g.cause }}" data-s="{{ g.status }}"
+            data-sl="{{ g.status_label }}" aria-label="{{ tip }}" data-tip="{{ tip }}"><i class="rg" aria-hidden="true"></i><span>{{ g.cause }}</span><b>{{ g.n }}</b></a></div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endfor %}
+        <div class="tally" aria-label="Reconcile counts">
+          {% for grp in lanes.tally %}<span class="tg"><svg class="key" viewBox="0 0 16 10" aria-hidden="true">{{ KEY[grp.shape]|safe }}</svg>
+            {%- for s, label, n in grp['items'] %}<a class="tli{{ ' lead' if s == 'disagree' and n }}" href="{{ url_for('reconcile_page', job_id=job.job_id) }}#{{ ANCHOR[s] }}"
+              data-tip="{{ label }}: {{ n }}. Opens Classifier vs judge at {{ label }}.">{{ label }}<b>{{ n }}</b>{% if s in ('disagree', 'agree') and lanes.of %}<small>/{{ lanes.of }}</small>{% endif %}</a>{% endfor %}</span>
+          {% endfor %}
+        </div>
+      </figure>
+      {% endif %}
+      {% if judgement.flags %}
+      <div class="b-flags" role="group" aria-label="Flags raised: each filters the trials">
+        {% set never = judgement.flag_ids|reject('in', judgement.flags|map('first')|list)|list %}
+        <div class="slot"><span>Flags raised</span><span class="end"{% if never %} data-tip="Never raised: {{ never|join(', ') }}"{% endif %}>of {{ judgement.judged }} judged</span></div>
+        {% for f, n in judgement.flags %}{% set num = judgement.flag_ids.index(f) + 1 %}
+        <a class="fr fx hl" data-f="{{ f }}" href="?flag={{ f }}" data-tip="{{ num }} · {{ f }}: raised on {{ n }} of {{ judgement.judged }} judged trials. Filters to them.">
+          <span class="pip on key-n" data-n="{{ num }}" aria-hidden="true"></span><span class="fn">{{ f }}</span><span class="fb"><i style="width:{{ (100 * n / judgement.judged)|round(1) }}%"></i></span><span class="fc">{{ n }}</span></a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% if (judgement.unjudged) or (judgement.llm.unjudged) or (tq and tq.unjudged) %}
+    <div class="jb">
+      {# one button per judge: each judges apart, so a person asks for the one they want #}
+      {% for lane, name, n, keyed in [('system-one', 'System One', judgement.unjudged, judgement.keyed), ('llm', 'LLM judge', judgement.llm.unjudged, judgement.llm.keyed)] if n %}
+      {% if keyed %}
+      <form method="post" action="{{ url_for('judge_job_route', job_id=job.job_id) }}" class="header-form" id="judge-all-{{ lane }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="lane" value="{{ lane }}">
+        <button class="btn sm ghost" type="submit" title="{{ name }}: judge every trial it has not judged">{{ name }} · judge {{ n }}</button>
+      </form>
+      {% else %}<a class="btn sm ghost" href="{{ url_for('settings_page') }}#judge" title="{{ name }} is not configured: set it in Settings, Judge">{{ name }} · set up</a>{% endif %}
+      {% endfor %}
+      {% if tq and tq.unjudged and tq.keyed %}
+      <form method="post" action="{{ url_for('judge_tasks_route', job_id=job.job_id) }}" class="header-form" id="judge-tasks">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn sm ghost" type="submit" title="Score every unscored task instruction: one call per task over its text alone">Score {{ tq.unjudged }} instruction{{ '' if tq.unjudged == 1 else 's' }}</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="blk b-tot">
+    <div class="lab">Run totals</div>
+    <div class="kv" data-tip="Recorded input + output tokens; cached input is already part of input"><span class="k">Tokens</span><span class="v">{{ (job.total_input_tokens + job.total_output_tokens)|tokens(job.kind) }}</span></div>
+    <div class="sp"><details class="pop"><summary aria-label="Token split: input, cached, output"><span class="tw"></span>in · cached · out</summary>
+      <div class="popm" role="group" aria-label="Token split"><span>input</span><b>{{ '{:,}'.format(job.total_input_tokens) }}</b><span>cached (part of input)</span><b>{{ '{:,}'.format(job.total_cache_tokens) }}</b><span>output</span><b>{{ '{:,}'.format(job.total_output_tokens) }}</b></div></details></div>
+    <div class="kv" data-tip="{{ 'A control never calls a model, so this is a real zero' if job.is_control else 'Only recorded by agents that report it' }}"><span class="k">Cost</span><span class="v">{{ job.total_cost_usd|usd(job.kind) }}</span></div>
+    {% if job.mean_score is not none %}<div class="kv" data-tip="{% if job.n_scored_parts %}The mean score over every one of the {{ job.n_scored_parts }} scored, whichever trial it is under{% else %}The mean of each item's graded score (an F1, partial credit){% endif %}{% if not job.scored_only %}; the rates count an item resolved at its benchmark's pass mark{% endif %}"><span class="k">Mean score</span><span class="v">{{ '%.2f'|format(job.mean_score) }}</span></div>{% endif %}
+    {% for g in job.score_by_group %}<div class="kv by-group" data-tip="The mean score of the {{ g.n }} scored with {{ job.parts_by }} {{ g.group }}"><span class="k">{{ job.parts_by|capitalize }} {{ g.group }}</span><span class="v">{{ '%.2f'|format(g.mean) }} <small class="faint">{{ g.n }}</small></span></div>{% endfor %}
+    {% if job.duration_min %}<div class="kv" data-tip="Start to finish, the whole run"><span class="k">Duration</span><span class="v">{{ job.duration_min|runtime }}</span></div>{% endif %}
+  </div>
+</section>
+</div>
+
+{# the trials: one filter row names every active filter, whichever mark set it #}
+<section class="rp-card trials" aria-label="Trials in this run">
+  <div class="tbar" role="group" aria-label="Filter the trials">
+    <h2 id="trials-heading" tabindex="-1">Trials</h2><span class="cnt" id="trial-count">{{ job.trials|length }}</span>
+    <div class="facet" data-k="o"><details><summary class="fsum"><span class="k">Outcome</span><span class="v">All</span><span class="car">▾</span></summary>
+      <div class="fmenu">
+        {% for k in ORDER %}{% if job.counts[k] %}<a class="fx" data-o="{{ k }}" href="?outcome={{ k }}"><i class="sw oc-{{ k }}"></i><span>{{ LABELS[k] }}</span><b>{{ job.counts[k] }}</b></a>{% endif %}{% endfor %}
+      </div></details><button class="x plain" type="button" hidden aria-label="Remove the outcome filter">✕</button></div>
+    {% if judgement and judgement.causes %}
+    <div class="facet j" data-k="c"><details><summary class="fsum"><span class="k">Judge cause</span><span class="v">All</span><span class="car">▾</span></summary>
+      <div class="fmenu" id="judge-filters">
+        {% for cause, n in judgement.causes %}<a class="fx" data-c="{{ cause }}" href="?cause={{ cause }}"><span class="mono">{{ cause }}</span><b>{{ n }}</b></a>{% endfor %}
+      </div></details><button class="x plain" type="button" hidden aria-label="Remove the judge cause filter">✕</button></div>
+    {% endif %}
+    {% if judgement and judgement.flags %}
+    <div class="facet j" data-k="f"><details><summary class="fsum"><span class="k">Flag</span><span class="v">All</span><span class="car">▾</span></summary>
+      <div class="fmenu">
+        {% for f, n in judgement.flags %}<a class="fx" data-f="{{ f }}" href="?flag={{ f }}"><span class="pip on key-n" data-n="{{ judgement.flag_ids.index(f) + 1 }}" aria-hidden="true"></span><span class="mono">{{ f }}</span><b>{{ n }}</b></a>{% endfor %}
+      </div></details><button class="x plain" type="button" hidden aria-label="Remove the flag filter">✕</button></div>
+    {% endif %}
+    <button class="fclear plain" id="clear-filters" type="button" hidden>Show all {{ job.trials|length }}</button>
+  </div>
+  <p class="sr" id="trials-live" aria-live="polite"></p>
+  {% set show_cause = show_judge %}
+  {% set show_flags = show_judge and judgement.judged %}
+  {% set n_judge = (1 if show_cause else 0) + (1 if show_flags else 0) + (1 if show_ins else 0) %}
+  <div class="tscroll" role="region" aria-label="Trials in this run" tabindex="0">
+  <table class="tt">
+    <colgroup>
+      <col><col class="w-out">{% if show_cause %}<col class="w-cause">{% endif %}{% if show_flags %}<col class="w-flags">{% endif %}{% if show_ins %}<col class="w-ins">{% endif %}
+      {% if vocab.gained %}<col class="w-chk">{% endif %}{% if vocab.held %}<col class="w-chk">{% endif %}
+      <col class="w-tok"><col class="w-tm"><col class="w-env"><col class="w-ag"><col class="w-ver"><col class="w-go">
+    </colgroup>
+    <thead>
+      <tr class="grp">
+        <th colspan="2"></th>
+        {% if n_judge %}<th colspan="{{ n_judge }}"><span class="gl"><span data-tip="A judge model's reading, experimental as on the board: the recorded outcomes stand.">Judge</span>{% if tq %}<span class="gx" id="task-quality" data-tip="Task instructions the judge has scored, once per dataset and task">instructions scored <b>{{ tq.judged }}/{{ tq.tasks }}</b></span>{% endif %}</span></th>{% endif %}
+        {% if vocab.gained or vocab.held %}<th colspan="{{ (1 if vocab.gained else 0) + (1 if vocab.held else 0) }}"><span class="gl">Tests</span></th>{% endif %}
+        <th></th>
+        <th colspan="4"><span class="gl">Time</span></th>
+        <th></th>
+      </tr>
+      <tr class="cols">
+        <th scope="col">Task</th>
+        <th scope="col">Outcome</th>
+        {% if show_cause %}<th scope="col"><span data-tip="The judge's failure cause, drawn as on the board: straight when the recorded outcome allows it, jogged when it does not, ending in the judge's hollow ring. A resolved trial is not asked.">Cause<span class="nfh">{% if show_flags %} · flags{% endif %}</span></span></th>{% endif %}
+        {% if show_flags %}<th scope="col" class="c-flags"><span data-tip="One slot per flag, numbered in the vocabulary's order: {% for f in judgement.flag_ids %}{{ loop.index }} {{ f }}{{ ' · ' if not loop.last }}{% endfor %}. Filled: raised on this trial.">Flags</span></th>{% endif %}
+        {% if show_ins %}<th scope="col" class="num"><span data-tip="A judge model's score of the task's instruction text alone: about the task, not this trial">Instruction</span></th>{% endif %}
+        {% if vocab.gained %}<th scope="col" class="num" title="{% if vocab.gained_term %}{{ vocab.gained_term }} {% endif %}pass / fail">{{ vocab.gained_abbr or vocab.gained }}</th>{% endif %}
+        {% if vocab.held %}<th scope="col" class="num" title="{% if vocab.held_term %}{{ vocab.held_term }} {% endif %}pass / fail">{{ vocab.held_abbr or vocab.held }}</th>{% endif %}
+        <th scope="col" class="num"><a class="sort" href="?sort=tokens" data-sort="tokens" data-tip="Recorded input + output tokens; cached input is already included. Sorts.">Tokens</a></th>
+        <th scope="col" class="num"><a class="sort" href="?sort=total" data-sort="total" data-tip="Recorded start-to-finish trial duration, including setup and overhead. Sorts.">Total</a></th>
+        <th scope="col" class="num"><span data-tip="The environment's setup, before the agent starts">Env</span></th>
+        <th scope="col" class="num"><span data-tip="The agent's own run">Agent</span></th>
+        <th scope="col" class="num"><span data-tip="The verifier; — when it did not run">Verify</span></th>
+        <th scope="col"><span class="sr">Open</span></th>
+      </tr>
+    </thead>
+    <tbody class="rows" id="trial-rows">
+      {% for t in job.trials %}
+      {%- set jr = judgement.by_trial.get(t.trial_name) if judgement else none %}
+      {%- set status = lanes.status.get(t.trial_name) if lanes else '' %}
+      {%- set used = (t.n_input_tokens or 0) + (t.n_output_tokens or 0) %}
+      {%- set url = url_for('trial', job_id=job.job_id, trial_name=t.trial_name) %}
+      <tr data-outcome="{{ t.outcome }}" data-cause="{{ (jr.cause or '') if jr else '' }}" data-status="{{ status or '' }}" data-flags="{{ jr.flags|join(' ') if jr else '' }}"
+          data-trial="{{ t.trial_name }}" data-tokens="{{ used }}" data-total="{{ t.dur_total or 0 }}" data-i="{{ loop.index0 }}">
+        <td><a class="task" href="{{ url }}" title="{{ t.task_name }}">{{ task_labels[t.trial_name] }}</a></td>
+        <td><span class="oc oc-{{ t.outcome }}"><i></i>{{ t.outcome_label }}</span>
+          {%- if t.score is not none %} <span class="badge trial-score" title="{% if t.n_parts %}The mean score of its {{ t.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it">{{ '%.2f'|format(t.score) }}</span>{% endif %}
+          {%- if t.n_rate_limited_retries %} <span class="badge rate-limits" title="{{ t.n_rate_limited_retries }} rate-limited call{{ '' if t.n_rate_limited_retries == 1 else 's' }} retried by the agent's SDK (agent/gateway.log) — the run survived them, so the outcome does not show them">429 ×{{ t.n_rate_limited_retries }}</span>{% endif -%}
+          {%- if t.exception_type %}
+          {%- if t.exception_message %}<details class="exd"><summary><span class="tw"></span>{{ t.exception_type }}</summary><code>{{ t.exception_message }}</code></details>
+          {%- else %}<span class="exn">{{ t.exception_type }}</span>{% endif %}{% endif %}</td>
+        {% if show_cause %}<td>
+          {%- if t.outcome == 'resolved' %}<span class="rc" data-tip="A resolved trial is never asked a failure cause"><span class="na">not asked</span></span>
+          {%- elif jr and jr.cause %}<span class="rc" data-tip="Recorded {{ t.outcome_label }}; the judge reads {{ jr.cause }}{% if status in GLYPH %} · {{ {'agree': 'Agree', 'disagree': 'Disagree', 'other': 'Cause outside the list', 'gated': 'Below threshold', 'suggestion': 'Suggested', 'not_comparable': 'Not comparable'}[status] }}{% endif %}"><svg class="kg" viewBox="0 0 22 14" aria-hidden="true">{{ (GLYPH.get(status) or GLYPH['agree'])|safe }}</svg><span class="ctag">{{ jr.cause }}</span></span>
+          {%- else %}<span class="rc"><span class="na">not judged</span></span>{% endif %}
+          {%- if show_flags and jr %}{{ slots(jr, ' nf') }}{% endif %}</td>{% endif %}
+        {% if show_flags %}<td class="c-flags">{% if jr %}{{ slots(jr, '') }}{% endif %}</td>{% endif %}
+        {% if show_ins %}<td class="num">{%- set q = task_quality_of(job, t) %}{% if q %}<span class="ins task-quality" data-task-quality="{{ q.level }}" data-tip="Instruction quality {{ '%.1f'|format(q.score) }} of {{ q.top }}: {{ q.label }}{% if q.confidence is not none %} · confidence {{ '%.0f'|format(q.confidence * 100) }}%{% endif %} · {{ q.model }} · experimental, about the task text, not this trial">{{ '%.1f'|format(q.score) }}<small>/{{ q.top }}</small></span>{% else %}<span class="faint">—</span>{% endif %}</td>{% endif %}
+        {% if vocab.gained %}<td class="num chk">{% if t.f2p_pass or t.f2p_fail %}<span class="ok">{{ t.f2p_pass }}</span><span class="faint">/</span><span class="bad">{{ t.f2p_fail }}</span>{% else %}<span class="faint">—</span>{% endif %}</td>{% endif %}
+        {% if vocab.held %}<td class="num chk">
+          {%- if t.p2p_pass or t.p2p_fail -%}
+            <span class="ok">{{ t.p2p_pass }}</span><span class="faint">/</span><span class="bad">{{ t.p2p_fail }}</span>
+            {%- if t.is_regression %} <span class="badge danger" title="Broke {{ t.p2p_fail }} previously-passing test(s)">⚠</span>{% endif -%}
+          {%- else %}<span class="faint">—</span>{% endif -%}
+        </td>{% endif %}
+        <td class="num run-token-count"><span class="mg" style="--v:{{ '%.3f'|format(used / big.tok if big.tok else 0) }}" data-tip="{% if used or job.is_control %}Input: {{ '{:,}'.format(t.n_input_tokens or 0) }} · Output: {{ '{:,}'.format(t.n_output_tokens or 0) }} · Cached input: {{ '{:,}'.format(t.n_cache_tokens or 0) }} (included in input){% else %}Token usage not recorded{% endif %}">{{ used|tokens(job.kind) }}</span></td>
+        <td class="num tot run-total-time"><span class="mg" style="--v:{{ '%.3f'|format((t.dur_total or 0) / big.tot if big.tot else 0) }}">{{ t.dur_total|secs }}</span></td>
+        <td class="num phase">{{ t.dur_env|secs }}</td>
+        <td class="num phase">{{ t.dur_agent|secs }}</td>
+        <td class="num phase">{{ t.dur_verifier|secs }}</td>
+        <td class="go"><a href="{{ url }}" aria-label="Open {{ t.task_base }}" tabindex="-1">→</a></td>
+      </tr>
+      {% endfor %}
+      <tr class="empty" id="no-trial-matches" hidden><td colspan="20">No trial matches <button class="fclear plain" type="button" data-clear>Show all {{ job.trials|length }}</button></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{# behind a click: what the run recorded about its install, and the page's one block of prose #}
+<div class="more">
+  {% if job.harbor_command %}
+  <details id="configuration">
+    <summary title="The command this run ran"><span class="tw"></span>Configuration<span class="end"></span></summary>
+    {% if job.harbor_command %}<div class="rcmd"><code>{{ job.harbor_command }}</code><button class="btn sm ghost" type="button" data-copy="{{ job.harbor_command }}">Copy</button></div>{% endif %}
+  </details>
+  {% endif %}
+  <details id="definitions">
+    <summary><span class="tw"></span>Definitions<span class="end"><span>outcomes · rates · judge</span></span></summary>
+    <dl class="gl">
+      {% for k in ORDER %}{% if job.counts[k] %}<dt class="oc-{{ k }}"><i class="sw"></i>{{ LABELS[k] }}{% if k in INFRA %} <span class="infra">infra</span>{% endif %}</dt><dd>{{ DESCRIPTIONS[k] }}</dd>{% endif %}{% endfor %}
+      <dt class="gs">Adjusted rate</dt><dd>Solves divided by the trials that actually ran: it drops the outcomes marked <span class="infra">infra</span>, which failed before the agent could be judged. The raw rate is Harbor's mean over every trial, shown beside it only when the two differ. A run in which no trial carries a verdict shows —, never 0%.</dd>
+      {% if not control %}<dt>Solved meter</dt><dd>One unit per trial that ran, solves filled; an infra trial is a hollow unit after a gap. Past 12 trials the units become one bar. A hovered trial row lights its unit.</dd>{% endif %}
+      <dt>Tokens · Total</dt><dd>Under each trial's value a thin bar from zero, on one scale for the column: the largest trial fills its track. Total is the trial start to finish and includes overhead that Env, Agent and Verify do not.</dd>
+      {% if show_judge %}
+      <dt class="gs">Marks</dt><dd><span class="mk"><i class="sw oc-agent_error"></i> solid = recorded</span><span class="mk"><svg class="key" viewBox="0 0 16 10" aria-hidden="true"><path d="M0 6H9.5"/><circle cx="12.5" cy="6" r="2.5" class="op"/></svg> hollow ring = judge reading</span><span class="mk"><svg class="key" viewBox="0 0 16 10" aria-hidden="true"><path d="M0 5H9" class="dt"/></svg> dotted = below the confidence gate</span></dd>
+      <dt><span class="adv">experimental</span></dt><dd>A judge model's reading of each transcript (cause, flags) or of each task's instruction text (Instruction). Shown beside the recorded outcomes, never replacing them; the rates count only the record.</dd>
+      <dt>Lanes</dt><dd>Each outcome row starts its own readings. A line runs <b>straight</b> into <i>agrees</i> when the recorded outcome allows the judge's cause, and <b>jogs</b> into <i>disagrees</i> when it does not. What is not a finding about the claim stays in the gutter: <i>not asked</i> (a resolved trial is never asked its cause), <i>not judged</i>, <i>below gate</i> (under {{ lanes.threshold if lanes else '0.5' }} confidence), and an Unknown outcome's reading. A cause filters to exactly its trials.</dd>
+      <dt>Tally</dt><dd>Under the lanes: the Classifier vs judge page's own counts and words. Disagree and Agree always show, over the comparable judged trials; the others only when non-zero. Each opens that page at its status.</dd>
+      <dt>Flags</dt><dd>One judgment per behaviour, asked of every judged trial. Each flag keeps a fixed number, its place in the question vocabulary. The board lists the flags raised, most raised first; each trial row keeps one slot per flag in number order, filled where the flag was raised.</dd>
+      {% endif %}
+      {% if show_ins %}<dt>Instruction</dt><dd>A judge model's score of each task's instruction text alone, once per dataset and task. An unclear instruction caps every agent on that task. Experimental.</dd>{% endif %}
+    </dl>
+  </details>
+</div>
+</div>
+{% if view %}</div>{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='runs/live-board.js') }}"></script>
+<script src="{{ url_for('static', filename='runs/board.js') }}"></script>{% endblock %}

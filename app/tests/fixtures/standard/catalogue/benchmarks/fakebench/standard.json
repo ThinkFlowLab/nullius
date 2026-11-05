@@ -1,0 +1,13 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "fakebench",
+  "label": "Fake bench",
+  "summary": "Three scripted units for the run tests: one solved, one failed, one that hangs.",
+  "family": "agent",
+  "needs": ["agent.task/v1", "agent.workspace/v1"],
+  "driver": {"command": ["python3", "{here}/driver.py"]},
+  "datasets": [{"id": "all", "units": 4}],
+  "units": {"noun": "task", "nouns": "tasks"},
+  "score": {"kind": "pass", "says": "answer.txt holds 42"},
+  "limits": {"turn_seconds": 3}
+}

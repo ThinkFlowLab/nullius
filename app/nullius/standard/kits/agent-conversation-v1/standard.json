@@ -1,0 +1,26 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "agent-conversation-v1",
+  "kit_version": 1,
+  "label": "Kit: agent.conversation/v1",
+  "summary": "A code word said in the first turn, asked for in the second.",
+  "family": "agent",
+  "needs": ["agent.conversation/v1"],
+  "driver": {"command": ["python3", "{here}/driver.py"]},
+  "datasets": [{"id": "kit", "units": 2}],
+  "units": {"noun": "check", "nouns": "checks"},
+  "score": {"kind": "pass", "says": "the second turn's answer is the first turn's code word"},
+  "limits": {"turn_seconds": 300},
+  "check_details": {
+    "c1": {
+      "label": "Remember heron-42",
+      "task": "Remember heron-42 in the first turn; recall it in the second.",
+      "passes": "Exactly two user turns; the final answer contains heron-42."
+    },
+    "c2": {
+      "label": "Remember maple-17",
+      "task": "Remember maple-17 in the first turn; recall it in the second.",
+      "passes": "Exactly two user turns; the final answer contains maple-17."
+    }
+  }
+}

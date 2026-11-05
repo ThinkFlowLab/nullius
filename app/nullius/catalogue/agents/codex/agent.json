@@ -1,0 +1,202 @@
+{
+  "schema": "nullius.agent/v1",
+  "key": "codex",
+  "label": "Codex",
+  "summary": "OpenAI's coding agent.",
+  "upstream": {
+    "license": "Apache-2.0"
+  },
+  "start": {
+    "acp": [
+      "{install}/node_modules/.bin/codex-acp"
+    ]
+  },
+  "model": {
+    "apis": [
+      "responses"
+    ],
+    "env": {
+      "CODEX_HOME": "{home}/.codex",
+      "NULLIUS_RELAY_KEY": "{key}"
+    },
+    "files": {
+      "{home}/.codex/config.toml": "config.toml"
+    }
+  },
+  "caches": [
+    "{home}/.codex/.tmp"
+  ],
+  "options": {
+    "reasoning_effort": {
+      "summary": "How much reasoning the model uses before answering.",
+      "values": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "medium"
+    }
+  },
+  "default": "2.2.2",
+  "versions": {
+    "2.2.2": {
+      "upstream": {
+        "package": "@agentclientprotocol/codex-acp",
+        "core": "@openai/codex 0.160.1, a dependency of the adapter (^0.160.1), pinned in install"
+      },
+      "install": {
+        "npm": [
+          "@agentclientprotocol/codex-acp@2.2.2",
+          "@openai/codex@0.160.1"
+        ]
+      },
+      "env": {
+        "INITIAL_AGENT_MODE": "agent-full-access"
+      },
+      "fidelity": {
+        "command": [
+          "{install}/node_modules/.bin/codex",
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--",
+          "{prompt}"
+        ]
+      },
+      "proven": {
+        "agent.task/v1": {
+          "passed": "3/3",
+          "on": "2026-11-02",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "2.2.2",
+          "kit_version": 1,
+          "backend": "docker",
+          "job": "2026-11-02__13-16-33__kit__agent-task-v1__codex-2.2.2"
+        },
+        "agent.workspace/v1": {
+          "passed": "2/2",
+          "on": "2026-11-02",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "2.2.2",
+          "kit_version": 1,
+          "backend": "docker",
+          "job": "2026-11-02__13-17-34__kit__agent-workspace-v1__codex-2.2.2"
+        },
+        "agent.conversation/v1": {
+          "passed": "2/2",
+          "on": "2026-11-02",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "2.2.2",
+          "kit_version": 1,
+          "backend": "docker",
+          "job": "2026-11-02__13-20-14__kit__agent-conversation-v1__codex-2.2.2"
+        },
+        "fidelity": {
+          "verdict": "same",
+          "on": "2026-10-12",
+          "model": "gpt-5-mini",
+          "provider": "openai",
+          "version": "2.2.2",
+          "job": "2026-10-12__16-11-01__fidelity__codex-2.2.2",
+          "passes": 2,
+          "differs": []
+        },
+        "agent.tools/v1": {
+          "passed": "2/2",
+          "on": "2026-11-02",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "2.2.2",
+          "kit_version": 2,
+          "backend": "docker",
+          "job": "2026-11-02__13-22-34__kit__agent-tools-v1__codex-2.2.2",
+          "skills": {
+            "decoys": {
+              "passed": "1/1",
+              "ok": true
+            },
+            "chain": {
+              "passed": "1/1",
+              "ok": true
+            },
+            "retry": {
+              "passed": "1/1",
+              "ok": true
+            }
+          }
+        }
+      }
+    },
+    "0.16.0": {
+      "install": {
+        "npm": [
+          "@zed-industries/codex-acp@0.16.0"
+        ]
+      },
+      "proven": {
+        "agent.task/v1": {
+          "passed": "3/3",
+          "on": "2026-11-02",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "0.16.0",
+          "kit_version": 1,
+          "backend": "docker",
+          "job": "2026-11-02__13-20-41__kit__agent-task-v1__codex-0.16.0"
+        },
+        "agent.workspace/v1": {
+          "passed": "2/2",
+          "on": "2026-11-02",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "0.16.0",
+          "kit_version": 1,
+          "backend": "docker",
+          "job": "2026-11-02__13-21-58__kit__agent-workspace-v1__codex-0.16.0"
+        },
+        "agent.conversation/v1": {
+          "passed": "2/2",
+          "on": "2026-11-02",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "0.16.0",
+          "kit_version": 1,
+          "backend": "docker",
+          "job": "2026-11-02__13-24-39__kit__agent-conversation-v1__codex-0.16.0"
+        },
+        "agent.tools/v1": {
+          "passed": "2/2",
+          "on": "2026-11-02",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "0.16.0",
+          "kit_version": 2,
+          "backend": "docker",
+          "job": "2026-11-02__13-22-38__kit__agent-tools-v1__codex-0.16.0",
+          "skills": {
+            "decoys": {
+              "passed": "1/1",
+              "ok": true
+            },
+            "chain": {
+              "passed": "1/1",
+              "ok": true
+            },
+            "retry": {
+              "passed": "1/1",
+              "ok": true
+            }
+          }
+        }
+      },
+      "upstream": {
+        "package": "@zed-industries/codex-acp",
+        "core": "openai/codex rust-v0.137.0 (f221438b691b8f749d98f22077c93ebe01923fbe), compiled into the adapter's binary"
+      }
+    }
+  }
+}

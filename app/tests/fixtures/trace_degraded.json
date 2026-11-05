@@ -1,0 +1,83 @@
+{
+  "schema_version": "harbor-trace-v1",
+  "trial_name": "hello-world__SYNTH01",
+  "session_id": "2f8c1e04-7b39-4a51-9d62-0ce4a7b1f883",
+  "agent": {
+    "name": "claude-code",
+    "version": "2.1.228"
+  },
+  "clock": {
+    "container_epoch_ns": 1786482844116000000,
+    "container_monotonic_ns": 6056447977239,
+    "host_started_at": "2026-08-11T23:10:15.434113Z"
+  },
+  "spans": [
+    {
+      "span_id": "session:2f8c1e04-7b39-4a51-9d62-0ce4a7b1f883",
+      "trace_id": "0f5c1d9a4b3e2f6187a0c4d5e6f70819",
+      "name": "session",
+      "kind": "session",
+      "start_ns": 1786482844593000064,
+      "end_ns": 1786482844630999936,
+      "duration_ns": 37999872,
+      "timing_quality": "inferred",
+      "source": "log",
+      "attributes": {},
+      "children": [
+        {
+          "span_id": "block:2f8c1e04-7b39-4a51-9d62-0ce4a7b1f883:0",
+          "parent_span_id": "session:2f8c1e04-7b39-4a51-9d62-0ce4a7b1f883",
+          "trace_id": "0f5c1d9a4b3e2f6187a0c4d5e6f70819",
+          "name": "llm_request",
+          "kind": "llm_request",
+          "start_ns": 1786482844593000064,
+          "end_ns": 1786482844630999936,
+          "duration_ns": 37999872,
+          "timing_quality": "inferred",
+          "source": "log",
+          "attributes": {},
+          "tokens": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "children": [
+            {
+              "span_id": "block:2f8c1e04-7b39-4a51-9d62-0ce4a7b1f883:1",
+              "parent_span_id": "block:2f8c1e04-7b39-4a51-9d62-0ce4a7b1f883:0",
+              "trace_id": "0f5c1d9a4b3e2f6187a0c4d5e6f70819",
+              "name": "output",
+              "kind": "output",
+              "start_ns": 1786482844593000064,
+              "end_ns": 1786482844630999936,
+              "duration_ns": 37999872,
+              "timing_quality": "inferred",
+              "source": "log",
+              "attributes": {},
+              "content": {
+                "output": "Created hello.txt"
+              },
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "wall_ns": 2966069000,
+    "llm_ns": 37999872,
+    "tool_ns": 0,
+    "reasoning_ns": 0,
+    "idle_ns": 2928069128,
+    "span_count": 3,
+    "measured_span_count": 0,
+    "tokens": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0
+    }
+  }
+}

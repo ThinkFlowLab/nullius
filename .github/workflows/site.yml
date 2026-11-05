@@ -1,0 +1,33 @@
+name: documentation site
+
+# The host builds and publishes the site from main itself, through its
+# GitHub integration (app/site/README.md, "Publishing"), so this workflow
+# is only the check, run by hand (Actions, "documentation site", Run
+# workflow, on any branch). It builds the site the way the host does and
+# fails on a broken link, asset, anchor or search target; the same check
+# runs locally with `bash app/site/host-build.sh`.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Test the source staging and link checker
+        run: python -m unittest discover -s app/tests -p test_site.py
+      - name: Build and check the site as the host does
+        env:
+          SITE_URL: ${{ vars.DOCS_SITE_URL }}
+        run: bash app/site/host-build.sh

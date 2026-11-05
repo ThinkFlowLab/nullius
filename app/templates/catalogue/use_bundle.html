@@ -1,0 +1,11 @@
+{% macro use_bundle(group, key, csrf) -%}
+<details class="catalogue-restore">
+  <summary class="btn ghost">Use bundled entry</summary>
+  <form method="post" action="{{ url_for('catalogue_use_bundled', group=group, key=key) }}" class="bench-delete-ask">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <span>Remove your custom files and local proof records for <b>{{ key }}</b>? Saved runs and results stay.</span>
+    <button type="submit" class="btn">Use bundled entry</button>
+    <button type="button" class="btn ghost" onclick="const summary = this.closest('details').querySelector('summary'); summary.click(); summary.focus()">Keep my copy</button>
+  </form>
+</details>
+{%- endmacro %}
