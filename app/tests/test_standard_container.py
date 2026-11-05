@@ -206,6 +206,37 @@ class ArgvTest(unittest.TestCase):
         door.stop()
         self.assertFalse(os.path.exists(door.dir))
 
+    def _started(self, **kw):
+        said = []
+
+        def docker(args, env=None, **_):
+            said.append((args, dict(env or {})))
+            return subprocess.CompletedProcess(args, 0, "127.0.0.1:5555\n" if args[:1] == ["port"] else "", "")
+        self.enterContext(mock.patch.object(container, "_docker", side_effect=docker))
+        self.enterContext(mock.patch.object(container, "wait_listening"))
+        u = container.Unit("job", "u0001", os.path.join(self.tmp, "rec"), image="img", app="/app", key="k", **kw).start()
+        return u, said
+
+    def test_a_licence_server_on_this_machine_on_a_rootless_engine_is_reached_through_a_door(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=True))
+        self.enterContext(mock.patch.object(container.platform, "system", return_value="Linux"))
+        u, said = self._started(base="https://x/v1", servers=["host.docker.internal:27000", "lic.example:1055", "localhost:27001"])
+        self.assertEqual(u.reach, {"host.docker.internal:27000": "licence-server-1:27000", "lic.example:1055": "lic.example:1055",
+                                   "localhost:27001": "localhost:27001"})                # as on a rootful engine: the forwarder's own
+        sd, = u.socket_doors
+        self.addCleanup(sd.stop)
+        self.assertEqual(sd.target, ("127.0.0.1", 27000))
+        steps = [(a, e) for a, e in said if a[:1] == ["run"]]
+        a, env = next((a, e) for a, e in steps if u.names["agent"] + "-lic1" in a)
+        self.assertEqual((a[a.index("--network") + 1], a[a.index("--network-alias") + 1]), (u.names["network"], "licence-server-1"))
+        self.assertEqual(env["NULLIUS_FORWARD_TO"], "unix:" + sd.path)
+        a, env = next((a, e) for a, e in steps if u.names["agent"] + "-lic2" in a)
+        self.assertIn("host.docker.internal:host-gateway", a)                          # elsewhere: the forwarder as it is
+        self.assertEqual(env["NULLIUS_FORWARD_TO"], "lic.example:1055")
+        u.stop()
+        self.assertFalse(os.path.exists(sd.dir))
+        self.assertEqual(u.socket_doors, [])
+
     def test_the_loopback_forwarder_passes_connections_until_it_stops(self):
         import http.server, socket, threading, urllib.request
         class Ok(http.server.BaseHTTPRequestHandler):
