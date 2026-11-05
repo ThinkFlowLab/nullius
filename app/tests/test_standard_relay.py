@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -192,23 +193,26 @@ class ServeTest(unittest.TestCase):
 
     def serve(self, key, *extra):
         import subprocess
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        with open(os.path.join(d, "key"), "w") as f:
+            f.write(key + "\n")
         env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": self.app}
-        if key:
-            env[relay.KEY_VAR] = key
         return subprocess.Popen([sys.executable, "-m", "nullius.standard.relay", "serve", "--listen", "127.0.0.1:0",
-                                 "--base", f"http://127.0.0.1:{self.up.server_address[1]}/v1", "--record", tempfile.mkdtemp(),
-                                 "--model", "the-recipes", *extra], env=env, stdout=subprocess.PIPE, text=True)
+                                 "--base", f"http://127.0.0.1:{self.up.server_address[1]}/v1", "--record", d,
+                                 "--key-file", os.path.join(d, "key"), "--model", "the-recipes", *extra],
+                                env=env, stdout=subprocess.PIPE, text=True)
 
-    def test_serve_relays_with_the_key_from_its_environment_and_stops_on_sigterm(self):
+    def test_serve_relays_with_the_key_from_its_file_and_stops_on_sigterm(self):
         import signal
-        p = self.serve("sk-from-env", "--route", "u1-judge=the-judge")
+        p = self.serve("sk-from-file", "--route", "u1-judge=the-judge")
         try:
             where = json.loads(p.stdout.readline())["listening"]
             for tag, model in (("u1", "the-recipes"), ("u1-judge", "the-judge")):
                 req = urllib.request.Request(f"{where}/{tag}/v1/chat/completions", data=b'{"model":"asked"}',
                                              headers={"Content-Type": "application/json"})
                 urllib.request.urlopen(req).read()
-                self.assertEqual(Upstream.seen[-1][1], "Bearer sk-from-env")
+                self.assertEqual(Upstream.seen[-1][1], "Bearer sk-from-file")
                 self.assertEqual(Upstream.seen[-1][2]["model"], model)
             p.send_signal(signal.SIGTERM)
             self.assertEqual(p.wait(timeout=10), 0)
@@ -217,9 +221,18 @@ class ServeTest(unittest.TestCase):
                 p.kill()
             p.stdout.close()
 
-    def test_serve_without_the_key_in_its_environment_refuses(self):
+    def test_serve_without_its_key_file_refuses(self):
+        import subprocess
+        p = subprocess.Popen([sys.executable, "-m", "nullius.standard.relay", "serve", "--base", "http://127.0.0.1:9/v1",
+                              "--record", tempfile.mkdtemp(), "--key-file", "/nonexistent/key"],
+                             env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": self.app}, stdout=subprocess.PIPE, text=True)
+        self.assertIn("cannot read --key-file", p.stdout.readline())
+        self.assertEqual(p.wait(timeout=10), 2)
+        p.stdout.close()
+
+    def test_serve_with_an_empty_key_file_refuses(self):
         p = self.serve("")
-        self.assertIn(relay.KEY_VAR, p.stdout.readline())
+        self.assertIn("contains no key", p.stdout.readline())
         self.assertEqual(p.wait(timeout=10), 2)
         p.stdout.close()
 

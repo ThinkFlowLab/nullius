@@ -7,8 +7,10 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -42,6 +44,7 @@ class ArgvTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))
 
     def test_mounts_each_folder_once_at_its_own_path(self):
         ws, home, app = (os.path.join(self.tmp, n) for n in ("ws", "home", "app"))
@@ -91,11 +94,12 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(a[-2:], ["img", "codex-acp"])
         self.assertNotIn("-p", a)                                                          # nothing published
 
-    def test_the_relays_container_names_the_key_and_never_holds_it(self):
-        a = container.relay_argv("img", name="nullius-j-u0000-relay", job="j", app="/app", record="/rec",
+    def test_the_relays_container_is_given_the_keys_file_never_the_key(self):
+        a = container.relay_argv("img", name="nullius-j-u0000-relay", job="j", app="/app", record="/rec", key_file="/k/key",
                                  base="https://api.example/v1", model="m", routes={"u0000-judge": "the-judge"})
-        self.assertIn("NULLIUS_RELAY_UPSTREAM_KEY", a)
-        self.assertFalse(any(w.startswith("NULLIUS_RELAY_UPSTREAM_KEY=") for w in a))
+        self.assertEqual(a[a.index("--mount") + 1], "type=bind,source=/k/key,target=/opt/nullius/relay-key,readonly")
+        self.assertEqual(a[a.index("--key-file") + 1], container.RELAY_KEY_IN)
+        self.assertFalse(any("KEY" in a[i + 1] for i, w in enumerate(a) if w == "-e"))
         self.assertIn("127.0.0.1::8080", a)                                 # the driver's way in, this machine only
         self.assertIn("/app:/app:ro", a)
         self.assertIn("/rec:/rec:rw", a)
@@ -106,10 +110,10 @@ class ArgvTest(unittest.TestCase):
     def test_an_endpoint_on_this_machines_loopback_is_reached_through_the_bridge(self):
         self.assertTrue(all(map(container.on_loopback, ["http://localhost:11434/v1", "http://127.0.0.1:8000/v1", "http://[::1]:8000/v1"])))
         self.assertFalse(any(map(container.on_loopback, ["https://openrouter.ai/api/v1", "http://172.17.0.1:8000/v1", ""])))
-        a = container.relay_argv("img", name="r", job="j", app="/app", record="/rec", base="http://host.docker.internal:4000/v1",
+        a = container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="http://host.docker.internal:4000/v1",
                                  model="m", routes={}, hosts={"host.docker.internal": "172.17.0.1"})
         self.assertEqual(a[a.index("--add-host") + 1], "host.docker.internal:172.17.0.1")
-        self.assertNotIn("--add-host", container.relay_argv("img", name="r", job="j", app="/app", record="/rec", base="b", model="m", routes={}))
+        self.assertNotIn("--add-host", container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="b", model="m", routes={}))
         with mock.patch.object(container, "bridge_gateway", return_value=""):          # Docker Desktop: the bridge is elsewhere
             door = container.Loopback("http://user@localhost:11434/v1?x=1").start()
         self.assertEqual((door.base, door.hosts), ("http://user@host.docker.internal:11434/v1?x=1", {"host.docker.internal": "host-gateway"}))
@@ -153,6 +157,61 @@ class ArgvTest(unittest.TestCase):
         name = u.names["agent"] + "-lic1"
         self.assertEqual(calls, [["run", "-d"], ["wait", name], ["network", "connect"]])
 
+    def start(self, fail_on=None):
+        """A unit started against a stand-in docker: each call's arguments and
+        environment, and the key's file as it was when the relay was run."""
+        u = container.Unit("job", "u0000", os.path.join(self.tmp, "rec"), image="img", app="/app", base="b", key="sk-real")
+        calls, seen = [], {}
+
+        def docker(args, env=None, **_):
+            calls.append((args, env or {}))
+            if args[0] == "run":
+                src = args[args.index("--mount") + 1].split(",")[1].removeprefix("source=")
+                with open(src) as f:
+                    seen.update(path=src, key=f.read(), mode=stat.S_IMODE(os.stat(src).st_mode),
+                                dir_mode=stat.S_IMODE(os.stat(os.path.dirname(src)).st_mode))
+            if args[:2] == fail_on:
+                raise container.Unavailable("docker failed")
+            return subprocess.CompletedProcess(args, 0, "0.0.0.0:32768\n" if args[0] == "port" else "", "")
+        self.enterContext(mock.patch.object(container, "_docker", docker))       # for the test's stop too
+        self.enterContext(mock.patch.object(container, "wait_listening"))
+        if fail_on:
+            with self.assertRaises(container.Unavailable):
+                u.start()
+        else:
+            u.start()
+        return u, calls, seen
+
+    def test_the_key_reaches_the_relay_as_an_owner_only_file_removed_once_read(self):
+        u, calls, seen = self.start()
+        self.assertEqual((seen["key"], seen["mode"], seen["dir_mode"]), ("sk-real", 0o600, 0o700))
+        self.assertEqual(os.path.dirname(os.path.dirname(seen["path"])), container.key_root())  # never the record's folder
+        self.assertEqual(stat.S_IMODE(os.stat(container.key_root()).st_mode), 0o700)
+        self.assertFalse(os.path.exists(os.path.dirname(seen["path"])))          # gone once the relay listens
+        self.assertNotIn("sk-real", json.dumps(calls))                           # no argument, no variable
+        u.stop()
+
+    def test_a_failed_start_removes_the_keys_file(self):
+        u, calls, seen = self.start(fail_on=["network", "connect"])             # after the relay's run
+        self.assertEqual(calls[-1][0][:2], ["network", "rm"])
+        self.assertFalse(os.path.exists(os.path.dirname(seen["path"])))
+        self.assertIsNone(u.key_dir)
+
+    def test_a_sweep_removes_the_jobs_key_folders_and_no_other_jobs(self):
+        os.makedirs(container.key_root())
+        mine, other = (tempfile.mkdtemp(prefix=container.key_prefix(j), dir=container.key_root()) for j in ("job", "job-2"))
+        with mock.patch.object(container, "_docker", side_effect=container.Unavailable("no docker")):
+            container.sweep("job")
+        self.assertEqual((os.path.exists(mine), os.path.exists(other)), (False, True))
+
+    def test_a_start_removes_stale_key_folders_of_any_job(self):
+        os.makedirs(container.key_root())
+        old, fresh = (tempfile.mkdtemp(prefix=container.key_prefix(j), dir=container.key_root()) for j in ("dead", "live"))
+        t = time.time() - container.KEY_STALE - 1
+        os.utime(old, (t, t))
+        self.start()[0].stop()
+        self.assertEqual((os.path.exists(old), os.path.exists(fresh)), (False, True))
+
     def test_a_long_job_name_gives_a_short_unique_slug(self):
         a, b = container.slug("x" * 200), container.slug("x" * 199 + "y")
         self.assertLessEqual(len(a), 80)
@@ -183,6 +242,9 @@ class DockerTest(unittest.TestCase):
                            base="http://127.0.0.1:9/v1", key="sk-test-not-real")      # an endpoint no one serves
         try:
             u.start()
+            seen = subprocess.run(["docker", "inspect", u.names["relay"]], stdout=subprocess.PIPE, text=True).stdout
+            self.assertIn(container.RELAY_KEY_IN, seen)
+            self.assertNotIn("sk-test-not-real", seen)                                 # the key is in no configuration
             with self.assertRaises(urllib.error.HTTPError) as e:                       # the host reaches it
                 urllib.request.urlopen(urllib.request.Request(u.url("u0000") + "/chat/completions", data=b"{}"), timeout=30)
             self.assertEqual(e.exception.code, 502)
