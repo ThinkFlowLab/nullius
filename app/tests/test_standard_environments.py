@@ -126,7 +126,8 @@ class Tag(unittest.TestCase):
 
         container._built.clear()
         with mock.patch.object(container, "base_image", return_value="nullius/base:aaa"), \
-                mock.patch.object(container, "_docker", side_effect=docker):
+                mock.patch.object(container, "_docker", side_effect=docker), \
+                mock.patch.object(container, "_rootless", None):         # the fake's answer is not kept
             work = os.path.join(self.tmp, "work")
             t1 = container.image_for(b, {"environment": "licensed"}, None, work)
             t2 = container.image_for(b, {"environment": "licensed"}, None, work)

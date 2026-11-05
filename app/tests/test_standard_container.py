@@ -42,6 +42,7 @@ class ImageTest(unittest.TestCase):
 
 class ArgvTest(unittest.TestCase):
     def setUp(self):
+        self.enterContext(mock.patch.object(container, "_rootless", None))    # a faked docker's answer is not kept
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))
@@ -71,6 +72,7 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(container.python_homes(os.path.join(self.tmp, "inst")), [link, os.path.dirname(py)])
 
     def test_an_install_in_the_base_image_sees_its_folder_alone_as_this_user(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
         a = container.install_argv("img", "/s/agents/x/abc", ["npm", "install", "p@1"])
         self.assertEqual(a[:3], ["docker", "run", "--rm"])
         self.assertEqual(a[a.index("--user") + 1], f"{os.getuid()}:{os.getgid()}")
@@ -80,6 +82,7 @@ class ArgvTest(unittest.TestCase):
         self.assertNotIn("--network", a)                     # it downloads the packages; no unit, no key
 
     def test_the_agents_container_is_on_the_units_network_with_its_variables_by_name(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
         a = container.run_argv("img", ["codex-acp"], name="nullius-j-u0000", network="nullius-j-u0000", job="j",
                                workdir="/w", mounted=[("/w", False), ("/i", True)],
                                env_names=["HOME", "NULLIUS_RELAY_KEY", "PATH"], path="/i/bin:/usr/bin")
@@ -160,6 +163,7 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(u.inside("u0002"), "http://relay:8080/u0002/v1")
 
     def test_a_licence_forwarder_listens_before_it_takes_the_servers_name(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
         u = container.Unit("j", "u0001", os.path.join(self.tmp, "rec"), image="img", app="/app", base="b", key="k")
         calls = []
         with mock.patch.object(container, "_docker", side_effect=lambda argv, **kw: calls.append(argv[:2])), \
@@ -222,6 +226,40 @@ class ArgvTest(unittest.TestCase):
         os.utime(old, (t, t))
         self.start()[0].stop()
         self.assertEqual((os.path.exists(old), os.path.exists(fresh)), (False, True))
+
+    def _users(self) -> set:
+        self.enterContext(mock.patch.dict(os.environ, {container.CHECK_IMAGE: "img"}))
+        argvs = [container.run_argv("img", ["a"], name="n", network="n", job="j", workdir="/w", mounted=[], env_names=[], path="/p"),
+                 container.check_argv("/w", [], []), container.install_argv("img", "/w", ["a"]),
+                 container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="b", model="m", routes={}),
+                 container.forward_argv("img", name="f", job="j", port=1),
+                 container.door_argv("img", name="d", job="j", network="n", alias="a", port=1, socket_path="/s"),
+                 container.egress_argv("img", name="e", job="j")]
+        return {a[a.index("--user") + 1] for a in argvs}
+
+    def test_a_rootless_engine_runs_every_container_as_its_root_which_is_this_user(self):
+        with mock.patch.object(container, "rootless", return_value=True):
+            self.assertEqual(self._users(), {"0:0"})
+        with mock.patch.object(container, "rootless", return_value=False):
+            self.assertEqual(self._users(), {f"{os.getuid()}:{os.getgid()}"})
+
+    def test_the_engine_is_asked_once_whether_it_is_rootless_and_one_that_cannot_answer_counts_as_rootful(self):
+        self.enterContext(mock.patch.object(container, "_rootless", None))
+        with mock.patch.object(container, "_docker", side_effect=container.Unavailable("no docker")):
+            self.assertFalse(container.rootless())
+        down = subprocess.CompletedProcess([], 1, "", "Cannot connect to the Docker daemon")
+        with mock.patch.object(container, "_docker", return_value=down):
+            self.assertFalse(container.rootless())
+        self.assertIsNone(container._rootless)                             # not an answer: asked again next time
+        said = subprocess.CompletedProcess([], 0, "[name=seccomp,profile=builtin name=rootless name=cgroupns]\n", "")
+        with mock.patch.object(container, "_docker", return_value=said) as ask:
+            self.assertTrue(container.rootless())
+            self.assertTrue(container.rootless())
+        self.assertEqual(ask.call_count, 1)
+        container._rootless = None
+        said = subprocess.CompletedProcess([], 0, "[name=apparmor name=seccomp,profile=builtin name=cgroupns]\n", "")
+        with mock.patch.object(container, "_docker", return_value=said):
+            self.assertFalse(container.rootless())
 
     def test_a_long_job_name_gives_a_short_unique_slug(self):
         a, b = container.slug("x" * 200), container.slug("x" * 199 + "y")
