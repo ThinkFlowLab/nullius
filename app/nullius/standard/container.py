@@ -52,8 +52,10 @@ port and passing every connection to that one address. The agent reaches
 the server by the address it was given; nothing else is opened. A server
 named by an IPv4 address is reached as ``licence-server-<i>`` instead, a
 network alias being a name; ``host.docker.internal`` is the machine the run
-is on. A licence file is mounted read-only, alone, at the path its
-environment declares (``wrap``'s ``binds``).
+is on. On a rootless engine on Linux, a server at ``host.docker.internal``
+is reached through a :class:`SocketDoor` instead, as ``licence-server-<i>``
+on the unit's network alone. A licence file is mounted read-only, alone, at
+the path its environment declares (``wrap``'s ``binds``).
 
 **A benchmark's MCP server on the machine is one door more.** A server the
 benchmark declares in ``mcp_servers`` runs on this machine, in the driver's
@@ -708,7 +710,8 @@ def forward_argv(image: str, *, name: str, job: str, port: int) -> List[str]:
     """``docker run`` for a licence server's forwarder: on the default bridge,
     its one file mounted, listening on the server's port. Where it forwards
     is named, never given: ``-e NULLIUS_FORWARD_TO``. ``host.docker.internal``
-    is the machine the run is on, for a server there."""
+    is the machine the run is on, for a server there (on a rootless engine on
+    Linux, ``Unit._forward`` gives such a server a door instead)."""
     return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
             "--add-host", "host.docker.internal:host-gateway", "-v", f"{FORWARD}:{FORWARD_IN}:ro",
@@ -779,6 +782,7 @@ class Unit:
         self.started: List[str] = []           # containers to remove
         self.network = False
         self.key_dir: Optional[str] = None     # the key file's folder, until the relay listens
+        self.socket_doors: List[SocketDoor] = []
         os.makedirs(record_dir, exist_ok=True)
 
     def start(self) -> "Unit":
@@ -800,7 +804,7 @@ class Unit:
             for i, address in enumerate(self.servers, 1):
                 self.reach[address] = self._forward(i, address)
             for i, (alias, port, sock) in enumerate(self.doors, 1):
-                self._door(i, alias, port, sock)
+                self._door(f"{self.names['agent']}-mcp{i}", alias, port, sock, "the door to the benchmark's MCP server")
         except Exception:
             self.stop()
             raise
@@ -827,9 +831,17 @@ class Unit:
     def _forward(self, i: int, address: str) -> str:
         """A licence server's forwarder, started and on the unit's network
         under the server's name: the address the agent reaches it by. It joins
-        that network once it listens, after it resolves the server's name."""
+        that network once it listens, after it resolves the server's name. One
+        at ``host.docker.internal``, on a rootless engine on Linux, is a door
+        to a :class:`SocketDoor` instead, as ``licence-server-<i>``."""
         alias, host, port = server_alias(address, i)
         name = f"{self.names['agent']}-lic{i}"
+        if use_socket_doors() and host == Loopback.NAME:
+            door = SocketDoor("127.0.0.1", port)
+            self.socket_doors.append(door)
+            alias = f"licence-server-{i}"
+            self._door(name, alias, port, door.path, "the licence server's forwarder")
+            return f"{alias}:{port}"
         self.started.append(name)
         _docker(forward_argv(self.image, name=name, job=self.job, port=port)[1:],
                 env=client_env({"NULLIUS_FORWARD_TO": f"{host}:{port}"}))
@@ -837,14 +849,13 @@ class Unit:
         _docker(["network", "connect", "--alias", alias, self.names["network"], name])
         return f"{alias}:{port}"
 
-    def _door(self, i: int, alias: str, port: int, sock: str) -> None:
-        """A door to a server on this machine, on the unit's network alone."""
-        name = f"{self.names['agent']}-mcp{i}"
+    def _door(self, name: str, alias: str, port: int, sock: str, what: str) -> None:
+        """A door container to a socket on this machine, on the unit's network alone as ``alias``."""
         self.started.append(name)
         _docker(door_argv(self.image, name=name, job=self.job, network=self.names["network"], alias=alias,
                           port=port, socket_path=sock)[1:],
                 env=client_env({"NULLIUS_FORWARD_TO": "unix:" + sock}))
-        self._wait(name, "the door to the benchmark's MCP server")
+        self._wait(name, what)
 
     def _wait(self, name: str, what: str, timeout: float = 30):
         wait_listening(name, what, timeout)
@@ -904,6 +915,9 @@ class Unit:
             except Unavailable:
                 pass
         self.started = []
+        for d in self.socket_doors:
+            d.stop()
+        self.socket_doors = []
         if self.network:
             try:
                 _docker(["network", "rm", self.names["network"]], check=False, timeout=60)

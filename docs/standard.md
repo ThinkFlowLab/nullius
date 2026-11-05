@@ -241,7 +241,7 @@ A benchmark whose tasks need different software names **environments**.
 | --- | --- | --- |
 | `value` (default) | A key, the variable `name` of its process | By name, never on an argument list |
 | `file` | A licence file; `env` names a variable holding its path, required on local processes | Mounted read-only at `path` (absolute, not under `/proc`, `/sys` or `/dev`) |
-| `server` | A licence server, `host:port`, as the variable `name` | A forwarder beside the relay (`standard/forward.py`) under the server's own name, the one address the agent may reach; an IPv4 address as `licence-server-<i>`, `host.docker.internal` the machine the run is on |
+| `server` | A licence server, `host:port`, as the variable `name` | A forwarder beside the relay (`standard/forward.py`) under the server's own name, the one address the agent may reach; an IPv4 address as `licence-server-<i>`, `host.docker.internal` the machine the run is on. On a rootless engine on Linux, `host.docker.internal` is reached as `licence-server-<i>` through a Unix socket |
 
 | Rule | Detail |
 | --- | --- |
