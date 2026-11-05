@@ -27,11 +27,13 @@ class ImageTest(unittest.TestCase):
         self.assertRegex(container.image_tag(a), r"^nullius/base:[0-9a-f]{12}$")
         self.assertNotEqual(container.image_tag(a), container.image_tag(container.dockerfile("aarch64")))
 
-    def test_the_dockerfile_pins_ubuntu_and_node_by_checksum(self):
+    def test_the_dockerfile_pins_ubuntu_node_and_uv_by_checksum(self):
         text = container.dockerfile("x86_64")
         self.assertTrue(text.startswith("FROM ubuntu:24.04\n"))
         self.assertIn(f"node-v{container.NODE_VERSION}-linux-x64.tar.xz", text)
         self.assertIn(container.NODE_SHA256["x64"] + "  /tmp/node.tar.xz\" | sha256sum -c -", text)
+        self.assertRegex(container.UV_DIGEST, r"^sha256:[0-9a-f]{64}$")
+        self.assertIn(f"COPY --from=ghcr.io/astral-sh/uv:{container.UV_VERSION}@{container.UV_DIGEST} /uv /uvx /usr/local/bin/\n", text)
         for pkg in ("git", "python3", "ca-certificates", "curl", "tmux"):
             self.assertIn(f" {pkg} ", text)
 

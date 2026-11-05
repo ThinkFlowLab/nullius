@@ -4,12 +4,12 @@ to the ``docker`` program and imports nothing outside the standard library.
 
 **One base image** (``nullius/base:<hash>``), built once and named by the
 hash of its Dockerfile, so a change to it builds a new one beside the old:
-Ubuntu 24.04 - the glibc of the machine the packages were installed on, so an
-install made here runs there - with git, python3, curl, CA certificates, tmux
-(Terminus's terminal) and Node 22 from its official tarball, checked by its
-sha256. A unit's image is chosen by :func:`image_for`: the base image, or the
-benchmark's environment the unit asks for - a layer on the base, its
-Dockerfile in the benchmark's folder, named by the hash of what it is built from
+Ubuntu 24.04 with git, python3, curl, CA certificates, tmux (Terminus's
+terminal), Node 22 from its official tarball, checked by its sha256, and uv
+from its official image, pinned by digest. A unit's image is chosen by
+:func:`image_for`: the base image, or the benchmark's environment the unit
+asks for - a layer on the base, its Dockerfile in the benchmark's folder,
+named by the hash of what it is built from
 (``nullius/env-<benchmark>-<name>:<hash>``) and built the first time a unit
 uses it (:func:`env_image`).
 
@@ -127,6 +127,8 @@ RELAY_KEY_IN = "/opt/nullius/relay-key"    # the key's one file, in the relay's 
 KEY_STALE = 600                            # older than any start can take: a killed run left it
 IMAGE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
+UV_VERSION = "0.13.5"
+UV_DIGEST = "sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff"    # its index: every platform
 NODE_VERSION = "22.23.3"
 NODE_SHA256 = {
     "x64": "df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de",
@@ -136,6 +138,7 @@ _ARCH = {"x86_64": "x64", "amd64": "x64", "aarch64": "arm64", "arm64": "arm64"}
 
 DOCKERFILE = """\
 FROM ubuntu:24.04
+COPY --from=ghcr.io/astral-sh/uv:{uv_version}@{uv_digest} /uv /uvx /usr/local/bin/
 RUN apt-get update \\
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git python3 ca-certificates curl tmux xz-utils \\
  && rm -rf /var/lib/apt/lists/*
@@ -226,7 +229,7 @@ def dockerfile(machine: Optional[str] = None) -> str:
     arch = _ARCH.get((machine or platform.machine()).lower())
     if not arch:
         raise Unavailable(f"no Node build pinned for {machine or platform.machine()}")
-    return DOCKERFILE.format(node=NODE_VERSION, arch=arch, sha=NODE_SHA256[arch], path=IMAGE_PATH)
+    return DOCKERFILE.format(uv_version=UV_VERSION, uv_digest=UV_DIGEST, node=NODE_VERSION, arch=arch, sha=NODE_SHA256[arch], path=IMAGE_PATH)
 
 
 def image_tag(text: str) -> str:
