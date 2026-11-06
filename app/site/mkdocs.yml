@@ -124,4 +124,5 @@ nav:
       - Metrics:
           - Metric field guide: field-guide.md
       - Release notes:
+          - v0.1.0rc2: releases/v0.1.0rc2.md
           - v0.1.0rc1: releases/v0.1.0rc1.md

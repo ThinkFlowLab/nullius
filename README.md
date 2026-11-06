@@ -23,7 +23,7 @@ uv tool install nullius-eval
 nullius serve
 ```
 
-To select a specific version, use `uv tool install nullius-eval==0.1.0rc1`.
+To select a specific version, use `uv tool install nullius-eval==0.1.0rc2`.
 The [Quickstart guide](docs/getting-started.md) covers upgrades, wheel and
 source installation, and migration from a checkout.
 

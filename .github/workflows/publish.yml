@@ -8,7 +8,7 @@ on:
       tag:
         description: Published prerelease tag matching pyproject.toml
         required: true
-        default: v0.1.0rc1
+        default: v0.1.0rc2
         type: string
       confirm:
         description: Upload this reviewed prerelease to PyPI
@@ -112,3 +112,27 @@ jobs:
           --publish-url https://upload.pypi.org/legacy/
           "$RUNNER_TEMP/nullius-publish/$WHEEL_NAME"
           "$RUNNER_TEMP/nullius-publish/$SOURCE_NAME"
+
+  docs:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: docs-release
+      cancel-in-progress: false
+    steps:
+      - name: Advance the released documentation branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        # Cloudflare builds only this branch. Never advance it before PyPI
+        # succeeds, and never rewind a newer release during an older rerun.
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+rc[1-9][0-9]*$ ]]
+          release_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha')
+          [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/docs-release" \
+            -f sha="$release_sha" -F force=false

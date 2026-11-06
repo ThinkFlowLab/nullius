@@ -33,7 +33,6 @@ a local web UI, not a standalone desktop installer.
   over SSH or across several machines.
 - Inspect trial outcomes, verifier results, model calls, conversations and
   artifacts; compare the shared tasks across runs.
-- Read Harbor job directories and import ATIF or OpenTelemetry traces.
 - Check benchmarks with controls and inspect results with optional model
   judgement.
 
@@ -49,7 +48,7 @@ Update to the latest version with:
 uv tool upgrade nullius-eval
 ```
 
-To select a specific version, use `uv tool install nullius-eval==0.1.0rc1`.
+To select a specific version, use `uv tool install nullius-eval==0.1.0rc2`.
 Add `--force` when replacing an existing installation. Explicit version pins
 are retained by `uv tool upgrade`; use `uv tool install --force nullius-eval`
 to return to the latest version without a pin.

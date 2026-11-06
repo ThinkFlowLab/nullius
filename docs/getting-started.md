@@ -38,7 +38,7 @@ uv tool upgrade nullius-eval
 ```
 
 To select a specific version instead, use `uv tool install
-nullius-eval==0.1.0rc1`. If replacing an existing installation, add `--force`.
+nullius-eval==0.1.0rc2`. If replacing an existing installation, add `--force`.
 An explicit version pin is retained by `uv tool upgrade`; change the pin with
 `uv tool install --force nullius-eval==VERSION`, or remove it with
 `uv tool install --force nullius-eval`.
@@ -56,7 +56,7 @@ Wheel downloads are listed under
 repository's access permissions. From the folder containing the file:
 
 ```bash
-uv tool install ./nullius_eval-0.1.0rc1-py3-none-any.whl
+uv tool install ./nullius_eval-0.1.0rc2-py3-none-any.whl
 nullius serve
 ```
 
@@ -68,7 +68,7 @@ From a checkout, build the wheel, then install the resulting file:
 
 ```bash
 uv build --wheel --out-dir dist
-uv tool install ./dist/nullius_eval-0.1.0rc1-py3-none-any.whl
+uv tool install ./dist/nullius_eval-0.1.0rc2-py3-none-any.whl
 nullius serve
 ```
 

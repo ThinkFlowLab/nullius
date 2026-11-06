@@ -29,7 +29,7 @@ Nullius runs AI evaluations on your machines and opens every score into the evid
 | [Capabilities](capabilities/supported/README.md) | Every capability, its port, how to add one |
 | [The standard](standard.md) | Ports, kits, setups, controls and proofs |
 | [CLI](cli/README.md) | Every command, by topic |
-| [Release notes](releases/v0.1.0rc1.md) | Highlights, changelog and installation notes by version |
+| [Release notes](releases/v0.1.0rc2.md) | Highlights, changelog and installation notes by version |
 | [Architecture](how-it-works.md) | Execution paths and files on disk |
 | [Metric field guide](field-guide.md) | Every metric and outcome; *Reference → Metrics* on the website |
 
