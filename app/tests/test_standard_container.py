@@ -70,6 +70,23 @@ class EngineTest(unittest.TestCase):
             self.assertEqual(made.call_args_list, 2 * [mock.call(["network", "create", "--ignore", "--label", "nullius.bridge=1",
                                                                   container.BRIDGE])])     # asked each time: it may have gone
 
+    def test_a_drivers_check_finds_the_engine_from_its_own_home(self):
+        env = {"HOME": "/home/u", "PATH": "/bin", "DOCKER_HOST": "unix:///d.sock", "XDG_RUNTIME_DIR": "/run/user/1",
+               "XDG_CONFIG_HOME": "/home/u/conf", "CONTAINER_HOST": "unix:///p.sock"}
+        self.enterContext(mock.patch.dict(os.environ, env, clear=True))
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        with mock.patch.object(container, "DOCKER", "docker"):
+            self.assertEqual(container.check_env(), {"DOCKER_HOST": "unix:///d.sock"})
+        with mock.patch.object(container, "DOCKER", "podman"):
+            got = container.check_env()
+            start = container.check_start()
+        engine = json.loads(got.pop(container.CHECK_ENGINE))
+        self.assertEqual(got, {"DOCKER_HOST": "unix:///d.sock", "XDG_RUNTIME_DIR": "/run/user/1",
+                               "CONTAINER_HOST": "unix:///p.sock"})     # no XDG folder of the user's
+        self.assertEqual(engine, ["env", "XDG_DATA_HOME=/home/u/.local/share", "XDG_CONFIG_HOME=/home/u/conf", *start])
+        with mock.patch.dict(os.environ, {container.CHECK_IMAGE: "img", container.CHECK_ENGINE: json.dumps(engine), "HOME": "/driver"}):
+            self.assertEqual(container.check_argv("/w", [], ["true"]), [*engine, "-v", "/w:/w:rw", "-w", "/w", "img", "true"])
+
     def test_podman_without_netavark_is_refused_plainly(self):
         self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
         said = lambda net: (lambda args, **kw: subprocess.CompletedProcess([], 0, net if args[0] == "info" else "5.8.9\n", ""))

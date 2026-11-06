@@ -159,8 +159,11 @@ ENV PATH={path}
 # place on this machine: meaningless, or wrong, inside.
 HOST_ONLY = ("TMPDIR", "NVM_DIR", "NODE_PATH", "SSL_CERT_FILE", "SSL_CERT_DIR")
 # What the engine's program keeps of this process's environment, to find the
-# daemon. Not a key among them.
-CLIENT_KEEP = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
+# daemon, or podman its storage and settings. Not a key among them, though
+# CONTAINER_HOST may name an ssh URL with a password: it is never on an argument list.
+CLIENT_KEEP = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY",
+               "XDG_RUNTIME_DIR", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "CONTAINERS_CONF", "CONTAINERS_STORAGE_CONF",
+               "CONTAINERS_REGISTRIES_CONF", "REGISTRY_AUTH_FILE", "CONTAINER_HOST", "CONTAINER_CONNECTION")
 
 
 class Unavailable(Exception):
@@ -186,8 +189,9 @@ def _docker(args: List[str], *, env: Optional[dict] = None, input: Optional[str]
 
 
 def client_env(extra: Optional[dict] = None) -> dict:
-    """The engine program's environment: what it needs to find the daemon, and
-    the values of the variables a ``-e NAME`` passes on."""
+    """The engine program's environment: what it needs to find the daemon, or
+    podman its storage and settings (``CLIENT_KEEP``), and the values of the
+    variables a ``-e NAME`` passes on."""
     env = {**_context(), **{k: os.environ[k] for k in CLIENT_KEEP if k in os.environ}}
     env.setdefault("PATH", os.defpath)
     env.update(extra or {})
@@ -538,6 +542,31 @@ def plain_only(root: str) -> List[str]:
 
 
 CHECK_IMAGE = "NULLIUS_CHECK_IMAGE"     # driver checks: the unit's image, or the base image for a local setup
+CHECK_ENGINE = "NULLIUS_CHECK_ENGINE"   # beside it on podman: check_start as podman runs from the driver, JSON
+_XDG = (("XDG_DATA_HOME", ".local/share"), ("XDG_CONFIG_HOME", ".config"))     # where podman keeps its images and settings
+
+
+def check_start() -> List[str]:
+    """A check's container command up to its mounts (:func:`check_argv`): no
+    network, no capabilities, as this machine's user."""
+    return [DOCKER, "run", "--rm", "--network", "none", *_userns(), "--user", _user(), "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges"]
+
+
+def check_env() -> dict:
+    """What a driver, which runs with a home of its own, gets to run
+    :func:`check_argv` on the same engine as the units. On Docker: the
+    ``DOCKER_*`` variables of :func:`client_env`. On podman: the variables of
+    ``CLIENT_KEEP`` (``CONTAINER_HOST``, ``REGISTRY_AUTH_FILE``...) except ``PATH``, ``HOME``,
+    ``XDG_DATA_HOME`` and ``XDG_CONFIG_HOME``, and ``CHECK_ENGINE``. That is
+    :func:`check_start` behind ``env``, which gives podman this user's XDG data
+    and config folders. The driver's own processes do not use these folders."""
+    if not podman():
+        return {k: v for k, v in client_env().items() if k.startswith("DOCKER")}
+    home = os.path.expanduser("~")
+    xdg = [f"{k}={os.environ.get(k) or os.path.join(home, d)}" for k, d in _XDG]
+    return {**{k: os.environ[k] for k in CLIENT_KEEP if k not in ("PATH", "HOME", *dict(_XDG)) and k in os.environ},
+            CHECK_ENGINE: json.dumps(["env", *xdg, *check_start()])}
 
 
 def check_argv(workdir: str, here: List[str], inside: List[str]) -> List[str]:
@@ -546,8 +575,8 @@ def check_argv(workdir: str, here: List[str], inside: List[str]) -> List[str]:
     image = os.environ.get(CHECK_IMAGE)
     if not image:
         return list(here)
-    return [DOCKER, "run", "--rm", "--network", "none", *_userns(), "--user", _user(), "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges", "-v", f"{workdir}:{workdir}:rw", "-w", workdir, image, *inside]
+    start = json.loads(os.environ[CHECK_ENGINE]) if os.environ.get(CHECK_ENGINE) else check_start()
+    return [*start, "-v", f"{workdir}:{workdir}:rw", "-w", workdir, image, *inside]
 
 
 # where this machine gets its packages from, passed by name: a proxy's URL may hold its password
