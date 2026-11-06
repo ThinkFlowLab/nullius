@@ -181,7 +181,7 @@ class Runtime(unittest.TestCase):
     def test_exec_passes_variables_by_name_and_the_runtimes_read_only(self):
         b = container.Box("job", "u0001", "img", workdir="/app", runtimes=self.RT)
         argv = b.exec_argv(["node", "x"], {"HOME": "/h", "NULLIUS_RELAY_KEY": "placeholder", "PATH": "/p"}, "/usr/bin:/opt/nullius/node/bin")
-        self.assertEqual(argv[:6], ["docker", "exec", "-i", "-w", "/app", "-e"])
+        self.assertEqual(argv[:6], [container.DOCKER, "exec", "-i", "-w", "/app", "-e"])
         self.assertIn("PATH=/usr/bin:/opt/nullius/node/bin", argv)
         self.assertIn("NULLIUS_RELAY_KEY", argv)
         self.assertNotIn("placeholder", " ".join(argv))
@@ -237,9 +237,9 @@ class DockerRun(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         # the fixture's image goes, and so does this process's memory of having built it
-        for line in subprocess.run(["docker", "images", "-q", "--filter", "label=nullius.own=ownbench"],
+        for line in subprocess.run([container.DOCKER, "images", "-q", "--filter", "label=nullius.own=ownbench"],
                                    stdout=subprocess.PIPE, text=True).stdout.split():
-            subprocess.run(["docker", "rmi", "-f", line], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([container.DOCKER, "rmi", "-f", line], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for tag in [t for t in container._built if t.startswith("nullius/own-ownbench-")]:
             container._built.pop(tag)
             container._fetched.discard(tag)

@@ -155,13 +155,13 @@ ENV PATH={path}
 # What a unit's process holds of this machine's environment that names a
 # place on this machine: meaningless, or wrong, inside.
 HOST_ONLY = ("TMPDIR", "NVM_DIR", "NODE_PATH", "SSL_CERT_FILE", "SSL_CERT_DIR")
-# What the docker program itself keeps of this process's environment, to
-# find the daemon. Not a key among them.
+# What the engine's program keeps of this process's environment, to find the
+# daemon. Not a key among them.
 CLIENT_KEEP = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
 
 
 class Unavailable(Exception):
-    """Docker is missing, not usable by this user, or failed at something."""
+    """The engine is missing, not usable by this user, or failed at something."""
 
 
 def _docker(args: List[str], *, env: Optional[dict] = None, input: Optional[str] = None, timeout: float = 120,
@@ -170,16 +170,16 @@ def _docker(args: List[str], *, env: Optional[dict] = None, input: Optional[str]
         r = subprocess.run([DOCKER] + args, env=env if env is not None else client_env(), input=input, text=True,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
     except FileNotFoundError:
-        raise Unavailable("docker is not installed on this machine")
+        raise Unavailable(f"{DOCKER} is not installed on this machine")
     except subprocess.TimeoutExpired:
-        raise Unavailable(f"docker {args[0]} did not answer in {int(timeout)} s")
+        raise Unavailable(f"{DOCKER} {args[0]} did not answer in {int(timeout)} s")
     if check and r.returncode != 0:
-        raise Unavailable(f"docker {' '.join(args[:2])}: {(r.stderr or r.stdout).strip()[-300:]}")
+        raise Unavailable(f"{DOCKER} {' '.join(args[:2])}: {(r.stderr or r.stdout).strip()[-300:]}")
     return r
 
 
 def client_env(extra: Optional[dict] = None) -> dict:
-    """The docker program's environment: what it needs to find the daemon, and
+    """The engine program's environment: what it needs to find the daemon, and
     the values of the variables a ``-e NAME`` passes on."""
     env = {**_context(), **{k: os.environ[k] for k in CLIENT_KEEP if k in os.environ}}
     env.setdefault("PATH", os.defpath)
@@ -224,7 +224,7 @@ def unusable() -> Optional[str]:
     if r.returncode != 0:
         said = (r.stderr or r.stdout).strip().splitlines()
         hint = " (add this user to the docker group, then log in again)" if "permission denied" in r.stderr.lower() else ""
-        return "docker is installed but not usable by this user: " + (said[-1][:200] if said else f"exit {r.returncode}") + hint
+        return f"{DOCKER} is installed but not usable by this user: " + (said[-1][:200] if said else f"exit {r.returncode}") + hint
     return None
 
 
@@ -1459,7 +1459,7 @@ class Box:
             out = e.stdout or b""
             return {"exit": None, "output": out.decode("utf-8", "replace") if isinstance(out, bytes) else out, "timed_out": True}
         except FileNotFoundError:
-            raise Unavailable("docker is not installed on this machine")
+            raise Unavailable(f"{DOCKER} is not installed on this machine")
         return {"exit": r.returncode, "output": r.stdout.decode("utf-8", "replace"), "timed_out": False}
 
     def copy_in(self, src: str, dest: str):

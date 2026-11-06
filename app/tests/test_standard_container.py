@@ -415,7 +415,7 @@ class ArgvTest(unittest.TestCase):
     def test_missing_docker_is_said_plainly(self):
         from unittest import mock
         with mock.patch.object(container, "DOCKER", "nullius-no-such-docker"):
-            self.assertEqual(container.unusable(), "docker is not installed on this machine")
+            self.assertEqual(container.unusable(), "nullius-no-such-docker is not installed on this machine")
 
 
 class ContextTest(unittest.TestCase):
@@ -472,7 +472,7 @@ class DockerTest(unittest.TestCase):
                            base="http://127.0.0.1:9/v1", key="sk-test-not-real")      # an endpoint no one serves
         try:
             u.start()
-            seen = subprocess.run(["docker", "inspect", u.names["relay"]], stdout=subprocess.PIPE, text=True).stdout
+            seen = subprocess.run([container.DOCKER, "inspect", u.names["relay"]], stdout=subprocess.PIPE, text=True).stdout
             self.assertIn(container.RELAY_KEY_IN, seen)
             self.assertNotIn("sk-test-not-real", seen)                                 # the key is in no configuration
             with self.assertRaises(urllib.error.HTTPError) as e:                       # the host reaches it
@@ -491,8 +491,8 @@ class DockerTest(unittest.TestCase):
         finally:
             u.stop()
             container.sweep(job)
-        left = subprocess.run(["docker", "ps", "-aq", "--filter", f"label=nullius.job={job}"], stdout=subprocess.PIPE, text=True)
-        nets = subprocess.run(["docker", "network", "ls", "-q", "--filter", f"label=nullius.job={job}"], stdout=subprocess.PIPE, text=True)
+        left = subprocess.run([container.DOCKER, "ps", "-aq", "--filter", f"label=nullius.job={job}"], stdout=subprocess.PIPE, text=True)
+        nets = subprocess.run([container.DOCKER, "network", "ls", "-q", "--filter", f"label=nullius.job={job}"], stdout=subprocess.PIPE, text=True)
         self.assertEqual((left.stdout.strip(), nets.stdout.strip()), ("", ""))
 
     def test_a_relay_reaches_a_model_server_on_this_machines_loopback(self):
