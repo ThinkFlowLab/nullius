@@ -34,7 +34,7 @@ def candidate(tag: str, root: Path = ROOT) -> str:
     project = tomllib.loads((root / 'pyproject.toml').read_text())['project']
     if project['name'] != NAME or tag != 'v' + project['version']:
         raise ValueError("Release tag must match the Nullius version in pyproject.toml")
-    notes = root / 'app/packaging/notes' / (tag + '.md')
+    notes = root / 'docs/releases' / (tag + '.md')
     if not notes.is_file() or not notes.read_text().strip():
         raise ValueError(f"Missing release notes: {notes}")
     return project['version']

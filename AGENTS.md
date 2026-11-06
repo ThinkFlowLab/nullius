@@ -215,7 +215,7 @@ The manual `draft release` workflow (`.github/workflows/release.yml`) runs both
 suites and uses `app/packaging/release.py` to build and verify a release
 candidate's wheel and source archive, then attaches them and `SHA256SUMS` to a
 draft prerelease. It does not publish or upload to PyPI; see
-`app/packaging/README.md` and the versioned notes under `app/packaging/notes/`.
+`app/packaging/README.md` and the versioned notes under `docs/releases/`.
 The separate manual `publish to PyPI` workflow (`.github/workflows/publish.yml`)
 requires confirmation and a reviewed, published GitHub prerelease. It verifies
 the downloaded assets before a separate `pypi` environment job uploads the
