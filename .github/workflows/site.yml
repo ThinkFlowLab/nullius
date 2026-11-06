@@ -1,6 +1,6 @@
 name: documentation site
 
-# The host builds and publishes the site from main itself, through its
+# The host builds and publishes the site from docs-release, through its
 # GitHub integration (app/site/README.md, "Publishing"), so this workflow
 # is only the check, run by hand (Actions, "documentation site", Run
 # workflow, on any branch). It builds the site the way the host does and

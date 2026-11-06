@@ -124,6 +124,11 @@ repository. A pending publisher does not reserve a package name. See
    IDs selected by validation. It compares their bytes with the validated
    SHA-256 hashes before uploading those two distributions. It does not rebuild
    the package, and its OpenID Connect permission is separate from validation.
+6. After a successful PyPI upload, a separate job advances `docs-release` to
+   the release tag's commit without force-pushing. Cloudflare builds that
+   production branch with previews disabled; see `app/site/README.md` for the
+   required host settings. If this final job fails, rerun only the failed job
+   after fixing it: the package is already published.
 
 After a successful upload, verify an installation outside the source checkout:
 

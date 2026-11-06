@@ -97,8 +97,12 @@ full reload, and that the mobile drawer closes after navigation.
 
 ## Publishing
 
-The host builds and publishes the site from `main` itself, through its
-GitHub integration; nothing in this repository uploads anything. The site's
+The host builds and publishes the site from `docs-release`, through its
+GitHub integration. The `publish to PyPI` workflow advances that branch to
+the published release tag only after its PyPI upload succeeds. The update
+is fast-forward only, so rerunning an older release cannot rewind the site.
+The branch must already exist, initialized at a published release commit.
+The repository does not upload site files. The site's
 address is not in the repository: the host sets it as the `SITE_URL` build
 variable, and the repository variable `DOCS_SITE_URL` holds the same value
 for the check. The `documentation site` workflow is only that check, run by
@@ -117,7 +121,11 @@ same path.
 
 The host's project is set up once:
 
-1. Connect it to this repository, production branch `main`.
+1. Connect it to this repository, production branch `docs-release`, with
+   automatic production deployments enabled. Set preview branches to **None**.
+   Keep build watch paths inclusive: each release should build, even when its
+   changes are outside the documentation. Merges into `main` and PR pushes do
+   not deploy the site with these settings.
 2. Build command `bash app/site/host-build.sh`, output directory `deploy` under `app/site` (the script writes it),
    variables `PYTHON_VERSION` = `3.12` and `SITE_URL`, the full site root
    with a trailing slash; set the repository variable `DOCS_SITE_URL` to the
@@ -127,6 +135,11 @@ The host's project is set up once:
 
 Only the built site is served. Neither the application nor the repository's
 internal files are published.
+
+If the final documentation-branch job fails after PyPI succeeds, the package
+is already published and the site remains on its previous release. Correct
+the branch or permission problem and rerun only the failed job; do not
+re-upload the package.
 
 For another static host, serve that `deploy` directory the same way. Pass `--site-url` to
 the build and checker for that host's URL; both root and subpath hosting work.

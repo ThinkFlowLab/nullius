@@ -225,7 +225,8 @@ The `docker tests` workflow (`.github/workflows/docker-tests.yml`) builds the
 standard's base image and runs the backend suite with the docker tier, nightly
 and by hand, never on a pull request. The `documentation site` workflow
 is run by hand and only checks: the host builds and publishes the site from
-`main` itself; `bash app/site/host-build.sh` is the same check locally. See
+`docs-release`, advanced to the release tag only after the PyPI upload succeeds.
+Preview deployments are disabled; `bash app/site/host-build.sh` is the same check locally. See
 `app/site/README.md`.
 
 **UI checks:** routine interface changes require relevant unit and route tests
