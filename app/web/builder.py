@@ -115,7 +115,7 @@ def new_run_prerequisites():
         if out["errors"]:
             return jsonify(machines=[], ready=False, errors=[e["message"] for e in out["errors"]])
         wheres = [sh["where"] for sh in out["shards"]]
-        needs = ["docker"] if out["docker"] else []
+        needs = ["engine"] if out["docker"] else []
         h = out.get("host") or {}
         b = definitions.get("benchmark", h.get("benchmark", "")) if h.get("needs") else None
         setups = {n["name"]: {**n, "install": hostreq.install_lines(b, [n["name"]])}

@@ -9,7 +9,7 @@ through the execution backend (`docs/builder.md`).
 
 - **Harbor** is never imported: a recipe pins a PyPI release or a repository
   commit, built here into `harbor-pins/` and run with `uvx`
-  (`nullius/harbor/source.py`). A run needs `docker ps` to answer.
+  (`nullius/harbor/source.py`). A Harbor run needs `docker ps` to answer.
 - **The standard** runs from the current checkout or installed package; on a
   host it sends a deterministic snapshot of the running backend and effective
   catalogue into `~/.nullius/app/<content-id>`. Source edits and user entries

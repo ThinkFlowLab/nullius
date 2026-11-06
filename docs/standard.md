@@ -325,7 +325,7 @@ The [builder](builder.md) runs the standard; what it adds:
 | Surface | What it does |
 | --- | --- |
 | The builder | Each dataset with each choice is a `cli run --from-run` and a job (`<name>-<dataset>-<agent>`); each machine a shard and a job (`<name>-shard-<I>of<N>`) |
-| A run on a host | Gets a content-addressed snapshot of the running backend and effective catalogue into `~/.nullius/app/<content-id>`; source edits and user entries are included, configuration and credential stores excluded; needs `python3`, `git` and, for the docker backend, docker; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back every 10 s |
+| A run on a host | Gets a content-addressed snapshot of the running backend and effective catalogue into `~/.nullius/app/<content-id>`; source edits and user entries are included, configuration and credential stores excluded; needs `python3`, `git` and, for the docker backend, Docker or Podman; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back every 10 s |
 | Agents and Capabilities tabs | Each definition's ports proven and the benchmarks it runs; *Prove its ports* runs `cli conform --from-run` here, with local processes or Docker, and rewrites the definition |
 | A benchmark's page | Its proofs per dataset; *Run control checks* runs `cli prove --from-run` here, handed no key unless the benchmark is judged. A failed check is kept under `proven.<dataset>.failed` until it passes |
 

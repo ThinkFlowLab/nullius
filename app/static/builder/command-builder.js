@@ -862,9 +862,10 @@
     const out=$('#nb-hosttest'), st=root.querySelector(`[data-host-state="${CSS.escape(entry)}"]`);
     out.textContent='testing…';
     try{const res=await fetch('/settings/hosts/test',{method:'POST',headers:{'X-CSRF-Token':schema.csrf},body:new URLSearchParams({entry})});const j=await res.json();
-      // only what can stop this recipe there: docker, for a Harbor run or the standard's docker backend (uv is installed when missing)
-      const rec=r(),needsDocker=rec.harness==='harbor'||(C.isStandard(rec)&&rec.backend==='docker'),dockerOk=j.docker&&j.docker_ok;
-      out.textContent=!j.ok?'✕ '+(j.error||('HTTP '+res.status)):needsDocker&&!dockerOk?'✓ Connected · ✕ docker '+(j.docker?'not usable by this user':'missing')+': this run needs it':'✓ Connected';
+      // only what can stop this recipe there: docker for a Harbor run, docker or podman for the standard's docker backend (uv is installed when missing)
+      const rec=r(),harbor=rec.harness==='harbor',needsEngine=harbor||(C.isStandard(rec)&&rec.backend==='docker');
+      const engine=harbor?(j.docker?'docker':null):j.engine,engineOk=engine&&j[engine+'_ok'];
+      out.textContent=!j.ok?'✕ '+(j.error||('HTTP '+res.status)):needsEngine&&!engineOk?'✓ Connected · ✕ '+(engine?engine+' not usable by this user':(harbor?'docker':'docker or podman')+' missing')+': this run needs it':'✓ Connected';
       if(st){st.textContent=j.ok?'connected':'unreachable';st.className='nb-state nb-hoststate '+(j.ok?'':'warn');}
       if(j.ok&&C.isStandard(r())&&optionNeeds(r()).host.length)hostReq(entry,'check');   // and what the chosen search needs of it
     }catch(e){out.textContent='✕ '+e;}

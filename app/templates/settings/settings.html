@@ -396,7 +396,7 @@
       const j = await r.json();
       if (!j.ok) return {ok: false, error: j.error || ('HTTP ' + r.status)};
       const has = k => k + (j[k] ? '' : ' missing');
-      return {ok: true, detail: [j.hostname, has('uv'), j.docker ? (j.docker_ok ? 'docker' : 'docker (no access)') : 'docker missing', j.harbor ? 'harbor ' + (j.harbor_version || '') : 'harbor missing', j.latency_ms + ' ms'].filter(Boolean).join(' · ')};
+      return {ok: true, detail: [j.hostname, has('uv'), j.engine ? j.engine + (j[j.engine + '_ok'] ? '' : ' (no access)') : 'docker or podman missing', j.harbor ? 'harbor ' + (j.harbor_version || '') : 'harbor missing', j.latency_ms + ' ms'].filter(Boolean).join(' · ')};
     } catch (err) { return {ok: false, error: String(err)}; }
   };
   // The Add host dialog. Either panel names one host; Test tries it and Add puts it in the list with what Test found.

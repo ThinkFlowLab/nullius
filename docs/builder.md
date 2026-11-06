@@ -42,7 +42,8 @@ Checked on each machine when Review opens, on *Check again*, and as the run star
 | --- | --- | --- |
 | `uv` | `command -v` | The standard; a pinned Harbor. On a host, installed by the run |
 | `python3`, `git` | `command -v` on the host | The standard on a host |
-| Docker, its engine answering | `docker version` here, `docker ps` on a host | The standard's docker backend; a control in a unit's own image; Harbor |
+| Docker or Podman, its engine answering | The engine's `version` here, `docker ps` or `podman ps` on a host | The standard's docker backend; a control in a unit's own image |
+| Docker | `docker version` here, `docker ps` on a host | Harbor |
 | A benchmark option's machine setup | Its programs | The chosen value; the install commands are shown |
 | `harbor` on PATH | `command -v` | A Harbor recipe without a pin |
 
@@ -93,7 +94,7 @@ a declared model list keeps those published choices.
 | Key and endpoint | Passed as environment (over stdin to a host), the key to a docker relay as a file; logs redacted. Other secrets withheld |
 | A host | Gets a content-addressed snapshot of the running backend and effective catalogue into `~/.nullius/app/<content-id>`, including source edits and user entries but no configuration stores; a Harbor recipe gets its pin's wheels in `~/.nullius/harbor/<pin>/wheels`, and `uv` if missing |
 | Proofs | Local runs save to the user catalogue. A host uses a writable copy in its run's `catalogue/`, isolated from the host's own entries; that copy and its proofs mirror back alongside `jobs/`, without changing the active user catalogue |
-| Docker | Where a recipe needs it, `docker ps` must answer, or the run stops before it starts |
+| Docker or Podman | The engine must answer `ps` (`docker ps`, or `podman ps` for the standard's docker backend), or the run stops before it starts |
 | Stop | Ends the current part (exit 130), records `stopped`; the next part never starts |
 | Restart of Nullius | `execution.restore` reattaches from `runs/<name>/run.json` |
 | Cannot run from the page | Generated tasks and custom agents are not supported by Run |
@@ -109,7 +110,8 @@ Harbor's tasks, run by Harbor's agents through the Harbor the recipe pins. What 
 | Dataset | Hub, registry, a local folder or generated tasks; one dataset per recipe |
 | Agent | The pinned Harbor's agents; custom agents as `module:Class`; the controls. *Common settings* apply to every agent; an agent's `--ak` options sit under its tab; *Extra parameters* override the agent, harness, environment or verifier |
 | Model | `<provider>/<model>` (a custom endpoint as `openai/`), with `LLM_API_KEY`, `OPENAI_API_KEY` and the provider's `*_BASE_URL`. The selected provider is kept; model IDs retain their vendor prefix |
-| Where | One machine. An agent's own vendor credentials come from [Agent keys](settings/agent-keys.md) |
+| Where | One machine, with Docker. An agent's own vendor credentials come from [Agent keys](settings/agent-keys.md) |
+| Podman | A Harbor recipe runs Harbor's docker environment. On Podman alone, run Harbor 0.23.0 or later itself with its podman environment, `harbor run -e podman` (with `podman-compose`, or `docker-compose` and Podman's socket), and open its jobs here |
 
 ### Which Harbor
 
