@@ -29,7 +29,7 @@ class ImageTest(unittest.TestCase):
 
     def test_the_dockerfile_pins_ubuntu_node_and_uv_by_checksum(self):
         text = container.dockerfile("x86_64")
-        self.assertTrue(text.startswith("FROM ubuntu:24.04\n"))
+        self.assertTrue(text.startswith("FROM docker.io/library/ubuntu:24.04\n"))       # in full: podman's short names vary
         self.assertIn(f"node-v{container.NODE_VERSION}-linux-x64.tar.xz", text)
         self.assertIn(container.NODE_SHA256["x64"] + "  /tmp/node.tar.xz\" | sha256sum -c -", text)
         self.assertRegex(container.UV_DIGEST, r"^sha256:[0-9a-f]{64}$")

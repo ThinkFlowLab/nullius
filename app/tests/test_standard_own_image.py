@@ -189,7 +189,7 @@ class Runtime(unittest.TestCase):
 
 
 def _docker_ready() -> str:
-    return docker_tier.why_not("ubuntu:24.04")
+    return docker_tier.why_not("docker.io/library/ubuntu:24.04")
 
 
 class LocalRun(unittest.TestCase):

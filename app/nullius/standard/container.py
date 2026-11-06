@@ -139,8 +139,9 @@ NODE_SHA256 = {
 }
 _ARCH = {"x86_64": "x64", "amd64": "x64", "aarch64": "arm64", "arm64": "arm64"}
 
+# FROM in full: podman resolves a short name by this machine's registries
 DOCKERFILE = """\
-FROM ubuntu:24.04
+FROM docker.io/library/ubuntu:24.04
 COPY --from=ghcr.io/astral-sh/uv:{uv_version}@{uv_digest} /uv /uvx /usr/local/bin/
 RUN apt-get update \\
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git python3 ca-certificates curl tmux xz-utils \\
