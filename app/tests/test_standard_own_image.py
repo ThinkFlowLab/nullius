@@ -94,6 +94,7 @@ class Setup(unittest.TestCase):
         probe.assert_not_called()
 
     def test_task_environment_reaches_agent_and_runner_variables_win(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))     # podman takes HOME by value
         r = run.Run.__new__(run.Run)
         r.inst = ""
         b = container.Box("job", "unit", "image", workdir="/testbed", path="/image/bin",
@@ -169,6 +170,7 @@ class Runtime(unittest.TestCase):
         self.assertEqual(container.in_runtime([venv_py, "/x/run.py"], self.RT), [venv_py, "/x/run.py"])
 
     def test_the_box_runs_in_the_machines_user_namespace_on_a_docker_with_userns_remap_alone(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))     # podman's box always runs so
         for remap in (True, False):
             calls = []
             b = container.Box("job", "u0001", "img", workdir="/app", network="net")

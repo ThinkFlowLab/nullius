@@ -43,6 +43,46 @@ class ImageTest(unittest.TestCase):
 
 
 class EngineTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def program(self, name: str, text: str = "") -> str:
+        path = os.path.join(self.tmp, name)
+        with open(path, "w") as f:
+            f.write(text)
+        os.chmod(path, 0o755)
+        return path
+
+    def engine(self) -> str:
+        with mock.patch.dict(os.environ, {"PATH": self.tmp}):
+            return container.engine()
+
+    def test_docker_is_the_engine_unless_podman_stands_in_for_it(self):
+        self.assertEqual(self.engine(), "docker")                          # neither: docker, said missing
+        podman = self.program("podman", "\x7fELF")
+        self.assertEqual(self.engine(), "podman")
+        docker = self.program("docker", "\x7fELF")
+        self.assertEqual(self.engine(), "docker")
+        self.program("docker", "#!/bin/sh\n# not podman\nexec /usr/libexec/docker-cli \"$@\"\n")   # a wrapper of Docker's
+        self.assertEqual(self.engine(), "docker")
+        self.program("docker", "#!/bin/sh\n[ -e /etc/containers/nodocker ] || echo podman >&2\nexec /usr/bin/podman \"$@\"\n")
+        self.assertEqual(self.engine(), "podman")                            # podman-docker's script
+        os.remove(docker)
+        os.symlink(podman, docker)
+        self.assertEqual(self.engine(), "podman")
+
+    def test_a_docker_that_refuses_this_user_says_podman_is_there(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))
+        refused = subprocess.CompletedProcess([], 1, "", "permission denied while trying to connect to the docker API\n")
+        self.enterContext(mock.patch.object(container, "_docker", return_value=refused))
+        said = "docker is installed but not usable by this user: permission denied while trying to connect to the docker API" \
+               " (add this user to the docker group, then log in again)"
+        with mock.patch.object(container.shutil, "which", return_value=None):
+            self.assertEqual(container.unusable(), said)
+        with mock.patch.object(container.shutil, "which", return_value="/usr/bin/podman"):
+            self.assertEqual(container.unusable(), said + ". podman is on this machine: Nullius uses it when docker is not on the PATH")
+
     def test_podman_is_asked_whether_it_is_rootless_in_its_own_terms(self):
         self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
         for said, rootless in (("name=rootless\n", True), ("\n", False)):
@@ -112,6 +152,7 @@ class ArgvTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))
 
     def test_mounts_each_folder_once_at_its_own_path(self):
         ws, home, app = (os.path.join(self.tmp, n) for n in ("ws", "home", "app"))

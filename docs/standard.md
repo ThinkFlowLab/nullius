@@ -134,7 +134,7 @@ record); verifier/reward.txt and score.json
 | --- | --- |
 | Units | Run `-j` at a time, each with its own workspace (a git repository of its own), home and relay |
 | A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost |
-| Backends (`--backend`) | `local`: processes on this machine. `docker`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`). The driver stays on the machine either way; on docker a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image |
+| Backends (`--backend`) | `local`: processes on this machine. `docker`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. The driver stays on the machine either way; on docker a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image |
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
 | Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate; a turn past its limit is the agent's timeout. `"kind": "score"` leaves a score and no pass |
 | The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. Provider `anthropic` speaks Anthropic's Messages (`ANTHROPIC_API_KEY` as `x-api-key`) |
@@ -158,7 +158,7 @@ The docker backend (`--backend docker`) is the isolation, and needs no such yes.
 | A model server on this machine | An endpoint on its loopback (`http://localhost:11434/v1`) is reached by the relays as `host.docker.internal`, through a forwarder the run keeps on the default bridge's gateway alone. On a rootless engine or Podman on Linux, as `host.docker.internal:8000`: one door container for the run, on the engine's default network, to a Unix socket on this machine. The agents' internal networks do not reach it |
 | Cleanup | Everything a unit starts is labelled `nullius.job=<job>` and removed when it ends, after an error too; the run sweeps the label. On Podman, `nullius-bridge` stays for the next run |
 
-Rootless podman is reached through its Docker API (`DOCKER_HOST` at `podman system service`'s socket), with `netns = "bridge"`, a DNS-enabled `default_network`, and `userns` at its default: with `keep-id`, a container's root is a sub-uid and cannot write the unit's folders.
+Through Podman's Docker API (a docker CLI with `DOCKER_HOST` at `podman system service`'s socket), Nullius runs docker and needs `netns = "bridge"`, a DNS-enabled `default_network`, and `userns` at its default in `containers.conf`: with `keep-id`, a container's root is a sub-uid and cannot write the unit's folders.
 
 A rootful Docker with `userns-remap` maps the uids of each container to sub-uids. There, the containers that use your files (the agent's, the relay, an install, the check, a door and an own image) run with `--userns=host`, as on a default Docker. The licence forwarder and the check's proxy keep the remap.
 
@@ -275,7 +275,7 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 
 | Field | Meaning |
 | --- | --- |
-| `image.build` | A folder of the upstream holding a Dockerfile, its whole context: `nullius/own-<benchmark>-<folder>:<hash>`, the sha256 of every file the build reads |
+| `image.build` | A folder of the upstream holding a Dockerfile, its whole context: `nullius/own-<benchmark>-<folder>:<hash>`, the sha256 of every file the build reads. On Podman, a short name in its `FROM` may fail under `short-name-mode = "enforcing"`: name the image in full |
 | `image.pull` | A reference pinned by its digest (`name@sha256:...`) |
 | `image.memory_mb`, `image.cpus` | The task's limits |
 | `workdir` | The session's `cwd` when not the image's working directory |

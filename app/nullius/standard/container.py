@@ -1,6 +1,9 @@
 """The container backend: each unit's agent, or capability, in a container of its
-own, and its relay in another beside it. Docker only; this module shells out
-to the ``docker`` program and imports nothing outside the standard library.
+own, and its relay in another beside it. This module shells out to the
+engine's program (:data:`DOCKER`) and imports nothing outside the standard
+library. That is ``docker``, or ``podman`` on a machine without Docker or
+where ``docker`` is podman's own (:func:`engine`). Podman needs no Docker API
+socket and no settings of its own for Nullius.
 
 **One base image** (``nullius/base:<hash>``), built once and named by the
 hash of its Dockerfile, so a change to it builds a new one beside the old:
@@ -119,7 +122,27 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from nullius import paths
 from nullius.standard import definitions, install
 
-DOCKER = "docker"
+def _runs_podman(path: str) -> bool:
+    """Whether the program at ``path`` is podman under another name: a link to
+    it, or a script that runs it (``podman-docker``'s ``docker``)."""
+    if os.path.basename(os.path.realpath(path)) == "podman":
+        return True
+    try:
+        with open(path, "rb") as f:
+            head = f.read(4096)
+    except OSError:
+        return False
+    return head.startswith(b"#!") and re.search(rb"^\s*exec\s+\S*podman\b", head, re.M) is not None
+
+
+def engine() -> str:
+    """``podman`` when it is on the PATH and ``docker`` is not, or is podman
+    under that name; else ``docker``."""
+    docker, podman = shutil.which("docker"), shutil.which("podman")
+    return "podman" if podman and (not docker or _runs_podman(docker)) else "docker"
+
+
+DOCKER = engine()                          # the engine's program, chosen once
 LABEL = "nullius.job"
 RELAY_PORT = 8080
 RELAY_ALIAS = "relay"
@@ -239,6 +262,8 @@ def unusable() -> Optional[str]:
         said = (r.stderr or r.stdout).strip().splitlines()
         hint = (" (add this user to the docker group, then log in again)"
                 if not podman() and "permission denied" in r.stderr.lower() else "")
+        if not podman() and shutil.which("podman"):     # docker wins (engine), so say podman is there
+            hint += ". podman is on this machine: Nullius uses it when docker is not on the PATH"
         return f"{DOCKER} is installed but not usable by this user: " + (said[-1][:200] if said else f"exit {r.returncode}") + hint
     if podman():
         try:
