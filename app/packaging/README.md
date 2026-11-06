@@ -13,7 +13,7 @@ The repository stays private; publication to PyPI makes the uploaded package
 and its included source public, independently of GitHub access.
 
 `pyproject.toml` owns the package version. The release tag is that version
-prefixed with `v`: version `0.1.0rc1` corresponds to tag `v0.1.0rc1`. Release
+prefixed with `v`: version `0.1.0rc2` corresponds to tag `v0.1.0rc2`. Release
 notes live in `docs/releases/<tag>.md`.
 
 ## Build the downloads locally
@@ -23,15 +23,15 @@ From the repository root, with Python 3.12 or later and `uv` available:
 ```bash
 python3 app/packaging/release.py build \
   --out-dir /tmp/nullius-release \
-  --tag v0.1.0rc1
+  --tag v0.1.0rc2
 ```
 
 The tag must match the package version, and the output directory must be absent
 or empty. Existing downloads are never overwritten. The output contains:
 
 ```text
-nullius_eval-0.1.0rc1-py3-none-any.whl
-nullius_eval-0.1.0rc1.tar.gz
+nullius_eval-0.1.0rc2-py3-none-any.whl
+nullius_eval-0.1.0rc2.tar.gz
 SHA256SUMS
 ```
 
@@ -45,7 +45,7 @@ tool replacement. It does not run a benchmark or read personal settings.
 To check a wheel independently:
 
 ```bash
-python3 app/packaging/verify.py /tmp/nullius-release/nullius_eval-0.1.0rc1-py3-none-any.whl
+python3 app/packaging/verify.py /tmp/nullius-release/nullius_eval-0.1.0rc2-py3-none-any.whl
 ```
 
 To validate the complete downloaded set, including checksums and package
@@ -54,7 +54,7 @@ metadata, without rebuilding it:
 ```bash
 python3 app/packaging/release.py verify \
   --dist-dir /tmp/nullius-release \
-  --tag v0.1.0rc1
+  --tag v0.1.0rc2
 ```
 
 The source distribution is a Python build input. Neither archive is a
@@ -66,7 +66,7 @@ the wheel's `py3-none-any` filename.
 
 1. Review and merge the version, release notes and intended changes into `main`.
 2. Open **Actions → draft release → Run workflow**, select `main`, and provide
-   the matching tag, such as `v0.1.0rc1`.
+   the matching tag, such as `v0.1.0rc2`.
 3. The workflow runs the backend and route suites, builds and verifies the
    packages, then creates a draft prerelease for the exact commit it checked
    out. Its assets are the wheel, source distribution and checksum file.
@@ -139,6 +139,6 @@ uninstall that tool with `uv tool uninstall nullius` before installing
 tool environment and remain in place.
 
 The default command installs the latest version without a pin. To select this
-specific candidate, use `uv tool install nullius-eval==0.1.0rc1`. Add `--force`
+specific candidate, use `uv tool install nullius-eval==0.1.0rc2`. Add `--force`
 when replacing an existing installation. `uv tool upgrade nullius-eval`
 updates an unpinned installation; it retains an explicit version constraint.
