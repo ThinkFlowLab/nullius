@@ -72,7 +72,7 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Nullius $RELEASE_TAG" \
             --draft --prerelease --latest=false \
-            --notes-file "app/packaging/notes/$RELEASE_TAG.md" \
+            --notes-file "docs/releases/$RELEASE_TAG.md" \
             "$RUNNER_TEMP/nullius-release/"*.whl \
             "$RUNNER_TEMP/nullius-release/"*.tar.gz \
             "$RUNNER_TEMP/nullius-release/SHA256SUMS"

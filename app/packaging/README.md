@@ -14,7 +14,7 @@ and its included source public, independently of GitHub access.
 
 `pyproject.toml` owns the package version. The release tag is that version
 prefixed with `v`: version `0.1.0rc1` corresponds to tag `v0.1.0rc1`. Release
-notes live in `app/packaging/notes/<tag>.md`.
+notes live in `docs/releases/<tag>.md`.
 
 ## Build the downloads locally
 

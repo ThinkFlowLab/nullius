@@ -48,7 +48,7 @@ class ReleaseDownloads(unittest.TestCase):
     def project(self):
         (self.root / 'pyproject.toml').write_text(
             f'[project]\nname = "nullius-eval"\nversion = "{VERSION}"\n')
-        notes = self.root / 'app/packaging/notes' / (TAG + '.md')
+        notes = self.root / 'docs/releases' / (TAG + '.md')
         notes.parent.mkdir(parents=True)
         notes.write_text('Initial release candidate.\n')
         return notes
