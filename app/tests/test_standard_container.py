@@ -169,7 +169,7 @@ class ArgvTest(unittest.TestCase):
         self.enterContext(mock.patch.object(container, "rootless", return_value=False))
         a = container.run_argv("img", ["codex-acp"], name="nullius-j-u0000", network="nullius-j-u0000", job="j",
                                workdir="/w", mounted=[("/w", False), ("/i", True)],
-                               env_names=["HOME", "NULLIUS_RELAY_KEY", "PATH"], path="/i/bin:/usr/bin")
+                               env=dict.fromkeys(["HOME", "NULLIUS_RELAY_KEY", "PATH"], ""), path="/i/bin:/usr/bin")
         self.assertEqual(a[:3], ["docker", "run", "-i"])
         self.assertEqual(a[a.index("--network") + 1], "nullius-j-u0000")
         self.assertEqual(a[a.index("--label") + 1], "nullius.job=j")
@@ -439,9 +439,22 @@ class ArgvTest(unittest.TestCase):
         self.start()[0].stop()
         self.assertEqual((os.path.exists(old), os.path.exists(fresh)), (False, True))
 
+    def test_on_podman_a_units_home_goes_by_value_and_podman_keeps_its_own(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        env = {"HOME": "/h", "XDG_CONFIG_HOME": "/h/c", "NULLIUS_RELAY_KEY": "r", "PATH": "/p"}
+        for engine, envs in (("docker", ["PATH=/p", "HOME", "NULLIUS_RELAY_KEY", "XDG_CONFIG_HOME"]),
+                             ("podman", ["PATH=/p", "HOME=/h", "XDG_CONFIG_HOME=/h/c", "NULLIUS_RELAY_KEY"])):
+            with mock.patch.object(container, "DOCKER", engine):
+                u = container.Unit("job", "u0004", os.path.join(self.tmp, "rec"), image="img", app="/app", base="b", key="k")
+                argv, prog = u.wrap(["agent"], env, "/w", [("/w", False)])
+            self.assertEqual([argv[i + 1] for i, w in enumerate(argv) if w == "-e"], envs)
+            self.assertEqual(prog["NULLIUS_RELAY_KEY"], "r")
+            self.assertEqual((prog.get("HOME"), prog.get("XDG_CONFIG_HOME")),
+                             ("/h", "/h/c") if engine == "docker" else (os.environ.get("HOME"), os.environ.get("XDG_CONFIG_HOME")))
+
     def _argvs(self) -> dict:
         self.enterContext(mock.patch.dict(os.environ, {container.CHECK_IMAGE: "img"}))
-        return {"agent": container.run_argv("img", ["a"], name="n", network="n", job="j", workdir="/w", mounted=[], env_names=[], path="/p"),
+        return {"agent": container.run_argv("img", ["a"], name="n", network="n", job="j", workdir="/w", mounted=[], env={}, path="/p"),
                 "check": container.check_argv("/w", [], []), "install": container.install_argv("img", "/w", ["a"]),
                 "relay": container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="b", model="m", routes={}),
                 "forward": container.forward_argv("img", name="f", job="j", port=1),

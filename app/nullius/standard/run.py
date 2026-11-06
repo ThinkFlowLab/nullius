@@ -1148,7 +1148,7 @@ class Run:
             path = ":".join(([box.env["PATH"]] if "PATH" in box.env else []) + [box.path]
                             + install.bin_dirs(self.inst) + [d + "/bin" for _, d in box.runtimes.values()])
             argv = box.exec_argv(container.in_runtime(cmd, box.runtimes), inside, path, interactive=interactive)
-            return argv, container.client_env({k: v for k, v in inside.items() if k != "PATH"})
+            return argv, container.program_env(inside)
         if self.backend == "local":
             return cmd, env
         ws = os.path.join(os.path.dirname(home), "workspace")

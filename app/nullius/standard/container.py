@@ -499,26 +499,50 @@ def _user() -> str:
     return "0:0" if rootless() else f"{os.getuid()}:{os.getgid()}"
 
 
+def by_value(env: Dict[str, str]) -> Dict[str, str]:
+    """What of a unit's environment podman itself reads (``CLIENT_KEEP``:
+    ``HOME``, the XDG folders...) but ``PATH``: on podman passed by value
+    (``-e NAME=value``), so the podman program keeps this machine's own and
+    finds its images. Nothing on Docker."""
+    return {k: v for k, v in env.items() if k in CLIENT_KEEP and k != "PATH"} if podman() else {}
+
+
+def program_env(env: Dict[str, str]) -> dict:
+    """The engine program's environment for a unit's process given ``env``:
+    the values of what goes by name (``-e NAME``), never ``PATH`` nor
+    :func:`by_value`'s."""
+    given = by_value(env)
+    return client_env({k: v for k, v in env.items() if k != "PATH" and k not in given})
+
+
+def env_args(env: Dict[str, str], path: str) -> Tuple[List[str], List[str]]:
+    """A unit's process's ``-e`` words: ``PATH``, the container's and no
+    secret, and :func:`by_value`'s by value; then the rest by name, the value
+    in the engine program's own environment (:func:`program_env`), never on
+    an argument list."""
+    given = by_value(env)
+    return (["-e", "PATH=" + path, *[w for k, v in sorted(given.items()) for w in ("-e", f"{k}={v}")]],
+            [w for k in sorted(set(env) - {"PATH"} - set(given)) for w in ("-e", k)])
+
+
 def run_argv(image: str, cmd: List[str], *, name: str, network: str, job: str, workdir: str,
-             mounted: List[Tuple[str, bool]], env_names: Iterable[str], path: str, interactive: bool = True,
+             mounted: List[Tuple[str, bool]], env: Dict[str, str], path: str, interactive: bool = True,
              binds: Iterable[Tuple[str, str]] = ()) -> List[str]:
-    """``docker run`` for a unit's agent or capability. Its environment is passed
-    by name only (``-e NAME``, the value in the docker program's own
-    environment), but for ``PATH``, which is the container's and no secret.
-    ``binds``: (a file on this machine, its path inside), each read-only - a
-    licence file where its environment says the software looks for it."""
+    """``docker run`` for a unit's agent or capability, its environment as
+    :func:`env_args` gives it. ``binds``: (a file on this machine, its path
+    inside), each read-only - a licence file where its environment says the
+    software looks for it."""
+    values, named = env_args(env, path)
     a = [DOCKER, "run", "--rm", "--name", name, "--network", network, "--label", f"{LABEL}={job}",
          *_userns(), "--user", _user(), "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
-         "-w", workdir, "-e", "PATH=" + path]
+         "-w", workdir, *values]
     if interactive:
         a.insert(2, "-i")
     for p, ro in mounted:
         a += ["-v", f"{p}:{p}:{'ro' if ro else 'rw'}"]
     for src, dest in binds:
         a += ["-v", f"{src}:{dest}:ro"]
-    for k in sorted(set(env_names) - {"PATH"}):
-        a += ["-e", k]
-    return a + [image] + list(cmd)
+    return a + named + [image] + list(cmd)
 
 
 def plain_only(root: str) -> List[str]:
@@ -998,7 +1022,7 @@ class Unit:
              image: Optional[str] = None, interactive: bool = True,
              binds: Iterable[Tuple[str, str]] = ()) -> Tuple[List[str], dict]:
         """A command and its environment turned into ``docker run`` and the
-        docker program's environment, the process's variables passed by name;
+        engine program's environment (:func:`env_args`, :func:`program_env`);
         ``binds``, licence files mounted read-only where they are declared."""
         app = os.path.abspath(self.app)
         binds = [(os.path.abspath(src), dest) for src, dest in binds]
@@ -1010,10 +1034,10 @@ class Unit:
                 raise ValueError(f"{src} is in this application's folder: a licence is never mounted from there")
         inside = {k: v for k, v in env.items() if k not in HOST_ONLY}
         argv = run_argv(image or self.image, cmd, name=self.names["agent"], network=self.names["network"], job=self.job,
-                        workdir=workdir, mounted=mounted, env_names=inside, path=inside.get("PATH") or IMAGE_PATH,
+                        workdir=workdir, mounted=mounted, env=inside, path=inside.get("PATH") or IMAGE_PATH,
                         interactive=interactive, binds=binds)
         self.started.append(self.names["agent"])
-        return argv, client_env({k: v for k, v in inside.items() if k != "PATH"})
+        return argv, program_env(inside)
 
     def stop(self):
         """Remove the unit's containers and network, and the key's file if the
@@ -1507,15 +1531,13 @@ class Box:
             raise
         return self
 
-    def exec_argv(self, cmd: List[str], env_names: Iterable[str], path: str, *, interactive: bool = True,
+    def exec_argv(self, cmd: List[str], env: Dict[str, str], path: str, *, interactive: bool = True,
                   workdir: Optional[str] = None) -> List[str]:
-        """``docker exec`` of a command in the box, its environment passed by
-        name (``-e NAME``, the value in the docker program's own environment)
-        but for ``PATH``."""
-        a = [DOCKER, "exec"] + (["-i"] if interactive else []) + ["-w", workdir or self.workdir, "-e", "PATH=" + path]
-        for k in sorted(set(env_names) - {"PATH"}):
-            a += ["-e", k]
-        return a + [self.name] + list(cmd)
+        """``docker exec`` of a command in the box, its environment as
+        :func:`env_args` gives it."""
+        values, named = env_args(env, path)
+        return [DOCKER, "exec", *(["-i"] if interactive else []), "-w", workdir or self.workdir,
+                *values, *named, self.name, *cmd]
 
     def run(self, cmd: List[str], seconds: float, *, user: Optional[str] = None, env: Optional[dict] = None) -> dict:
         """A command run in the box, to its end or ``seconds``: {exit, output,

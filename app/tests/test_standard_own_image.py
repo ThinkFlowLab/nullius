@@ -188,6 +188,16 @@ class Runtime(unittest.TestCase):
         self.assertEqual(argv[-3:], [b.name, "node", "x"])
 
 
+    def test_on_podman_the_agent_in_its_own_image_gets_its_home_by_value(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        r = run.Run.__new__(run.Run)
+        r.inst = ""
+        b = container.Box("job", "u0001", "img", workdir="/app", runtimes={})
+        argv, env = r.place(None, ["sh", "x"], {"HOME": "/h", "NULLIUS_RELAY_KEY": "placeholder", "PATH": "/p"}, "/app", "/h", box=b)
+        self.assertEqual(argv[:2], ["podman", "exec"])
+        self.assertEqual([argv[i + 1] for i, w in enumerate(argv) if w == "-e"][1:], ["HOME=/h", "NULLIUS_RELAY_KEY"])
+        self.assertEqual((env.get("HOME"), env["NULLIUS_RELAY_KEY"]), (os.environ.get("HOME"), "placeholder"))
+
 def _docker_ready() -> str:
     return docker_tier.why_not("docker.io/library/ubuntu:24.04")
 
