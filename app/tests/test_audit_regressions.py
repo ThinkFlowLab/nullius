@@ -69,7 +69,7 @@ class Regressions(unittest.TestCase):
             finally:
                 if pid.exists():
                     try: os.kill(int(pid.read_text()), signal.SIGKILL)
-                    except ProcessLookupError: pass
+                    except (ProcessLookupError, ValueError): pass                  # ValueError: not written yet
 
     def test_sigterm_stops_a_real_memory_process_and_writes_cancelled_results(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -89,8 +89,9 @@ run.run(b,o,model='m',provider='custom',jobs_root={tmp!r},name='stopped',env={{'
                 deadline = time.monotonic() + 10
                 while time.monotonic() < deadline:
                     markers = list(root.glob('stopped/*/.work/capability/pid'))
-                    if markers:
+                    try:
                         memory_pid = int(markers[0].read_text()); break
+                    except (IndexError, ValueError): pass                          # not there, or not written yet
                     if process.poll() is not None: break
                     time.sleep(.05)
                 self.assertIsNotNone(memory_pid, process.communicate(timeout=1) if process.poll() is not None else 'memory did not start')
