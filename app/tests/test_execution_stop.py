@@ -90,14 +90,6 @@ class StopAtLaunch(LocalHost):
         self.ran = self.tmp / "ran"
         return f"sleep 3; echo ran > {self.ran}"
 
-    def pid_of(self, d, part="a", seconds=10):
-        for _ in range(int(seconds / 0.02)):
-            try:
-                return int((d / f"run-{part}.pid").read_text())
-            except (OSError, ValueError):
-                time.sleep(0.02)
-        self.fail(f"run-{part}.pid never appeared")
-
     def test_a_part_started_by_a_launcher_cut_short_here_is_stopped(self):
         ex = execution.Execution(execution.Plan(name="r", script="", parts=[{"id": "a", "label": "a", "script": self.script()}]), root=str(self.tmp))
         real = ex._sh

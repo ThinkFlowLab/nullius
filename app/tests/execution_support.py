@@ -36,6 +36,14 @@ class Base(unittest.TestCase):
             ex.thread.join(0.02)
         self.fail(f"never reached {state}: {ex.state} {ex.lines}")
 
+    def pid_of(self, d, part="a", seconds=10):
+        for _ in range(int(seconds / 0.02)):
+            try:
+                return int((d / f"run-{part}.pid").read_text())
+            except (OSError, ValueError):
+                time.sleep(0.02)
+        self.fail(f"run-{part}.pid never appeared")
+
     def until_recorded(self, ex, state, seconds=10):
         """The record is saved just after the state the page reads is set:
         wait for the record itself, by when the run's state, question and
