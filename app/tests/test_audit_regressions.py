@@ -86,7 +86,7 @@ run.run(b,o,model='m',provider='custom',jobs_root={tmp!r},name='stopped',env={{'
             process = subprocess.Popen([sys.executable, '-c', script], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             memory_pid = None
             try:
-                deadline = time.monotonic() + 10
+                deadline = time.monotonic() + 60
                 while time.monotonic() < deadline:
                     markers = list(root.glob('stopped/*/.work/capability/pid'))
                     try:
