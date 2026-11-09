@@ -688,6 +688,22 @@ class RunTest(unittest.TestCase):
         with self.assertRaisesRegex(run.Refused, "backend 'vm'"):
             run.Run(b, a, model="m", provider="custom", env=env, unsandboxed=True, backend="vm")
 
+    def test_a_model_door_that_fails_to_open_still_writes_the_jobs_result(self):
+        from unittest import mock
+        from nullius.standard import container
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        a = definitions.get("agent", "fake", ROOT)
+        env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}
+        with mock.patch.object(container, "unusable", return_value=None), mock.patch.object(container, "sweep"), \
+                mock.patch.object(container, "present", return_value=True), \
+                mock.patch.object(container, "base_image", return_value="img"), \
+                mock.patch.object(container.Loopback, "start", side_effect=OSError("cannot bind")):
+            with self.assertRaisesRegex(OSError, "cannot bind"):
+                run.run(b, a, model="m", provider="custom", env=env, backend="docker", jobs_root=os.path.join(self.tmp, "jobs"),
+                        say=lambda s: None, limit=1)
+        (job,) = os.listdir(os.path.join(self.tmp, "jobs"))
+        self.assertTrue(os.path.exists(os.path.join(self.tmp, "jobs", job, "result.json")))
+
     def test_a_missing_key_is_refused(self):
         b = definitions.get("benchmark", "fakebench", ROOT)
         a = definitions.get("agent", "fake", ROOT)

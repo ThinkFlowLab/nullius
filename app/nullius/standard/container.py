@@ -39,7 +39,10 @@ removed from this machine once the relay listens: never on an argument list
 publishes its port on 127.0.0.1 so the driver, which stays on this machine
 (it owns the answers), reaches the judge's route and a capability
 benchmark's reader. Its record folder is mounted read-write, so the host
-reads each call as the local relay's are read.
+reads each call as the local relay's are read. A model endpoint on this
+machine's loopback is reached by the relays alone (:class:`Loopback`):
+through a forwarder on the default bridge's gateway, or, on a rootless
+engine, a door container on the engine's default network.
 
 **A licence server is one more door.** A unit whose environment needs a
 licence of kind ``server`` (``host:port``) gets a forwarder beside its relay
@@ -571,6 +574,49 @@ def _pass_each(server: socket.socket, target: Tuple[str, int]) -> None:
         for a, b in ((inside, outside), (outside, inside)):
             threading.Thread(target=_pump, args=(a, b), daemon=True).start()
 
+
+def _close(server: socket.socket) -> None:
+    """Close a listening socket. The shutdown wakes the thread blocked in its
+    ``accept``, which a close alone does not do on Linux."""
+    try:
+        server.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+    server.close()
+
+
+def use_socket_doors() -> bool:
+    """Whether a server on this machine's loopback is reached through a
+    :class:`SocketDoor`: on a rootless engine on Linux. Elsewhere a rootless
+    engine runs in a virtual machine, which this machine's sockets may not
+    reach."""
+    return rootless() and platform.system() == "Linux"
+
+
+class SocketDoor:
+    """A Unix socket in a folder of its own that passes each connection to one
+    ``host:port`` here: a rootless engine's door container mounts it to reach
+    this machine's loopback. ``stop`` closes it and removes the folder."""
+
+    def __init__(self, host: str, port: int):
+        self.dir = tempfile.mkdtemp(prefix="nullius-door-")
+        self.path, self.target = os.path.join(self.dir, "s"), (host, port)     # short: a socket path has ~108 bytes
+        self._server: Optional[socket.socket] = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            self._server.bind(self.path)
+            self._server.listen(64)
+        except OSError:
+            self.stop()
+            raise
+        threading.Thread(target=_pass_each, args=(self._server, self.target), daemon=True).start()
+
+    def stop(self) -> None:
+        server, self._server = self._server, None
+        if server is not None:
+            _close(server)
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+
 class Loopback:
     """An endpoint on this machine's loopback, as the relays' containers reach
     it: ``base`` and the ``hosts`` they are given. On Linux, a forwarder for
@@ -578,15 +624,24 @@ class Loopback:
     container there has for this machine, reached by the relays and by no
     agent, whose networks are internal - and passing each connection to the
     endpoint; the relays call it ``host.docker.internal``. Where the bridge
-    is not on this machine (Docker Desktop's virtual machine), that name
-    already reaches its loopback: only the name changes."""
+    is not on this machine and the engine runs as root (Docker Desktop's
+    virtual machine), that name already reaches its loopback: only the name
+    changes. On Linux, a rootless engine's gateway is in its own network
+    namespace, so a :class:`SocketDoor` (``door``) passes each connection
+    instead, and one door container for the run reaches it, on the engine's
+    default network as the relays are. The relays call it
+    ``host.docker.internal`` there too, at the door's address, on port 8000."""
 
     NAME = "host.docker.internal"
+    DOOR_PORT = 8000                      # not the endpoint's: below 1024 needs a capability on podman
 
-    def __init__(self, base: str):
+    def __init__(self, base: str, *, image: str = "", job: str = ""):
         self.target = urllib.parse.urlsplit(base)
         self.base, self.hosts = base, {}
+        self.image, self.job = image, job       # the door container's, on a rootless engine
         self._server: Optional[socket.socket] = None
+        self.door: Optional[SocketDoor] = None
+        self.container: Optional[str] = None
 
     def _url(self, port: Optional[int]) -> str:
         t = self.target
@@ -594,6 +649,23 @@ class Loopback:
         return urllib.parse.urlunsplit((t.scheme, netloc, t.path, t.query, t.fragment))
 
     def start(self) -> "Loopback":
+        if use_socket_doors():
+            self.door = SocketDoor(*self._endpoint())
+            self.container = f"nullius-{slug(self.job)}-model"
+            try:
+                _docker(door_argv(self.image, name=self.container, job=self.job, port=self.DOOR_PORT,
+                                  socket_path=self.door.path)[1:],
+                        env=client_env({"NULLIUS_FORWARD_TO": "unix:" + self.door.path}))
+                wait_listening(self.container, "the door to the model server")
+                ip = _docker(["inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
+                              self.container]).stdout.split()
+                if not ip:
+                    raise Unavailable("the door to the model server has no address on the default network")
+            except Exception:
+                self.stop()
+                raise
+            self.base, self.hosts = self._url(self.DOOR_PORT), {self.NAME: ip[0]}
+            return self
         gateway = bridge_gateway()
         try:
             if not gateway:
@@ -613,11 +685,15 @@ class Loopback:
     def stop(self) -> None:
         server, self._server = self._server, None
         if server is not None:
+            _close(server)
+        name, self.container = self.container, None
+        if name is not None:
             try:
-                server.shutdown(socket.SHUT_RDWR)        # wakes the accept, which a close alone does not on Linux
-            except OSError:
+                _docker(["rm", "-f", name], check=False, timeout=60)
+            except Unavailable:
                 pass
-            server.close()
+        if self.door is not None:
+            self.door.stop()
 
 
 def server_alias(address: str, i: int = 1) -> Tuple[str, str, int]:
@@ -640,14 +716,17 @@ def forward_argv(image: str, *, name: str, job: str, port: int) -> List[str]:
             image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}"]
 
 
-def door_argv(image: str, *, name: str, job: str, network: str, alias: str, port: int, socket_path: str) -> List[str]:
-    """``docker run`` for a door to a server on this machine (``mcp_machine``):
-    on the unit's internal network alone, as ``alias``, its one file and the
-    server's socket mounted, each alone and read-only. Where it forwards is
-    named, never given: ``-e NULLIUS_FORWARD_TO`` (``unix:<socket>``)."""
+def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
+              network: Optional[str] = None, alias: Optional[str] = None) -> List[str]:
+    """``docker run`` for a door to a server on this machine (``mcp_machine``,
+    a :class:`SocketDoor`): on one internal network alone, as ``alias``, or
+    without ``network`` on the default one (a :class:`Loopback`'s), its one
+    file and the server's socket mounted, each alone and read-only. Where it
+    forwards is named, never given: ``-e NULLIUS_FORWARD_TO``
+    (``unix:<socket>``)."""
     return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
-            "--network", network, "--network-alias", alias,
+            *(["--network", network, "--network-alias", alias] if network else []),
             "-v", f"{FORWARD}:{FORWARD_IN}:ro", "-v", f"{socket_path}:{socket_path}:ro",
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
             image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}"]

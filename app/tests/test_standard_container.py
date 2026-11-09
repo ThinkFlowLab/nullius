@@ -125,10 +125,86 @@ class ArgvTest(unittest.TestCase):
                                  model="m", routes={}, hosts={"host.docker.internal": "172.17.0.1"})
         self.assertEqual(a[a.index("--add-host") + 1], "host.docker.internal:172.17.0.1")
         self.assertNotIn("--add-host", container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="b", model="m", routes={}))
-        with mock.patch.object(container, "bridge_gateway", return_value=""):          # Docker Desktop: the bridge is elsewhere
+        with mock.patch.object(container, "bridge_gateway", return_value=""), \
+                mock.patch.object(container, "rootless", return_value=False):           # Docker Desktop: the bridge is elsewhere
             door = container.Loopback("http://user@localhost:11434/v1?x=1").start()
-        self.assertEqual((door.base, door.hosts), ("http://user@host.docker.internal:11434/v1?x=1", {"host.docker.internal": "host-gateway"}))
         door.stop()
+        self.assertEqual((door.base, door.hosts), ("http://user@host.docker.internal:11434/v1?x=1", {"host.docker.internal": "host-gateway"}))
+        self.assertIsNone(door.door)
+
+    def _rootless_loopback(self, fail=None, ip="10.88.0.7 \n"):
+        said = []
+
+        def docker(args, env=None, **_):
+            said.append((args, dict(env or {})))
+            if fail and args[:1] == [fail]:
+                raise container.Unavailable(f"docker {fail}: no")
+            return subprocess.CompletedProcess(args, 0, ip if args[:1] == ["inspect"] else "", "")
+        self.enterContext(mock.patch.object(container, "_docker", side_effect=docker))
+        self.enterContext(mock.patch.object(container, "wait_listening"))
+        self.enterContext(mock.patch.object(container, "rootless", return_value=True))
+        self.enterContext(mock.patch.object(container.platform, "system", return_value="Linux"))
+        return container.Loopback("http://user@localhost:80/v1?x=1", image="img", job="job"), said
+
+    def test_on_a_rootless_engine_an_endpoint_on_this_machines_loopback_is_one_door_for_the_run(self):
+        door, said = self._rootless_loopback()
+        door.start()
+        self.addCleanup(door.stop)
+        self.assertEqual((door.base, door.hosts), ("http://user@host.docker.internal:8000/v1?x=1",
+                                                   {"host.docker.internal": "10.88.0.7"}))
+        self.assertEqual(door.door.target, ("localhost", 80))
+        (a, env), = [(a, e) for a, e in said if a[:1] == ["run"]]
+        self.assertNotIn("--network", a)                                               # the default network, as the relays
+        self.assertEqual(a[a.index("--name") + 1], "nullius-job-model")
+        self.assertEqual(a[a.index("--label") + 1], "nullius.job=job")
+        self.assertEqual(a[a.index("--user") + 1], "0:0")
+        self.assertIn(f"{door.door.path}:{door.door.path}:ro", a)
+        self.assertEqual(a[-1], "0.0.0.0:8000")
+        self.assertEqual(env["NULLIUS_FORWARD_TO"], "unix:" + door.door.path)
+        r = container.relay_argv("img", name="r", job="job", app="/app", record="/rec", key_file="/k", base=door.base,
+                                 model="m", routes={}, hosts=door.hosts)
+        self.assertEqual(r[r.index("--add-host") + 1], "host.docker.internal:10.88.0.7")
+        said.clear()
+        door.stop()
+        self.assertIn(["rm", "-f", "nullius-job-model"], [a for a, _ in said])
+        self.assertFalse(os.path.exists(door.door.dir))
+
+    def test_a_model_door_that_fails_to_start_removes_what_it_made(self):
+        for fail, ip in (("run", ""), ("inspect", ""), (None, " \n")):           # the last: inspect gives no address
+            door, said = self._rootless_loopback(fail, ip)
+            with self.assertRaises(container.Unavailable):
+                door.start()
+            self.assertIn(["rm", "-f", "nullius-job-model"], [a for a, _ in said])
+            self.assertFalse(os.path.exists(door.door.dir))
+            self.assertIsNone(door.container)
+
+    def test_a_rootless_engine_off_linux_keeps_the_gateway_forwarder(self):
+        with mock.patch.object(container, "bridge_gateway", return_value=""), \
+                mock.patch.object(container, "rootless", return_value=True), \
+                mock.patch.object(container.platform, "system", return_value="Darwin"):   # podman machine, Lima
+            door = container.Loopback("http://localhost:11434/v1").start()
+        door.stop()
+        self.assertEqual((door.base, door.door), ("http://host.docker.internal:11434/v1", None))
+
+    def test_a_socket_door_passes_each_connection_to_its_endpoint_and_removes_its_folder(self):
+        import socket, threading
+        srv = socket.create_server(("127.0.0.1", 0))
+        self.addCleanup(srv.close)
+        def echo():
+            c, _ = srv.accept()
+            with c:
+                c.sendall(c.recv(100).upper())
+        threading.Thread(target=echo, daemon=True).start()
+        door = container.SocketDoor("127.0.0.1", srv.getsockname()[1])
+        self.addCleanup(door.stop)
+        self.assertTrue(os.path.basename(door.dir).startswith("nullius-door-"))
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(10)
+            s.connect(door.path)
+            s.sendall(b"hello")
+            self.assertEqual(s.recv(100), b"HELLO")
+        door.stop()
+        self.assertFalse(os.path.exists(door.dir))
 
     def test_the_loopback_forwarder_passes_connections_until_it_stops(self):
         import http.server, socket, threading, urllib.request
@@ -139,7 +215,8 @@ class ArgvTest(unittest.TestCase):
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Ok)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.shutdown)
-        with mock.patch.object(container, "bridge_gateway", return_value="127.0.0.2"):  # a second loopback address stands in for it
+        with mock.patch.object(container, "bridge_gateway", return_value="127.0.0.2"), \
+                mock.patch.object(container, "rootless", return_value=False):           # a second loopback address stands in for it
             door = container.Loopback(f"http://localhost:{srv.server_address[1]}/v1").start()
         self.addCleanup(door.stop)
         port = int(door.base.rsplit(":", 1)[1].split("/")[0])
@@ -333,7 +410,7 @@ class DockerTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, True)
         app = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         job = "test-loopback-" + os.path.basename(tmp)
-        door = container.Loopback(f"http://localhost:{srv.server_address[1]}/v1").start()
+        door = container.Loopback(f"http://localhost:{srv.server_address[1]}/v1", image=container.base_image(), job=job).start()
         u = container.Unit(job, "u0000", os.path.join(tmp, "rec"), image=container.base_image(), app=app,
                            base=door.base, key="sk-test-not-real", hosts=door.hosts)
         try:
