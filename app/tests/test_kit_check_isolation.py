@@ -19,6 +19,7 @@ from pathlib import Path
 
 from nullius.standard import container, definitions, jsonl
 from tests import APP
+from tests.execution_support import gone
 
 KIT = os.path.join(definitions.KITS, "agent-workspace-v1", "driver.py")
 HUMANEVAL = os.path.join(APP, "nullius", "catalogue", "benchmarks", "humaneval", "driver.py")
@@ -161,29 +162,16 @@ class CommandAgentGroup(unittest.TestCase):
         pidfile = os.path.join(tmp, "child.pid")
         return pidfile, ["sh", "-c", f"sleep 60 & echo $! > {pidfile}; {then}"]
 
-    def alive(self, pidfile) -> bool:
-        import time
-        pid = int(Path(pidfile).read_text())
-        for _ in range(50):
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                return False
-            if Path(f"/proc/{pid}/stat").exists() and Path(f"/proc/{pid}/stat").read_text().split()[2] == "Z":
-                return False
-            time.sleep(0.02)
-        return True
-
     def test_a_normal_end_ends_what_it_left_running(self):
         from nullius.standard import run
         pidfile, cmd = self.background("echo done")
         r = run.run_group(cmd, 10, stdout=subprocess.PIPE, text=True)
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "done"))
-        self.assertFalse(self.alive(pidfile))
+        self.assertTrue(gone(int(Path(pidfile).read_text())))
 
     def test_a_timeout_ends_the_whole_group(self):
         from nullius.standard import run
         pidfile, cmd = self.background("sleep 30")
         with self.assertRaises(subprocess.TimeoutExpired):
             run.run_group(cmd, 0.5, stdout=subprocess.PIPE, text=True)
-        self.assertFalse(self.alive(pidfile))
+        self.assertTrue(gone(int(Path(pidfile).read_text())))
