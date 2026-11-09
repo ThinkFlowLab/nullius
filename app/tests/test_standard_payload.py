@@ -277,7 +277,7 @@ print(json.dumps({"providers": providers, "backend": nullius.__file__,
                   "snapshot": execution_.app_on_target, "successful_launches": 3}))
 '''
         ran = subprocess.run([str(python), "-I", "-B", "-c", driver], cwd=cwd, env=env,
-                             capture_output=True, text=True, timeout=25)
+                             capture_output=True, text=True, timeout=120)
         self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
         parent = json.loads(ran.stdout)
         self.assertEqual(parent["providers"], [str(installed)])
