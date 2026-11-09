@@ -549,9 +549,7 @@ class Run:
         self._halt, self._refused, self.halted = threading.Event(), [], None
         self._cut: List[str] = []                # units the spending cap cut off
         self._over: List[str] = []               # units that reached their own cap: cut off there, the run going on
-        # a model server on this machine's loopback, which the relays' containers cannot reach as written
-        self.loopback = (container.Loopback(self.base).start()
-                         if self.backend == "docker" and self.base and container.on_loopback(self.base) else None)
+        self.loopback = None
         def work_unit(iur):
             if self._stopped.is_set():
                 return None
@@ -565,6 +563,9 @@ class Run:
         pool = ThreadPoolExecutor(self.concurrency)
         futures = []
         try:
+            # a model server on this machine's loopback, which the relays' containers cannot reach as written
+            if self.backend == "docker" and self.base and container.on_loopback(self.base):
+                self.loopback = container.Loopback(self.base, image=self.image, job=self.name).start()
             for iur in work:
                 futures.append(pool.submit(work_unit, iur))
             for future in as_completed(futures):
