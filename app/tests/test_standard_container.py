@@ -51,6 +51,24 @@ class EngineTest(unittest.TestCase):
                 self.assertEqual((container.rootless(), container.userns_remap()), (rootless, False))
             self.assertEqual(ask.call_args.args[0], ["info", "--format", "{{if .Host.Security.Rootless}}name=rootless{{end}}"])
 
+    def test_podman_without_netavark_is_refused_plainly(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        said = lambda net: (lambda args, **kw: subprocess.CompletedProcess([], 0, net if args[0] == "info" else "5.8.9\n", ""))
+        with mock.patch.object(container, "_docker", said("cni\n")):
+            self.assertEqual(container.unusable(), "podman's network backend is cni: Nullius needs netavark"
+                                                   ' (podman 4.7 or later, network_backend = "netavark")')
+        with mock.patch.object(container, "_docker", said("netavark\n")):
+            self.assertIsNone(container.unusable())
+
+    def test_podman_that_does_not_say_its_network_backend_is_a_reason_not_an_error(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        def answer(args, **kw):
+            if args[0] == "info":
+                raise container.Unavailable("podman info did not answer in 30 s")
+            return subprocess.CompletedProcess([], 0, "5.8.9\n", "")
+        with mock.patch.object(container, "_docker", answer):
+            self.assertEqual(container.unusable(), "podman info did not answer in 30 s")
+
 
 class ArgvTest(unittest.TestCase):
     def setUp(self):

@@ -228,8 +228,17 @@ def unusable() -> Optional[str]:
         return str(e)
     if r.returncode != 0:
         said = (r.stderr or r.stdout).strip().splitlines()
-        hint = " (add this user to the docker group, then log in again)" if "permission denied" in r.stderr.lower() else ""
+        hint = (" (add this user to the docker group, then log in again)"
+                if not podman() and "permission denied" in r.stderr.lower() else "")
         return f"{DOCKER} is installed but not usable by this user: " + (said[-1][:200] if said else f"exit {r.returncode}") + hint
+    if podman():
+        try:
+            net = _docker(["info", "--format", "{{.Host.NetworkBackend}}"], timeout=30, check=False).stdout.strip()
+        except Unavailable as e:
+            return str(e)
+        if net != "netavark":
+            return (f"podman's network backend is {net or 'unknown'}: Nullius needs netavark"
+                    ' (podman 4.7 or later, network_backend = "netavark")')
     return None
 
 
