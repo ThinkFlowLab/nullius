@@ -114,7 +114,7 @@ class StopAtLaunch(LocalHost):
         """The ssh is cut short before the host has run the launcher, which
         goes on there all the same and starts the part once the Stop's kill
         has been and gone: the part sees the Stop and does not run."""
-        (self.home / "late").write_text("3")
+        (self.home / "late").touch(); self.addCleanup((self.home / "go").touch)   # a failed test lets the launcher go
         ex = execution.Execution(self.plan([{"id": "a", "label": "a", "script": self.script()}]), root=str(self.tmp / "runs"), key="k" * 20).start()
         self.addCleanup(lambda: (ex.stop(), ex.thread.join(10)))                  # a failed test stops its run
         for _ in range(500):                                                       # a Stop before this kills the ssh, and nothing starts
@@ -126,6 +126,7 @@ class StopAtLaunch(LocalHost):
         ex.stop(); self.wait(ex)
         self.assertEqual((ex.state, ex.exit_code), ("stopped", 130), ex.lines)
         self.assertFalse((self.on_host() / "run-a.pid").exists())                 # the Stop came before the part started
+        (self.home / "go").touch()
         pid = self.pid_of(self.on_host())                                          # and the launcher started it after all
         self.assertTrue(gone(pid, 10), "the part outlived the Stop")
         self.assertFalse((self.on_host() / "run-a.log").exists(), "the part ran after the Stop")    # its script never began
