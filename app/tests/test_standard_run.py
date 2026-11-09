@@ -688,6 +688,27 @@ class RunTest(unittest.TestCase):
         with self.assertRaisesRegex(run.Refused, "backend 'vm'"):
             run.Run(b, a, model="m", provider="custom", env=env, unsandboxed=True, backend="vm")
 
+    def test_on_the_docker_backend_the_agent_is_installed_in_the_base_image_whatever_this_machine(self):
+        from unittest import mock
+        from nullius.standard import container, install
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        a = definitions.get("agent", "fake", ROOT)
+        env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}
+        with mock.patch.object(container, "unusable", return_value=None), \
+                mock.patch.object(container, "present", return_value=True), \
+                mock.patch.object(container, "base_image", return_value="nullius/base:x"):
+            for backend, unsandboxed in (("docker", False), ("local", True)):
+                r = run.Run(b, a, model="m", provider="custom", env=env, backend=backend, unsandboxed=unsandboxed,
+                            jobs_root=os.path.join(self.tmp, "jobs"), say=lambda s: None)
+                with self.subTest(backend=backend), mock.patch.object(install, "packages", return_value=self.tmp) as pk:
+                    r.ready()
+                    kw = pk.call_args.kwargs
+                    if backend == "docker":     # the Linux base image's tools and libc, never this machine's
+                        self.assertEqual(kw["image"], "nullius/base:x")
+                        self.assertEqual(kw["run_in"](["uv", "venv"], "/w")[-3:], ["nullius/base:x", "uv", "venv"])
+                    else:
+                        self.assertEqual((kw["image"], kw["run_in"]), (None, None))
+
     def test_a_model_door_that_fails_to_open_still_writes_the_jobs_result(self):
         from unittest import mock
         from nullius.standard import container

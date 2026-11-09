@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from unittest import mock
 
-from nullius.standard import container
+from nullius.standard import container, install
 from tests import docker_tier
 
 
@@ -57,31 +57,26 @@ class ArgvTest(unittest.TestCase):
         got = container.mounts([ws, home], [here, app, app, os.path.join(self.tmp, "missing"), ""])
         self.assertEqual(got, [(ws, False), (home, False), (app, True)])     # here sits inside app: once
 
-    def test_a_uv_environments_interpreter_is_found_from_pyvenv_cfg(self):
-        py = os.path.join(self.tmp, "uvpython", "cpython-3.12", "bin")
-        os.makedirs(py)
-        os.makedirs(os.path.join(self.tmp, "inst", ".venv"))
-        with open(os.path.join(self.tmp, "inst", ".venv", "pyvenv.cfg"), "w") as f:
-            f.write(f"home = {py}\nversion = 3.12\n")
-        self.assertEqual(container.python_homes(os.path.join(self.tmp, "inst")), [os.path.dirname(py)])
-        self.assertEqual(container.python_homes(self.tmp), [])
-        # uv names the home by a link (cpython-3.12-...) to the release folder: both are mounted, so
-        # the environment's bin/python link, written through the first, resolves in the container
-        link = os.path.join(self.tmp, "uvpython", "cpython-3.12-link")
-        os.symlink(os.path.dirname(py), link)
-        with open(os.path.join(self.tmp, "inst", ".venv", "pyvenv.cfg"), "w") as f:
-            f.write(f"home = {link}/bin\nversion = 3.12\n")
-        self.assertEqual(container.python_homes(os.path.join(self.tmp, "inst")), [link, os.path.dirname(py)])
-
     def test_an_install_in_the_base_image_sees_its_folder_alone_as_this_user(self):
         self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        self.enterContext(mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://u:secret@proxy:3128", "UNRELATED": "x"}))
         a = container.install_argv("img", "/s/agents/x/abc", ["npm", "install", "p@1"])
         self.assertEqual(a[:3], ["docker", "run", "--rm"])
+        self.assertIn(["-e", "HTTPS_PROXY"], [a[i:i + 2] for i in range(len(a))])     # this machine's proxy, by name
+        self.assertNotIn("secret", " ".join(a))
+        self.assertNotIn("UNRELATED", " ".join(a))
         self.assertEqual(a[a.index("--user") + 1], f"{os.getuid()}:{os.getgid()}")
         self.assertEqual([a[i + 1] for i, w in enumerate(a) if w == "-v"], ["/s/agents/x/abc:/s/agents/x/abc:rw"])
         self.assertEqual(a[a.index("img"):], ["img", "npm", "install", "p@1"])
-        self.assertIn("npm_config_cache=/s/agents/x/abc/.npm-cache", a)
+        env = dict(a[i + 1].split("=", 1) for i, w in enumerate(a) if w == "-e" and "=" in a[i + 1])
+        self.assertEqual(env, {"HOME": "/s/agents/x/abc/.home", "npm_config_cache": "/s/agents/x/abc/.npm-cache",
+                               "UV_CACHE_DIR": "/s/agents/x/abc/.uv-cache", "UV_PYTHON_DOWNLOADS": "automatic",
+                               "UV_PYTHON_INSTALL_DIR": "/s/agents/x/abc/.python"})    # inside: the agent's container mounts it
+        self.assertEqual({os.path.basename(env[k]) for k in ("HOME", "npm_config_cache", "UV_CACHE_DIR")},
+                         set(install.SCRATCH))                # what the install removes after
         self.assertNotIn("--network", a)                     # it downloads the packages; no unit, no key
+        a = container.install_argv("img", "/w", ["python", "-c", "x"], {"HF_HUB_CACHE": "/w/hf"})
+        self.assertIn("HF_HUB_CACHE=/w/hf", a)
 
     def test_the_agents_container_is_on_the_units_network_with_its_variables_by_name(self):
         self.enterContext(mock.patch.object(container, "rootless", return_value=False))

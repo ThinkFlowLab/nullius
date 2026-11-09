@@ -20,9 +20,9 @@ each file a unit's stdio MCP server is started from, alone (:func:`mcp_mounts`)
 refuses it) nor the benchmark's folder or upstream (their data holds the
 answers). All where they are on this machine, so every path a
 definition's templates rendered (``{home}``, ``{install}``, ``{here}``) holds
-inside unchanged. A uv environment's interpreter lives outside the install
-(``pyvenv.cfg`` names it); its folder is mounted read-only too. The container
-runs as this machine's user, with no capabilities and no way to gain
+inside unchanged. A uv environment's interpreter is in the install
+(``.python``), installed with it in the base image (:func:`install_argv`).
+The container runs as this machine's user, with no capabilities and no way to gain
 privileges, so what it writes in the workspace is the user's to read and
 remove. That is ``--user uid:gid``, or ``--user 0:0`` on a rootless engine,
 where a container's root is this machine's user.
@@ -363,26 +363,6 @@ def names(job: str, tag: str) -> Dict[str, str]:
     return {"network": base, "agent": base, "relay": base + "-relay"}
 
 
-def python_homes(inst: str) -> List[str]:
-    """The interpreter a uv environment in the install links to, which lives
-    outside it: the folder holding its ``bin``, from ``pyvenv.cfg`` - as
-    written there and, when that is a link (uv's ``cpython-3.12-...`` to
-    ``cpython-3.12.15-...``), where it leads, so the environment's own
-    ``bin/python`` link resolves inside the container too."""
-    out = []
-    try:
-        with open(os.path.join(inst, ".venv", "pyvenv.cfg")) as f:
-            for line in f:
-                k, _, v = line.partition("=")
-                if k.strip() == "home" and v.strip():
-                    for home in (os.path.dirname(v.strip()), os.path.dirname(os.path.realpath(v.strip()))):
-                        if home not in ("/usr", "/", "/usr/local") and home not in out and os.path.isdir(home):
-                            out.append(home)
-    except OSError:
-        pass
-    return out
-
-
 def mcp_mounts(servers: Iterable[dict], trial: str) -> Tuple[List[str], List[str]]:
     """What a unit's stdio MCP servers need inside the agent's container,
     which starts them: each file their command, arguments or environment
@@ -514,15 +494,29 @@ def check_argv(workdir: str, here: List[str], inside: List[str]) -> List[str]:
             "--security-opt", "no-new-privileges", "-v", f"{workdir}:{workdir}:rw", "-w", workdir, image, *inside]
 
 
-def install_argv(image: str, where: str, cmd: List[str]) -> List[str]:
-    """``docker run`` for an install step on a machine without the program
-    it needs (``install.packages``' ``npm_in``): in the base image, as this
-    machine's user, with the install folder alone mounted, at its own path,
-    and npm's home and cache inside it (removed after). It has the network -
-    it downloads the packages - and nothing of a run: no key, no unit."""
+# where this machine gets its packages from, passed by name: a proxy's URL may hold its password
+INSTALL_KEEP = ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+                "UV_INDEX", "UV_INDEX_URL", "UV_DEFAULT_INDEX", "UV_EXTRA_INDEX_URL", "UV_PYTHON_INSTALL_MIRROR",
+                "PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "npm_config_registry", "NPM_CONFIG_REGISTRY", "HF_ENDPOINT")
+
+
+def install_argv(image: str, where: str, cmd: List[str], env: Optional[dict] = None) -> List[str]:
+    """``docker run`` for an install step (``install.packages``' ``run_in``):
+    in the base image, as this machine's user, with the install folder alone
+    mounted, at its own path. The home and npm's and uv's caches are inside
+    it, removed after (``install.SCRATCH``). uv's Python is inside it too
+    (``.python``), and kept: the environment links to it, and the agent's
+    container mounts the folder. ``env``: the step's own variables. This
+    machine's proxy and package indexes (``INSTALL_KEEP``) are passed by name.
+    It has the network - it downloads the packages - and nothing of a run: no
+    key, no unit."""
+    home, npm, uv = (f"{where}/{s}" for s in install.SCRATCH)
+    env = {"HOME": home, "npm_config_cache": npm, "UV_CACHE_DIR": uv,
+           "UV_PYTHON_INSTALL_DIR": f"{where}/.python", "UV_PYTHON_DOWNLOADS": "automatic", **(env or {})}
     return [DOCKER, "run", "--rm", "--label", "nullius.install=1", "--user", _user(), "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "-v", f"{where}:{where}:rw", "-w", where,
-            "-e", f"HOME={where}/.npm-home", "-e", f"npm_config_cache={where}/.npm-cache", image] + list(cmd)
+            *[w for k, v in env.items() for w in ("-e", f"{k}={v}")],
+            *[w for k in INSTALL_KEEP if k in os.environ for w in ("-e", k)], image] + list(cmd)
 
 
 def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_file: str, base: str,
