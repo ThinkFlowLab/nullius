@@ -42,6 +42,16 @@ class ImageTest(unittest.TestCase):
             container.dockerfile("riscv64")
 
 
+class EngineTest(unittest.TestCase):
+    def test_podman_is_asked_whether_it_is_rootless_in_its_own_terms(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        for said, rootless in (("name=rootless\n", True), ("\n", False)):
+            self.enterContext(mock.patch.object(container, "_security", None))
+            with mock.patch.object(container, "_docker", return_value=subprocess.CompletedProcess([], 0, said, "")) as ask:
+                self.assertEqual((container.rootless(), container.userns_remap()), (rootless, False))
+            self.assertEqual(ask.call_args.args[0], ["info", "--format", "{{if .Host.Security.Rootless}}name=rootless{{end}}"])
+
+
 class ArgvTest(unittest.TestCase):
     def setUp(self):
         self.enterContext(mock.patch.object(container, "_security", ""))      # a default rootful docker, never asked

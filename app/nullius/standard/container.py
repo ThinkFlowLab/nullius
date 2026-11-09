@@ -165,6 +165,10 @@ class Unavailable(Exception):
     """The engine is missing, not usable by this user, or failed at something."""
 
 
+def podman() -> bool:
+    return DOCKER == "podman"
+
+
 def _docker(args: List[str], *, env: Optional[dict] = None, input: Optional[str] = None, timeout: float = 120,
             check: bool = True) -> subprocess.CompletedProcess:
     try:
@@ -422,12 +426,15 @@ _security: Optional[str] = None
 
 
 def _security_options() -> str:
-    """The engine's security options (``docker info``). The first answer is
-    kept. An engine that does not answer gives none and is asked again."""
+    """The engine's security options (``docker info``), or podman's answer in
+    their terms (``name=rootless``): podman has no ``SecurityOptions``. The
+    first answer is kept. An engine that does not answer gives none and is
+    asked again."""
     global _security
     if _security is None:
+        asked = "{{if .Host.Security.Rootless}}name=rootless{{end}}" if podman() else "{{.SecurityOptions}}"
         try:
-            r = _docker(["info", "--format", "{{.SecurityOptions}}"], check=False, timeout=30)
+            r = _docker(["info", "--format", asked], check=False, timeout=30)
         except Unavailable:
             return ""
         if r.returncode != 0:
