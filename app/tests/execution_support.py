@@ -74,8 +74,9 @@ def gone(pid, seconds=5):
 # ssh to a host that is this machine: the last word is the command, run as sshd runs it - a session of
 # its own, under the host's own home - so a client killed mid-command leaves the command running, as a
 # real host does. `late` in that home holds the seconds the launcher waits there before it starts (a slow
-# connection: the client may be gone by then); `slow` the seconds its answer takes to come back; `lag`
-# the seconds every command waits before it runs (a host slower to answer than STOP_POLL).
+# connection: the client may be gone by then); `launched` appears once the launcher is on its way there;
+# `slow` the seconds its answer takes to come back; `lag` the seconds every command waits before it runs
+# (a host slower to answer than STOP_POLL).
 FAKE_SSH = """#!/bin/bash
 cmd="${@: -1}"
 export HOME=%(home)s
@@ -86,6 +87,7 @@ launcher=no; case "$cmd" in *"setsid nohup"*) launcher=yes;; esac
 delay=0; [ $launcher = yes ] && [ -f "$HOME/late" ] && delay=$(cat "$HOME/late")
 out=$(mktemp)
 setsid bash -c "sleep $delay; $cmd" <&0 >"$out" 2>&1 &
+[ $launcher = yes ] && touch "$HOME/launched"
 wait $!; rc=$?
 [ $launcher = yes ] && [ -f "$HOME/slow" ] && sleep "$(cat "$HOME/slow")" </dev/null >/dev/null 2>&1
 cat "$out"; rm -f "$out"; exit $rc
