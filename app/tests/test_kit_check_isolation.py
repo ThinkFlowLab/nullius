@@ -173,5 +173,7 @@ class CommandAgentGroup(unittest.TestCase):
         from nullius.standard import run
         pidfile, cmd = self.background("sleep 30")
         with self.assertRaises(subprocess.TimeoutExpired):
-            run.run_group(cmd, 0.5, stdout=subprocess.PIPE, text=True)
-        self.assertTrue(gone(int(Path(pidfile).read_text())))
+            run.run_group(cmd, 2, stdout=subprocess.PIPE, text=True)             # time for sh to write the pid first
+        pid = Path(pidfile).read_text().strip() if Path(pidfile).exists() else ""
+        self.assertTrue(pid, "sh never wrote its child's pid")
+        self.assertTrue(gone(int(pid)))
