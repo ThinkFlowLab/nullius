@@ -541,6 +541,36 @@ def bridge_gateway() -> str:
     return next((w for w in r.stdout.split() if _IPV4.match(w)), "")
 
 
+def _pump(src: socket.socket, dst: socket.socket) -> None:
+    try:
+        while data := src.recv(65536):
+            dst.sendall(data)
+    except OSError:
+        pass
+    finally:
+        for sk in (src, dst):
+            try:
+                sk.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+
+def _pass_each(server: socket.socket, target: Tuple[str, int]) -> None:
+    """Pass each connection ``server`` accepts to ``target``, until it is closed."""
+    while True:
+        try:
+            inside, _ = server.accept()
+        except OSError:
+            return
+        try:
+            outside = socket.create_connection(target, timeout=10)
+            outside.settimeout(None)
+        except OSError:
+            inside.close()
+            continue
+        for a, b in ((inside, outside), (outside, inside)):
+            threading.Thread(target=_pump, args=(a, b), daemon=True).start()
+
 class Loopback:
     """An endpoint on this machine's loopback, as the relays' containers reach
     it: ``base`` and the ``hosts`` they are given. On Linux, a forwarder for
@@ -573,38 +603,12 @@ class Loopback:
             self.base, self.hosts = self._url(self.target.port), {self.NAME: "host-gateway"}
             return self
         self.base, self.hosts = self._url(self._server.getsockname()[1]), {self.NAME: gateway}
-        threading.Thread(target=self._accept, daemon=True).start()
+        threading.Thread(target=_pass_each, args=(self._server, self._endpoint()), daemon=True).start()
         return self
 
-    def _accept(self) -> None:
-        port = self.target.port or (443 if self.target.scheme == "https" else 80)
-        while self._server is not None:
-            try:
-                inside, _ = self._server.accept()
-            except OSError:
-                return
-            try:
-                outside = socket.create_connection((self.target.hostname, port), timeout=10)
-                outside.settimeout(None)
-            except OSError:
-                inside.close()
-                continue
-            for a, b in ((inside, outside), (outside, inside)):
-                threading.Thread(target=self._pump, args=(a, b), daemon=True).start()
-
-    @staticmethod
-    def _pump(src: socket.socket, dst: socket.socket) -> None:
-        try:
-            while data := src.recv(65536):
-                dst.sendall(data)
-        except OSError:
-            pass
-        finally:
-            for sk in (src, dst):
-                try:
-                    sk.shutdown(socket.SHUT_RDWR)
-                except OSError:
-                    pass
+    def _endpoint(self) -> Tuple[str, int]:
+        t = self.target
+        return t.hostname, t.port or (443 if t.scheme == "https" else 80)
 
     def stop(self) -> None:
         server, self._server = self._server, None
