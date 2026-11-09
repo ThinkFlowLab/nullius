@@ -474,7 +474,27 @@ class ArgvTest(unittest.TestCase):
             argvs.append(ran.call_args_list[0].args[0])                              # an own image's container
             self.assertEqual({"label=disable" in a for a in argvs}, {engine == "podman"})
 
-    def test_a_rootless_engine_runs_every_container_as_its_root_which_is_this_user(self):
+    def test_rootless_podman_runs_every_container_of_nullius_as_this_users_uid(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        self.enterContext(mock.patch.object(container, "userns_remap", return_value=False))
+        me = f"{os.getuid()}:{os.getgid()}"
+        with mock.patch.object(container, "rootless", return_value=True):
+            argvs = self._argvs().values()
+            self.assertEqual({(a[a.index("--user") + 1], a.count("--userns=keep-id"), "--userns=host" in a) for a in argvs},
+                             {(me, 1, False)})                                   # keep-id once: that uid is this user
+        with mock.patch.object(container, "rootless", return_value=False):
+            self.assertFalse([a for a in self._argvs().values() if any(w.startswith("--userns") for w in a)])
+
+    def test_an_own_images_root_gives_back_to_its_root_on_a_rootless_engine(self):
+        for engine, rl, owner in (("docker", False, f"{os.getuid()}:{os.getgid()}"), ("docker", True, "0:0"), ("podman", True, "0:0")):
+            with mock.patch.object(container, "DOCKER", engine), mock.patch.object(container, "rootless", return_value=rl):
+                b = container.Box("j", "u0000", "img", workdir="/", network="n")
+                b.up = True
+                with mock.patch.object(b, "run") as ran:
+                    b.give_back(["/h"])
+                self.assertEqual(ran.call_args.args[0], ["chown", "-R", owner, "/h"])      # the box's root is this user there
+
+    def test_rootless_docker_runs_every_container_as_its_root_which_is_this_user(self):
         with mock.patch.object(container, "rootless", return_value=True):
             self.assertEqual(self._users(), {"0:0"})
         with mock.patch.object(container, "rootless", return_value=False):

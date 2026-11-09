@@ -24,8 +24,9 @@ inside unchanged. A uv environment's interpreter is in the install
 (``.python``), installed with it in the base image (:func:`install_argv`).
 The container runs as this machine's user, with no capabilities and no way to gain
 privileges, so what it writes in the workspace is the user's to read and
-remove. That is ``--user uid:gid``, or ``--user 0:0`` on a rootless engine,
-where a container's root is this machine's user. On a Docker with
+remove. That is ``--user uid:gid``, with ``--userns=keep-id`` on rootless
+podman, which maps that uid to this user, or ``--user 0:0`` on rootless
+Docker, where only a container's root is this machine's user. On a Docker with
 ``userns-remap``, a container that uses this machine's user's files also
 runs in this machine's user namespace (:func:`_userns`). On podman it
 runs with no SELinux label (:func:`_security_opt`), as on Docker's default
@@ -472,9 +473,20 @@ def userns_remap() -> bool:
     return "name=userns" in _security_options()
 
 
+def _keep_id() -> List[str]:
+    """``--userns=keep-id`` on rootless podman, which maps :func:`_user`'s uid
+    to this machine's user, as on rootful Docker. Rootless Docker cannot map
+    a uid, and runs its containers as root, which is this user there."""
+    return ["--userns=keep-id"] if podman() and rootless() else []
+
+
 def _userns() -> List[str]:
-    """``--userns=host`` on a Docker with ``userns-remap``, where a container's
-    uids are otherwise sub-uids that cannot use this machine's user's files."""
+    """The user namespace of a container that uses this machine's user's files:
+    :func:`_keep_id` on podman, ``--userns=host`` on a Docker with
+    ``userns-remap``, where a container's uids are otherwise sub-uids that
+    cannot use those files."""
+    if podman():
+        return _keep_id()
     return ["--userns=host"] if userns_remap() else []
 
 
@@ -497,8 +509,8 @@ def way_out() -> List[str]:
 
 def _user() -> str:
     """The ``--user`` that gives a container's files to this machine's user:
-    ``0:0`` on a rootless engine, ``uid:gid`` otherwise."""
-    return "0:0" if rootless() else f"{os.getuid()}:{os.getgid()}"
+    ``0:0`` on rootless Docker, ``uid:gid`` otherwise (:func:`_keep_id`)."""
+    return "0:0" if rootless() and not podman() else f"{os.getuid()}:{os.getgid()}"
 
 
 def _security_opt() -> List[str]:
@@ -861,7 +873,7 @@ def forward_argv(image: str, *, name: str, job: str, port: int) -> List[str]:
     ``host.docker.internal`` is the machine the run is on, for a server there
     (where :func:`use_socket_doors`, ``Unit._forward`` gives such a server a
     door instead)."""
-    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), "--user", _user(),
+    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_keep_id(), "--user", _user(),
             "--cap-drop", "ALL", *_security_opt(), "--init",
             "--add-host", "host.docker.internal:host-gateway", "-v", f"{FORWARD}:{FORWARD_IN}:ro",
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
@@ -888,7 +900,7 @@ def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
 def egress_argv(image: str, *, name: str, job: str) -> List[str]:
     """``docker run`` for an own image's check's proxy (``egress.py``): on the
     default bridge (``BRIDGE`` on podman), its one file mounted, nothing else given."""
-    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), "--user", _user(),
+    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_keep_id(), "--user", _user(),
             "--cap-drop", "ALL", *_security_opt(), "--init",
             "-v", f"{EGRESS}:{EGRESS_IN}:ro", "-e", "PYTHONDONTWRITEBYTECODE=1",
             image, "python3", EGRESS_IN, "--listen", f"0.0.0.0:{EGRESS_PORT}"]
@@ -1524,7 +1536,7 @@ class Box:
             if self.own_net:
                 _docker(["network", "create", "--internal", "--label", f"{LABEL}={self.job}", self.net])
             a = ["run", "-d", "--name", self.name, "--label", f"{LABEL}={self.job}", "--network", self.net, "--init",
-                 *_security_opt(), "-w", self.workdir, *_userns()]
+                 *_security_opt(), "-w", self.workdir, *([] if podman() else _userns())]
             if self.memory_mb:
                 a += ["--memory", f"{int(self.memory_mb)}m"]
             if self.cpus:
@@ -1673,11 +1685,12 @@ class Box:
 
     def give_back(self, paths: Iterable[str]):
         """The folders of this machine the box wrote into, given back to this
-        machine's user: what root wrote there is the user's to read and remove."""
+        machine's user: what root wrote there is the user's to read and remove.
+        On a rootless engine the box's root is that user."""
         paths = [p for p in paths if p]
         if self.up and paths:
             try:
-                self.run(["chown", "-R", _user()] + paths, 120, user="0")
+                self.run(["chown", "-R", "0:0" if rootless() else _user()] + paths, 120, user="0")
             except Unavailable:
                 pass
 
