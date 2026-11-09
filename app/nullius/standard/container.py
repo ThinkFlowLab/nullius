@@ -41,21 +41,22 @@ removed from this machine once the relay listens: never on an argument list
 publishes its port on 127.0.0.1 so the driver, which stays on this machine
 (it owns the answers), reaches the judge's route and a capability
 benchmark's reader. Its record folder is mounted read-write, so the host
-reads each call as the local relay's are read. A model endpoint on this
+reads each call as the local relay's are read. On podman the default bridge
+is Nullius's own (:data:`BRIDGE`, :func:`way_out`). A model endpoint on this
 machine's loopback is reached by the relays alone (:class:`Loopback`):
 through a forwarder on the default bridge's gateway, or, on a rootless
-engine, a door container on the engine's default network.
+engine or podman, a door container on the engine's default network.
 
 **A licence server is one more door.** A unit whose environment needs a
 licence of kind ``server`` (``host:port``) gets a forwarder beside its relay
-(``forward.py``, mounted alone into the base image): on the default bridge,
-and on the unit's network under the server's own name, listening on its
+(``forward.py``, mounted alone into the base image): on the default bridge
+(``BRIDGE`` on podman), and on the unit's network under the server's own name, listening on its
 port and passing every connection to that one address. The agent reaches
 the server by the address it was given; nothing else is opened. A server
 named by an IPv4 address is reached as ``licence-server-<i>`` instead, a
 network alias being a name; ``host.docker.internal`` is the machine the run
-is on. On a rootless engine on Linux, a server at ``host.docker.internal``
-is reached through a :class:`SocketDoor` instead, as ``licence-server-<i>``
+is on. On a rootless engine or podman on Linux, a server at
+``host.docker.internal`` is reached through a :class:`SocketDoor` instead, as ``licence-server-<i>``
 on the unit's network alone. A licence file is mounted read-only, alone, at
 the path its environment declares (``wrap``'s ``binds``).
 
@@ -125,6 +126,7 @@ EGRESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "egress.py")
 EGRESS_IN = "/opt/nullius/egress.py"       # the check's proxy's one file, in its container
 EGRESS_PORT = 3128
 EGRESS_ALIAS = "egress"
+BRIDGE = "nullius-bridge"                  # podman: the network a container with a way out starts on (way_out)
 RELAY_KEY_IN = "/opt/nullius/relay-key"    # the key's one file, in the relay's container
 KEY_STALE = 600                            # older than any start can take: a killed run left it
 IMAGE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -470,6 +472,23 @@ def _userns() -> List[str]:
     return ["--userns=host"] if userns_remap() else []
 
 
+def make_bridge() -> None:
+    """On podman, make ``BRIDGE`` when it is missing (``--ignore``: asked each
+    time, so a network removed between units is made again): a bridge with
+    DNS, as podman's default network has DNS off. Docker has its default bridge."""
+    if podman():
+        _docker(["network", "create", "--ignore", "--label", "nullius.bridge=1", BRIDGE])
+
+
+def way_out() -> List[str]:
+    """The network of a container that reaches out, or that the relays reach
+    (the relay, a licence server's forwarder, the check's proxy, the door to a
+    model server): the engine's default, or ``BRIDGE`` on podman
+    (:func:`make_bridge`). A rootless podman container starts on pasta, which
+    cannot join a network after it starts."""
+    return ["--network", BRIDGE] if podman() else []
+
+
 def _user() -> str:
     """The ``--user`` that gives a container's files to this machine's user:
     ``0:0`` on a rootless engine, ``uid:gid`` otherwise."""
@@ -568,7 +587,7 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
     (``--add-host``), the machine's own for an endpoint on its loopback.
     ``ledger``: the file of the run's spending cap, its folder mounted so
     this relay books its calls where every other relay of the job does."""
-    a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *_userns(), "--user", _user(),
+    a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_userns(), "--user", _user(),
          "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
          *[w for n, ip in sorted((hosts or {}).items()) for w in ("--add-host", f"{n}:{ip}")],
          "-p", f"127.0.0.1::{RELAY_PORT}", "-v", f"{app}:{app}:ro", "-v", f"{record}:{record}:rw",
@@ -652,10 +671,11 @@ def _close(server: socket.socket) -> None:
 
 def use_socket_doors() -> bool:
     """Whether a server on this machine's loopback is reached through a
-    :class:`SocketDoor`: on a rootless engine on Linux. Elsewhere a rootless
-    engine runs in a virtual machine, which this machine's sockets may not
-    reach."""
-    return rootless() and platform.system() == "Linux"
+    :class:`SocketDoor`: on a rootless engine on Linux, or on podman there,
+    whose bridge has no address on this machine until a container joins it.
+    Elsewhere the engine runs in a virtual machine, which this machine's
+    sockets may not reach."""
+    return (rootless() or podman()) and platform.system() == "Linux"
 
 
 class SocketDoor:
@@ -692,7 +712,8 @@ class Loopback:
     is not on this machine and the engine runs as root (Docker Desktop's
     virtual machine), that name already reaches its loopback: only the name
     changes. On Linux, a rootless engine's gateway is in its own network
-    namespace, so a :class:`SocketDoor` (``door``) passes each connection
+    namespace, and podman's bridge has no address here until a container
+    joins it, so a :class:`SocketDoor` (``door``) passes each connection
     instead, and one door container for the run reaches it, on the engine's
     default network as the relays are. The relays call it
     ``host.docker.internal`` there too, at the door's address, on port 8000."""
@@ -703,7 +724,7 @@ class Loopback:
     def __init__(self, base: str, *, image: str = "", job: str = ""):
         self.target = urllib.parse.urlsplit(base)
         self.base, self.hosts = base, {}
-        self.image, self.job = image, job       # the door container's, on a rootless engine
+        self.image, self.job = image, job       # the door container's (use_socket_doors)
         self._server: Optional[socket.socket] = None
         self.door: Optional[SocketDoor] = None
         self.container: Optional[str] = None
@@ -718,6 +739,7 @@ class Loopback:
             self.door = SocketDoor(*self._endpoint())
             self.container = f"nullius-{slug(self.job)}-model"
             try:
+                make_bridge()
                 _docker(door_argv(self.image, name=self.container, job=self.job, port=self.DOOR_PORT,
                                   socket_path=self.door.path)[1:],
                         env=client_env({"NULLIUS_FORWARD_TO": "unix:" + self.door.path}))
@@ -770,12 +792,13 @@ def server_alias(address: str, i: int = 1) -> Tuple[str, str, int]:
 
 
 def forward_argv(image: str, *, name: str, job: str, port: int) -> List[str]:
-    """``docker run`` for a licence server's forwarder: on the default bridge,
-    its one file mounted, listening on the server's port. Where it forwards
-    is named, never given: ``-e NULLIUS_FORWARD_TO``. ``host.docker.internal``
-    is the machine the run is on, for a server there (on a rootless engine on
-    Linux, ``Unit._forward`` gives such a server a door instead)."""
-    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
+    """``docker run`` for a licence server's forwarder: on the default bridge
+    (``BRIDGE`` on podman), its one file mounted, listening on the server's
+    port. Where it forwards is named, never given: ``-e NULLIUS_FORWARD_TO``.
+    ``host.docker.internal`` is the machine the run is on, for a server there
+    (where :func:`use_socket_doors`, ``Unit._forward`` gives such a server a
+    door instead)."""
+    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), "--user", _user(),
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
             "--add-host", "host.docker.internal:host-gateway", "-v", f"{FORWARD}:{FORWARD_IN}:ro",
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
@@ -786,13 +809,14 @@ def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
               network: Optional[str] = None, alias: Optional[str] = None) -> List[str]:
     """``docker run`` for a door to a server on this machine (``mcp_machine``,
     a :class:`SocketDoor`): on one internal network alone, as ``alias``, or
-    without ``network`` on the default one (a :class:`Loopback`'s), its one
+    without ``network`` on the default one (``BRIDGE`` on podman: a
+    :class:`Loopback`'s), its one
     file and the server's socket mounted, each alone and read-only. Where it
     forwards is named, never given: ``-e NULLIUS_FORWARD_TO``
     (``unix:<socket>``)."""
     return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *_userns(), "--user", _user(),
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
-            *(["--network", network, "--network-alias", alias] if network else []),
+            *(["--network", network, "--network-alias", alias] if network else way_out()),
             "-v", f"{FORWARD}:{FORWARD_IN}:ro", "-v", f"{socket_path}:{socket_path}:ro",
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
             image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}"]
@@ -800,8 +824,8 @@ def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
 
 def egress_argv(image: str, *, name: str, job: str) -> List[str]:
     """``docker run`` for an own image's check's proxy (``egress.py``): on the
-    default bridge, its one file mounted, nothing else given."""
-    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
+    default bridge (``BRIDGE`` on podman), its one file mounted, nothing else given."""
+    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), "--user", _user(),
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
             "-v", f"{EGRESS}:{EGRESS_IN}:ro", "-e", "PYTHONDONTWRITEBYTECODE=1",
             image, "python3", EGRESS_IN, "--listen", f"0.0.0.0:{EGRESS_PORT}"]
@@ -850,6 +874,7 @@ class Unit:
 
     def start(self) -> "Unit":
         try:
+            make_bridge()
             _docker(["network", "create", "--internal", "--label", f"{LABEL}={self.job}", self.names["network"]])
             self.network = True
             argv = relay_argv(self.image, name=self.names["relay"], job=self.job, app=self.app, record=self.dir,
@@ -895,7 +920,7 @@ class Unit:
         """A licence server's forwarder, started and on the unit's network
         under the server's name: the address the agent reaches it by. It joins
         that network once it listens, after it resolves the server's name. One
-        at ``host.docker.internal``, on a rootless engine on Linux, is a door
+        at ``host.docker.internal``, where :func:`use_socket_doors`, is a door
         to a :class:`SocketDoor` instead, as ``licence-server-<i>``."""
         alias, host, port = server_alias(address, i)
         name = f"{self.names['agent']}-lic{i}"
@@ -1538,13 +1563,14 @@ class Box:
 
     def online(self) -> Dict[str, str]:
         """A way out for the check: its proxy (``egress.py``, in the base image)
-        started on the default bridge and joined to the box's network as
+        started on the default bridge (``BRIDGE`` on podman) and joined to the box's network as
         ``egress``. The box itself stays on its internal network. The
         variables the check is run with, which name the proxy - and leave
         the box's own services (``localhost``) to be reached directly."""
         image = base_image()
         name = self.name + "-egress"
         self.egress = name
+        make_bridge()
         _docker(egress_argv(image, name=name, job=self.job)[1:])
         _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.net, name])
         wait_listening(name, "the check's proxy")

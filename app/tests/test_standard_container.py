@@ -51,6 +51,25 @@ class EngineTest(unittest.TestCase):
                 self.assertEqual((container.rootless(), container.userns_remap()), (rootless, False))
             self.assertEqual(ask.call_args.args[0], ["info", "--format", "{{if .Host.Security.Rootless}}name=rootless{{end}}"])
 
+    def test_on_podman_a_container_with_a_way_out_starts_on_a_bridge_with_dns(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))
+        argvs = lambda: [container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="b",
+                                              model="m", routes={}),
+                         container.forward_argv("img", name="f", job="j", port=1), container.egress_argv("img", name="e", job="j"),
+                         container.door_argv("img", name="d", job="j", port=8000, socket_path="/s")]
+        for argv in argvs():
+            self.assertNotIn("--network", argv)                              # docker's default bridge
+        with mock.patch.object(container, "DOCKER", "podman"):
+            for argv in argvs():
+                self.assertEqual(argv[argv.index("--network") + 1], container.BRIDGE)
+            ok = subprocess.CompletedProcess([], 0, "", "")
+            with mock.patch.object(container, "_docker", return_value=ok) as made:
+                container.make_bridge()
+                container.make_bridge()
+            self.assertEqual(made.call_args_list, 2 * [mock.call(["network", "create", "--ignore", "--label", "nullius.bridge=1",
+                                                                  container.BRIDGE])])     # asked each time: it may have gone
+
     def test_podman_without_netavark_is_refused_plainly(self):
         self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
         said = lambda net: (lambda args, **kw: subprocess.CompletedProcess([], 0, net if args[0] == "info" else "5.8.9\n", ""))
@@ -226,6 +245,17 @@ class ArgvTest(unittest.TestCase):
             self.assertFalse(os.path.exists(door.door.dir))
             self.assertIsNone(door.container)
 
+    def test_on_rootful_podman_an_endpoint_on_this_machines_loopback_is_one_door_on_its_bridge(self):
+        door, said = self._rootless_loopback()
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))     # its bridge has no address here yet
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        door.start()
+        self.addCleanup(door.stop)
+        self.assertEqual(door.hosts, {"host.docker.internal": "10.88.0.7"})
+        self.assertEqual([a for a, _ in said][0], ["network", "create", "--ignore", "--label", "nullius.bridge=1", container.BRIDGE])
+        (a, _), = [(a, e) for a, e in said if a[:1] == ["run"]]
+        self.assertEqual(a[a.index("--network") + 1], container.BRIDGE)
+
     def test_a_rootless_engine_off_linux_keeps_the_gateway_forwarder(self):
         with mock.patch.object(container, "bridge_gateway", return_value=""), \
                 mock.patch.object(container, "rootless", return_value=True), \
@@ -284,6 +314,15 @@ class ArgvTest(unittest.TestCase):
         u.stop()
         self.assertFalse(os.path.exists(sd.dir))
         self.assertEqual(u.socket_doors, [])
+
+    def test_a_licence_server_on_this_machine_on_rootful_podman_is_reached_through_a_door(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))      # its bridge has no address here until a container joins it
+        self.enterContext(mock.patch.object(container.platform, "system", return_value="Linux"))
+        u, _ = self._started(base="https://x/v1", servers=["host.docker.internal:27000"])
+        self.addCleanup(u.stop)
+        self.assertEqual(u.reach, {"host.docker.internal:27000": "licence-server-1:27000"})
+        self.assertEqual(u.socket_doors[0].target, ("127.0.0.1", 27000))
 
     def test_the_loopback_forwarder_passes_connections_until_it_stops(self):
         import http.server, socket, threading, urllib.request
