@@ -27,7 +27,9 @@ privileges, so what it writes in the workspace is the user's to read and
 remove. That is ``--user uid:gid``, or ``--user 0:0`` on a rootless engine,
 where a container's root is this machine's user. On a Docker with
 ``userns-remap``, a container that uses this machine's user's files also
-runs in this machine's user namespace (:func:`_userns`).
+runs in this machine's user namespace (:func:`_userns`). On podman it
+runs with no SELinux label (:func:`_security_opt`), as on Docker's default
+daemon.
 
 **The relay is a sidecar, and the agent's only way out.** Per unit, an
 internal network (``docker network create --internal``: no route off it); a
@@ -499,6 +501,14 @@ def _user() -> str:
     return "0:0" if rootless() else f"{os.getuid()}:{os.getgid()}"
 
 
+def _security_opt() -> List[str]:
+    """Every container's ``--security-opt``: no way to gain privileges, and on
+    podman no SELinux label. Docker's default daemon (``selinux-enabled`` off)
+    gives none, so a container reads the folders it mounts, which are never
+    relabelled (``:z`` would relabel the user's). Labels are future work."""
+    return ["--security-opt", "no-new-privileges", *(["--security-opt", "label=disable"] if podman() else [])]
+
+
 def by_value(env: Dict[str, str]) -> Dict[str, str]:
     """What of a unit's environment podman itself reads (``CLIENT_KEEP``:
     ``HOME``, the XDG folders...) but ``PATH``: on podman passed by value
@@ -534,7 +544,7 @@ def run_argv(image: str, cmd: List[str], *, name: str, network: str, job: str, w
     software looks for it."""
     values, named = env_args(env, path)
     a = [DOCKER, "run", "--rm", "--name", name, "--network", network, "--label", f"{LABEL}={job}",
-         *_userns(), "--user", _user(), "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
+         *_userns(), "--user", _user(), "--cap-drop", "ALL", *_security_opt(), "--init",
          "-w", workdir, *values]
     if interactive:
         a.insert(2, "-i")
@@ -574,7 +584,7 @@ def check_start() -> List[str]:
     """A check's container command up to its mounts (:func:`check_argv`): no
     network, no capabilities, as this machine's user."""
     return [DOCKER, "run", "--rm", "--network", "none", *_userns(), "--user", _user(), "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges"]
+            *_security_opt()]
 
 
 def check_env() -> dict:
@@ -623,7 +633,7 @@ def install_argv(image: str, where: str, cmd: List[str], env: Optional[dict] = N
     env = {"HOME": home, "npm_config_cache": npm, "UV_CACHE_DIR": uv,
            "UV_PYTHON_INSTALL_DIR": f"{where}/.python", "UV_PYTHON_DOWNLOADS": "automatic", **(env or {})}
     return [DOCKER, "run", "--rm", "--label", "nullius.install=1", *_userns(), "--user", _user(), "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges", "-v", f"{where}:{where}:rw", "-w", where,
+            *_security_opt(), "-v", f"{where}:{where}:rw", "-w", where,
             *[w for k, v in env.items() for w in ("-e", f"{k}={v}")],
             *[w for k in INSTALL_KEEP if k in os.environ for w in ("-e", k)], image] + list(cmd)
 
@@ -641,7 +651,7 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
     ``ledger``: the file of the run's spending cap, its folder mounted so
     this relay books its calls where every other relay of the job does."""
     a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_userns(), "--user", _user(),
-         "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
+         "--cap-drop", "ALL", *_security_opt(), "--init",
          *[w for n, ip in sorted((hosts or {}).items()) for w in ("--add-host", f"{n}:{ip}")],
          "-p", f"127.0.0.1::{RELAY_PORT}", "-v", f"{app}:{app}:ro", "-v", f"{record}:{record}:rw",
          *(["-v", f"{os.path.dirname(ledger)}:{os.path.dirname(ledger)}:rw"] if ledger else []),
@@ -852,7 +862,7 @@ def forward_argv(image: str, *, name: str, job: str, port: int) -> List[str]:
     (where :func:`use_socket_doors`, ``Unit._forward`` gives such a server a
     door instead)."""
     return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), "--user", _user(),
-            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
+            "--cap-drop", "ALL", *_security_opt(), "--init",
             "--add-host", "host.docker.internal:host-gateway", "-v", f"{FORWARD}:{FORWARD_IN}:ro",
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
             image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}"]
@@ -868,7 +878,7 @@ def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
     forwards is named, never given: ``-e NULLIUS_FORWARD_TO``
     (``unix:<socket>``)."""
     return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *_userns(), "--user", _user(),
-            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
+            "--cap-drop", "ALL", *_security_opt(), "--init",
             *(["--network", network, "--network-alias", alias] if network else way_out()),
             "-v", f"{FORWARD}:{FORWARD_IN}:ro", "-v", f"{socket_path}:{socket_path}:ro",
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
@@ -879,7 +889,7 @@ def egress_argv(image: str, *, name: str, job: str) -> List[str]:
     """``docker run`` for an own image's check's proxy (``egress.py``): on the
     default bridge (``BRIDGE`` on podman), its one file mounted, nothing else given."""
     return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), "--user", _user(),
-            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
+            "--cap-drop", "ALL", *_security_opt(), "--init",
             "-v", f"{EGRESS}:{EGRESS_IN}:ro", "-e", "PYTHONDONTWRITEBYTECODE=1",
             image, "python3", EGRESS_IN, "--listen", f"0.0.0.0:{EGRESS_PORT}"]
 
@@ -1514,7 +1524,7 @@ class Box:
             if self.own_net:
                 _docker(["network", "create", "--internal", "--label", f"{LABEL}={self.job}", self.net])
             a = ["run", "-d", "--name", self.name, "--label", f"{LABEL}={self.job}", "--network", self.net, "--init",
-                 "--security-opt", "no-new-privileges", "-w", self.workdir, *_userns()]
+                 *_security_opt(), "-w", self.workdir, *_userns()]
             if self.memory_mb:
                 a += ["--memory", f"{int(self.memory_mb)}m"]
             if self.cpus:

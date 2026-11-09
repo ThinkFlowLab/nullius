@@ -147,7 +147,7 @@ record); verifier/reward.txt and score.json
 
 A benchmark whose check executes submitted code declares `score.runs_code: true` (optional boolean, default false). Its Original setup uses the base image through `NULLIUS_CHECK_IMAGE` when Docker is usable; otherwise it requires `--unsandboxed`. Container failures never fall back to local execution. HumanEval's trial detail records `check: container` or `check: this machine`.
 
-The docker backend (`--backend docker`) is the isolation, and needs no such yes. Per unit:
+The docker backend (`--backend docker`) is the isolation, and needs no such yes. On Podman, Nullius's containers and an own image's, the agent's included, run with `--security-opt label=disable`, so they read the folders they mount, which are never relabelled. Docker's default daemon (`selinux-enabled` off) gives its containers no SELinux label either. Per unit:
 
 | Piece | Rule |
 | --- | --- |

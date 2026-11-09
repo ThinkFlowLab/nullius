@@ -464,6 +464,16 @@ class ArgvTest(unittest.TestCase):
     def _users(self) -> set:
         return {a[a.index("--user") + 1] for a in self._argvs().values()}
 
+    def test_on_podman_every_container_runs_without_an_selinux_label(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        box = mock.patch.object(container, "_docker", side_effect=container.Unavailable("stop at the first call"))
+        for engine in ("docker", "podman"):
+            with mock.patch.object(container, "DOCKER", engine), box as ran, self.assertRaises(container.Unavailable):
+                argvs = list(self._argvs().values())
+                container.Box("j", "u0000", "img", workdir="/", network="n").start()
+            argvs.append(ran.call_args_list[0].args[0])                              # an own image's container
+            self.assertEqual({"label=disable" in a for a in argvs}, {engine == "podman"})
+
     def test_a_rootless_engine_runs_every_container_as_its_root_which_is_this_user(self):
         with mock.patch.object(container, "rootless", return_value=True):
             self.assertEqual(self._users(), {"0:0"})
