@@ -127,6 +127,7 @@ RELAY_KEY_IN = "/opt/nullius/relay-key"    # the key's one file, in the relay's 
 KEY_STALE = 600                            # older than any start can take: a killed run left it
 IMAGE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
+# uv and PYTHON_VERSION move together: this uv must know that Python
 UV_VERSION = "0.13.5"
 UV_DIGEST = "sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff"    # its index: every platform
 NODE_VERSION = "22.23.3"
@@ -954,7 +955,7 @@ class Unit:
 
 # -- an own image: the task's container, the agent added at run time -------------
 RUNTIMES = "/opt/nullius"                # where an own image is given what the agent runs on
-PYTHON_VERSION = "3.12.14"               # the standalone Python an agent started as python3 runs on there
+PYTHON_VERSION = "3.12.14"               # the standalone Python an agent started as python3 runs on there; moves with UV_VERSION
 _PULL = re.compile(r"^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$")
 IMAGE_SPEC = ("build", "pull", "memory_mb", "cpus")
 STEP = ("copy", "write", "run", "collect", "seconds", "network", "keep_processes")
@@ -1251,18 +1252,24 @@ def python_runtime() -> str:
     """A standalone Python for an own image (python-build-standalone, by
     ``uv python install``, which checks it by its own pinned digests),
     installed once into ``<STANDARD_DIR>/runtimes/python-<version>``: the
-    interpreter's folder. A glibc build, as Node's is."""
+    interpreter's folder. Installed in the base image, so it is a glibc
+    build, as Node's is, whatever this machine's libc."""
     where = os.path.join(runtimes_dir(), f"python-{PYTHON_VERSION}")
     found = lambda: sorted(glob.glob(os.path.join(where, f"cpython-{PYTHON_VERSION}-linux-*-gnu")))
     if install.ready(where) and found():
         return found()[0]
     with install._locked(where):
         if not (install.ready(where) and found()):
+            os.makedirs(where, exist_ok=True)
             try:
-                r = subprocess.run(["uv", "python", "install", PYTHON_VERSION, "--install-dir", where, "--no-bin"],
-                                   env=install.install_env(), capture_output=True, text=True, timeout=1800)
+                r = subprocess.run(install_argv(base_image(), where, ["uv", "python", "install", PYTHON_VERSION,
+                                                                     "--install-dir", where, "--no-bin"]),
+                                   env=client_env({k: os.environ[k] for k in INSTALL_KEEP if k in os.environ}),
+                                   capture_output=True, text=True, timeout=1800)
             except (OSError, subprocess.TimeoutExpired) as e:
                 raise Unavailable(f"installing Python {PYTHON_VERSION}: {e}")
+            finally:
+                install.remove_scratch(where)
             if r.returncode != 0 or not found():
                 raise Unavailable(f"installing Python {PYTHON_VERSION}: {(r.stderr or r.stdout).strip()[-300:]}")
             open(os.path.join(where, install.MARK), "w").close()

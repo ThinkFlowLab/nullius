@@ -78,6 +78,29 @@ class ArgvTest(unittest.TestCase):
         a = container.install_argv("img", "/w", ["python", "-c", "x"], {"HF_HUB_CACHE": "/w/hf"})
         self.assertIn("HF_HUB_CACHE=/w/hf", a)
 
+    def test_the_standalone_python_is_installed_in_the_base_image_and_its_scratch_removed(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        self.enterContext(mock.patch.object(container, "runtimes_dir", return_value=self.tmp))
+        self.enterContext(mock.patch.object(container, "base_image", return_value="nullius/base:x"))
+        self.enterContext(mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://proxy:3128"}))
+        where = os.path.join(self.tmp, f"python-{container.PYTHON_VERSION}")
+
+        def run(argv, **kw):
+            os.makedirs(os.path.join(where, f"cpython-{container.PYTHON_VERSION}-linux-x86_64-gnu"))
+            for scratch in install.SCRATCH:
+                os.makedirs(os.path.join(where, scratch))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        with mock.patch.object(container.subprocess, "run", side_effect=run) as ran:
+            got = container.python_runtime()
+        argv = ran.call_args.args[0]
+        self.assertEqual(argv[:2], ["docker", "run"])
+        self.assertIn(["-e", "HTTPS_PROXY"], [argv[i:i + 2] for i in range(len(argv))])
+        self.assertEqual(ran.call_args.kwargs["env"]["HTTPS_PROXY"], "http://proxy:3128")    # the value -e HTTPS_PROXY passes on
+        self.assertEqual(argv[argv.index("nullius/base:x"):],
+                         ["nullius/base:x", "uv", "python", "install", container.PYTHON_VERSION, "--install-dir", where, "--no-bin"])
+        self.assertEqual(got, os.path.join(where, f"cpython-{container.PYTHON_VERSION}-linux-x86_64-gnu"))
+        self.assertEqual(sorted(os.listdir(where)), sorted([install.MARK, os.path.basename(got)]))
+
     def test_the_agents_container_is_on_the_units_network_with_its_variables_by_name(self):
         self.enterContext(mock.patch.object(container, "rootless", return_value=False))
         a = container.run_argv("img", ["codex-acp"], name="nullius-j-u0000", network="nullius-j-u0000", job="j",
