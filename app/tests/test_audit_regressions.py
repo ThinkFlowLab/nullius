@@ -14,6 +14,7 @@ from nullius.standard import job, run, definitions
 from nullius.traces import charts, trajectory
 from nullius.judge import state
 from nullius.runs import parse
+from tests.execution_support import gone
 from tests.test_standard_run import ROOT
 
 
@@ -98,7 +99,7 @@ run.run(b,o,model='m',provider='custom',jobs_root={tmp!r},name='stopped',env={{'
                 process.terminate()
                 out, err = process.communicate(timeout=12)
                 self.assertEqual(process.returncode, 143, err.decode())
-                with self.assertRaises(ProcessLookupError): os.kill(memory_pid, 0)
+                self.assertTrue(gone(memory_pid), 'memory outlived the run')
                 results = [json.loads(p.read_text()) for p in root.glob('stopped/*/result.json')]
                 self.assertTrue(results)
                 self.assertTrue(all(r['exception_info']['exception_type'] == 'CancelledError' for r in results))
