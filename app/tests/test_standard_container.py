@@ -482,6 +482,12 @@ class ArgvTest(unittest.TestCase):
             argvs = self._argvs().values()
             self.assertEqual({(a[a.index("--user") + 1], a.count("--userns=keep-id"), "--userns=host" in a) for a in argvs},
                              {(me, 1, False)})                                   # keep-id once: that uid is this user
+            box = mock.patch.object(container, "_docker", side_effect=container.Unavailable("stop here"))
+            with box as ran, self.assertRaises(container.Unavailable):
+                container.Box("j", "u0000", "img", workdir="/", network="n").start()
+            started = ran.call_args_list[0].args[0]
+            self.assertEqual([w for w in started if w.startswith("--userns")], ["--userns=host"])   # an own image's root stays this user
+            self.assertNotIn("--user", started)
         with mock.patch.object(container, "rootless", return_value=False):
             self.assertFalse([a for a in self._argvs().values() if any(w.startswith("--userns") for w in a)])
 

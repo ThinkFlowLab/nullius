@@ -1535,8 +1535,10 @@ class Box:
         try:
             if self.own_net:
                 _docker(["network", "create", "--internal", "--label", f"{LABEL}={self.job}", self.net])
+            # in the machine's user namespace on podman (its root stays this user on rootless podman whatever
+            # containers.conf sets: keep-id makes it a sub-uid) and on a Docker with userns-remap
             a = ["run", "-d", "--name", self.name, "--label", f"{LABEL}={self.job}", "--network", self.net, "--init",
-                 *_security_opt(), "-w", self.workdir, *([] if podman() else _userns())]
+                 *_security_opt(), "-w", self.workdir, *(["--userns=host"] if podman() else _userns())]
             if self.memory_mb:
                 a += ["--memory", f"{int(self.memory_mb)}m"]
             if self.cpus:

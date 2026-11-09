@@ -290,7 +290,7 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 
 | Rule | Detail |
 | --- | --- |
-| The agent is added at run time | The container runs the image for the whole unit (`container.Box`), as the image's own user, default capabilities and no way to gain more, on the unit's internal network. The agent is started with `docker exec`; ACP's `fs` is off. Home, install, definition and MCP files are mounted as on the base |
+| The agent is added at run time | The container runs the image for the whole unit (`container.Box`), as the image's own user, default capabilities and no way to gain more, on the unit's internal network. On Podman with `--userns=host`, so its root is you on rootless Podman whatever `containers.conf` sets. The agent is started with `docker exec`; ACP's `fs` is off. Home, install, definition and MCP files are mounted as on the base |
 | Runtimes | Read-only under `/opt/nullius`: the base's Node for an agent from npm, a pinned standalone Python (`uv python install` in the base image) for one started as `python3` with no uv environment. A uv environment's interpreter is in its install. The start command names it; `PATH` keeps the image's own `python3` and `node` first. The home written as root is given back to you |
 | A runtime the image cannot start | Tried once before the agent; a failure (glibc in a musl image) is a setup error: "not run: the agent's runtime (node) needs glibc; this task's image is musl-based" |
 | The check runs where the work is | `score` is sent `verified: {exit, timed_out, output, dir, collected}`; the driver never runs docker. What changed in the container is `agent/container-changes.txt` |
