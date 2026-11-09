@@ -60,9 +60,9 @@ class Here(Base):
         lookup = ('command() { if [ "$1" = -v ] && [ "$2" = setsid ]; then '
                   'return 1; else builtin command "$@"; fi; }; ')
         ex._sh = lambda command, timeout=600.0, stdin=None: real(lookup + command, timeout, stdin)
-        ex.start()
-        self.until(ex, "running"); time.sleep(0.2)
-        pid = int((self.tmp / "fallback-stop" / "run-run.pid").read_text())
+        ex.start(); self.addCleanup(lambda: (ex.stop(), ex.thread.join(10)))
+        self.until(ex, "running")
+        pid = self.pid_of(self.tmp / "fallback-stop", "run")
         ex.stop(); self.wait(ex)
         self.assertEqual(ex.state, "stopped")
         self.assertTrue(gone(pid), "the fallback process outlived Stop")
