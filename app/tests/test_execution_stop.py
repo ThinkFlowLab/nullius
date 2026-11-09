@@ -116,10 +116,13 @@ class StopAtLaunch(LocalHost):
         has been and gone: the part sees the Stop and does not run."""
         (self.home / "late").write_text("3")
         ex = execution.Execution(self.plan([{"id": "a", "label": "a", "script": self.script()}]), root=str(self.tmp / "runs"), key="k" * 20).start()
-        for _ in range(500):
-            if any(l.startswith("— running a") for l in ex.lines):
+        self.addCleanup(lambda: (ex.stop(), ex.thread.join(10)))                  # a failed test stops its run
+        for _ in range(500):                                                       # a Stop before this kills the ssh, and nothing starts
+            if (self.home / "launched").exists():
                 break
             time.sleep(0.02)
+        else:
+            self.fail("the launcher never left the stand-in ssh")
         ex.stop(); self.wait(ex)
         self.assertEqual((ex.state, ex.exit_code), ("stopped", 130), ex.lines)
         self.assertFalse((self.on_host() / "run-a.pid").exists())                 # the Stop came before the part started
