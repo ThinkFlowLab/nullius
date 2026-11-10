@@ -20,6 +20,23 @@ class LedgerTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.path = os.path.join(self.tmp, "ledger", "ledger.json")
 
+    def test_the_ledger_keeps_the_largest_reply_each_model_has_answered_with(self):
+        led = ledger.Ledger.create(self.path, 1.0)
+        self.assertIsNone(led.largest("m"))                                        # before any reply
+        for cost, model, output in ((0.01, "m", 300), (0.01, "m", 120), (0.01, "other", 9000), (None, "m", None), (0.01, "m", True)):
+            booking, _ = led.reserve(0.02)
+            led.settle(booking, cost, model, output)
+        self.assertEqual((led.largest("m"), led.largest("other"), led.largest("never")), (300, 9000, None))
+        with open(self.path) as f:                                                 # a ledger written before the field is read as one with none
+            doc = json.load(f)
+        del doc["seen"]
+        with open(self.path, "w") as f:
+            json.dump(doc, f)
+        self.assertIsNone(led.largest("m"))
+        booking, _ = led.reserve(0.02)
+        led.settle(booking, 0.01, "m", 50)
+        self.assertEqual(led.largest("m"), 50)
+
     def test_a_call_is_sent_while_spent_and_in_flight_and_its_booking_fit(self):
         led = ledger.Ledger.create(self.path, 1.0)
         a, _ = led.reserve(0.4)
@@ -116,6 +133,23 @@ class BoundTest(unittest.TestCase):
         tokens = -(-len(json.dumps(req)) // 3)
         self.assertAlmostEqual(self.bound(req, dict(ROW, max_output=2000)), (tokens + 2000 * 10.0) / 1e6)
         self.assertAlmostEqual(self.bound(req), (tokens + ledger.OUTPUT * 10.0) / 1e6)
+
+    def test_a_call_in_flight_is_booked_the_largest_reply_the_run_has_seen_never_past_a_limit(self):
+        """Its cost is known only when its reply comes back: until then it counts as the largest reply the run
+        has had from that model, not as the model's limit, which a short answer is a hundredth of."""
+        req = {"model": "m", "messages": []}
+        tokens = -(-len(json.dumps(req)) // 3)
+        out = lambda row=ROW, seen=None, **named: round((ledger.bound({**req, **named}, json.dumps({**req, **named}).encode(), row, "/chat/completions", seen) * 1e6
+                                                         - -(-len(json.dumps({**req, **named})) // 3)) / 10.0)
+        self.assertEqual(out(seen=300), 300)                                       # what its replies have been
+        self.assertEqual(out(), ledger.OUTPUT)                                     # before any reply
+        self.assertEqual(out(dict(ROW, max_output=131072)), ledger.OUTPUT)         # not the model's whole limit
+        self.assertEqual(out(dict(ROW, max_output=131072), seen=900), 900)
+        self.assertEqual(out(seen=300, max_tokens=100), 100)                       # never more than the call asks for
+        self.assertEqual(out(dict(ROW, max_output=2000), seen=5000), 2000)         # nor than the model can answer
+        self.assertEqual(out(max_tokens=64000), ledger.OUTPUT)                     # a large limit named is no reply seen
+        self.assertEqual(out(seen=7000, max_tokens=64000), 7000)
+        self.assertAlmostEqual(ledger.bound(req, json.dumps(req).encode(), ROW, "/chat/completions", 300), (tokens + 300 * 10.0) / 1e6)
 
     def test_input_is_booked_at_the_dearer_of_input_and_cache_write(self):
         req = {"model": "m", "messages": [], "max_tokens": 1}

@@ -489,7 +489,7 @@ class Relay:
                 rec["booked_usd"] = booked
                 try:
                     if status == 200 or cut:     # what it cost; unknown (no token count, cut off), the booking is kept whole
-                        self.ledger.settle(booking, cost)
+                        self.ledger.settle(booking, cost, rec["model"], ((rec.get("reply") or {}).get("usage") or {}).get("output"))
                     else:                        # an error of the provider's, or never reached: not billed
                         self.ledger.release(booking)
                 except ledgers.Unavailable:
@@ -551,7 +551,7 @@ class Relay:
         if not row:
             return None, None, f"no price for the model {req.get('model')!r}: a run with a spending cap sends no call it cannot price"
         try:
-            amount = ledgers.bound(req, raw, row, rest)
+            amount = ledgers.bound(req, raw, row, rest, self.ledger.largest(req.get("model")))
             booking, seen = self.ledger.reserve(amount)
         except ledgers.Unavailable as e:
             return None, None, str(e)
