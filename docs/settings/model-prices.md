@@ -17,7 +17,7 @@ its list is filled once.
 | One run | `--price MODEL=INPUT,OUTPUT[,CACHED]` on [`nullius standard run`](../cli/run.md) prices that run only, over both |
 | A call's cost | The provider's own figure when its reply carries one (OpenRouter's does); else the price of exactly that model name; else none, shown as — |
 | Exact names | `gpt-4.1-nano` is not priced as `gpt-4.1`: a model whose name only starts like another's is another model |
-| Recorded | A job's `config.json` keeps the prices of the models it calls and where the list came from |
+| Recorded | A job's `config.json` keeps the prices of the models it calls, each with its source (`list`, `own`, or `run` for `--price`), and where and when the list was fetched when a price is the list's |
 | Docker and hosts | A unit's relay in a container gets its models' prices from the run; a run on a host takes this machine's list with it |
 | An estimate | List prices, not a bill: [Metrics](../field-guide.md) |
 | Code | `app/nullius/prices.py` |

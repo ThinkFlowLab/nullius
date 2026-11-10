@@ -400,7 +400,8 @@ class Run:
         self.embed_model = needs["embeddings"][0] if needs["embeddings"] else None
         # What a call's cost is estimated from when the provider does not say it: the user's price list
         # (nullius.prices), this run's own prices over it. Read once, here: a run never fetches a price.
-        self.prices = {**price_list.table(), **(prices or {})}
+        self.run_prices = dict(prices or {})
+        self.prices = {**price_list.table(), **self.run_prices}
         lacking = hostreq.missing(bench, needs["host"], which)
         if lacking:
             raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
@@ -885,12 +886,16 @@ class Run:
 
     def prices_record(self) -> Optional[dict]:
         """What the job's config keeps of its prices: the rows of the models
-        it calls, and where the user's list came from. None when it has none."""
+        it calls, each with its ``source`` (``list`` the public list, ``own``
+        the user's own row, ``run`` this run's ``--price``), and where and
+        when the list was fetched when a row is its. None when it has none."""
         rows = price_list.given(self.models_called(), self.prices)
         if not rows:
             return None
-        doc = price_list.load()
-        return {**({"from": doc["from"], "on": doc["on"]} if doc["from"] else {}), "models": rows}
+        doc, mine = price_list.load(), getattr(self, "run_prices", {})
+        rows = {n: {**r, "source": "run" if n in mine else "own" if n in doc["own"] else "list"} for n, r in rows.items()}
+        listed = doc["from"] and any(r["source"] == "list" for r in rows.values())
+        return {**({"from": doc["from"], "on": doc["on"]} if listed else {}), "models": rows}
 
     def models_called(self) -> List[str]:
         """Every model this run's relays may send a call to, as sent: the

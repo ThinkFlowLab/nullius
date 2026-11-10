@@ -90,8 +90,12 @@ class Update(Profile):
         self.assertEqual(prices.update(listing)["n"], 3)
         with mock.patch("urllib.request.urlopen", side_effect=AssertionError("fetched")):
             for source in ("http://example.invalid/prices.json", "ftp://example.invalid/prices.json"):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ValueError) as e:
                     prices.update(source)
+                self.assertEqual(str(e.exception).count(source), 1)          # the address once, not twice
+        with self.assertRaises(ValueError) as e:
+            prices.update(os.path.join(self.tmp, "none.json"))
+        self.assertEqual(str(e.exception).count("none.json"), 1)
 
     def test_the_fetch_says_nothing_of_the_user(self):
         seen = []

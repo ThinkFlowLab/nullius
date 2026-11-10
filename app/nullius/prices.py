@@ -164,7 +164,7 @@ def _fetch(source: str) -> bytes:
         with urllib.request.urlopen(req, timeout=60) as r:
             return r.read(_MOST + 1)
     if "://" in source:
-        raise ValueError(f"{source}: an https address or a file")
+        raise ValueError("only an https address or a file is read")
     with open(source, "rb") as f:
         return f.read(_MOST + 1)
 
@@ -178,7 +178,8 @@ def update(source: Optional[str] = None, env=None, fetch: Optional[Callable[[str
     try:
         raw = (fetch or _fetch)(source)
     except (OSError, ValueError) as e:
-        raise ValueError(f"could not fetch the price list from {source}: {e}")
+        why = e.strerror if isinstance(e, OSError) and e.filename else e      # a file's error names the file again
+        raise ValueError(f"could not fetch the price list from {source}: {why}")
     if len(raw) > _MOST:
         raise ValueError(f"{source}: too large to be a price list")
     try:
