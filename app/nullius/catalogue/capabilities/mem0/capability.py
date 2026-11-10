@@ -117,7 +117,7 @@ class Memory:
         t0 = time.time()
         meta = {"session": sid, "date": self.dates[sid]}
         if self.dates[sid]:
-            meta["timestamp"] = self.dates[sid]     # where Mem0 reads the observation date once it grounds extraction on it
+            meta["timestamp"] = self.dates[sid]
         got = self.mem.add(messages, user_id=USER, metadata=meta, infer=setting("MEM0_INFER", "on") != "off")
         items = got.get("results") if isinstance(got, dict) else got
         return {"trace": {"messages": len(messages), "seconds": round(time.time() - t0, 3),
