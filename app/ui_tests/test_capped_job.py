@@ -14,7 +14,7 @@ from unittest.mock import patch
 from nullius import workspace
 from nullius.runs import classify
 from nullius.standard import job, ledger
-from ui_tests.builder_support import CompilerCase
+from ui_tests.builder_support import AGENT as CUSTOM_AGENT, APP, PIN, CompilerCase
 from .test_routes import web
 
 BENCH = {"key": "fakebench", "_ref": "fakebench", "family": "agent", "needs": ["agent.workspace/v1"],
@@ -103,6 +103,15 @@ class BuilderKeepsTheCap(CompilerCase):
                       'process.stdout.write(JSON.stringify([back(2),back(0.25),back(0),back(-1),back("2"),back(true),back(null),'
                       '"max_usd" in C.createStandard("gsm8k")].map(v=>v===undefined?"none":v)));')
         self.assertEqual(out, [2, 0.25, "none", "none", "none", "none", "none", False])
+
+    def test_a_harbor_recipe_takes_no_cap(self):
+        """Harbor's calls do not pass the relay, so nothing could hold them to one: the field is the standard's alone."""
+        out = self.js('const r=C.fromJSON(JSON.stringify({...C.create("harbor"),max_usd:2}));' + CUSTOM_AGENT + PIN
+                      + 'process.stdout.write(JSON.stringify(["max_usd" in r,/max.usd/i.test(JSON.stringify(C.compile(r)))]));')
+        self.assertEqual(out, [False, False])
+        page = (APP / "static" / "builder" / "command-builder.js").read_text(encoding="utf-8")
+        self.assertEqual(page.count("'max_usd'"), 1)                                        # offered once, on the standard's Limits step
+        self.assertIn("C.standardKeyless(rec) ? '' : field('Spending cap (USD)', 'max_usd'", page)
 
 
 if __name__ == "__main__":
