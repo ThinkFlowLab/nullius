@@ -2,8 +2,8 @@
 
 A capped run (``run --max-usd``) gives each of its relays - the units' own,
 in this process or in their containers, and the benchmark's - the same
-ledger. Before a call goes out, its relay books the most the call is likely
-to cost (:func:`bound`). The call is sent only while what was spent, what the
+ledger. Before a call goes out, its relay books what the call is likely to
+cost (:func:`bound`). The call is sent only while what was spent, what the
 calls in flight have booked and this booking stay within the cap. The first
 call that does not fit is refused and closes the ledger: every later call is
 refused too, so a run stops at one point instead of letting its small calls
@@ -14,11 +14,16 @@ provider answered with an error gives its booking back (``release``). One
 whose cost was never known - a reply with no token count, a reply cut off -
 keeps its whole booking, as ``unsettled``: it may have been billed.
 
-A booking is an estimate, not a bill: the prompt's characters over three as
-input tokens, and as output the limit the call names, else the model's own
-(its price row's ``max_output``), else ``OUTPUT``. A call that costs more
-than was booked for it takes the spend past the cap by the difference, and
-the next call is refused.
+What was spent is each reply's real cost. Only a call in flight is an
+estimate, since its cost is known when its reply comes back: the prompt's
+characters over three as input tokens, and as output the largest reply
+the run has had from that model so far (the ledger keeps it, ``seen``) -
+``OUTPUT`` before any - and never more than the limit the call names or
+the model's own (its price row's ``max_output``). The model's limit alone
+would book a short answer at a hundred times its cost, and a few calls
+at a time would fill a cap nothing had been spent of. A call that costs
+more than was booked for it takes the spend past the cap by the
+difference, and the next call is refused.
 
 The file is rewritten whole under a lock held for one read and one write
 (``flock`` on a file beside it, as an install is locked): a relay that dies
@@ -34,7 +39,7 @@ import os
 import uuid
 from typing import Optional, Tuple
 
-OUTPUT = 4096                       # output tokens booked when neither the call nor the model's price row names a limit
+OUTPUT = 4096                       # output tokens booked for a call before the run has had a reply from its model
 ERROR = "SpendingCapError"          # what a unit the cap ended carries: its own outcome outside the rate, never a miss (runs.classify)
 _LIMITS = ("max_completion_tokens", "max_output_tokens", "max_tokens")
 
@@ -43,18 +48,19 @@ class Unavailable(Exception):
     """The ledger could not be read or written: a capped call is then not sent."""
 
 
-def bound(req: dict, raw: bytes, row: dict, path: str = "") -> float:
-    """The most a call is likely to cost, in USD, at ``row`` (a price row,
-    USD per million tokens). Input: the request's characters over three -
-    its JSON whole, less what it carries as base64 - at the dearer of the
-    input and the cache-write price. Output: the limit the call names, else
-    the row's, else ``OUTPUT``; an embeddings call has none."""
+def bound(req: dict, raw: bytes, row: dict, path: str = "", seen: Optional[int] = None) -> float:
+    """What a call is likely to cost, in USD, at ``row`` (a price row, USD
+    per million tokens). Input: the request's characters over three - its
+    JSON whole, less what it carries as base64 - at the dearer of the input
+    and the cache-write price. Output: ``seen``, the largest reply the run
+    has had from this model, or ``OUTPUT`` before any; never more than the
+    limit the call names or the row's own. An embeddings call has none."""
     tokens = math.ceil(max(0, len(raw) - _blobs(req)) / 3)
     rate = max(row["input"], row.get("cache_write") or 0)
     out = 0
     if not path.split("?")[0].endswith("/embeddings"):
         named = [req.get(k) for k in _LIMITS if isinstance(req.get(k), int) and not isinstance(req.get(k), bool) and req.get(k) > 0]
-        out = named[0] if named else row.get("max_output") or OUTPUT
+        out = min(x for x in (named[0] if named else None, row.get("max_output"), seen or OUTPUT) if x)
     return (tokens * rate + out * row["output"]) / 1e6
 
 
@@ -80,7 +86,7 @@ class Ledger:
     def create(cls, path: str, max_usd: float) -> "Ledger":
         os.makedirs(os.path.dirname(path), exist_ok=True)
         led = cls(path)
-        led._write({"max_usd": float(max_usd), "spent_usd": 0.0, "unsettled_usd": 0.0, "held": {}, "closed": False})
+        led._write({"max_usd": float(max_usd), "spent_usd": 0.0, "unsettled_usd": 0.0, "held": {}, "closed": False, "seen": {}})
         return led
 
     @contextlib.contextmanager
@@ -99,6 +105,8 @@ class Ledger:
         with open(self.path, encoding="utf-8") as f:
             doc = json.load(f)
         float(doc["max_usd"]), float(doc["spent_usd"]), float(doc["unsettled_usd"]), sum(doc["held"].values())
+        if not isinstance(doc.get("seen"), dict):
+            doc["seen"] = {}
         return doc
 
     def _write(self, doc: dict) -> None:
@@ -124,13 +132,17 @@ class Ledger:
             self._write(doc)
             return booking, seen
 
-    def settle(self, booking: str, cost: Optional[float]) -> None:
+    def settle(self, booking: str, cost: Optional[float], model: Optional[str] = None, output: Optional[int] = None) -> None:
         """The call's cost in place of its booking; None, its cost was never
-        known: the whole booking is kept, as unsettled."""
+        known: the whole booking is kept, as unsettled. ``output``: the
+        reply's output tokens, kept when they are the most ``model`` has
+        answered in this run - what its next calls are booked at."""
         with self._locked() as doc:
             amount = doc["held"].pop(booking, None)
             if amount is None:
                 return
+            if model and isinstance(output, int) and not isinstance(output, bool) and output > doc["seen"].get(model, 0):
+                doc["seen"][model] = output
             if cost is None:
                 doc["unsettled_usd"] += amount
             else:
@@ -142,6 +154,13 @@ class Ledger:
         with self._locked() as doc:
             if doc["held"].pop(booking, None) is not None:
                 self._write(doc)
+
+    def largest(self, model) -> Optional[int]:
+        """The most output tokens ``model`` has answered a call of this run with; None before any. Read without the lock."""
+        try:
+            return self._read()["seen"].get(model) or None
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise Unavailable(f"the spending cap's ledger could not be read: {type(e).__name__}: {e}")
 
     def state(self) -> dict:
         """``max_usd``, ``spent_usd``, ``unsettled_usd``, ``held_usd`` (the

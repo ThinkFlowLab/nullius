@@ -56,14 +56,14 @@ the job books each call in one ledger before sending it
 | Rule | Detail |
 | --- | --- |
 | Prices first | Every model the run calls (its own, the judge, the simulated user, an option's embeddings, an agent's side models) needs a price in your [price list](../settings/model-prices.md) or a `--price`; else the run is refused before it starts |
-| A booking | The most a call is likely to cost: its characters over three as input tokens, and as output the limit the call names, else the model's own (its price's output limit), else 4,096 tokens |
+| A booking | What a call in flight is counted as, since its cost is known only when its reply comes back: its characters over three as input tokens, and as output the largest reply the run has had from that model so far, 4,096 tokens before any; never more than the limit the call names or the model's own |
 | Sent or refused | A call is sent only while what was spent, what the calls in flight have booked and its own booking stay within the cap. The first that does not fit is refused, and so is every call after it: the run stops at one point |
 | Settled | A reply turns the booking into what the call cost. A provider's error gives the booking back. A reply with no token count, or cut off, keeps its whole booking as unsettled: it may have been billed |
 | A refused call | Answered by the relay with HTTP 402, naming the relay and the cap, and recorded `refused`: never the provider's error |
 | The units | One cut off by the cap ends as `SpendingCapError`: the outcome Spending cap, outside the agent's rate, never a miss. Units not begun are not run |
 | The result | `result.json` carries `budget`: `max_usd`, `spent_usd`, `unsettled_usd` when there is some, `stopped`, `cut_off` and `not_run`; stderr says `stage=cap` |
-| Several at a time | The calls in flight take room: with `-j 4`, four bookings must fit at once. A cap close to one call's booking stops the run early |
-| An estimate | Prices are list prices and a booking is not a bill: a call that costs more than was booked takes the spend past the cap by the difference, and the next call is refused |
+| Several at a time | The calls in flight take room: with `-j 4`, four bookings must fit at once. The first calls, before any reply, are booked 4,096 output tokens each |
+| An estimate | What was spent is each reply's cost, the provider's own figure when its reply carries one. A booking is not a bill: a reply longer than any before it costs more than was booked and takes the spend past the cap by the difference; the next call is then refused |
 | A shard | On the command line the cap is that shard's alone. `merge` adds the shards' caps and spending into one `budget`, when every shard had a cap |
 | From the builder | *Limits* takes one cap for the whole run. Its jobs that call a model (each dataset with each participant, on each machine) take equal shares, rounded down, so the amount typed is the most the run spends. A model without a price is named there, before Run. Not offered for a Harbor recipe, whose calls do not pass the relay |
 | The job page | Run totals shows the cap. A run the cap stopped says so, with what was spent, and lists the units not run; the units cut off are its Spending cap trials. The live board says what was spent of the cap |

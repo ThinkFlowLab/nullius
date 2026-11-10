@@ -223,6 +223,22 @@ class CapTest(unittest.TestCase):
         self.assertAlmostEqual(got["spent_usd"], rec["cost_usd"])
         self.assertEqual((got["held_usd"], got["unsettled_usd"], got["closed"]), (0, 0.0, False))
 
+    def test_a_call_is_booked_at_what_the_runs_replies_have_been_once_one_came_back(self):
+        """Fifteen calls at the model's limit would fill a cap nothing was spent of: after the first reply
+        (2 output tokens here) a call that names no limit is booked those, at the same price."""
+        r, led = self.capped(1.0)
+        body = {"model": "m", "messages": [{"role": "user", "content": "hi"}]}
+        raw = json.dumps(body).encode()
+        self.assertEqual(self.post(r, "u1", body)[0], 200)
+        first = r.calls("u1")[-1]
+        self.assertAlmostEqual(first["booked_usd"], ledger.bound(body, raw, self.PRICES["m"]))            # no reply yet: the start
+        self.assertEqual(led.largest("m"), first["reply"]["usage"]["output"])
+        self.assertEqual(self.post(r, "u2", body)[0], 200)
+        second = r.calls("u2")[-1]
+        self.assertAlmostEqual(second["booked_usd"], ledger.bound(body, raw, self.PRICES["m"], seen=first["reply"]["usage"]["output"]))
+        self.assertLess(second["booked_usd"], first["booked_usd"])
+        self.assertAlmostEqual(led.state()["spent_usd"], first["cost_usd"] + second["cost_usd"])          # what was spent is what the calls cost
+
     def test_a_call_that_does_not_fit_is_answered_by_the_relay_and_never_sent(self):
         r, led = self.capped(0.0005)             # 100 output tokens at 10 USD a million are 0.001 already
         sent = len(Upstream.seen)

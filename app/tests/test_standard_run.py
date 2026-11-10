@@ -294,24 +294,25 @@ class RunTest(unittest.TestCase):
 
     def calling(self, **kw):
         """Eight units, each one model call (11 tokens in, 3 out), one at a
-        time. Input is free here and the model's own output limit is 100
-        tokens at 10 USD a million, so a call is booked 0.001 and costs 0.00003."""
+        time. Input is free here and the model's own output limit is 10
+        tokens at 10 USD a million: the first call is booked 0.0001, and once
+        its reply is seen each call is booked what a reply is, 0.00003, its cost."""
         here = os.path.join(self.tmp, "calling")
         os.makedirs(here, exist_ok=True)
         with open(os.path.join(here, "driver.py"), "w") as f:
             f.write(CALLING_DRIVER)
         b = dict(definitions.get("benchmark", "fakebench", ROOT), _here=here, driver={"command": ["python3", "{here}/driver.py"]})
         said = []
-        kw = {"prices": {"m-1": {"input": 0.0, "output": 10.0, "max_output": 100}}, **kw}
+        kw = {"prices": {"m-1": {"input": 0.0, "output": 10.0, "max_output": 10}}, **kw}
         job_dir, failed = run.run_and_report(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
                                              concurrency=1, env=self.env, say=said.append, unsandboxed=True, proving=True, **kw)
         with open(os.path.join(job_dir, "result.json")) as f:
             return job_dir, failed, json.load(f), said
 
     def test_a_spending_cap_stops_the_run_and_its_result_says_where(self):
-        # 0.001 booked a call, 0.00003 spent by each: the fourth no longer fits 0.00107
-        job_dir, failed, result, said = self.calling(max_usd=0.00107)
-        self.assertEqual(result["budget"], {"max_usd": 0.00107, "spent_usd": 0.00009, "stopped": True,
+        # 0.00003 spent by each call and as much booked for the next: with 0.00009 spent the fourth no longer fits 0.00011
+        job_dir, failed, result, said = self.calling(max_usd=0.00011)
+        self.assertEqual(result["budget"], {"max_usd": 0.00011, "spent_usd": 0.00009, "stopped": True,
                                             "cut_off": ["m3"], "not_run": ["m4", "m5", "m6", "m7"]})
         self.assertEqual((result["n_total_trials"], result["stats"]["n_cancelled_trials"], result["stats"]["n_errored_trials"]), (8, 4, 1))
         self.assertFalse(failed)                                             # three units reached a verdict
@@ -324,14 +325,14 @@ class RunTest(unittest.TestCase):
         self.assertEqual([c.get("refused") for c in calls].count("cap"), 1)
         sent = [c for c in calls if not c.get("refused")]
         self.assertEqual(len(sent), 3)                                       # no call went out past the cap
-        self.assertTrue(all(abs(c["booked_usd"] - 0.001) < 1e-12 for c in sent))
-        self.assertLessEqual(sum(c["cost_usd"] for c in sent), 0.00107)
-        self.assertTrue(any(s.startswith("stopped: a call did not fit the spending cap of 0.0011 USD (0.0001 spent): 1 cut off, 4 not run")
+        self.assertEqual(sorted(round(c["booked_usd"], 8) for c in sent), [0.00003, 0.00003, 0.0001])   # the start once, then what a reply has been
+        self.assertLessEqual(sum(c["cost_usd"] for c in sent), 0.00011)
+        self.assertTrue(any(s.startswith("stopped: a call did not fit the spending cap of 0.0001 USD (0.0001 spent): 1 cut off, 4 not run")
                             for s in said), said)
         # the live board is told the cap as the units start, and the unit it cut off ends there as budget
         with open(os.path.join(job_dir, "events.jsonl")) as f:
             board = live.fold([live.parse_line(line) for line in f if line.strip()])
-        self.assertEqual(board.budget, {"max_usd": 0.00107})
+        self.assertEqual(board.budget, {"max_usd": 0.00011})
         self.assertEqual({t.trial.split("__")[0]: t.outcome for t in board.trials if t.outcome}, {"m0": "resolved", "m1": "resolved", "m2": "resolved", "m3": "budget"})
         self.assert_no_key(job_dir)
 
