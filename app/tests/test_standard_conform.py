@@ -41,6 +41,20 @@ class ConformTest(unittest.TestCase):
         self.assertTrue(os.path.isdir(os.path.join(self.tmp, "jobs", rec["job"])))
         self.assertEqual(d["offers"], ["cap.memory/v1"])
 
+    def test_a_memory_that_refuses_credentials_still_proves_the_memory_port(self):
+        here = os.path.join(self.root, "capabilities", "fakemem")
+        with open(os.path.join(here, "capability.py")) as f:
+            src = f.read()
+        refuse = 'kept.append(req["session"]["text"]); out = {}'
+        self.assertIn(refuse, src)
+        with open(os.path.join(here, "capability.py"), "w") as f:      # it drops every session that looks like a secret
+            f.write(src.replace(refuse, 'out = {}\n        if not any(w in req["session"]["text"].lower() for w in '
+                                        '("password", "passcode", "token", "secret", "credential", "api key")):\n'
+                                        '            kept.append(req["session"]["text"])'))
+        got, d = self.check("capability", "fakemem", ["cap.memory/v1"])
+        self.assertTrue(got["cap.memory/v1"]["ok"])
+        self.assertEqual(d["proven"]["cap.memory/v1"]["passed"], "2/2")
+
     def test_a_kit_that_fails_takes_the_claim_back(self):
         got, d = self.check("agent", "fake", ["agent.task/v1"])          # it shouts the prompt back: not the word
         self.assertFalse(got["agent.task/v1"]["ok"])
