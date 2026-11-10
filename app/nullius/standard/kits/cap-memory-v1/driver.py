@@ -6,7 +6,7 @@ FILLER = ["We discussed the train timetable for the weekend.", "The weather was 
           "The neighbours painted their fence blue."]
 CHECKS = {
     "m1": ("My sister Ines moved to Lisbon in March.", "Where did Ines move to?", "Lisbon"),
-    "m2": ("The wifi password at the cabin is tern-river-9.", "What is the wifi password at the cabin?", "tern-river-9"),
+    "m2": ("The boat at the cabin is named tern-river-9.", "What is the boat at the cabin named?", "tern-river-9"),
 }
 
 
