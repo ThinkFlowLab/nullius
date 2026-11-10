@@ -725,10 +725,12 @@ class StandardOnHost(HostBase):
         self.assertEqual(json.loads((self.tmp / "runs" / "std-shard-2of2" / "run.json").read_text())["catalogue_on_target"],
                          "~/.nullius/runs/std-shard-2of2/catalogue")
 
-    def test_the_price_list_goes_with_the_run_and_a_host_without_one_is_told_nothing(self):
+    def test_the_price_list_goes_with_the_run_even_empty_so_the_host_s_own_is_never_read(self):
         ex = self.run_it()
+        sent = next(s for c, s in self.calls if c[0] == "ssh" and "cat > " in c[-1] and "/prices.json" in c[-1])
+        self.assertEqual((json.loads(sent)["models"], json.loads(sent)["own"]), ({}, {}))  # no list here: an empty one
         launch = next(c for c, _ in self.calls if c[0] == "ssh" and "setsid nohup" in c[-1])
-        self.assertNotIn("NULLIUS_PRICES", launch[-1])                                # no list here: none sent
+        self.assertIn("NULLIUS_PRICES=", launch[-1])
         self.calls.clear(); self.polls = 0
         price_list.set_own("gpt-5-mini", price_list.row(1, 2))
         self.plan.name = "std-priced"

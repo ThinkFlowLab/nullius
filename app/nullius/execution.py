@@ -1452,14 +1452,13 @@ class Execution:
             return False
         prices_on_target = ""
         if self.plan.runner == STANDARD and self.on_host:
-            # the price list is this machine's user's: a host holds none, so the run takes it along (nullius.prices)
-            doc = price_list.load()
-            if doc["models"] or doc["own"]:
-                prices_on_target = run_dir + "/prices.json"
-                rc, out = self._sh(f"cat > {self._q(prices_on_target)}", 60, stdin=json.dumps(doc) + "\n")
-                if rc != 0:
-                    self._fail("run", f"the price list did not land on {where}: " + out.strip()[-400:])
-                    return False
+            # the price list is this machine's user's, so the run takes it along (nullius.prices) - an empty one
+            # too: a host's own list, if it has one, never prices a run started here
+            prices_on_target = run_dir + "/prices.json"
+            rc, out = self._sh(f"cat > {self._q(prices_on_target)}", 60, stdin=json.dumps(price_list.load()) + "\n")
+            if rc != 0:
+                self._fail("run", f"the price list did not land on {where}: " + out.strip()[-400:])
+                return False
         exports = " ".join(f"{k}={self._q(v) if v.startswith('~') else shlex.quote(v)}" for k, v in
                            [("NULLIUS_HARBOR", self.harbor), ("NULLIUS_TASKS", self.tasks_on_target), ("NULLIUS_JOBS", run_dir + "/jobs"),
                             ("NULLIUS_PROGRESS", "1")]
