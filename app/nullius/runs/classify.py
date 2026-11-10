@@ -57,6 +57,7 @@ _INFRA_EXCEPTIONS = {
     "modelnotfounderror",         # the model name is wrong; the agent never ran
     "networkconnectionerror",     # DNS, refused connection, TLS — transport, not skill
     "unknownapierror",            # Harbor's own "some provider error"; an ApiError without the prefix
+    "spendingcaperror",           # the run's own spending cap refused the call (the standard's relay): no attempt was had
 }
 
 # What Harbor's agents raise when the agent itself fails — its budget spent,
@@ -131,7 +132,8 @@ DESCRIPTIONS = {
     ),
     API_ERROR: (
         "The model API failed some other way — overloaded, unreachable, out of "
-        "quota, or the key was rejected. The agent never got a fair attempt, so "
+        "quota, or the key was rejected — or the run's own spending cap refused "
+        "the call. The agent never got a fair attempt, so "
         "this is infrastructure too and is excluded from the adjusted rate."
     ),
     SETUP_ERROR: (

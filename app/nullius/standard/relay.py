@@ -23,6 +23,11 @@ which the relay replaces with its own key, and the headers of the hop itself;
 the provider's headers come back the same way (its request id, its rate
 limits). It never answers for the provider: a 429 reaches the caller and the
 record as it was sent, which is what makes rate limits measurable.
+
+One answer is the relay's own: a run with a spending cap (``ledger``) books
+each call before it goes out, and a call that does not fit is not sent. Its
+caller gets a 402 that names the relay and the cap, and the record says
+``refused``, so it never reads as the provider's error.
 """
 from __future__ import annotations
 
@@ -38,6 +43,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional
 
 from nullius.redact import redact
+from nullius.standard import ledger as ledgers
 
 PLACEHOLDER_KEY = "nullius-relay"
 _TAG = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -330,7 +336,8 @@ class _Pool:
 
 class Relay:
     def __init__(self, base: str, key: str, record_dir: str, prices: Optional[Dict[str, dict]] = None,
-                 model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False):
+                 model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False,
+                 ledger: Optional[str] = None):
         """``base``: the provider's endpoint (``https://api.openai.com/v1``).
         ``model``: when given, every call is sent as this model, whatever the
         caller named - the run's model is the recipe's, not the agent's. A
@@ -345,8 +352,12 @@ class Relay:
         run's, recorded with ``model_asked``. ``key_header``: how the provider takes its key - a
         bearer ``authorization``, or Anthropic's ``x-api-key``.
         ``fields``: each record also holds the request's fields as sent
-        (:func:`request_fields`) - ``fidelity``'s, never a normal run's."""
+        (:func:`request_fields`) - ``fidelity``'s, never a normal run's.
+        ``ledger``: the file of the run's spending cap (``ledger``), shared
+        by every relay of the job: a call is booked there before it is sent,
+        and not sent when it does not fit."""
         self.fields = fields
+        self.ledger = ledgers.Ledger(ledger) if ledger else None
         self.base, self.key, self.dir = base.rstrip("/"), key, record_dir
         self.prices, self.model = prices or {}, model
         self.side_models = {a: (b or a) for a, _, b in (str(m).partition("=") for m in side_models or ())}
@@ -434,8 +445,15 @@ class Relay:
             if req.get("stream") and rest.split("?")[0].endswith("/chat/completions"):
                 req.setdefault("stream_options", {})["include_usage"] = True
             raw = json.dumps(req).encode()
+        booking = booked = None
+        if self.ledger is not None and h.command == "POST":
+            booking, booked, why = self._book(req if isinstance(req, dict) else {}, raw, rest)
+            if why:
+                self._refuse(h, tag, rest, req, asked, why)
+                return
         t0 = time.time()
         conn, r, back, body = None, None, [], b""
+        cut = False                              # the reply was cut off: the call may have been billed
         try:
             conn, r = self.pool.send(h.command, rest, raw if h.command == "POST" else None, self._headers(h.headers))
             status, kind, back = r.status, r.getheader("Content-Type") or "application/json", returned(r.headers)
@@ -448,7 +466,7 @@ class Relay:
             try:
                 body, whole = r.read(), True
             except Exception as e:               # cut off mid-reply
-                status, kind, back = 502, "application/json", []
+                status, kind, back, cut = 502, "application/json", [], True
                 body = json.dumps({"error": {"message": "the endpoint's reply was cut off: " + self._said(e)}}).encode()
 
         def record(body):
@@ -459,6 +477,7 @@ class Relay:
                 rec["side"] = True
             if self.fields and isinstance(req, dict) and req:
                 rec["fields"] = request_fields(req)
+            cost = None
             if status == 200:
                 rec["reply"] = read_reply(rest, body, streamed)
                 cost, how = self._cost(rec["model"], rec["reply"].get("usage"))
@@ -466,6 +485,15 @@ class Relay:
                     rec["cost_usd"], rec["cost_from"] = cost, how
             else:
                 rec["error"] = _said(status, body)
+            if booking is not None:
+                rec["booked_usd"] = booked
+                try:
+                    if status == 200 or cut:     # what it cost; unknown (no token count, cut off), the booking is kept whole
+                        self.ledger.settle(booking, cost)
+                    else:                        # an error of the provider's, or never reached: not billed
+                        self.ledger.release(booking)
+                except ledgers.Unavailable:
+                    pass                         # the booking stays held, against the cap
             with self.lock:
                 with open(os.path.join(self.dir, tag + ".jsonl"), "a") as f:
                     f.write(json.dumps(rec) + "\n")
@@ -515,6 +543,41 @@ class Relay:
             else:
                 conn.close()
 
+    def _book(self, req: dict, raw: bytes, rest: str) -> tuple:
+        """(booking, its amount, None) for a call the cap lets out; (None,
+        its amount, why) for one it does not. A model with no price is not
+        sent either: a capped run sends no call it cannot price."""
+        row = self.prices.get(req.get("model"))
+        if not row:
+            return None, None, f"no price for the model {req.get('model')!r}: a run with a spending cap sends no call it cannot price"
+        try:
+            amount = ledgers.bound(req, raw, row, rest)
+            booking, seen = self.ledger.reserve(amount)
+        except ledgers.Unavailable as e:
+            return None, None, str(e)
+        return booking, amount, None if booking else ledgers.refusal(seen, amount)
+
+    def _refuse(self, h: BaseHTTPRequestHandler, tag: str, rest: str, req, asked, why: str) -> None:
+        """A call the run's spending cap did not let out: answered here and
+        recorded as the relay's own (``refused``), nothing sent."""
+        t = time.time()
+        rec = {"t0": t, "t1": t, "path": rest, "model": req.get("model") if isinstance(req, dict) else None, "model_asked": asked,
+               "status": 402, "refused": "cap", "error": why, "request": _request_tail(req) if isinstance(req, dict) else {},
+               "headers": sorted(k.lower() for k in forwarded(h.headers))}
+        with self.lock:
+            with open(os.path.join(self.dir, tag + ".jsonl"), "a") as f:
+                f.write(json.dumps(rec) + "\n")
+        body = json.dumps({"type": "error", "error": {"type": "spending_cap", "code": "spending_cap",
+                                                      "message": "nullius relay: " + why}}).encode()
+        h.send_response(402)
+        for n, v in (("Content-Type", "application/json"), ("X-Nullius-Refused", "cap"), ("Content-Length", str(len(body)))):
+            h.send_header(n, v)
+        h.end_headers()
+        try:
+            h.wfile.write(body)
+        except OSError:
+            pass
+
     # The address ``url`` hands out: the listening one unless the caller sets
     # another - a sidecar listens on 0.0.0.0 and is reached as ``relay``.
     public: Optional[str] = None
@@ -553,7 +616,12 @@ def failure(calls: List[dict]) -> Optional[tuple]:
     """When a unit's model calls ended failing, the exception a trial carries
     for it - named so ``nullius.runs.classify`` sorts it as the
     infrastructure it was - and the endpoint's words. None when the last call
-    succeeded (a failure the agent recovered from is not the unit's)."""
+    succeeded (a failure the agent recovered from is not the unit's). A call
+    the run's spending cap refused is the unit's wherever it falls: once one
+    is refused, every later one is."""
+    cut = next((c for c in calls if c.get("refused") == "cap"), None)
+    if cut:
+        return ledgers.ERROR, cut.get("error") or ""
     if not calls or calls[-1].get("status") == 200:
         return None
     last = calls[-1]
@@ -576,7 +644,7 @@ KEY_VAR = "NULLIUS_RELAY_UPSTREAM_KEY"
 def serve(argv=None) -> int:
     """``python3 -m nullius.standard.relay serve --listen HOST:PORT --base URL
     --record DIR [--model M] [--route TAG=MODEL ...] [--side-model M ...] [--key-header NAME]
-    [--public URL] [--prices JSON]``.
+    [--public URL] [--prices JSON] [--ledger FILE]``.
 
     ``--base`` is the provider's endpoint, ``--route`` a route sent as another
     model (a benchmark's judge), ``--public`` the address ``url`` hands out.
@@ -596,6 +664,7 @@ def serve(argv=None) -> int:
     ap.add_argument("--key-header", default="authorization", choices=("authorization", "x-api-key"))
     ap.add_argument("--public", help="the address url() hands out, when not the listening one")
     ap.add_argument("--prices", help="a JSON object: model -> USD per million tokens, for a cost estimate")
+    ap.add_argument("--ledger", help="the file of the run's spending cap: a call is booked there before it is sent")
     a = ap.parse_args(argv)
     key = os.environ.get(KEY_VAR)
     if not key:
@@ -603,7 +672,7 @@ def serve(argv=None) -> int:
         return 2
     host, _, port = a.listen.rpartition(":")
     r = Relay(a.base, key, a.record, prices=json.loads(a.prices) if a.prices else None, model=a.model,
-              side_models=a.side_model, key_header=a.key_header)
+              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger)
     for route in a.route:
         tag, _, model = route.partition("=")
         if not _TAG.match(tag) or not model:

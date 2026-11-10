@@ -486,7 +486,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
 
 #: an error kind naming the machine or the benchmark's side rather than the agent: the live board's infra_error
 _INFRA = ("Setup", "Verifier", "Api", "RateLimit", "Environment", "Docker", "Build", "Connection", "Network", "Authentication",
-          "ModelNotFound")
+          "ModelNotFound", "SpendingCap")
 
 
 def feed_outcome(kind: str, score: Optional[dict], exception: Optional[tuple]) -> dict:
@@ -532,11 +532,14 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
             "at": {str(k): round(sum(1 - comb(n - sum(v[:n]), k) / comb(n, k) for v in whole.values()) / len(whole), 4) for k in range(1, n + 1)}}
 
 
-def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int):
+def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int, budget: Optional[dict] = None):
+    """``budget``: a run with a spending cap (``run.Run.budget``): the cap,
+    what was spent, whether it stopped the run, the units it cut off and
+    those never begun."""
     errored = sum(1 for r in results if r.get("exception_info"))
     hat = pass_hat(results)
     with open(os.path.join(job_dir, "result.json"), "w") as f:
         json.dump({"id": job, "started_at": iso(t0), "finished_at": iso(t1), "n_total_trials": planned,
                    "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
                              "n_cancelled_trials": planned - len(results), "n_running_trials": 0, "n_pending_trials": 0},
-                   **({"pass_hat_k": hat} if hat else {})}, f, indent=1)
+                   **({"pass_hat_k": hat} if hat else {}), **({"budget": budget} if budget else {})}, f, indent=1)

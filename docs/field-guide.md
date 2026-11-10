@@ -231,7 +231,7 @@ Eleven classes. The three marked **yes** under Infrastructure leave the adjusted
 | `no_patch` | No patch produced | no | Finished without changing anything. |
 | `agent_error` | Agent error | no | Timed out, filled its context, truncated its output, refused, or exited non-zero. A result, counted against the agent. |
 | `rate_limited` | Rate limited | yes | An HTTP 429 ended the trial. |
-| `api_error` | API error | yes | Any other provider failure: overloaded, unreachable, out of quota, key rejected. |
+| `api_error` | API error | yes | Any other provider failure: overloaded, unreachable, out of quota, key rejected. Also a standard run's unit cut off by its own spending cap (`SpendingCapError`). |
 | `setup_error` | Setup error | yes | The environment or image never came up, or the unit was not run for want of a secret or docker it needs, so the agent never ran. |
 | `unknown` | Unknown | no | No verdict, or an exception on neither list. Counted, charged to nobody; the trial page shows the recorded type. |
 

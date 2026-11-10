@@ -1,0 +1,138 @@
+"""A run's spending cap: a call is booked before it is sent, sent only while
+it fits, and the first that does not closes the ledger for every later one."""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import threading
+import unittest
+
+from nullius.standard import ledger
+
+ROW = {"input": 1.0, "output": 10.0}
+
+
+class LedgerTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.path = os.path.join(self.tmp, "ledger", "ledger.json")
+
+    def test_a_call_is_sent_while_spent_and_in_flight_and_its_booking_fit(self):
+        led = ledger.Ledger.create(self.path, 1.0)
+        a, _ = led.reserve(0.4)
+        b, _ = led.reserve(0.4)
+        self.assertTrue(a and b and a != b)
+        self.assertAlmostEqual(led.state()["held_usd"], 0.8)
+        led.settle(a, 0.05)                      # the reply: what it cost, in place of what was booked
+        self.assertAlmostEqual(led.state()["spent_usd"], 0.05)
+        self.assertAlmostEqual(led.state()["left_usd"], 1.0 - 0.05 - 0.4)
+        c, _ = led.reserve(0.5)
+        self.assertTrue(c)
+        self.assertFalse(led.closed())
+
+    def test_the_first_call_that_does_not_fit_closes_it_for_every_later_one(self):
+        led = ledger.Ledger.create(self.path, 1.0)
+        a, _ = led.reserve(0.7)
+        refused, seen = led.reserve(0.4)         # 0.7 in flight: 0.4 more would pass the cap
+        self.assertIsNone(refused)
+        self.assertFalse(seen["closed"])         # the state it was refused in, for its message
+        self.assertTrue(led.closed())
+        led.settle(a, 0.01)
+        self.assertIsNone(led.reserve(0.0001)[0])        # room again, and still closed: a run stops at one point
+        said = ledger.refusal(led.state(), 0.0001)
+        self.assertIn("1.00 USD", said)
+        self.assertIn("no further call", said)
+
+    def test_a_call_whose_cost_was_never_known_keeps_its_booking_and_an_error_gives_it_back(self):
+        led = ledger.Ledger.create(self.path, 1.0)
+        a, _ = led.reserve(0.3)
+        b, _ = led.reserve(0.3)
+        led.settle(a, None)                      # no token count, or cut off: it may have been billed
+        led.release(b)                           # the provider's error: not billed
+        led.release(b)                           # twice is once
+        led.settle("unknown", 9.0)               # a booking it does not hold changes nothing
+        got = led.state()
+        self.assertEqual((got["spent_usd"], got["unsettled_usd"], got["held_usd"]), (0.0, 0.3, 0))
+        self.assertAlmostEqual(got["left_usd"], 0.7)
+
+    def test_a_ledger_that_cannot_be_read_lets_no_call_out(self):
+        led = ledger.Ledger.create(self.path, 1.0)
+        with open(self.path, "w") as f:
+            f.write("{not json")
+        with self.assertRaises(ledger.Unavailable):
+            led.reserve(0.1)
+        self.assertTrue(led.closed())
+        self.assertTrue(ledger.Ledger(os.path.join(self.tmp, "none.json")).closed())
+
+    def test_many_calls_at_once_never_book_past_the_cap(self):
+        led = ledger.Ledger.create(self.path, 1.0)
+        got = []
+
+        def ask():
+            got.append(led.reserve(0.03)[0])
+
+        threads = [threading.Thread(target=ask) for _ in range(60)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(sum(1 for b in got if b), 33)           # 33 x 0.03 fit in 1.00, the 34th does not
+        self.assertLessEqual(led.state()["held_usd"], 1.0)
+
+    def test_relays_in_other_processes_book_in_the_same_ledger(self):
+        """What a docker unit's relay does from its container: each process
+        books and settles; none of it is lost between them."""
+        led = ledger.Ledger.create(self.path, 100.0)
+        app = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        code = ("import sys\nfrom nullius.standard import ledger\nled = ledger.Ledger(sys.argv[1])\n"
+                "for _ in range(40):\n    b, _ = led.reserve(0.5)\n    led.settle(b, 0.01)\n")
+        procs = [subprocess.Popen([sys.executable, "-c", code, self.path], env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": app})
+                 for _ in range(4)]
+        self.assertEqual([p.wait(timeout=60) for p in procs], [0, 0, 0, 0])
+        got = led.state()
+        self.assertAlmostEqual(got["spent_usd"], 4 * 40 * 0.01)
+        self.assertEqual((got["held_usd"], got["closed"]), (0, False))
+        with open(self.path) as f:
+            self.assertEqual(json.load(f)["held"], {})
+
+
+class BoundTest(unittest.TestCase):
+    def bound(self, req, row=ROW, path="/chat/completions"):
+        return ledger.bound(req, json.dumps(req).encode(), row, path)
+
+    def test_the_limit_the_call_names_is_its_output(self):
+        req = {"model": "m", "messages": [{"role": "user", "content": "x" * 300}], "max_tokens": 100}
+        tokens = -(-len(json.dumps(req)) // 3)   # its characters over three, rounded up
+        self.assertAlmostEqual(self.bound(req), (tokens * 1.0 + 100 * 10.0) / 1e6)
+        for name in ("max_completion_tokens", "max_output_tokens"):
+            other = {"model": "m", "input": "hi", name: 50}
+            self.assertAlmostEqual(self.bound(other), (-(-len(json.dumps(other)) // 3) * 1.0 + 50 * 10.0) / 1e6)
+
+    def test_a_call_that_names_none_is_booked_the_models_own_limit_else_the_default(self):
+        req = {"model": "m", "messages": []}
+        tokens = -(-len(json.dumps(req)) // 3)
+        self.assertAlmostEqual(self.bound(req, dict(ROW, max_output=2000)), (tokens + 2000 * 10.0) / 1e6)
+        self.assertAlmostEqual(self.bound(req), (tokens + ledger.OUTPUT * 10.0) / 1e6)
+
+    def test_input_is_booked_at_the_dearer_of_input_and_cache_write(self):
+        req = {"model": "m", "messages": [], "max_tokens": 1}
+        tokens = -(-len(json.dumps(req)) // 3)
+        self.assertAlmostEqual(self.bound(req, dict(ROW, cache_write=1.25)), (tokens * 1.25 + 10.0) / 1e6)
+
+    def test_an_embeddings_call_has_no_output_and_an_encoded_file_is_not_a_prompt(self):
+        req = {"model": "e", "input": ["some text"]}
+        self.assertAlmostEqual(self.bound(req, {"input": 0.02, "output": 5.0}, "/embeddings"), -(-len(json.dumps(req)) // 3) * 0.02 / 1e6)
+        picture = "A" * 30000
+        plain = {"model": "m", "max_tokens": 1, "messages": [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": ""}}, {"type": "image", "source": {"type": "base64", "data": ""}}]}]}
+        with_files = json.loads(json.dumps(plain))
+        with_files["messages"][0]["content"][0]["image_url"]["url"] = "data:image/png;base64," + picture
+        with_files["messages"][0]["content"][1]["source"]["data"] = picture
+        self.assertAlmostEqual(self.bound(with_files), self.bound(plain))
+
+
+if __name__ == "__main__":
+    unittest.main()

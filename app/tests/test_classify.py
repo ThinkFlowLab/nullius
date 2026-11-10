@@ -92,6 +92,13 @@ class LiveBoardAgrees(unittest.TestCase):
                 with self.subTest(name, board=board):
                     self.assertIn(outcome(name), ("agent_error", "timeout"))
 
+    def test_a_unit_the_runs_spending_cap_cut_off_is_infrastructure_on_both(self):
+        """The standard's own: its relay refused the call (``standard.ledger``), so the unit had no attempt."""
+        from nullius.standard import job, ledger
+        self.assertEqual(C.from_verdict(ledger.ERROR, None), C.API_ERROR)
+        self.assertIn(C.API_ERROR, C.INFRA_OUTCOMES)
+        self.assertEqual(job.feed_outcome("pass", None, (ledger.ERROR, "the run's spending cap"))["outcome"], "infra_error")
+
 
 class HarborTaxonomy(unittest.TestCase):
     def test_provider_failures_are_infra(self):

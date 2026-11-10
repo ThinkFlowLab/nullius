@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 from nullius.runs import classify, parse
-from nullius.standard import acp, container, definitions, install, run
+from nullius.standard import acp, container, definitions, install, ledger, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 # A conversation whose user a model plays: it opens, speaks once more, then is done.
@@ -291,6 +291,63 @@ class RunTest(unittest.TestCase):
                          {"from": "https://example.invalid/list.json", "on": "2026-11-10", "models": {"m-1": {**listed, "source": "list"}}})
         # the user's own row over the list's: the list did not say this price, so it is not named
         self.assertEqual(recorded({"models": {"m-1": listed}, "own": {"m-1": own}}), {"models": {"m-1": {**own, "source": "own"}}})
+
+    def calling(self, **kw):
+        """Eight units, each one model call (11 tokens in, 3 out), one at a
+        time. Input is free here and the model's own output limit is 100
+        tokens at 10 USD a million, so a call is booked 0.001 and costs 0.00003."""
+        here = os.path.join(self.tmp, "calling")
+        os.makedirs(here, exist_ok=True)
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(CALLING_DRIVER)
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), _here=here, driver={"command": ["python3", "{here}/driver.py"]})
+        said = []
+        kw = {"prices": {"m-1": {"input": 0.0, "output": 10.0, "max_output": 100}}, **kw}
+        job_dir, failed = run.run_and_report(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                                             concurrency=1, env=self.env, say=said.append, unsandboxed=True, proving=True, **kw)
+        with open(os.path.join(job_dir, "result.json")) as f:
+            return job_dir, failed, json.load(f), said
+
+    def test_a_spending_cap_stops_the_run_and_its_result_says_where(self):
+        # 0.001 booked a call, 0.00003 spent by each: the fourth no longer fits 0.00107
+        job_dir, failed, result, said = self.calling(max_usd=0.00107)
+        self.assertEqual(result["budget"], {"max_usd": 0.00107, "spent_usd": 0.00009, "stopped": True,
+                                            "cut_off": ["m3"], "not_run": ["m4", "m5", "m6", "m7"]})
+        self.assertEqual((result["n_total_trials"], result["stats"]["n_cancelled_trials"], result["stats"]["n_errored_trials"]), (8, 4, 1))
+        self.assertFalse(failed)                                             # three units reached a verdict
+        got, _ = self.outcomes(job_dir)
+        self.assertEqual(sorted(got), ["m0", "m1", "m2", "m3"])              # the four never begun have no trial
+        self.assertEqual(got["m3"].exception_type, ledger.ERROR)
+        self.assertEqual(got["m3"].outcome, classify.API_ERROR)              # infrastructure: never a miss
+        self.assertTrue(all(got[u].outcome == classify.RESOLVED for u in ("m0", "m1", "m2")))
+        calls = self.relay_calls(job_dir)
+        self.assertEqual([c.get("refused") for c in calls].count("cap"), 1)
+        sent = [c for c in calls if not c.get("refused")]
+        self.assertEqual(len(sent), 3)                                       # no call went out past the cap
+        self.assertTrue(all(abs(c["booked_usd"] - 0.001) < 1e-12 for c in sent))
+        self.assertLessEqual(sum(c["cost_usd"] for c in sent), 0.00107)
+        self.assertTrue(any(s.startswith("stopped: a call did not fit the spending cap of 0.0011 USD (0.0001 spent): 1 cut off, 4 not run")
+                            for s in said), said)
+        self.assert_no_key(job_dir)
+
+    def test_a_spending_cap_the_run_stays_under_changes_nothing_but_the_result(self):
+        job_dir, failed, result, said = self.calling(max_usd=1.0)
+        self.assertEqual(result["budget"], {"max_usd": 1.0, "spent_usd": 0.00024, "stopped": False, "cut_off": [], "not_run": []})
+        self.assertEqual(len(self.outcomes(job_dir)[0]), 8)
+        self.assertIn("spent 0.0002 of the 1.00 USD cap", said)
+        job_dir, _, result, _ = self.calling(name="uncapped")
+        self.assertNotIn("budget", result)
+        self.assertFalse(os.path.exists(os.path.join(job_dir, ".work", "ledger")))
+        self.assertFalse(any("booked_usd" in c for c in self.relay_calls(job_dir)))
+
+    def test_a_spending_cap_is_refused_without_a_price_for_each_model_or_an_amount(self):
+        with self.assertRaises(run.Refused) as e:
+            self.calling(max_usd=1.0, prices={"another": {"input": 1.0, "output": 1.0}})
+        self.assertIn("there is none for m-1", str(e.exception))
+        for bad in (0, -1, float("inf"), float("nan"), "much"):
+            with self.assertRaises(run.Refused, msg=bad):
+                self.calling(max_usd=bad)
+        self.assertEqual([n for n in os.listdir(self.tmp) if "fakebench" in n], [])       # nothing was begun
 
     def test_a_run_with_no_price_has_no_cost_and_says_nothing_of_prices(self):
         job_dir = self.go("fakebench", "fake")
