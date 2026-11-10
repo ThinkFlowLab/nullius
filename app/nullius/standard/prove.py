@@ -75,7 +75,7 @@ class _Driver:
         os.makedirs(home, exist_ok=True)
         cmd, extra = install.driver_argv(self.bench)
         env = run.base_env(home, {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
-                                  "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": run.APP, "PYTHONDONTWRITEBYTECODE": "1",
+                                  "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": run.driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                                   "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
                                   **run.option_env(definitions.bench_options_of(self.bench, self.ds["id"])[0])})   # the options at their defaults
         return jsonl.Proc(cmd, self.bench["_here"], env, os.path.join(self.work, f"driver-{n}.log")).start()
