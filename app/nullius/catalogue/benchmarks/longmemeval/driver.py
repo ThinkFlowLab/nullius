@@ -16,7 +16,8 @@ Both paths use the run's relay routes for reader and judge model calls.
 The oracle control supplies the dataset's answer, including its explanation
 for abstention questions.
 
-Questions retain dataset order and question_id. Large datasets are streamed
+Questions retain dataset order and question_id; the question_type option
+keeps one type's questions, abstention ones included. Large datasets are streamed
 once into a line-per-question index so workers need not load the whole file.
 """
 import ast
@@ -72,6 +73,7 @@ def gen_length():
 READER = reader_template()
 GEN_LENGTH = gen_length()
 INDEX = {}
+TYPES = {}                                          # question_id -> question_type, read with the index
 
 
 def entries(path, size=1 << 20):
@@ -122,7 +124,9 @@ def index():
         with open(lines_path(), "rb") as f:
             at = 0
             for line in f:
-                INDEX[json.loads(line)["question_id"]] = at
+                q = json.loads(line)
+                INDEX[q["question_id"]] = at
+                TYPES[q["question_id"]] = q.get("question_type")
                 at += len(line)
     return INDEX
 
@@ -134,7 +138,10 @@ def entry(qid):
 
 
 def units(dataset, setup=None):
-    return {"units": list(index())}                 # a setup's unit is a question too, as run_generation reads them
+    # a setup's unit is a question too, as run_generation reads them; one type keeps its abstention
+    # questions too (their question_type is the type's), in dataset order, before any --limit
+    kind = os.environ.get("NULLIUS_OPTION_QUESTION_TYPE", "all")
+    return {"units": [q for q in index() if kind == "all" or TYPES[q] == kind]}
 
 
 def setup(unit, dir):
