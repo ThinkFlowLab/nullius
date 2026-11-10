@@ -42,9 +42,10 @@
 
   const update = $('[data-prices-update]');
   if (update) update.addEventListener('click', async () => {
-    update.disabled = true; update.textContent = 'Updating…';
+    const label = update.querySelector('span');
+    update.disabled = true; update.classList.add('busy'); label.textContent = 'Updating…';
     const got = await post(section.dataset.update, {});
-    update.disabled = false; update.textContent = 'Update';
+    update.disabled = false; update.classList.remove('busy'); label.textContent = 'Update';
     tell(got.ok ? `${got.n.toLocaleString('en-US')} models priced` : got.error, !got.ok);
     if (got.ok) show(got);
   });
