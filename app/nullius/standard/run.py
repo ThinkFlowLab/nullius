@@ -47,6 +47,7 @@ The job's config records both, and the backend.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -61,7 +62,7 @@ import tempfile
 from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, List, Optional
 
-from nullius import progress, providers
+from nullius import paths, progress, providers
 from nullius.redact import redact
 from nullius.harbor import feed as live_feed
 from nullius.standard import acp, container, definitions, hostreq, install, job, jsonl, match, mcp_machine, relay, shard as shards
@@ -72,7 +73,24 @@ FEED_TOTALS = ("n_input_tokens", "n_cache_tokens", "n_output_tokens", "cost_usd"
 # The variables of this machine's environment a run's processes keep: where
 # programs are, the locale, the temporary folder. Not a key among them.
 KEEP = ("PATH", "LANG", "LC_ALL", "TMPDIR", "TERM", "NVM_DIR", "NODE_PATH", "SSL_CERT_FILE", "SSL_CERT_DIR")
-APP = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))      # app/: what a kit's driver imports
+APP = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))      # the folder holding the nullius package
+
+
+def driver_path() -> str:
+    """A driver's ``PYTHONPATH``: a folder whose one entry links to the ``nullius`` package, for the
+    kits' drivers that import it. Not ``APP``: installed from a wheel, that is the tool's whole
+    site-packages, and every package there would come before the driver's own environment's."""
+    pkg = os.path.join(APP, "nullius")
+    root = os.path.join(paths.cache_dir(), "driver-path", hashlib.sha256(pkg.encode()).hexdigest()[:16])
+    link = os.path.join(root, "nullius")
+    if os.path.realpath(link) != os.path.realpath(pkg):
+        os.makedirs(root, exist_ok=True)
+        # written whole beside the folder, then renamed in: drivers start in parallel, and the folder
+        # on their PYTHONPATH never holds anything but the link
+        part = f"{root}.{os.getpid()}.{threading.get_ident()}.part"
+        os.symlink(pkg, part)
+        os.replace(part, link)
+    return root
 
 PROVIDERS = {
     "openai": {"base": "https://api.openai.com/v1", "key": "OPENAI_API_KEY"},
@@ -447,7 +465,7 @@ class Run:
                 raise Refused(f"could not install the driver's environment: {e}")
             env = base_env(os.path.join(self.job_dir, ".work", "driver-home"),
                            {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
-                            "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": APP, "PYTHONDONTWRITEBYTECODE": "1",
+                            "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                             "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
                             **({container.CHECK_IMAGE: self.image,
                                 **{k: os.environ[k] for k in container.CLIENT_KEEP if k.startswith("DOCKER") and k in os.environ}}
