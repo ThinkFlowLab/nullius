@@ -48,7 +48,7 @@ class CappedJobPage(unittest.TestCase):
         capped_job(tmp / "jobs", "stopped", 6, 10, cut=("t-5",),
                    budget={"max_usd": 0.5, "spent_usd": 0.41, "unsettled_usd": 0.03, "stopped": True, "cut_off": ["t-5"],
                            "not_run": ["t-6", "t-7", "t-8", "t-9"]})
-        capped_job(tmp / "jobs", "within", 4, 4, budget={"max_usd": 2.0, "spent_usd": 0.004, "stopped": False, "cut_off": [], "not_run": []})
+        capped_job(tmp / "jobs", "within", 4, 4, budget={"max_usd": 0.395, "spent_usd": 0.004, "stopped": False, "cut_off": [], "not_run": []})
         capped_job(tmp / "jobs", "uncapped", 4, 4)
         cls.stack = ExitStack()
         cls.stack.enter_context(patch.object(web.shared, "WS_HOME", str(tmp / "ws")))
@@ -89,7 +89,7 @@ class CappedJobPage(unittest.TestCase):
 
     def test_a_run_within_its_cap_says_the_cap_and_no_more_and_one_without_says_nothing(self):
         html = self.page("within")
-        self.assertEqual(self.text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $2.00")
+        self.assertEqual(self.text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $0.395")       # as it was given, not rounded to $0.40
         for absent in ('id="cap-stopped"', "cap-units", "not run</summary>", "oc-spending_cap"):
             self.assertNotIn(absent, html)
         plain = self.page("uncapped")
