@@ -118,6 +118,25 @@
     "turn_seconds": 900
   },
   "options": {
+    "question_type": {
+      "label": "Question type",
+      "summary": "Which memory ability the run measures: every question, or only the questions of one type.",
+      "values": [
+        "all",
+        "knowledge-update",
+        "temporal-reasoning",
+        "multi-session",
+        "single-session-user",
+        "single-session-assistant",
+        "single-session-preference"
+      ],
+      "default": "all",
+      "setups": [
+        "original",
+        "model",
+        "yours"
+      ]
+    },
     "reading": {
       "summary": "Whether the model answers from recalled memory directly or first identifies relevant facts and reasons through them.",
       "values": [

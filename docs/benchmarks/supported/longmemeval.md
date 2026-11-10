@@ -34,7 +34,7 @@ Long-term chat memory: questions over timestamped chat histories.
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `longmemeval` | Original · Original memory · Like the paper or Any of your choice | `history_format`, `merge_key_expansion`, `reading`, `retriever`, `separate_notes`, `topk`, `useronly` |
+| `longmemeval` | Original · Original memory · Like the paper or Any of your choice | `history_format`, `merge_key_expansion`, `question_type`, `reading`, `retriever`, `separate_notes`, `topk`, `useronly` |
 
 ## Options
 
@@ -42,6 +42,7 @@ Long-term chat memory: questions over timestamped chat histories.
 |---|---|---|---|
 | `history_format` | **`json`**, `nl` | Whether conversation history is shown to the model as JSON or as lines of text labelled by speaker. | `original`, `model` |
 | `merge_key_expansion` | **`none`**, `merge`, `replace` | Whether retrieved conversations are shown in full, replaced by their user text, or combined with that text. | `original`, `model` |
+| `question_type` | **`all`**, `knowledge-update`, `temporal-reasoning`, `multi-session`, `single-session-user`, `single-session-assistant`, `single-session-preference` | Which memory ability the run measures: every question, or only the questions of one type. | `original`, `model`, `yours` |
 | `reading` | **`con`**, `direct` | Whether the model answers from recalled memory directly or first identifies relevant facts and reasons through them. | `original`, `model`, `yours` |
 | `retriever` | **`full-history-session`**, `full-history-turn`, `no-retrieval`, `flat-bm25-session`, `flat-bm25-turn`, `flat-contriever-session`, `flat-contriever-turn`, `flat-stella-session`, `flat-stella-turn` | Whether the model receives the full conversation history, no history, or sessions or turns selected by a retrieval method. | `original`, `model` |
 | `separate_notes` | **`false`**, `true` | Write a separate note for each retrieved session or turn before reasoning. Original memory only. | `original`, `model` |
