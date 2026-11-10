@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
-from nullius import execution, hosts, paths, sandbox, settings
+from nullius import execution, hosts, paths, prices, sandbox, settings
 from nullius.standard import container
 from nullius.judge import client
 
@@ -30,9 +30,11 @@ def settings_page():
                            env_file=shared.ENV_FILE,
                            storage_paths=[("Settings", shared.ENV_FILE), ("User catalogue", paths.catalogue_dir()),
                                           ("Workspaces", paths.workspaces_dir()), ("Runs", paths.runs_dir()),
-                                          ("Benchmark licences", paths.secrets_dir()), ("Cache", paths.cache_dir())],
+                                          ("Benchmark licences", paths.secrets_dir()), ("Model prices", paths.prices_file()),
+                                          ("Cache", paths.cache_dir())],
                            unread=[dict(u, inherited=u["name"] not in withheld, startup=u["instead"] in settings.STARTUP)
                                    for u in settings.unread(shared.ENV_FILE)],
+                           prices=prices.state(),
                            ssh_hosts=hosts.scan_ssh_config(), judges=(client.system_one(os.environ), client.llm_judge(os.environ)), llm_providers=client.LLM_PROVIDERS, s1_providers=client.SYSTEM_ONE_PROVIDERS, agent_keys=settings.agent_key_names())
 
 
@@ -148,6 +150,38 @@ def settings_sandbox_remove():
     except container.Unavailable as e:
         return jsonify(ok=False, error=str(e)), 502
     return jsonify(got), (200 if got["ok"] else 409)
+
+
+@app.route("/settings/prices/update", methods=["POST"])
+def settings_prices_update():
+    """The public price list fetched and kept (``nullius.prices``): the one
+    fetch, asked for here and never by a run. Same guards as Save."""
+    _sandbox_guard("Prices are updated")
+    try:
+        prices.update()
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 502
+    return jsonify(ok=True, **prices.state())
+
+
+@app.route("/settings/prices/set", methods=["POST"])
+def settings_prices_set():
+    """A price of the user's own for one model, over the list."""
+    _sandbox_guard("Prices are set")
+    f = request.form
+    try:
+        prices.set_own(f.get("model", ""), prices.row(f.get("input") or None, f.get("output") or None, f.get("cached") or None))
+    except (ValueError, TypeError) as e:
+        return jsonify(ok=False, error=str(e)), 400
+    return jsonify(ok=True, **prices.state())
+
+
+@app.route("/settings/prices/remove", methods=["POST"])
+def settings_prices_remove():
+    _sandbox_guard("Prices are removed")
+    if not prices.remove_own(request.form.get("model", "")):
+        return jsonify(ok=False, error="not one of your own prices"), 404
+    return jsonify(ok=True, **prices.state())
 
 
 def _settings_return():

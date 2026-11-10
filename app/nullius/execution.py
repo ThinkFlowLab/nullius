@@ -120,7 +120,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
-from nullius import hosts, paths, progress, redact, secrets, settings
+from nullius import hosts, paths, prices as price_list, progress, redact, secrets, settings
 from nullius.harbor import source as harbor_source
 from nullius.standard import payload as standard_payload
 
@@ -1450,6 +1450,16 @@ class Execution:
         if rc != 0:
             self._fail("run", f"the script did not land on {where}: " + out.strip()[-400:])
             return False
+        prices_on_target = ""
+        if self.plan.runner == STANDARD and self.on_host:
+            # the price list is this machine's user's: a host holds none, so the run takes it along (nullius.prices)
+            doc = price_list.load()
+            if doc["models"] or doc["own"]:
+                prices_on_target = run_dir + "/prices.json"
+                rc, out = self._sh(f"cat > {self._q(prices_on_target)}", 60, stdin=json.dumps(doc) + "\n")
+                if rc != 0:
+                    self._fail("run", f"the price list did not land on {where}: " + out.strip()[-400:])
+                    return False
         exports = " ".join(f"{k}={self._q(v) if v.startswith('~') else shlex.quote(v)}" for k, v in
                            [("NULLIUS_HARBOR", self.harbor), ("NULLIUS_TASKS", self.tasks_on_target), ("NULLIUS_JOBS", run_dir + "/jobs"),
                             ("NULLIUS_PROGRESS", "1")]
@@ -1457,6 +1467,7 @@ class Execution:
                               if self.plan.runner == STANDARD else [])
                            + ([("NULLIUS_CATALOGUE", self.catalogue_on_target)]
                               if self.plan.runner == STANDARD and self.catalogue_on_target else [])
+                           + ([("NULLIUS_PRICES", prices_on_target)] if prices_on_target else [])
                            + ([("NULLIUS_PYTHON", sys.executable)] if self.plan.runner == STANDARD and not self.on_host else [])
                            + ([("NULLIUS_LICENCE_DIR", self._licence_dir())] if self._licence_dir() else [])
                            + ([("API_MODEL_NAME", self.plan.model)] if self.plan.model else []))

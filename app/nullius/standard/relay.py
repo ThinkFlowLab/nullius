@@ -11,8 +11,8 @@ byte for byte - and recorded once it is complete, one line per call in
 the tokens, and an abridged request and reply. Three API shapes are read,
 Chat Completions, Responses and Anthropic's Messages, streamed or not. The
 cost is the provider's when it says it (OpenRouter's ``usage.cost``), else an
-estimate from ``prices`` when one is given for the model, marked as an
-estimate.
+estimate from ``prices`` when one is given for exactly that model (the
+user's price list, ``nullius.prices``), marked as an estimate.
 
 What the relay changes on the way is kept small, so a call through it costs
 what the same call made directly would: the connection to the provider is
@@ -380,7 +380,7 @@ class Relay:
             return None, None
         if "cost" in usage:
             return usage["cost"], "provider"
-        p = self.prices.get(model) or next((v for k, v in self.prices.items() if model and model.startswith(k)), None)
+        p = self.prices.get(model)                # exactly this model: one whose name only starts the same is another
         if not p:
             return None, None
         fresh = max(0, usage["input"] - usage["cached"])

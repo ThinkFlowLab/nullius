@@ -93,6 +93,15 @@ class RelayTest(unittest.TestCase):
         self.assertAlmostEqual(rec["cost_usd"], (6 * 1.0 + 4 * 0.1 + 2 * 10.0) / 1e6)
         self.assertEqual(rec["cost_from"], "estimate")
 
+    def test_a_model_is_priced_by_exactly_its_name(self):
+        """``m`` has a price; a model whose name only starts with it is another model, and has no cost."""
+        status, _ = self.post("u1x", "/chat/completions", {"model": "m-large", "messages": [{"role": "user", "content": "hi"}]})
+        self.assertEqual(status, 200)
+        rec = self.relay.calls("u1x")[-1]
+        self.assertEqual(rec["model"], "m-large")
+        self.assertNotIn("cost_usd", rec)
+        self.assertNotIn("cost_from", rec)
+
     def test_streamed_chat_is_passed_byte_for_byte_and_read_whole(self):
         status, body = self.post("u2", "/chat/completions", {"model": "m", "stream": True, "messages": []})
         self.assertEqual(body, CHAT_SSE)

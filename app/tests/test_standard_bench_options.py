@@ -98,7 +98,6 @@ class Relay(unittest.TestCase):
         got = relay.read_reply("/embeddings", body, False)
         self.assertEqual((got["embeddings"], got["usage"]["input"]), (3, 1000))
         self.assertNotIn("0.1", json.dumps(got))
-        self.assertIn("text-embedding-3-large", run.PRICES)
 
 
 class Refused(unittest.TestCase):

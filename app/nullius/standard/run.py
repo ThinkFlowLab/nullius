@@ -61,7 +61,7 @@ import tempfile
 from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, List, Optional
 
-from nullius import progress, providers
+from nullius import prices as price_list, progress, providers
 from nullius.redact import redact
 from nullius.harbor import feed as live_feed
 from nullius.standard import acp, container, definitions, hostreq, install, job, jsonl, match, mcp_machine, relay, shard as shards
@@ -79,24 +79,6 @@ PROVIDERS = {
     "openrouter": {"base": "https://openrouter.ai/api/v1", "key": "OPENROUTER_API_KEY"},
     "anthropic": {"base": "https://api.anthropic.com/v1", "key": "ANTHROPIC_API_KEY", "key_header": "x-api-key"},
     "custom": {"base_var": "MODEL_API_URL", "key": "MODEL_API_KEY"},
-}
-# List prices in USD per million tokens, for an estimate of what a call cost
-# when the provider does not say (OpenAI does not; OpenRouter does). A model
-# not here has no cost estimate rather than a wrong one.
-PRICES = {
-    "gpt-5-mini": {"input": 0.25, "cached": 0.025, "output": 2.0},
-    "gpt-5-nano": {"input": 0.05, "cached": 0.005, "output": 0.4},
-    "gpt-4.1-mini": {"input": 0.4, "cached": 0.1, "output": 1.6},
-    "gpt-4.1": {"input": 2.0, "cached": 0.5, "output": 8.0},
-    "gpt-4o-mini": {"input": 0.15, "cached": 0.075, "output": 0.6},
-    "gpt-4o-mini-2024-07-18": {"input": 0.15, "cached": 0.075, "output": 0.6},
-    "gpt-4o": {"input": 2.5, "cached": 1.25, "output": 10.0},
-    "gpt-4o-2024-08-06": {"input": 2.5, "cached": 1.25, "output": 10.0},
-    "gpt-4-turbo": {"input": 10.0, "cached": 10.0, "output": 30.0},             # a paper's reader (a setup's original)
-    "gpt-3.5-turbo": {"input": 0.5, "cached": 0.5, "output": 1.5},
-    "text-embedding-3-large": {"input": 0.13, "cached": 0.13, "output": 0.0},     # a search option's embeddings (tau3-bench)
-    "text-embedding-3-small": {"input": 0.02, "cached": 0.02, "output": 0.0},     # a capability's own embedder (Mem0)
-    "text-embedding-ada-002": {"input": 0.1, "cached": 0.1, "output": 0.0},
 }
 TURN_SECONDS = 900
 DRIVER_SECONDS = 600                  # a driver's setup, oracle and score requests, each
@@ -308,7 +290,7 @@ class Run:
                  backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None,
                  launch: Optional[str] = None, repeat: int = 1, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
-                 remove_images: bool = False):
+                 remove_images: bool = False, prices: Optional[dict] = None):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: the caller's explicit yes to running an agent on the
@@ -326,6 +308,8 @@ class Run:
         ``u0042r2``; once by default, tagged ``u0042`` as always.
         ``simulator_model``: a benchmark whose user a model plays
         (``simulator``): this model instead of its official one.
+        ``prices``: this run's own prices, by model, over the user's list
+        (``nullius.prices``): what a call's cost is estimated from.
         ``licences``: what the run holds of the benchmark's licences
         (:class:`Licences`); by default its store on this machine.
         ``bench_options``: the benchmark's own options for this run
@@ -396,6 +380,9 @@ class Run:
             raise Refused("; ".join(bad))
         needs = definitions.option_needs(bench, self.bench_options)
         self.embed_model = needs["embeddings"][0] if needs["embeddings"] else None
+        # What a call's cost is estimated from when the provider does not say it: the user's price list
+        # (nullius.prices), this run's own prices over it. Read once, here: a run never fetches a price.
+        self.prices = {**price_list.table(), **(prices or {})}
         lacking = hostreq.missing(bench, needs["host"], which)
         if lacking:
             raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
@@ -493,7 +480,7 @@ class Run:
                          granted=self.other["_kind"] == "agent", judge=self.judge_model or "", backend=self.backend,
                          image=self.image, options=self.options, launch=self.launch or "", bench_options=self.bench_options,
                          shard=shards.record(*self.shard, len(everything), units, self.limit) if self.shard else None,
-                         repeat=self.repeat,
+                         repeat=self.repeat, prices=self.prices_record(),
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
         # every unit once, then every unit again: a repeat cut short still has each unit's first run
         work = [(i, u, r) for r in range(1, self.repeat + 1) for i, u in mine]
@@ -620,7 +607,7 @@ class Run:
         # own, recorded in the job's .work/relay-benchmark beside the units', never counted as the agent's.
         if self.embed_model and self.bench_relay is None:
             self.bench_relay = relay.Relay(self.base, self.key, os.path.join(self.job_dir, ".work", "relay-benchmark"),
-                                           prices=PRICES, model=self.embed_model,
+                                           prices=self.prices, model=self.embed_model,
                                            key_header=PROVIDERS[self.provider].get("key_header", "authorization")).start()
 
     def runtimes_needed(self) -> List[str]:
@@ -878,6 +865,24 @@ class Run:
                 out.append(h["value"])
         return out
 
+    def prices_record(self) -> Optional[dict]:
+        """What the job's config keeps of its prices: the rows of the models
+        it calls, and where the user's list came from. None when it has none."""
+        rows = price_list.given(self.models_called(), self.prices)
+        if not rows:
+            return None
+        doc = price_list.load()
+        return {**({"from": doc["from"], "on": doc["on"]} if doc["from"] else {}), "models": rows}
+
+    def models_called(self) -> List[str]:
+        """Every model this run's relays may send a call to, as sent: the
+        run's, the judge's, the simulator's, an option's embeddings and the
+        agent's side models. Any other name a caller asks for is replaced by
+        the run's (``relay``), so these are all a run can be priced for."""
+        side = [(b or a) for a, _, b in (str(m).partition("=") for m in (self.other.get("model") or {}).get("side_models") or ())]
+        mine = [getattr(self, n, None) for n in ("model", "judge_model", "simulator_model", "embed_model")]
+        return [m for m in dict.fromkeys([*mine, *side]) if m]
+
     def unit_relay(self, tag: str, trial: str, setup: dict, env_def: Optional[dict] = None, own: bool = False):
         """The unit's own relay, started: in this process on the local
         backend, a sidecar container on docker. Either answers ``url`` (the
@@ -891,7 +896,7 @@ class Run:
         side = tuple((self.other.get("model") or {}).get("side_models") or ())
         key_header = PROVIDERS[self.provider].get("key_header", "authorization")
         if self.backend == "local":
-            rl = relay.Relay(self.base, self.key, record, prices=PRICES, model=self.model, side_models=side,
+            rl = relay.Relay(self.base, self.key, record, prices=getattr(self, "prices", None), model=self.model, side_models=side,
                              key_header=key_header).start()
             rl.unit_url = rl.url(tag)
             return rl
@@ -910,7 +915,8 @@ class Run:
                 raise _Ended("EnvironmentSetupError", f"the unit's setup: {e}")
         door = getattr(self, "loopback", None)
         rl = container.Unit(self.name, tag, record, image=self.image, app=APP, base=door.base if door else self.base, key=self.key,
-                            model=self.model, routes=routes, prices=PRICES, side_models=side, key_header=key_header,
+                            model=self.model, routes=routes, side_models=side, key_header=key_header,
+                            prices=price_list.given(self.models_called(), getattr(self, "prices", None)),   # a sidecar's argv: its models' rows
                             servers=self.agent_servers(env_def), doors=doors, hosts=door.hosts if door else None)
         rl.mcp_listeners = listeners
         try:

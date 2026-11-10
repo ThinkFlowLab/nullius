@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 from unittest.mock import patch
 
-from nullius import execution, hosts, settings
+from nullius import execution, hosts, prices as price_list, settings
 from nullius.harbor import source
 from nullius import providers
 
@@ -724,6 +724,20 @@ class StandardOnHost(HostBase):
                          f"~/.nullius/app/{self.COMMIT}")
         self.assertEqual(json.loads((self.tmp / "runs" / "std-shard-2of2" / "run.json").read_text())["catalogue_on_target"],
                          "~/.nullius/runs/std-shard-2of2/catalogue")
+
+    def test_the_price_list_goes_with_the_run_and_a_host_without_one_is_told_nothing(self):
+        ex = self.run_it()
+        launch = next(c for c, _ in self.calls if c[0] == "ssh" and "setsid nohup" in c[-1])
+        self.assertNotIn("NULLIUS_PRICES", launch[-1])                                # no list here: none sent
+        self.calls.clear(); self.polls = 0
+        price_list.set_own("gpt-5-mini", price_list.row(1, 2))
+        self.plan.name = "std-priced"
+        ex = self.run_it()
+        self.assertEqual((ex.state, ex.exit_code), ("done", 0), ex.lines)
+        sent = next(s for c, s in self.calls if c[0] == "ssh" and "cat > " in c[-1] and "/prices.json" in c[-1])
+        self.assertEqual(json.loads(sent)["own"], {"gpt-5-mini": {"input": 1.0, "output": 2.0}})
+        launch = next(c for c, _ in self.calls if c[0] == "ssh" and "setsid nohup" in c[-1])
+        self.assertIn('NULLIUS_PRICES="$HOME/.nullius/runs/std-priced/prices.json"', launch[-1])
 
     def test_what_it_does_is_said_in_stages_its_own_and_the_cli_s(self):
         """Getting the host ready is said stage by stage in the run's log, and

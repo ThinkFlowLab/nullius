@@ -20,6 +20,7 @@ COMMANDS = {
     "standard": "inspect and run standard definitions",
     "workspace": "manage workspaces",
     "paths": "show persistent storage locations",
+    "prices": "show and update model prices",
     "migrate": "copy legacy storage into the user profile",
 }
 MODULES = {
@@ -29,6 +30,7 @@ MODULES = {
     "standard": "nullius.standard.cli",
     "workspace": "nullius.workspace_cli",
     "paths": "nullius.paths",
+    "prices": "nullius.prices",
     "migrate": "nullius.migrate",
 }
 

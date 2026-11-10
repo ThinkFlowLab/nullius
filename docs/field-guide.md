@@ -163,7 +163,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `dur_other` | `dur_total` minus the phases: on Harbor, image pull, container start and teardown; on an imported script run, the wait for the judge; on a standard run, the unit's setup, the benchmark's driver and its scorer. | derived | any |
 | `n_input_tokens` | Prompt tokens for the trial. | measured | any |
 | `n_cache_tokens` | The cached part of the prompt tokens: a subset, never added to them. | measured | any |
-| `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from a price table. A benchmark option's embeddings (a search index its driver builds) are the run's, in `.work/relay-benchmark`, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
+| `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings (a search index its driver builds) are the run's, in `.work/relay-benchmark`, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
 | `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log reads *not recorded*, never 0. | inferred | any |
@@ -237,7 +237,7 @@ Eleven classes. The three marked **yes** under Infrastructure leave the adjusted
 
 ## Caveats {#caveats}
 
-- **Cost is an estimate, and only where one was recorded.** A Harbor agent prices its own usage; a standard run's relay keeps the provider's figure when the reply carries one and estimates otherwise. No bill is read. A trial without a cost shows —, and a run's total covers only the trials that have one.
+- **Cost is an estimate, and only where one was recorded.** A Harbor agent prices its own usage; a standard run's relay keeps the provider's figure when the reply carries one and otherwise estimates from the user's price list, when it prices that exact model. No bill is read. A trial without a cost shows —, and a run's total covers only the trials that have one.
 
 - **The infra/agent split is an explicit list.** Which exceptions leave the adjusted denominator and which count against the agent is pinned in `classify.py` and tested against Harbor's own classes; anything else is *Unknown*.
 

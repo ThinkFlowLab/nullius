@@ -46,6 +46,11 @@ def settings_file(env=None) -> str:
     return os.path.join(config_dir(env), "settings.json")
 
 
+def prices_file(env=None) -> str:
+    env = os.environ if env is None else env
+    return env.get("NULLIUS_PRICES") or os.path.join(config_dir(env), "prices.json")
+
+
 def catalogue_dir(env=None) -> str:
     env = os.environ if env is None else env
     return env.get("NULLIUS_CATALOGUE") or os.path.join(data_dir(env), "catalogue")
@@ -70,7 +75,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Show Nullius's persistent user directories (no secret values).")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    values = {"settings": settings_file(), "secrets": secrets_dir(), "catalogue": catalogue_dir(),
+    values = {"settings": settings_file(), "secrets": secrets_dir(), "prices": prices_file(), "catalogue": catalogue_dir(),
               "workspaces": workspaces_dir(), "runs": runs_dir(), "cache": cache_dir()}
     if args.json:
         print(json.dumps(values, indent=2))

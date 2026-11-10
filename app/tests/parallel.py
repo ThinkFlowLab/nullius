@@ -80,7 +80,7 @@ def main(argv) -> int:
             if not docker:
                 os.environ.pop("NULLIUS_TEST_DOCKER", None)
             for name in ("NULLIUS_CATALOGUE", "WORKSPACES_DIR", "RUNS_DIR", "SECRETS_DIR",
-                         "STANDARD_DIR", "STANDARD_DATA_DIR", "HARBOR_PINS"):
+                         "STANDARD_DIR", "STANDARD_DATA_DIR", "HARBOR_PINS", "NULLIUS_PRICES"):
                 os.environ.pop(name, None)
             return _suite(argv)
 

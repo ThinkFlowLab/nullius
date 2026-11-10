@@ -5,6 +5,8 @@ a write takes — form token, same origin, a loopback client — and validation
 that refuses before anything is written."""
 from __future__ import annotations
 
+import html as html_text
+import json
 import os
 import re
 import shutil
@@ -14,7 +16,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-from nullius import hosts, sandbox, settings
+from nullius import hosts, prices, sandbox, settings
 from .test_routes import web
 
 
@@ -432,6 +434,39 @@ class SettingsPage(unittest.TestCase):
             self.assertEqual(self.client.post("/settings/sandbox/images/remove", data={"benchmark": ""}, headers=headers).status_code, 400)
             self.assertEqual(self.client.post("/settings/sandbox/images/remove", data={"benchmark": "swe"}, headers=headers,
                                               environ_base={"REMOTE_ADDR": "10.0.0.7"}).status_code, 403)
+
+
+    def test_the_price_list_is_updated_and_priced_only_from_this_machines_browser(self):
+        self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_PRICES": str(self.tmp / "prices.json")}))
+        page = self.page()
+        section = page[page.index('id="prices"'):page.index('id="general"')]
+        self.assertNotIn('name="value:', section)                                       # outside Save: nothing of it lands in the file
+        state = json.loads(html_text.unescape(re.search(r"data-state='([^']*)'", section).group(1)))
+        self.assertEqual(state, {"n": 0, "from": "", "on": "", "own": {}})               # nothing ships with Nullius
+        headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
+        listing = json.dumps({"model-a": {"input_cost_per_token": 2.5e-06, "output_cost_per_token": 1e-05}}).encode()
+        with patch.object(prices, "_fetch", lambda source: listing):
+            r = self.client.post("/settings/prices/update", headers=headers); self.addCleanup(r.close)
+        self.assertEqual((r.status_code, r.json["ok"], r.json["n"], r.json["from"]), (200, True, 1, prices.SOURCE))
+        self.assertEqual(prices.table(), {"model-a": {"input": 2.5, "output": 10.0}})
+        with patch.object(prices, "_fetch", lambda source: b"<html>not a list"):
+            r = self.client.post("/settings/prices/update", headers=headers); self.addCleanup(r.close)
+        self.assertEqual((r.status_code, r.json["ok"]), (502, False))
+        self.assertEqual(prices.state()["n"], 1)                                        # the list held stays
+        r = self.client.post("/settings/prices/set", data={"model": "model-a", "input": "1", "output": "2", "cached": ""}, headers=headers); self.addCleanup(r.close)
+        self.assertEqual(r.json["own"], {"model-a": {"input": 1.0, "output": 2.0}})
+        self.assertEqual(prices.table()["model-a"]["input"], 1.0)                       # the user's own, over the list
+        for bad in ({"model": "m", "input": "free", "output": "2"}, {"model": "m", "input": "1"}, {"model": "", "input": "1", "output": "2"}):
+            r = self.client.post("/settings/prices/set", data=bad, headers=headers); self.addCleanup(r.close)
+            self.assertEqual((r.status_code, r.json["ok"]), (400, False), bad)
+        r = self.client.post("/settings/prices/remove", data={"model": "model-a"}, headers=headers); self.addCleanup(r.close)
+        self.assertEqual(r.json["own"], {})
+        self.assertEqual(self.client.post("/settings/prices/remove", data={"model": "model-a"}, headers=headers).status_code, 404)
+        # the same guards as Save: token, origin, loopback
+        for route in ("update", "set", "remove"):
+            for kw in ({"headers": {"Origin": "http://localhost"}}, {"headers": headers, "environ_base": {"REMOTE_ADDR": "10.0.0.7"}}):
+                self.assertEqual(self.client.post(f"/settings/prices/{route}", data={"model": "x", "input": "1", "output": "2"}, **kw).status_code, 403)
+        self.assertIsNone(self.file())
 
 
 class StartUp(unittest.TestCase):
