@@ -210,7 +210,7 @@ overrides an explicit `DEBUG=1` environment setting.
 **CI** runs the experimental PR judge, backend and route suites, and a temporary
 wheel install/reinstall check on pull requests. `app/packaging/verify.py` checks
 runtime assets, one backend provider, installed commands and pages, and user
-storage preservation. The `tests` workflow also runs on pushes to `main` and by hand.
+storage preservation. The `tests` workflow also runs by hand.
 The manual `draft release` workflow (`.github/workflows/release.yml`) runs both
 suites and uses `app/packaging/release.py` to build and verify a release
 candidate's wheel and source archive, then attaches them and `SHA256SUMS` to a

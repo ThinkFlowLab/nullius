@@ -1,5 +1,5 @@
-# The application's two suites and installable package, on every PR and push
-# to main. There are no model calls or containers: the docker tier is the
+# The application's two suites and installable package, on every PR and by
+# hand. There are no model calls or containers: the docker tier is the
 # nightly docker-tests workflow. Hosted runner time uses
 # the account's Actions allowance. uv is a test tool; Flask is the app's
 # only Python dependency.
@@ -12,8 +12,6 @@ name: tests
 
 on:
   pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
