@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from nullius.standard import run
 
@@ -46,6 +47,25 @@ class DriverPath(unittest.TestCase):
 
     def test_it_is_made_once_and_kept(self):
         self.assertEqual(run.driver_path(), run.driver_path())
+
+    def test_while_it_is_made_the_folder_holds_only_the_link(self):
+        """A driver starting while another's link is being made sees only ``nullius``."""
+        with tempfile.TemporaryDirectory() as site:
+            os.symlink(os.path.join(run.APP, "nullius"), os.path.join(site, "nullius"))
+            seen, replace = [], os.replace
+
+            def watch(src, dst):
+                seen.append(sorted(os.listdir(os.path.dirname(dst))))
+                return replace(src, dst)
+
+            app, run.APP = run.APP, site
+            try:
+                with mock.patch.object(run.os, "replace", watch):
+                    path = run.driver_path()
+            finally:
+                run.APP = app
+            self.assertEqual(seen, [[]])
+            self.assertEqual(os.listdir(path), ["nullius"])
 
 
 if __name__ == "__main__":

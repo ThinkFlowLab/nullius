@@ -85,7 +85,9 @@ def driver_path() -> str:
     link = os.path.join(root, "nullius")
     if os.path.realpath(link) != os.path.realpath(pkg):
         os.makedirs(root, exist_ok=True)
-        part = f"{link}.{os.getpid()}.{threading.get_ident()}.part"        # written whole, then renamed: drivers start in parallel
+        # written whole beside the folder, then renamed in: drivers start in parallel, and the folder
+        # on their PYTHONPATH never holds anything but the link
+        part = f"{root}.{os.getpid()}.{threading.get_ident()}.part"
         os.symlink(pkg, part)
         os.replace(part, link)
     return root
