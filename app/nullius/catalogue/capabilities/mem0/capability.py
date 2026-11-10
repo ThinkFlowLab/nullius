@@ -12,11 +12,8 @@ Nothing of Mem0 is changed.
 
 ``add {session}``     - the session's turns as Mem0 messages (a role other than
                         user or assistant is a user turn naming its speaker),
-                        added for one user, the session's id and date as metadata;
-                        the date also as ``timestamp``, the key Mem0's open
-                        fix for its Observation Date reads (mem0ai/mem0#4963).
-                        Mem0 2.2.1 does not read it, so extraction anchors
-                        relative dates to the day of the run
+                        added for one user, the session's id and date as metadata,
+                        the date also as ``timestamp``
 ``recall {question}`` - ``{memory}``: what Mem0's search returns, best first,
                         each memory headed by its session's date
 
