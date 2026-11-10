@@ -128,6 +128,7 @@ class Merge(unittest.TestCase):
         want = {"max_usd": 1.5, "spent_usd": 0.71, "unsettled_usd": 0.03, "stopped": True, "cut_off": ["t-9"], "not_run": ["t-11", "t-12"]}
         self.assertEqual(read(os.path.join(got["out"], "result.json"))["budget"], want)
         self.assertEqual(parse.parse_job(got["out"]).budget, want)
+        self.assertGreaterEqual(int(parse.SCHEMA), 14)                                  # a job cached before the field is read again
         # a cap over part of a launch is not the launch's: nothing is claimed
         shutil.rmtree(dirs[2])
         dirs[2] = write_shard(self.tmp, "run-shard-3of3", self.split[3], 3, 3)
