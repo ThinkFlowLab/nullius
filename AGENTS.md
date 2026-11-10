@@ -338,7 +338,15 @@ catalogue, high the backend, extreme what runs and proves), **Components**,
 **Screenshot** when it is visible, **Reproduction** (the smallest steps or
 input that show it), **Expected**, **Acceptance** (one checkbox per
 criterion; the judge gives each its own row) and **Dependencies and
-related**. A pull request's body follows `.github/pull_request_template.md`:
+related**. A pull request's title is a conventional commit subject, since a
+squash merge makes it the commit on `main`: `type(scope): summary`, the
+summary lowercase (names keep their case) without a final period. The type is
+one of `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `ci`, `build`,
+`chore` or `revert`; the scope is the part it touches: `standard`,
+`catalogue`, `runs`, `traces`, `compare`, `judge`, `builder`, `web`,
+`execution`, `settings`, `docs`, `site`, `ci`, `release`. For example
+`fix(standard): give drivers only the nullius package on PYTHONPATH`.
+A pull request's body follows `.github/pull_request_template.md`:
 `Closes #n`, What, Touches, Before and after (two images when the change is
 visible), Verified, Risk. An assistant files either with the `/file-issue`
 skill (`.claude/skills/file-issue/SKILL.md`), which produces the same shape
