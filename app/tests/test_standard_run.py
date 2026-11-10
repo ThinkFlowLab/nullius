@@ -12,7 +12,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
-from nullius.runs import classify, parse
+from nullius.runs import classify, live, parse
 from nullius.standard import acp, container, definitions, install, ledger, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
@@ -328,6 +328,11 @@ class RunTest(unittest.TestCase):
         self.assertLessEqual(sum(c["cost_usd"] for c in sent), 0.00107)
         self.assertTrue(any(s.startswith("stopped: a call did not fit the spending cap of 0.0011 USD (0.0001 spent): 1 cut off, 4 not run")
                             for s in said), said)
+        # the live board is told the cap as the units start, and the unit it cut off ends there as budget
+        with open(os.path.join(job_dir, "events.jsonl")) as f:
+            board = live.fold([live.parse_line(line) for line in f if line.strip()])
+        self.assertEqual(board.budget, {"max_usd": 0.00107})
+        self.assertEqual({t.trial.split("__")[0]: t.outcome for t in board.trials if t.outcome}, {"m0": "resolved", "m1": "resolved", "m2": "resolved", "m3": "budget"})
         self.assert_no_key(job_dir)
 
     def test_a_spending_cap_the_run_stays_under_changes_nothing_but_the_result(self):

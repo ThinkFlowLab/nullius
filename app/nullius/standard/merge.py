@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from nullius.standard import job
 
@@ -154,6 +154,21 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
     return {"shards": shards, "by_unit": by_unit, "notes": notes, "missing": missing, "units_total": total, "differ": differ}
 
 
+def _budget(budgets: list) -> Optional[dict]:
+    """The shards' spending caps as one (``run.Run.budget``): the caps and what was spent added up, stopped
+    when any shard was, their units cut off and not run together. None unless every shard had a cap: a cap
+    over part of a launch is not the launch's."""
+    if not budgets or not all(isinstance(x, dict) and isinstance(x.get("max_usd"), (int, float)) for x in budgets):
+        return None
+    spent = [x.get("spent_usd") for x in budgets]
+    unsettled = round(sum(x.get("unsettled_usd") or 0 for x in budgets), 6)
+    return {"max_usd": round(sum(x["max_usd"] for x in budgets), 6),
+            "spent_usd": None if any(not isinstance(v, (int, float)) for v in spent) else round(sum(spent), 6),
+            **({"unsettled_usd": unsettled} if unsettled else {}), "stopped": any(x.get("stopped") for x in budgets),
+            "cut_off": [u for x in budgets for u in x.get("cut_off") or []],
+            "not_run": [u for x in budgets for u in x.get("not_run") or []]}
+
+
 def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
     """Merge the shard jobs ``job_dirs`` into the new job ``out``.
     {out, trials, merged_from, notes, missing}."""
@@ -183,6 +198,7 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
     errored = sum(1 for r in results if r.get("exception_info"))
     rewards = [(r.get("verifier_result") or {}).get("rewards") or {} for r in results]
     scores = [w["score"] for w in rewards if "score" in w]
+    budget = _budget([s["result"].get("budget") for s in shards])
     with open(os.path.join(out, "result.json"), "w", encoding="utf-8") as f:
         # ISO stamps in UTC sort as their instants
         json.dump({"id": name, "started_at": min(starts) if starts else None, "finished_at": max(ends) if ends else None,
@@ -190,7 +206,8 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
                    "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
                              "n_cancelled_trials": max(0, planned - len(results)), "n_running_trials": 0, "n_pending_trials": 0},
                    "standard": {"passed": sum(1 for w in rewards if w.get("reward") == 1.0),
-                                "scored": len(scores), "mean_score": job.mean_score(results)}}, f, indent=1)
+                                "scored": len(scores), "mean_score": job.mean_score(results)},
+                   **({"budget": budget} if budget else {})}, f, indent=1)
     cfg = json.loads(json.dumps(shards[0]["config"]))
     cfg["job_name"] = name
     std = cfg.setdefault("standard", {})

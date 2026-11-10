@@ -135,6 +135,8 @@
     if ((Number.isInteger(raw.concurrency) && raw.concurrency >= 1) || raw.concurrency === '') r.concurrency = raw.concurrency;
     // attempts per unit and the judge's and user simulator's models: a reopened recipe runs as it was saved
     if (Number.isInteger(raw.repeat) && raw.repeat >= 1 && raw.repeat <= 32) r.repeat = raw.repeat;
+    // the run's spending cap in USD, shared by its jobs (recipe.py): an amount above zero, or none
+    if (typeof raw.max_usd === 'number' && Number.isFinite(raw.max_usd) && raw.max_usd > 0) r.max_usd = raw.max_usd;
     for (const key of ['judge_model', 'simulator_model']) if (typeof raw[key] === 'string' && raw[key].trim()) r[key] = raw[key].trim();
     r.unsandboxed = raw.unsandboxed === true;
     if(raw.modelFormat === 'provider-id')r.modelFormat='provider-id';

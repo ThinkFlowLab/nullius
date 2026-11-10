@@ -87,7 +87,11 @@
     }
     // measured, or left out: a rate the window could not measure, and a cost nobody reported, are absent, never 0
     if (s.tokens_per_sec != null) bits.push(`<span><b>${count(Math.round(s.tokens_per_sec))}</b> tokens / s, last 30 s</span>`);
-    if (T.cost_usd != null) bits.push(`<span><b>$${Number(T.cost_usd).toFixed(2)}</b> spent</span>`);
+    // a run with a spending cap (job.start's budget) says it beside what was spent, or alone while nothing was
+    const cap = s.budget && Number(s.budget.max_usd) > 0 ? ` of the <b>$${Number(s.budget.max_usd).toFixed(2)}</b> cap` : '';
+    // under a cent, four decimals as Results shows it: beside a cap, $0.00 spent would read as nothing spent
+    if (T.cost_usd != null) bits.push(`<span><b>$${Number(T.cost_usd).toFixed(cap && T.cost_usd < 0.01 ? 4 : 2)}</b> spent${cap}</span>`);
+    else if (cap) bits.push(`<span>spending cap <b>$${Number(s.budget.max_usd).toFixed(2)}</b></span>`);
     if (s.wall_sec) bits.push(`<span>wall <b>${clock(s.wall_sec)}</b> per trial</span>`);
     return bits.join('');
   }

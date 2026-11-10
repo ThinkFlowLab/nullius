@@ -61,7 +61,7 @@ class Partition(unittest.TestCase):
 
 
 def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="gpt-5-mini", bench=BENCH, other=AGENT,
-                planned=None, t0=1_760_000_000.0, failed=()):
+                planned=None, t0=1_760_000_000.0, failed=(), budget=None):
     """A shard job as a run writes it: its config, a trial per unit (tagged by
     the unit's place in the whole dataset), its result."""
     d = os.path.join(root, name)
@@ -80,7 +80,7 @@ def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="g
         results.append(job.write_trial(trial, job=name, bench=bench, other=other, model=model, unit=u, t0=t0 + k, t1=t0 + k + 5,
                                        produce=(t0 + k, t0 + k + 4), score=None if exc else {"reward": 1.0 if place % 2 else 0.0},
                                        exception=exc, calls=[], trajectory=None))
-    job.write_result(d, name, t0, t0 + 10 * (index + 1), results, len(planned))
+    job.write_result(d, name, t0, t0 + 10 * (index + 1), results, len(planned), budget=budget)
     return d
 
 
@@ -116,6 +116,30 @@ class Merge(unittest.TestCase):
         self.assertEqual(read((os.path.join(src, "result.json")))["standard"]["job"], f"run-shard-{shard.of('t-1', 3)}of3")
         self.assertTrue(os.path.samefile(os.path.join(src, "workspace", "solution.py"),
                                          os.path.join(got["out"], "t-1__u0001", "workspace", "solution.py")))
+
+    def test_the_merged_job_carries_the_shards_spending_caps_as_one(self):
+        """Each shard ran under its share of the run's cap: the merged job says the whole cap, what all of them
+        spent, and every unit a cap cut off or left out."""
+        caps = {1: {"max_usd": 0.5, "spent_usd": 0.2, "stopped": False, "cut_off": [], "not_run": []},
+                2: {"max_usd": 0.5, "spent_usd": 0.41, "unsettled_usd": 0.03, "stopped": True, "cut_off": ["t-9"], "not_run": ["t-11", "t-12"]},
+                3: {"max_usd": 0.5, "spent_usd": 0.1, "stopped": False, "cut_off": [], "not_run": []}}
+        dirs = [write_shard(self.tmp, f"run-shard-{i}of3", self.split[i], i, 3, budget=caps[i]) for i in (1, 2, 3)]
+        got = merge.merge(dirs, os.path.join(self.tmp, "capped", "run"))
+        want = {"max_usd": 1.5, "spent_usd": 0.71, "unsettled_usd": 0.03, "stopped": True, "cut_off": ["t-9"], "not_run": ["t-11", "t-12"]}
+        self.assertEqual(read(os.path.join(got["out"], "result.json"))["budget"], want)
+        self.assertEqual(parse.parse_job(got["out"]).budget, want)
+        # a cap over part of a launch is not the launch's: nothing is claimed
+        shutil.rmtree(dirs[2])
+        dirs[2] = write_shard(self.tmp, "run-shard-3of3", self.split[3], 3, 3)
+        part = merge.merge(dirs, os.path.join(self.tmp, "partly", "run"))
+        self.assertNotIn("budget", read(os.path.join(part["out"], "result.json")))
+        self.assertEqual(parse.parse_job(part["out"]).budget, {})
+
+    def test_a_recorded_cap_is_read_leniently_and_an_amount_missing_is_not_zero(self):
+        self.assertEqual(parse._budget(None), {})
+        self.assertEqual(parse._budget({"max_usd": "2", "spent_usd": 1}), {})                # no cap named: no cap
+        self.assertEqual(parse._budget({"max_usd": 2, "stopped": "yes", "cut_off": "t-1"}),
+                         {"max_usd": 2, "spent_usd": None, "unsettled_usd": None, "stopped": False, "cut_off": [], "not_run": []})
 
     def test_shards_of_different_launches_models_or_versions_are_refused_unless_forced(self):
         a = write_shard(self.tmp, "a", self.split[1], 1, 3)
