@@ -78,9 +78,9 @@ and MODEL_API_KEY - optional: without it the run is sent
 run without that endpoint fails before it starts.
 They are read on this machine and handed to the run as environment
 (API_TOKEN, OPENAI_API_KEY, LLM_API_KEY; API_URL, OPENAI_BASE_URL,
-LLM_BASE_URL) - over stdin to the launcher, never in argv, never written
-anywhere; a stdin cut short starts nothing and fails the run at that part
-(``_launch``), and one that holds a line break is never sent
+LLM_BASE_URL) - over stdin to the launcher, never in argv (the key to a
+docker relay as a file); a stdin cut short starts nothing and fails the
+run at that part (``_launch``), and one that holds a line break is never sent
 (``_line_break``) - and they are the only credentials it has: its commands get this
 process's environment less every secret in Settings, whichever provider it
 belongs to (``withheld``); a host gets nothing of it but stdin.

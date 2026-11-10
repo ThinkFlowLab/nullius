@@ -7,7 +7,10 @@ no route out; its relay is its way to the model. A licence of kind
 beside the relay (``container.Unit``), on the default bridge and on the
 unit's network under the server's own name, listening on the server's port
 and passing every connection to that one address - and to nothing else,
-whatever the agent sends. It reads nothing of what it passes.
+whatever the agent sends. It reads nothing of what it passes. It resolves the
+server's name once, before it listens: on the unit's network, that name is
+the forwarder's own. A name that does not resolve ends it with an
+``unresolved`` event.
 
 A benchmark's MCP server run on the machine (``mcp_machine``) is reached the
 same way: a forwarder on the unit's internal network only, the server's
@@ -44,14 +47,26 @@ def _pump(src: socket.socket, dst: socket.socket) -> None:
                 pass
 
 
-def _serve(conn: socket.socket, host: str, port) -> None:
-    try:
-        if port is None:                         # a Unix socket: host is its path
-            up = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+def _connect(targets) -> socket.socket:
+    """The first of ``targets`` (family, address) that accepts, or the last error."""
+    error = OSError("no address to connect to")
+    for family, addr in targets:
+        up = None
+        try:
+            up = socket.socket(family, socket.SOCK_STREAM)    # in the try: a family this kernel lacks is skipped
             up.settimeout(30)
-            up.connect(host)
-        else:
-            up = socket.create_connection((host, port), timeout=30)
+            up.connect(addr)
+            return up
+        except OSError as e:
+            error = e
+            if up is not None:
+                up.close()
+    raise error
+
+
+def _serve(conn: socket.socket, targets) -> None:
+    try:
+        up = _connect(targets)
         up.settimeout(None)
     except OSError as e:
         print(json.dumps({"event": "unreachable", "error": str(e)[:200]}), flush=True)
@@ -78,6 +93,14 @@ def main(argv=None) -> int:
         ap.error("--to, or NULLIUS_FORWARD_TO: where to forward")
     lhost, lport = _split(a.listen)
     host, port = _split(a.to)
+    if port is None:
+        targets = [(socket.AF_UNIX, host)]
+    else:
+        try:
+            targets = [(f, addr) for f, _, _, _, addr in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)]
+        except OSError as e:
+            print(json.dumps({"event": "unresolved", "host": host, "error": str(e)[:200]}), flush=True)
+            return 1
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((lhost, lport))
@@ -85,7 +108,7 @@ def main(argv=None) -> int:
     print(json.dumps({"event": "listening", "port": lport}), flush=True)
     while True:
         conn, _ = srv.accept()
-        threading.Thread(target=_serve, args=(conn, host, port), daemon=True).start()
+        threading.Thread(target=_serve, args=(conn, targets), daemon=True).start()
 
 
 if __name__ == "__main__":

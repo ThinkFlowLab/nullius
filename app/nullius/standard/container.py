@@ -32,12 +32,13 @@ relay container (``python3 -m nullius.standard.relay serve``) on the default
 bridge *and* on that network as ``relay``; the agent's container on the
 internal network alone. Its model endpoint is ``http://relay:8080/<tag>/v1``
 and nothing else answers it. The real key reaches the relay's container
-only, as ``-e NULLIUS_RELAY_UPSTREAM_KEY`` with the value in the docker
-program's own environment - never on an argument list, which ``ps`` and
-``docker inspect`` show. The relay publishes its port on 127.0.0.1 so the
-driver, which stays on this machine (it owns the answers), reaches the
-judge's route and a capability benchmark's reader. Its record folder is mounted
-read-write, so the host reads each call as the local relay's are read.
+only, as an owner-only file under :func:`key_root`, mounted read-only and
+removed from this machine once the relay listens: never on an argument list
+(``ps``) or in the container's environment (``docker inspect``). The relay
+publishes its port on 127.0.0.1 so the driver, which stays on this machine
+(it owns the answers), reaches the judge's route and a capability
+benchmark's reader. Its record folder is mounted read-write, so the host
+reads each call as the local relay's are read.
 
 **A licence server is one more door.** A unit whose environment needs a
 licence of kind ``server`` (``host:port``) gets a forwarder beside its relay
@@ -102,6 +103,7 @@ import urllib.parse
 import urllib.request
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from nullius import paths
 from nullius.standard import definitions, install
 
 DOCKER = "docker"
@@ -114,6 +116,8 @@ EGRESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "egress.py")
 EGRESS_IN = "/opt/nullius/egress.py"       # the check's proxy's one file, in its container
 EGRESS_PORT = 3128
 EGRESS_ALIAS = "egress"
+RELAY_KEY_IN = "/opt/nullius/relay-key"    # the key's one file, in the relay's container
+KEY_STALE = 600                            # older than any start can take: a killed run left it
 IMAGE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 NODE_VERSION = "22.23.3"
@@ -465,13 +469,15 @@ def install_argv(image: str, where: str, cmd: List[str]) -> List[str]:
             "-e", f"HOME={where}/.npm-home", "-e", f"npm_config_cache={where}/.npm-cache", image] + list(cmd)
 
 
-def relay_argv(image: str, *, name: str, job: str, app: str, record: str, base: str, model: Optional[str],
-               routes: Dict[str, str], prices: Optional[dict] = None, side_models=(),
+def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_file: str, base: str,
+               model: Optional[str], routes: Dict[str, str], prices: Optional[dict] = None, side_models=(),
                key_header: str = "authorization", hosts: Optional[Dict[str, str]] = None,
                ledger: Optional[str] = None) -> List[str]:
     """``docker run`` for a unit's relay: on the default bridge (its way to the
-    provider), its port published on 127.0.0.1 only. The key is named, never
-    given: ``-e NULLIUS_RELAY_UPSTREAM_KEY``. ``hosts``: names it resolves
+    provider), its port published on 127.0.0.1 only. The key is never given:
+    ``key_file``, its file, is mounted read-only at ``RELAY_KEY_IN`` with
+    ``--mount``, which fails when the engine cannot see it (``-v`` would mount
+    an empty folder). ``hosts``: names it resolves
     (``--add-host``), the machine's own for an endpoint on its loopback.
     ``ledger``: the file of the run's spending cap, its folder mounted so
     this relay books its calls where every other relay of the job does."""
@@ -479,10 +485,11 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, base: 
          "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
          *[w for n, ip in sorted((hosts or {}).items()) for w in ("--add-host", f"{n}:{ip}")],
          "-p", f"127.0.0.1::{RELAY_PORT}", "-v", f"{app}:{app}:ro", "-v", f"{record}:{record}:rw",
-         *(["-v", f"{os.path.dirname(ledger)}:{os.path.dirname(ledger)}:rw"] if ledger else []), "-w", app,
-         "-e", "PYTHONPATH=" + app, "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_RELAY_UPSTREAM_KEY",
+         *(["-v", f"{os.path.dirname(ledger)}:{os.path.dirname(ledger)}:rw"] if ledger else []),
+         "--mount", f"type=bind,source={key_file},target={RELAY_KEY_IN},readonly", "-w", app,
+         "-e", "PYTHONPATH=" + app, "-e", "PYTHONDONTWRITEBYTECODE=1",
          image, "python3", "-m", "nullius.standard.relay", "serve", "--listen", f"0.0.0.0:{RELAY_PORT}",
-         "--base", base, "--record", record, "--public", f"http://{RELAY_ALIAS}:{RELAY_PORT}"]
+         "--base", base, "--record", record, "--key-file", RELAY_KEY_IN, "--public", f"http://{RELAY_ALIAS}:{RELAY_PORT}"]
     if model:
         a += ["--model", model]
     for tag, m in sorted(routes.items()):
@@ -665,6 +672,7 @@ class Unit:
         self.host: Optional[str] = None
         self.started: List[str] = []           # containers to remove
         self.network = False
+        self.key_dir: Optional[str] = None     # the key file's folder, until the relay listens
         os.makedirs(record_dir, exist_ok=True)
 
     def start(self) -> "Unit":
@@ -672,13 +680,14 @@ class Unit:
             _docker(["network", "create", "--internal", "--label", f"{LABEL}={self.job}", self.names["network"]])
             self.network = True
             argv = relay_argv(self.image, name=self.names["relay"], job=self.job, app=self.app, record=self.dir,
-                              base=self.base, model=self.model, routes=self.routes, prices=self.prices,
-                              side_models=self.side_models, key_header=self.key_header, hosts=self.hosts,
-                              ledger=self.ledger)
+                              key_file=self._key_file(), base=self.base, model=self.model, routes=self.routes,
+                              prices=self.prices, side_models=self.side_models, key_header=self.key_header,
+                              hosts=self.hosts, ledger=self.ledger)
             self.started.append(self.names["relay"])
-            _docker(argv[1:], env=client_env({"NULLIUS_RELAY_UPSTREAM_KEY": self.key}))
+            _docker(argv[1:])
             _docker(["network", "connect", "--alias", RELAY_ALIAS, self.names["network"], self.names["relay"]])
             self._wait(self.names["relay"], "the relay's container")
+            self._forget_key()
             port = _docker(["port", self.names["relay"], f"{RELAY_PORT}/tcp"]).stdout.strip().splitlines()[0]
             self.host = "http://" + port.replace("0.0.0.0", "127.0.0.1")
             self.reach = {}
@@ -691,16 +700,35 @@ class Unit:
             raise
         return self
 
+    def _key_file(self) -> str:
+        """Write the key to an owner-only file in a new folder under
+        :func:`key_root`, and return its path. Not the record folder: it is kept."""
+        root = key_root()
+        os.makedirs(root, exist_ok=True)
+        os.chmod(root, 0o700)
+        forget_stale_keys()
+        self.key_dir = tempfile.mkdtemp(prefix=key_prefix(self.job), dir=root)
+        path = os.path.join(self.key_dir, "key")
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
+            f.write(self.key)
+        return path
+
+    def _forget_key(self):
+        if self.key_dir:
+            shutil.rmtree(self.key_dir, ignore_errors=True)
+            self.key_dir = None
+
     def _forward(self, i: int, address: str) -> str:
         """A licence server's forwarder, started and on the unit's network
-        under the server's name: the address the agent reaches it by."""
+        under the server's name: the address the agent reaches it by. It joins
+        that network once it listens, after it resolves the server's name."""
         alias, host, port = server_alias(address, i)
         name = f"{self.names['agent']}-lic{i}"
         self.started.append(name)
         _docker(forward_argv(self.image, name=name, job=self.job, port=port)[1:],
                 env=client_env({"NULLIUS_FORWARD_TO": f"{host}:{port}"}))
-        _docker(["network", "connect", "--alias", alias, self.names["network"], name])
         self._wait(name, "the licence server's forwarder")
+        _docker(["network", "connect", "--alias", alias, self.names["network"], name])
         return f"{alias}:{port}"
 
     def _door(self, i: int, alias: str, port: int, sock: str) -> None:
@@ -754,8 +782,9 @@ class Unit:
         return argv, client_env({k: v for k, v in inside.items() if k != "PATH"})
 
     def stop(self):
-        """Remove the unit's containers and network; the relay's log is kept
-        beside its record first."""
+        """Remove the unit's containers and network, and the key's file if the
+        relay has not read it; the relay's log is kept beside its record first."""
+        self._forget_key()
         if self.names["relay"] in self.started:
             try:
                 r = _docker(["logs", self.names["relay"]], check=False, timeout=30)
@@ -1377,8 +1406,34 @@ class Box:
             self.own_net = False
 
 
+def key_root() -> str:
+    """The relays' key folders, in the user's cache: Colima and Lima share the
+    home with their engine, not the temporary folder."""
+    return os.path.join(paths.cache_dir(), "relay-keys")
+
+
+def forget_stale_keys():
+    """Remove every job's key folders older than ``KEY_STALE``."""
+    old = time.time() - KEY_STALE
+    for d in glob.glob(os.path.join(glob.escape(key_root()), "*")):
+        try:
+            if os.lstat(d).st_mtime < old:
+                shutil.rmtree(d, ignore_errors=True)
+        except OSError:
+            pass
+
+
+def key_prefix(job: str) -> str:
+    """A job's key folder prefix: a hash, so no job's prefix starts another's."""
+    return f"nullius-relay-key-{hashlib.sha256(job.encode()).hexdigest()[:12]}-"
+
+
 def sweep(job: str):
-    """Remove every container and network a job's units left, by its label."""
+    """Remove every container and network a job's units left, by its label,
+    its relays' key folders, and stale key folders."""
+    for d in glob.glob(os.path.join(glob.escape(key_root()), glob.escape(key_prefix(job)) + "*")):
+        shutil.rmtree(d, ignore_errors=True)
+    forget_stale_keys()
     try:
         ids = _docker(["ps", "-aq", "--filter", f"label={LABEL}={job}"], check=False).stdout.split()
         if ids:

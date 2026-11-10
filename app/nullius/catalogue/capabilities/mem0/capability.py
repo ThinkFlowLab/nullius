@@ -12,7 +12,8 @@ Nothing of Mem0 is changed.
 
 ``add {session}``     - the session's turns as Mem0 messages (a role other than
                         user or assistant is a user turn naming its speaker),
-                        added for one user, the session's id and date as metadata
+                        added for one user, the session's id and date as metadata,
+                        the date also as ``timestamp``
 ``recall {question}`` - ``{memory}``: what Mem0's search returns, best first,
                         each memory headed by its session's date
 
@@ -111,8 +112,10 @@ class Memory:
         self.dates[sid] = str(s.get("date") or "")
         self.warnings.take()
         t0 = time.time()
-        got = self.mem.add(messages, user_id=USER, metadata={"session": sid, "date": self.dates[sid]},
-                           infer=setting("MEM0_INFER", "on") != "off")
+        meta = {"session": sid, "date": self.dates[sid]}
+        if self.dates[sid]:
+            meta["timestamp"] = self.dates[sid]
+        got = self.mem.add(messages, user_id=USER, metadata=meta, infer=setting("MEM0_INFER", "on") != "off")
         items = got.get("results") if isinstance(got, dict) else got
         return {"trace": {"messages": len(messages), "seconds": round(time.time() - t0, 3),
                           "written": [{k: it.get(k) for k in ("id", "event", "memory", "previous_memory") if it.get(k) is not None}

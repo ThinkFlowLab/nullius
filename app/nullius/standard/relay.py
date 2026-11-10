@@ -638,19 +638,16 @@ def failure(calls: List[dict]) -> Optional[tuple]:
 
 
 # -- the relay as a process of its own: a container backend's sidecar ----------
-KEY_VAR = "NULLIUS_RELAY_UPSTREAM_KEY"
-
-
 def serve(argv=None) -> int:
     """``python3 -m nullius.standard.relay serve --listen HOST:PORT --base URL
-    --record DIR [--model M] [--route TAG=MODEL ...] [--side-model M ...] [--key-header NAME]
+    --record DIR --key-file PATH [--model M] [--route TAG=MODEL ...] [--side-model M ...] [--key-header NAME]
     [--public URL] [--prices JSON] [--ledger FILE]``.
 
     ``--base`` is the provider's endpoint, ``--route`` a route sent as another
     model (a benchmark's judge), ``--public`` the address ``url`` hands out.
-    The real key is read from ``NULLIUS_RELAY_UPSTREAM_KEY`` and nowhere else:
-    an argument is visible to anyone who lists processes or inspects a
-    container. One JSON line, ``{"listening": "http://host:port"}``, says it
+    The real key is read from ``--key-file`` and nowhere else: an argument or
+    an environment variable is visible to anyone who lists processes or
+    inspects a container. One JSON line, ``{"listening": "http://host:port"}``, says it
     is ready; SIGTERM (or SIGINT) stops it."""
     import argparse
     import signal
@@ -658,6 +655,7 @@ def serve(argv=None) -> int:
     ap.add_argument("--listen", default="127.0.0.1:0", help="HOST:PORT")
     ap.add_argument("--base", required=True, help="the provider's endpoint")
     ap.add_argument("--record", required=True, help="the folder each route's calls are recorded in")
+    ap.add_argument("--key-file", required=True, help="the file that holds the provider's key")
     ap.add_argument("--model", help="every call sent as this model")
     ap.add_argument("--route", action="append", default=[], help="TAG=MODEL")
     ap.add_argument("--side-model", action="append", default=[], help="a model the agent may call as asked")
@@ -666,9 +664,14 @@ def serve(argv=None) -> int:
     ap.add_argument("--prices", help="a JSON object: model -> USD per million tokens, for a cost estimate")
     ap.add_argument("--ledger", help="the file of the run's spending cap: a call is booked there before it is sent")
     a = ap.parse_args(argv)
-    key = os.environ.get(KEY_VAR)
+    try:
+        with open(a.key_file) as f:
+            key = f.read().strip()
+    except OSError as e:
+        print(json.dumps({"error": f"cannot read --key-file: {e}"}), flush=True)
+        return 2
     if not key:
-        print(json.dumps({"error": f"{KEY_VAR} is not set"}), flush=True)
+        print(json.dumps({"error": f"--key-file {a.key_file} contains no key"}), flush=True)
         return 2
     host, _, port = a.listen.rpartition(":")
     r = Relay(a.base, key, a.record, prices=json.loads(a.prices) if a.prices else None, model=a.model,
@@ -694,5 +697,5 @@ def serve(argv=None) -> int:
 if __name__ == "__main__":
     import sys
     if sys.argv[1:2] != ["serve"]:
-        sys.exit("python3 -m nullius.standard.relay serve --listen HOST:PORT --base URL --record DIR [--model M]")
+        sys.exit("python3 -m nullius.standard.relay serve --listen HOST:PORT --base URL --record DIR --key-file PATH [--model M]")
     sys.exit(serve(sys.argv[2:]))
