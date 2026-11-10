@@ -30,7 +30,7 @@ A pair is an **agent benchmark** × an **agent**, or a **capability benchmark** 
 | `agent.tools/v1` | The agent calls the tools of the MCP servers given to its session | Two basic checks, three skills ([the tools kit](#the-tools-kit)) |
 | `agent.conversation/v1` | Several prompts in one session, the earlier turns remembered | Turn 2 asks for what turn 1 said |
 | `agent.browser/v1` | A browser, through an MCP server Nullius starts | Defined; its kit comes with the first browser benchmark |
-| `cap.memory/v1` | `add {session}` then `recall {question}` → `{memory}`; a session is `{id, date, turns: [{role, text}], text}` | Recall a fact among distractors |
+| `cap.memory/v1` | `add {session}` then `recall {question}` → `{memory}`; a session is `{id, date, turns: [{role, text}], text}` | Recall a place and an exact name among distractors (2 checks); nothing it stores is a credential |
 
 - **The last message** is the agent's text after its last other event (a tool call, a notice); session metadata parts two messages but ends nothing after the last one.
 - **Notices** (`session.notices`): an adapter sends its warnings as a `notice`, a system step of the trajectory, never as text in front of the answer.
@@ -57,6 +57,7 @@ no generic agent-plus-capability recipe or swap control.
 | Rule | Detail |
 | --- | --- |
 | Declared | A kit's `kit_version`: 1 for every kit but the tools kit, at 2 |
+| Bumped | When a check gets stronger or tests something new; rewording a check that still tests the same thing keeps the version and the proofs made on it |
 | Recorded | `kit_version` in the `proven` entry; none means version 1 |
 | Older proofs | Still proofs, read as *proven on kit v1; kit v2 is current* |
 | Replaced | `cli conform` on the current kit replaces it, or takes the port back if it fails |
