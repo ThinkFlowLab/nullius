@@ -70,6 +70,8 @@ PHASES = ("env_setup", "agent_setup", "agent_run", "verify")
 #: mean over the trial's parts, how many (``parts``). The snapshot says so only
 #: where there is one: a ``scored`` count, and ``score`` / ``parts`` on that
 #: trial. A feed without one folds to a snapshot with none of those keys.
+#: ``budget`` is a run's spending cap: a unit its relay cut off there (the
+#: standard's ``--max-usd``), outside the rates as ``infra_error`` is.
 OUTCOMES = ("resolved", "unresolved", "scored", "agent_error", "infra_error",
             "cancelled", "timeout", "budget")
 ERROR_OUTCOMES = {"agent_error", "infra_error", "timeout", "budget"}

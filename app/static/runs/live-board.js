@@ -28,7 +28,7 @@
   const PHASES = ['env_setup', 'agent_setup', 'agent_run', 'verify'];
   const PHASE_LABEL = {env_setup: 'env setup', agent_setup: 'agent setup', agent_run: 'agent run', verify: 'verify'};
   const OUTCOMES = ['resolved', 'unresolved', 'scored', 'agent_error', 'infra_error', 'timeout', 'budget', 'cancelled'];
-  const OUTCOME_LABEL = {resolved: 'Resolved', unresolved: 'Unresolved', scored: 'Scored', agent_error: 'Agent error', infra_error: 'Infra error', cancelled: 'Cancelled', timeout: 'Timeout', budget: 'Budget'};
+  const OUTCOME_LABEL = {resolved: 'Resolved', unresolved: 'Unresolved', scored: 'Scored', agent_error: 'Agent error', infra_error: 'Infra error', cancelled: 'Cancelled', timeout: 'Timeout', budget: 'Spending cap'};
   const STATE_LABEL = {preparing: 'Preparing', starting: 'Starting', running: 'Running', finished: 'Finished', unknown: 'Waiting for the feed'};
   const FLIGHT_SHOWN = 12;      // past this many in flight, the nearest their limit come first and the rest wait behind a button
   const MANY_TILES = 60;        // past this many trials, the tiles are drawn smaller
@@ -99,7 +99,7 @@
     const C = s.counts || {};
     const queued = C.total != null ? Math.max(0, C.total - C.completed - C.running) : null;
     const rate = s.elapsed_sec > 60 && C.completed ? C.completed / (s.elapsed_sec / 60) : null;
-    const ran = C.completed - (oc.infra_error || 0);
+    const ran = C.completed - (oc.infra_error || 0) - (oc.budget || 0);
     const when = state === 'finished' ? 'on the feed' : 'so far';   // the feed's outcomes, not the classifier's: Results has those
     // A benchmark that gives a score and no pass or fail has no solve rate: the mean score, over every part scored, stands there.
     const scored = (s.trials || []).filter(t => t.state === 'done' && t.outcome === 'scored' && t.score != null);

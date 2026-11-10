@@ -486,17 +486,18 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
 
 #: an error kind naming the machine or the benchmark's side rather than the agent: the live board's infra_error
 _INFRA = ("Setup", "Verifier", "Api", "RateLimit", "Environment", "Docker", "Build", "Connection", "Network", "Authentication",
-          "ModelNotFound", "SpendingCap")
+          "ModelNotFound")
 
 
 def feed_outcome(kind: str, score: Optional[dict], exception: Optional[tuple]) -> dict:
     """A unit's end in the live feed's words (``nullius.runs.live``): its
     outcome, with the reward (a pass benchmark) or the score, and the error's
-    kind as evidence."""
+    kind as evidence. A unit the run's spending cap cut off (``ledger.ERROR``)
+    is the feed's ``budget``."""
     score = score or {}
     if exception:
         k = exception[0]
-        return {"outcome": "cancelled" if k == "CancelledError" else "timeout" if "Timeout" in k else "infra_error" if any(w in k for w in _INFRA) else "agent_error",
+        return {"outcome": "cancelled" if k == "CancelledError" else "budget" if k == "SpendingCapError" else "timeout" if "Timeout" in k else "infra_error" if any(w in k for w in _INFRA) else "agent_error",
                 "exc": k, "evidence": (exception[1] or k)[:200]}
     if kind == "pass":
         reward = score.get("reward")

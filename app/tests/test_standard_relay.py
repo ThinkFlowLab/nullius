@@ -243,8 +243,8 @@ class CapTest(unittest.TestCase):
         exc, said = relay.failure(r.calls("u1"))
         self.assertEqual(exc, ledger.ERROR)
         self.assertIn("spending cap", said)
-        self.assertEqual(classify.from_verdict(exc, None), classify.API_ERROR)       # infrastructure, never a miss
-        self.assertIn(classify.API_ERROR, classify.INFRA_OUTCOMES)
+        self.assertEqual(classify.from_verdict(exc, None), classify.SPENDING_CAP)    # its own outcome, never a miss
+        self.assertIn(classify.SPENDING_CAP, classify.INFRA_OUTCOMES)
 
     def test_a_refused_call_is_the_units_whatever_its_agent_did_next(self):
         calls = [{"status": 200}, {"status": 402, "refused": "cap", "error": "the run's spending cap"}, {"status": 200}]

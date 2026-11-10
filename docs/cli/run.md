@@ -60,7 +60,7 @@ the job books each call in one ledger before sending it
 | Sent or refused | A call is sent only while what was spent, what the calls in flight have booked and its own booking stay within the cap. The first that does not fit is refused, and so is every call after it: the run stops at one point |
 | Settled | A reply turns the booking into what the call cost. A provider's error gives the booking back. A reply with no token count, or cut off, keeps its whole booking as unsettled: it may have been billed |
 | A refused call | Answered by the relay with HTTP 402, naming the relay and the cap, and recorded `refused`: never the provider's error |
-| The units | One cut off by the cap ends as `SpendingCapError`, an API error outside the agent's rate, never a miss. Units not begun are not run |
+| The units | One cut off by the cap ends as `SpendingCapError`: the outcome Spending cap, outside the agent's rate, never a miss. Units not begun are not run |
 | The result | `result.json` carries `budget`: `max_usd`, `spent_usd`, `unsettled_usd` when there is some, `stopped`, `cut_off` and `not_run`; stderr says `stage=cap` |
 | Several at a time | The calls in flight take room: with `-j 4`, four bookings must fit at once. A cap close to one call's booking stops the run early |
 | An estimate | Prices are list prices and a booking is not a bill: a call that costs more than was booked takes the spend past the cap by the difference, and the next call is refused |

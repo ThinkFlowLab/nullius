@@ -40,6 +40,7 @@
 .rp .oc-no_patch { --oc: var(--no_patch); } .rp .oc-agent_error { --oc: var(--agent_error); }
 .rp .oc-rate_limited { --oc: var(--rate_limited); } .rp .oc-api_error { --oc: var(--api_error); }
 .rp .oc-setup_error { --oc: var(--setup_error); } .rp .oc-unknown { --oc: var(--unknown-mark); }
+.rp .oc-spending_cap { --oc: var(--spending_cap); }
 .rp .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--oc); flex: none; }
 .rp .odot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--oc); flex: none; }
 .rp .adv { display: inline-block; font: 500 10.5px/16px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint);

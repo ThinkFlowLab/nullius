@@ -92,12 +92,19 @@ class LiveBoardAgrees(unittest.TestCase):
                 with self.subTest(name, board=board):
                     self.assertIn(outcome(name), ("agent_error", "timeout"))
 
-    def test_a_unit_the_runs_spending_cap_cut_off_is_infrastructure_on_both(self):
-        """The standard's own: its relay refused the call (``standard.ledger``), so the unit had no attempt."""
+    def test_a_unit_the_runs_spending_cap_cut_off_has_its_own_outcome_outside_the_rate_on_both(self):
+        """The standard's own: its relay refused the call (``standard.ledger``), so the unit had no attempt.
+        Not an API error: nothing failed. The live feed's word for it is ``budget``."""
+        from nullius.runs import live
         from nullius.standard import job, ledger
-        self.assertEqual(C.from_verdict(ledger.ERROR, None), C.API_ERROR)
-        self.assertIn(C.API_ERROR, C.INFRA_OUTCOMES)
-        self.assertEqual(job.feed_outcome("pass", None, (ledger.ERROR, "the run's spending cap"))["outcome"], "infra_error")
+        self.assertEqual(C.from_verdict(ledger.ERROR, None), C.SPENDING_CAP)
+        self.assertEqual(C.from_verdict("nullius.standard." + ledger.ERROR, None), C.SPENDING_CAP)
+        self.assertIn(C.SPENDING_CAP, C.INFRA_OUTCOMES)
+        self.assertEqual(C.ORDER.index(C.SPENDING_CAP), C.ORDER.index(C.UNKNOWN) - 1)
+        self.assertNotIn("—", C.DESCRIPTIONS[C.SPENDING_CAP])
+        end = job.feed_outcome("pass", None, (ledger.ERROR, "the run's spending cap"))
+        self.assertEqual((end["outcome"], end["exc"]), ("budget", ledger.ERROR))
+        self.assertIn("budget", live.OUTCOMES)
 
 
 class HarborTaxonomy(unittest.TestCase):
@@ -242,7 +249,7 @@ class Presentation(unittest.TestCase):
         """ORDER drives sorting; an outcome missing from it raises on compare."""
         produced = {C.RESOLVED, C.SCORED, C.PATCH_FAILED_TESTS, C.FAILED_VERIFICATION,
                     C.PATCH_NOT_APPLIED, C.NO_PATCH, C.AGENT_ERROR,
-                    C.RATE_LIMITED, C.API_ERROR, C.SETUP_ERROR, C.UNKNOWN}
+                    C.RATE_LIMITED, C.API_ERROR, C.SETUP_ERROR, C.SPENDING_CAP, C.UNKNOWN}
         self.assertEqual(produced, set(C.ORDER))
 
 

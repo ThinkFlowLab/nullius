@@ -35,7 +35,7 @@ import uuid
 from typing import Optional, Tuple
 
 OUTPUT = 4096                       # output tokens booked when neither the call nor the model's price row names a limit
-ERROR = "SpendingCapError"          # what a unit the cap ended carries: infrastructure, never a miss (runs.classify)
+ERROR = "SpendingCapError"          # what a unit the cap ended carries: its own outcome outside the rate, never a miss (runs.classify)
 _LIMITS = ("max_completion_tokens", "max_output_tokens", "max_tokens")
 
 

@@ -318,7 +318,7 @@ class RunTest(unittest.TestCase):
         got, _ = self.outcomes(job_dir)
         self.assertEqual(sorted(got), ["m0", "m1", "m2", "m3"])              # the four never begun have no trial
         self.assertEqual(got["m3"].exception_type, ledger.ERROR)
-        self.assertEqual(got["m3"].outcome, classify.API_ERROR)              # infrastructure: never a miss
+        self.assertEqual(got["m3"].outcome, classify.SPENDING_CAP)           # its own outcome, outside the rate: never a miss
         self.assertTrue(all(got[u].outcome == classify.RESOLVED for u in ("m0", "m1", "m2")))
         calls = self.relay_calls(job_dir)
         self.assertEqual([c.get("refused") for c in calls].count("cap"), 1)
