@@ -156,7 +156,7 @@ def _fake_upstream(root):
 
 
 class Driver(unittest.TestCase):
-    def run_driver(self, reqs, options, keep=None):
+    def run_driver(self, reqs, options, keep=None, questions=None):
         with tempfile.TemporaryDirectory() as tmp:
             t = keep or tmp
             up, ws = os.path.join(t, "up"), os.path.join(t, "ws")
@@ -164,11 +164,12 @@ class Driver(unittest.TestCase):
             _fake_upstream(up)
             data = os.path.join(t, "data.json")
             with open(data, "w") as f:
-                json.dump([{"question_id": "q1", "question_type": "multi-session", "question": "Q?", "answer": "A",
-                            "question_date": "", "haystack_session_ids": [], "haystack_dates": [], "haystack_sessions": []}], f)
+                json.dump([{"question_id": q, "question_type": t, "question": "Q?", "answer": "A", "question_date": "",
+                            "haystack_session_ids": [], "haystack_dates": [], "haystack_sessions": []}
+                           for q, t in (questions or [("q1", "multi-session")])], f)
             env = dict(os.environ, NULLIUS_UPSTREAM=up, NULLIUS_DATASET=data,
                        **{"NULLIUS_OPTION_" + k.upper(): v for k, v in options.items()})
-            lines = "".join(json.dumps(dict(r, dir=ws)) + "\n" for r in reqs)
+            lines = "".join(json.dumps(r if r["op"] == "units" else dict(r, dir=ws)) + "\n" for r in reqs)
             out = subprocess.run([sys.executable, DRIVER], input=lines, capture_output=True, text=True, env=env, timeout=60)
             return [json.loads(ln) for ln in out.stdout.splitlines()]
 
@@ -210,6 +211,28 @@ class Driver(unittest.TestCase):
                           pairs["--merge_key_expansion_into_value"], pairs["--model_name"]),
                          ("orig-turn", "50", "nl", "true", "replace", "gpt-4o-2024-08-06"))
         self.assertEqual(argv[-4:], ["--cot", "true", "--con", "true"])
+
+    QUESTIONS = [("a1", "temporal-reasoning"), ("k1", "knowledge-update"), ("m1", "multi-session"),
+                 ("k2_abs", "knowledge-update"), ("k3", "knowledge-update")]
+
+    def test_a_question_type_keeps_that_types_questions_abstention_included_in_dataset_order(self):
+        got = self.run_driver([{"op": "units", "dataset": "longmemeval_oracle"}], {"question_type": "knowledge-update"},
+                              questions=self.QUESTIONS)
+        self.assertEqual(got[0]["units"], ["k1", "k2_abs", "k3"])
+
+    def test_without_a_question_type_every_question_runs(self):
+        for options in ({}, {"question_type": "all"}):
+            got = self.run_driver([{"op": "units", "dataset": "longmemeval_oracle"}], options, questions=self.QUESTIONS)
+            self.assertEqual(got[0]["units"], [q for q, _ in self.QUESTIONS])
+
+    def test_question_type_offers_every_type_and_applies_to_every_setup(self):
+        o = BENCH["options"]["question_type"]
+        self.assertEqual(o["default"], "all")
+        self.assertEqual(set(o["values"]), {"all", "knowledge-update", "temporal-reasoning", "multi-session",
+                                            "single-session-user", "single-session-assistant", "single-session-preference"})
+        for setup in ("original", "model", "yours"):
+            vals, bad = definitions.bench_options_of(BENCH, "longmemeval_oracle", {"question_type": "knowledge-update"}, setup)
+            self.assertEqual((bad, vals["question_type"]), ([], "knowledge-update"))
 
     def test_a_dense_retriever_runs_run_retrieval_with_the_repositorys_shared_model_cache(self):
         with tempfile.TemporaryDirectory() as t:

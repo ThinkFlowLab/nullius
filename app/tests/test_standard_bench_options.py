@@ -144,7 +144,7 @@ class OtherBenchmarks(unittest.TestCase):
     def test_longmemeval_keeps_all_options_in_one_entry(self):
         b = definitions.get("benchmark", "longmemeval")
         self.assertNotIn("@", b["_ref"])
-        self.assertEqual(definitions.bench_options_of(b, "longmemeval_s")[0], {"reading": "con"})
+        self.assertEqual(definitions.bench_options_of(b, "longmemeval_s")[0], {"question_type": "all", "reading": "con"})
         self.assertEqual(set(b["options"]["retriever"]["values"]),
                          {"full-history-session", "full-history-turn", "no-retrieval",
                           "flat-bm25-session", "flat-bm25-turn", "flat-contriever-session",

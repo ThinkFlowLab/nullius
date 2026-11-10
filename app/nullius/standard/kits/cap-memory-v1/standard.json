@@ -83,8 +83,8 @@
       "passes": "The recalled memory contains Lisbon, ignoring case."
     },
     "m2": {
-      "label": "Recall a password",
-      "task": "Store six sessions, including the cabin Wi-Fi password tern-river-9. Ask for that password.",
+      "label": "Recall an exact name",
+      "task": "Store six sessions, including “The boat at the cabin is named tern-river-9.” Ask what the boat is named.",
       "passes": "The recalled memory contains tern-river-9, ignoring case."
     }
   }

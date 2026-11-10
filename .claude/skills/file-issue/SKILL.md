@@ -54,6 +54,13 @@ repository and of the repository that owns the cause, with `gh issue list
 
 ## A pull request
 
+The title is a conventional commit subject, because a squash merge makes it
+the commit on `main`: `type(scope): summary`, lowercase except names, no
+final period. Type: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `ci`,
+`build`, `chore` or `revert`. Scope: the part touched, as AGENTS.md lists them
+(`standard`, `catalogue`, `runs`, `web`, `docs`, `ci`, ...). For example
+`feat(catalogue): run LongMemEval on one question type`.
+
 The body follows the template: `Closes #n` first when an issue exists, then
 `## What`, `## Touches`, `## Before and after` (two images at the same width
 when the change is visible; leave the section out otherwise), `## Verified`
