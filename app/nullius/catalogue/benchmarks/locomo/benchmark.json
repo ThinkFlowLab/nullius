@@ -19,7 +19,8 @@
     "The paper's readers, gpt-4-turbo and gpt-3.5-turbo, now point to newer models. Scores can differ from the paper's for that reason.",
     "The reader gets 32 tokens per answer. A reasoning model can spend them all reasoning, and that question fails.",
     "One unreadable reply stops the whole conversation, because LoCoMo's script writes its answers only at the end.",
-    "Original memory runs the paper's retrieval setup and needs a CUDA GPU. It writes facts and summaries anew each run, so they differ from the authors' released ones."
+    "Original memory runs the paper's retrieval setup and needs a CUDA GPU. It writes facts and summaries anew each run, so they differ from the authors' released ones.",
+    "Contriever, LoCoMo's default retriever, and the OpenAI retriever fail as published, so they are not offered."
   ],
   "limitations": [
     "The paper's other readers are not offered. Claude 3 Sonnet and Gemini Pro 1.0 are retired, and the Llama 3 and Mistral readers run only as local weights."
