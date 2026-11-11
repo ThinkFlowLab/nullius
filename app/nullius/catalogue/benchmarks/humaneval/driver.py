@@ -13,7 +13,9 @@ score  - the upstream's own check_correctness (human_eval/execution.py) with
          the problem and a completion made of the agent's solution.py, at the
          timeout evaluate_functional_correctness gives it by default (3 s):
          the prompt, the completion and the problem's test run as one program,
-         in a process of its own under the upstream's reliability_guard
+         in a process of its own under the upstream's reliability_guard. The
+         workspace files solution.py's import statements name are listed in
+         the detail (``not_tested``): the check is given solution.py alone
 oracle - the reference control: writes the problem's prompt and its
          canonical_solution, the authors' own body, as solution.py
 answer - the original setup: the problem's prompt completed by a model in one
@@ -147,6 +149,38 @@ def completion(problem, text):
     return "\n" + text, "the whole file: the prompt's part was changed"
 
 
+LISTED_UP_TO = 1 << 20      # characters: a larger solution.py cannot run within the check's time, and is not read for names
+
+
+def not_tested(dir, text):
+    """The workspace files solution.py's import statements name. The check is given solution.py alone, as the
+    upstream is given one completion, so a solution split over two files fails on its import: listed so that
+    the failure reads as what it is. Read from the file's syntax, nothing run; none when it does not parse."""
+    if len(text) > LISTED_UP_TO:
+        return []
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return []
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                names.add(node.module.split(".")[0])
+            elif node.level:                                    # from . import helpers
+                names.update(a.name for a in node.names)
+    found = []
+    for name in sorted(names - {"solution"}):
+        path = os.path.join(dir, name)
+        if os.path.lexists(path + ".py"):
+            found.append(name + ".py")
+        elif os.path.islink(path) or os.path.isdir(path):        # a package; a link is named, never followed
+            found.append(name + "/")
+    return found
+
+
 def score(unit, dir, transcript, answer, setup=None, **_):
     p = load()[unit]
     path = os.path.join(dir, "solution.py")
@@ -157,8 +191,13 @@ def score(unit, dir, transcript, answer, setup=None, **_):
     done, how = completion(p, text)
     r = check_in_container(dir, p, done) if os.environ.get(CHECK_IMAGE) else check_correctness(p, done, TIMEOUT)
     ok = bool(r["passed"])
+    try:
+        left = not_tested(dir, text)
+    except Exception:                                             # the names explain the verdict, never replace it
+        left = []
     return {"reward": 1.0 if ok else 0.0, "passed": ok,
-            "detail": {"result": r["result"], "timeout": TIMEOUT, "completion": how, "solution.py": text[-4000:]}}
+            "detail": {"result": r["result"], "timeout": TIMEOUT, "completion": how, "solution.py": text[-4000:],
+                       **({"not_tested": left} if left else {})}}
 
 
 # Run in the unit's image: the upstream's check_correctness, imported from its own files copied in.

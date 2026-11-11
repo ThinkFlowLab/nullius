@@ -168,6 +168,68 @@ class Gsm8k(unittest.TestCase):
         self.assertTrue(said[0][0] and said[1][1] and not said[0][3])
 
 
+class HumanEvalNotTested(unittest.TestCase):
+    """The workspace files solution.py imports are named beside the verdict, which stays the check's on
+    solution.py alone. A stand-in of human-eval's three modules stands for the upstream, so this runs
+    without the clone: what is tested is the driver's reading, not the upstream's check."""
+
+    STAND_IN = {
+        "__init__.py": "",
+        "data.py": "import json\ndef read_problems(path):\n    return {p['task_id']: p for p in map(json.loads, open(path))}\n",
+        "execution.py": ("def check_correctness(problem, completion, timeout, completion_id=None):\n"     # passes what returns 1
+                         "    ok = 'return 1' in completion\n"
+                         "    return {'task_id': problem['task_id'], 'passed': ok, 'result': 'passed' if ok else 'failed: the stand-in',\n"
+                         "            'completion_id': completion_id}\n"),
+        "evaluation.py": "def evaluate_functional_correctness(sample_file, k=[1], n_workers=4, timeout=3.0, problem_file=''):\n    pass\n",
+    }
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        up = os.path.join(self.tmp, "upstream")
+        os.makedirs(os.path.join(up, "human_eval"))
+        for name, text in self.STAND_IN.items():
+            with open(os.path.join(up, "human_eval", name), "w") as f:
+                f.write(text)
+        data = os.path.join(self.tmp, "problems.jsonl")
+        with open(data, "w") as f:
+            f.write(json.dumps({"task_id": "T/0", "prompt": "def f():\n", "entry_point": "f", "canonical_solution": "    return 1\n",
+                                "test": ""}) + "\n")
+        self.p = _driver(self, definitions.get("benchmark", "humaneval"), up, data)
+        self.ws = os.path.join(self.tmp, "workspace")
+        os.makedirs(os.path.join(self.ws, "pkg"))
+        for name in ("helpers.py", "rel.py"):
+            open(os.path.join(self.ws, name), "w").close()
+
+    def score(self, solution):
+        with open(os.path.join(self.ws, "solution.py"), "w") as f:
+            f.write(solution)
+        return self.p.request("score", unit="T/0", dir=self.ws, transcript=[], answer="")
+
+    def test_the_files_solution_py_imports_are_named_and_the_verdict_is_the_checks(self):
+        got = self.score("import os, helpers\nfrom pkg.sub import g\nfrom . import rel\nfrom .solution import f\n"
+                         "def f():\n    return helpers.one()\n")
+        self.assertEqual((got["reward"], got["detail"]["result"]), (0.0, "failed: the stand-in"))      # the check's own
+        self.assertEqual(got["detail"]["not_tested"], ["helpers.py", "pkg/", "rel.py"])           # the standard library is no file here
+        self.assertNotIn("not_tested", self.score("import math\ndef f():\n    return 1\n")["detail"])   # the standard library only
+        self.assertNotIn("not_tested", self.score("import helpers\ndef f(:\n")["detail"])         # no syntax, no names
+
+    def test_the_names_never_change_the_verdict(self):
+        guarded = "try:\n    import helpers\nexcept ImportError:\n    pass\ndef f():\n    return 1\n"
+        got = self.score(guarded)
+        self.assertEqual((got["reward"], got["detail"]["result"], got["detail"]["not_tested"]), (1.0, "passed", ["helpers.py"]))
+        for odd in ("x = " + "-" * 100000 + "1\n", "#" * (1 << 20) + "\n"):              # too deep to parse; too large to read
+            got = self.score(guarded + odd)
+            self.assertEqual((got["reward"], got["detail"]["result"], "not_tested" in got["detail"]), (1.0, "passed", False))
+
+    def test_dotted_imports_and_links_are_named_never_followed(self):
+        os.makedirs(os.path.join(self.ws, "other"))
+        os.symlink(os.path.join(self.tmp, "nowhere.py"), os.path.join(self.ws, "dangling.py"))
+        os.symlink(self.tmp, os.path.join(self.ws, "away"))                              # a folder outside the workspace
+        got = self.score("import other.mod as m, dangling, away\nfrom .rel import x\n")
+        self.assertEqual(got["detail"]["not_tested"], ["away/", "dangling.py", "other/", "rel.py"])
+
+
 class HumanEval(unittest.TestCase):
     """The verdict is the upstream's check_correctness on the completion the
     driver derives from solution.py: the text after the prompt, or the whole
@@ -216,6 +278,26 @@ class HumanEval(unittest.TestCase):
         self.assertEqual(said, self.theirs(cases))
         self.assertEqual(said[1:3], ["passed", "passed"])
         self.assertNotEqual(said[0], "passed")
+
+    def test_a_solution_split_over_two_files_fails_as_the_upstream_says_and_the_other_file_is_named(self):
+        """The function written in helpers.py and imported: the upstream's own failure, and the file named beside it."""
+        p = _driver(self, self.b, self.up, self.data)
+        t = p.request("units", dataset="humaneval")["units"][0]
+        with gzip.open(self.data, "rt") as f:
+            q = next(x for x in map(json.loads, f) if x["task_id"] == t)
+        with open(os.path.join(self.tmp, "helpers.py"), "w") as f:
+            f.write(q["prompt"] + q["canonical_solution"])
+        split = f"from helpers import {q['entry_point']}\n"
+        whole = q["prompt"] + q["canonical_solution"]
+        said = []
+        for text in (split, whole):
+            with open(os.path.join(self.tmp, "solution.py"), "w") as f:
+                f.write(text)
+            said.append(p.request("score", unit=t, dir=self.tmp, transcript=[], answer="")["detail"])
+        self.assertEqual([d["result"] for d in said], self.theirs([(t, "\n" + split), (t, q["canonical_solution"])]))
+        self.assertEqual((said[0]["result"], said[0]["not_tested"]), ("failed: No module named 'helpers'", ["helpers.py"]))
+        self.assertEqual(said[1]["result"], "passed")
+        self.assertNotIn("not_tested", said[1])                                  # helpers.py is there, and not imported
 
     def test_on_docker_the_check_runs_in_a_throwaway_container_and_the_agents_code_never_here(self):
         bin_dir, log = os.path.join(self.tmp, "bin"), os.path.join(self.tmp, "docker-argv.json")
