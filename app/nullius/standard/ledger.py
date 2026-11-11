@@ -296,10 +296,13 @@ def usd(v: float, places: Optional[int] = None) -> str:
     return f"{whole}.{cents.ljust(2, '0')}"
 
 
-def _together(*amounts: float) -> list:
-    """Amounts read as a sum, all to the decimals the finest of them needs: 0.0118 spent and a call of 0.000157
-    would read as fitting a cap of 0.012 that 0.011849 and 0.000157 pass."""
+def _together(cap: float, *amounts: float) -> list:
+    """Amounts that pass ``cap`` together, printed so that they still do: all to the decimals the finest of
+    them needs, and to more while their rounding hides it. 0.0118 spent and a call of 0.000157 would read as
+    fitting a cap of 0.012 that 0.011849 and 0.000157 pass."""
     places = max(_places(a) for a in amounts)
+    while places < 12 and sum(round(a, places) for a in amounts) <= cap < sum(amounts):
+        places += 1
     return [usd(a, places) for a in amounts]
 
 
@@ -310,14 +313,14 @@ def refusal(state: dict, amount: float) -> str:
         if u["closed"]:
             return (f"an earlier call of this unit did not fit its spending cap of {usd(u['max_usd'])} USD "
                     f"({usd(u['spent_usd'])} spent by the unit): no further call of this unit is sent")
-        spent, held, call = _together(u["spent_usd"], u["held_usd"], amount)
+        spent, held, call = _together(u["max_usd"], u["spent_usd"], u["held_usd"], amount)
         return (f"this unit's spending cap of {usd(u['max_usd'])} USD: {spent} spent by the unit"
                 + (f", {held} booked by its calls in flight or never settled" if u["held_usd"] else "")
                 + f", and this call is counted at {call}; it was not sent, and no further call of this unit is")
     if state["closed"]:
         return (f"an earlier call did not fit the run's spending cap of {usd(state['max_usd'])} USD "
                 f"({usd(state['spent_usd'])} spent): no further call of this run is sent")
-    spent, held, call = _together(state["spent_usd"], state["held_usd"] + state["unsettled_usd"], amount)
+    spent, held, call = _together(state["max_usd"], state["spent_usd"], state["held_usd"] + state["unsettled_usd"], amount)
     return (f"the run's spending cap of {usd(state['max_usd'])} USD: {spent} spent"
             + (f", {held} booked by calls in flight or never settled" if state["held_usd"] + state["unsettled_usd"] else "")
             + f", and this call is counted at {call}; it was not sent, and no further call of this run is")
