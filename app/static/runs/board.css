@@ -131,6 +131,7 @@
 
 /* judge: one advisory group. The lanes sit on the outcomes' row lines, flags beside them (under them when narrower) */
 .rp .b-judge .lab { padding-left: 20px; }
+.rp .runner-judge { margin: 0; padding: 0 20px 12px; }
 .rp .xl { display: inline-flex; align-items: center; min-height: 24px; font: 500 12px var(--sans); color: var(--accent); white-space: nowrap; }
 .rp .xl:hover { color: var(--accent-strong); text-decoration: underline; text-underline-offset: 3px; }
 .rp .jcols { display: flex; flex-wrap: wrap; }
