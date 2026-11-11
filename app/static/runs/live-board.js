@@ -104,8 +104,7 @@
   const pct = x => `${Math.round(100 * x)}<small>%</small>`;
   function renderStats(s, state, oc) {
     const C = s.counts || {};
-    // once the run has ended, what never began is not queued: not run (the fold's count, job.end's and Results')
-    const queued = C.total != null ? Math.max(0, C.total - C.completed - C.running - (C.not_run || 0)) : null;
+    const queued = C.total != null ? Math.max(0, C.total - C.completed - C.running) : null;
     const rate = s.elapsed_sec > 60 && C.completed ? C.completed / (s.elapsed_sec / 60) : null;
     const ran = C.completed - (oc.infra_error || 0) - (oc.budget || 0);
     const when = state === 'finished' ? 'on the feed' : 'so far';   // the feed's outcomes, not the classifier's: Results has those
@@ -256,7 +255,7 @@
     const events = (s.tail || []).filter(e => e.trial === t.trial).slice(-6);
     const state = t.state === 'done' ? `${OUTCOME_LABEL[t.outcome] || 'Ended'}${t.total_sec != null ? ', ' + clock(t.total_sec) + ' in all' : ''}`
       : t.state === 'running' ? `${PHASE_LABEL[t.phase] || t.phase}, ${clock(t.elapsed_sec)} of ${t.timeout_sec ? clock(t.timeout_sec) : 'no limit'}`
-      : `Queued${t.position != null ? ', position ' + (t.position + 1) : ''}`;
+      : stateOf(s) === 'finished' ? 'Not run' : `Queued${t.position != null ? ', position ' + (t.position + 1) : ''}`;
     const href = trialHref(t, opts);
     return `<header><h3>${esc(shortTask(t))}<small>${esc(state)}${t.agent ? ' · ' + esc(t.agent) : ''}</small></h3><button class="lb-x" type="button" data-close aria-label="Close trial detail">×</button></header>
       <div class="lb-river"><div class="lb-rl"><span>${t0 == null ? 'not started' : hms(starts[keys[0]])}</span><span>${tl.ended ? 'ended ' + hms(tl.ended) : limEnd ? 'limit ' + clock(limEnd - t0) + ' in' : ''}</span></div>

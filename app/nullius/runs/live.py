@@ -279,12 +279,7 @@ class Board:
     now: datetime | None = None
 
     def counts(self) -> dict:
-        c = _counts(self.trials, self.n_total)
-        if self.finished_at is not None and c["pending"]:
-            # the run ended (its cap, a stop, its endpoint refusing): what never began never will. Not run, not
-            # queued - the number job.end and Results give. Only then, so a fixture that ran to its end is unchanged
-            c["not_run"], c["pending"] = c["pending"], 0
-        return c
+        return _ended(_counts(self.trials, self.n_total), self.finished_at)
 
     def mean_reward(self) -> float | None:
         return _mean_reward(self.trials)
@@ -318,7 +313,7 @@ class Board:
         for agent in self.lane_order():
             members = [t for t in self.trials if t.agent == agent]
             out.append({"agent": agent, "trials": [t.trial for t in members],
-                        "counts": _counts(members, len(members)),
+                        "counts": _ended(_counts(members, len(members)), self.finished_at),
                         "mean_reward": _mean_reward(members), "totals": _totals(members),
                         "wins": wins.get(agent, 0)})
         return out
@@ -495,6 +490,14 @@ class Board:
             "tail": [e.to_dict() for e in self.tail],
             "notices": list(self.notices),
         }
+
+
+def _ended(c: dict, finished_at: datetime | None) -> dict:
+    """Once the run has ended (its cap, a stop, its endpoint refusing), what never began never will: not run,
+    not pending - the number job.end and Results give. Only then, so a run that began every unit is unchanged."""
+    if finished_at is not None and c["pending"] > 0:
+        c["not_run"], c["pending"] = c["pending"], 0
+    return c
 
 
 def _counts(trials: list, n_total: int | None) -> dict:
