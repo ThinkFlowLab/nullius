@@ -65,6 +65,9 @@ COMPATIBLE = {
     # The judge's option names API errors alongside rate limits and timeouts.
     classify.API_ERROR: ("rate_limit_or_timeout",),
     classify.SETUP_ERROR: ("environment_error",),
+    # The relay's own refusal at the run's spending cap: recorded, never read
+    # from a transcript, so nothing agrees or disagrees with it and no cause suggests it.
+    classify.SPENDING_CAP: (),
     # No claim made: not comparable. The judge's pick becomes a suggestion.
     classify.UNKNOWN: (),
 }

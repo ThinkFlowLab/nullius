@@ -35,6 +35,7 @@
   --rate_limited: #7d8595;
   --api_error: #4aa8ee;           /* 35.8 from its nearest, rate_limited */
   --setup_error: #e58ac0;
+  --spending_cap: #b68a6c;        /* bronze, a coin: 34.8 from its nearest, rate_limited */
   --unknown: #454c58;
 
   /* Tool categories and run phases own their colours rather than borrowing
@@ -109,6 +110,7 @@
   --rate_limited: #626b7a;
   --api_error: #125db2;           /* 43.5 from its nearest, rate_limited */
   --setup_error: #a03089;
+  --spending_cap: #895741;        /* 34.5 from its nearest, patch_failed_tests */
   --unknown: #aab1bb;
 
   /* Same treatment, inverted: worst pair 16.7. */
@@ -998,6 +1000,7 @@ tr.control-row td { color: var(--text-dim); }
 .oc-rate_limited::before, .seg.oc-rate_limited, .tag.oc-rate_limited::before { background: var(--rate_limited); }
 .oc-api_error::before, .seg.oc-api_error, .tag.oc-api_error::before { background: var(--api_error); }
 .oc-setup_error::before, .seg.oc-setup_error, .tag.oc-setup_error::before { background: var(--setup_error); }
+.oc-spending_cap::before, .seg.oc-spending_cap, .tag.oc-spending_cap::before { background: var(--spending_cap); }
 .seg.oc-unknown { background: var(--unknown); }
 
 /* outcome tag inside a table row */
@@ -1019,15 +1022,16 @@ tr.control-row td { color: var(--text-dim); }
 .tag.oc-rate_limited { --outcome-color: var(--rate_limited); }
 .tag.oc-api_error { --outcome-color: var(--api_error); }
 .tag.oc-setup_error { --outcome-color: var(--setup_error); }
+.tag.oc-spending_cap { --outcome-color: var(--spending_cap); }
 .tag.oc-unknown { --outcome-color: var(--unknown); }
-.tag:is(.oc-resolved, .oc-scored, .oc-patch_failed_tests, .oc-failed_verification, .oc-patch_not_applied, .oc-no_patch, .oc-agent_error, .oc-rate_limited, .oc-api_error, .oc-setup_error, .oc-unknown) {
+.tag:is(.oc-resolved, .oc-scored, .oc-patch_failed_tests, .oc-failed_verification, .oc-patch_not_applied, .oc-no_patch, .oc-agent_error, .oc-rate_limited, .oc-api_error, .oc-setup_error, .oc-spending_cap, .oc-unknown) {
   color: color-mix(in srgb, var(--outcome-color) 75%, var(--text));
   background: color-mix(in srgb, var(--outcome-color) 16%, var(--surface));
   border-color: color-mix(in srgb, var(--outcome-color) 42%, var(--border));
   font-family: var(--sans); font-size: 12px; font-weight: 500; line-height: 1.45;
   padding: .22rem .55rem; border-radius: 5px;
 }
-.tag:is(.oc-resolved, .oc-scored, .oc-patch_failed_tests, .oc-failed_verification, .oc-patch_not_applied, .oc-no_patch, .oc-agent_error, .oc-rate_limited, .oc-api_error, .oc-setup_error, .oc-unknown)::before { width: 7px; height: 7px; flex: none; }
+.tag:is(.oc-resolved, .oc-scored, .oc-patch_failed_tests, .oc-failed_verification, .oc-patch_not_applied, .oc-no_patch, .oc-agent_error, .oc-rate_limited, .oc-api_error, .oc-setup_error, .oc-spending_cap, .oc-unknown)::before { width: 7px; height: 7px; flex: none; }
 .tag.oc-unknown { color: var(--text-dim); }
 .tag.oc-unknown::before { background: var(--text-dim); }
 

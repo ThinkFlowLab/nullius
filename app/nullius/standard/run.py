@@ -65,7 +65,7 @@ from typing import Callable, Dict, List, Optional
 from nullius import paths, prices as price_list, progress, providers
 from nullius.redact import redact
 from nullius.harbor import feed as live_feed
-from nullius.standard import acp, container, definitions, hostreq, install, job, jsonl, match, mcp_machine, relay, shard as shards
+from nullius.standard import acp, container, definitions, hostreq, install, job, jsonl, ledger as ledgers, match, mcp_machine, relay, shard as shards
 
 # the totals a unit's end carries onto the live board, from its trial's agent_result
 FEED_TOTALS = ("n_input_tokens", "n_cache_tokens", "n_output_tokens", "cost_usd")
@@ -308,7 +308,7 @@ class Run:
                  backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None,
                  launch: Optional[str] = None, repeat: int = 1, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
-                 remove_images: bool = False, prices: Optional[dict] = None):
+                 remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: the caller's explicit yes to running an agent on the
@@ -328,6 +328,11 @@ class Run:
         (``simulator``): this model instead of its official one.
         ``prices``: this run's own prices, by model, over the user's list
         (``nullius.prices``): what a call's cost is estimated from.
+        ``max_usd``: the run's spending cap (``ledger``): every relay of the
+        job books a call before sending it, and once one does not fit no
+        further call goes out and nothing more is begun. Refused when a model
+        the run calls has no price: a call that cannot be priced cannot be
+        booked.
         ``licences``: what the run holds of the benchmark's licences
         (:class:`Licences`); by default its store on this machine.
         ``bench_options``: the benchmark's own options for this run
@@ -402,6 +407,20 @@ class Run:
         # (nullius.prices), this run's own prices over it. Read once, here: a run never fetches a price.
         self.run_prices = dict(prices or {})
         self.prices = {**price_list.table(), **self.run_prices}
+        self.max_usd, self.ledger = None, None
+        if max_usd is not None:
+            try:
+                cap = float(max_usd)
+            except (TypeError, ValueError):
+                cap = 0.0
+            if not 0 < cap < float("inf"):
+                raise Refused(f"--max-usd {max_usd!r}: the run's spending cap in USD, above zero")
+            unpriced = [m for m in self.models_called() if m not in self.prices]
+            if unpriced:
+                raise Refused("a spending cap needs a price for every model the run calls, and there is none for "
+                              + ", ".join(unpriced) + ": nullius prices update, nullius prices set MODEL INPUT OUTPUT, "
+                              "or --price MODEL=INPUT,OUTPUT")
+            self.max_usd = cap
         lacking = hostreq.missing(bench, needs["host"], which)
         if lacking:
             raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
@@ -479,6 +498,9 @@ class Run:
                                       + (["dataset"] if self.ds.get("url") else [])
                                       + (["driver"] if install.driver_dir(self.bench) else [])
                                       + ([] if control or self.upstream else ["install"]) + ["units"]))
+        if self.max_usd is not None and self.base:
+            # one ledger for the job, in a folder of its own: all a unit's relay container is given of the job besides its record
+            self.ledger = ledgers.Ledger.create(os.path.join(self.job_dir, ".work", "ledger", "ledger.json"), self.max_usd)
         try:
             self.ready()
         except Refused as e:
@@ -511,6 +533,7 @@ class Run:
         results = []
         u0 = time.time()
         self._halt, self._refused, self.halted = threading.Event(), [], None
+        self._cut: List[str] = []                # units the spending cap cut off
         # a model server on this machine's loopback, which the relays' containers cannot reach as written
         self.loopback = (container.Loopback(self.base).start()
                          if self.backend == "docker" and self.base and container.on_loopback(self.base) else None)
@@ -542,7 +565,8 @@ class Run:
         finally:
             # a Stop or Ctrl-C: the units not begun are not begun, those running end with their agents
             pool.shutdown(wait=True, cancel_futures=True)
-            results = [f.result() for f in futures if not f.cancelled() and f.exception() is None and f.result() is not None]
+            begun = [not f.cancelled() and f.exception() is None and f.result() is not None for f in futures]
+            results = [f.result() for f, ran in zip(futures, begun) if ran]
             for d in self.drivers:
                 d.close()
             if self.bench_relay is not None:
@@ -551,11 +575,20 @@ class Run:
                 container.sweep(self.name)          # whatever an interrupted unit left
             if self.loopback is not None:
                 self.loopback.stop()
-            job.write_result(self.job_dir, self.name, t0, time.time(), results, len(work))
+            budget = self.budget([u for n, (_, u, _) in enumerate(work) if n >= len(begun) or not begun[n]])
+            job.write_result(self.job_dir, self.name, t0, time.time(), results, len(work), budget=budget)
             errored = sum(1 for x in results if x.get("exception_info"))
             self.feed.emit("job.end", n_completed=len(results) - errored, n_errored=errored, n_cancelled=len(work) - len(results))
         p.emit("units", "done", seconds=round(time.time() - u0, 1))
         self.n_verdicts, self.n_ended = sum(1 for x in results if x.get("verifier_result")), len(results)
+        if budget and budget["stopped"]:
+            spent = "unknown" if budget["spent_usd"] is None else ledgers.usd(budget["spent_usd"])
+            p.emit("cap", detail=f"a call did not fit the spending cap of {ledgers.usd(budget['max_usd'])} USD",
+                   spent_usd=spent, cut_off=len(budget["cut_off"]), not_run=len(budget["not_run"]))
+            self.say(f"stopped: a call did not fit the spending cap of {ledgers.usd(budget['max_usd'])} USD "
+                     f"({spent} spent): {len(budget['cut_off'])} cut off, {len(budget['not_run'])} not run")
+        elif budget:
+            self.say(f"spent {ledgers.usd(budget['spent_usd'] or 0)} of the {ledgers.usd(budget['max_usd'])} USD cap")
         if self.halted:
             self.say(f"stopped: the endpoint refused {REFUSED_IN_A_ROW} units in a row ({self.halted[0]}: "
                      f"{redact(str(self.halted[1]))[:200]}); the {len(work) - len(results)} units not begun were not run")
@@ -626,7 +659,7 @@ class Run:
         # own, recorded in the job's .work/relay-benchmark beside the units', never counted as the agent's.
         if self.embed_model and self.bench_relay is None:
             self.bench_relay = relay.Relay(self.base, self.key, os.path.join(self.job_dir, ".work", "relay-benchmark"),
-                                           prices=self.prices, model=self.embed_model,
+                                           prices=self.prices, model=self.embed_model, ledger=self.ledger_file(),
                                            key_header=PROVIDERS[self.provider].get("key_header", "authorization")).start()
 
     def runtimes_needed(self) -> List[str]:
@@ -657,6 +690,9 @@ class Run:
     def unit(self, i: int, unit: str, r: int = 1) -> Optional[dict]:
         if self._stopped.is_set() or (getattr(self, "_halt", None) is not None and self._halt.is_set()):
             return None                          # the endpoint refused the run: nothing more is begun
+        if getattr(self, "ledger", None) is not None and self.ledger.closed():
+            self._halt.set()                     # the spending cap refused a call: every later one is refused too
+            return None
         tag = f"u{i:04d}" + (f"r{r}" if self.repeat > 1 else "")
         self.local.attempt = r
         trial = os.path.join(self.job_dir, self.trial_name(i, unit, r))
@@ -759,6 +795,13 @@ class Run:
         if failed and (exc is None or exc[0] not in ("EnvironmentSetupError",)):
             exc = failed                     # what the endpoint said outranks how the agent took it
             score = None
+        if rl is not None and getattr(self, "ledger", None) is not None:
+            # a call the spending cap refused, the agent's, the judge's or the simulated user's: the unit was
+            # cut off by the run's own limit, whatever its agent made of the refusal - never a miss
+            cut = next((f for f in (relay.failure(rl.calls(t)) for t in (tag, f"{tag}-judge", f"{tag}-simulator"))
+                        if f and f[0] == ledgers.ERROR), None)
+            if cut:
+                exc, score = cut, None
         if self._stopped.is_set() and score is None:
             # the Stop ended its agent, its relay or its containers under it: what it then failed with is
             # the Stop's doing, not the agent's nor the environment's (Harbor's name for a stopped trial)
@@ -783,7 +826,29 @@ class Run:
                            **{k: v for k, v in (res.get("agent_result") or {}).items() if k in FEED_TOTALS},
                            durations={"agent_run": round(produce[1] - produce[0], 3)} if produce[0] is not None else None)
         self.note_refusal(exc)
+        if exc and exc[0] == ledgers.ERROR and getattr(self, "_halt", None) is not None:
+            with self._said:
+                self._cut.append(unit)
+            self._halt.set()                     # the cap is reached: nothing more is begun
         return res
+
+    def budget(self, not_run: List[str]) -> Optional[dict]:
+        """What ``result.json`` says of the run's spending cap: the cap,
+        what was spent, what was booked for calls whose cost was never known
+        (``unsettled_usd``, said only when there is some), whether the cap
+        stopped the run, the units it cut off and those never begun. None
+        for a run without a cap."""
+        if getattr(self, "ledger", None) is None:
+            return None
+        try:
+            got = self.ledger.state()
+        except ledgers.Unavailable:
+            got = {"spent_usd": None, "unsettled_usd": 0.0, "held_usd": 0.0, "closed": True}
+        unsettled = round(got["unsettled_usd"] + got["held_usd"], 6)
+        cut = getattr(self, "_cut", [])
+        return {"max_usd": self.max_usd, "spent_usd": None if got["spent_usd"] is None else round(got["spent_usd"], 6),
+                **({"unsettled_usd": unsettled} if unsettled else {}), "stopped": bool(got["closed"]),
+                "cut_off": list(dict.fromkeys(cut)), "not_run": list(dict.fromkeys(not_run)) if got["closed"] else []}
 
     def note_refusal(self, exc: Optional[tuple]) -> None:
         """A unit's end, counted toward the endpoint refusing the run: a wrong
@@ -897,6 +962,11 @@ class Run:
         listed = doc["from"] and any(r["source"] == "list" for r in rows.values())
         return {**({"from": doc["from"], "on": doc["on"]} if listed else {}), "models": rows}
 
+    def ledger_file(self) -> Optional[str]:
+        """The file of the run's spending cap, for a relay; None without a cap."""
+        led = getattr(self, "ledger", None)
+        return led.path if led is not None else None
+
     def models_called(self) -> List[str]:
         """Every model this run's relays may send a call to, as sent: the
         run's, the judge's, the simulator's, an option's embeddings and the
@@ -920,7 +990,7 @@ class Run:
         key_header = PROVIDERS[self.provider].get("key_header", "authorization")
         if self.backend == "local":
             rl = relay.Relay(self.base, self.key, record, prices=getattr(self, "prices", None), model=self.model, side_models=side,
-                             key_header=key_header).start()
+                             key_header=key_header, ledger=self.ledger_file()).start()
             rl.unit_url = rl.url(tag)
             return rl
         routes = {tag + "-judge": self.judge_model} if self.judge_model else {}
@@ -940,7 +1010,8 @@ class Run:
         rl = container.Unit(self.name, tag, record, image=self.image, app=APP, base=door.base if door else self.base, key=self.key,
                             model=self.model, routes=routes, side_models=side, key_header=key_header,
                             prices=price_list.given(self.models_called(), getattr(self, "prices", None)),   # a sidecar's argv: its models' rows
-                            servers=self.agent_servers(env_def), doors=doors, hosts=door.hosts if door else None)
+                            servers=self.agent_servers(env_def), doors=doors, hosts=door.hosts if door else None,
+                            ledger=self.ledger_file())
         rl.mcp_listeners = listeners
         try:
             try:

@@ -61,7 +61,7 @@ class Vocabulary(unittest.TestCase):
         from nullius.runs import classify
         q = questions.QUESTIONS["likely_outcome"]
         self.assertEqual((q["type"], q["state"], q["when"]), ("choice", "failure", "unknown"))
-        self.assertEqual(sorted(q["criteria"]), sorted([l for l in classify.ORDER if l not in (classify.UNKNOWN, classify.SCORED)] + ["other"]))   # the classifier's labels, unknown itself and scored (only a benchmark's score makes it) excluded, an escape
+        self.assertEqual(sorted(q["criteria"]), sorted([l for l in classify.ORDER if l not in (classify.UNKNOWN, classify.SCORED, classify.SPENDING_CAP)] + ["other"]))   # the classifier's labels, unknown itself, scored (only a benchmark's score makes it) and the spending cap (only the relay's refusal makes it) excluded, an escape
         self.assertIn("likely_outcome", questions.for_trial(False, "unknown")); self.assertNotIn("failure_cause", questions.for_trial(True, "resolved"))
         for outcome in ("resolved", "patch_failed_tests", "agent_error", None):
             self.assertNotIn("likely_outcome", questions.for_trial(outcome == "resolved", outcome), outcome)

@@ -150,7 +150,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |
-| `outcome` | One of eleven classes: from the exception if there was one, else from the verifier's verdict. Full vocabulary below. | inferred | mixed |
+| `outcome` | One of twelve classes: from the exception if there was one, else from the verifier's verdict. Full vocabulary below. | inferred | mixed |
 | `score · n_parts` | A graded score the benchmark gave, and how many parts it averages. With no reward and no exception, the outcome is *Scored*. | measured | mixed |
 | `reward` | The verifier's raw reward. Where no report says more, 1.0 or above is a solve. | measured | any |
 | `f2p_pass / f2p_fail` | Checks that had to start passing: SWE-bench's FAIL_TO_PASS, or every test of a Terminal-Bench task. | measured | mixed |
@@ -219,7 +219,7 @@ Computed here over the trajectory's tool calls, when present. They describe cond
 
 ## Outcome vocabulary {#outcomes}
 
-Eleven classes. The three marked **yes** under Infrastructure leave the adjusted solve rate's denominator.
+Twelve classes. The four marked **yes** under Infrastructure leave the adjusted solve rate's denominator.
 
 | Outcome | Label | Infrastructure | Meaning |
 | --- | --- | --- | --- |
@@ -233,6 +233,7 @@ Eleven classes. The three marked **yes** under Infrastructure leave the adjusted
 | `rate_limited` | Rate limited | yes | An HTTP 429 ended the trial. |
 | `api_error` | API error | yes | Any other provider failure: overloaded, unreachable, out of quota, key rejected. |
 | `setup_error` | Setup error | yes | The environment or image never came up, or the unit was not run for want of a secret or docker it needs, so the agent never ran. |
+| `spending_cap` | Spending cap | yes | A standard run reached its spending cap (`--max-usd`): its relay refused a model call the unit needed (`SpendingCapError`). Nothing failed; no attempt was had. |
 | `unknown` | Unknown | no | No verdict, or an exception on neither list. Counted, charged to nobody; the trial page shows the recorded type. |
 
 ## Caveats {#caveats}

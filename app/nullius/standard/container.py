@@ -471,17 +471,21 @@ def install_argv(image: str, where: str, cmd: List[str]) -> List[str]:
 
 def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_file: str, base: str,
                model: Optional[str], routes: Dict[str, str], prices: Optional[dict] = None, side_models=(),
-               key_header: str = "authorization", hosts: Optional[Dict[str, str]] = None) -> List[str]:
+               key_header: str = "authorization", hosts: Optional[Dict[str, str]] = None,
+               ledger: Optional[str] = None) -> List[str]:
     """``docker run`` for a unit's relay: on the default bridge (its way to the
     provider), its port published on 127.0.0.1 only. The key is never given:
     ``key_file``, its file, is mounted read-only at ``RELAY_KEY_IN`` with
     ``--mount``, which fails when the engine cannot see it (``-v`` would mount
     an empty folder). ``hosts``: names it resolves
-    (``--add-host``), the machine's own for an endpoint on its loopback."""
+    (``--add-host``), the machine's own for an endpoint on its loopback.
+    ``ledger``: the file of the run's spending cap, its folder mounted so
+    this relay books its calls where every other relay of the job does."""
     a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
          "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
          *[w for n, ip in sorted((hosts or {}).items()) for w in ("--add-host", f"{n}:{ip}")],
          "-p", f"127.0.0.1::{RELAY_PORT}", "-v", f"{app}:{app}:ro", "-v", f"{record}:{record}:rw",
+         *(["-v", f"{os.path.dirname(ledger)}:{os.path.dirname(ledger)}:rw"] if ledger else []),
          "--mount", f"type=bind,source={key_file},target={RELAY_KEY_IN},readonly", "-w", app,
          "-e", "PYTHONPATH=" + app, "-e", "PYTHONDONTWRITEBYTECODE=1",
          image, "python3", "-m", "nullius.standard.relay", "serve", "--listen", f"0.0.0.0:{RELAY_PORT}",
@@ -492,6 +496,8 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
         a += ["--route", f"{tag}={m}"]
     if prices:
         a += ["--prices", json.dumps(prices, separators=(",", ":"))]
+    if ledger:
+        a += ["--ledger", ledger]
     for m in side_models:
         a += ["--side-model", m]
     if key_header != "authorization":
@@ -653,8 +659,10 @@ class Unit:
     def __init__(self, job: str, tag: str, record_dir: str, *, image: str, app: str, base: str, key: str,
                  model: Optional[str] = None, routes: Optional[Dict[str, str]] = None, prices: Optional[dict] = None,
                  side_models=(), key_header: str = "authorization", servers: Iterable[str] = (),
-                 doors: Iterable[Tuple[str, int, str]] = (), hosts: Optional[Dict[str, str]] = None):
+                 doors: Iterable[Tuple[str, int, str]] = (), hosts: Optional[Dict[str, str]] = None,
+                 ledger: Optional[str] = None):
         self.job, self.tag, self.dir, self.image, self.app = job, tag, record_dir, image, app
+        self.ledger = ledger                     # the file of the run's spending cap, when it has one
         self.servers = list(servers)             # licence servers, host:port each: a forwarder apiece
         self.doors = list(doors)                 # servers on this machine: (alias, port, socket), a door apiece
         self.side_models, self.key_header = tuple(side_models), key_header
@@ -674,7 +682,7 @@ class Unit:
             argv = relay_argv(self.image, name=self.names["relay"], job=self.job, app=self.app, record=self.dir,
                               key_file=self._key_file(), base=self.base, model=self.model, routes=self.routes,
                               prices=self.prices, side_models=self.side_models, key_header=self.key_header,
-                              hosts=self.hosts)
+                              hosts=self.hosts, ledger=self.ledger)
             self.started.append(self.names["relay"])
             _docker(argv[1:])
             _docker(["network", "connect", "--alias", RELAY_ALIAS, self.names["network"], self.names["relay"]])

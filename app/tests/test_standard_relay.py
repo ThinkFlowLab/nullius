@@ -16,7 +16,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from nullius.runs import classify
-from nullius.standard import jsonl, relay
+from nullius.standard import jsonl, ledger, relay
 
 CHAT = {"choices": [{"message": {"role": "assistant", "content": "hello"}}],
         "usage": {"prompt_tokens": 10, "completion_tokens": 2, "prompt_tokens_details": {"cached_tokens": 4}}}
@@ -45,6 +45,8 @@ class Upstream(BaseHTTPRequestHandler):
             self.reply(429, b'{"error":{"message":"Rate limit reached"}}', "application/json")
         elif mode == "401":
             self.reply(401, b'{"error":{"message":"Incorrect API key"}}', "application/json")
+        elif mode == "no-usage":
+            self.reply(200, b'{"choices":[{"message":{"role":"assistant","content":"hello"}}]}', "application/json")
         elif self.path.endswith("/responses"):
             self.reply(200, RESP_SSE, "text/event-stream")
         elif body.get("stream"):
@@ -178,6 +180,123 @@ class RelayTest(unittest.TestCase):
             r.stop()
 
 
+class CapTest(unittest.TestCase):
+    """A relay of a run with a spending cap: a call is booked before it goes
+    out and is not sent when it does not fit - the one answer that is the
+    relay's own, and marked so."""
+    PRICES = {"m": {"input": 1.0, "cached": 0.1, "output": 10.0}}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.up = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+        threading.Thread(target=cls.up.serve_forever, daemon=True).start()
+        cls.base = f"http://127.0.0.1:{cls.up.server_address[1]}/v1"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.up.shutdown()
+
+    def capped(self, cap):
+        tmp = tempfile.mkdtemp()
+        led = ledger.Ledger.create(os.path.join(tmp, "ledger", "ledger.json"), cap)
+        r = relay.Relay(self.base, "sk-real", os.path.join(tmp, "relay"), prices=self.PRICES, ledger=led.path).start()
+        self.addCleanup(r.stop)
+        return r, led
+
+    def post(self, r, tag, body):
+        req = urllib.request.Request(r.url(tag) + "/chat/completions", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req) as got:
+                return got.status, dict(got.headers.items()), got.read()
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers.items()), e.read()
+
+    def test_a_call_that_fits_is_sent_and_its_booking_becomes_what_it_cost(self):
+        r, led = self.capped(1.0)
+        body = {"model": "m", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 100}
+        status, _, _ = self.post(r, "u1", body)
+        self.assertEqual(status, 200)
+        rec = r.calls("u1")[-1]
+        self.assertAlmostEqual(rec["booked_usd"], ledger.bound(body, json.dumps(body).encode(), self.PRICES["m"]))
+        got = led.state()
+        self.assertAlmostEqual(got["spent_usd"], rec["cost_usd"])
+        self.assertEqual((got["held_usd"], got["unsettled_usd"], got["closed"]), (0, 0.0, False))
+
+    def test_a_call_is_booked_at_what_the_runs_replies_have_been_once_one_came_back(self):
+        """Fifteen calls at the model's limit would fill a cap nothing was spent of: after the first reply
+        (2 output tokens here) a call that names no limit is booked those, at the same price."""
+        r, led = self.capped(1.0)
+        body = {"model": "m", "messages": [{"role": "user", "content": "hi"}]}
+        raw = json.dumps(body).encode()
+        self.assertEqual(self.post(r, "u1", body)[0], 200)
+        first = r.calls("u1")[-1]
+        self.assertAlmostEqual(first["booked_usd"], ledger.bound(body, raw, self.PRICES["m"]))            # no reply yet: the start
+        self.assertEqual(led.largest("m"), first["reply"]["usage"]["output"])
+        self.assertEqual(self.post(r, "u2", body)[0], 200)
+        second = r.calls("u2")[-1]
+        self.assertAlmostEqual(second["booked_usd"], ledger.bound(body, raw, self.PRICES["m"], seen=first["reply"]["usage"]["output"]))
+        self.assertLess(second["booked_usd"], first["booked_usd"])
+        self.assertAlmostEqual(led.state()["spent_usd"], first["cost_usd"] + second["cost_usd"])          # what was spent is what the calls cost
+
+    def test_a_call_that_does_not_fit_is_answered_by_the_relay_and_never_sent(self):
+        r, led = self.capped(0.0005)             # 100 output tokens at 10 USD a million are 0.001 already
+        sent = len(Upstream.seen)
+        status, headers, body = self.post(r, "u1", {"model": "m", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 100})
+        self.assertEqual((status, headers.get("X-Nullius-Refused")), (402, "cap"))
+        error = json.loads(body)["error"]
+        self.assertEqual(error["type"], "spending_cap")
+        self.assertIn("nullius relay: the run's spending cap of 0.0005 USD", error["message"])
+        rec = r.calls("u1")[-1]
+        self.assertEqual((rec["status"], rec["refused"]), (402, "cap"))
+        self.assertNotIn("reply", rec)
+        self.assertTrue(led.closed())
+        # a call small enough to fit is refused too: a run stops at one point
+        status, _, _ = self.post(r, "u1", {"model": "m", "messages": [], "max_tokens": 1})
+        self.assertEqual(status, 402)
+        self.assertEqual(len(Upstream.seen), sent)                       # neither reached the provider
+        self.assertEqual(led.state()["spent_usd"], 0.0)
+        exc, said = relay.failure(r.calls("u1"))
+        self.assertEqual(exc, ledger.ERROR)
+        self.assertIn("spending cap", said)
+        self.assertEqual(classify.from_verdict(exc, None), classify.SPENDING_CAP)    # its own outcome, never a miss
+        self.assertIn(classify.SPENDING_CAP, classify.INFRA_OUTCOMES)
+
+    def test_a_refused_call_is_the_units_whatever_its_agent_did_next(self):
+        calls = [{"status": 200}, {"status": 402, "refused": "cap", "error": "the run's spending cap"}, {"status": 200}]
+        self.assertEqual(relay.failure(calls), (ledger.ERROR, "the run's spending cap"))
+
+    def test_an_error_gives_the_booking_back_and_a_reply_without_tokens_keeps_it(self):
+        r, led = self.capped(1.0)
+        status, _, _ = self.post(r, "u1", {"model": "m", "mode": "429", "max_tokens": 100})
+        self.assertEqual(status, 429)                                     # the provider's own, passed on as ever
+        got = led.state()
+        self.assertEqual((got["spent_usd"], got["unsettled_usd"], got["held_usd"]), (0.0, 0.0, 0))
+        status, _, _ = self.post(r, "u1", {"model": "m", "mode": "no-usage", "max_tokens": 100})
+        self.assertEqual(status, 200)
+        rec = r.calls("u1")[-1]
+        self.assertNotIn("cost_usd", rec)
+        got = led.state()
+        self.assertEqual((got["spent_usd"], got["held_usd"]), (0.0, 0))
+        self.assertAlmostEqual(got["unsettled_usd"], rec["booked_usd"])     # it may have been billed
+
+    def test_a_model_without_a_price_is_not_sent_and_closes_nothing(self):
+        r, led = self.capped(1.0)
+        sent = len(Upstream.seen)
+        status, _, body = self.post(r, "u1", {"model": "another", "messages": []})
+        self.assertEqual(status, 402)
+        self.assertIn("no price for the model 'another'", json.loads(body)["error"]["message"])
+        self.assertEqual(len(Upstream.seen), sent)
+        self.assertFalse(led.closed())
+
+    def test_a_relay_without_a_cap_books_nothing(self):
+        r = relay.Relay(self.base, "sk-real", tempfile.mkdtemp(), prices=self.PRICES).start()
+        self.addCleanup(r.stop)
+        status, _, _ = self.post(r, "u1", {"model": "another", "messages": []})
+        self.assertEqual(status, 200)
+        self.assertNotIn("booked_usd", r.calls("u1")[-1])
+
+
 class EffortTest(unittest.TestCase):
     def test_the_record_says_the_reasoning_effort_a_request_asked_for(self):
         # chat's reasoning_effort, the Responses API's reasoning.effort, and none at all
@@ -223,6 +342,24 @@ class ServeTest(unittest.TestCase):
                 urllib.request.urlopen(req).read()
                 self.assertEqual(Upstream.seen[-1][1], "Bearer sk-from-file")
                 self.assertEqual(Upstream.seen[-1][2]["model"], model)
+            p.send_signal(signal.SIGTERM)
+            self.assertEqual(p.wait(timeout=10), 0)
+        finally:
+            if p.poll() is None:
+                p.kill()
+            p.stdout.close()
+
+    def test_serve_books_its_calls_in_the_runs_ledger(self):
+        """A docker unit's relay: the ledger is a file it is given, shared with every other relay of the job."""
+        import signal
+        led = ledger.Ledger.create(os.path.join(tempfile.mkdtemp(), "ledger", "ledger.json"), 1.0)
+        p = self.serve("sk-from-env", "--ledger", led.path, "--prices", json.dumps({"the-recipes": {"input": 1.0, "output": 10.0}}))
+        try:
+            where = json.loads(p.stdout.readline())["listening"]
+            req = urllib.request.Request(f"{where}/u1/v1/chat/completions", data=b'{"model":"asked","max_tokens":5}',
+                                         headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req).read()
+            self.assertAlmostEqual(led.state()["spent_usd"], (10 * 1.0 + 2 * 10.0) / 1e6)
             p.send_signal(signal.SIGTERM)
             self.assertEqual(p.wait(timeout=10), 0)
         finally:
