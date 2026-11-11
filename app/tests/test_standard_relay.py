@@ -692,7 +692,28 @@ class PassThroughTest(unittest.TestCase):
         rec = r.calls("u")[-1]["reply"]
         self.assertEqual(rec["text"], "hello")
         self.assertEqual(rec["tool_calls"], [{"name": "bash", "arguments": '{"cmd": "ls"}'}])
-        self.assertEqual(rec["usage"], {"input": 132, "output": 3, "cached": 120, "reasoning": 0})
+        self.assertEqual(rec["usage"], {"input": 132, "output": 3, "cached": 120, "reasoning": 0, "cache_write": 20})
+
+    def test_tokens_written_to_a_cache_are_priced_apart_from_those_read_from_it(self):
+        """Of its 120 cached tokens the reply read 100 and wrote 20: a write costs more than a fresh token, a read less."""
+        row = {"input": 3.0, "cached": 0.3, "cache_write": 3.75, "output": 15.0}
+        for prices, cost in ((row, 12 * 3.0 + 100 * 0.3 + 20 * 3.75 + 3 * 15.0),
+                             ({k: v for k, v in row.items() if k != "cache_write"}, 12 * 3.0 + 100 * 0.3 + 20 * 3.0 + 3 * 15.0)):   # no price for a write: the input's
+            r = self.relay(model="claude-x", key_header="x-api-key", prices={"claude-x": prices})
+            self.post(r, "u", "/messages", {"model": "claude-x", "max_tokens": 10, "messages": []}, {"x-api-key": relay.PLACEHOLDER_KEY})
+            rec = r.calls("u")[-1]
+            self.assertEqual(rec["cost_from"], "estimate")
+            self.assertAlmostEqual(rec["cost_usd"], cost / 1e6)
+
+    def test_a_cache_write_said_in_the_chat_format_is_priced_as_one(self):
+        """The usage of a real call that wrote 7,081 tokens, then of one that read them: charged 0.000889025 and 0.00007471 USD."""
+        r = self.relay(prices={"m": {"input": 0.10, "output": 0.50, "cached": 0.01, "cache_write": 0.125}})
+        wrote = relay._usage({"prompt_tokens": 7105, "completion_tokens": 3, "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 7081}})
+        self.assertEqual(wrote, {"input": 7105, "output": 3, "cached": 7081, "reasoning": 0, "cache_write": 7081})
+        self.assertAlmostEqual(r._cost("m", wrote)[0], 0.000889025)                  # 0.000712 at the input rate
+        read = relay._usage({"prompt_tokens": 7105, "completion_tokens": 3, "prompt_tokens_details": {"cached_tokens": 7081, "cache_write_tokens": 0}})
+        self.assertEqual(read, {"input": 7105, "output": 3, "cached": 7081, "reasoning": 0})
+        self.assertAlmostEqual(r._cost("m", read)[0], 0.00007471)
 
     def test_anthropic_messages_streamed(self):
         r = self.relay(model="claude-x", key_header="x-api-key")
