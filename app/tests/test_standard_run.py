@@ -404,6 +404,7 @@ class RunTest(unittest.TestCase):
             board = live.fold([live.parse_line(line) for line in f if line.strip()])
         self.assertEqual(board.budget, {"max_usd": 0.00011})
         self.assertEqual({t.trial.split("__")[0]: t.outcome for t in board.trials if t.outcome}, {"m0": "resolved", "m1": "resolved", "m2": "resolved", "m3": "budget"})
+        self.assertEqual((board.counts().get("not_run"), board.counts()["pending"]), (len(result["budget"]["not_run"]), 0))   # as the result says
         self.assert_no_key(job_dir)
 
     def test_a_spending_cap_the_run_stays_under_changes_nothing_but_the_result(self):

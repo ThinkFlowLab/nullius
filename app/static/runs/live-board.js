@@ -117,7 +117,7 @@
         + stat(`Adjusted <small>${when}</small>`, ran > 0 ? pct(oc.resolved / ran) : '—', 'rate', !(ran > 0));
     return stat('Done', `${C.completed}<small>/${C.total == null ? '?' : C.total}</small>`)
       + stat('Running', String(C.running))
-      + stat('Queued', queued == null ? '—' : String(queued), '', queued == null)
+      + (C.not_run ? stat('Not run', String(C.not_run)) : stat('Queued', queued == null ? '—' : String(queued), '', queued == null))
       + stat('Rate', rate ? `${rate.toFixed(1)}<small>/min</small>` : '—', '', !rate)
       + rates;
   }
@@ -161,13 +161,13 @@
     return `<div class="lb-winners" data-winners="${winners.length}"><table><thead><tr><th>Winner per task</th>${agents.map(a => `<th class="num">${esc(a)}</th>`).join('')}<th>winner</th></tr></thead><tbody>${rows}</tbody></table>
       <p class="lb-note">Each agent's best reward on the task so far; a winner is named once every trial of the task ended and one best is strictly higher. A tie names nobody.</p></div>`;
   }
-  function renderTiles(trials, opts, agents) {
+  function renderTiles(trials, opts, agents, ended) {
     return trials.map(t => {
       const st = t.state === 'done' ? 'done' : t.state === 'running' ? 'running' : 'queued';
       const cls = st === 'done' ? ` lbo-${esc(t.outcome || 'cancelled')}` : st === 'running' ? ` lbp-${esc(t.phase)}` : '';
       const w = st === 'running' && t.timeout_sec ? ` style="--p:${Math.min(1, pressure(t)).toFixed(3)}"` : '';
       const dim = opts.filter && t.outcome !== opts.filter ? ' dim' : '';
-      const label = `${shortTask(t)}${agents.length > 1 ? ' · ' + (t.agent || '') : ''}: ${st === 'done' ? (OUTCOME_LABEL[t.outcome] || 'ended') : st === 'running' ? PHASE_LABEL[t.phase] || t.phase : 'queued'}`;
+      const label = `${shortTask(t)}${agents.length > 1 ? ' · ' + (t.agent || '') : ''}: ${st === 'done' ? (OUTCOME_LABEL[t.outcome] || 'ended') : st === 'running' ? PHASE_LABEL[t.phase] || t.phase : ended ? 'not run' : 'queued'}`;
       return `<button type="button" class="lb-tile ${st}${cls}${dim}" data-trial="${esc(t.trial)}"${w} aria-current="${opts.selected === t.trial}" aria-label="${esc(label)}" title="${esc(label)}"><i></i></button>`;
     }).join('');
   }
@@ -255,7 +255,7 @@
     const events = (s.tail || []).filter(e => e.trial === t.trial).slice(-6);
     const state = t.state === 'done' ? `${OUTCOME_LABEL[t.outcome] || 'Ended'}${t.total_sec != null ? ', ' + clock(t.total_sec) + ' in all' : ''}`
       : t.state === 'running' ? `${PHASE_LABEL[t.phase] || t.phase}, ${clock(t.elapsed_sec)} of ${t.timeout_sec ? clock(t.timeout_sec) : 'no limit'}`
-      : `Queued${t.position != null ? ', position ' + (t.position + 1) : ''}`;
+      : stateOf(s) === 'finished' ? 'Not run' : `Queued${t.position != null ? ', position ' + (t.position + 1) : ''}`;
     const href = trialHref(t, opts);
     return `<header><h3>${esc(shortTask(t))}<small>${esc(state)}${t.agent ? ' · ' + esc(t.agent) : ''}</small></h3><button class="lb-x" type="button" data-close aria-label="Close trial detail">×</button></header>
       <div class="lb-river"><div class="lb-rl"><span>${t0 == null ? 'not started' : hms(starts[keys[0]])}</span><span>${tl.ended ? 'ended ' + hms(tl.ended) : limEnd ? 'limit ' + clock(limEnd - t0) + ' in' : ''}</span></div>
@@ -293,7 +293,7 @@
       winners: renderWinners(winners),
       tilesLabel: `All ${trials.length} trial${trials.length === 1 ? '' : 's'}`,
       manyTiles: trials.length > MANY_TILES,
-      tiles: renderTiles(trials, opts, agents),
+      tiles: renderTiles(trials, opts, agents, state === 'finished'),
       flight: renderFlight(s, state, opts, oc, agents),
       drawer: picked ? renderDrawer(s, picked, opts) : '',
     };

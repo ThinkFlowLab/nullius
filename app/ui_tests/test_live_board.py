@@ -24,7 +24,7 @@ import unittest
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
-from nullius.runs import parse
+from nullius.runs import live, parse
 from nullius.standard import ledger
 from nullius import workspace
 
@@ -428,6 +428,26 @@ class LiveBoard(unittest.TestCase):
         said = [re.search(r"spending cap \$([0-9.]+)", visible(self.render(dict(s, budget={"max_usd": v}))["meta"])) for v in amounts]
         self.assertEqual([m and m[1] for m in said], [ledger.usd(v) for v in amounts])   # 0.00015 read "$0.0001", 0.00004 "$0.00"
         self.assertNotIn("spending cap", self.render(s)["meta"])                         # none said where the run has none
+
+    def test_renderer_says_not_run_for_what_a_finished_run_never_began(self):
+        """A standard run's feed: six units queued, two run, then its cap ends it. Folded, then drawn."""
+        at = lambda n: f"2026-09-12T18:00:{n:02d}Z"
+        line = lambda n, event, trial=None, **d: json.dumps({"ts": at(n), "seq": n, "job": "j", "trial": trial, "event": event, **d})
+        feed = [line(1, "job.start", n_total=6, n_concurrent=2)] + [line(2 + i, "trial.queued", f"u{i}", position=i) for i in range(6)]
+        feed += [line(10, "trial.phase", "u0", phase="agent_run"), line(11, "trial.phase", "u1", phase="agent_run"),
+                 line(20, "trial.end", "u0", outcome="resolved", reward=1.0), line(21, "trial.end", "u1", outcome="budget")]
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d, "events.jsonl")
+            path.write_text("\n".join(feed) + "\n")
+            going = live.load(path).snapshot()
+            path.write_text("\n".join(feed + [line(22, "job.end", n_completed=1, n_errored=1, n_cancelled=4)]) + "\n")
+            ended = live.load(path).snapshot()
+        out = self.render(going, selected="u3")
+        self.assertIn("Queued 4", visible(out["stats"])); self.assertIn('u3: queued"', out["tiles"]); self.assertIn("Queued, position 4", visible(out["drawer"]))
+        out = self.render(ended, selected="u3")
+        self.assertIn("Not run 4", visible(out["stats"])); self.assertNotIn("Queued", visible(out["stats"]))
+        self.assertIn('u3: not run"', out["tiles"]); self.assertNotIn(': queued"', out["tiles"])
+        self.assertIn("Not run", visible(out["drawer"])); self.assertNotIn("Queued", visible(out["drawer"]))
 
     def test_renderer_shows_the_last_log_line_when_no_activity_and_it_is_redacted(self):
         s = json.loads((FIXTURE / "expected.json").read_text())
