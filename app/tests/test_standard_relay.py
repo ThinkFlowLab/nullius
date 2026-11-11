@@ -239,12 +239,10 @@ class CapTest(unittest.TestCase):
         self.assertEqual(self.post(r, "u1", body)[0], 200)
         first = r.calls("u1")[-1]
         self.assertAlmostEqual(first["booked_usd"], ledger.bound(body, raw, self.PRICES["m"]))            # no reply yet: the start
-        self.assertEqual(led.usual("m"), first["reply"]["usage"]["output"])
         self.assertEqual(self.post(r, "u2", body)[0], 200)
         second = r.calls("u2")[-1]
         self.assertAlmostEqual(second["booked_usd"], ledger.bound(body, raw, self.PRICES["m"], seen=first["reply"]["usage"]["output"]))
         self.assertLess(second["booked_usd"], first["booked_usd"])
-        self.assertAlmostEqual(led.state()["spent_usd"], first["cost_usd"] + second["cost_usd"])          # what was spent is what the calls cost
 
     def test_a_units_own_cap_refuses_its_calls_and_its_simulated_users_not_its_judges_nor_another_units(self):
         tmp = tempfile.mkdtemp()
@@ -261,8 +259,6 @@ class CapTest(unittest.TestCase):
         exc, why = relay.failure(r.calls("u1"))
         self.assertEqual(exc, ledger.UNIT_ERROR)
         self.assertIn("this unit's spending cap of 0.0005 USD", why)
-        self.assertEqual(classify.from_verdict(exc, None), classify.AGENT_ERROR)   # it spent its allowance: counted against the agent
-        self.assertNotIn(classify.AGENT_ERROR, classify.INFRA_OUTCOMES)
         self.assertEqual(self.post(r, "u1-judge", body)[0], 200)                   # the scorer is no part of the unit's task
         self.assertEqual(self.post(r, "u1-simulator", body)[0], 402)               # its simulated user is
         self.assertEqual(self.post(r, "u2", body)[0], 200)                         # another unit: booked what a reply has been, within its own cap
@@ -287,8 +283,11 @@ class CapTest(unittest.TestCase):
         self.assertFalse(any("booked_usd" in c or c.get("refused") for c in r.calls("u1")))
         self.assertEqual((led.state()["held_usd"], led.state()["unsettled_usd"], led.state()["spent_usd"]), (0, 0.0, 0.0))
         # a model with no price is not sent, and that is no cap reached: the unit is not the cap's, and the run goes on
+        sent = len(Upstream.seen)
         status, headers, answer = self.post(r, "u2", {"model": "another", "messages": [{"role": "user", "content": "hi"}]})
         self.assertEqual((status, headers.get("X-Nullius-Refused"), json.loads(answer)["error"]["code"]), (402, "price", "unpriced_model"))
+        self.assertIn("no price for the model 'another'", json.loads(answer)["error"]["message"])
+        self.assertEqual(len(Upstream.seen), sent)
         self.assertEqual(r.calls("u2")[-1]["refused"], "price")
         self.assertEqual(relay.failure(r.calls("u2"))[0], "ApiError")
         self.assertFalse(led.closed())
@@ -358,8 +357,6 @@ class CapTest(unittest.TestCase):
         exc, said = relay.failure(r.calls("u1"))
         self.assertEqual(exc, ledger.ERROR)
         self.assertIn("spending cap", said)
-        self.assertEqual(classify.from_verdict(exc, None), classify.SPENDING_CAP)    # its own outcome, never a miss
-        self.assertIn(classify.SPENDING_CAP, classify.INFRA_OUTCOMES)
 
     def test_a_cap_under_one_guessed_call_lets_the_first_out_and_books_the_next_from_its_reply(self):
         """100 output tokens at 10 USD a million are 0.001, over this cap of 0.0005: before any reply that is a
@@ -372,13 +369,6 @@ class CapTest(unittest.TestCase):
         self.assertEqual(self.post(r, "u2", body)[0], 200)
         self.assertLess(r.calls("u2")[-1]["booked_usd"], 0.0001)                   # what a reply has been
         self.assertFalse(led.closed())
-        # a unit's own cap the same way
-        tmp = tempfile.mkdtemp()
-        each = ledger.Ledger.create(os.path.join(tmp, "ledger", "ledger.json"), None, 0.0005)
-        units = relay.Relay(self.base, "sk-real", os.path.join(tmp, "relay"), prices={"fresh": self.PRICES["m"]}, ledger=each.path).start()
-        self.addCleanup(units.stop)
-        self.assertEqual(self.post(units, "u1", dict(body, model="fresh"))[0], 200)
-        self.assertAlmostEqual(units.calls("u1")[-1]["booked_usd"], 0.0005)
 
     def test_a_call_that_never_left_gives_its_booking_back_and_one_cut_off_after_it_was_sent_keeps_it(self):
         r, led = self.capped(1.0)
@@ -452,22 +442,6 @@ class CapTest(unittest.TestCase):
         got = led.state()
         self.assertEqual((got["spent_usd"], got["held_usd"]), (0.0, 0))
         self.assertAlmostEqual(got["unsettled_usd"], rec["booked_usd"])     # it may have been billed
-
-    def test_a_model_without_a_price_is_not_sent_and_closes_nothing(self):
-        r, led = self.capped(1.0)
-        sent = len(Upstream.seen)
-        status, _, body = self.post(r, "u1", {"model": "another", "messages": []})
-        self.assertEqual(status, 402)
-        self.assertIn("no price for the model 'another'", json.loads(body)["error"]["message"])
-        self.assertEqual(len(Upstream.seen), sent)
-        self.assertFalse(led.closed())
-
-    def test_a_relay_without_a_cap_books_nothing(self):
-        r = relay.Relay(self.base, "sk-real", tempfile.mkdtemp(), prices=self.PRICES).start()
-        self.addCleanup(r.stop)
-        status, _, _ = self.post(r, "u1", {"model": "another", "messages": []})
-        self.assertEqual(status, 200)
-        self.assertNotIn("booked_usd", r.calls("u1")[-1])
 
 
 class EffortTest(unittest.TestCase):

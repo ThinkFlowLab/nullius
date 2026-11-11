@@ -25,6 +25,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 from nullius.runs import parse
+from nullius.standard import ledger
 from nullius import workspace
 
 APP_DIR = Path(__file__).resolve().parents[1]
@@ -419,6 +420,14 @@ class LiveBoard(unittest.TestCase):
         opened = self.render(s, selected=running[0]["trial"])
         self.assertIn('href="/trial/demo-x3/', opened["drawer"])                          # the drawer links to its trial
         self.assertIn(escape(running[0]["task"].split("__")[-1]), opened["drawer"])
+
+    def test_renderer_says_a_spending_cap_as_the_job_page_does(self):
+        """One amount, one reading: the cap on the board is what ledger.usd gives, under a cent too."""
+        s = json.loads((FIXTURE / "expected.json").read_text())
+        amounts = [1, 10, 0.5, 0.395, 0.154, 0.004, 0.00015, 0.00004, 0.002017442, 1234.5]
+        said = [re.search(r"spending cap \$([0-9.]+)", visible(self.render(dict(s, budget={"max_usd": v}))["meta"])) for v in amounts]
+        self.assertEqual([m and m[1] for m in said], [ledger.usd(v) for v in amounts])   # 0.00015 read "$0.0001", 0.00004 "$0.00"
+        self.assertNotIn("spending cap", self.render(s)["meta"])                         # none said where the run has none
 
     def test_renderer_shows_the_last_log_line_when_no_activity_and_it_is_redacted(self):
         s = json.loads((FIXTURE / "expected.json").read_text())

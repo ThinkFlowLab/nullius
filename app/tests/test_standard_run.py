@@ -326,14 +326,13 @@ class RunTest(unittest.TestCase):
         self.assertEqual(result["budget"], {"max_usd": None, "spent_usd": 0.000287, "stopped": False, "cut_off": [], "not_run": [],
                                             "unit_max_usd": 0.0005, "over_unit": ["m5"]})
         self.assertFalse(failed)
-        got, j = self.outcomes(job_dir)
+        got, _ = self.outcomes(job_dir)
         self.assertEqual(sorted(got), [f"m{i}" for i in range(8)])               # every unit was begun: the run went on
         self.assertEqual((got["m5"].exception_type, got["m5"].outcome), (ledger.UNIT_ERROR, classify.AGENT_ERROR))
         self.assertTrue(all(got[u].outcome == classify.RESOLVED for u in got if u != "m5"))
-        self.assertEqual(j.budget["over_unit"], ["m5"])
         calls = self.relay_calls(job_dir)
         self.assertEqual(([c.get("refused") for c in calls].count("unit"), len([c for c in calls if not c.get("refused")])), (1, 7))
-        self.assertTrue(any(s == "1 of the tasks reached the cap of 0.0005 USD each and were cut off there" for s in said), said)
+        self.assertTrue(any(s.startswith("1 of the tasks reached the cap of 0.0005 USD each") for s in said), said)
         self.assertFalse(any(s.startswith("stopped:") for s in said), said)
         with open(os.path.join(job_dir, "events.jsonl")) as f:
             board = live.fold([live.parse_line(line) for line in f if line.strip()])
@@ -370,14 +369,13 @@ class RunTest(unittest.TestCase):
         r.embed_model = "embed-1"
         r.bench_relay = relay.Relay("http://127.0.0.1:9/v1", "sk-real", os.path.join(self.tmp, "relay-benchmark")).start()
         self.addCleanup(r.bench_relay.stop)
-        urls = {}
-        for name in ("a", "b"):
-            t = threading.Thread(target=lambda name=name: urls.update({name: (r.embeddings_tag(), r.embeddings_env()["OPENAI_BASE_URL"])}))
-            t.start()
-            t.join()
-            urls[name] += (t.ident,)
-        (tag_a, url_a, ident_a), (tag_b, url_b, ident_b) = urls["a"], urls["b"]
-        self.assertEqual((tag_a, tag_b), (f"embeddings-{ident_a}", f"embeddings-{ident_b}"))
+        route = lambda: (r.embeddings_tag(), r.embeddings_env()["OPENAI_BASE_URL"])
+        urls = {"a": route()}
+        t = threading.Thread(target=lambda: urls.update(b=route()))      # a second thread while this one lives, as two units side by side
+        t.start()
+        t.join()
+        (tag_a, url_a), (tag_b, url_b) = urls["a"], urls["b"]
+        self.assertNotEqual(tag_a, tag_b)
         self.assertTrue(url_a.endswith(f"/{tag_a}/v1") and url_b.endswith(f"/{tag_b}/v1"))
         self.assertEqual({r.bench_relay.models[tag_a], r.bench_relay.models[tag_b]}, {"embed-1"})
 

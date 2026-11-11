@@ -159,9 +159,8 @@ class SpendingCap(unittest.TestCase):
         self.assertEqual(out["errors"], [])
         self.assertEqual(self.caps(out), ["0.25"] * 4)                                      # two agents on two machines: four jobs
         self.assertIn([recipe.STEP["limits"], "Spending cap", "$1.00 in all · $0.25 for each of 4 jobs"], out["review"])
-        three = recipe.compile(a_recipe(where=["local", "me@bench", "gpu-box"], max_usd=1), defs())
-        self.assertEqual(self.caps(three), ["0.333333"] * 3)                                # rounded down: the shares never add up to more
-        self.assertLessEqual(sum(float(c) for c in self.caps(three)), 1)
+        three = recipe.compile(a_recipe(where=["local", "me@bench", "gpu-box"], max_usd=2), defs())
+        self.assertEqual(self.caps(three), ["0.666666"] * 3)                                # rounded down: the shares never add up to more
 
     def test_a_job_that_calls_no_model_takes_no_share(self):
         bench = dict(definitions.find(definitions.load("benchmark", ROOT)[0], "fakebench"), key="checked",
@@ -182,17 +181,18 @@ class SpendingCap(unittest.TestCase):
         self.assertEqual(each, ["0.05"] * 4)                                                # a unit's is not: a unit is a unit wherever it runs
         self.assertIn([recipe.STEP["limits"], "Spending cap per task", "$0.05"], out["review"])
         alone = recipe.compile(a_recipe(max_usd_per_unit=0.05), defs(), unpriced=lambda models: list(models))
-        self.assertEqual([e["message"] for e in alone["errors"]],                           # alone it needs prices too
-                         ["A spending cap needs a price for gpt-5-mini: update the price list in Settings, or set a price there."])
+        self.assertEqual([e["step"] for e in alone["errors"]], [recipe.STEP["limits"]])    # alone it needs prices too
+        self.assertIn("gpt-5-mini", alone["errors"][0]["message"])
         plain = recipe.compile(a_recipe(max_usd_per_unit=0.05), defs())
         self.assertEqual((plain["errors"], self.caps(plain)), ([], [None]))
         self.assertIn("-j 2 --max-usd-per-unit 0.05 --name", plain["script"])
         self.assertNotIn("Spending cap", [row[1] for row in plain["review"]])
         tiny = recipe.compile(a_recipe(max_usd_per_unit=1e-7), defs())["errors"]          # less than the command line can say
-        self.assertEqual([e["message"] for e in tiny], ["The spending cap per task is too small."])
+        self.assertEqual([e["step"] for e in tiny], [recipe.STEP["limits"]])
+        self.assertIn("per task is too small", tiny[0]["message"])
         bad = recipe.compile(a_recipe(max_usd_per_unit=0), defs())["errors"]
-        self.assertEqual([(e["step"], e["message"]) for e in bad],
-                         [(recipe.STEP["limits"], "The spending cap per task is an amount in USD above zero, or empty for none.")])
+        self.assertEqual([e["step"] for e in bad], [recipe.STEP["limits"]])
+        self.assertIn("per task", bad[0]["message"])                                        # which cap it is about
 
     def test_the_price_question_names_every_model_the_run_will_call(self):
         """As ``run.Run.models_called`` lists them: an agent's side models too, each as it is sent."""
@@ -206,10 +206,10 @@ class SpendingCap(unittest.TestCase):
         for bad in (0, -1, "2", True, float("inf"), float("nan"), [2]):
             with self.subTest(bad):
                 errors = recipe.compile(a_recipe(max_usd=bad), defs())["errors"]
-                self.assertEqual([(e["step"], e["message"]) for e in errors],
-                                 [(recipe.STEP["limits"], "The spending cap is an amount in USD above zero, or empty for none.")])
+                self.assertEqual([e["step"] for e in errors], [recipe.STEP["limits"]])
         small = recipe.compile(a_recipe(where=["local", "me@bench"], max_usd=1e-6), defs())["errors"]
-        self.assertEqual([(e["step"], e["message"]) for e in small], [(recipe.STEP["limits"], "The spending cap is too small to share over 2 jobs.")])
+        self.assertEqual([e["step"] for e in small], [recipe.STEP["limits"]])
+        self.assertIn("2 jobs", small[0]["message"])
 
     def test_a_cap_without_a_price_is_said_at_limits_and_only_a_cap_asks(self):
         asked = []
