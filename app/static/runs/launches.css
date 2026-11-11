@@ -40,7 +40,7 @@
 .la-name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .la-who a { font-weight: 500; color: var(--text); text-decoration: none; }
 .la-who a:hover { text-decoration: underline; }
-.la-who small { font-size: 11.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 26rem; }
+.la-who small { font-size: 11.5px; color: var(--text-faint); overflow-wrap: anywhere; max-width: 26rem; }   /* a name wraps, never cut, in the column it has */
 .la-ver { font-size: 11px; padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim); }
 .la-state { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; color: var(--text-dim); white-space: nowrap; }
 .la-state i { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
