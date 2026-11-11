@@ -593,12 +593,13 @@ class Run:
             job.write_result(self.job_dir, self.name, t0, time.time(), results, len(work), budget=budget)
             errored = sum(1 for x in results if x.get("exception_info"))
             self.feed.emit("job.end", n_completed=len(results) - errored, n_errored=errored, n_cancelled=len(work) - len(results))
-        p.emit("units", "done", seconds=round(time.time() - u0, 1))
+        # the units' stage says why it ended early: a line of its own would be a stage that never starts
+        p.emit("units", "done", seconds=round(time.time() - u0, 1),
+               **({"detail": f"stopped at the spending cap of {ledgers.usd(budget['max_usd'])} USD: "
+                             f"{len(budget['cut_off'])} cut off, {len(budget['not_run'])} not run"} if budget and budget["stopped"] else {}))
         self.n_verdicts, self.n_ended = sum(1 for x in results if x.get("verifier_result")), len(results)
         if budget and budget["stopped"]:
             spent = "unknown" if budget["spent_usd"] is None else ledgers.usd(budget["spent_usd"])
-            p.emit("cap", detail=f"a call did not fit the spending cap of {ledgers.usd(budget['max_usd'])} USD",
-                   spent_usd=spent, cut_off=len(budget["cut_off"]), not_run=len(budget["not_run"]))
             self.say(f"stopped: a call did not fit the spending cap of {ledgers.usd(budget['max_usd'])} USD "
                      f"({spent} spent): {len(budget['cut_off'])} cut off, {len(budget['not_run'])} not run")
         elif budget and budget["max_usd"] is not None:
@@ -821,6 +822,13 @@ class Run:
             cut = next((f for f in cuts if f[0] == ledgers.ERROR), None) or next((f for f in cuts if f[0] == ledgers.UNIT_ERROR), None)
             if cut:
                 exc, score = cut, None
+        if exc and exc[0] not in (ledgers.ERROR, ledgers.UNIT_ERROR) and getattr(self, "ledger", None) is not None \
+                and getattr(self, "bench_relay", None) is not None:
+            # the call the cap refused while this unit ran was its driver's own (an option's embeddings, on the
+            # benchmark's relay): the unit was cut off there too, whatever its driver made of the refusal
+            late = [c for c in self.bench_relay.calls("embeddings") if c.get("refused") == "cap" and c.get("t0", 0) >= t0]
+            if late:
+                exc, score = (ledgers.ERROR, late[0].get("error") or ""), None
         if self._stopped.is_set() and score is None:
             # the Stop ended its agent, its relay or its containers under it: what it then failed with is
             # the Stop's doing, not the agent's nor the environment's (Harbor's name for a stopped trial)
@@ -852,6 +860,11 @@ class Run:
         elif exc and exc[0] == ledgers.UNIT_ERROR:
             with self._said:
                 self._over.append(unit)          # its own cap: the others go on
+        if getattr(self, "ledger", None) is not None and self.unit_max_usd is not None:
+            try:
+                self.ledger.forget(tag)          # the unit ended: its own count goes from the ledger
+            except ledgers.Unavailable:
+                pass
         return res
 
     def budget(self, not_run: List[str]) -> Optional[dict]:
@@ -869,10 +882,11 @@ class Run:
         except ledgers.Unavailable:
             got = {"spent_usd": None, "unsettled_usd": 0.0, "held_usd": 0.0, "closed": True}
         unsettled = round(got["unsettled_usd"] + got["held_usd"], 6)
+        stopped = bool(got["closed"]) and self.max_usd is not None     # only the run's cap stops a run
         cut = getattr(self, "_cut", [])
         return {"max_usd": self.max_usd, "spent_usd": None if got["spent_usd"] is None else round(got["spent_usd"], 6),
-                **({"unsettled_usd": unsettled} if unsettled else {}), "stopped": bool(got["closed"]),
-                "cut_off": list(dict.fromkeys(cut)), "not_run": list(dict.fromkeys(not_run)) if got["closed"] else [],
+                **({"unsettled_usd": unsettled} if unsettled else {}), "stopped": stopped,
+                "cut_off": list(dict.fromkeys(cut)), "not_run": list(dict.fromkeys(not_run)) if stopped else [],
                 **({"unit_max_usd": self.unit_max_usd, "over_unit": list(dict.fromkeys(getattr(self, "_over", [])))}
                    if self.unit_max_usd is not None else {})}
 

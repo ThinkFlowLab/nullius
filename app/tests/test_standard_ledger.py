@@ -32,19 +32,28 @@ class LedgerTest(unittest.TestCase):
             booking, _ = led.reserve(0.02)
             led.settle(booking, 0.01, "steady", output)
         self.assertEqual(led.usual("steady"), 534)
-        with open(self.path) as f:                                                 # a ledger written before the field is read as one with none
+        with open(self.path) as f:                                                 # a file that lacks a part is no ledger: no call it guards is sent
             doc = json.load(f)
         del doc["seen"]
         with open(self.path, "w") as f:
             json.dump(doc, f)
-        self.assertIsNone(led.usual("m"))
-        booking, _ = led.reserve(0.02)
-        led.settle(booking, 0.01, "m", 50)
-        self.assertEqual(led.usual("m"), 50)
-        doc["seen"] = {"m": 80}                                                   # written as one number, by a relay from before
-        with open(self.path, "w") as f:
-            json.dump(doc, f)
-        self.assertEqual(led.usual("m"), 80)
+        self.assertRaises(ledger.Unavailable, led.usual, "m")
+        self.assertRaises(ledger.Unavailable, led.reserve, 0.02)
+        self.assertTrue(led.closed())
+
+    def test_a_booking_is_made_from_what_the_models_replies_have_been_under_the_same_lock(self):
+        led = ledger.Ledger.create(self.path, 1.0, 0.5)
+        told = []
+        a, state = led.reserve(lambda usual: told.append(usual) or 0.1, "u1", "m")
+        self.assertEqual((told, state["amount"]), ([None], 0.1))                      # no reply yet
+        led.settle(a, 0.05, "m", 200)
+        b, state = led.reserve(lambda usual: usual / 1000, "u1", "m")               # the average so far: 200 tokens
+        self.assertEqual(state["amount"], 0.2)
+        led.settle(b, 0.01, "m", 100)
+        led.forget("u1")                                                           # the unit ended: its own count goes, the run's stays
+        with open(self.path) as f:
+            doc = json.load(f)
+        self.assertEqual((doc["units"], round(doc["spent_usd"], 6)), ({}, 0.06))
 
     def test_a_unit_that_reaches_its_own_cap_is_refused_from_then_on_and_the_run_goes_on(self):
         led = ledger.Ledger.create(self.path, None, 0.10)                          # a cap per unit alone: none on the run

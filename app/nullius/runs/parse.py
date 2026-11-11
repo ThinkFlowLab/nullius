@@ -842,8 +842,12 @@ def _budget(b) -> dict:
         return {}
     names = lambda v: [str(x) for x in v] if isinstance(v, list) else []
     return {"max_usd": num(b.get("max_usd")), "spent_usd": num(b.get("spent_usd")), "unsettled_usd": num(b.get("unsettled_usd")),
-            "stopped": b.get("stopped") is True, "cut_off": names(b.get("cut_off")), "not_run": names(b.get("not_run")),
-            "unit_max_usd": num(b.get("unit_max_usd")), "over_unit": names(b.get("over_unit"))}
+            # only the run's cap stops a run: without one there is no stop to say
+            "stopped": b.get("stopped") is True and num(b.get("max_usd")) is not None,
+            "cut_off": names(b.get("cut_off")), "not_run": names(b.get("not_run")),
+            "unit_max_usd": num(b.get("unit_max_usd")), "over_unit": names(b.get("over_unit")),
+            # a merged job: its shards, and how many stopped at their share
+            "shards": num(b.get("shards")) or 0, "shards_stopped": num(b.get("shards_stopped")) or 0}
 
 
 def parse_job(job_dir: str, reuse=None) -> Job:

@@ -125,7 +125,8 @@ class Merge(unittest.TestCase):
                 3: {"max_usd": 0.5, "spent_usd": 0.1, "stopped": False, "cut_off": [], "not_run": []}}
         dirs = [write_shard(self.tmp, f"run-shard-{i}of3", self.split[i], i, 3, budget=caps[i]) for i in (1, 2, 3)]
         got = merge.merge(dirs, os.path.join(self.tmp, "capped", "run"))
-        want = {"max_usd": 1.5, "spent_usd": 0.71, "unsettled_usd": 0.03, "stopped": True, "cut_off": ["t-9"], "not_run": ["t-11", "t-12"]}
+        want = {"max_usd": 1.5, "spent_usd": 0.71, "unsettled_usd": 0.03, "stopped": True, "cut_off": ["t-9"], "not_run": ["t-11", "t-12"],
+                "shards": 3, "shards_stopped": 1}                                # one shard stopped at its share: not the launch at 1.5
         self.assertEqual(read(os.path.join(got["out"], "result.json"))["budget"], want)
         self.assertEqual(parse.parse_job(got["out"]).budget, dict(want, unit_max_usd=None, over_unit=[]))
         self.assertGreaterEqual(int(parse.SCHEMA), 15)                                  # a job cached before the field is read again
@@ -141,8 +142,15 @@ class Merge(unittest.TestCase):
         self.assertEqual(parse._budget({"max_usd": "2", "spent_usd": 1}), {})                # no cap named: no cap
         self.assertEqual(parse._budget({"max_usd": 2, "stopped": "yes", "cut_off": "t-1"}),
                          {"max_usd": 2, "spent_usd": None, "unsettled_usd": None, "stopped": False, "cut_off": [], "not_run": [],
-                          "unit_max_usd": None, "over_unit": []})
+                          "unit_max_usd": None, "over_unit": [], "shards": 0, "shards_stopped": 0})
+        self.assertFalse(parse._budget({"unit_max_usd": 0.5, "stopped": True})["stopped"])   # only the run's cap stops a run
         self.assertEqual(parse._budget({"unit_max_usd": 0.5, "over_unit": ["t-2"]})["over_unit"], ["t-2"])   # a cap per unit alone is a cap
+
+    def test_a_launch_whose_shards_did_not_all_have_the_runs_cap_claims_no_stop(self):
+        some = lambda i: {"max_usd": 0.5 if i < 3 else None, "spent_usd": 0.1, "stopped": i == 1, "cut_off": [], "not_run": [], "unit_max_usd": 0.05, "over_unit": []}
+        dirs = [write_shard(self.tmp, f"run-shard-{i}of3", self.split[i], i, 3, budget=some(i)) for i in (1, 2, 3)]
+        got = read(os.path.join(merge.merge(dirs, os.path.join(self.tmp, "mixed", "run"))["out"], "result.json"))["budget"]
+        self.assertEqual((got["max_usd"], got["stopped"], got["unit_max_usd"], "shards" in got), (None, False, 0.05, False))
 
     def test_the_merged_job_keeps_a_cap_per_unit_and_the_units_that_reached_it(self):
         each = lambda over: {"max_usd": None, "spent_usd": 0.1, "stopped": False, "cut_off": [], "not_run": [], "unit_max_usd": 0.05, "over_unit": over}

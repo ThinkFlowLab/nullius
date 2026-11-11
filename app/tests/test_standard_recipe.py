@@ -192,6 +192,14 @@ class SpendingCap(unittest.TestCase):
         self.assertEqual([(e["step"], e["message"]) for e in bad],
                          [(recipe.STEP["limits"], "The spending cap per task is an amount in USD above zero, or empty for none.")])
 
+    def test_the_price_question_names_every_model_the_run_will_call(self):
+        """As ``run.Run.models_called`` lists them: an agent's side models too, each as it is sent."""
+        base = self.twin()
+        memo = dict(base, model={**(base.get("model") or {}), "side_models": ["text-embedding-3-small", "fast=gpt-5-nano"]})
+        asked = []
+        out = recipe.compile(a_recipe(others=["twin"], max_usd=1), defs(agent=[memo]), unpriced=lambda models: asked.append(list(models)) or [])
+        self.assertEqual((out["errors"], asked), ([], [["gpt-5-mini", "text-embedding-3-small", "gpt-5-nano"]]))
+
     def test_a_cap_that_is_no_amount_names_limits(self):
         for bad in (0, -1, "2", True, float("inf"), float("nan"), [2]):
             with self.subTest(bad):

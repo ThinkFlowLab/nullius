@@ -171,7 +171,9 @@ def _budget(budgets: list) -> Optional[dict]:
     unsettled = round(sum(x.get("unsettled_usd") or 0 for x in budgets), 6)
     return {"max_usd": round(sum(x["max_usd"] for x in budgets), 6) if whole else None,
             "spent_usd": None if any(not isinstance(v, (int, float)) for v in spent) else round(sum(spent), 6),
-            **({"unsettled_usd": unsettled} if unsettled else {}), "stopped": any(x.get("stopped") for x in budgets),
+            **({"unsettled_usd": unsettled} if unsettled else {}), "stopped": whole and any(x.get("stopped") for x in budgets),
+            # how many shards there were and how many stopped: each at its own share, not the launch at the sum
+            **({"shards": len(budgets), "shards_stopped": sum(1 for x in budgets if x.get("stopped"))} if whole else {}),
             "cut_off": [u for x in budgets for u in x.get("cut_off") or []],
             "not_run": [u for x in budgets for u in x.get("not_run") or []],
             **({"unit_max_usd": each, "over_unit": [u for x in budgets for u in x.get("over_unit") or []]} if number(each) else {})}

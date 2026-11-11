@@ -448,7 +448,9 @@ class Relay:
                 req.setdefault("stream_options", {})["include_usage"] = True
             raw = json.dumps(req).encode()
         booking = booked = None
-        if self.ledger is not None and h.command == "POST":
+        # only a call a model answers is booked: one that names its model, on a route that is billed - never a
+        # token count, a cancellation or a body that is no request, which cost nothing and report no usage
+        if self.ledger is not None and h.command == "POST" and isinstance(req, dict) and req.get("model") and _billed(rest):
             booking, booked, why, by = self._book(req if isinstance(req, dict) else {}, raw, rest, tag)
             if why:
                 self._refuse(h, tag, rest, req, asked, why, by)
@@ -548,23 +550,25 @@ class Relay:
     def _book(self, req: dict, raw: bytes, rest: str, tag: str = "") -> tuple:
         """(booking, its amount, None, None) for a call the cap lets out;
         (None, its amount, why, by) for one it does not - ``by`` the run's
-        cap (``cap``) or the cap of the unit ``tag`` routes for (``unit``).
-        A model with no price is not sent either: a capped run sends no
-        call it cannot price."""
+        cap (``cap``), the cap of the unit ``tag`` routes for (``unit``), or
+        ``price``: a model with no price is not sent either, a capped run
+        sending no call it cannot price - and that is no cap reached."""
         row = self.prices.get(req.get("model"))
         if not row:
-            return None, None, f"no price for the model {req.get('model')!r}: a run with a spending cap sends no call it cannot price", "cap"
+            return None, None, f"no price for the model {req.get('model')!r}: a run with a spending cap sends no call it cannot price", "price"
         try:
-            amount = ledgers.bound(req, raw, row, rest, self.ledger.usual(req.get("model")))
-            booking, seen = self.ledger.reserve(amount, ledgers.unit_of(tag) if self.unit_caps and tag else None)
+            booking, seen = self.ledger.reserve(lambda usual: ledgers.bound(req, raw, row, rest, usual),
+                                                ledgers.unit_of(tag) if self.unit_caps and tag else None, req.get("model"))
         except ledgers.Unavailable as e:
             return None, None, str(e), "cap"
+        amount = seen["amount"]
         return (booking, amount, None, None) if booking else (None, amount, ledgers.refusal(seen, amount), seen["by"])
 
     def _refuse(self, h: BaseHTTPRequestHandler, tag: str, rest: str, req, asked, why: str, by: str = "cap") -> None:
-        """A call a spending cap did not let out - the run's (``by`` is
-        ``cap``) or its unit's own (``unit``): answered here and recorded
-        as the relay's own (``refused``), nothing sent."""
+        """A call a capped run did not let out - at the run's cap (``by`` is
+        ``cap``), at its unit's own (``unit``), or for want of a price
+        (``price``): answered here and recorded as the relay's own
+        (``refused``), nothing sent."""
         t = time.time()
         rec = {"t0": t, "t1": t, "path": rest, "model": req.get("model") if isinstance(req, dict) else None, "model_asked": asked,
                "status": 402, "refused": by, "error": why, "request": _request_tail(req) if isinstance(req, dict) else {},
@@ -572,7 +576,7 @@ class Relay:
         with self.lock:
             with open(os.path.join(self.dir, tag + ".jsonl"), "a") as f:
                 f.write(json.dumps(rec) + "\n")
-        body = json.dumps({"type": "error", "error": {"type": "spending_cap", "code": "unit_spending_cap" if by == "unit" else "spending_cap",
+        body = json.dumps({"type": "error", "error": {"type": "spending_cap", "code": {"unit": "unit_spending_cap", "price": "unpriced_model"}.get(by, "spending_cap"),
                                                       "message": "nullius relay: " + why}}).encode()
         h.send_response(402)
         for n, v in (("Content-Type", "application/json"), ("X-Nullius-Refused", by), ("Content-Length", str(len(body)))):
@@ -615,6 +619,14 @@ class Relay:
             self.server.shutdown()
             self.server.server_close()
         self.pool.close()
+
+
+# the routes a provider bills a call on, as a path ends: what a capped run books
+_BILLED = ("/chat/completions", "/completions", "/responses", "/messages", "/embeddings")
+
+
+def _billed(rest: str) -> bool:
+    return rest.split("?")[0].rstrip("/").endswith(_BILLED)
 
 
 def failure(calls: List[dict]) -> Optional[tuple]:

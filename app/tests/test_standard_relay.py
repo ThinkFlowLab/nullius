@@ -264,6 +264,27 @@ class CapTest(unittest.TestCase):
         self.addCleanup(shared.stop)
         self.assertEqual(self.post(shared, "u1", body)[0], 200)
 
+    def test_only_a_call_a_model_answers_is_booked_and_a_missing_price_is_no_cap_reached(self):
+        r, led = self.capped(1.0)
+        # a token count, and a body that names no model, cost nothing and report no usage: never booked, so never
+        # kept against the cap as a call whose cost was not known
+        for path, body in (("/messages/count_tokens", {"model": "m", "messages": [{"role": "user", "content": "x" * 6000}]}),
+                           ("/responses/abc/cancel", {})):
+            req = urllib.request.Request(r.url("u1") + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+            try:
+                urllib.request.urlopen(req).read()
+            except urllib.error.HTTPError as e:
+                e.read()
+        self.assertEqual(len(r.calls("u1")), 2)
+        self.assertFalse(any("booked_usd" in c or c.get("refused") for c in r.calls("u1")))
+        self.assertEqual((led.state()["held_usd"], led.state()["unsettled_usd"], led.state()["spent_usd"]), (0, 0.0, 0.0))
+        # a model with no price is not sent, and that is no cap reached: the unit is not the cap's, and the run goes on
+        status, headers, answer = self.post(r, "u2", {"model": "another", "messages": [{"role": "user", "content": "hi"}]})
+        self.assertEqual((status, headers.get("X-Nullius-Refused"), json.loads(answer)["error"]["code"]), (402, "price", "unpriced_model"))
+        self.assertEqual(r.calls("u2")[-1]["refused"], "price")
+        self.assertEqual(relay.failure(r.calls("u2"))[0], "ApiError")
+        self.assertFalse(led.closed())
+
     def test_a_call_that_does_not_fit_is_answered_by_the_relay_and_never_sent(self):
         r, led = self.capped(0.0005)             # 100 output tokens at 10 USD a million are 0.001 already
         sent = len(Upstream.seen)

@@ -126,12 +126,7 @@ class Ledger:
         with open(self.path, encoding="utf-8") as f:
             doc = json.load(f)
         float(doc["max_usd"] or 0), float(doc["spent_usd"]), float(doc["unsettled_usd"]), sum(doc["held"].values())
-        for name in ("seen", "units", "of"):
-            if not isinstance(doc.get(name), dict):
-                doc[name] = {}
-        # per model, how many replies and their output tokens in all; a number alone (a ledger from before) is one reply
-        doc["seen"] = {m: v if isinstance(v, list) else [1, v] for m, v in doc["seen"].items()}
-        doc.setdefault("unit_max_usd", None)
+        doc["unit_max_usd"], dict(doc["seen"]), dict(doc["units"]), dict(doc["of"])     # all there, or it is no ledger
         return doc
 
     def _write(self, doc: dict) -> None:
@@ -141,15 +136,20 @@ class Ledger:
             json.dump(doc, f)
         os.replace(part, self.path)
 
-    def reserve(self, amount: float, unit: Optional[str] = None) -> Tuple[Optional[str], dict]:
+    def reserve(self, amount, unit: Optional[str] = None, model: Optional[str] = None) -> Tuple[Optional[str], dict]:
         """(the booking's id, the state before it) when ``amount`` fits;
         (None, the state) when it does not, or the ledger is closed already -
         and it is closed from then on. ``unit``: the unit the call is part
         of (:func:`unit_of`): with a cap per unit, a call that does not fit
         its unit's is refused (the state says ``by: unit``) and closes that
-        unit alone - the run's ledger stays open for the others."""
+        unit alone - the run's ledger stays open for the others. ``amount``
+        may be a function of what ``model``'s replies have been on average
+        (:func:`bound`): it is then read here, under the same lock, and
+        the state says the ``amount`` booked."""
         with self._locked() as doc:
-            seen = dict(_state(doc), by="cap")
+            if callable(amount):
+                amount = amount(_usual(doc, model))
+            seen = dict(_state(doc), by="cap", amount=amount)
             each = doc["unit_max_usd"] if unit is not None else None
             if each is not None:
                 u = doc["units"].setdefault(unit, {"spent_usd": 0.0, "unsettled_usd": 0.0, "closed": False})
@@ -199,11 +199,16 @@ class Ledger:
             if doc["held"].pop(booking, None) is not None:
                 self._write(doc)
 
+    def forget(self, unit: str) -> None:
+        """A unit that ended: its own count goes, so the file stays the size of the units in flight."""
+        with self._locked() as doc:
+            if doc["units"].pop(unit, None) is not None:
+                self._write(doc)
+
     def usual(self, model) -> Optional[int]:
         """The output tokens ``model`` has answered a call of this run with, on average; None before any. Read without the lock."""
         try:
-            replies, tokens = self._read()["seen"].get(model) or (0, 0)
-            return math.ceil(tokens / replies) if replies else None
+            return _usual(self._read(), model)
         except (OSError, ValueError, KeyError, TypeError) as e:
             raise Unavailable(f"the spending cap's ledger could not be read: {type(e).__name__}: {e}")
 
@@ -222,6 +227,11 @@ class Ledger:
             return bool(self.state()["closed"])
         except Unavailable:
             return True
+
+
+def _usual(doc: dict, model) -> Optional[int]:
+    replies, tokens = doc["seen"].get(model) or (0, 0)
+    return math.ceil(tokens / replies) if replies else None
 
 
 def _state(doc: dict) -> dict:

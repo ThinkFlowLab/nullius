@@ -463,12 +463,14 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if not paying:
         per_unit = None                                       # no job calls a model: nothing to cap
     if (share or per_unit) and unpriced is not None:
-        # the models a run names as it sends them (run.Run.models_called): its own or a setup's, the judge's,
-        # the simulated user's, an option's embeddings
+        # the models a run names as it sends them, as run.Run.models_called lists them: its own or a setup's and
+        # their side models, the judge's, the simulated user's (a control's run names it too), an option's embeddings
         judge, sim = (b.get("score") or {}).get("judge"), b.get("simulator")
-        called = [*[(p["o"].get("sent") or p.get("model")) if p.get("setup") else model for p in picks if not p["control"]],
+        sides = lambda o: [(to or name) for name, _, to in (str(m).partition("=") for m in (o.get("model") or {}).get("side_models") or ())]
+        called = [*[m for p in picks if not p["control"]
+                    for m in ((p["o"].get("sent") or p.get("model")) if p.get("setup") else model, *sides(p["o"]))],
                   (judge_model or providers.served_as(judge["model"], provider)) if judge else "",
-                  (sim_model or providers.served_as(sim["model"], provider)) if sim and any(not p["control"] for p in picks) else "",
+                  (sim_model or providers.served_as(sim["model"], provider)) if sim else "",
                   *needs["embeddings"][:1]]
         missing = unpriced([m for m in dict.fromkeys(called) if isinstance(m, str) and m])
         if missing:
