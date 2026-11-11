@@ -41,7 +41,9 @@ Before any reply from its model, a call's output is a guess (``OUTPUT``),
 and no call is refused on a guess: one whose request alone fits is booked
 the room there is. The calls beside it wait for its reply, and are booked
 from it. A cap under one guessed call would else refuse every call with
-nothing spent.
+nothing spent. Nor is a unit refused before it has spent anything: for its
+first call the average is other units' replies, a guess of its own, and a
+unit refused on it would count against its agent with no call sent.
 
 The file is rewritten whole under a lock held for one read and one write
 (``flock`` on a file beside it, as an install is locked): a relay that dies
@@ -173,7 +175,8 @@ class Ledger:
         wait``), and nothing is closed. ``least``: the part of ``amount``
         that is no guess, the request's own (:func:`bound`): before any
         reply from ``model``, a call whose ``least`` fits is booked the room
-        there is with nothing in flight, never refused on its guess."""
+        there is with nothing in flight, never refused on its guess; and so
+        is the call of a unit that has spent nothing, within its unit's cap."""
         with self._locked() as doc:
             usual = _usual(doc, model)
             if callable(amount):
@@ -181,9 +184,11 @@ class Ledger:
             guess = least is not None and usual is None       # no reply from its model yet: its output is a guess
             each = doc["unit_max_usd"] if unit is not None else None
             u = doc["units"].setdefault(unit, {"spent_usd": 0.0, "unsettled_usd": 0.0, "closed": False}) if each is not None else None
+            # a unit that has spent nothing: the average is other units' replies, a guess for its own first call
+            first = u is not None and least is not None and not u["spent_usd"] and not u["unsettled_usd"]
             for cap, count in ((each, u), (doc["max_usd"], doc)):
                 room = None if cap is None else cap - count["spent_usd"] - count["unsettled_usd"]
-                if guess and room is not None and least <= room < amount:
+                if (guess or (first and count is u)) and room is not None and least <= room < amount:
                     amount = room                             # booked the room there is, never refused on the guess
             seen = dict(_state(doc), by="cap", amount=amount)
             if each is not None:

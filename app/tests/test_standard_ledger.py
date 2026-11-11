@@ -74,6 +74,24 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual((doc["units"]["u1"]["spent_usd"], doc["units"]["u1"]["closed"], doc["of"].get(a)), (0.02, True, None))
         self.assertAlmostEqual(led.state()["spent_usd"], 0.02)
 
+    def test_a_unit_that_has_spent_nothing_is_not_refused_on_what_other_units_replies_were(self):
+        """Refused on that average, it would count against its agent with no call sent: 8 of 16 problems did, on a real run."""
+        led = ledger.Ledger.create(self.path, None, 0.00015)
+        booked = lambda usual: 0.00002 + (usual or ledger.OUTPUT) * 0.2e-6       # the request, and the reply at 0.20 USD a million
+        a, _ = led.reserve(booked, "u1", "m", least=0.00002)
+        led.settle(a, 0.00014, "m", 700)                                           # the model's replies so far: 700 tokens, 0.00016 a call
+        b, state = led.reserve(booked, "u2", "m", least=0.00002)                   # u2's first call: over its cap by the others' average
+        self.assertTrue(b)
+        self.assertAlmostEqual(state["amount"], 0.00015)                           # booked the room there is
+        again, state = led.reserve(booked, "u2", "m", wait=True, least=0.00002)    # a second beside it waits for the first
+        self.assertEqual((again, state["by"]), (None, "wait"))
+        led.settle(b, 0.00012, "m", 500)
+        refused, state = led.reserve(booked, "u2", "m", least=0.00002)             # it has spent now: 0.00012 and 0.00014 more pass 0.00015
+        self.assertEqual((refused, state["by"], state["unit"]["spent_usd"]), (None, "unit", 0.00012))
+        big, state = led.reserve(lambda usual: 0.0002 + usual * 0.2e-6, "u3", "m", least=0.0002)   # a request that alone does not fit: refused, first or not
+        self.assertEqual((big, state["by"]), (None, "unit"))
+        self.assertFalse(led.closed())
+
     def test_an_amount_under_a_cent_is_said_to_its_third_figure_never_rounded_to_another(self):
         said = {0: "0.00", 0.5: "0.50", 10: "10.00", 0.395: "0.395", 0.2418236: "0.2418", 0.00005: "0.00005", 0.00004: "0.00004",
                 0.002017442: "0.00202", 0.000500894: "0.000501"}                  # 0.00005 read "0.0001", and 0.00004 "0.00"
