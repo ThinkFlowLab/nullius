@@ -92,7 +92,7 @@
   {"entry": "task_eval/gpt_utils.py", "setting": "tiktoken encoding", "values": "gpt-3.5-turbo-16k's for the windows, else the model's", "default": "",
    "nullius": "fixed:as published - the upstream's own call"},
   {"entry": "global_methods.py", "setting": "run_chatgpt role and retries", "values": "gpt-3.5 as system, gpt-4 as user; API, connection and unavailable errors retried without end, a rate limit with no wait", "default": "",
-   "nullius": "fixed:as published - the run's turn_seconds bounds a unit, said in the limitations"},
+   "nullius": "fixed:as published - the run's turn_seconds bounds a unit"},
   {"entry": "data/locomo10.json", "setting": "question categories 1 to 4", "values": "1,540 questions: multi-hop, temporal, open-domain, single-hop", "default": "",
    "nullius": "dataset:locomo10"},
   {"entry": "data/locomo10.json", "setting": "question category 5 (adversarial)", "values": "446 questions", "default": "",

@@ -22,7 +22,7 @@
     "Tool calls must be one at a time: the evaluator refuses concurrent ones."
   ],
   "limitations": [
-    "All five domains run: airline, retail, telecom, telecom-workflow and banking_knowledge. The mock domain and voice mode are not run.",
+    "All five domains run: airline, retail, telecom, telecom-workflow and banking_knowledge. Voice mode is not run.",
     "banking_knowledge's search method is an option, bm25 by default. Scores compare only between runs with the same search. The qwen and reranker methods are not offered.",
     "Another agent replaces the upstream's agent. It gets the upstream's instructions and policy, plus two lines from Nullius: where its tools are, and that its last message in a turn goes to the user."
   ],

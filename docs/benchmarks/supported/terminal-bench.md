@@ -49,6 +49,7 @@ Real terminal tasks in a container: build, configure, debug.
 ## Good to know
 
 - Each task's agent time limit comes from the task: 600 to 12,000 seconds.
+- Each task's prebuilt image is pulled by default. The image option builds it here instead, except fix-git, whose build no longer works.
 
 ## Upstream limitations
 
@@ -63,7 +64,6 @@ Real terminal tasks in a container: build, configure, debug.
 
 - On Nullius, the agent can reach only its model. The 36 tasks whose solution downloads something are left out, so 53 of the 89 run, and the agent cannot install tools.
 - On Nullius, the tests get internet access after the agent ends. What the agent left running is stopped first, except in the 4 tasks whose tests need it.
-- Each task's prebuilt image is pulled by default. The image option builds it here instead, except fix-git, whose build no longer works.
 - Terminus-2, the authors' own agent, runs only on Harbor.
 - Terminal-Bench's own harness adds tmux to every task's image and Nullius does not yet, so git-multibranch, whose solution uses it, fails even with the reference solution.
 
