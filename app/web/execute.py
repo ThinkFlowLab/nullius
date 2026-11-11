@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from flask import abort, jsonify, request, url_for
-from nullius import execution, hosts, prerequisites, providers
+from nullius import execution, hosts, prerequisites, prices, providers
 from nullius.harbor import source as harbor_source
 from nullius.standard import recipe as standard_recipe
 
@@ -115,7 +116,7 @@ def _start_standard(recipe: dict):
     one checked before any starts."""
     if len(json.dumps(recipe)) > 200_000:
         return jsonify(ok=False, error="the recipe is too large to keep with the run"), 400
-    out = standard_recipe.compile(recipe, docker_unusable=docker_problem)
+    out = standard_recipe.compile(recipe, docker_unusable=docker_problem, unpriced=unpriced)
     if out["errors"]:
         return jsonify(ok=False, error=" ".join(e["message"] for e in out["errors"])), 400
     # a run of controls calls no model: it is handed no key, so none need be set
@@ -139,6 +140,17 @@ def _start_standard(recipe: dict):
     shared.adopt_roots([ex.jobs for ex in started])
     return jsonify(ok=True, open=url_for("index", view="launch"), runs=[ex.summary() for ex in started],
                    **started[0].summary())
+
+
+_PRICED = {"at": float("-inf"), "rows": {}}
+
+
+def unpriced(models: list) -> list:
+    """Which of ``models`` have no price in the user's list (``nullius.prices``): what a recipe with a spending
+    cap is told at its Limits step, since a run with a cap is refused without a price for each model it calls."""
+    if time.monotonic() - _PRICED["at"] > 5:     # the builder asks at every keystroke: the list is read at most every five seconds
+        _PRICED.update(at=time.monotonic(), rows=prices.table())
+    return [m for m in models if m not in _PRICED["rows"]]
 
 
 def docker_problem():

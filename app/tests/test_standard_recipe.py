@@ -135,6 +135,93 @@ class Compile(unittest.TestCase):
         self.assertEqual(out["errors"][0]["step"], recipe.STEP["model"])
 
 
+class SpendingCap(unittest.TestCase):
+    """*Limits*: one cap for the whole run (``max_usd``), shared in equal parts by its jobs that call a model."""
+
+    def twin(self):
+        return dict(definitions.load("agent", ROOT)[0][0], key="twin", label="Twin agent")
+
+    def caps(self, out):
+        return [c.split("--max-usd ")[1].split()[0] if "--max-usd " in c else None for sh in out["shards"] for c in sh["command"].split("\n")]
+
+    def test_one_job_takes_the_whole_cap_and_no_cap_adds_nothing(self):
+        out = recipe.compile(a_recipe(max_usd=2), defs())
+        self.assertEqual(out["errors"], [])
+        self.assertIn("-j 2 --max-usd 2 --name fake-0101-120000", out["script"])
+        self.assertIn([recipe.STEP["limits"], "Spending cap", "$2.00"], out["review"])
+        for none in ({}, {"max_usd": ""}, {"max_usd": None}):
+            plain = recipe.compile(a_recipe(**none), defs())
+            self.assertEqual((plain["errors"], self.caps(plain)), ([], [None]))
+            self.assertNotIn("Spending cap", [row[1] for row in plain["review"]])
+
+    def test_the_jobs_of_a_run_share_the_cap_in_equal_parts_and_never_pass_it(self):
+        out = recipe.compile(a_recipe(others=["fake", "twin"], where=["local", "me@bench"], max_usd=1), defs(agent=[self.twin()]))
+        self.assertEqual(out["errors"], [])
+        self.assertEqual(self.caps(out), ["0.25"] * 4)                                      # two agents on two machines: four jobs
+        self.assertIn([recipe.STEP["limits"], "Spending cap", "$1.00 in all · $0.25 for each of 4 jobs"], out["review"])
+        three = recipe.compile(a_recipe(where=["local", "me@bench", "gpu-box"], max_usd=2), defs())
+        self.assertEqual(self.caps(three), ["0.666666"] * 3)                                # rounded down: the shares never add up to more
+
+    def test_a_job_that_calls_no_model_takes_no_share(self):
+        bench = dict(definitions.find(definitions.load("benchmark", ROOT)[0], "fakebench"), key="checked",
+                     controls={"nop": {"source": "nullius", "from": "an empty answer"}})
+        out = recipe.compile(a_recipe(benchmark="checked", others=["fake", "nop"], max_usd=2), defs(benchmark=[bench]))
+        self.assertEqual(out["errors"], [])
+        self.assertEqual(self.caps(out), ["2", None])                                       # the control spends nothing
+        self.assertIn([recipe.STEP["limits"], "Spending cap", "$2.00"], out["review"])
+        alone = recipe.compile(a_recipe(benchmark="checked", others=["nop"], max_usd=2), defs(benchmark=[bench]))
+        self.assertEqual((alone["errors"], self.caps(alone)), ([], [None]))
+        self.assertNotIn("Spending cap", [row[1] for row in alone["review"]])
+
+    def test_a_cap_per_unit_goes_whole_to_every_job_that_calls_a_model(self):
+        out = recipe.compile(a_recipe(others=["fake", "twin"], where=["local", "me@bench"], max_usd=1, max_usd_per_unit=0.05), defs(agent=[self.twin()]))
+        self.assertEqual(out["errors"], [])
+        self.assertEqual(self.caps(out), ["0.25"] * 4)                                      # the run's is shared
+        each = [c.split("--max-usd-per-unit ")[1].split()[0] for sh in out["shards"] for c in sh["command"].split("\n")]
+        self.assertEqual(each, ["0.05"] * 4)                                                # a unit's is not: a unit is a unit wherever it runs
+        self.assertIn([recipe.STEP["limits"], "Spending cap per task", "$0.05"], out["review"])
+        alone = recipe.compile(a_recipe(max_usd_per_unit=0.05), defs(), unpriced=lambda models: list(models))
+        self.assertEqual([e["step"] for e in alone["errors"]], [recipe.STEP["limits"]])    # alone it needs prices too
+        self.assertIn("gpt-5-mini", alone["errors"][0]["message"])
+        plain = recipe.compile(a_recipe(max_usd_per_unit=0.05), defs())
+        self.assertEqual((plain["errors"], self.caps(plain)), ([], [None]))
+        self.assertIn("-j 2 --max-usd-per-unit 0.05 --name", plain["script"])
+        self.assertNotIn("Spending cap", [row[1] for row in plain["review"]])
+        tiny = recipe.compile(a_recipe(max_usd_per_unit=1e-7), defs())["errors"]          # less than the command line can say
+        self.assertEqual([e["step"] for e in tiny], [recipe.STEP["limits"]])
+        self.assertIn("per task is too small", tiny[0]["message"])
+        bad = recipe.compile(a_recipe(max_usd_per_unit=0), defs())["errors"]
+        self.assertEqual([e["step"] for e in bad], [recipe.STEP["limits"]])
+        self.assertIn("per task", bad[0]["message"])                                        # which cap it is about
+
+    def test_the_price_question_names_every_model_the_run_will_call(self):
+        """As ``run.Run.models_called`` lists them: an agent's side models too, each as it is sent."""
+        base = self.twin()
+        memo = dict(base, model={**(base.get("model") or {}), "side_models": ["text-embedding-3-small", "fast=gpt-5-nano"]})
+        asked = []
+        out = recipe.compile(a_recipe(others=["twin"], max_usd=1), defs(agent=[memo]), unpriced=lambda models: asked.append(list(models)) or [])
+        self.assertEqual((out["errors"], asked), ([], [["gpt-5-mini", "text-embedding-3-small", "gpt-5-nano"]]))
+
+    def test_a_cap_that_is_no_amount_names_limits(self):
+        for bad in (0, -1, "2", True, float("inf"), float("nan"), [2]):
+            with self.subTest(bad):
+                errors = recipe.compile(a_recipe(max_usd=bad), defs())["errors"]
+                self.assertEqual([e["step"] for e in errors], [recipe.STEP["limits"]])
+        small = recipe.compile(a_recipe(where=["local", "me@bench"], max_usd=1e-6), defs())["errors"]
+        self.assertEqual([e["step"] for e in small], [recipe.STEP["limits"]])
+        self.assertIn("2 jobs", small[0]["message"])
+
+    def test_a_cap_without_a_price_is_said_at_limits_and_only_a_cap_asks(self):
+        asked = []
+        out = recipe.compile(a_recipe(max_usd=2), defs(), unpriced=lambda models: asked.append(list(models)) or list(models))
+        self.assertEqual(asked, [["gpt-5-mini"]])                                           # the model as the run sends it
+        self.assertEqual([(e["step"], e["message"]) for e in out["errors"]],
+                         [(recipe.STEP["limits"], "A spending cap needs a price for gpt-5-mini: update the price list in Settings, or set a price there.")])
+        self.assertEqual(recipe.compile(a_recipe(max_usd=2), defs(), unpriced=lambda models: [])["errors"], [])
+        never = lambda models: self.fail("a recipe without a cap asks for no price")
+        self.assertEqual(recipe.compile(a_recipe(), defs(), unpriced=never)["errors"], [])
+
+
 class ExecutionScripts(unittest.TestCase):
     """Execution scripts dispatch only to stubs, with no installed package
     visible to the shell's python3 and no developer settings or credentials."""

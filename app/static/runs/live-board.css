@@ -18,7 +18,7 @@
 .lb { --lb-track: color-mix(in srgb, var(--text-faint) 16%, var(--surface)); --lb-hair: var(--border-soft); }
 .lb .lbo-resolved { --c: var(--resolved); } .lb .lbo-unresolved { --c: var(--failed_verification); } .lb .lbo-scored { --c: var(--scored); }
 .lb .lbo-agent_error { --c: var(--agent_error); } .lb .lbo-infra_error { --c: var(--rate_limited); }
-.lb .lbo-timeout { --c: var(--patch_failed_tests); } .lb .lbo-budget { --c: var(--api_error); } .lb .lbo-cancelled { --c: var(--unknown); }
+.lb .lbo-timeout { --c: var(--patch_failed_tests); } .lb .lbo-budget { --c: var(--spending_cap); } .lb .lbo-cancelled { --c: var(--unknown); }
 .lb .lbp-env_setup { --c: var(--rate_limited); } .lb .lbp-agent_setup { --c: var(--patch_failed_tests); }
 .lb .lbp-agent_run { --c: var(--accent); } .lb .lbp-verify { --c: var(--ph-verify); }
 

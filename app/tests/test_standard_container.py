@@ -106,6 +106,14 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(a[a.index("--route") + 1], "u0000-judge=the-judge")
         self.assertEqual(a[a.index("--public") + 1], "http://relay:8080")
         self.assertEqual(a[a.index("--label") + 1], "nullius.job=j")
+        self.assertNotIn("--ledger", a)
+
+    def test_the_relays_container_is_given_the_runs_ledger_and_its_folder_alone(self):
+        a = container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/key", base="b", model="m", routes={},
+                                 ledger="/job/.work/ledger/ledger.json")
+        self.assertEqual(a[a.index("--ledger") + 1], "/job/.work/ledger/ledger.json")
+        # where every relay of the job books its calls: that folder, and nothing else of the job but its own record
+        self.assertEqual([w for w in a if w.endswith(":rw")], ["/rec:/rec:rw", "/job/.work/ledger:/job/.work/ledger:rw"])
 
     def test_an_endpoint_on_this_machines_loopback_is_reached_through_the_bridge(self):
         self.assertTrue(all(map(container.on_loopback, ["http://localhost:11434/v1", "http://127.0.0.1:8000/v1", "http://[::1]:8000/v1"])))

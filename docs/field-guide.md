@@ -128,7 +128,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |
 | `raw_solve_rate` | Resolved ÷ all trials: Harbor's headline, which counts infra failures as misses. | derived | any |
-| `adjusted_solve_rate` | Resolved ÷ non-infrastructure trials. Only rate limits, API errors and setup errors leave the denominator; unknowns remain. Read alongside the raw rate and infrastructure count. | derived | any |
+| `adjusted_solve_rate` | Resolved ÷ non-infrastructure trials. Only rate limits, API errors, setup errors and spending caps leave the denominator; unknowns remain. Read alongside the raw rate and infrastructure count. | derived | any |
 | `n_infra` | Trials removed from the adjusted denominator as infrastructure failures. | derived | any |
 | `mean_score` | The mean graded score, weighted by each trial's number of scored parts when present. When no trial passes or fails, it is the headline and the rates read —. | derived | mixed |
 | `score_by_group · parts_by` | The mean score per value of the field the benchmark breaks it down by (a question's category), from `verifier/parts.json`. | derived | mixed |
@@ -139,6 +139,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `total_output_tokens` | Completion tokens. | derived | any |
 | `total_cost_usd` | The trials' recorded costs, summed: an estimate, not a bill. Shows — when no trial recorded one. | derived | any |
 | `duration_min` | The whole run, start to finish. | derived | any |
+| `budget` | A standard run's spending cap, from `result.json`: `max_usd` and `spent_usd`, whether it `stopped` the run, the units `cut_off` and `not_run`, and with a cap per unit `unit_max_usd` and `over_unit`. Empty without a cap. | measured | any |
 | `agent_label` | The agent's name: the class of a `module:Class` path, or the trials' own name when the config gives none. | measured | any |
 | `agent_version` | The version the trial's `agent_info` reports. | measured | any |
 | `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. An imported runner's arm without that declaration is not a control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |
@@ -150,7 +151,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |
-| `outcome` | One of eleven classes: from the exception if there was one, else from the verifier's verdict. Full vocabulary below. | inferred | mixed |
+| `outcome` | One of twelve classes: from the exception if there was one, else from the verifier's verdict. Full vocabulary below. | inferred | mixed |
 | `score · n_parts` | A graded score the benchmark gave, and how many parts it averages. With no reward and no exception, the outcome is *Scored*. | measured | mixed |
 | `reward` | The verifier's raw reward. Where no report says more, 1.0 or above is a solve. | measured | any |
 | `f2p_pass / f2p_fail` | Checks that had to start passing: SWE-bench's FAIL_TO_PASS, or every test of a Terminal-Bench task. | measured | mixed |
@@ -219,7 +220,7 @@ Computed here over the trajectory's tool calls, when present. They describe cond
 
 ## Outcome vocabulary {#outcomes}
 
-Eleven classes. The three marked **yes** under Infrastructure leave the adjusted solve rate's denominator.
+Twelve classes. The four marked **yes** under Infrastructure leave the adjusted solve rate's denominator.
 
 | Outcome | Label | Infrastructure | Meaning |
 | --- | --- | --- | --- |
@@ -229,10 +230,11 @@ Eleven classes. The three marked **yes** under Infrastructure leave the adjusted
 | `failed_verification` | Failed verification | no | The verifier said no, on a benchmark with no patch detail: Terminal-Bench, or one read only by its reward. |
 | `patch_not_applied` | Patch did not apply | no | Malformed context lines, or edits against the wrong revision. |
 | `no_patch` | No patch produced | no | Finished without changing anything. |
-| `agent_error` | Agent error | no | Timed out, filled its context, truncated its output, refused, or exited non-zero. A result, counted against the agent. |
+| `agent_error` | Agent error | no | Timed out, filled its context, truncated its output, refused, exited non-zero, or reached its own spending cap. A result, counted against the agent. |
 | `rate_limited` | Rate limited | yes | An HTTP 429 ended the trial. |
 | `api_error` | API error | yes | Any other provider failure: overloaded, unreachable, out of quota, key rejected. |
 | `setup_error` | Setup error | yes | The environment or image never came up, or the unit was not run for want of a secret or docker it needs, so the agent never ran. |
+| `spending_cap` | Spending cap | yes | The run reached its spending cap and its relay refused a call the unit needed. No attempt was had. |
 | `unknown` | Unknown | no | No verdict, or an exception on neither list. Counted, charged to nobody; the trial page shows the recorded type. |
 
 ## Caveats {#caveats}

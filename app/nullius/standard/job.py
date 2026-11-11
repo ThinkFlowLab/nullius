@@ -29,6 +29,7 @@ import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+from nullius.standard import ledger
 from nullius.traces import otel, trace
 
 
@@ -62,7 +63,7 @@ def _usage_total(calls: List[dict]) -> dict:
     return {"input": u("input"), "output": u("output"), "cached": u("cached"), "reasoning": u("reasoning"),
             "cost": sum(costs) if costs else None,
             "cost_from": "estimate" if any(c.get("cost_from") == "estimate" for c in ok) else ("provider" if costs else None),
-            "n_calls": len(calls)}
+            "n_calls": sum(1 for c in calls if not c.get("refused"))}       # a call its cap refused was never sent
 
 
 def _tool_clock(extra: dict, status: Optional[str], t: Optional[float]):
@@ -492,11 +493,12 @@ _INFRA = ("Setup", "Verifier", "Api", "RateLimit", "Environment", "Docker", "Bui
 def feed_outcome(kind: str, score: Optional[dict], exception: Optional[tuple]) -> dict:
     """A unit's end in the live feed's words (``nullius.runs.live``): its
     outcome, with the reward (a pass benchmark) or the score, and the error's
-    kind as evidence."""
+    kind as evidence. A unit the run's spending cap cut off (``ledger.ERROR``)
+    is the feed's ``budget``."""
     score = score or {}
     if exception:
         k = exception[0]
-        return {"outcome": "cancelled" if k == "CancelledError" else "timeout" if "Timeout" in k else "infra_error" if any(w in k for w in _INFRA) else "agent_error",
+        return {"outcome": "cancelled" if k == "CancelledError" else "budget" if k == ledger.ERROR else "timeout" if "Timeout" in k else "infra_error" if any(w in k for w in _INFRA) else "agent_error",
                 "exc": k, "evidence": (exception[1] or k)[:200]}
     if kind == "pass":
         reward = score.get("reward")
@@ -532,11 +534,14 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
             "at": {str(k): round(sum(1 - comb(n - sum(v[:n]), k) / comb(n, k) for v in whole.values()) / len(whole), 4) for k in range(1, n + 1)}}
 
 
-def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int):
+def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int, budget: Optional[dict] = None):
+    """``budget``: a run with a spending cap (``run.Run.budget``): the cap,
+    what was spent, whether it stopped the run, the units it cut off and
+    those never begun."""
     errored = sum(1 for r in results if r.get("exception_info"))
     hat = pass_hat(results)
     with open(os.path.join(job_dir, "result.json"), "w") as f:
         json.dump({"id": job, "started_at": iso(t0), "finished_at": iso(t1), "n_total_trials": planned,
                    "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
                              "n_cancelled_trials": planned - len(results), "n_running_trials": 0, "n_pending_trials": 0},
-                   **({"pass_hat_k": hat} if hat else {})}, f, indent=1)
+                   **({"pass_hat_k": hat} if hat else {}), **({"budget": budget} if budget else {})}, f, indent=1)

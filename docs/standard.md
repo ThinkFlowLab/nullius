@@ -138,6 +138,7 @@ record); verifier/reward.txt and score.json
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
 | Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate; a turn past its limit is the agent's timeout. `"kind": "score"` leaves a score and no pass |
 | The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. Provider `anthropic` speaks Anthropic's Messages (`ANTHROPIC_API_KEY` as `x-api-key`) |
+| A spending cap (`--max-usd`, `--max-usd-per-unit`) | Each relay books a call in the job's ledger (`.work/ledger`, `standard/ledger.py`) before sending it, and refuses the one that does not fit the run's cap or its unit's ([Run a benchmark](cli/run.md#a-spending-cap)) |
 
 ## Safety
 
@@ -296,7 +297,7 @@ N machines are N runs of the same command, each with `--shard I/N`, and one merg
 
 | Rule | Detail |
 | --- | --- |
-| No central relay | Each unit's relay runs on its own machine with the key it was handed; split a launch over keys of their own if one cannot carry it |
+| No central relay | Each unit's relay runs on its own machine with the key it was handed; split a launch over keys of their own if one cannot carry it. A spending cap is each shard's own |
 | Shards by the unit's id | `sha256(unit id) mod N` (`standard/shard.py`); changing N moves most units. Order: the driver's `units`, the shard, then `--limit` (`--shard 1/2 --limit 6` is the first six units of shard 1) |
 | A unit keeps its place | `u0042` is the 43rd unit of the whole dataset in every shard |
 | One launch | Each shard's `config.json` records `standard.shard` (`index`, `of`, `units_total`, `partition`, `planned`, `limit`) and `standard.launch` (`--launch`, else the UTC day, benchmark, agent or capability and model) |

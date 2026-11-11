@@ -5,7 +5,7 @@ One benchmark and one agent, capability, control or setup, into a job.
 ```bash title="Run"
 nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--limit N] [-j N] \
     [--unsandboxed | --backend docker] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
-    [--price MODEL=INPUT,OUTPUT[,CACHED]]... \
+    [--price MODEL=INPUT,OUTPUT[,CACHED]]... [--max-usd USD] [--max-usd-per-unit USD] \
     [--repeat K] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
 ```
 
@@ -28,6 +28,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--option NAME=VALUE` | An agent's or capability's option (repeatable) |
 | `--bench-option NAME=VALUE` | A benchmark's option (repeatable), read as `NULLIUS_OPTION_<NAME>` |
 | `--price MODEL=INPUT,OUTPUT[,CACHED]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
+| `--max-usd USD`, `--max-usd-per-unit USD` | A spending cap for the run, for each unit: [below](#a-spending-cap) |
 | `--repeat K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--repeat`); by default they stay for the next run, listed and removed in Settings, [Sandbox](../settings/sandbox.md) |
 | `--judge-model` | Instead of the official judge |
@@ -45,6 +46,23 @@ nullius standard run locomo model --model gpt-4o-mini
 | Machine programs | An option needing them is refused without them |
 | Progress | stderr, one line per stage (`[nullius] stage=install ...`, `stage=units n=10`, `stage=done`, `stage=refused`), also `progress.jsonl` |
 | The job | Opens in the app; `events.jsonl` feeds the live board |
+
+## A spending cap
+
+`--max-usd 5` stops a run at 5 USD and `--max-usd-per-unit 0.50` one unit at 0.50.
+
+| Rule | Detail |
+| --- | --- |
+| Prices first | Every model the run calls needs a price ([price list](../settings/model-prices.md) or `--price`), else the run is refused |
+| What is counted | Each reply's cost, and an estimate for each call in flight |
+| At the run's cap | The call that does not fit is refused by the relay (HTTP 402), and every call after it |
+| Its units | One cut off is the outcome Spending cap, outside the adjusted rate; those not begun are not run |
+| At a unit's cap | Its own calls and its simulated user's count, its judge's do not. A unit that reaches its cap is an Agent error; the run goes on |
+| Not exact | A call that costs more than its estimate can take the spend past a cap by up to the difference |
+| Cached input | Estimated as if not cached, so a unit can be cut off short of its cap |
+| The result | `result.json` carries `budget`, and the job page shows it |
+| From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit |
+| Shards | A shard's cap is its own: [Shard and merge](shard-and-merge.md) |
 
 <div class="grid cards" markdown>
 

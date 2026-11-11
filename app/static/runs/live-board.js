@@ -28,7 +28,7 @@
   const PHASES = ['env_setup', 'agent_setup', 'agent_run', 'verify'];
   const PHASE_LABEL = {env_setup: 'env setup', agent_setup: 'agent setup', agent_run: 'agent run', verify: 'verify'};
   const OUTCOMES = ['resolved', 'unresolved', 'scored', 'agent_error', 'infra_error', 'timeout', 'budget', 'cancelled'];
-  const OUTCOME_LABEL = {resolved: 'Resolved', unresolved: 'Unresolved', scored: 'Scored', agent_error: 'Agent error', infra_error: 'Infra error', cancelled: 'Cancelled', timeout: 'Timeout', budget: 'Budget'};
+  const OUTCOME_LABEL = {resolved: 'Resolved', unresolved: 'Unresolved', scored: 'Scored', agent_error: 'Agent error', infra_error: 'Infra error', cancelled: 'Cancelled', timeout: 'Timeout', budget: 'Spending cap'};
   const STATE_LABEL = {preparing: 'Preparing', starting: 'Starting', running: 'Running', finished: 'Finished', unknown: 'Waiting for the feed'};
   const FLIGHT_SHOWN = 12;      // past this many in flight, the nearest their limit come first and the rest wait behind a button
   const MANY_TILES = 60;        // past this many trials, the tiles are drawn smaller
@@ -87,7 +87,14 @@
     }
     // measured, or left out: a rate the window could not measure, and a cost nobody reported, are absent, never 0
     if (s.tokens_per_sec != null) bits.push(`<span><b>${count(Math.round(s.tokens_per_sec))}</b> tokens / s, last 30 s</span>`);
-    if (T.cost_usd != null) bits.push(`<span><b>$${Number(T.cost_usd).toFixed(2)}</b> spent</span>`);
+    // as the job page says a cost: to the cent, and under a cent to four decimals ($0.00 beside a cap of $0.004 says nothing)
+    if (T.cost_usd != null) bits.push(`<span><b>$${Number(T.cost_usd).toFixed(Number(T.cost_usd) < 0.01 ? 4 : 2)}</b> spent</span>`);
+    // a run's spending cap (job.start's budget), said on its own: it counts the judge's and the simulated user's calls
+    // too, which the agents' cost beside it does not. As it was given (ledger.usd): cents, and the digits past them it
+    // has, to four decimals or to its third figure where that is finer (0.395, 0.00015)
+    const capped = v => { v = Number(v); const places = Math.min(12, Math.max(4, 2 - Math.floor(Math.log10(Math.abs(v)))));
+      const [whole, part = ''] = v.toFixed(places).replace(/0+$/, '').split('.'); return whole + '.' + part.padEnd(2, '0'); };
+    if (s.budget && Number(s.budget.max_usd) > 0) bits.push(`<span>spending cap <b>$${capped(s.budget.max_usd)}</b></span>`);
     if (s.wall_sec) bits.push(`<span>wall <b>${clock(s.wall_sec)}</b> per trial</span>`);
     return bits.join('');
   }
@@ -99,7 +106,7 @@
     const C = s.counts || {};
     const queued = C.total != null ? Math.max(0, C.total - C.completed - C.running) : null;
     const rate = s.elapsed_sec > 60 && C.completed ? C.completed / (s.elapsed_sec / 60) : null;
-    const ran = C.completed - (oc.infra_error || 0);
+    const ran = C.completed - (oc.infra_error || 0) - (oc.budget || 0);
     const when = state === 'finished' ? 'on the feed' : 'so far';   // the feed's outcomes, not the classifier's: Results has those
     // A benchmark that gives a score and no pass or fail has no solve rate: the mean score, over every part scored, stands there.
     const scored = (s.trials || []).filter(t => t.state === 'done' && t.outcome === 'scored' && t.score != null);

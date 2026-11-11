@@ -24,11 +24,15 @@ NO_PATCH = "no_patch"
 RATE_LIMITED = "rate_limited"
 API_ERROR = "api_error"
 SETUP_ERROR = "setup_error"
+# The run's own spending cap refused a model call the unit needed (the
+# standard's relay, ``standard.ledger``): the unit was cut off. Nothing
+# failed, and no attempt was had: the money ran out, by the user's own word.
+SPENDING_CAP = "spending_cap"
 AGENT_ERROR = "agent_error"
 UNKNOWN = "unknown"
 
 # Outcomes that reflect harness/infra problems, not the agent's ability.
-INFRA_OUTCOMES = {RATE_LIMITED, API_ERROR, SETUP_ERROR}
+INFRA_OUTCOMES = {RATE_LIMITED, API_ERROR, SETUP_ERROR, SPENDING_CAP}
 
 ORDER = [
     RESOLVED,
@@ -41,6 +45,7 @@ ORDER = [
     RATE_LIMITED,
     API_ERROR,
     SETUP_ERROR,
+    SPENDING_CAP,
     UNKNOWN,
 ]
 
@@ -58,6 +63,9 @@ _INFRA_EXCEPTIONS = {
     "networkconnectionerror",     # DNS, refused connection, TLS — transport, not skill
     "unknownapierror",            # Harbor's own "some provider error"; an ApiError without the prefix
 }
+# What a unit the run's spending cap cut off carries (``standard.ledger.ERROR``): recorded by the relay that
+# refused the call, never inferred.
+_CAP_EXCEPTION = "spendingcaperror"
 
 # What Harbor's agents raise when the agent itself fails — its budget spent,
 # its own context filled, its own output truncated, a refusal, its process
@@ -73,6 +81,7 @@ _INFRA_EXCEPTIONS = {
 # one can place it here.
 _AGENT_EXCEPTIONS = {
     "agenttimeouterror",            # the agent spent its budget — that is a result
+    "unitspendingcaperror",         # the unit spent its own spending cap (the standard's relay): the same, in money
     "agentsafetyrefusalerror",      # the agent (or its provider) chose to refuse
     "contextwindowexceedederror",   # the agent filled its own context
     "contextlengthexceedederror",   # same, from Harbor's LLM layer
@@ -92,6 +101,7 @@ LABELS = {
     RATE_LIMITED: "Rate limited",
     API_ERROR: "API error",
     SETUP_ERROR: "Setup error",
+    SPENDING_CAP: "Spending cap",
     UNKNOWN: "Unknown",
 }
 
@@ -122,7 +132,7 @@ DESCRIPTIONS = {
     NO_PATCH: "The agent finished without producing a patch at all.",
     AGENT_ERROR: (
         "The agent itself failed — it timed out, filled its context, truncated its "
-        "own output, refused, or its process exited non-zero. Counted against the "
+        "own output, refused, spent its own spending cap, or its process exited non-zero. Counted against the "
         "agent, because each of those is a result rather than an interruption."
     ),
     RATE_LIMITED: (
@@ -137,6 +147,11 @@ DESCRIPTIONS = {
     SETUP_ERROR: (
         "The environment or image failed to build or start, so the agent never ran. "
         "Infrastructure, not capability — excluded from the adjusted rate."
+    ),
+    SPENDING_CAP: (
+        "The run reached its spending cap: its relay refused a model call this "
+        "trial needed, so the trial was cut off. Nothing failed and no attempt "
+        "was had, so it is excluded from the adjusted rate."
     ),
     UNKNOWN: (
         "No verifier report and no exception, or an exception this reader does not "
@@ -162,6 +177,8 @@ def from_verdict(exception_type, verdict):
     """
     if exception_type:
         et = exception_type.lower().rpartition(".")[2]  # tolerate dotted paths
+        if et == _CAP_EXCEPTION:
+            return SPENDING_CAP
         # Rate limiting first: it is an Api* class too, but common enough to be
         # worth seeing on its own rather than folded into the generic bucket.
         if "ratelimit" in et or "rate_limit" in et or "429" in et:

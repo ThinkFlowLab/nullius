@@ -258,6 +258,7 @@
    "agent_name",
    "agent_version",
    "agents",
+   "budget",
    "control_source",
    "counts",
    "dataset",

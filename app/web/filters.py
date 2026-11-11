@@ -8,7 +8,7 @@ from pathlib import Path
 from nullius import importers as harnesses
 from nullius.runs import classify
 from nullius import workspace
-from nullius.standard import ports, definitions
+from nullius.standard import ledger, ports, definitions
 
 from .core import app
 from . import shared
@@ -95,6 +95,13 @@ def _usd(value, kind="agent"):
     if value is None:
         return "$0.00" if kind == "control" else "—"
     return f"${value:.4f}" if value < 0.01 else f"${value:.2f}"
+
+
+@app.template_filter("cap")
+def _cap(value):
+    """A spending cap as it was given, and what was spent of it: cents, and the digits past them it has
+    ($0.395, $0.00005). The cost filter rounds to the cent, which would show a cap the run never had."""
+    return "$" + ledger.usd(value)
 
 
 @app.template_filter("dsname")

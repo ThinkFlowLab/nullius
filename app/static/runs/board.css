@@ -40,6 +40,7 @@
 .rp .oc-no_patch { --oc: var(--no_patch); } .rp .oc-agent_error { --oc: var(--agent_error); }
 .rp .oc-rate_limited { --oc: var(--rate_limited); } .rp .oc-api_error { --oc: var(--api_error); }
 .rp .oc-setup_error { --oc: var(--setup_error); } .rp .oc-unknown { --oc: var(--unknown-mark); }
+.rp .oc-spending_cap { --oc: var(--spending_cap); }
 .rp .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--oc); flex: none; }
 .rp .odot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--oc); flex: none; }
 .rp .adv { display: inline-block; font: 500 10.5px/16px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint);
@@ -211,6 +212,8 @@
 .rp .popm { position: absolute; z-index: 6; left: 0; top: calc(100% + 4px); display: grid; grid-template-columns: auto auto; gap: 4px 14px; padding: 9px 12px;
   border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12px; color: var(--text-faint); white-space: nowrap; }
 .rp .popm b { font: 500 12px var(--mono); color: var(--text); text-align: right; }
+/* the units a spending cap left out: ids, as many as there are */
+.rp .popm.cap-units { grid-template-columns: repeat(4, auto); max-height: 220px; overflow-y: auto; font-family: var(--mono); color: var(--text-dim); }
 
 /* linked preview: a hovered row lights its board marks and dims the rest; board counts never change */
 .rp .board.pv .hl:not(.lr) { opacity: .28; }
@@ -220,7 +223,7 @@
 @container board (max-width: 1240px) {
   .rp .b-flags { flex-basis: 100%; border-left: 0; border-top: 1px solid var(--hair-in); padding-bottom: 10px; }
   .rp .board:not(.no-judge) { grid-template-areas: "rate out judge" "tot tot judge"; grid-template-rows: auto 1fr; }
-  .rp .board:not(.no-judge) .b-tot { display: grid; grid-template-columns: 6em max-content max-content; align-content: start; column-gap: 12px; padding: 0 18px 12px; }
+  .rp .board:not(.no-judge) .b-tot { display: grid; grid-template-columns: minmax(6em, max-content) max-content max-content; align-content: start; column-gap: 12px; padding: 0 18px 12px; }
   .rp .board:not(.no-judge) .b-tot .lab { grid-column: 1 / -1; height: 30px; font-weight: 400; font-size: 12px; color: var(--text-faint); }
   .rp .board:not(.no-judge) .b-tot .kv { display: contents; }
   .rp .board:not(.no-judge) .b-tot .kv > * { height: 28px; display: flex; align-items: center; }
