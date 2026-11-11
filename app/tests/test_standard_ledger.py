@@ -102,6 +102,12 @@ class LedgerTest(unittest.TestCase):
         _, state = led.reserve(0.00021, "u1")                                      # read "0.0005 spent" and "up to 0.0002": as if it fitted
         self.assertIn("this unit's spending cap of 0.0007 USD: 0.000501 spent by the unit, and this call is counted at 0.00021; it was not sent",
                       ledger.refusal(state, 0.00021))
+        run = ledger.Ledger.create(os.path.join(self.tmp, "run", "ledger.json"), 0.012)
+        b, _ = run.reserve(0.0119)
+        run.settle(b, 0.011849)
+        _, state = run.reserve(0.000157)                                           # read "0.0118 spent" beside 0.000157: under 0.012 as printed
+        self.assertIn("the run's spending cap of 0.012 USD: 0.011849 spent, and this call is counted at 0.000157; it was not sent",
+                      ledger.refusal(state, 0.000157))
 
     def test_the_runs_cap_and_a_units_are_held_together_and_only_the_runs_stops_the_run(self):
         led = ledger.Ledger.create(self.path, 0.20, 0.15)
