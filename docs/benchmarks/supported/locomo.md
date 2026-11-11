@@ -63,6 +63,7 @@ Very long-term conversational memory over conversations of 19 to 32 sessions.
 - The reader gets 32 tokens per answer. A reasoning model can spend them all reasoning, and that question fails.
 - One unreadable reply stops the whole conversation, because LoCoMo's script writes its answers only at the end.
 - Original memory runs the paper's retrieval setup and needs a CUDA GPU. It writes facts and summaries anew each run, so they differ from the authors' released ones.
+- Contriever, LoCoMo's default retriever, and the OpenAI retriever fail as published. DRAGON and DPR run, DRAGON by default.
 
 ## Nullius limitations
 

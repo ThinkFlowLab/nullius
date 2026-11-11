@@ -70,10 +70,11 @@ Long-term chat memory: questions over timestamped chat histories.
 - An empty reply from the reader fails the question.
 - Three combinations fail as published: merge expansion with a full-history retriever, user-only with flat-bm25-turn, and separate notes with chain-of-note reading and nl history.
 - The judge, a model, rejects about one right answer in twenty, and passes an empty answer now and then.
+- Time-aware query expansion fails as published, so it is not offered.
 
 ## Nullius limitations
 
-- The GTE retriever, the index and query expansions, and the open-weight readers are not offered.
+- The GTE retriever, index expansion and the open-weight readers are not offered.
 
 ## Cite
 
