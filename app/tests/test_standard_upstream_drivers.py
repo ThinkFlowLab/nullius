@@ -262,6 +262,27 @@ class HumanEval(unittest.TestCase):
         self.assertEqual(said[1:3], ["passed", "passed"])
         self.assertNotEqual(said[0], "passed")
 
+    def test_a_solution_split_over_two_files_fails_as_the_upstream_says_and_the_other_file_is_named(self):
+        """The function written in helpers.py and imported: the upstream's own failure, and the file named beside it."""
+        p = _driver(self, self.b, self.up, self.data)
+        t = p.request("units", dataset="humaneval")["units"][0]
+        with gzip.open(self.data, "rt") as f:
+            q = next(x for x in map(json.loads, f) if x["task_id"] == t)
+        p.request("setup", unit=t, dir=self.tmp)
+        with open(os.path.join(self.tmp, "helpers.py"), "w") as f:
+            f.write(q["prompt"] + q["canonical_solution"])
+        split = f"from helpers import {q['entry_point']}\n"
+        whole = q["prompt"] + q["canonical_solution"]
+        said = []
+        for text in (split, whole):
+            with open(os.path.join(self.tmp, "solution.py"), "w") as f:
+                f.write(text)
+            said.append(p.request("score", unit=t, dir=self.tmp, transcript=[], answer="")["detail"])
+        self.assertEqual([d["result"] for d in said], self.theirs([(t, "\n" + split), (t, q["canonical_solution"])]))
+        self.assertEqual((said[0]["result"], said[0]["not_tested"]), ("failed: No module named 'helpers'", ["helpers.py"]))
+        self.assertEqual(said[1]["result"], "passed")
+        self.assertNotIn("not_tested", said[1])                                  # helpers.py is there, and not imported
+
     def test_on_docker_the_check_runs_in_a_throwaway_container_and_the_agents_code_never_here(self):
         bin_dir, log = os.path.join(self.tmp, "bin"), os.path.join(self.tmp, "docker-argv.json")
         os.makedirs(bin_dir)
