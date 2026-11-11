@@ -59,7 +59,7 @@
 {% if job.budget and job.budget.stopped and job.budget.max_usd %}
 {# The run's own spending cap ended it (a Nullius standard run's --max-usd): nothing failed, so the notice is neutral. #}
 <div class="alert" id="cap-stopped">
-  <strong>{% if job.budget.shards %}{{ job.budget.shards_stopped }} of {{ job.budget.shards }} shards stopped at their share of the spending cap{% else %}Stopped at its spending cap{% endif %}</strong> of {{ job.budget.max_usd|cap }}{% if job.budget.spent_usd is not none %}, with {{ job.budget.spent_usd|usd }} spent{% endif %}:
+  <strong>{% if job.budget.shards %}{{ job.budget.shards_stopped }} of {{ job.budget.shards }} shards stopped at their share of the spending cap{% else %}Stopped at its spending cap{% endif %}</strong> of {{ job.budget.max_usd|cap }}{% if job.budget.spent_usd is not none %}, with {{ job.budget.spent_usd|cap }} spent{% endif %}:
   {{ job.budget.cut_off|length }} cut off, {{ job.budget.not_run|length }} not run.
 </div>
 {% endif %}

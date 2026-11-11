@@ -74,6 +74,17 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual((doc["units"]["u1"]["spent_usd"], doc["units"]["u1"]["closed"], doc["of"].get(a)), (0.02, True, None))
         self.assertAlmostEqual(led.state()["spent_usd"], 0.02)
 
+    def test_an_amount_under_a_cent_is_said_to_its_third_figure_never_rounded_to_another(self):
+        said = {0: "0.00", 0.5: "0.50", 10: "10.00", 0.395: "0.395", 0.2418236: "0.2418", 0.00005: "0.00005", 0.00004: "0.00004",
+                0.002017442: "0.00202", 0.000500894: "0.000501"}                  # 0.00005 read "0.0001", and 0.00004 "0.00"
+        self.assertEqual({v: ledger.usd(v) for v in said}, said)
+        led = ledger.Ledger.create(self.path, None, 0.0007)
+        a, _ = led.reserve(0.0006, "u1")
+        led.settle(a, 0.000500894)
+        _, state = led.reserve(0.00021, "u1")                                      # read "0.0005 spent" and "up to 0.0002": as if it fitted
+        self.assertIn("this unit's spending cap of 0.0007 USD: 0.000501 spent by the unit, and this call is counted at 0.00021; it was not sent",
+                      ledger.refusal(state, 0.00021))
+
     def test_the_runs_cap_and_a_units_are_held_together_and_only_the_runs_stops_the_run(self):
         led = ledger.Ledger.create(self.path, 0.20, 0.15)
         self.assertEqual((led.reserve(0.16, "u1")[1]["by"], led.closed()), ("unit", False))

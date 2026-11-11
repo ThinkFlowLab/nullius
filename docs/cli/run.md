@@ -60,7 +60,7 @@ prepaid or shared key (`app/nullius/standard/ledger.py`). Neither is set by defa
 | At the run's cap | A call waits while only calls in flight are in its way. The one that does not fit is refused by the relay (HTTP 402), and every call after it |
 | Its units | One cut off is the outcome Spending cap, outside the rate; those not begun are not run |
 | At a unit's cap | Its own calls and its simulated user's count, its judge's do not. The unit is an Agent error; the run goes on |
-| Not exact | A reply longer than the average takes the spend past a cap by the difference, for each call in flight |
+| Not exact | A request is counted at three characters a token and its reply at the average: a call that costs more takes the spend past a cap by the difference. Cached input is counted at the full price, so a unit can be cut off short of its cap |
 | The result | `result.json` carries `budget`, and the job page shows it |
 | From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit. Not for a Harbor recipe |
 | Shards | A shard's cap is its own on the command line; `merge` adds them up |

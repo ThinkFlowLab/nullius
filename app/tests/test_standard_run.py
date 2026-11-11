@@ -399,7 +399,7 @@ class RunTest(unittest.TestCase):
         self.assertEqual(len(sent), 3)                                       # no call went out past the cap
         self.assertEqual(sorted(round(c["booked_usd"], 8) for c in sent), [0.00003, 0.00003, 0.0001])   # the start once, then what a reply has been
         self.assertLessEqual(sum(c["cost_usd"] for c in sent), 0.00011)
-        self.assertTrue(any(s.startswith("stopped: a call did not fit the spending cap of 0.0001 USD (0.0001 spent): 1 cut off, 4 not run")
+        self.assertTrue(any(s.startswith("stopped: a call did not fit the spending cap of 0.00011 USD (0.00009 spent): 1 cut off, 4 not run")
                             for s in said), said)
         # the live board is told the cap as the units start, and the unit it cut off ends there as budget
         with open(os.path.join(job_dir, "events.jsonl")) as f:
@@ -412,7 +412,7 @@ class RunTest(unittest.TestCase):
         job_dir, failed, result, said = self.calling(max_usd=1.0)
         self.assertEqual(result["budget"], {"max_usd": 1.0, "spent_usd": 0.00024, "stopped": False, "cut_off": [], "not_run": []})
         self.assertEqual(len(self.outcomes(job_dir)[0]), 8)
-        self.assertIn("spent 0.0002 of the 1.00 USD cap", said)
+        self.assertIn("spent 0.00024 of the 1.00 USD cap", said)
         job_dir, _, result, _ = self.calling(name="uncapped")
         self.assertNotIn("budget", result)
         self.assertFalse(os.path.exists(os.path.join(job_dir, ".work", "ledger")))

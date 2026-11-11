@@ -280,8 +280,10 @@ def _state(doc: dict) -> dict:
 
 
 def usd(v: float) -> str:
-    """An amount as a person reads it: cents, and up to two digits more when it has them."""
-    whole, _, cents = f"{v:.4f}".rstrip("0").partition(".")
+    """An amount as a person reads it: cents, and the digits past them it has, to four decimals or to its third
+    figure where that is finer (0.395, 0.00202, 0.00005): a cap under a cent is not rounded to another."""
+    places = min(12, max(4, 2 - math.floor(math.log10(abs(v))))) if v and math.isfinite(v) else 4
+    whole, _, cents = f"{v:.{places}f}".rstrip("0").partition(".")
     return f"{whole}.{cents.ljust(2, '0')}"
 
 
@@ -294,11 +296,11 @@ def refusal(state: dict, amount: float) -> str:
                     f"({usd(u['spent_usd'])} spent by the unit): no further call of this unit is sent")
         return (f"this unit's spending cap of {usd(u['max_usd'])} USD: {usd(u['spent_usd'])} spent by the unit"
                 + (f", {usd(u['held_usd'])} booked by its calls in flight or never settled" if u["held_usd"] else "")
-                + f", and this call may cost up to {usd(amount)}; it was not sent, and no further call of this unit is")
+                + f", and this call is counted at {usd(amount)}; it was not sent, and no further call of this unit is")
     if state["closed"]:
         return (f"an earlier call did not fit the run's spending cap of {usd(state['max_usd'])} USD "
                 f"({usd(state['spent_usd'])} spent): no further call of this run is sent")
     flight = state["held_usd"] + state["unsettled_usd"]
     return (f"the run's spending cap of {usd(state['max_usd'])} USD: {usd(state['spent_usd'])} spent"
             + (f", {usd(flight)} booked by calls in flight or never settled" if flight else "")
-            + f", and this call may cost up to {usd(amount)}; it was not sent, and no further call of this run is")
+            + f", and this call is counted at {usd(amount)}; it was not sent, and no further call of this run is")

@@ -63,7 +63,7 @@ def _usage_total(calls: List[dict]) -> dict:
     return {"input": u("input"), "output": u("output"), "cached": u("cached"), "reasoning": u("reasoning"),
             "cost": sum(costs) if costs else None,
             "cost_from": "estimate" if any(c.get("cost_from") == "estimate" for c in ok) else ("provider" if costs else None),
-            "n_calls": len(calls)}
+            "n_calls": sum(1 for c in calls if not c.get("refused"))}       # a call its cap refused was never sent
 
 
 def _tool_clock(extra: dict, status: Optional[str], t: Optional[float]):

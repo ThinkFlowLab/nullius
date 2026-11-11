@@ -50,7 +50,7 @@ class CappedJobPage(unittest.TestCase):
                            "not_run": ["t-6", "t-7", "t-8", "t-9"]})
         capped_job(tmp / "jobs", "within", 4, 4, budget={"max_usd": 0.395, "spent_usd": 0.004, "stopped": False, "cut_off": [], "not_run": []})
         capped_job(tmp / "jobs", "uncapped", 4, 4)
-        capped_job(tmp / "jobs", "merged", 3, 4, budget={"max_usd": 10.0, "spent_usd": 4.0, "stopped": True, "cut_off": [], "not_run": ["t-3"],
+        capped_job(tmp / "jobs", "merged", 3, 4, budget={"max_usd": 0.154, "spent_usd": 0.014991, "stopped": True, "cut_off": [], "not_run": ["t-3"],
                                                          "shards": 4, "shards_stopped": 1})
         capped_job(tmp / "jobs", "unit-only", 4, 4, budget={"max_usd": None, "spent_usd": None, "stopped": True, "cut_off": [], "not_run": [],
                                                             "unit_max_usd": 0.002, "over_unit": []})
@@ -118,7 +118,7 @@ class CappedJobPage(unittest.TestCase):
     def test_a_merged_job_says_how_many_shards_stopped_and_a_run_without_its_own_cap_says_no_stop(self):
         html = self.page("merged")
         self.assertEqual(self.text(html, r'<div class="alert" id="cap-stopped">.*?</div>'),
-                         "1 of 4 shards stopped at their share of the spending cap of $10.00, with $4.00 spent: 0 cut off, 1 not run.")
+                         "1 of 4 shards stopped at their share of the spending cap of $0.154, with $0.015 spent: 0 cut off, 1 not run.")   # not "$0.01"
         alone = self.page("unit-only")                                                   # recorded stopped with no cap of the run's: nothing to say, no error
         self.assertNotIn('id="cap-stopped"', alone)
         self.assertEqual(self.text(alone, r'<div class="kv" id="unit-cap".*?</div>'), "Cap per task $0.002")
