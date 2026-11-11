@@ -58,12 +58,12 @@ Real terminal tasks in a container: build, configure, debug.
 - qemu-alpine-ssh and qemu-startup fail even with the reference solution: their tests install Debian packages that are no longer published.
 - The tests of torch-pipeline-parallelism and torch-tensor-parallelism download about 3 GB of PyTorch, which can outlast their time limit on a slow connection.
 - mailman's tests fail now and then even with the reference solution.
+- fix-git's image no longer builds as published, so it is pulled even when the image option builds.
 
 ## Nullius limitations
 
 - On Nullius, the agent can reach only its model. The 36 tasks whose solution downloads something are left out, so 53 of the 89 run, and the agent cannot install tools.
 - On Nullius, the tests get internet access after the agent ends. What the agent left running is stopped first, except in the 4 tasks whose tests need it.
-- Each task's prebuilt image is pulled by default. The image option builds it here instead, except fix-git, whose build no longer works.
 - Terminus-2, the authors' own agent, runs only on Harbor.
 - Terminal-Bench's own harness adds tmux to every task's image and Nullius does not yet, so git-multibranch, whose solution uses it, fails even with the reference solution.
 

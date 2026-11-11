@@ -186,7 +186,8 @@ prints the writable folder under the active user catalogue. Work there, then:
 - every dataset the upstream publishes for evaluation, each a dataset here
   (its default task set where it has splits; a domain or split loaded by the
   upstream's own loader is a dataset with no file); what is left out - a
-  training set, a test fixture, a mode not run - is said in the limitations;
+  training set, a mode not run - is said in the limitations (an upstream's
+  own test fixture only in the settings inventory);
 - **every setting of the upstream, inventoried - not only the ones the
   driver touches.** List every evaluation entry point the paper's numbers
   come from (each `scripts/*.sh`, each Python main, each README command, the
