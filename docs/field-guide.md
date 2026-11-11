@@ -139,7 +139,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `total_output_tokens` | Completion tokens. | derived | any |
 | `total_cost_usd` | The trials' recorded costs, summed: an estimate, not a bill. Shows — when no trial recorded one. | derived | any |
 | `duration_min` | The whole run, start to finish. | derived | any |
-| `budget` | A standard run's spending cap, from its `result.json`: the cap and what its ledger counted as spent (`max_usd`, `spent_usd`), whether the cap stopped the run, and the units cut off or never begun; a cap per unit and the units that reached it (`unit_max_usd`, `over_unit`). A merged job's is its shards' added up. Empty without a cap. | measured | any |
+| `budget` | A standard run's spending cap, from `result.json`: `max_usd` and `spent_usd`, whether it `stopped` the run, the units `cut_off` and `not_run`, and with a cap per unit `unit_max_usd` and `over_unit`. Empty without a cap. | measured | any |
 | `agent_label` | The agent's name: the class of a `module:Class` path, or the trials' own name when the config gives none. | measured | any |
 | `agent_version` | The version the trial's `agent_info` reports. | measured | any |
 | `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. An imported runner's arm without that declaration is not a control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |
@@ -230,11 +230,11 @@ Twelve classes. The four marked **yes** under Infrastructure leave the adjusted 
 | `failed_verification` | Failed verification | no | The verifier said no, on a benchmark with no patch detail: Terminal-Bench, or one read only by its reward. |
 | `patch_not_applied` | Patch did not apply | no | Malformed context lines, or edits against the wrong revision. |
 | `no_patch` | No patch produced | no | Finished without changing anything. |
-| `agent_error` | Agent error | no | Timed out, filled its context, truncated its output, refused, exited non-zero, or reached its own spending cap (a standard run's `--max-usd-per-unit`, `UnitSpendingCapError`). A result, counted against the agent. |
+| `agent_error` | Agent error | no | Timed out, filled its context, truncated its output, refused, exited non-zero, or reached its own spending cap (`UnitSpendingCapError`). A result, counted against the agent. |
 | `rate_limited` | Rate limited | yes | An HTTP 429 ended the trial. |
 | `api_error` | API error | yes | Any other provider failure: overloaded, unreachable, out of quota, key rejected. |
 | `setup_error` | Setup error | yes | The environment or image never came up, or the unit was not run for want of a secret or docker it needs, so the agent never ran. |
-| `spending_cap` | Spending cap | yes | A standard run reached its spending cap (`--max-usd`): its relay refused a model call the unit needed (`SpendingCapError`). Nothing failed; no attempt was had. |
+| `spending_cap` | Spending cap | yes | The run reached its `--max-usd` and its relay refused a call the unit needed (`SpendingCapError`). No attempt was had. |
 | `unknown` | Unknown | no | No verdict, or an exception on neither list. Counted, charged to nobody; the trial page shows the recorded type. |
 
 ## Caveats {#caveats}
