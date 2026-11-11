@@ -57,7 +57,7 @@ prepaid or shared key (`app/nullius/standard/ledger.py`). Neither is set by defa
 | --- | --- |
 | Prices first | Every model the run calls needs a price ([price list](../settings/model-prices.md) or `--price`), else the run is refused |
 | What is counted | Each reply's cost; a call in flight as the average reply so far from its model, 4,096 output tokens before any |
-| At the run's cap | The call that does not fit is refused by the relay (HTTP 402), and every call after it: the run stops there |
+| At the run's cap | A call waits while only calls in flight are in its way. The one that does not fit is refused by the relay (HTTP 402), and every call after it |
 | Its units | One cut off is the outcome Spending cap, outside the rate; those not begun are not run |
 | At a unit's cap | Its own calls and its simulated user's count, its judge's do not. The unit is an Agent error; the run goes on |
 | Not exact | A reply longer than the average takes the spend past a cap by the difference, for each call in flight |

@@ -188,6 +188,8 @@ class SpendingCap(unittest.TestCase):
         self.assertEqual((plain["errors"], self.caps(plain)), ([], [None]))
         self.assertIn("-j 2 --max-usd-per-unit 0.05 --name", plain["script"])
         self.assertNotIn("Spending cap", [row[1] for row in plain["review"]])
+        tiny = recipe.compile(a_recipe(max_usd_per_unit=1e-7), defs())["errors"]          # less than the command line can say
+        self.assertEqual([e["message"] for e in tiny], ["The spending cap per task is too small."])
         bad = recipe.compile(a_recipe(max_usd_per_unit=0), defs())["errors"]
         self.assertEqual([(e["step"], e["message"]) for e in bad],
                          [(recipe.STEP["limits"], "The spending cap per task is an amount in USD above zero, or empty for none.")])

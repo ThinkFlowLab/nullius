@@ -32,6 +32,11 @@ fit its unit's cap is refused, and so is every later call of that unit; the
 run goes on. A unit's calls are its own and its simulated user's - part of
 the task - and never its judge's, which scores it (:func:`unit_of`).
 
+A call that lacks room only because of calls in flight is not refused: its
+relay waits for them to settle (``WAIT``), since their bookings are
+estimates and mostly come back. Only a call that would not fit with nothing
+in flight, or that waited in vain, closes the ledger.
+
 The file is rewritten whole under a lock held for one read and one write
 (``flock`` on a file beside it, as an install is locked): a relay that dies
 holding it lets it go.
@@ -51,11 +56,21 @@ ERROR = "SpendingCapError"          # what a unit the cap ended carries: its own
 # what a unit that reached its own cap carries: it had its attempt and spent its allowance, as one that spends its
 # time does - an agent error, counted against the agent (runs.classify)
 UNIT_ERROR = "UnitSpendingCapError"
+WAIT = 120.0                        # seconds a call waits for the calls in flight to settle before it is refused
 _LIMITS = ("max_completion_tokens", "max_output_tokens", "max_tokens")
 
 
 class Unavailable(Exception):
     """The ledger could not be read or written: a capped call is then not sent."""
+
+
+def models(other: dict, model, judge, simulator, embed, control: bool = False) -> list:
+    """Every model a run's relays may send a call to, as sent: the run's own, the judge's, the simulated
+    user's (never a control's: it holds no conversation), an option's embeddings and the side models of
+    ``other`` (the agent, capability or setup). What a capped run must have a price for; the run and the
+    builder's Limits step both read it here."""
+    side = [(to or name) for name, _, to in (str(m).partition("=") for m in (other.get("model") or {}).get("side_models") or ())]
+    return [m for m in dict.fromkeys([model, judge, None if control else simulator, embed, *side]) if m]
 
 
 def unit_of(tag: str) -> Optional[str]:
@@ -136,7 +151,7 @@ class Ledger:
             json.dump(doc, f)
         os.replace(part, self.path)
 
-    def reserve(self, amount, unit: Optional[str] = None, model: Optional[str] = None) -> Tuple[Optional[str], dict]:
+    def reserve(self, amount, unit: Optional[str] = None, model: Optional[str] = None, wait: bool = False) -> Tuple[Optional[str], dict]:
         """(the booking's id, the state before it) when ``amount`` fits;
         (None, the state) when it does not, or the ledger is closed already -
         and it is closed from then on. ``unit``: the unit the call is part
@@ -145,7 +160,9 @@ class Ledger:
         unit alone - the run's ledger stays open for the others. ``amount``
         may be a function of what ``model``'s replies have been on average
         (:func:`bound`): it is then read here, under the same lock, and
-        the state says the ``amount`` booked."""
+        the state says the ``amount`` booked. ``wait``: a call that would
+        fit with nothing in flight is not refused but told to wait (``by:
+        wait``), and nothing is closed."""
         with self._locked() as doc:
             if callable(amount):
                 amount = amount(_usual(doc, model))
@@ -156,10 +173,14 @@ class Ledger:
                 flight = sum(doc["held"].get(b, 0.0) for b, w in doc["of"].items() if w == unit) + u["unsettled_usd"]
                 seen["unit"] = {"max_usd": each, "spent_usd": u["spent_usd"], "held_usd": flight, "closed": u["closed"]}
                 if u["closed"] or amount > each - u["spent_usd"] - flight:
+                    if wait and not u["closed"] and flight > u["unsettled_usd"] and amount <= each - u["spent_usd"] - u["unsettled_usd"]:
+                        return None, dict(seen, by="wait")     # only its own calls in flight are in the way
                     u["closed"] = True
                     self._write(doc)
                     return None, dict(seen, by="unit")
             if doc["closed"] or amount > seen["left_usd"]:
+                if wait and not doc["closed"] and seen["held_usd"] > 0 and amount <= doc["max_usd"] - doc["spent_usd"] - doc["unsettled_usd"]:
+                    return None, dict(seen, by="wait")         # only the calls in flight are in the way
                 if not doc["closed"]:
                     doc["closed"] = True
                     self._write(doc)

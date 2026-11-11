@@ -88,6 +88,35 @@ class LedgerTest(unittest.TestCase):
     def test_a_units_calls_are_its_own_and_its_simulated_users_never_its_judges(self):
         self.assertEqual([ledger.unit_of(t) for t in ("t-3", "t-3-simulator", "t-3-judge", "judge")], ["t-3", "t-3", None, "judge"])
 
+    def test_a_call_only_the_calls_in_flight_keep_out_is_told_to_wait_and_nothing_closes(self):
+        """Fifteen first calls booked before any reply must not end a run nothing was spent of: their bookings
+        are estimates, and settle."""
+        led = ledger.Ledger.create(self.path, 1.0, 0.6)
+        a, _ = led.reserve(0.7)
+        again, state = led.reserve(0.5, wait=True)                                 # 0.5 fits a cap of 1.0 once the 0.7 in flight settles
+        self.assertEqual((again, state["by"], led.closed()), (None, "wait", False))
+        led.settle(a, 0.1)
+        self.assertTrue(led.reserve(0.5, wait=True)[0])                            # and it does
+        never, state = led.reserve(0.5, wait=True)                                 # 0.1 spent and 0.5 in flight: 0.5 more fits alone, so it waits
+        self.assertEqual((never, state["by"]), (None, "wait"))
+        big, state = led.reserve(0.95, wait=True)                                  # with nothing in flight it would still not fit: refused, for good
+        self.assertEqual((big, state["by"], led.closed()), (None, "cap", True))
+        # a unit's own calls in flight are waited for the same way, and what it could never fit closes it
+        units = ledger.Ledger.create(self.path, None, 0.6)
+        b, _ = units.reserve(0.4, "u1")
+        self.assertEqual(units.reserve(0.4, "u1", wait=True)[1]["by"], "wait")
+        self.assertEqual(units.reserve(0.7, "u1", wait=True)[1]["by"], "unit")
+        # without waiting (the wait is over), what does not fit now is refused
+        self.assertEqual(units.reserve(0.4, "u2")[0] is not None, True)
+        self.assertEqual(units.reserve(0.4, "u2")[1]["by"], "unit")
+
+    def test_the_models_a_run_may_call_are_listed_once_for_the_run_and_the_builder(self):
+        agent = {"model": {"side_models": ["text-embedding-3-small", "fast=gpt-5-nano"]}}
+        self.assertEqual(ledger.models(agent, "m", "judge-1", "user-1", "embed-1"),
+                         ["m", "judge-1", "user-1", "embed-1", "text-embedding-3-small", "gpt-5-nano"])
+        self.assertEqual(ledger.models({}, None, "judge-1", "user-1", None, control=True), ["judge-1"])   # a control holds no conversation
+        self.assertEqual(ledger.models({}, "m", "m", None, None), ["m"])
+
     def test_a_call_is_sent_while_spent_and_in_flight_and_its_booking_fit(self):
         led = ledger.Ledger.create(self.path, 1.0)
         a, _ = led.reserve(0.4)

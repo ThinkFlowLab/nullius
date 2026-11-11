@@ -439,6 +439,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     elif isinstance(per_unit, bool) or not isinstance(per_unit, (int, float)) or not 0 < per_unit < float("inf"):
         add("limits", f"The spending cap per {noun} is an amount in USD above zero, or empty for none.")
         per_unit = None
+    elif per_unit < 1e-6:                                     # what the command line can say: a millionth of a dollar
+        add("limits", f"The spending cap per {noun} is too small.")
+        per_unit = None
     limit = recipe.get("limit")
     if limit not in ("", None) and _int(limit, 1) is None:
         add("limits", "The number of units is a whole number of at least 1, or empty for all of them.")
@@ -463,15 +466,14 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if not paying:
         per_unit = None                                       # no job calls a model: nothing to cap
     if (share or per_unit) and unpriced is not None:
-        # the models a run names as it sends them, as run.Run.models_called lists them: its own or a setup's and
-        # their side models, the judge's, the simulated user's (a control's run names it too), an option's embeddings
+        # the models each job names as it sends them, read where its run reads them (ledger.models): each
+        # dataset with each choice, the dataset's own embeddings
         judge, sim = (b.get("score") or {}).get("judge"), b.get("simulator")
-        sides = lambda o: [(to or name) for name, _, to in (str(m).partition("=") for m in (o.get("model") or {}).get("side_models") or ())]
-        called = [*[m for p in picks if not p["control"]
-                    for m in ((p["o"].get("sent") or p.get("model")) if p.get("setup") else model, *sides(p["o"]))],
-                  (judge_model or providers.served_as(judge["model"], provider)) if judge else "",
-                  (sim_model or providers.served_as(sim["model"], provider)) if sim else "",
-                  *needs["embeddings"][:1]]
+        called = [m for x in dss for p in picks for m in ledger.models(
+            p["o"], None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
+            (judge_model or providers.served_as(judge["model"], provider)) if judge else None,
+            (sim_model or providers.served_as(sim["model"], provider)) if sim else None,
+            (definitions.option_needs(b, per_ds[x["id"]])["embeddings"] or [None])[0], control=p["control"])]
         missing = unpriced([m for m in dict.fromkeys(called) if isinstance(m, str) and m])
         if missing:
             add("limits", f"A spending cap needs a price for {', '.join(missing)}: update the price list in Settings, or set a price there.")

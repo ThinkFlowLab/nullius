@@ -822,10 +822,10 @@ class Run:
             cut = next((f for f in cuts if f[0] == ledgers.ERROR), None) or next((f for f in cuts if f[0] == ledgers.UNIT_ERROR), None)
             if cut:
                 exc, score = cut, None
-        if exc and exc[0] not in (ledgers.ERROR, ledgers.UNIT_ERROR) and getattr(self, "ledger", None) is not None \
+        if exc and exc[0] in ("EnvironmentSetupError", "VerifierError") and getattr(self, "ledger", None) is not None \
                 and getattr(self, "bench_relay", None) is not None:
-            # the call the cap refused while this unit ran was its driver's own (an option's embeddings, on the
-            # benchmark's relay): the unit was cut off there too, whatever its driver made of the refusal
+            # its driver failed, at setup or at scoring, while the cap refused a call of the driver's own (an option's
+            # embeddings, on the benchmark's relay): the unit was cut off there. An agent's own error stays the agent's
             late = [c for c in self.bench_relay.calls("embeddings") if c.get("refused") == "cap" and c.get("t0", 0) >= t0]
             if late:
                 exc, score = (ledgers.ERROR, late[0].get("error") or ""), None
@@ -1012,9 +1012,8 @@ class Run:
         run's, the judge's, the simulator's, an option's embeddings and the
         agent's side models. Any other name a caller asks for is replaced by
         the run's (``relay``), so these are all a run can be priced for."""
-        side = [(b or a) for a, _, b in (str(m).partition("=") for m in (self.other.get("model") or {}).get("side_models") or ())]
-        mine = [getattr(self, n, None) for n in ("model", "judge_model", "simulator_model", "embed_model")]
-        return [m for m in dict.fromkeys([*mine, *side]) if m]
+        return ledgers.models(self.other, *(getattr(self, n, None) for n in ("model", "judge_model", "simulator_model", "embed_model")),
+                              control=self.other.get("_kind") == "control")
 
     def unit_relay(self, tag: str, trial: str, setup: dict, env_def: Optional[dict] = None, own: bool = False):
         """The unit's own relay, started: in this process on the local

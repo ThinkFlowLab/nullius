@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import time
+from unittest import mock
 import unittest
 import urllib.error
 import urllib.request
@@ -284,6 +285,44 @@ class CapTest(unittest.TestCase):
         self.assertEqual(r.calls("u2")[-1]["refused"], "price")
         self.assertEqual(relay.failure(r.calls("u2"))[0], "ApiError")
         self.assertFalse(led.closed())
+
+    def test_a_call_waits_for_the_calls_in_flight_and_is_refused_only_when_they_do_not_settle(self):
+        r, led = self.capped(0.0015)
+        body = {"model": "m", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 100}     # booked a little over 0.001
+        held, _ = led.reserve(0.001)                                               # another call, in flight
+        got = {}
+        waiting = threading.Thread(target=lambda: got.update(status=self.post(r, "u1", body)[0]))
+        waiting.start()
+        time.sleep(0.6)
+        self.assertEqual((got, led.closed()), ({}, False))                         # not refused, not sent: waiting
+        led.settle(held, 0.0001)                                                   # the call in flight comes back, far under its booking
+        waiting.join(10)
+        self.assertEqual((got.get("status"), led.closed()), (200, False))
+        # one that waits in vain is refused, and the run stops there
+        stuck, _ = led.reserve(led.state()["left_usd"] - 0.00001)                 # a call in flight that never comes back, leaving next to nothing
+        with mock.patch.object(ledger, "WAIT", 0.5):
+            status, headers, _ = self.post(r, "u2", body)
+        self.assertEqual((status, headers.get("X-Nullius-Refused"), led.closed()), (402, "cap", True))
+        # once the cap is reached, a call with nothing to price is not sent either
+        req = urllib.request.Request(r.url("u3") + "/responses/abc/cancel", data=b"{}", headers={"Content-Type": "application/json"})
+        with self.assertRaises(urllib.error.HTTPError) as refused:
+            urllib.request.urlopen(req)
+        self.assertEqual((refused.exception.code, refused.exception.headers.get("X-Nullius-Refused")), (402, "cap"))
+        refused.exception.read()
+
+    def test_a_call_that_names_a_model_is_booked_on_any_route_and_a_ledger_that_fails_is_no_cap_reached(self):
+        r, led = self.capped(1.0)
+        req = urllib.request.Request(r.url("u1") + "/images/generations", data=json.dumps({"model": "m", "prompt": "a cat"}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req).read()
+        except urllib.error.HTTPError as e:
+            e.read()
+        self.assertIn("booked_usd", r.calls("u1")[-1])                             # a route the relay does not know is booked all the same
+        os.unlink(led.path)                                                        # the ledger gone: the call is not sent, and that is no cap
+        status, headers, answer = self.post(r, "u2", {"model": "m", "messages": [{"role": "user", "content": "hi"}]})
+        self.assertEqual((status, headers.get("X-Nullius-Refused"), json.loads(answer)["error"]["code"]), (402, "ledger", "ledger_unavailable"))
+        self.assertEqual(relay.failure(r.calls("u2"))[0], "ApiError")
 
     def test_a_call_that_does_not_fit_is_answered_by_the_relay_and_never_sent(self):
         r, led = self.capped(0.0005)             # 100 output tokens at 10 USD a million are 0.001 already
