@@ -139,6 +139,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `total_output_tokens` | Completion tokens. | derived | any |
 | `total_cost_usd` | The trials' recorded costs, summed: an estimate, not a bill. Shows — when no trial recorded one. | derived | any |
 | `duration_min` | The whole run, start to finish. | derived | any |
+| `budget` | A standard run's spending cap, from its `result.json`: the cap and what its ledger counted as spent (`max_usd`, `spent_usd`), whether the cap stopped the run, and the units cut off or never begun. A merged job's is its shards' added up. Empty without a cap. | measured | any |
 | `agent_label` | The agent's name: the class of a `module:Class` path, or the trials' own name when the config gives none. | measured | any |
 | `agent_version` | The version the trial's `agent_info` reports. | measured | any |
 | `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. An imported runner's arm without that declaration is not a control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |

@@ -15,6 +15,7 @@ nullius standard merge jobs_standard/*__shard-* -o jobs_standard/humaneval-oracl
 | A unit keeps its place | `u0042` is the 43rd unit of the dataset in every shard; shard jobs never share a trial name |
 | One launch | Each shard's `config.json` records `standard.shard` (`index`, `of`, `units_total`, `partition`, `planned`, `limit`) and `standard.launch`: `--launch`, or the day (UTC), benchmark, agent or capability and model. The runs page groups them until merged |
 | `merge JOB_DIR... -o OUT` | One job (`app/nullius/standard/merge.py`): trials hard-linked, each `result.json` naming the merged job and shard; the job's `result.json` recomputed; `config.json` with `merged_from` for `shard`. Different launches, versions, datasets, agents, models, backends or N refused unless `--force`; two trials of one unit always. Units no shard ran are named |
+| A spending cap | `--max-usd` is each shard's own; the builder shares a recipe's cap over its shards in equal parts. `merge` adds the caps and what was spent into the merged job's `budget`, with every unit cut off or not run, when every shard had a cap |
 | `prove --shard I/N` | Controls and leak on that shard, units on all; recorded as `shard` |
 
 The builder's *Where* does the same: one shard per machine.

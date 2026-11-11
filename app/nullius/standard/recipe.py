@@ -31,13 +31,14 @@ unit's agent or capability in a container - which a host must have docker for
 """
 from __future__ import annotations
 
+import math
 import re
 import shlex
 from typing import Callable, Dict, List, Optional
 
 from nullius import hosts, providers
 from nullius.providers import PROVIDER_LABEL, PROVIDERS, STEP
-from nullius.standard import hostreq, definitions, match, ports, prove
+from nullius.standard import hostreq, definitions, ledger, match, ports, prove
 
 HARNESS = "standard"
 # The builder's runner card (command-builder-core.js, runners()): not a definition file, so builtin like Harbor's.
@@ -253,7 +254,8 @@ def _int(v, low: int, high: Optional[int] = None) -> Optional[int]:
 
 
 def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
-            docker_unusable: Optional[Callable[[], Optional[str]]] = None) -> dict:
+            docker_unusable: Optional[Callable[[], Optional[str]]] = None,
+            unpriced: Optional[Callable[[List[str]], List[str]]] = None) -> dict:
     """{errors, notes, review, jobs, confirm, script, parts, model}
     for one recipe; errors name the step
     that edits what is wrong. And ``shards``: one per machine of *Where*, each
@@ -265,7 +267,15 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     machine, why docker cannot run here (``container.unusable``) - a reason
     is the Where step's error. Not given, it is not asked: compiling stays a
     function of the definitions alone, and the routes that preview or start
-    a run pass it."""
+    a run pass it.
+
+    ``max_usd``: the run's spending cap (``standard.ledger``), one amount for
+    the whole run: its jobs that call a model - each dataset with each
+    participant, on each machine - take equal shares (``--max-usd``), so
+    none spends another's and the amount typed is the most the run spends.
+    ``unpriced``: asked, for a recipe with a cap, which of the models it
+    names have no price in the user's list (``nullius.prices``): a run
+    with a cap is refused without one, and the Limits step says so first."""
     d = defs or _all()
     errors, notes = [], []
     add = lambda step, message: errors.append({"step": STEP[step], "message": message})
@@ -413,6 +423,13 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # the leaderboard's own models, as the run's provider spells them; the official ones stay the run's default
     sim_model = providers.served_as(lb["simulator"], provider_) if lb.get("simulator") else sim_model
     judge_model = providers.served_as(lb["judge"], provider_) if lb.get("judge") else judge_model
+    # the run's spending cap: an amount in USD, or none
+    cap = recipe.get("max_usd")
+    if cap in ("", None):
+        cap = None
+    elif isinstance(cap, bool) or not isinstance(cap, (int, float)) or not 0 < cap < float("inf"):
+        add("limits", "The spending cap is an amount in USD above zero, or empty for none.")
+        cap = None
     limit = recipe.get("limit")
     if limit not in ("", None) and _int(limit, 1) is None:
         add("limits", "The number of units is a whole number of at least 1, or empty for all of them.")
@@ -426,6 +443,25 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         why = docker_unusable()
         if why:
             add("where", f"The docker backend cannot run on this machine: {why}. Choose local processes, or a host with docker.")
+    # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
+    spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"])
+    paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])
+    share = None
+    if cap is not None and paying:
+        share = math.floor(cap / paying * 1e6) / 1e6          # never more than the cap in all
+        if not share:
+            add("limits", "The spending cap is too small" + (f" to share over {paying} jobs." if paying > 1 else "."))
+        elif unpriced is not None:
+            # the models a run names as it sends them (run.Run.models_called): its own or a setup's, the judge's,
+            # the simulated user's, an option's embeddings
+            judge, sim = (b.get("score") or {}).get("judge"), b.get("simulator")
+            called = [*[(p["o"].get("sent") or p.get("model")) if p.get("setup") else model for p in picks if not p["control"]],
+                      (judge_model or providers.served_as(judge["model"], provider)) if judge else "",
+                      (sim_model or providers.served_as(sim["model"], provider)) if sim and any(not p["control"] for p in picks) else "",
+                      *needs["embeddings"][:1]]
+            missing = unpriced([m for m in dict.fromkeys(called) if isinstance(m, str) and m])
+            if missing:
+                add("limits", f"A spending cap needs a price for {', '.join(missing)}: update the price list in Settings, or set a price there.")
     if errors:
         return out
     nouns = (b.get("units") or {}).get("nouns", "units")
@@ -458,6 +494,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  "--dataset", d["id"], *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
                  *[w for k, v in options_for_pick(d, p).items() for w in ("--bench-option", f"{k}={v}")],
                  *(["--repeat", str(repeat)] if repeat > 1 else []),
+                 *(["--max-usd", f"{share:.6f}".rstrip("0").rstrip(".")] if share and spends(p) else []),
                  *(["--simulator-model", sim_model] if sim_model and not p["control"] else []),
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
@@ -537,6 +574,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       + (f" · {repeat} attempts each (pass^1 to pass^{repeat})" if repeat > 1 else "")
                       + (" · a setup counts " + next(p["o"]["units"]["nouns"] for p in picks if p.get("setup"))
                          if any(p.get("setup") for p in picks) and not all(p.get("setup") for p in picks) else "")],
+                     *([[STEP["limits"], "Spending cap", f"${ledger.usd(cap)}"
+                         + (f" in all · ${ledger.usd(share)} for each of {paying} jobs" if paying > 1 else "")]] if share else []),
                      [STEP["where"], "Where", (f"{of} shards, one per machine: " if of > 1 else "")
                       + ", ".join(where_label(t) for t in targets) + f" · {backend} backend"]]
     if agents_local:

@@ -64,7 +64,9 @@ the job books each call in one ledger before sending it
 | The result | `result.json` carries `budget`: `max_usd`, `spent_usd`, `unsettled_usd` when there is some, `stopped`, `cut_off` and `not_run`; stderr says `stage=cap` |
 | Several at a time | The calls in flight take room: with `-j 4`, four bookings must fit at once. The first calls, before any reply, are booked 4,096 output tokens each |
 | An estimate | What was spent is each reply's cost, the provider's own figure when its reply carries one. A booking is not a bill: a reply longer than any before it costs more than was booked and takes the spend past the cap by the difference; the next call is then refused |
-| A shard | The cap is that shard's alone: split a budget over the shards yourself |
+| A shard | On the command line the cap is that shard's alone. `merge` adds the shards' caps and spending into one `budget`, when every shard had a cap |
+| From the builder | *Limits* takes one cap for the whole run. Its jobs that call a model (each dataset with each participant, on each machine) take equal shares, rounded down, so the amount typed is the most the run spends. A model without a price is named there, before Run. Not offered for a Harbor recipe, whose calls do not pass the relay |
+| The job page | Run totals shows the cap. A run the cap stopped says so, with what was spent, and lists the units not run; the units cut off are its Spending cap trials. The live board says what was spent of the cap |
 
 <div class="grid cards" markdown>
 

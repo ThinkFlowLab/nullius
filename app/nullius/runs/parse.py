@@ -30,7 +30,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "13"
+SCHEMA = "14"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness (an agent's `max_retries` reaching its
@@ -283,6 +283,9 @@ class Job:
     # defaults filled in (launch_of): what "New run like this" rebuilds a
     # recipe from when the run kept none. Empty when config.json is absent.
     launch: dict = field(default_factory=dict)
+    # A run with a spending cap (a Nullius standard job's ``result.json``, ``budget``): the cap and what was
+    # spent in USD, whether the cap stopped the run, the units it cut off and those never begun. {} without one.
+    budget: dict = field(default_factory=dict)
     # A Harbor job run with several agents or models (`-m a -m b`, or a config
     # listing several): each one's {name, model, effort}, which split_agents
     # turns into one view per agent. [] for a job of one agent.
@@ -830,6 +833,17 @@ def launch_of(cfg: dict) -> dict:
     }
 
 
+def _budget(b) -> dict:
+    """A job's recorded spending cap, read leniently: {} unless it names a cap; an amount that is no number is
+    None (not reported), never zero."""
+    num = lambda v: v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    if not isinstance(b, dict) or not num(b.get("max_usd")):
+        return {}
+    names = lambda v: [str(x) for x in v] if isinstance(v, list) else []
+    return {"max_usd": b["max_usd"], "spent_usd": num(b.get("spent_usd")), "unsettled_usd": num(b.get("unsettled_usd")),
+            "stopped": b.get("stopped") is True, "cut_off": names(b.get("cut_off")), "not_run": names(b.get("not_run"))}
+
+
 def parse_job(job_dir: str, reuse=None) -> Job:
     """One job directory. ``reuse(trial_dir)``: a Trial already parsed from
     files that have not changed since (a workspace's cache, for a running
@@ -906,6 +920,7 @@ def parse_job(job_dir: str, reuse=None) -> Job:
     ctl = std.get("control") if isinstance(std.get("control"), dict) else {}
     job.control_source = str(ctl.get("source") or "control") if ctl.get("name") == job.agent_label.lower() else ""
     job.launch_id = str(std.get("launch") or "")
+    job.budget = _budget(res.get("budget"))
     job.standard = bool(std)
     # a runner's job was never a `harbor run`: there is no command to rebuild
     job.harbor_command = "" if job.runner else redact(harbor_command(
