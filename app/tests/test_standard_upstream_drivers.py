@@ -176,8 +176,10 @@ class HumanEvalNotTested(unittest.TestCase):
     STAND_IN = {
         "__init__.py": "",
         "data.py": "import json\ndef read_problems(path):\n    return {p['task_id']: p for p in map(json.loads, open(path))}\n",
-        "execution.py": ("def check_correctness(problem, completion, timeout):\n"
-                         "    return {'task_id': problem['task_id'], 'passed': False, 'result': 'failed: the stand-in', 'completion_id': None}\n"),
+        "execution.py": ("def check_correctness(problem, completion, timeout, completion_id=None):\n"     # passes what returns 1
+                         "    ok = 'return 1' in completion\n"
+                         "    return {'task_id': problem['task_id'], 'passed': ok, 'result': 'passed' if ok else 'failed: the stand-in',\n"
+                         "            'completion_id': completion_id}\n"),
         "evaluation.py": "def evaluate_functional_correctness(sample_file, k=[1], n_workers=4, timeout=3.0, problem_file=''):\n    pass\n",
     }
 
@@ -211,6 +213,21 @@ class HumanEvalNotTested(unittest.TestCase):
         self.assertEqual(got["detail"]["not_tested"], ["helpers.py", "pkg/", "rel.py"])           # the standard library is no file here
         self.assertNotIn("not_tested", self.score("import math\ndef f():\n    return 1\n")["detail"])   # the standard library only
         self.assertNotIn("not_tested", self.score("import helpers\ndef f(:\n")["detail"])         # no syntax, no names
+
+    def test_the_names_never_change_the_verdict(self):
+        guarded = "try:\n    import helpers\nexcept ImportError:\n    pass\ndef f():\n    return 1\n"
+        got = self.score(guarded)
+        self.assertEqual((got["reward"], got["detail"]["result"], got["detail"]["not_tested"]), (1.0, "passed", ["helpers.py"]))
+        for odd in ("x = " + "-" * 100000 + "1\n", "#" * (1 << 20) + "\n"):              # too deep to parse; too large to read
+            got = self.score(guarded + odd)
+            self.assertEqual((got["reward"], got["detail"]["result"], "not_tested" in got["detail"]), (1.0, "passed", False))
+
+    def test_dotted_imports_and_links_are_named_never_followed(self):
+        os.makedirs(os.path.join(self.ws, "other"))
+        os.symlink(os.path.join(self.tmp, "nowhere.py"), os.path.join(self.ws, "dangling.py"))
+        os.symlink(self.tmp, os.path.join(self.ws, "away"))                              # a folder outside the workspace
+        got = self.score("import other.mod as m, dangling, away\nfrom .rel import x\n")
+        self.assertEqual(got["detail"]["not_tested"], ["away/", "dangling.py", "other/", "rel.py"])
 
 
 class HumanEval(unittest.TestCase):
@@ -268,7 +285,6 @@ class HumanEval(unittest.TestCase):
         t = p.request("units", dataset="humaneval")["units"][0]
         with gzip.open(self.data, "rt") as f:
             q = next(x for x in map(json.loads, f) if x["task_id"] == t)
-        p.request("setup", unit=t, dir=self.tmp)
         with open(os.path.join(self.tmp, "helpers.py"), "w") as f:
             f.write(q["prompt"] + q["canonical_solution"])
         split = f"from helpers import {q['entry_point']}\n"

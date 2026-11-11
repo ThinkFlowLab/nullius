@@ -14,8 +14,8 @@ score  - the upstream's own check_correctness (human_eval/execution.py) with
          timeout evaluate_functional_correctness gives it by default (3 s):
          the prompt, the completion and the problem's test run as one program,
          in a process of its own under the upstream's reliability_guard. The
-         workspace files solution.py imports, which that program does not
-         have, are named in the detail (``not_tested``)
+         workspace files solution.py's import statements name are listed in
+         the detail (``not_tested``): the check is given solution.py alone
 oracle - the reference control: writes the problem's prompt and its
          canonical_solution, the authors' own body, as solution.py
 answer - the original setup: the problem's prompt completed by a model in one
@@ -149,10 +149,15 @@ def completion(problem, text):
     return "\n" + text, "the whole file: the prompt's part was changed"
 
 
+LISTED_UP_TO = 1 << 20      # characters: a larger solution.py cannot run within the check's time, and is not read for names
+
+
 def not_tested(dir, text):
-    """The files of the workspace that solution.py imports: the check runs solution.py alone, as the upstream
-    runs one completion, so a solution split over two files fails on the import. Named so the failure reads
-    as what it is; read from the file's syntax, nothing run, and none when it does not parse."""
+    """The workspace files solution.py's import statements name. The check is given solution.py alone, as the
+    upstream is given one completion, so a solution split over two files fails on its import: listed so that
+    the failure reads as what it is. Read from the file's syntax, nothing run; none when it does not parse."""
+    if len(text) > LISTED_UP_TO:
+        return []
     try:
         tree = ast.parse(text)
     except (SyntaxError, ValueError):
@@ -186,7 +191,10 @@ def score(unit, dir, transcript, answer, setup=None, **_):
     done, how = completion(p, text)
     r = check_in_container(dir, p, done) if os.environ.get(CHECK_IMAGE) else check_correctness(p, done, TIMEOUT)
     ok = bool(r["passed"])
-    left = not_tested(dir, text)
+    try:
+        left = not_tested(dir, text)
+    except Exception:                                             # the names explain the verdict, never replace it
+        left = []
     return {"reward": 1.0 if ok else 0.0, "passed": ok,
             "detail": {"result": r["result"], "timeout": TIMEOUT, "completion": how, "solution.py": text[-4000:],
                        **({"not_tested": left} if left else {})}}
