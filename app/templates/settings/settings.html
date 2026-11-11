@@ -74,6 +74,7 @@
       {{ section_link('providers', 'Model providers', 'capability', 'openrouter openai anthropic local endpoint api key model_api_url') }}
       {{ section_link('agent-keys', 'Agent keys', 'agent', 'credentials cursor copilot token agent_keys') }}
       {{ section_link('judge', 'Judges', 'compare', 'typesafe system one llm model judgement') }}
+      {{ section_link('prices', 'Model prices', 'dollar', 'cost price estimate usd tokens list update') }}
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Execution</div>
@@ -239,6 +240,32 @@
     </fieldset>
   </section>
 
+  {# the user's price list (nullius.prices), outside the form: prices.js draws the state and answers the buttons #}
+  <section class="st-section" id="prices" aria-labelledby="prices-h" data-state='{{ prices|tojson }}'{% if writable %} data-csrf="{{ csrf }}" data-update="{{ url_for('settings_prices_update') }}" data-set="{{ url_for('settings_prices_set') }}" data-remove="{{ url_for('settings_prices_remove') }}"{% endif %}>
+    <div class="st-section-head"><h2 id="prices-h">Model prices</h2><p>What a run's cost is estimated from, in USD per million tokens.</p></div>
+    <div class="st-card">
+      <div class="st-row"><span class="st-row-label">Price list</span><span class="st-row-value st-value"><span data-prices-state></span>{% if writable %} <button type="button" class="btn sm" data-prices-update><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span>Update</span></button>{% endif %}</span></div>
+    </div>
+    <fieldset class="st-card">
+      <legend>Your prices</legend>
+      <div class="st-sandbox-rows" data-own-rows></div>
+      <p class="st-about" data-own-none hidden>None yet.</p>
+      {% if writable %}
+      <form class="st-sandbox-rows st-prices-add" data-own-add autocomplete="off">
+        <div class="st-row"><label class="st-row-label" for="price-model">Model</label>
+          <div class="st-row-value"><input class="st-input" id="price-model" name="model" type="text" spellcheck="false" autocomplete="off" maxlength="200" required></div></div>
+        <div class="st-row"><label class="st-row-label" for="price-input">Input</label>
+          <div class="st-row-value"><input class="st-input" id="price-input" name="input" type="number" min="0" step="any" inputmode="decimal" required></div></div>
+        <div class="st-row"><label class="st-row-label" for="price-output">Output</label>
+          <div class="st-row-value"><input class="st-input" id="price-output" name="output" type="number" min="0" step="any" inputmode="decimal" required></div></div>
+        <div class="st-row"><label class="st-row-label" for="price-cached">Cached input</label>
+          <div class="st-row-value"><input class="st-input" id="price-cached" name="cached" type="number" min="0" step="any" inputmode="decimal"></div></div>
+        <div class="st-row"><span class="st-row-label"></span><span class="st-row-value st-value"><button type="submit" class="btn sm">Add</button></span></div>
+      </form>
+      {% endif %}
+    </fieldset>
+  </section>
+
   {# kept in this browser, not in the file: onboarding.js fills the state and answers the buttons #}
   <section class="st-section" id="general" aria-labelledby="general-h">
     <div class="st-section-head">
@@ -276,6 +303,7 @@
 <script src="{{ url_for('static', filename='settings/navigation.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/providers.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/sandbox.js') }}"></script>
+<script src="{{ url_for('static', filename='settings/prices.js') }}"></script>
 {% if writable %}
 <dialog id="add-host" class="settings-dialog">
   {# a host: one of the ssh config's, or by hand — who and where, and how ssh gets in without a prompt. Test before Add; no password is ever stored, one is used once to put this machine's key on the host. #}

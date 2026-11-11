@@ -182,7 +182,7 @@ def main(argv=None) -> int:
             assert 'serve' in run(*prefix, '--help')
             assert set(json.loads(run(*prefix, 'import', '--list', '--json'))) == {'atif', 'otel'}
             assert run(*prefix, '--version').strip() == 'nullius ' + backend['version']
-            for subcommand in ('runs', 'compare', 'standard', 'workspace', 'paths', 'migrate'):
+            for subcommand in ('runs', 'compare', 'standard', 'workspace', 'paths', 'prices', 'migrate'):
                 assert 'usage:' in run(*prefix, subcommand, '--help')
             run(*prefix, 'import', root / 'missing', expected=3)
         locations = json.loads(run(command, 'paths', '--json'))

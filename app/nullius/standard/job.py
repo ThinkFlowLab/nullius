@@ -459,7 +459,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                  concurrency: int, granted: bool, judge: str = "", backend: str = "local", image: str = "",
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
                  bench_options: Optional[dict] = None,
-                 simulator: str = ""):
+                 simulator: str = "", prices: Optional[dict] = None):
     """``unsandboxed`` is true for an agent on the local backend only: in a
     container (``backend``, ``image``) it is not. ``standard.options`` holds
     every option's value, the defaults included, so two runs read side by side
@@ -467,7 +467,8 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     several machines (``shard``), which ``merge`` reads back. ``repeat``: how
     many times each unit was run, said only when more than once. ``judge`` and
     ``simulator``: the models that graded and that played the user, when the
-    benchmark has them."""
+    benchmark has them. ``prices``: the rows its models' costs are
+    estimated from and where the user's list came from, when it has any."""
     with open(os.path.join(job_dir, "config.json"), "w") as f:
         json.dump({"job_name": job, "runner": "standard", "runner_label": "Nullius",
                    "standard": {"benchmark": bench["key"], **_version(bench), "plugged": other.get("_ref") or other["key"], "kind": other["_kind"], "provider": provider,
@@ -476,7 +477,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"image": image} if image else {}), **({"judge": judge} if judge else {}),
                                 **({"simulator": simulator} if simulator else {}), **({"options": options} if options else {}), **({"benchmark_options": bench_options} if bench_options else {}), **_control(other), **_setup(other),
                                 **({"launch": launch} if launch else {}), **({"shard": shard} if shard else {}),
-                                **({"repeat": repeat} if repeat > 1 else {})},
+                                **({"repeat": repeat} if repeat > 1 else {}), **({"prices": prices} if prices else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,
                    "agents": [{"name": other["key"], "model_name": model}],

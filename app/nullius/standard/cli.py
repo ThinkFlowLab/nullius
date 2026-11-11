@@ -6,7 +6,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend docker]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--unsandboxed | --backend docker]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED] ...] [--unsandboxed | --backend docker]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -63,7 +63,7 @@ import signal
 import sys
 import tempfile
 
-from nullius import paths, progress, secrets, settings
+from nullius import paths, prices as price_list, progress, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed, just like the unified CLI does.
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
@@ -416,6 +416,18 @@ def options(pairs) -> dict:
     return out
 
 
+def prices(given) -> dict:
+    """``--price MODEL=INPUT,OUTPUT[,CACHED]``, repeatable: this run's own prices, over the user's list."""
+    out = {}
+    for p in given or []:
+        try:
+            name, row = price_list.parse(p)
+        except ValueError as e:
+            sys.exit(str(e))
+        out[name] = row
+    return out
+
+
 def cmd_conform(a):
     o = _other(a.other)
     try:
@@ -457,7 +469,7 @@ def cmd_run(a):
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
                       simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
                       licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
-                      **({"env": run_env(a.provider)} if a.from_run else {}))
+                      prices=prices(a.price), **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
         print("refused:", e)
         return 2
@@ -610,6 +622,8 @@ def main(argv=None):
             p.add_argument("--launch", help="the launch id every shard records (default: the day, the benchmark, the agent, the model)")
             p.add_argument("--bench-option", action="append", metavar="NAME=VALUE",
                            help="one of the benchmark's own options (repeatable: a search, a mode); the rest keep their defaults")
+            p.add_argument("--price", action="append", metavar="MODEL=INPUT,OUTPUT[,CACHED]",
+                           help="this run's price for a model in USD per million tokens, over your price list (repeatable; nullius prices)")
     v = sub.add_parser("prove", help="prove a benchmark: its controls, its units, no leak; record what passed")
     v.add_argument("benchmark")
     v.add_argument("--dataset", help="one dataset (default: each)")

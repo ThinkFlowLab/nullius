@@ -111,6 +111,7 @@ nav:
           - System One provider: settings/system-one.md
           - LLM judge provider: settings/llm-judge.md
           - Agent keys: settings/agent-keys.md
+          - Model prices: settings/model-prices.md
           - Run hosts: settings/run-hosts.md
           - Sandbox: settings/sandbox.md
           - Other: settings/other.md

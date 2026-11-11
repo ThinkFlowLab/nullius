@@ -29,6 +29,7 @@ import subprocess
 import time
 from typing import Callable, Dict, List, Optional
 
+from nullius import prices as price_list
 from nullius.standard import definitions, install, jsonl, relay, run
 
 SIDES = ("acp", "cli")
@@ -171,7 +172,7 @@ def check(agent: dict, *, model: str, provider: str, jobs_root: str = "jobs", pa
     units = [str(u) for u in r.driver().request("units", dataset=r.ds["id"], timeout=300)["units"]]
     # One relay for the whole comparison, on this machine: every route's
     # records side by side, with the fields fidelity reads.
-    r.relay = relay.Relay(r.base, r.key, os.path.join(r.job_dir, ".work", "relay"), prices=run.PRICES, model=model,
+    r.relay = relay.Relay(r.base, r.key, os.path.join(r.job_dir, ".work", "relay"), prices=price_list.table(), model=model,
                           side_models=(agent.get("model") or {}).get("side_models") or (),
                           key_header=run.PROVIDERS[provider].get("key_header", "authorization"), fields=True).start()
     order = [(s, n) for n in range(1, passes + 1) for s in SIDES]

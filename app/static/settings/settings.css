@@ -225,5 +225,10 @@
 .st-sandbox-rows { display: grid; gap: 14px; }
 .st-sandbox-rows > .st-row + .st-row { padding-top: 14px; border-top: 1px solid var(--border-soft); }
 .settings-page .st-sandbox-rows .st-input { height: 34px; min-height: 34px; padding-block: 0; }
-.settings-page #sandbox .st-row-value.st-value { flex-direction: row; justify-content: flex-start; align-items: center; }
+.settings-page #sandbox .st-row-value.st-value, .settings-page #prices .st-row-value.st-value { flex-direction: row; justify-content: flex-start; align-items: center; }
+#prices [data-prices-update] .ic { width: 15px; height: 15px; }
+#prices [data-prices-update].busy .ic { animation: st-prices-spin .9s linear infinite; }
+@keyframes st-prices-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #prices [data-prices-update].busy .ic { animation: none; } }
+.st-prices-add { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
 .st-input[list]::-webkit-calendar-picker-indicator { opacity: 1; display: block; cursor: pointer; }

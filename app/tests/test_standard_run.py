@@ -254,6 +254,52 @@ class RunTest(unittest.TestCase):
         self.assert_no_key(job_dir)
         self.assert_unit_relays(job_dir)
 
+    def relay_calls(self, job_dir):
+        out = []
+        for root, _, files in os.walk(job_dir):
+            for n in files:
+                if n.endswith(".jsonl") and os.path.basename(root) == "relay":
+                    with open(os.path.join(root, n)) as f:
+                        out += [json.loads(line) for line in f if line.strip()]
+        return out
+
+    def test_a_run_given_a_price_estimates_its_calls_and_records_the_price(self):
+        price = {"input": 1.0, "output": 10.0}
+        job_dir = self.go("fakebench", "fake", prices={"m-1": price, "another": {"input": 9.0, "output": 9.0}})
+        calls = self.relay_calls(job_dir)
+        self.assertTrue(calls)
+        for c in calls:
+            self.assertAlmostEqual(c["cost_usd"], (11 * 1.0 + 3 * 10.0) / 1e6)
+            self.assertEqual(c["cost_from"], "estimate")
+        with open(os.path.join(job_dir, "config.json")) as f:
+            # the models it calls, no other; the row is this run's, so no list is credited with it
+            self.assertEqual(json.load(f)["standard"]["prices"], {"models": {"m-1": {**price, "source": "run"}}})
+
+    def test_the_record_says_whose_each_price_is_and_names_the_list_only_for_its_own(self):
+        listed, own = {"input": 1.0, "output": 10.0}, {"input": 2.0, "output": 4.0}
+        held = os.path.join(self.tmp, "prices.json")
+
+        def recorded(doc):
+            with open(held, "w") as f:
+                json.dump({"from": "https://example.invalid/list.json", "on": "2026-11-10", **doc}, f)
+            with mock.patch.dict(os.environ, {"NULLIUS_PRICES": held}):
+                job_dir = self.go("fakebench", "fake")
+            with open(os.path.join(job_dir, "config.json")) as f:
+                return json.load(f)["standard"]["prices"]
+
+        self.assertEqual(recorded({"models": {"m-1": listed}}),
+                         {"from": "https://example.invalid/list.json", "on": "2026-11-10", "models": {"m-1": {**listed, "source": "list"}}})
+        # the user's own row over the list's: the list did not say this price, so it is not named
+        self.assertEqual(recorded({"models": {"m-1": listed}, "own": {"m-1": own}}), {"models": {"m-1": {**own, "source": "own"}}})
+
+    def test_a_run_with_no_price_has_no_cost_and_says_nothing_of_prices(self):
+        job_dir = self.go("fakebench", "fake")
+        calls = self.relay_calls(job_dir)
+        self.assertTrue(calls)
+        self.assertFalse(any("cost_usd" in c for c in calls))
+        with open(os.path.join(job_dir, "config.json")) as f:
+            self.assertNotIn("prices", json.load(f)["standard"])
+
     def test_the_trajectory_carries_the_prompt_the_tool_call_and_the_answer(self):
         job_dir = self.go("fakebench", "fake", limit=1)
         trial = [d for d in os.listdir(job_dir) if d.startswith("good__")][0]

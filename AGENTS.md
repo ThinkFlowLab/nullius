@@ -70,7 +70,7 @@ and its resources. The source layout stays under `app/`.
   (the reference `agent`; JiuwenSwarm's `agent` and mini-swe-agent's `run`, the wrappers that start them) and `catalogue/capabilities/<key>/` (the keyword-memory `capability`); `workspace` (and
   `workspace_cli`, its shell command),
   `cli` and `__main__` (the unified `nullius` and `python -m nullius` commands),
-  `paths` (user config, data and cache locations), `migrate` (explicit copying of legacy checkout storage), `settings`, `hosts`, `execution`, `progress` (what a run is doing, one line per stage), `prerequisites` (what a recipe needs of each machine it runs on, asked before Run and again as it starts), `onboarding` (the Getting started checklist: what this machine
+  `paths` (user config, data and cache locations), `prices` (the user's model price list: fetched on request, never by a run; what a cost is estimated from), `migrate` (explicit copying of legacy checkout storage), `settings`, `hosts`, `execution`, `progress` (what a run is doing, one line per stage), `prerequisites` (what a recipe needs of each machine it runs on, asked before Run and again as it starts), `onboarding` (the Getting started checklist: what this machine
   says is done, and where each step is done), `gitrefs` (a repository's branches and tags,
   by `git ls-remote`), `secrets` (a benchmark's licences, kept per benchmark outside the repository), `sandbox` (Settings' docker: its Docker Hub login and the images runs keep) and `redact` at the top.
 - `app/templates/`, `app/static/` — the interface, grouped by the same capability
@@ -110,8 +110,8 @@ remain available; the executable is `nullius` and storage paths keep that name. 
 Harbor a recipe runs is its pin's, run through `uvx` (or the target's own, for
 a recipe without a pin), and the viewer never imports it.
 
-`nullius paths` lists persistent locations. On Linux, settings and benchmark
-licences live under `~/.config/nullius/`, user catalogue entries, workspaces,
+`nullius paths` lists persistent locations. On Linux, settings, the model price
+list and benchmark licences live under `~/.config/nullius/`, user catalogue entries, workspaces,
 runs and standard installs under `~/.local/share/nullius/`, and caches under
 `~/.cache/nullius/`. XDG variables move those roots; `NULLIUS_HOME` selects a
 separate profile with `config/`, `data/` and `cache/`. Existing storage overrides
