@@ -36,6 +36,7 @@ import http.client
 import json
 import os
 import re
+import select
 import socket
 import threading
 import time
@@ -317,6 +318,12 @@ class _Pool:
         conn, reused = self.take()
         while True:
             try:
+                if conn.sock is None:
+                    try:
+                        conn.connect()           # the address, the connection, TLS: a failure here is before anything was sent
+                    except Exception as e:
+                        e.unsent = True
+                        raise
                 conn.request(method, self.prefix + path, body=body, headers=headers)
                 return conn, conn.getresponse()
             except _STALE:
@@ -361,6 +368,7 @@ class Relay:
         self.ledger = ledgers.Ledger(ledger) if ledger else None
         # False for the benchmark's own relay: its calls (an option's embeddings) are no one unit's, so only the run's cap holds them
         self.unit_caps = unit_caps
+        self.stopping = threading.Event()        # said by stop(): a call waiting for room gives up
         self.base, self.key, self.dir = base.rstrip("/"), key, record_dir
         self.prices, self.model = prices or {}, model
         self.side_models = {a: (b or a) for a, _, b in (str(m).partition("=") for m in side_models or ())}
@@ -453,10 +461,15 @@ class Relay:
         # reports no usage; one that names none (a cancellation, a body that is no request) has no price to book
         if self.ledger is not None and h.command == "POST":
             if isinstance(req, dict) and req.get("model") and not _free(rest):
-                booking, booked, why, by = self._book(req, raw, rest, tag)
+                booking, booked, why, by = self._book(req, raw, rest, tag, h)
             else:                                # nothing to price: sent as it is, but not once the run's cap is reached
-                why, by = (("the run's spending cap was reached: no further call of this run is sent", "cap")
-                           if self.ledger.closed() else (None, None))
+                try:
+                    why, by = (("the run's spending cap was reached: no further call of this run is sent", "cap")
+                               if self.ledger.state()["closed"] else (None, None))
+                except ledgers.Unavailable as e:     # as for a call it would book: not sent, and no cap reached
+                    why, by = str(e), "ledger"
+            if by == "gone":                     # its caller hung up while it waited: nothing was booked, nothing is sent
+                return
             if why:
                 self._refuse(h, tag, rest, req, asked, why, by)
                 return
@@ -468,9 +481,10 @@ class Relay:
             status, kind, back = r.status, r.getheader("Content-Type") or "application/json", returned(r.headers)
         except Exception as e:
             status, kind = 502, "application/json"
-            # refused or unknown address: never sent. Anything else (a timeout, a dropped line) came after the
-            # request may have gone out: it may have been billed, so its booking is kept
-            cut = not isinstance(e, (ConnectionRefusedError, socket.gaierror))
+            # the connection was never made (refused, unknown or unreachable address, a timeout or TLS failing as
+            # it opened): never sent. Anything else came after the request may have gone out: it may have been
+            # billed, so its booking is kept
+            cut = not getattr(e, "unsent", False)
             body = json.dumps({"error": {"message": "the relay could not reach the endpoint: " + self._said(e)}}).encode()
         streamed = r is not None and "text/event-stream" in kind
         whole = False                            # the reply read to its end: its connection can be kept
@@ -555,25 +569,29 @@ class Relay:
             else:
                 conn.close()
 
-    def _book(self, req: dict, raw: bytes, rest: str, tag: str = "") -> tuple:
+    def _book(self, req: dict, raw: bytes, rest: str, tag: str = "", h: Optional[BaseHTTPRequestHandler] = None) -> tuple:
         """(booking, its amount, None, None) for a call the cap lets out;
         (None, its amount, why, by) for one it does not - ``by`` the run's
         cap (``cap``), the cap of the unit ``tag`` routes for (``unit``),
         ``price`` (a model with no price is not sent either, a capped run
         sending no call it cannot price) or ``ledger`` (it could not be
-        read or written) - and those two are no cap reached."""
+        read or written) - and those two are no cap reached. ``gone``: its
+        caller ``h`` hung up, or this relay stopped, while it waited."""
         row = self.prices.get(req.get("model"))
         if not row:
             return None, None, f"no price for the model {req.get('model')!r}: a run with a spending cap sends no call it cannot price", "price"
         try:
             # a call only the calls in flight keep out waits for them: their bookings are estimates, and settle
             deadline = time.time() + ledgers.WAIT
+            least = ledgers.bound(req, raw, row, rest, output=False)
             while True:
                 booking, seen = self.ledger.reserve(lambda usual: ledgers.bound(req, raw, row, rest, usual),
                                                     ledgers.unit_of(tag) if self.unit_caps and tag else None, req.get("model"),
-                                                    wait=time.time() < deadline)
+                                                    wait=time.time() < deadline, least=least)
                 if booking or seen["by"] != "wait":
                     break
+                if self.stopping.is_set() or _gone(h):
+                    return None, None, None, "gone"     # no one waits for it: not booked later, and the cap not closed in its name
                 time.sleep(0.2)
         except ledgers.Unavailable as e:         # not a cap reached: the unit is not the cap's, and the run goes on if the ledger reads again
             return None, None, str(e), "ledger"
@@ -631,6 +649,7 @@ class Relay:
         return self
 
     def stop(self):
+        self.stopping.set()
         if self.server:
             self.server.shutdown()
             self.server.server_close()
@@ -640,6 +659,16 @@ class Relay:
 def _free(rest: str) -> bool:
     """A route that names a model and is not billed: a token count."""
     return rest.split("?")[0].rstrip("/").endswith("/count_tokens")
+
+
+def _gone(h: Optional[BaseHTTPRequestHandler]) -> bool:
+    """Whether a caller hung up while its call waited: its end of the connection reads closed."""
+    if h is None:
+        return False
+    try:
+        return bool(select.select([h.connection], [], [], 0)[0]) and h.connection.recv(1, socket.MSG_PEEK) == b""
+    except (OSError, ValueError):
+        return True
 
 
 def failure(calls: List[dict]) -> Optional[tuple]:

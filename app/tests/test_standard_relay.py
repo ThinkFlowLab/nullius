@@ -3,9 +3,12 @@ call by its unit, and names a unit's failure the way the classifier reads it.
 A driver or capability process answers one JSON line per request."""
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import shutil
+import socket
+import ssl
 import sys
 import tempfile
 import threading
@@ -56,11 +59,14 @@ class Upstream(BaseHTTPRequestHandler):
             self.reply(200, json.dumps(CHAT).encode(), "application/json")
 
     def reply(self, status, body, kind):
-        self.send_response(status)
-        self.send_header("Content-Type", kind)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except OSError:
+            pass                                 # the relay hung up first: a test of a reply that never came
 
 
 class RelayTest(unittest.TestCase):
@@ -245,9 +251,10 @@ class CapTest(unittest.TestCase):
         led = ledger.Ledger.create(os.path.join(tmp, "ledger", "ledger.json"), None, 0.0005)
         r = relay.Relay(self.base, "sk-real", os.path.join(tmp, "relay"), prices=self.PRICES, ledger=led.path).start()
         self.addCleanup(r.stop)
-        body = {"model": "m", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 100}     # booked 0.001 and more: over 0.0005
+        body = {"model": "m", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 100}
+        big = {"model": "m", "messages": [{"role": "user", "content": "x" * 3000}], "max_tokens": 100}    # a thousand tokens of request: 0.001, over 0.0005
         sent = len(Upstream.seen)
-        status, headers, answer = self.post(r, "u1", body)
+        status, headers, answer = self.post(r, "u1", big)
         self.assertEqual((status, headers.get("X-Nullius-Refused"), json.loads(answer)["error"]["code"]), (402, "unit", "unit_spending_cap"))
         self.assertEqual(len(Upstream.seen), sent)                                 # never sent
         self.assertEqual(r.calls("u1")[-1]["refused"], "unit")
@@ -323,11 +330,18 @@ class CapTest(unittest.TestCase):
         status, headers, answer = self.post(r, "u2", {"model": "m", "messages": [{"role": "user", "content": "hi"}]})
         self.assertEqual((status, headers.get("X-Nullius-Refused"), json.loads(answer)["error"]["code"]), (402, "ledger", "ledger_unavailable"))
         self.assertEqual(relay.failure(r.calls("u2"))[0], "ApiError")
+        # a call with nothing to price the same way: not sent, and not the cap's
+        req = urllib.request.Request(r.url("u3") + "/responses/abc/cancel", data=b"{}", headers={"Content-Type": "application/json"})
+        with self.assertRaises(urllib.error.HTTPError) as refused:
+            urllib.request.urlopen(req)
+        self.assertEqual((refused.exception.code, refused.exception.headers.get("X-Nullius-Refused")), (402, "ledger"))
+        refused.exception.read()
+        self.assertEqual(relay.failure(r.calls("u3"))[0], "ApiError")
 
     def test_a_call_that_does_not_fit_is_answered_by_the_relay_and_never_sent(self):
-        r, led = self.capped(0.0005)             # 100 output tokens at 10 USD a million are 0.001 already
+        r, led = self.capped(0.0005)             # a thousand tokens of request at 1 USD a million are 0.001 already
         sent = len(Upstream.seen)
-        status, headers, body = self.post(r, "u1", {"model": "m", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 100})
+        status, headers, body = self.post(r, "u1", {"model": "m", "messages": [{"role": "user", "content": "x" * 3000}], "max_tokens": 100})
         self.assertEqual((status, headers.get("X-Nullius-Refused")), (402, "cap"))
         error = json.loads(body)["error"]
         self.assertEqual(error["type"], "spending_cap")
@@ -346,6 +360,80 @@ class CapTest(unittest.TestCase):
         self.assertIn("spending cap", said)
         self.assertEqual(classify.from_verdict(exc, None), classify.SPENDING_CAP)    # its own outcome, never a miss
         self.assertIn(classify.SPENDING_CAP, classify.INFRA_OUTCOMES)
+
+    def test_a_cap_under_one_guessed_call_lets_the_first_out_and_books_the_next_from_its_reply(self):
+        """100 output tokens at 10 USD a million are 0.001, over this cap of 0.0005: before any reply that is a
+        guess, and refusing on it refused every call of the run with nothing spent."""
+        r, led = self.capped(0.0005)
+        body = {"model": "m", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 100}
+        self.assertEqual(self.post(r, "u1", body)[0], 200)
+        first = r.calls("u1")[-1]
+        self.assertAlmostEqual(first["booked_usd"], 0.0005)                        # the room there was
+        self.assertEqual(self.post(r, "u2", body)[0], 200)
+        self.assertLess(r.calls("u2")[-1]["booked_usd"], 0.0001)                   # what a reply has been
+        self.assertFalse(led.closed())
+        # a unit's own cap the same way
+        tmp = tempfile.mkdtemp()
+        each = ledger.Ledger.create(os.path.join(tmp, "ledger", "ledger.json"), None, 0.0005)
+        units = relay.Relay(self.base, "sk-real", os.path.join(tmp, "relay"), prices={"fresh": self.PRICES["m"]}, ledger=each.path).start()
+        self.addCleanup(units.stop)
+        self.assertEqual(self.post(units, "u1", dict(body, model="fresh"))[0], 200)
+        self.assertAlmostEqual(units.calls("u1")[-1]["booked_usd"], 0.0005)
+
+    def test_a_call_that_never_left_gives_its_booking_back_and_one_cut_off_after_it_was_sent_keeps_it(self):
+        r, led = self.capped(1.0)
+        body = {"model": "m", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 100}
+        def a_connection(**failing):
+            conn = http.client.HTTPConnection(*self.up.server_address[:2], timeout=5)
+            for step, error in failing.items():
+                setattr(conn, step, mock.Mock(side_effect=error))
+            return conn, False
+
+        for failing in (TimeoutError("timed out"), OSError(113, "No route to host"), ssl.SSLCertVerificationError("certificate verify failed")):
+            with mock.patch.object(r.pool, "take", side_effect=lambda fresh=False: a_connection(connect=failing)):
+                self.assertEqual(self.post(r, "u1", body)[0], 502)
+            got = led.state()
+            self.assertEqual((got["held_usd"], got["unsettled_usd"], got["spent_usd"]), (0, 0.0, 0.0), failing)   # never sent: nothing kept
+        with mock.patch.object(r.pool, "take", side_effect=lambda fresh=False: a_connection(getresponse=TimeoutError("timed out"))):
+            self.assertEqual(self.post(r, "u1", body)[0], 502)
+        got = led.state()
+        self.assertEqual(got["held_usd"], 0)
+        self.assertAlmostEqual(got["unsettled_usd"], r.calls("u1")[-1]["booked_usd"])       # sent, then silence: it may have been billed
+
+    def test_a_waiting_call_whose_caller_hung_up_is_dropped_and_closes_nothing(self):
+        r, led = self.capped(0.0015)
+        body = json.dumps({"model": "m", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 100}).encode()
+        self.assertEqual(self.post(r, "u0", json.loads(body))[0], 200)             # a reply, so the next is booked from it
+        held, _ = led.reserve(led.state()["left_usd"] - 0.000001)                  # a call in flight, leaving next to nothing
+        sent = len(Upstream.seen)
+        host, port = r.server.server_address[:2]
+        caller = socket.create_connection((host, port))
+        caller.sendall(b"POST /u1/v1/chat/completions HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n"
+                       b"Content-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body)
+        time.sleep(0.5)
+        self.assertEqual(len(Upstream.seen), sent)                                 # waiting
+        caller.close()                                                             # its agent gave up
+        time.sleep(0.6)
+        led.settle(held, 0.0)                                                      # room now: an orphan would be booked and sent here
+        time.sleep(0.6)
+        got = led.state()
+        self.assertEqual((len(Upstream.seen), got["held_usd"], got["closed"], r.calls("u1")), (sent, 0, False, []))
+        # a relay that stops lets its waiting calls go the same way
+        stuck, _ = led.reserve(led.state()["left_usd"] - 0.000001)
+        answered = {}
+
+        def call():
+            try:
+                answered.update(status=self.post(r, "u2", json.loads(body))[0])
+            except OSError as e:                                                   # let go without an answer
+                answered.update(dropped=type(e).__name__)
+
+        waiting = threading.Thread(target=call, daemon=True)
+        waiting.start()
+        time.sleep(0.5)
+        r.stopping.set()
+        waiting.join(5)
+        self.assertEqual((answered, len(Upstream.seen), led.closed()), ({"dropped": "RemoteDisconnected"}, sent, False))
 
     def test_a_refused_call_is_the_units_whatever_its_agent_did_next(self):
         calls = [{"status": 200}, {"status": 402, "refused": "cap", "error": "the run's spending cap"}, {"status": 200}]

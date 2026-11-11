@@ -413,6 +413,7 @@ class Run:
         self.run_prices = dict(prices or {})
         self.prices = {**price_list.table(), **self.run_prices}
         self.max_usd, self.unit_max_usd, self.ledger = None, None, None
+        self.capped = False                      # whether the run's spending cap stopped it
         for flag, given, what in (("--max-usd", max_usd, "the run's spending cap"), ("--max-usd-per-unit", max_usd_per_unit, "a unit's spending cap")):
             if given is None:
                 continue
@@ -589,7 +590,8 @@ class Run:
                 container.sweep(self.name)          # whatever an interrupted unit left
             if self.loopback is not None:
                 self.loopback.stop()
-            budget = self.budget([u for n, (_, u, _) in enumerate(work) if n >= len(begun) or not begun[n]])
+            budget = self.budget([self.attempt_name(u, r) for n, (_, u, r) in enumerate(work) if n >= len(begun) or not begun[n]])
+            self.capped = bool(budget and budget["stopped"])
             job.write_result(self.job_dir, self.name, t0, time.time(), results, len(work), budget=budget)
             errored = sum(1 for x in results if x.get("exception_info"))
             self.feed.emit("job.end", n_completed=len(results) - errored, n_errored=errored, n_cancelled=len(work) - len(results))
@@ -776,6 +778,9 @@ class Run:
                 produce = (p0, time.time())
                 if box is not None:              # what the agent (or the control) left in the container, before the check
                     changes = self.box_changes(box)
+            cut = self.cap_reached(rl, tag)
+            if cut:                              # cut off at a spending cap: nothing of it is checked, and its judge is asked nothing
+                raise _Ended(cut[0], cut[1], traj)
             step = setup.get("verify") if box is not None else None
             checking = (time.time(), None)
             self.phase(name, unit, "verify", DRIVER_SECONDS + (float(step.get("seconds") or self.turn_seconds) if step else 0))
@@ -815,18 +820,15 @@ class Run:
         if failed and (exc is None or exc[0] not in ("EnvironmentSetupError",)):
             exc = failed                     # what the endpoint said outranks how the agent took it
             score = None
-        if rl is not None and getattr(self, "ledger", None) is not None:
-            # a call a spending cap refused, the agent's, the judge's or the simulated user's: the unit was cut
-            # off by the run's own limit - never a miss - or by its own, whatever its agent made of the refusal
-            cuts = [f for f in (relay.failure(rl.calls(t)) for t in (tag, f"{tag}-judge", f"{tag}-simulator")) if f]
-            cut = next((f for f in cuts if f[0] == ledgers.ERROR), None) or next((f for f in cuts if f[0] == ledgers.UNIT_ERROR), None)
-            if cut:
-                exc, score = cut, None
+        cut = self.cap_reached(rl, tag)          # at scoring too: its judge's call, or a refusal its agent made something else of
+        if cut:
+            exc, score = cut, None
         if exc and exc[0] in ("EnvironmentSetupError", "VerifierError") and getattr(self, "ledger", None) is not None \
                 and getattr(self, "bench_relay", None) is not None:
-            # its driver failed, at setup or at scoring, while the cap refused a call of the driver's own (an option's
-            # embeddings, on the benchmark's relay): the unit was cut off there. An agent's own error stays the agent's
-            late = [c for c in self.bench_relay.calls("embeddings") if c.get("refused") == "cap" and c.get("t0", 0) >= t0]
+            # its driver failed, at setup or at scoring, and the cap refused a call that driver made for this unit (an
+            # option's embeddings, on its thread's route of the benchmark's relay): the unit was cut off there. Another
+            # unit's refusal is not this one's, and an agent's own error stays the agent's
+            late = [c for c in self.bench_relay.calls(self.embeddings_tag()) if c.get("refused") == "cap" and c.get("t0", 0) >= t0]
             if late:
                 exc, score = (ledgers.ERROR, late[0].get("error") or ""), None
         if self._stopped.is_set() and score is None:
@@ -855,17 +857,31 @@ class Run:
         self.note_refusal(exc)
         if exc and exc[0] == ledgers.ERROR and getattr(self, "_halt", None) is not None:
             with self._said:
-                self._cut.append(unit)
+                self._cut.append(self.attempt_name(unit, r))
             self._halt.set()                     # the cap is reached: nothing more is begun
         elif exc and exc[0] == ledgers.UNIT_ERROR:
             with self._said:
-                self._over.append(unit)          # its own cap: the others go on
+                self._over.append(self.attempt_name(unit, r))     # its own cap: the others go on
         if getattr(self, "ledger", None) is not None and self.unit_max_usd is not None:
             try:
                 self.ledger.forget(tag)          # the unit ended: its own count goes from the ledger
             except ledgers.Unavailable:
                 pass
         return res
+
+    def cap_reached(self, rl, tag: str) -> Optional[tuple]:
+        """A spending cap's refusal among a unit's calls - its agent's, its
+        judge's or its simulated user's - as what the unit ends with: cut
+        off by the run's own limit, never a miss, before its own. None
+        without one."""
+        if rl is None or getattr(self, "ledger", None) is None:
+            return None
+        cuts = [f for f in (relay.failure(rl.calls(t)) for t in (tag, f"{tag}-judge", f"{tag}-simulator")) if f]
+        return next((f for f in cuts if f[0] == ledgers.ERROR), None) or next((f for f in cuts if f[0] == ledgers.UNIT_ERROR), None)
+
+    def attempt_name(self, unit: str, r: int = 1) -> str:
+        """A unit as the budget lists it: by its name, and its attempt when the run repeats its units."""
+        return unit if self.repeat <= 1 else f"{unit} (attempt {r})"
 
     def budget(self, not_run: List[str]) -> Optional[dict]:
         """What ``result.json`` says of the run's spending cap: the cap,
@@ -1084,7 +1100,12 @@ class Run:
         model pinned on its route, as an OpenAI client reads it; nothing without an embedding option."""
         if getattr(self, "bench_relay", None) is None:
             return {}
-        return {"OPENAI_BASE_URL": self.bench_relay.url("embeddings", model=self.embed_model), "OPENAI_API_KEY": relay.PLACEHOLDER_KEY}
+        return {"OPENAI_BASE_URL": self.bench_relay.url(self.embeddings_tag(), model=self.embed_model), "OPENAI_API_KEY": relay.PLACEHOLDER_KEY}
+
+    def embeddings_tag(self) -> str:
+        """This thread's route on the benchmark's relay. A driver serves one thread, one unit at a time: what
+        it was refused there is that unit's, never one running beside it."""
+        return f"embeddings-{threading.get_ident()}"
 
     def unit_image(self, setup: dict) -> str:
         """The image a unit runs in (``container.image_for``); the first unit
@@ -1500,7 +1521,9 @@ def run(bench: dict, other: dict, **kw) -> str:
 
 def run_and_report(bench: dict, other: dict, **kw) -> tuple:
     """(job directory, whether it failed): it stopped on a refusing endpoint,
-    or units ran and none reached a verdict - what the CLI's exit status says."""
+    or units ran and none reached a verdict - what the CLI's exit status says.
+    A run its spending cap stopped ended as it was asked to: no failure,
+    whatever it reached."""
     r = Run(bench, other, **kw)
     job_dir = r.start()
-    return job_dir, bool(r.halted) or (r.n_ended > 0 and r.n_verdicts == 0)
+    return job_dir, bool(r.halted) or (r.n_ended > 0 and r.n_verdicts == 0 and not r.capped)

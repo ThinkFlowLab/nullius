@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 from nullius.runs import classify, live, parse
-from nullius.standard import acp, container, definitions, install, ledger, run
+from nullius.standard import acp, container, definitions, install, ledger, relay, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 # A conversation whose user a model plays: it opens, speaks once more, then is done.
@@ -64,6 +64,11 @@ serve({"units": lambda dataset: {"units": [f"m{i}" for i in range(8)]}, "setup":
 
 # the same, one unit asking far more than the others: its prompt is three thousand characters
 UNEVEN_DRIVER = CALLING_DRIVER.replace('{"prompt": "model hi"}', '{"prompt": "model " + ("x" * 3000 if unit == "m5" else "hi")}')
+# the same, m5's agent taking its refused call in its stride and ending its turn; each score leaves a mark in the workspace
+SWALLOWING_DRIVER = (UNEVEN_DRIVER.replace('"model " + ("x" * 3000', '("swallow " if unit == "m5" else "model ") + ("x" * 3000')
+                     .replace("from nullius.standard.jsonl import serve", "import os\nfrom nullius.standard.jsonl import serve")
+                     .replace('"score": lambda unit, dir, transcript, answer: {',
+                              '"score": lambda unit, dir, transcript, answer: open(os.path.join(dir, "scored"), "w").close() or {'))
 
 
 class Echo(BaseHTTPRequestHandler):
@@ -334,6 +339,47 @@ class RunTest(unittest.TestCase):
             board = live.fold([live.parse_line(line) for line in f if line.strip()])
         self.assertEqual(board.budget, {"unit_max_usd": 0.0005})
         self.assertEqual({t.trial.split("__")[0]: t.outcome for t in board.trials if t.outcome == "agent_error"}, {"m5": "agent_error"})
+
+    def test_a_unit_cut_off_at_a_cap_is_not_scored_whatever_its_agent_made_of_the_refusal(self):
+        """Its verdict would be thrown away, and a judge would be paid for it."""
+        prices = {"m-1": {"input": 1.0, "output": 10.0, "max_output": 10}}
+        job_dir, failed, result, said = self.calling(SWALLOWING_DRIVER, prices=prices, max_usd_per_unit=0.0005)
+        got, _ = self.outcomes(job_dir)
+        self.assertEqual((got["m5"].exception_type, got["m5"].outcome), (ledger.UNIT_ERROR, classify.AGENT_ERROR))
+        scored = sorted(n.split("__")[0] for n in os.listdir(job_dir) if os.path.exists(os.path.join(job_dir, n, "workspace", "scored")))
+        self.assertEqual(scored, ["m0", "m1", "m2", "m3", "m4", "m6", "m7"])
+
+    def test_a_run_its_cap_stopped_before_any_verdict_is_no_failure(self):
+        """A launch pauses on a failed run (\"usually the dataset or the environment\"): a cap reached is the
+        limit its user set, and the launch's other jobs have shares of their own."""
+        prices = {"m-1": {"input": 1.0, "output": 10.0, "max_output": 10}}
+        job_dir, failed, result, said = self.calling(prices=prices, max_usd=0.00001)       # under the first request itself
+        self.assertEqual((result["budget"]["stopped"], result["budget"]["cut_off"], len(result["budget"]["not_run"])), (True, ["m0"], 7))
+        self.assertEqual(result["budget"]["spent_usd"], 0.0)
+        self.assertFalse(failed)
+
+    def test_a_repeated_runs_budget_names_each_attempt(self):
+        job_dir, failed, result, said = self.calling(max_usd=0.00011, repeat=2)
+        self.assertEqual(result["budget"]["cut_off"], ["m3 (attempt 1)"])
+        self.assertEqual(result["budget"]["not_run"], [f"m{i} (attempt 1)" for i in range(4, 8)] + [f"m{i} (attempt 2)" for i in range(8)])
+        self.assertEqual((result["n_total_trials"], result["stats"]["n_cancelled_trials"]), (16, 12))     # as many as the trials not run
+
+    def test_each_threads_driver_has_a_route_of_its_own_on_the_benchmarks_relay(self):
+        """A cap's refusal of a driver's own call (an option's embeddings) is the unit's that driver served, never one beside it."""
+        r = run.Run.__new__(run.Run)
+        r.embed_model = "embed-1"
+        r.bench_relay = relay.Relay("http://127.0.0.1:9/v1", "sk-real", os.path.join(self.tmp, "relay-benchmark")).start()
+        self.addCleanup(r.bench_relay.stop)
+        urls = {}
+        for name in ("a", "b"):
+            t = threading.Thread(target=lambda name=name: urls.update({name: (r.embeddings_tag(), r.embeddings_env()["OPENAI_BASE_URL"])}))
+            t.start()
+            t.join()
+            urls[name] += (t.ident,)
+        (tag_a, url_a, ident_a), (tag_b, url_b, ident_b) = urls["a"], urls["b"]
+        self.assertEqual((tag_a, tag_b), (f"embeddings-{ident_a}", f"embeddings-{ident_b}"))
+        self.assertTrue(url_a.endswith(f"/{tag_a}/v1") and url_b.endswith(f"/{tag_b}/v1"))
+        self.assertEqual({r.bench_relay.models[tag_a], r.bench_relay.models[tag_b]}, {"embed-1"})
 
     def test_a_spending_cap_stops_the_run_and_its_result_says_where(self):
         # 0.00003 spent by each call and as much booked for the next: with 0.00009 spent the fourth no longer fits 0.00011

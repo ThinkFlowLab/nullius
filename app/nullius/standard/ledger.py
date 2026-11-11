@@ -37,6 +37,12 @@ relay waits for them to settle (``WAIT``), since their bookings are
 estimates and mostly come back. Only a call that would not fit with nothing
 in flight, or that waited in vain, closes the ledger.
 
+Before any reply from its model, a call's output is a guess (``OUTPUT``),
+and no call is refused on a guess: one whose request alone fits is booked
+the room there is. The calls beside it wait for its reply, and are booked
+from it. A cap under one guessed call would else refuse every call with
+nothing spent.
+
 The file is rewritten whole under a lock held for one read and one write
 (``flock`` on a file beside it, as an install is locked): a relay that dies
 holding it lets it go.
@@ -81,17 +87,18 @@ def unit_of(tag: str) -> Optional[str]:
     return tag[:-len("-simulator")] if tag.endswith("-simulator") else tag
 
 
-def bound(req: dict, raw: bytes, row: dict, path: str = "", seen: Optional[int] = None) -> float:
+def bound(req: dict, raw: bytes, row: dict, path: str = "", seen: Optional[int] = None, output: bool = True) -> float:
     """What a call is likely to cost, in USD, at ``row`` (a price row, USD
     per million tokens). Input: the request's characters over three - its
     JSON whole, less what it carries as base64 - at the dearer of the input
     and the cache-write price. Output: ``seen``, the average reply the run
     has had from this model, or ``OUTPUT`` before any; never more than the
-    limit the call names or the row's own. An embeddings call has none."""
+    limit the call names or the row's own. An embeddings call has none.
+    ``output`` False: the request alone, which is no guess."""
     tokens = math.ceil(max(0, len(raw) - _blobs(req)) / 3)
     rate = max(row["input"], row.get("cache_write") or 0)
     out = 0
-    if not path.split("?")[0].endswith("/embeddings"):
+    if output and not path.split("?")[0].endswith("/embeddings"):
         named = [req.get(k) for k in _LIMITS if isinstance(req.get(k), int) and not isinstance(req.get(k), bool) and req.get(k) > 0]
         out = min(x for x in (named[0] if named else None, row.get("max_output"), seen or OUTPUT) if x)
     return (tokens * rate + out * row["output"]) / 1e6
@@ -151,7 +158,8 @@ class Ledger:
             json.dump(doc, f)
         os.replace(part, self.path)
 
-    def reserve(self, amount, unit: Optional[str] = None, model: Optional[str] = None, wait: bool = False) -> Tuple[Optional[str], dict]:
+    def reserve(self, amount, unit: Optional[str] = None, model: Optional[str] = None, wait: bool = False,
+                least: Optional[float] = None) -> Tuple[Optional[str], dict]:
         """(the booking's id, the state before it) when ``amount`` fits;
         (None, the state) when it does not, or the ledger is closed already -
         and it is closed from then on. ``unit``: the unit the call is part
@@ -162,14 +170,23 @@ class Ledger:
         (:func:`bound`): it is then read here, under the same lock, and
         the state says the ``amount`` booked. ``wait``: a call that would
         fit with nothing in flight is not refused but told to wait (``by:
-        wait``), and nothing is closed."""
+        wait``), and nothing is closed. ``least``: the part of ``amount``
+        that is no guess, the request's own (:func:`bound`): before any
+        reply from ``model``, a call whose ``least`` fits is booked the room
+        there is with nothing in flight, never refused on its guess."""
         with self._locked() as doc:
+            usual = _usual(doc, model)
             if callable(amount):
-                amount = amount(_usual(doc, model))
-            seen = dict(_state(doc), by="cap", amount=amount)
+                amount = amount(usual)
+            guess = least is not None and usual is None       # no reply from its model yet: its output is a guess
             each = doc["unit_max_usd"] if unit is not None else None
+            u = doc["units"].setdefault(unit, {"spent_usd": 0.0, "unsettled_usd": 0.0, "closed": False}) if each is not None else None
+            for cap, count in ((each, u), (doc["max_usd"], doc)):
+                room = None if cap is None else cap - count["spent_usd"] - count["unsettled_usd"]
+                if guess and room is not None and least <= room < amount:
+                    amount = room                             # booked the room there is, never refused on the guess
+            seen = dict(_state(doc), by="cap", amount=amount)
             if each is not None:
-                u = doc["units"].setdefault(unit, {"spent_usd": 0.0, "unsettled_usd": 0.0, "closed": False})
                 flight = sum(doc["held"].get(b, 0.0) for b, w in doc["of"].items() if w == unit) + u["unsettled_usd"]
                 seen["unit"] = {"max_usd": each, "spent_usd": u["spent_usd"], "held_usd": flight, "closed": u["closed"]}
                 if u["closed"] or amount > each - u["spent_usd"] - flight:

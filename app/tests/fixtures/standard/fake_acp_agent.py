@@ -8,6 +8,7 @@
 - ``mcp TOOL JSON``: starts the session's first MCP server as given (stdio), calls TOOL with
   the arguments JSON, and says what it answered
 - ``model``: calls the model at OPENAI_BASE_URL once and says its reply
+- ``swallow``: the same, but a refused call is no error to it: it says so and ends its turn
 - ``die``: exits mid-turn
 - ``warn``: warns, then says ok - the warning a notice when the client takes them, else text, as an adapter does
 - anything else: says it back, upper-cased
@@ -100,16 +101,18 @@ def turn(mid, sid, text):
         p.stdin.close()
         p.wait(timeout=10)
         say(sid, r["result"]["content"][0]["text"])
-    elif words and words[0] == "model":
+    elif words and words[0] in ("model", "swallow"):
         req = urllib.request.Request(os.environ["OPENAI_BASE_URL"] + "/chat/completions",
                                      data=json.dumps({"model": "fake", "messages": [{"role": "user", "content": text}]}).encode(),
                                      headers={"Content-Type": "application/json", "Authorization": "Bearer " + os.environ.get("OPENAI_API_KEY", "")})
         try:
             got = json.loads(urllib.request.urlopen(req).read())
         except urllib.error.HTTPError as e:
-            send({"jsonrpc": "2.0", "id": mid,
-                  "error": {"code": -32000, "message": f"model HTTP {e.code}"}})
-            return
+            if words[0] == "model":
+                send({"jsonrpc": "2.0", "id": mid,
+                      "error": {"code": -32000, "message": f"model HTTP {e.code}"}})
+                return
+            got = {"choices": [{"message": {"content": "gave up"}}]}
         say(sid, got["choices"][0]["message"]["content"])
     else:
         say(sid, text.upper())

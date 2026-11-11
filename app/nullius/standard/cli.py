@@ -479,7 +479,8 @@ def cmd_run(a):
             shutil.rmtree(spill, ignore_errors=True)
     print(job)
     # no unit reached a verdict (a refusing endpoint, every unit an error): the run failed, and says so
-    # by its exit status, so a launch of several agents pauses rather than running the next into the same error
+    # by its exit status, so a launch of several agents pauses rather than running the next into the same error.
+    # A run its spending cap stopped did what was asked of it: no failure
     return 3 if failed else 0
 
 

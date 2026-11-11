@@ -110,6 +110,26 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual(units.reserve(0.4, "u2")[0] is not None, True)
         self.assertEqual(units.reserve(0.4, "u2")[1]["by"], "unit")
 
+    def test_before_any_reply_from_its_model_a_call_is_booked_the_room_there_is_never_refused_on_a_guess(self):
+        """A cap under one guessed call (4,096 output tokens before any reply) refused every call with nothing spent."""
+        led = ledger.Ledger.create(self.path, 0.01)
+        first, state = led.reserve(0.06, model="m", least=0.002)                   # its request fits, its guessed output does not
+        self.assertEqual((bool(first), state["amount"], led.closed()), (True, 0.01, False))     # booked the whole room
+        self.assertEqual(led.reserve(0.06, model="m", wait=True, least=0.002)[1]["by"], "wait")  # the next waits for its reply
+        led.settle(first, 0.003, "m", 200)
+        # a reply came back: the guess is over, and a call that does not fit is refused as ever
+        self.assertEqual(led.reserve(0.06, model="m", least=0.002)[1]["by"], "cap")
+        self.assertTrue(led.closed())
+        # a request that does not fit by itself is no guess: refused before any reply too
+        tight = ledger.Ledger.create(self.path, 0.01)
+        self.assertEqual((tight.reserve(0.06, model="m", least=0.02)[0], tight.closed()), (None, True))
+        # a unit's cap the same way: its first call is booked the unit's room, and the run's ledger stays open
+        units = ledger.Ledger.create(self.path, 1.0, 0.01)
+        got, state = units.reserve(0.06, "u1", "m", least=0.002)
+        self.assertEqual((bool(got), state["amount"]), (True, 0.01))
+        self.assertEqual(units.reserve(0.06, "u2", "m", least=0.02)[1]["by"], "unit")
+        self.assertFalse(units.closed())
+
     def test_the_models_a_run_may_call_are_listed_once_for_the_run_and_the_builder(self):
         agent = {"model": {"side_models": ["text-embedding-3-small", "fast=gpt-5-nano"]}}
         self.assertEqual(ledger.models(agent, "m", "judge-1", "user-1", "embed-1"),
