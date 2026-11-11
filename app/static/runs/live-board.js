@@ -87,10 +87,13 @@
     }
     // measured, or left out: a rate the window could not measure, and a cost nobody reported, are absent, never 0
     if (s.tokens_per_sec != null) bits.push(`<span><b>${count(Math.round(s.tokens_per_sec))}</b> tokens / s, last 30 s</span>`);
-    if (T.cost_usd != null) bits.push(`<span><b>$${Number(T.cost_usd).toFixed(2)}</b> spent</span>`);
+    // as the job page says a cost: to the cent, and under a cent to four decimals ($0.00 beside a cap of $0.004 says nothing)
+    if (T.cost_usd != null) bits.push(`<span><b>$${Number(T.cost_usd).toFixed(Number(T.cost_usd) < 0.01 ? 4 : 2)}</b> spent</span>`);
     // a run's spending cap (job.start's budget), said on its own: it counts the judge's and the simulated user's calls
-    // too, which the agents' cost beside it does not. As it was given: cents, and up to two digits more (0.395)
-    const capped = v => { const [whole, part = ''] = Number(v).toFixed(4).replace(/0+$/, '').split('.'); return whole + '.' + part.padEnd(2, '0'); };
+    // too, which the agents' cost beside it does not. As it was given (ledger.usd): cents, and the digits past them it
+    // has, to four decimals or to its third figure where that is finer (0.395, 0.00015)
+    const capped = v => { v = Number(v); const places = Math.min(12, Math.max(4, 2 - Math.floor(Math.log10(Math.abs(v)))));
+      const [whole, part = ''] = v.toFixed(places).replace(/0+$/, '').split('.'); return whole + '.' + part.padEnd(2, '0'); };
     if (s.budget && Number(s.budget.max_usd) > 0) bits.push(`<span>spending cap <b>$${capped(s.budget.max_usd)}</b></span>`);
     if (s.wall_sec) bits.push(`<span>wall <b>${clock(s.wall_sec)}</b> per trial</span>`);
     return bits.join('');

@@ -3,6 +3,7 @@ that it stopped the run, and the units it cut off or never began, read from
 the job as a standard run writes it; the builder keeps a recipe's cap."""
 from __future__ import annotations
 
+import json
 import re
 import tempfile
 import unittest
@@ -133,6 +134,15 @@ class BuilderKeepsTheCap(CompilerCase):
         each = self.js('const back=v=>C.fromJSON(JSON.stringify({...C.createStandard("gsm8k"),max_usd_per_unit:v})).max_usd_per_unit;'
                        'process.stdout.write(JSON.stringify([back(0.01),back(0),back("1")].map(v=>v===undefined?"none":v)));')
         self.assertEqual(each, [0.01, "none", "none"])
+
+    def test_the_live_board_says_a_cap_as_the_job_page_does(self):
+        """One amount, one reading: the board's own formatter gives what ledger.usd does, under a cent too."""
+        board = (APP / "static" / "runs" / "live-board.js").read_text(encoding="utf-8")
+        said = re.search(r"const capped = v => \{.*?padEnd\(2, '0'\); \};", board, re.S)
+        self.assertIsNotNone(said)
+        amounts = [1, 10, 0.5, 0.395, 0.154, 0.004, 0.00015, 0.00004, 0.002017442, 1234.5]
+        out = self.js(said[0] + "process.stdout.write(JSON.stringify(" + json.dumps(amounts) + ".map(capped)));")
+        self.assertEqual(out, [ledger.usd(v) for v in amounts])                          # 0.00015 read "$0.0001", 0.00004 "$0.00"
 
     def test_a_harbor_recipe_takes_no_cap(self):
         """Harbor's calls do not pass the relay, so nothing could hold them to one: the field is the standard's alone."""

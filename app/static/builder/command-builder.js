@@ -972,6 +972,12 @@
     else return;
     refreshPlan();
   });
+  // a number field left holding what is no number ("1e", "-") reads as empty to the page: a cap typed that way would be
+  // no cap, unsaid. It is said, and the field emptied, so that it shows what the recipe holds
+  root.addEventListener('focusout',event=>{
+    const el=event.target;
+    if(el.type==='number'&&el.dataset.field&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
+  });
   root.addEventListener('change',async event=>{
     const el=event.target,d=el.dataset;
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
