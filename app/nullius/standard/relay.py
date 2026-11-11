@@ -82,7 +82,9 @@ def _usage(u: Optional[dict]) -> Optional[dict]:
     served. Anthropic counts the tokens read from its cache and those written
     to it apart from ``input_tokens``; both are put back in, as cached, and
     those written are said again as ``cache_write``: they cost more than
-    the rest, where those read cost less."""
+    the rest, where those read cost less. Chat Completions counts both in
+    ``prompt_tokens`` and says those written apart from those read
+    (``cache_write_tokens``): they are cached, and ``cache_write``, alike."""
     if not isinstance(u, dict):
         return None
     inp = u.get("prompt_tokens", u.get("input_tokens")) or 0
@@ -94,6 +96,9 @@ def _usage(u: Optional[dict]) -> Optional[dict]:
     cache = (u.get("cache_read_input_tokens") or 0) + written
     if cache:
         inp, cached = inp + cache, cache
+    else:
+        written = (det or {}).get("cache_write_tokens") or 0
+        cached += written
     got = {"input": inp, "output": out, "cached": cached, "reasoning": (rdet or {}).get("reasoning_tokens") or 0}
     if written:
         got["cache_write"] = written
