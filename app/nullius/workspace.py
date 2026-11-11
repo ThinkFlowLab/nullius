@@ -49,9 +49,15 @@ def home() -> str:
     return paths.workspaces_dir()
 
 
+NAME_MAX = 48
+# a name as slug() and _free() make it; one ending in a hyphen, or past 48 characters with a suffix, is how
+# an earlier slug() could cut it, and is read still: its workspace is on disk and its owner made it
+_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*-?")
+
+
 def slug(label: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", (label or "").lower()).strip("-")
-    return s[:48]
+    return s[:NAME_MAX].rstrip("-")             # a cut on a separator leaves no hyphen at the end
 
 
 def random_name(taken=(), rng: random.Random | None = None) -> str:
@@ -126,7 +132,7 @@ def save(ws: Workspace) -> None:
 
 
 def load(home_dir: str, name: str) -> Workspace | None:
-    if not name or slug(name) != name:
+    if not name or not _NAME.fullmatch(name):
         return None
     try:
         with open(_path(home_dir, name), encoding="utf-8") as fh:
@@ -165,8 +171,10 @@ def find_by_roots(home_dir: str, roots, besides: str = "") -> Workspace | None:
 
 
 def _free(name: str, taken) -> str:
-    """*name*, or the first ``<name>-<n>`` no other workspace has."""
-    return name if name not in taken else next(f"{name}-{i}" for i in range(2, 1000) if f"{name}-{i}" not in taken)
+    """*name*, or the first ``<name>-<n>`` no other workspace has, cut so that it stays a name."""
+    if name not in taken:
+        return name
+    return next(c for c in (f"{name[:NAME_MAX - len(str(i)) - 1].rstrip('-')}-{i}" for i in range(2, 1000)) if c not in taken)
 
 
 def create(home_dir: str, roots, label: str = "") -> Workspace:

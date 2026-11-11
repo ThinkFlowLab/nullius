@@ -9,10 +9,12 @@ from __future__ import annotations
 import json
 import os
 import random
+import shutil
 import tempfile
 import threading
 import time
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 from nullius.runs import parse
@@ -59,6 +61,31 @@ class Names(unittest.TestCase):
     def test_slug(self):
         self.assertEqual(workspace.slug("  Tau3 full — Sept! "), "tau3-full-sept")
         self.assertEqual(workspace.slug("***"), "")
+
+    def test_a_label_cut_on_a_separator_is_still_a_name(self):
+        """48 characters ended on the hyphen before "label": the name was refused, and its workspace listed nowhere."""
+        label = "tau3 runs and fake jobs, a fairly long workspace label"
+        name = workspace.slug(label)
+        self.assertEqual(name, "tau3-runs-and-fake-jobs-a-fairly-long-workspace")
+        self.assertEqual(workspace.slug(name), name)
+        home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, home, True)
+        a, b = workspace.create(home, ["/r/one"], label=label), workspace.create(home, ["/r/two"], label=label + "s")
+        self.assertEqual((a.name, b.name), (name, "tau3-runs-and-fake-jobs-a-fairly-long-workspac-2"))   # suffixed within 48
+        self.assertEqual({w.name for w in workspace.list_all(home)}, {a.name, b.name})
+        self.assertEqual(workspace.load(home, b.name).roots, ["/r/two"])
+
+    def test_a_name_an_earlier_version_cut_is_read_again_and_nothing_else_is(self):
+        home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, home, True)
+        olds = {"tau3-runs-and-fake-jobs-a-fairly-long-workspace-", "tau3-runs-and-fake-jobs-a-fairly-long-workspace-label-2"}
+        for old in olds:                                                          # as the earlier slug() and _free() named them
+            ws = workspace.create(home, ["/r/" + old], label="x")
+            shutil.rmtree(ws.dir)
+            workspace.save(replace(ws, name=old, dir=os.path.join(home, old)))
+        self.assertEqual({w.name for w in workspace.list_all(home)}, olds)
+        for unsafe in ("..", "-x", "a/b", "A", "a_b", ".hidden"):
+            self.assertIsNone(workspace.load(home, unsafe))
 
 
 class Lifecycle(unittest.TestCase):
