@@ -13,7 +13,9 @@ score  - the upstream's own check_correctness (human_eval/execution.py) with
          the problem and a completion made of the agent's solution.py, at the
          timeout evaluate_functional_correctness gives it by default (3 s):
          the prompt, the completion and the problem's test run as one program,
-         in a process of its own under the upstream's reliability_guard
+         in a process of its own under the upstream's reliability_guard. The
+         workspace files solution.py imports, which that program does not
+         have, are named in the detail (``not_tested``)
 oracle - the reference control: writes the problem's prompt and its
          canonical_solution, the authors' own body, as solution.py
 answer - the original setup: the problem's prompt completed by a model in one
@@ -147,6 +149,33 @@ def completion(problem, text):
     return "\n" + text, "the whole file: the prompt's part was changed"
 
 
+def not_tested(dir, text):
+    """The files of the workspace that solution.py imports: the check runs solution.py alone, as the upstream
+    runs one completion, so a solution split over two files fails on the import. Named so the failure reads
+    as what it is; read from the file's syntax, nothing run, and none when it does not parse."""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return []
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                names.add(node.module.split(".")[0])
+            elif node.level:                                    # from . import helpers
+                names.update(a.name for a in node.names)
+    found = []
+    for name in sorted(names - {"solution"}):
+        path = os.path.join(dir, name)
+        if os.path.lexists(path + ".py"):
+            found.append(name + ".py")
+        elif os.path.islink(path) or os.path.isdir(path):        # a package; a link is named, never followed
+            found.append(name + "/")
+    return found
+
+
 def score(unit, dir, transcript, answer, setup=None, **_):
     p = load()[unit]
     path = os.path.join(dir, "solution.py")
@@ -157,8 +186,10 @@ def score(unit, dir, transcript, answer, setup=None, **_):
     done, how = completion(p, text)
     r = check_in_container(dir, p, done) if os.environ.get(CHECK_IMAGE) else check_correctness(p, done, TIMEOUT)
     ok = bool(r["passed"])
+    left = not_tested(dir, text)
     return {"reward": 1.0 if ok else 0.0, "passed": ok,
-            "detail": {"result": r["result"], "timeout": TIMEOUT, "completion": how, "solution.py": text[-4000:]}}
+            "detail": {"result": r["result"], "timeout": TIMEOUT, "completion": how, "solution.py": text[-4000:],
+                       **({"not_tested": left} if left else {})}}
 
 
 # Run in the unit's image: the upstream's check_correctness, imported from its own files copied in.
