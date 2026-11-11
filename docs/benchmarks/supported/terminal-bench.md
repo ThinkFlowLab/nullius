@@ -49,7 +49,6 @@ Real terminal tasks in a container: build, configure, debug.
 ## Good to know
 
 - Each task's agent time limit comes from the task: 600 to 12,000 seconds.
-- Each task's prebuilt image is pulled by default. The image option builds it here instead, except fix-git, whose build no longer works.
 
 ## Upstream limitations
 
@@ -59,6 +58,7 @@ Real terminal tasks in a container: build, configure, debug.
 - qemu-alpine-ssh and qemu-startup fail even with the reference solution: their tests install Debian packages that are no longer published.
 - The tests of torch-pipeline-parallelism and torch-tensor-parallelism download about 3 GB of PyTorch, which can outlast their time limit on a slow connection.
 - mailman's tests fail now and then even with the reference solution.
+- fix-git's image no longer builds as published, so it is pulled even when the image option builds.
 
 ## Nullius limitations
 
