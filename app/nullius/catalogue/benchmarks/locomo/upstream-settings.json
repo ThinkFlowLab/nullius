@@ -62,7 +62,7 @@
   {"entry": "task_eval/rag_utils.py", "setting": "retriever dpr", "values": "facebook/dpr-ctx_encoder-single-nq-base, facebook/dpr-question_encoder-single-nq-base", "default": "",
    "nullius": "option:retriever"},
   {"entry": "task_eval/rag_utils.py", "setting": "retriever contriever", "values": "facebook/contriever", "default": "",
-   "nullius": "not offered - as published it fails: init_query_model reads context_tokenizer, which it never defines (NameError), and get_embeddings pools with the input list's attention_mask"},
+   "nullius": "not offered - as published it fails: init_query_model reads context_tokenizer, which only its DRAGON branch assigns (UnboundLocalError), and get_embeddings pools with the input list's attention_mask"},
   {"entry": "task_eval/rag_utils.py", "setting": "retriever openai", "values": "text-embedding-ada-002 (global_methods.get_openai_embedding)", "default": "",
    "nullius": "not offered - get_embeddings passes the whole input list, not the batch, for each batch of 24, and get_openai_embedding asks for all of it once per text: n texts make ceil(n/24) x n calls of n texts, and ceil(n/24) x n rows that prepare_for_rag's assert refuses once n > 24. Tried on 2026-10-16 through the relay: conv-26's 419 turns sent 710 calls of 419 texts (16,883 tokens each, about $1.20) in 10 minutes before it was stopped, of the 7,542 the context alone would take before failing"},
   {"entry": "task_eval/rag_utils.py", "setting": "batch_size", "values": "24", "default": "24",
