@@ -6,7 +6,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend docker]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED] ...] [--max-usd USD] [--unsandboxed | --backend docker]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED] ...] [--max-usd USD] [--max-usd-per-unit USD] [--unsandboxed | --backend docker]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -469,7 +469,8 @@ def cmd_run(a):
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
                       simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
                       licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
-                      prices=prices(a.price), max_usd=a.max_usd, **({"env": run_env(a.provider)} if a.from_run else {}))
+                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit,
+                      **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
         print("refused:", e)
         return 2
@@ -478,7 +479,8 @@ def cmd_run(a):
             shutil.rmtree(spill, ignore_errors=True)
     print(job)
     # no unit reached a verdict (a refusing endpoint, every unit an error): the run failed, and says so
-    # by its exit status, so a launch of several agents pauses rather than running the next into the same error
+    # by its exit status, so a launch of several agents pauses rather than running the next into the same error.
+    # A run its spending cap stopped did what was asked of it: no failure
     return 3 if failed else 0
 
 
@@ -626,6 +628,8 @@ def main(argv=None):
                            help="this run's price for a model in USD per million tokens, over your price list (repeatable; nullius prices)")
             p.add_argument("--max-usd", type=float, metavar="USD",
                            help="the run's spending cap: no call goes out once the spend plus the calls in flight would pass it")
+            p.add_argument("--max-usd-per-unit", type=float, metavar="USD",
+                           help="each unit's own spending cap: a unit that reaches it is cut off there, and the run goes on")
     v = sub.add_parser("prove", help="prove a benchmark: its controls, its units, no leak; record what passed")
     v.add_argument("benchmark")
     v.add_argument("--dataset", help="one dataset (default: each)")

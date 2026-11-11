@@ -32,7 +32,7 @@
   {% elif not comparison.datasets_match %}<p>The recorded datasets differ. Matching requires exact dataset names and versions; identical task names from different datasets are kept separate.</p>{% endif %}
   {% if cohort == 'matched' and not n_shared %}<p>No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
   {% if comparison.repeated_trials|sum %}<p>Some tasks have repeated attempts. All attempts count in the summaries; each task row and its detail show the <strong>last indexed attempt</strong>, not necessarily the latest by timestamp.</p>{% endif %}
-  <p>Adjusted rate excludes only rate limits, API errors and setup errors. Unknown outcomes stay in its denominator. Controls are never ranked.</p>
+  <p>Adjusted rate excludes only rate limits, API errors, setup errors and spending caps. Unknown outcomes stay in its denominator. Controls are never ranked.</p>
 </div>
 
 <h2>Side by side</h2>

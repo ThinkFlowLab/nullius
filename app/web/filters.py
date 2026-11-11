@@ -99,8 +99,8 @@ def _usd(value, kind="agent"):
 
 @app.template_filter("cap")
 def _cap(value):
-    """A spending cap as it was given: cents, and up to two digits more when it has them ($0.395). The cost
-    filter rounds to the cent, which would show a cap the run never had."""
+    """A spending cap as it was given, and what was spent of it: cents, and the digits past them it has
+    ($0.395, $0.00005). The cost filter rounds to the cent, which would show a cap the run never had."""
     return "$" + ledger.usd(value)
 
 

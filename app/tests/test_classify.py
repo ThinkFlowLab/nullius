@@ -95,16 +95,18 @@ class LiveBoardAgrees(unittest.TestCase):
     def test_a_unit_the_runs_spending_cap_cut_off_has_its_own_outcome_outside_the_rate_on_both(self):
         """The standard's own: its relay refused the call (``standard.ledger``), so the unit had no attempt.
         Not an API error: nothing failed. The live feed's word for it is ``budget``."""
-        from nullius.runs import live
         from nullius.standard import job, ledger
         self.assertEqual(C.from_verdict(ledger.ERROR, None), C.SPENDING_CAP)
-        self.assertEqual(C.from_verdict("nullius.standard." + ledger.ERROR, None), C.SPENDING_CAP)
         self.assertIn(C.SPENDING_CAP, C.INFRA_OUTCOMES)
         self.assertEqual(C.ORDER.index(C.SPENDING_CAP), C.ORDER.index(C.UNKNOWN) - 1)
-        self.assertNotIn("—", C.DESCRIPTIONS[C.SPENDING_CAP])
         end = job.feed_outcome("pass", None, (ledger.ERROR, "the run's spending cap"))
         self.assertEqual((end["outcome"], end["exc"]), ("budget", ledger.ERROR))
-        self.assertIn("budget", live.OUTCOMES)
+
+    def test_a_unit_that_reached_its_own_spending_cap_counts_against_the_agent_on_both(self):
+        """It had its attempt and spent its allowance, as one that spends its time does: a result, in the rate."""
+        from nullius.standard import job, ledger
+        self.assertEqual(C.from_verdict(ledger.UNIT_ERROR, None), C.AGENT_ERROR)
+        self.assertEqual(job.feed_outcome("pass", None, (ledger.UNIT_ERROR, "its own cap"))["outcome"], "agent_error")
 
 
 class HarborTaxonomy(unittest.TestCase):

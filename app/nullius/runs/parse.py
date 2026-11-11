@@ -30,7 +30,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "14"
+SCHEMA = "15"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness (an agent's `max_retries` reaching its
@@ -284,7 +284,8 @@ class Job:
     # recipe from when the run kept none. Empty when config.json is absent.
     launch: dict = field(default_factory=dict)
     # A run with a spending cap (a Nullius standard job's ``result.json``, ``budget``): the cap and what was
-    # spent in USD, whether the cap stopped the run, the units it cut off and those never begun. {} without one.
+    # spent in USD, whether the cap stopped the run, the units it cut off and those never begun; a cap per unit
+    # (``unit_max_usd``) and the units that reached it (``over_unit``). {} without one.
     budget: dict = field(default_factory=dict)
     # A Harbor job run with several agents or models (`-m a -m b`, or a config
     # listing several): each one's {name, model, effort}, which split_agents
@@ -837,11 +838,16 @@ def _budget(b) -> dict:
     """A job's recorded spending cap, read leniently: {} unless it names a cap; an amount that is no number is
     None (not reported), never zero."""
     num = lambda v: v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
-    if not isinstance(b, dict) or not num(b.get("max_usd")):
+    if not isinstance(b, dict) or not (num(b.get("max_usd")) or num(b.get("unit_max_usd"))):
         return {}
     names = lambda v: [str(x) for x in v] if isinstance(v, list) else []
-    return {"max_usd": b["max_usd"], "spent_usd": num(b.get("spent_usd")), "unsettled_usd": num(b.get("unsettled_usd")),
-            "stopped": b.get("stopped") is True, "cut_off": names(b.get("cut_off")), "not_run": names(b.get("not_run"))}
+    return {"max_usd": num(b.get("max_usd")), "spent_usd": num(b.get("spent_usd")), "unsettled_usd": num(b.get("unsettled_usd")),
+            # only the run's cap stops a run: without one there is no stop to say
+            "stopped": b.get("stopped") is True and num(b.get("max_usd")) is not None,
+            "cut_off": names(b.get("cut_off")), "not_run": names(b.get("not_run")),
+            "unit_max_usd": num(b.get("unit_max_usd")), "over_unit": names(b.get("over_unit")),
+            # a merged job: its shards, and how many stopped at their share
+            "shards": num(b.get("shards")) or 0, "shards_stopped": num(b.get("shards_stopped")) or 0}
 
 
 def parse_job(job_dir: str, reuse=None) -> Job:

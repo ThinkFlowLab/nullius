@@ -22,7 +22,7 @@ BENCH = {"key": "fakebench", "_ref": "fakebench", "family": "agent", "needs": ["
 AGENT = {"key": "fake", "_kind": "agent", "_ref": "fake"}
 
 
-def capped_job(root: Path, name: str, ran: int, planned: int, budget=None, cut=()):
+def capped_job(root: Path, name: str, ran: int, planned: int, budget=None, cut=(), cut_by=None):
     """A standard job of ``planned`` units of which the first ``ran`` have a trial; those in ``cut`` ended at the cap."""
     d = root / name
     d.mkdir(parents=True)
@@ -33,7 +33,7 @@ def capped_job(root: Path, name: str, ran: int, planned: int, budget=None, cut=(
     for k, u in enumerate(units[:ran]):
         trial = d / f"{u}__u{k:04d}"
         trial.mkdir()
-        exc = (ledger.ERROR, "the run's spending cap") if u in cut else None
+        exc = (ledger.ERROR, "the run's spending cap") if u in cut else ((cut_by or {})[u], "its own spending cap") if u in (cut_by or {}) else None
         results.append(job.write_trial(str(trial), job=name, bench=BENCH, other=AGENT, model="m-1", unit=u, t0=1_760_000_000.0 + k,
                                        t1=1_760_000_005.0 + k, produce=(1_760_000_000.0 + k, 1_760_000_004.0 + k),
                                        score=None if exc else {"reward": 1.0}, exception=exc, calls=[], trajectory=None))
@@ -50,6 +50,12 @@ class CappedJobPage(unittest.TestCase):
                            "not_run": ["t-6", "t-7", "t-8", "t-9"]})
         capped_job(tmp / "jobs", "within", 4, 4, budget={"max_usd": 0.395, "spent_usd": 0.004, "stopped": False, "cut_off": [], "not_run": []})
         capped_job(tmp / "jobs", "uncapped", 4, 4)
+        capped_job(tmp / "jobs", "merged", 3, 4, budget={"max_usd": 0.154, "spent_usd": 0.014991, "stopped": True, "cut_off": [], "not_run": ["t-3"],
+                                                         "shards": 4, "shards_stopped": 1})
+        capped_job(tmp / "jobs", "unit-only", 4, 4, budget={"max_usd": None, "spent_usd": None, "stopped": True, "cut_off": [], "not_run": [],
+                                                            "unit_max_usd": 0.002, "over_unit": []})
+        capped_job(tmp / "jobs", "per-unit", 4, 4, cut_by={"t-2": ledger.UNIT_ERROR},
+                   budget={"max_usd": None, "spent_usd": 0.004, "stopped": False, "cut_off": [], "not_run": [], "unit_max_usd": 0.002, "over_unit": ["t-2"]})
         cls.stack = ExitStack()
         cls.stack.enter_context(patch.object(web.shared, "WS_HOME", str(tmp / "ws")))
         cls.stack.enter_context(patch.dict(web.app.config, TESTING=True))
@@ -76,10 +82,9 @@ class CappedJobPage(unittest.TestCase):
     def test_a_run_the_cap_stopped_says_so_with_what_was_spent_and_the_units_left_out(self):
         html = self.page("stopped")
         self.assertEqual(self.text(html, r'<div class="alert" id="cap-stopped">.*?</div>'),
-                         "Stopped at its spending cap of $0.50, with $0.41 spent: 1 cut off, 4 not run.")
-        self.assertNotIn('class="alert error" id="cap-stopped"', html)                    # nothing failed: a neutral notice
+                         "Stopped at its spending cap of $0.50, with $0.41 spent: 1 cut off, 4 not run.")   # a neutral notice: nothing failed
         self.assertEqual(self.text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $0.50")
-        self.assertIn("$0.03 stays booked for calls whose cost was never reported", unescape(html))
+        self.assertIn("$0.03", unescape(html))                                            # what stays booked for calls whose cost was never reported
         self.assertEqual(self.text(html, r'<div class="popm cap-units".*?</div>'), "t-6 t-7 t-8 t-9")
         self.assertIn("4 not run</summary>", html)
         # the unit it cut off is a trial with its own outcome, outside the rate
@@ -97,12 +102,34 @@ class CappedJobPage(unittest.TestCase):
             self.assertNotIn(absent, plain)
 
 
+    def test_a_run_with_a_cap_per_unit_says_it_and_the_units_that_reached_it_count_against_the_agent(self):
+        html = self.page("per-unit")
+        self.assertEqual(self.text(html, r'<div class="kv" id="unit-cap".*?</div>'), "Cap per task $0.002")
+        self.assertIn("1 reached it</summary>", html)
+        self.assertEqual(self.text(html, r'<div class="popm cap-units".*?</div>'), "t-2")
+        for absent in ('id="run-cap"', 'id="cap-stopped"', "oc-spending_cap"):          # the run had no cap of its own, and was not stopped
+            self.assertNotIn(absent, html)
+        self.assertRegex(html, r'class="[^"]*oc-agent_error[^"]*"[^>]*data-o="agent_error"')
+
+
+    def test_a_merged_job_says_how_many_shards_stopped_and_a_run_without_its_own_cap_says_no_stop(self):
+        html = self.page("merged")
+        self.assertEqual(self.text(html, r'<div class="alert" id="cap-stopped">.*?</div>'),
+                         "1 of 4 shards stopped at their share of the spending cap of $0.154, with $0.015 spent: 0 cut off, 1 not run.")   # not "$0.01"
+        alone = self.page("unit-only")                                                   # recorded stopped with no cap of the run's: nothing to say, no error
+        self.assertNotIn('id="cap-stopped"', alone)
+        self.assertEqual(self.text(alone, r'<div class="kv" id="unit-cap".*?</div>'), "Cap per task $0.002")
+
+
 class BuilderKeepsTheCap(CompilerCase):
     def test_a_saved_recipe_keeps_an_amount_above_zero_and_nothing_else(self):
         out = self.js('const back=v=>C.fromJSON(JSON.stringify({...C.createStandard("gsm8k"),max_usd:v})).max_usd;'
                       'process.stdout.write(JSON.stringify([back(2),back(0.25),back(0),back(-1),back("2"),back(true),back(null),'
                       '"max_usd" in C.createStandard("gsm8k")].map(v=>v===undefined?"none":v)));')
         self.assertEqual(out, [2, 0.25, "none", "none", "none", "none", "none", False])
+        each = self.js('const back=v=>C.fromJSON(JSON.stringify({...C.createStandard("gsm8k"),max_usd_per_unit:v})).max_usd_per_unit;'
+                       'process.stdout.write(JSON.stringify([back(0.01),back(0),back("1")].map(v=>v===undefined?"none":v)));')
+        self.assertEqual(each, [0.01, "none", "none"])
 
     def test_a_harbor_recipe_takes_no_cap(self):
         """Harbor's calls do not pass the relay, so nothing could hold them to one: the field is the standard's alone."""
@@ -110,8 +137,8 @@ class BuilderKeepsTheCap(CompilerCase):
                       + 'process.stdout.write(JSON.stringify(["max_usd" in r,/max.usd/i.test(JSON.stringify(C.compile(r)))]));')
         self.assertEqual(out, [False, False])
         page = (APP / "static" / "builder" / "command-builder.js").read_text(encoding="utf-8")
-        self.assertEqual(page.count("'max_usd'"), 1)                                        # offered once, on the standard's Limits step
-        self.assertIn("C.standardKeyless(rec) ? '' : field('Spending cap (USD)', 'max_usd'", page)
+        self.assertEqual((page.count("'max_usd'"), page.count("'max_usd_per_unit'")), (1, 1))   # offered once each, on the standard's Limits step
+        self.assertRegex(page, r"C\.standardKeyless\(rec\) \? '' : field\('[^']*', 'max_usd'")   # a run that calls no model is offered none
 
 
 if __name__ == "__main__":

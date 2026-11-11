@@ -29,6 +29,7 @@ import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+from nullius.standard import ledger
 from nullius.traces import otel, trace
 
 
@@ -62,7 +63,7 @@ def _usage_total(calls: List[dict]) -> dict:
     return {"input": u("input"), "output": u("output"), "cached": u("cached"), "reasoning": u("reasoning"),
             "cost": sum(costs) if costs else None,
             "cost_from": "estimate" if any(c.get("cost_from") == "estimate" for c in ok) else ("provider" if costs else None),
-            "n_calls": len(calls)}
+            "n_calls": sum(1 for c in calls if not c.get("refused"))}       # a call its cap refused was never sent
 
 
 def _tool_clock(extra: dict, status: Optional[str], t: Optional[float]):
@@ -497,7 +498,7 @@ def feed_outcome(kind: str, score: Optional[dict], exception: Optional[tuple]) -
     score = score or {}
     if exception:
         k = exception[0]
-        return {"outcome": "cancelled" if k == "CancelledError" else "budget" if k == "SpendingCapError" else "timeout" if "Timeout" in k else "infra_error" if any(w in k for w in _INFRA) else "agent_error",
+        return {"outcome": "cancelled" if k == "CancelledError" else "budget" if k == ledger.ERROR else "timeout" if "Timeout" in k else "infra_error" if any(w in k for w in _INFRA) else "agent_error",
                 "exc": k, "evidence": (exception[1] or k)[:200]}
     if kind == "pass":
         reward = score.get("reward")

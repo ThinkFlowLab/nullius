@@ -116,6 +116,15 @@ class Written(unittest.TestCase):
             self.assertEqual(json.load(f)["spans"][0]["name"], "codex")
         self.assertTrue(trace.load(path).has_spans)
 
+    def test_a_call_its_cap_refused_was_never_sent_and_is_no_model_call(self):
+        d = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
+        refused = {"t0": T + 3, "t1": T + 3, "model": "m", "status": 402, "refused": "unit", "path": "chat/completions", "request": {},
+                   "error": "this unit's spending cap"}
+        failed = call(4, 5, status=500, reply=None)                                # sent, and the provider failed: a call all the same
+        res = job.write_trial(d, job="j", bench=BENCH, other=AGENT, model="m", unit="u", t0=T, t1=T + 40, produce=(T, T + 30), score=None,
+                              exception=("UnitSpendingCapError", "its own spending cap"), calls=[call(1, 2), refused, failed], trajectory=None)
+        self.assertEqual((res["agent_result"]["n_model_calls"], res["agent_result"]["n_input_tokens"]), (2, 10))
+
     def test_a_control_writes_none(self):
         self.assertFalse(os.path.exists(self.write({"key": "nop", "_kind": "control"}, None)))
 

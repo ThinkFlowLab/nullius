@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from flask import abort, jsonify, request, url_for
 from nullius import execution, hosts, prerequisites, prices, providers
 from nullius.harbor import source as harbor_source
@@ -141,11 +142,15 @@ def _start_standard(recipe: dict):
                    **started[0].summary())
 
 
+_PRICED = {"at": float("-inf"), "rows": {}}
+
+
 def unpriced(models: list) -> list:
     """Which of ``models`` have no price in the user's list (``nullius.prices``): what a recipe with a spending
     cap is told at its Limits step, since a run with a cap is refused without a price for each model it calls."""
-    rows = prices.table()
-    return [m for m in models if m not in rows]
+    if time.monotonic() - _PRICED["at"] > 5:     # the builder asks at every keystroke: the list is read at most every five seconds
+        _PRICED.update(at=time.monotonic(), rows=prices.table())
+    return [m for m in models if m not in _PRICED["rows"]]
 
 
 def docker_problem():
