@@ -20,7 +20,7 @@ its list is filled once.
 | Recorded | A job's `config.json` keeps the prices of the models it calls, each with its source (`list`, `own`, or `run` for `--price`), and where and when the list was fetched when a price is the list's |
 | Docker and hosts | A unit's relay in a container gets its models' prices from the run; a run on a host takes this machine's list with it |
 | An estimate | List prices, not a bill: [Metrics](../field-guide.md) |
-| A spending cap | `--max-usd`, or the builder's spending cap, books each call at these prices before sending it, so it needs one for every model the run calls: [Run a benchmark](../cli/run.md#a-spending-cap) |
+| A spending cap | Needs these prices: [Run a benchmark](../cli/run.md#a-spending-cap) |
 | Code | `app/nullius/prices.py` |
 
 ## From a shell

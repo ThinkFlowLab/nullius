@@ -174,7 +174,7 @@
     <div class="hk" aria-label="Health">
       <dl>
         <dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="No pass or fail in this benchmark: no rate">—</dd>
-        <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors and setup failures">{{ job.n_infra }}</dd>
+        <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>
       </dl>
     </div>
   </div>
@@ -206,7 +206,7 @@
       {% if job.has_verdict and job.raw_solve_rate == job.adjusted_solve_rate %}<p id="raw-rate" data-tip="No outcome in this run is infra, so the raw rate is also {{ job.raw_solve_rate|pct }}">raw = adjusted</p>{% endif %}
       <dl>
         {% if not job.has_verdict or job.raw_solve_rate != job.adjusted_solve_rate %}<dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="Harbor's mean: resolved over every trial, infra included">{{ job.raw_solve_rate|pct }}</dd>{% endif %}
-        <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors and setup failures">{{ job.n_infra }}</dd>
+        <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>
         <dt>broke tests</dt><dd{% if job.n_regressions %} class="bad"{% endif %} data-tip="Trials whose patch broke tests that passed before it">{{ job.n_regressions }}</dd>
       </dl>
     </div>

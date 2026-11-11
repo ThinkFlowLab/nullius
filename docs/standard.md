@@ -138,7 +138,7 @@ record); verifier/reward.txt and score.json
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
 | Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate; a turn past its limit is the agent's timeout. `"kind": "score"` leaves a score and no pass |
 | The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. Provider `anthropic` speaks Anthropic's Messages (`ANTHROPIC_API_KEY` as `x-api-key`) |
-| A spending cap (`--max-usd`, `--max-usd-per-unit`) | Each relay books a call in the job's ledger (`.work/ledger`, `standard/ledger.py`) before sending it, and refuses the one that does not fit the run's cap or its unit's. [Run a benchmark](cli/run.md#a-spending-cap) |
+| A spending cap (`--max-usd`, `--max-usd-per-unit`) | Each relay books a call in the job's ledger (`.work/ledger`, `standard/ledger.py`) before sending it, and refuses the one that does not fit the run's cap or its unit's ([Run a benchmark](cli/run.md#a-spending-cap)) |
 
 ## Safety
 

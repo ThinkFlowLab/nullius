@@ -28,8 +28,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--option NAME=VALUE` | An agent's or capability's option (repeatable) |
 | `--bench-option NAME=VALUE` | A benchmark's option (repeatable), read as `NULLIUS_OPTION_<NAME>` |
 | `--price MODEL=INPUT,OUTPUT[,CACHED]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
-| `--max-usd USD` | The run's spending cap: no call goes out once the spend plus the calls in flight would pass it ([below](#a-spending-cap)) |
-| `--max-usd-per-unit USD` | Each unit's own spending cap: a unit that reaches it is cut off there, and the run goes on ([below](#a-spending-cap)) |
+| `--max-usd USD`, `--max-usd-per-unit USD` | A spending cap for the run, for each unit: [below](#a-spending-cap) |
 | `--repeat K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--repeat`); by default they stay for the next run, listed and removed in Settings, [Sandbox](../settings/sandbox.md) |
 | `--judge-model` | Instead of the official judge |
@@ -50,20 +49,20 @@ nullius standard run locomo model --model gpt-4o-mini
 
 ## A spending cap
 
-`--max-usd 5` stops a run at 5 USD and `--max-usd-per-unit 0.50` one unit at 0.50, for a
-prepaid or shared key (`app/nullius/standard/ledger.py`). Neither is set by default.
+`--max-usd 5` stops a run at 5 USD and `--max-usd-per-unit 0.50` one unit at 0.50.
 
 | Rule | Detail |
 | --- | --- |
 | Prices first | Every model the run calls needs a price ([price list](../settings/model-prices.md) or `--price`), else the run is refused |
-| What is counted | Each reply's cost; a call in flight as the average reply so far from its model. Before any reply, a guess of 4,096 output tokens, which refuses no call whose request fits |
-| At the run's cap | A call waits while only calls in flight are in its way. The one that does not fit is refused by the relay (HTTP 402), and every call after it |
-| Its units | One cut off is the outcome Spending cap, outside the rate; those not begun are not run |
-| At a unit's cap | Its own calls and its simulated user's count, its judge's do not. A unit that has spent nothing is not refused on an estimate. One that reaches its cap is an Agent error; the run goes on |
-| Not exact | A request is counted at three characters a token and its reply at the average: a call that costs more takes the spend past a cap by the difference. Cached input is counted at the full price, so a unit can be cut off short of its cap |
+| What is counted | Each reply's cost, and an estimate for each call in flight |
+| At the run's cap | The call that does not fit is refused by the relay (HTTP 402), and every call after it |
+| Its units | One cut off is the outcome Spending cap, outside the adjusted rate; those not begun are not run |
+| At a unit's cap | Its own calls and its simulated user's count, its judge's do not. A unit that reaches its cap is an Agent error; the run goes on |
+| Not exact | A call that costs more than its estimate can take the spend past a cap by up to the difference |
+| Cached input | Estimated as if not cached, so a unit can be cut off short of its cap |
 | The result | `result.json` carries `budget`, and the job page shows it |
-| From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit. Not for a Harbor recipe |
-| Shards | A shard's cap is its own on the command line; `merge` adds them up |
+| From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit |
+| Shards | A shard's cap is its own: [Shard and merge](shard-and-merge.md) |
 
 <div class="grid cards" markdown>
 
