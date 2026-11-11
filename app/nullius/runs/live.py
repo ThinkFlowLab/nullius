@@ -279,7 +279,12 @@ class Board:
     now: datetime | None = None
 
     def counts(self) -> dict:
-        return _counts(self.trials, self.n_total)
+        c = _counts(self.trials, self.n_total)
+        if self.finished_at is not None and c["pending"]:
+            # the run ended (its cap, a stop, its endpoint refusing): what never began never will. Not run, not
+            # queued - the number job.end and Results give. Only then, so a fixture that ran to its end is unchanged
+            c["not_run"], c["pending"] = c["pending"], 0
+        return c
 
     def mean_reward(self) -> float | None:
         return _mean_reward(self.trials)
@@ -442,11 +447,11 @@ class Board:
         cut = [t for t in self.trials if t.state == "running"]
         for t in cut:
             t.outcome, t.finished_at = "cancelled", at
-        pending = self.counts()["pending"]
+        never = self.counts().get("not_run", 0)
         self.notices.append(
             f"The run was {how} at {at.strftime('%H:%M:%S')}Z before Harbor wrote job.end: "
             f"{len(cut)} trial{'s' if len(cut) != 1 else ''} cancelled"
-            + (f", {pending} never started" if pending else "") + ".")
+            + (f", {never} never started" if never else "") + ".")
 
     def elapsed_sec(self) -> float | None:
         """Since the launch when the feed recorded one, else since job.start:

@@ -699,12 +699,21 @@ class EndedByRunner(unittest.TestCase):
         self.assertEqual(b.elapsed_sec(), 58.0)                                                # the clock stops there
         a = next(t for t in b.trials if t.trial == "a")
         self.assertEqual((a.state, a.outcome, a.finished_at), ("done", "cancelled", stopped_at))
-        self.assertEqual(b.counts()["running"], 0); self.assertEqual(b.counts()["completed"], 2); self.assertEqual(b.counts()["pending"], 2)
+        self.assertEqual((b.counts()["running"], b.counts()["completed"], b.counts()["pending"], b.counts()["not_run"]), (0, 2, 0, 2))
         self.assertEqual(b.notices[-1], "The run was stopped at 08:00:58Z before Harbor wrote job.end: 1 trial cancelled, 2 never started.")
         snap = b.snapshot()
         self.assertEqual((snap["state"], snap["running"], snap["ended_by"]), ("finished", False, "stopped"))
         self.assertNotIn("ended_by", board_of(*lines, now=now).snapshot())                     # absent unless the runner ended it
         self.assertEqual(snap["finished_at"], "2026-09-14T08:00:58Z")
+
+    def test_a_run_its_feed_ended_early_counts_what_never_began_as_not_run(self):
+        """A run its spending cap stopped, or its endpoint: job.end, with units never begun. They are not queued."""
+        start, lines = self.lines()
+        lines += [ev(7, "trial.end", trial="a", ts=at_(start, 40), outcome="budget"),
+                  ev(8, "job.end", trial=None, ts=at_(start, 41), n_completed=1, n_errored=1, n_cancelled=2)]
+        c = board_of(*lines, now=start + timedelta(seconds=100)).counts()
+        self.assertEqual((c["total"], c["completed"], c["pending"], c["not_run"]), (4, 2, 0, 2))     # job.end's n_cancelled
+        self.assertNotIn("not_run", board_of(*lines[:-1], now=start + timedelta(seconds=100)).counts())   # still going: queued
 
     def test_a_feed_with_its_own_end_is_left_alone(self):
         start, lines = self.lines()

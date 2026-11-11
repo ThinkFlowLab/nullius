@@ -429,6 +429,17 @@ class LiveBoard(unittest.TestCase):
         self.assertEqual([m and m[1] for m in said], [ledger.usd(v) for v in amounts])   # 0.00015 read "$0.0001", 0.00004 "$0.00"
         self.assertNotIn("spending cap", self.render(s)["meta"])                         # none said where the run has none
 
+    def test_renderer_says_not_run_for_what_a_finished_run_never_began(self):
+        s = json.loads((FIXTURE / "expected.json").read_text())
+        queued = [dict(t, state="queued", outcome=None, phase=None) for t in s["trials"][:2]]
+        going = dict(s, trials=queued, counts=dict(s["counts"], total=len(s["trials"]), pending=2))
+        self.assertIn("Queued", visible(self.render(going)["stats"]))
+        self.assertIn('aria-label="' , self.render(going)["tiles"]); self.assertIn(': queued"', self.render(going)["tiles"])
+        ended = dict(going, state="finished", finished_at=s["now"], running=False, counts=dict(going["counts"], pending=0, not_run=2))
+        out = self.render(ended)
+        self.assertIn("Not run 2", visible(out["stats"])); self.assertNotIn("Queued", visible(out["stats"]))
+        self.assertNotIn(': queued"', out["tiles"]); self.assertIn(': not run"', out["tiles"])
+
     def test_renderer_shows_the_last_log_line_when_no_activity_and_it_is_redacted(self):
         s = json.loads((FIXTURE / "expected.json").read_text())
         retail = next(t for t in s["trials"] if t["last_line"])
