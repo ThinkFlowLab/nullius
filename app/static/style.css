@@ -1546,7 +1546,7 @@ a.chip { text-decoration: none; }
   border-radius: 7px; color: var(--text-dim); font-size: .85rem; text-align: left; white-space: nowrap;
   background: transparent; border: 0; cursor: pointer; font: inherit; font-size: .85rem;
 }
-.tree-item .lbl { min-width: 0; flex: 1; white-space: normal; overflow-wrap: anywhere; line-height: 1.3; padding-block: 4px; }   /* a name wraps, never cut */
+.tree-item .lbl { min-width: 0; flex: 1; white-space: normal; overflow-wrap: anywhere; line-height: 1.3; padding-block: 3px; }   /* a name wraps, never cut */
 .tree-item:hover { background: var(--surface); color: var(--text); text-decoration: none; }
 .tree-item.on { background: var(--accent-soft); color: var(--text); font-weight: 500; }
 .tree-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
