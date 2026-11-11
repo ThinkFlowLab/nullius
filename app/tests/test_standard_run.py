@@ -62,6 +62,10 @@ serve({"units": lambda dataset: {"units": [f"m{i}" for i in range(8)]}, "setup":
 '''
 
 
+# the same, one unit asking far more than the others: its prompt is three thousand characters
+UNEVEN_DRIVER = CALLING_DRIVER.replace('{"prompt": "model hi"}', '{"prompt": "model " + ("x" * 3000 if unit == "m5" else "hi")}')
+
+
 class Echo(BaseHTTPRequestHandler):
     """A model that says back the last message, and counts its tokens."""
     status = 200
@@ -292,7 +296,7 @@ class RunTest(unittest.TestCase):
         # the user's own row over the list's: the list did not say this price, so it is not named
         self.assertEqual(recorded({"models": {"m-1": listed}, "own": {"m-1": own}}), {"models": {"m-1": {**own, "source": "own"}}})
 
-    def calling(self, **kw):
+    def calling(self, driver=CALLING_DRIVER, **kw):
         """Eight units, each one model call (11 tokens in, 3 out), one at a
         time. Input is free here and the model's own output limit is 10
         tokens at 10 USD a million: the first call is booked 0.0001, and once
@@ -300,7 +304,7 @@ class RunTest(unittest.TestCase):
         here = os.path.join(self.tmp, "calling")
         os.makedirs(here, exist_ok=True)
         with open(os.path.join(here, "driver.py"), "w") as f:
-            f.write(CALLING_DRIVER)
+            f.write(driver)
         b = dict(definitions.get("benchmark", "fakebench", ROOT), _here=here, driver={"command": ["python3", "{here}/driver.py"]})
         said = []
         kw = {"prices": {"m-1": {"input": 0.0, "output": 10.0, "max_output": 10}}, **kw}
@@ -308,6 +312,28 @@ class RunTest(unittest.TestCase):
                                              concurrency=1, env=self.env, say=said.append, unsandboxed=True, proving=True, **kw)
         with open(os.path.join(job_dir, "result.json")) as f:
             return job_dir, failed, json.load(f), said
+
+    def test_a_cap_per_unit_cuts_off_the_unit_that_reaches_it_and_the_run_goes_on(self):
+        """Input at 1 USD a million here: seven units book about 0.0001 a call, one a thousand tokens of prompt,
+        0.001 - over its cap of 0.0005. It alone is cut off, against its agent; the seven others run."""
+        prices = {"m-1": {"input": 1.0, "output": 10.0, "max_output": 10}}
+        job_dir, failed, result, said = self.calling(UNEVEN_DRIVER, prices=prices, max_usd_per_unit=0.0005)
+        self.assertEqual(result["budget"], {"max_usd": None, "spent_usd": 0.000287, "stopped": False, "cut_off": [], "not_run": [],
+                                            "unit_max_usd": 0.0005, "over_unit": ["m5"]})
+        self.assertFalse(failed)
+        got, j = self.outcomes(job_dir)
+        self.assertEqual(sorted(got), [f"m{i}" for i in range(8)])               # every unit was begun: the run went on
+        self.assertEqual((got["m5"].exception_type, got["m5"].outcome), (ledger.UNIT_ERROR, classify.AGENT_ERROR))
+        self.assertTrue(all(got[u].outcome == classify.RESOLVED for u in got if u != "m5"))
+        self.assertEqual(j.budget["over_unit"], ["m5"])
+        calls = self.relay_calls(job_dir)
+        self.assertEqual(([c.get("refused") for c in calls].count("unit"), len([c for c in calls if not c.get("refused")])), (1, 7))
+        self.assertTrue(any(s == "1 of the tasks reached the cap of 0.0005 USD each and were cut off there" for s in said), said)
+        self.assertFalse(any(s.startswith("stopped:") for s in said), said)
+        with open(os.path.join(job_dir, "events.jsonl")) as f:
+            board = live.fold([live.parse_line(line) for line in f if line.strip()])
+        self.assertEqual(board.budget, {"unit_max_usd": 0.0005})
+        self.assertEqual({t.trial.split("__")[0]: t.outcome for t in board.trials if t.outcome == "agent_error"}, {"m5": "agent_error"})
 
     def test_a_spending_cap_stops_the_run_and_its_result_says_where(self):
         # 0.00003 spent by each call and as much booked for the next: with 0.00009 spent the fourth no longer fits 0.00011

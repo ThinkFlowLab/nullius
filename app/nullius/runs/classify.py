@@ -81,6 +81,7 @@ _CAP_EXCEPTION = "spendingcaperror"
 # one can place it here.
 _AGENT_EXCEPTIONS = {
     "agenttimeouterror",            # the agent spent its budget — that is a result
+    "unitspendingcaperror",         # the unit spent its own spending cap (the standard's relay): the same, in money
     "agentsafetyrefusalerror",      # the agent (or its provider) chose to refuse
     "contextwindowexceedederror",   # the agent filled its own context
     "contextlengthexceedederror",   # same, from Harbor's LLM layer
@@ -131,7 +132,7 @@ DESCRIPTIONS = {
     NO_PATCH: "The agent finished without producing a patch at all.",
     AGENT_ERROR: (
         "The agent itself failed — it timed out, filled its context, truncated its "
-        "own output, refused, or its process exited non-zero. Counted against the "
+        "own output, refused, spent its own spending cap, or its process exited non-zero. Counted against the "
         "agent, because each of those is a result rather than an interruption."
     ),
     RATE_LIMITED: (

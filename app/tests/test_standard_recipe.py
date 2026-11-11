@@ -142,7 +142,7 @@ class SpendingCap(unittest.TestCase):
         return dict(definitions.load("agent", ROOT)[0][0], key="twin", label="Twin agent")
 
     def caps(self, out):
-        return [c.split("--max-usd ")[1].split()[0] if "--max-usd" in c else None for sh in out["shards"] for c in sh["command"].split("\n")]
+        return [c.split("--max-usd ")[1].split()[0] if "--max-usd " in c else None for sh in out["shards"] for c in sh["command"].split("\n")]
 
     def test_one_job_takes_the_whole_cap_and_no_cap_adds_nothing(self):
         out = recipe.compile(a_recipe(max_usd=2), defs())
@@ -173,6 +173,24 @@ class SpendingCap(unittest.TestCase):
         alone = recipe.compile(a_recipe(benchmark="checked", others=["nop"], max_usd=2), defs(benchmark=[bench]))
         self.assertEqual((alone["errors"], self.caps(alone)), ([], [None]))
         self.assertNotIn("Spending cap", [row[1] for row in alone["review"]])
+
+    def test_a_cap_per_unit_goes_whole_to_every_job_that_calls_a_model(self):
+        out = recipe.compile(a_recipe(others=["fake", "twin"], where=["local", "me@bench"], max_usd=1, max_usd_per_unit=0.05), defs(agent=[self.twin()]))
+        self.assertEqual(out["errors"], [])
+        self.assertEqual(self.caps(out), ["0.25"] * 4)                                      # the run's is shared
+        each = [c.split("--max-usd-per-unit ")[1].split()[0] for sh in out["shards"] for c in sh["command"].split("\n")]
+        self.assertEqual(each, ["0.05"] * 4)                                                # a unit's is not: a unit is a unit wherever it runs
+        self.assertIn([recipe.STEP["limits"], "Spending cap per task", "$0.05"], out["review"])
+        alone = recipe.compile(a_recipe(max_usd_per_unit=0.05), defs(), unpriced=lambda models: list(models))
+        self.assertEqual([e["message"] for e in alone["errors"]],                           # alone it needs prices too
+                         ["A spending cap needs a price for gpt-5-mini: update the price list in Settings, or set a price there."])
+        plain = recipe.compile(a_recipe(max_usd_per_unit=0.05), defs())
+        self.assertEqual((plain["errors"], self.caps(plain)), ([], [None]))
+        self.assertIn("-j 2 --max-usd-per-unit 0.05 --name", plain["script"])
+        self.assertNotIn("Spending cap", [row[1] for row in plain["review"]])
+        bad = recipe.compile(a_recipe(max_usd_per_unit=0), defs())["errors"]
+        self.assertEqual([(e["step"], e["message"]) for e in bad],
+                         [(recipe.STEP["limits"], "The spending cap per task is an amount in USD above zero, or empty for none.")])
 
     def test_a_cap_that_is_no_amount_names_limits(self):
         for bad in (0, -1, "2", True, float("inf"), float("nan"), [2]):

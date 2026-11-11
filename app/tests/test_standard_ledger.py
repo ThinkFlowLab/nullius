@@ -20,22 +20,64 @@ class LedgerTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.path = os.path.join(self.tmp, "ledger", "ledger.json")
 
-    def test_the_ledger_keeps_the_largest_reply_each_model_has_answered_with(self):
+    def test_the_ledger_keeps_what_each_model_has_answered_with_on_average(self):
+        """The average, not the largest: one long answer does not raise what every later call is booked."""
         led = ledger.Ledger.create(self.path, 1.0)
-        self.assertIsNone(led.largest("m"))                                        # before any reply
+        self.assertIsNone(led.usual("m"))                                          # before any reply
         for cost, model, output in ((0.01, "m", 300), (0.01, "m", 120), (0.01, "other", 9000), (None, "m", None), (0.01, "m", True)):
             booking, _ = led.reserve(0.02)
             led.settle(booking, cost, model, output)
-        self.assertEqual((led.largest("m"), led.largest("other"), led.largest("never")), (300, 9000, None))
+        self.assertEqual((led.usual("m"), led.usual("other"), led.usual("never")), (210, 9000, None))
+        for output in (100,) * 8 + (4000,):                                        # eight short answers and a long one
+            booking, _ = led.reserve(0.02)
+            led.settle(booking, 0.01, "steady", output)
+        self.assertEqual(led.usual("steady"), 534)
         with open(self.path) as f:                                                 # a ledger written before the field is read as one with none
             doc = json.load(f)
         del doc["seen"]
         with open(self.path, "w") as f:
             json.dump(doc, f)
-        self.assertIsNone(led.largest("m"))
+        self.assertIsNone(led.usual("m"))
         booking, _ = led.reserve(0.02)
         led.settle(booking, 0.01, "m", 50)
-        self.assertEqual(led.largest("m"), 50)
+        self.assertEqual(led.usual("m"), 50)
+        doc["seen"] = {"m": 80}                                                   # written as one number, by a relay from before
+        with open(self.path, "w") as f:
+            json.dump(doc, f)
+        self.assertEqual(led.usual("m"), 80)
+
+    def test_a_unit_that_reaches_its_own_cap_is_refused_from_then_on_and_the_run_goes_on(self):
+        led = ledger.Ledger.create(self.path, None, 0.10)                          # a cap per unit alone: none on the run
+        a, _ = led.reserve(0.06, "u1")
+        self.assertTrue(a)
+        refused, state = led.reserve(0.06, "u1")                                   # 0.12 in flight would pass its 0.10
+        self.assertEqual((refused, state["by"], state["unit"]["closed"]), (None, "unit", False))
+        self.assertIn("this unit's spending cap of 0.10 USD", ledger.refusal(state, 0.06))
+        again, state = led.reserve(0.001, "u1")                                    # a small one after it: refused too
+        self.assertEqual((again, state["by"]), (None, "unit"))
+        self.assertIn("an earlier call of this unit did not fit its spending cap of 0.10 USD", ledger.refusal(state, 0.001))
+        self.assertFalse(led.closed())                                             # the run is not stopped
+        self.assertTrue(led.reserve(0.06, "u2")[0])                                # another unit has its own
+        self.assertTrue(led.reserve(5.0)[0])                                       # a call that is no unit's (its judge's) has none
+        led.settle(a, 0.02)
+        with open(self.path) as f:
+            doc = json.load(f)
+        self.assertEqual((doc["units"]["u1"]["spent_usd"], doc["units"]["u1"]["closed"], doc["of"].get(a)), (0.02, True, None))
+        self.assertAlmostEqual(led.state()["spent_usd"], 0.02)
+
+    def test_the_runs_cap_and_a_units_are_held_together_and_only_the_runs_stops_the_run(self):
+        led = ledger.Ledger.create(self.path, 0.20, 0.15)
+        self.assertEqual((led.reserve(0.16, "u1")[1]["by"], led.closed()), ("unit", False))
+        a, _ = led.reserve(0.12, "u2")
+        refused, state = led.reserve(0.12, "u3")                                   # fits its unit's 0.15, not the run's 0.20
+        self.assertEqual((bool(a), refused, state["by"], led.closed()), (True, None, "cap", True))
+        self.assertIn("the run's spending cap of 0.20 USD", ledger.refusal(state, 0.12))
+        unsettled, _ = None, led.settle(a, None)                                   # never known: kept on the unit's count too
+        with open(self.path) as f:
+            self.assertEqual(json.load(f)["units"]["u2"]["unsettled_usd"], 0.12)
+
+    def test_a_units_calls_are_its_own_and_its_simulated_users_never_its_judges(self):
+        self.assertEqual([ledger.unit_of(t) for t in ("t-3", "t-3-simulator", "t-3-judge", "judge")], ["t-3", "t-3", None, "judge"])
 
     def test_a_call_is_sent_while_spent_and_in_flight_and_its_booking_fit(self):
         led = ledger.Ledger.create(self.path, 1.0)
@@ -134,9 +176,9 @@ class BoundTest(unittest.TestCase):
         self.assertAlmostEqual(self.bound(req, dict(ROW, max_output=2000)), (tokens + 2000 * 10.0) / 1e6)
         self.assertAlmostEqual(self.bound(req), (tokens + ledger.OUTPUT * 10.0) / 1e6)
 
-    def test_a_call_in_flight_is_booked_the_largest_reply_the_run_has_seen_never_past_a_limit(self):
-        """Its cost is known only when its reply comes back: until then it counts as the largest reply the run
-        has had from that model, not as the model's limit, which a short answer is a hundredth of."""
+    def test_a_call_in_flight_is_booked_what_the_runs_replies_have_been_never_past_a_limit(self):
+        """Its cost is known only when its reply comes back: until then it counts as the average reply the run
+        has had from that model (``seen``), not as the model's limit, which a short answer is a hundredth of."""
         req = {"model": "m", "messages": []}
         tokens = -(-len(json.dumps(req)) // 3)
         out = lambda row=ROW, seen=None, **named: round((ledger.bound({**req, **named}, json.dumps({**req, **named}).encode(), row, "/chat/completions", seen) * 1e6

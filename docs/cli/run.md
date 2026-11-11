@@ -5,7 +5,7 @@ One benchmark and one agent, capability, control or setup, into a job.
 ```bash title="Run"
 nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--limit N] [-j N] \
     [--unsandboxed | --backend docker] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
-    [--price MODEL=INPUT,OUTPUT[,CACHED]]... [--max-usd USD] \
+    [--price MODEL=INPUT,OUTPUT[,CACHED]]... [--max-usd USD] [--max-usd-per-unit USD] \
     [--repeat K] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
 ```
 
@@ -29,6 +29,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--bench-option NAME=VALUE` | A benchmark's option (repeatable), read as `NULLIUS_OPTION_<NAME>` |
 | `--price MODEL=INPUT,OUTPUT[,CACHED]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
 | `--max-usd USD` | The run's spending cap: no call goes out once the spend plus the calls in flight would pass it ([below](#a-spending-cap)) |
+| `--max-usd-per-unit USD` | Each unit's own spending cap: a unit that reaches it is cut off there, and the run goes on ([below](#a-spending-cap)) |
 | `--repeat K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--repeat`); by default they stay for the next run, listed and removed in Settings, [Sandbox](../settings/sandbox.md) |
 | `--judge-model` | Instead of the official judge |
@@ -56,16 +57,17 @@ the job books each call in one ledger before sending it
 | Rule | Detail |
 | --- | --- |
 | Prices first | Every model the run calls (its own, the judge, the simulated user, an option's embeddings, an agent's side models) needs a price in your [price list](../settings/model-prices.md) or a `--price`; else the run is refused before it starts |
-| A booking | What a call in flight is counted as, since its cost is known only when its reply comes back: its characters over three as input tokens, and as output the largest reply the run has had from that model so far, 4,096 tokens before any; never more than the limit the call names or the model's own |
+| A booking | What a call in flight is counted as, since its cost is known only when its reply comes back: its characters over three as input tokens, and as output the average reply the run has had from that model so far, 4,096 tokens before any; never more than the limit the call names or the model's own |
 | Sent or refused | A call is sent only while what was spent, what the calls in flight have booked and its own booking stay within the cap. The first that does not fit is refused, and so is every call after it: the run stops at one point |
 | Settled | A reply turns the booking into what the call cost. A provider's error gives the booking back. A reply with no token count, or cut off, keeps its whole booking as unsettled: it may have been billed |
 | A refused call | Answered by the relay with HTTP 402, naming the relay and the cap, and recorded `refused`: never the provider's error |
 | The units | One cut off by the cap ends as `SpendingCapError`: the outcome Spending cap, outside the agent's rate, never a miss. Units not begun are not run |
 | The result | `result.json` carries `budget`: `max_usd`, `spent_usd`, `unsettled_usd` when there is some, `stopped`, `cut_off` and `not_run`; stderr says `stage=cap` |
 | Several at a time | The calls in flight take room: with `-j 4`, four bookings must fit at once. The first calls, before any reply, are booked 4,096 output tokens each |
-| An estimate | What was spent is each reply's cost, the provider's own figure when its reply carries one. A booking is not a bill: a reply longer than any before it costs more than was booked and takes the spend past the cap by the difference; the next call is then refused |
+| An estimate | What was spent is each reply's cost, the provider's own figure when its reply carries one. A booking is not a bill: a reply longer than the average so far costs more than was booked and takes the spend past the cap by the difference; the next call is then refused |
+| A cap per unit | `--max-usd-per-unit 0.50`, with or without the run's. A unit's own calls and its simulated user's count toward it: they are the task. Its judge's do not: the judge scores it. A call that does not fit its unit's cap is refused the same way (`refused: unit`), and so is every later call of that unit. The unit ends as `UnitSpendingCapError`, an Agent error counted against the agent, as one that spends its time is; the other units run. `budget` carries `unit_max_usd` and `over_unit`. A call is booked as above, so a cap below one call's booking cuts every unit off |
 | A shard | On the command line the cap is that shard's alone. `merge` adds the shards' caps and spending into one `budget`, when every shard had a cap |
-| From the builder | *Limits* takes one cap for the whole run. Its jobs that call a model (each dataset with each participant, on each machine) take equal shares, rounded down, so the amount typed is the most the run spends. A model without a price is named there, before Run. Not offered for a Harbor recipe, whose calls do not pass the relay |
+| From the builder | *Limits* takes one cap for the whole run, and one per unit, which every job is given whole. Its jobs that call a model (each dataset with each participant, on each machine) take equal shares, rounded down, so the amount typed is the most the run spends. A model without a price is named there, before Run. Not offered for a Harbor recipe, whose calls do not pass the relay |
 | The job page | Run totals shows the cap. A run the cap stopped says so, with what was spent, and lists the units not run; the units cut off are its Spending cap trials. The live board says what was spent of the cap |
 
 <div class="grid cards" markdown>

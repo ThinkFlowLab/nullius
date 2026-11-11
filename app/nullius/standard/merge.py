@@ -156,17 +156,25 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
 
 def _budget(budgets: list) -> Optional[dict]:
     """The shards' spending caps as one (``run.Run.budget``): the caps and what was spent added up, stopped
-    when any shard was, their units cut off and not run together. None unless every shard had a cap: a cap
-    over part of a launch is not the launch's."""
-    if not budgets or not all(isinstance(x, dict) and isinstance(x.get("max_usd"), (int, float)) for x in budgets):
+    when any shard was, their units cut off and not run together; a cap per unit, the same on every shard, is
+    kept with the units that reached it. None unless every shard had a cap: a cap over part of a launch is
+    not the launch's."""
+    number = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    if not budgets or not all(isinstance(x, dict) for x in budgets):
+        return None
+    whole = all(number(x.get("max_usd")) for x in budgets)
+    each = {x.get("unit_max_usd") for x in budgets}
+    each = each.pop() if len(each) == 1 else None
+    if not whole and not number(each):
         return None
     spent = [x.get("spent_usd") for x in budgets]
     unsettled = round(sum(x.get("unsettled_usd") or 0 for x in budgets), 6)
-    return {"max_usd": round(sum(x["max_usd"] for x in budgets), 6),
+    return {"max_usd": round(sum(x["max_usd"] for x in budgets), 6) if whole else None,
             "spent_usd": None if any(not isinstance(v, (int, float)) for v in spent) else round(sum(spent), 6),
             **({"unsettled_usd": unsettled} if unsettled else {}), "stopped": any(x.get("stopped") for x in budgets),
             "cut_off": [u for x in budgets for u in x.get("cut_off") or []],
-            "not_run": [u for x in budgets for u in x.get("not_run") or []]}
+            "not_run": [u for x in budgets for u in x.get("not_run") or []],
+            **({"unit_max_usd": each, "over_unit": [u for x in budgets for u in x.get("over_unit") or []]} if number(each) else {})}
 
 
 def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:

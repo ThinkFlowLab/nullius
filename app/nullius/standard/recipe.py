@@ -273,6 +273,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     the whole run: its jobs that call a model - each dataset with each
     participant, on each machine - take equal shares (``--max-usd``), so
     none spends another's and the amount typed is the most the run spends.
+    ``max_usd_per_unit``: each unit's own cap (``--max-usd-per-unit``), given
+    whole to every job that calls a model: a unit is a unit wherever it runs.
     ``unpriced``: asked, for a recipe with a cap, which of the models it
     names have no price in the user's list (``nullius.prices``): a run
     with a cap is refused without one, and the Limits step says so first."""
@@ -430,6 +432,13 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     elif isinstance(cap, bool) or not isinstance(cap, (int, float)) or not 0 < cap < float("inf"):
         add("limits", "The spending cap is an amount in USD above zero, or empty for none.")
         cap = None
+    noun = (b.get("units") or {}).get("noun", "unit")
+    per_unit = recipe.get("max_usd_per_unit")
+    if per_unit in ("", None):
+        per_unit = None
+    elif isinstance(per_unit, bool) or not isinstance(per_unit, (int, float)) or not 0 < per_unit < float("inf"):
+        add("limits", f"The spending cap per {noun} is an amount in USD above zero, or empty for none.")
+        per_unit = None
     limit = recipe.get("limit")
     if limit not in ("", None) and _int(limit, 1) is None:
         add("limits", "The number of units is a whole number of at least 1, or empty for all of them.")
@@ -451,17 +460,19 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         share = math.floor(cap / paying * 1e6) / 1e6          # never more than the cap in all
         if not share:
             add("limits", "The spending cap is too small" + (f" to share over {paying} jobs." if paying > 1 else "."))
-        elif unpriced is not None:
-            # the models a run names as it sends them (run.Run.models_called): its own or a setup's, the judge's,
-            # the simulated user's, an option's embeddings
-            judge, sim = (b.get("score") or {}).get("judge"), b.get("simulator")
-            called = [*[(p["o"].get("sent") or p.get("model")) if p.get("setup") else model for p in picks if not p["control"]],
-                      (judge_model or providers.served_as(judge["model"], provider)) if judge else "",
-                      (sim_model or providers.served_as(sim["model"], provider)) if sim and any(not p["control"] for p in picks) else "",
-                      *needs["embeddings"][:1]]
-            missing = unpriced([m for m in dict.fromkeys(called) if isinstance(m, str) and m])
-            if missing:
-                add("limits", f"A spending cap needs a price for {', '.join(missing)}: update the price list in Settings, or set a price there.")
+    if not paying:
+        per_unit = None                                       # no job calls a model: nothing to cap
+    if (share or per_unit) and unpriced is not None:
+        # the models a run names as it sends them (run.Run.models_called): its own or a setup's, the judge's,
+        # the simulated user's, an option's embeddings
+        judge, sim = (b.get("score") or {}).get("judge"), b.get("simulator")
+        called = [*[(p["o"].get("sent") or p.get("model")) if p.get("setup") else model for p in picks if not p["control"]],
+                  (judge_model or providers.served_as(judge["model"], provider)) if judge else "",
+                  (sim_model or providers.served_as(sim["model"], provider)) if sim and any(not p["control"] for p in picks) else "",
+                  *needs["embeddings"][:1]]
+        missing = unpriced([m for m in dict.fromkeys(called) if isinstance(m, str) and m])
+        if missing:
+            add("limits", f"A spending cap needs a price for {', '.join(missing)}: update the price list in Settings, or set a price there.")
     if errors:
         return out
     nouns = (b.get("units") or {}).get("nouns", "units")
@@ -495,6 +506,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *[w for k, v in options_for_pick(d, p).items() for w in ("--bench-option", f"{k}={v}")],
                  *(["--repeat", str(repeat)] if repeat > 1 else []),
                  *(["--max-usd", f"{share:.6f}".rstrip("0").rstrip(".")] if share and spends(p) else []),
+                 *(["--max-usd-per-unit", f"{per_unit:.6f}".rstrip("0").rstrip(".")] if per_unit and spends(p) else []),
                  *(["--simulator-model", sim_model] if sim_model and not p["control"] else []),
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
@@ -576,6 +588,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                          if any(p.get("setup") for p in picks) and not all(p.get("setup") for p in picks) else "")],
                      *([[STEP["limits"], "Spending cap", f"${ledger.usd(cap)}"
                          + (f" in all · ${ledger.usd(share)} for each of {paying} jobs" if paying > 1 else "")]] if share else []),
+                     *([[STEP["limits"], f"Spending cap per {noun}", f"${ledger.usd(per_unit)}"]] if per_unit else []),
                      [STEP["where"], "Where", (f"{of} shards, one per machine: " if of > 1 else "")
                       + ", ".join(where_label(t) for t in targets) + f" · {backend} backend"]]
     if agents_local:

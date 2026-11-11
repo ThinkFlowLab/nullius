@@ -308,7 +308,8 @@ class Run:
                  backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None,
                  launch: Optional[str] = None, repeat: int = 1, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
-                 remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None):
+                 remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
+                 max_usd_per_unit: Optional[float] = None):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: the caller's explicit yes to running an agent on the
@@ -328,6 +329,10 @@ class Run:
         (``simulator``): this model instead of its official one.
         ``prices``: this run's own prices, by model, over the user's list
         (``nullius.prices``): what a call's cost is estimated from.
+        ``max_usd_per_unit``: each unit's own spending cap, kept in the same
+        ledger: its own calls and its simulated user's count toward it, its
+        judge's do not. A unit that reaches it ends as ``ledger.UNIT_ERROR``,
+        an agent error counted against the agent, and the run goes on.
         ``max_usd``: the run's spending cap (``ledger``): every relay of the
         job books a call before sending it, and once one does not fit no
         further call goes out and nothing more is begun. Refused when a model
@@ -407,20 +412,26 @@ class Run:
         # (nullius.prices), this run's own prices over it. Read once, here: a run never fetches a price.
         self.run_prices = dict(prices or {})
         self.prices = {**price_list.table(), **self.run_prices}
-        self.max_usd, self.ledger = None, None
-        if max_usd is not None:
+        self.max_usd, self.unit_max_usd, self.ledger = None, None, None
+        for flag, given, what in (("--max-usd", max_usd, "the run's spending cap"), ("--max-usd-per-unit", max_usd_per_unit, "a unit's spending cap")):
+            if given is None:
+                continue
             try:
-                cap = float(max_usd)
+                cap = float(given)
             except (TypeError, ValueError):
                 cap = 0.0
             if not 0 < cap < float("inf"):
-                raise Refused(f"--max-usd {max_usd!r}: the run's spending cap in USD, above zero")
+                raise Refused(f"{flag} {given!r}: {what} in USD, above zero")
+            if flag == "--max-usd":
+                self.max_usd = cap
+            else:
+                self.unit_max_usd = cap
+        if self.max_usd is not None or self.unit_max_usd is not None:
             unpriced = [m for m in self.models_called() if m not in self.prices]
             if unpriced:
                 raise Refused("a spending cap needs a price for every model the run calls, and there is none for "
                               + ", ".join(unpriced) + ": nullius prices update, nullius prices set MODEL INPUT OUTPUT, "
                               "or --price MODEL=INPUT,OUTPUT")
-            self.max_usd = cap
         lacking = hostreq.missing(bench, needs["host"], which)
         if lacking:
             raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
@@ -498,9 +509,9 @@ class Run:
                                       + (["dataset"] if self.ds.get("url") else [])
                                       + (["driver"] if install.driver_dir(self.bench) else [])
                                       + ([] if control or self.upstream else ["install"]) + ["units"]))
-        if self.max_usd is not None and self.base:
+        if (self.max_usd is not None or self.unit_max_usd is not None) and self.base:
             # one ledger for the job, in a folder of its own: all a unit's relay container is given of the job besides its record
-            self.ledger = ledgers.Ledger.create(os.path.join(self.job_dir, ".work", "ledger", "ledger.json"), self.max_usd)
+            self.ledger = ledgers.Ledger.create(os.path.join(self.job_dir, ".work", "ledger", "ledger.json"), self.max_usd, self.unit_max_usd)
         try:
             self.ready()
         except Refused as e:
@@ -528,13 +539,15 @@ class Run:
         self.n_units = len(work)                 # what the progress counts: every run of every unit
         self.feed = live_feed.Writer(os.path.join(self.job_dir, live_feed.FEED), self.name)
         self.feed.emit("job.start", n_total=len(work), n_concurrent=self.concurrency, agents=[self.other["key"]], tasks=units,
-                       **({"budget": {"max_usd": self.max_usd}} if self.ledger is not None else {}))   # the live board says the cap
+                       **({"budget": {k: v for k, v in (("max_usd", self.max_usd), ("unit_max_usd", self.unit_max_usd)) if v is not None}}
+                          if self.ledger is not None else {}))   # the live board says the cap
         for pos, (i, u, r) in enumerate(work):
             self.feed.emit("trial.queued", self.trial_name(i, u, r), agent=self.other["key"], position=pos)
         results = []
         u0 = time.time()
         self._halt, self._refused, self.halted = threading.Event(), [], None
         self._cut: List[str] = []                # units the spending cap cut off
+        self._over: List[str] = []               # units that reached their own cap: cut off there, the run going on
         # a model server on this machine's loopback, which the relays' containers cannot reach as written
         self.loopback = (container.Loopback(self.base).start()
                          if self.backend == "docker" and self.base and container.on_loopback(self.base) else None)
@@ -588,8 +601,13 @@ class Run:
                    spent_usd=spent, cut_off=len(budget["cut_off"]), not_run=len(budget["not_run"]))
             self.say(f"stopped: a call did not fit the spending cap of {ledgers.usd(budget['max_usd'])} USD "
                      f"({spent} spent): {len(budget['cut_off'])} cut off, {len(budget['not_run'])} not run")
-        elif budget:
+        elif budget and budget["max_usd"] is not None:
             self.say(f"spent {ledgers.usd(budget['spent_usd'] or 0)} of the {ledgers.usd(budget['max_usd'])} USD cap")
+        elif budget:
+            self.say(f"spent {ledgers.usd(budget['spent_usd'] or 0)} USD")
+        if budget and budget.get("over_unit"):
+            self.say(f"{len(budget['over_unit'])} of the {self.bench['units']['nouns']} reached the cap of "
+                     f"{ledgers.usd(budget['unit_max_usd'])} USD each and were cut off there")
         if self.halted:
             self.say(f"stopped: the endpoint refused {REFUSED_IN_A_ROW} units in a row ({self.halted[0]}: "
                      f"{redact(str(self.halted[1]))[:200]}); the {len(work) - len(results)} units not begun were not run")
@@ -660,7 +678,7 @@ class Run:
         # own, recorded in the job's .work/relay-benchmark beside the units', never counted as the agent's.
         if self.embed_model and self.bench_relay is None:
             self.bench_relay = relay.Relay(self.base, self.key, os.path.join(self.job_dir, ".work", "relay-benchmark"),
-                                           prices=self.prices, model=self.embed_model, ledger=self.ledger_file(),
+                                           prices=self.prices, model=self.embed_model, ledger=self.ledger_file(), unit_caps=False,
                                            key_header=PROVIDERS[self.provider].get("key_header", "authorization")).start()
 
     def runtimes_needed(self) -> List[str]:
@@ -797,10 +815,10 @@ class Run:
             exc = failed                     # what the endpoint said outranks how the agent took it
             score = None
         if rl is not None and getattr(self, "ledger", None) is not None:
-            # a call the spending cap refused, the agent's, the judge's or the simulated user's: the unit was
-            # cut off by the run's own limit, whatever its agent made of the refusal - never a miss
-            cut = next((f for f in (relay.failure(rl.calls(t)) for t in (tag, f"{tag}-judge", f"{tag}-simulator"))
-                        if f and f[0] == ledgers.ERROR), None)
+            # a call a spending cap refused, the agent's, the judge's or the simulated user's: the unit was cut
+            # off by the run's own limit - never a miss - or by its own, whatever its agent made of the refusal
+            cuts = [f for f in (relay.failure(rl.calls(t)) for t in (tag, f"{tag}-judge", f"{tag}-simulator")) if f]
+            cut = next((f for f in cuts if f[0] == ledgers.ERROR), None) or next((f for f in cuts if f[0] == ledgers.UNIT_ERROR), None)
             if cut:
                 exc, score = cut, None
         if self._stopped.is_set() and score is None:
@@ -831,14 +849,19 @@ class Run:
             with self._said:
                 self._cut.append(unit)
             self._halt.set()                     # the cap is reached: nothing more is begun
+        elif exc and exc[0] == ledgers.UNIT_ERROR:
+            with self._said:
+                self._over.append(unit)          # its own cap: the others go on
         return res
 
     def budget(self, not_run: List[str]) -> Optional[dict]:
         """What ``result.json`` says of the run's spending cap: the cap,
         what was spent, what was booked for calls whose cost was never known
         (``unsettled_usd``, said only when there is some), whether the cap
-        stopped the run, the units it cut off and those never begun. None
-        for a run without a cap."""
+        stopped the run, the units it cut off and those never begun. With a
+        cap per unit, that cap and the units that reached it
+        (``unit_max_usd``, ``over_unit``); ``max_usd`` is then None when the
+        run itself had none. None for a run without a cap."""
         if getattr(self, "ledger", None) is None:
             return None
         try:
@@ -849,7 +872,9 @@ class Run:
         cut = getattr(self, "_cut", [])
         return {"max_usd": self.max_usd, "spent_usd": None if got["spent_usd"] is None else round(got["spent_usd"], 6),
                 **({"unsettled_usd": unsettled} if unsettled else {}), "stopped": bool(got["closed"]),
-                "cut_off": list(dict.fromkeys(cut)), "not_run": list(dict.fromkeys(not_run)) if got["closed"] else []}
+                "cut_off": list(dict.fromkeys(cut)), "not_run": list(dict.fromkeys(not_run)) if got["closed"] else [],
+                **({"unit_max_usd": self.unit_max_usd, "over_unit": list(dict.fromkeys(getattr(self, "_over", [])))}
+                   if self.unit_max_usd is not None else {})}
 
     def note_refusal(self, exc: Optional[tuple]) -> None:
         """A unit's end, counted toward the endpoint refusing the run: a wrong

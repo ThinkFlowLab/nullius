@@ -232,12 +232,37 @@ class CapTest(unittest.TestCase):
         self.assertEqual(self.post(r, "u1", body)[0], 200)
         first = r.calls("u1")[-1]
         self.assertAlmostEqual(first["booked_usd"], ledger.bound(body, raw, self.PRICES["m"]))            # no reply yet: the start
-        self.assertEqual(led.largest("m"), first["reply"]["usage"]["output"])
+        self.assertEqual(led.usual("m"), first["reply"]["usage"]["output"])
         self.assertEqual(self.post(r, "u2", body)[0], 200)
         second = r.calls("u2")[-1]
         self.assertAlmostEqual(second["booked_usd"], ledger.bound(body, raw, self.PRICES["m"], seen=first["reply"]["usage"]["output"]))
         self.assertLess(second["booked_usd"], first["booked_usd"])
         self.assertAlmostEqual(led.state()["spent_usd"], first["cost_usd"] + second["cost_usd"])          # what was spent is what the calls cost
+
+    def test_a_units_own_cap_refuses_its_calls_and_its_simulated_users_not_its_judges_nor_another_units(self):
+        tmp = tempfile.mkdtemp()
+        led = ledger.Ledger.create(os.path.join(tmp, "ledger", "ledger.json"), None, 0.0005)
+        r = relay.Relay(self.base, "sk-real", os.path.join(tmp, "relay"), prices=self.PRICES, ledger=led.path).start()
+        self.addCleanup(r.stop)
+        body = {"model": "m", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 100}     # booked 0.001 and more: over 0.0005
+        sent = len(Upstream.seen)
+        status, headers, answer = self.post(r, "u1", body)
+        self.assertEqual((status, headers.get("X-Nullius-Refused"), json.loads(answer)["error"]["code"]), (402, "unit", "unit_spending_cap"))
+        self.assertEqual(len(Upstream.seen), sent)                                 # never sent
+        self.assertEqual(r.calls("u1")[-1]["refused"], "unit")
+        exc, why = relay.failure(r.calls("u1"))
+        self.assertEqual(exc, ledger.UNIT_ERROR)
+        self.assertIn("this unit's spending cap of 0.0005 USD", why)
+        self.assertEqual(classify.from_verdict(exc, None), classify.AGENT_ERROR)   # it spent its allowance: counted against the agent
+        self.assertNotIn(classify.AGENT_ERROR, classify.INFRA_OUTCOMES)
+        self.assertEqual(self.post(r, "u1-judge", body)[0], 200)                   # the scorer is no part of the unit's task
+        self.assertEqual(self.post(r, "u1-simulator", body)[0], 402)               # its simulated user is
+        self.assertEqual(self.post(r, "u2", body)[0], 200)                         # another unit: booked what a reply has been, within its own cap
+        self.assertFalse(led.closed())
+        # the benchmark's own relay books for no unit: only the run's cap holds its calls
+        shared = relay.Relay(self.base, "sk-real", os.path.join(tmp, "shared"), prices=self.PRICES, ledger=led.path, unit_caps=False).start()
+        self.addCleanup(shared.stop)
+        self.assertEqual(self.post(shared, "u1", body)[0], 200)
 
     def test_a_call_that_does_not_fit_is_answered_by_the_relay_and_never_sent(self):
         r, led = self.capped(0.0005)             # 100 output tokens at 10 USD a million are 0.001 already

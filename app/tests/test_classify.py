@@ -106,6 +106,14 @@ class LiveBoardAgrees(unittest.TestCase):
         self.assertEqual((end["outcome"], end["exc"]), ("budget", ledger.ERROR))
         self.assertIn("budget", live.OUTCOMES)
 
+    def test_a_unit_that_reached_its_own_spending_cap_counts_against_the_agent_on_both(self):
+        """It had its attempt and spent its allowance, as one that spends its time does: a result, in the rate."""
+        from nullius.standard import job, ledger
+        self.assertEqual(C.from_verdict(ledger.UNIT_ERROR, None), C.AGENT_ERROR)
+        self.assertNotIn(C.AGENT_ERROR, C.INFRA_OUTCOMES)
+        self.assertNotEqual(ledger.UNIT_ERROR, ledger.ERROR)                      # recorded apart from the run's cap
+        self.assertEqual(job.feed_outcome("pass", None, (ledger.UNIT_ERROR, "its own cap"))["outcome"], "agent_error")
+
 
 class HarborTaxonomy(unittest.TestCase):
     def test_provider_failures_are_infra(self):

@@ -16,14 +16,21 @@ keeps its whole booking, as ``unsettled``: it may have been billed.
 
 What was spent is each reply's real cost. Only a call in flight is an
 estimate, since its cost is known when its reply comes back: the prompt's
-characters over three as input tokens, and as output the largest reply
-the run has had from that model so far (the ledger keeps it, ``seen``) -
-``OUTPUT`` before any - and never more than the limit the call names or
-the model's own (its price row's ``max_output``). The model's limit alone
-would book a short answer at a hundred times its cost, and a few calls
-at a time would fill a cap nothing had been spent of. A call that costs
-more than was booked for it takes the spend past the cap by the
-difference, and the next call is refused.
+characters over three as input tokens, and as output the average reply
+the run has had from that model so far (the ledger keeps their count and
+sum, ``seen``) - ``OUTPUT`` before any - and never more than the limit the
+call names or the model's own (its price row's ``max_output``). The
+model's limit alone would book a short answer at a hundred times its
+cost, and a few calls at a time would fill a cap nothing had been spent
+of; the largest reply so far would let one long answer do the same to
+every call after it. A call that costs more than was booked for it takes
+the spend past the cap by the difference, and the next call is refused.
+
+A cap per unit (``run --max-usd-per-unit``) is kept in the same file: what
+each unit spent and has in flight, beside the run's. A call that does not
+fit its unit's cap is refused, and so is every later call of that unit; the
+run goes on. A unit's calls are its own and its simulated user's - part of
+the task - and never its judge's, which scores it (:func:`unit_of`).
 
 The file is rewritten whole under a lock held for one read and one write
 (``flock`` on a file beside it, as an install is locked): a relay that dies
@@ -41,6 +48,9 @@ from typing import Optional, Tuple
 
 OUTPUT = 4096                       # output tokens booked for a call before the run has had a reply from its model
 ERROR = "SpendingCapError"          # what a unit the cap ended carries: its own outcome outside the rate, never a miss (runs.classify)
+# what a unit that reached its own cap carries: it had its attempt and spent its allowance, as one that spends its
+# time does - an agent error, counted against the agent (runs.classify)
+UNIT_ERROR = "UnitSpendingCapError"
 _LIMITS = ("max_completion_tokens", "max_output_tokens", "max_tokens")
 
 
@@ -48,11 +58,19 @@ class Unavailable(Exception):
     """The ledger could not be read or written: a capped call is then not sent."""
 
 
+def unit_of(tag: str) -> Optional[str]:
+    """The unit a relay's route books for, by its tag (``run``): the unit's own calls and its simulated user's
+    (``<tag>-simulator``) are the task; its judge's (``<tag>-judge``) score it and count toward no unit."""
+    if tag.endswith("-judge"):
+        return None
+    return tag[:-len("-simulator")] if tag.endswith("-simulator") else tag
+
+
 def bound(req: dict, raw: bytes, row: dict, path: str = "", seen: Optional[int] = None) -> float:
     """What a call is likely to cost, in USD, at ``row`` (a price row, USD
     per million tokens). Input: the request's characters over three - its
     JSON whole, less what it carries as base64 - at the dearer of the input
-    and the cache-write price. Output: ``seen``, the largest reply the run
+    and the cache-write price. Output: ``seen``, the average reply the run
     has had from this model, or ``OUTPUT`` before any; never more than the
     limit the call names or the row's own. An embeddings call has none."""
     tokens = math.ceil(max(0, len(raw) - _blobs(req)) / 3)
@@ -83,10 +101,13 @@ class Ledger:
         self.path = path
 
     @classmethod
-    def create(cls, path: str, max_usd: float) -> "Ledger":
+    def create(cls, path: str, max_usd: Optional[float] = None, unit_max_usd: Optional[float] = None) -> "Ledger":
+        """``max_usd``: the run's cap, or None for a run with a cap per unit alone. ``unit_max_usd``: each unit's."""
         os.makedirs(os.path.dirname(path), exist_ok=True)
         led = cls(path)
-        led._write({"max_usd": float(max_usd), "spent_usd": 0.0, "unsettled_usd": 0.0, "held": {}, "closed": False, "seen": {}})
+        led._write({"max_usd": None if max_usd is None else float(max_usd),
+                    "unit_max_usd": None if unit_max_usd is None else float(unit_max_usd),
+                    "spent_usd": 0.0, "unsettled_usd": 0.0, "held": {}, "closed": False, "seen": {}, "units": {}, "of": {}})
         return led
 
     @contextlib.contextmanager
@@ -104,9 +125,13 @@ class Ledger:
     def _read(self) -> dict:
         with open(self.path, encoding="utf-8") as f:
             doc = json.load(f)
-        float(doc["max_usd"]), float(doc["spent_usd"]), float(doc["unsettled_usd"]), sum(doc["held"].values())
-        if not isinstance(doc.get("seen"), dict):
-            doc["seen"] = {}
+        float(doc["max_usd"] or 0), float(doc["spent_usd"]), float(doc["unsettled_usd"]), sum(doc["held"].values())
+        for name in ("seen", "units", "of"):
+            if not isinstance(doc.get(name), dict):
+                doc[name] = {}
+        # per model, how many replies and their output tokens in all; a number alone (a ledger from before) is one reply
+        doc["seen"] = {m: v if isinstance(v, list) else [1, v] for m, v in doc["seen"].items()}
+        doc.setdefault("unit_max_usd", None)
         return doc
 
     def _write(self, doc: dict) -> None:
@@ -116,12 +141,24 @@ class Ledger:
             json.dump(doc, f)
         os.replace(part, self.path)
 
-    def reserve(self, amount: float) -> Tuple[Optional[str], dict]:
+    def reserve(self, amount: float, unit: Optional[str] = None) -> Tuple[Optional[str], dict]:
         """(the booking's id, the state before it) when ``amount`` fits;
         (None, the state) when it does not, or the ledger is closed already -
-        and it is closed from then on."""
+        and it is closed from then on. ``unit``: the unit the call is part
+        of (:func:`unit_of`): with a cap per unit, a call that does not fit
+        its unit's is refused (the state says ``by: unit``) and closes that
+        unit alone - the run's ledger stays open for the others."""
         with self._locked() as doc:
-            seen = _state(doc)
+            seen = dict(_state(doc), by="cap")
+            each = doc["unit_max_usd"] if unit is not None else None
+            if each is not None:
+                u = doc["units"].setdefault(unit, {"spent_usd": 0.0, "unsettled_usd": 0.0, "closed": False})
+                flight = sum(doc["held"].get(b, 0.0) for b, w in doc["of"].items() if w == unit) + u["unsettled_usd"]
+                seen["unit"] = {"max_usd": each, "spent_usd": u["spent_usd"], "held_usd": flight, "closed": u["closed"]}
+                if u["closed"] or amount > each - u["spent_usd"] - flight:
+                    u["closed"] = True
+                    self._write(doc)
+                    return None, dict(seen, by="unit")
             if doc["closed"] or amount > seen["left_usd"]:
                 if not doc["closed"]:
                     doc["closed"] = True
@@ -129,36 +166,44 @@ class Ledger:
                 return None, seen
             booking = uuid.uuid4().hex[:12]
             doc["held"][booking] = amount
+            if each is not None:
+                doc["of"][booking] = unit
             self._write(doc)
             return booking, seen
 
     def settle(self, booking: str, cost: Optional[float], model: Optional[str] = None, output: Optional[int] = None) -> None:
         """The call's cost in place of its booking; None, its cost was never
         known: the whole booking is kept, as unsettled. ``output``: the
-        reply's output tokens, kept when they are the most ``model`` has
-        answered in this run - what its next calls are booked at."""
+        reply's output tokens, added to what ``model`` has answered in this
+        run - its next calls are booked at their average."""
         with self._locked() as doc:
             amount = doc["held"].pop(booking, None)
             if amount is None:
                 return
-            if model and isinstance(output, int) and not isinstance(output, bool) and output > doc["seen"].get(model, 0):
-                doc["seen"][model] = output
+            if model and isinstance(output, int) and not isinstance(output, bool) and output > 0:
+                replies, tokens = doc["seen"].get(model) or (0, 0)
+                doc["seen"][model] = [replies + 1, tokens + output]
+            unit = doc["units"].get(doc["of"].pop(booking, None))
             if cost is None:
                 doc["unsettled_usd"] += amount
             else:
                 doc["spent_usd"] += max(0.0, float(cost))
+            if unit is not None:                 # the same, on its unit's own count
+                unit["unsettled_usd" if cost is None else "spent_usd"] += amount if cost is None else max(0.0, float(cost))
             self._write(doc)
 
     def release(self, booking: str) -> None:
         """The booking given back: the provider answered with an error, or was never reached."""
         with self._locked() as doc:
+            doc["of"].pop(booking, None)
             if doc["held"].pop(booking, None) is not None:
                 self._write(doc)
 
-    def largest(self, model) -> Optional[int]:
-        """The most output tokens ``model`` has answered a call of this run with; None before any. Read without the lock."""
+    def usual(self, model) -> Optional[int]:
+        """The output tokens ``model`` has answered a call of this run with, on average; None before any. Read without the lock."""
         try:
-            return self._read()["seen"].get(model) or None
+            replies, tokens = self._read()["seen"].get(model) or (0, 0)
+            return math.ceil(tokens / replies) if replies else None
         except (OSError, ValueError, KeyError, TypeError) as e:
             raise Unavailable(f"the spending cap's ledger could not be read: {type(e).__name__}: {e}")
 
@@ -181,8 +226,9 @@ class Ledger:
 
 def _state(doc: dict) -> dict:
     held = sum(doc["held"].values())
+    left = float("inf") if doc["max_usd"] is None else doc["max_usd"] - doc["spent_usd"] - doc["unsettled_usd"] - held   # no cap on the run: a cap per unit alone
     return {"max_usd": doc["max_usd"], "spent_usd": doc["spent_usd"], "unsettled_usd": doc["unsettled_usd"], "held_usd": held,
-            "left_usd": doc["max_usd"] - doc["spent_usd"] - doc["unsettled_usd"] - held, "closed": bool(doc["closed"])}
+            "left_usd": left, "closed": bool(doc["closed"])}
 
 
 def usd(v: float) -> str:
@@ -193,6 +239,14 @@ def usd(v: float) -> str:
 
 def refusal(state: dict, amount: float) -> str:
     """Why a call was not sent, as its caller and the record read it."""
+    if state.get("by") == "unit":
+        u = state["unit"]
+        if u["closed"]:
+            return (f"an earlier call of this unit did not fit its spending cap of {usd(u['max_usd'])} USD "
+                    f"({usd(u['spent_usd'])} spent by the unit): no further call of this unit is sent")
+        return (f"this unit's spending cap of {usd(u['max_usd'])} USD: {usd(u['spent_usd'])} spent by the unit"
+                + (f", {usd(u['held_usd'])} booked by its calls in flight or never settled" if u["held_usd"] else "")
+                + f", and this call may cost up to {usd(amount)}; it was not sent, and no further call of this unit is")
     if state["closed"]:
         return (f"an earlier call did not fit the run's spending cap of {usd(state['max_usd'])} USD "
                 f"({usd(state['spent_usd'])} spent): no further call of this run is sent")

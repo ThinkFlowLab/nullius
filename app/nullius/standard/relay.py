@@ -337,7 +337,7 @@ class _Pool:
 class Relay:
     def __init__(self, base: str, key: str, record_dir: str, prices: Optional[Dict[str, dict]] = None,
                  model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False,
-                 ledger: Optional[str] = None):
+                 ledger: Optional[str] = None, unit_caps: bool = True):
         """``base``: the provider's endpoint (``https://api.openai.com/v1``).
         ``model``: when given, every call is sent as this model, whatever the
         caller named - the run's model is the recipe's, not the agent's. A
@@ -358,6 +358,8 @@ class Relay:
         and not sent when it does not fit."""
         self.fields = fields
         self.ledger = ledgers.Ledger(ledger) if ledger else None
+        # False for the benchmark's own relay: its calls (an option's embeddings) are no one unit's, so only the run's cap holds them
+        self.unit_caps = unit_caps
         self.base, self.key, self.dir = base.rstrip("/"), key, record_dir
         self.prices, self.model = prices or {}, model
         self.side_models = {a: (b or a) for a, _, b in (str(m).partition("=") for m in side_models or ())}
@@ -447,9 +449,9 @@ class Relay:
             raw = json.dumps(req).encode()
         booking = booked = None
         if self.ledger is not None and h.command == "POST":
-            booking, booked, why = self._book(req if isinstance(req, dict) else {}, raw, rest)
+            booking, booked, why, by = self._book(req if isinstance(req, dict) else {}, raw, rest, tag)
             if why:
-                self._refuse(h, tag, rest, req, asked, why)
+                self._refuse(h, tag, rest, req, asked, why, by)
                 return
         t0 = time.time()
         conn, r, back, body = None, None, [], b""
@@ -543,34 +545,37 @@ class Relay:
             else:
                 conn.close()
 
-    def _book(self, req: dict, raw: bytes, rest: str) -> tuple:
-        """(booking, its amount, None) for a call the cap lets out; (None,
-        its amount, why) for one it does not. A model with no price is not
-        sent either: a capped run sends no call it cannot price."""
+    def _book(self, req: dict, raw: bytes, rest: str, tag: str = "") -> tuple:
+        """(booking, its amount, None, None) for a call the cap lets out;
+        (None, its amount, why, by) for one it does not - ``by`` the run's
+        cap (``cap``) or the cap of the unit ``tag`` routes for (``unit``).
+        A model with no price is not sent either: a capped run sends no
+        call it cannot price."""
         row = self.prices.get(req.get("model"))
         if not row:
-            return None, None, f"no price for the model {req.get('model')!r}: a run with a spending cap sends no call it cannot price"
+            return None, None, f"no price for the model {req.get('model')!r}: a run with a spending cap sends no call it cannot price", "cap"
         try:
-            amount = ledgers.bound(req, raw, row, rest, self.ledger.largest(req.get("model")))
-            booking, seen = self.ledger.reserve(amount)
+            amount = ledgers.bound(req, raw, row, rest, self.ledger.usual(req.get("model")))
+            booking, seen = self.ledger.reserve(amount, ledgers.unit_of(tag) if self.unit_caps and tag else None)
         except ledgers.Unavailable as e:
-            return None, None, str(e)
-        return booking, amount, None if booking else ledgers.refusal(seen, amount)
+            return None, None, str(e), "cap"
+        return (booking, amount, None, None) if booking else (None, amount, ledgers.refusal(seen, amount), seen["by"])
 
-    def _refuse(self, h: BaseHTTPRequestHandler, tag: str, rest: str, req, asked, why: str) -> None:
-        """A call the run's spending cap did not let out: answered here and
-        recorded as the relay's own (``refused``), nothing sent."""
+    def _refuse(self, h: BaseHTTPRequestHandler, tag: str, rest: str, req, asked, why: str, by: str = "cap") -> None:
+        """A call a spending cap did not let out - the run's (``by`` is
+        ``cap``) or its unit's own (``unit``): answered here and recorded
+        as the relay's own (``refused``), nothing sent."""
         t = time.time()
         rec = {"t0": t, "t1": t, "path": rest, "model": req.get("model") if isinstance(req, dict) else None, "model_asked": asked,
-               "status": 402, "refused": "cap", "error": why, "request": _request_tail(req) if isinstance(req, dict) else {},
+               "status": 402, "refused": by, "error": why, "request": _request_tail(req) if isinstance(req, dict) else {},
                "headers": sorted(k.lower() for k in forwarded(h.headers))}
         with self.lock:
             with open(os.path.join(self.dir, tag + ".jsonl"), "a") as f:
                 f.write(json.dumps(rec) + "\n")
-        body = json.dumps({"type": "error", "error": {"type": "spending_cap", "code": "spending_cap",
+        body = json.dumps({"type": "error", "error": {"type": "spending_cap", "code": "unit_spending_cap" if by == "unit" else "spending_cap",
                                                       "message": "nullius relay: " + why}}).encode()
         h.send_response(402)
-        for n, v in (("Content-Type", "application/json"), ("X-Nullius-Refused", "cap"), ("Content-Length", str(len(body)))):
+        for n, v in (("Content-Type", "application/json"), ("X-Nullius-Refused", by), ("Content-Length", str(len(body)))):
             h.send_header(n, v)
         h.end_headers()
         try:
@@ -622,6 +627,9 @@ def failure(calls: List[dict]) -> Optional[tuple]:
     cut = next((c for c in calls if c.get("refused") == "cap"), None)
     if cut:
         return ledgers.ERROR, cut.get("error") or ""
+    over = next((c for c in calls if c.get("refused") == "unit"), None)
+    if over:                                     # its own cap: the unit's doing, and the run goes on
+        return ledgers.UNIT_ERROR, over.get("error") or ""
     if not calls or calls[-1].get("status") == 200:
         return None
     last = calls[-1]
