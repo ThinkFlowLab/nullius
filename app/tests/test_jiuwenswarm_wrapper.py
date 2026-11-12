@@ -1,7 +1,7 @@
 """JiuwenSwarm's ACP wrapper: on ACP, JiuwenSwarm edits files only through the
 client, and a client that offers none (Nullius on docker) leaves it with no
 file at all - so the wrapper, in the agent's container, answers them itself,
-inside the session's directory."""
+inside the workspace or the unit's own JiuwenSwarm home."""
 from __future__ import annotations
 
 import importlib.util
@@ -11,6 +11,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tests import APP
 
@@ -37,6 +38,9 @@ class FilesWithoutTheClient(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="nullius-jw-"); self.addCleanup(shutil.rmtree, self.tmp, True)
         self.ws = os.path.join(self.tmp, "ws"); os.makedirs(self.ws)
+        self.jhome = os.path.join(self.tmp, "home", ".jiuwenswarm"); os.makedirs(self.jhome)
+        home = patch.object(agent, "JHOME", self.jhome)
+        home.start(); self.addCleanup(home.stop)
 
     def session(self, fs: bool):
         ses, bridge = agent.Sessions(), Pipe()
@@ -75,6 +79,49 @@ class FilesWithoutTheClient(unittest.TestCase):
         agent.to_client(lines({"jsonrpc": "2.0", "id": 7, "method": "fs/read_text_file",
                                "params": {"sessionId": "x", "path": "a.txt"}}), out, ses)
         self.assertEqual(read(out)[0]["params"], {"sessionId": "s1", "path": os.path.join(self.ws, "a.txt")})
+
+    def test_unit_home_config_and_todos_on_both_backends(self):
+        config = os.path.join(self.jhome, "config", "config.yaml")
+        os.makedirs(os.path.dirname(config))
+        with open(config, "w") as stream:
+            stream.write("language: en\n")
+        todo = os.path.join(self.jhome, "todos", "task.txt")
+        for fs in (False, True):
+            with self.subTest(client_files=fs):
+                ses, bridge, out = self.session(fs)
+                bridge.seek(0); bridge.truncate()
+                out.seek(0); out.truncate()
+                agent.to_client(lines(
+                    {"jsonrpc": "2.0", "id": 11, "method": "fs/read_text_file",
+                     "params": {"sessionId": "x", "path": config}},
+                    {"jsonrpc": "2.0", "id": 12, "method": "fs/write_text_file",
+                     "params": {"sessionId": "x", "path": todo, "content": "pending"}},
+                    {"jsonrpc": "2.0", "id": 13, "method": "fs/read_text_file",
+                     "params": {"sessionId": "x", "path": todo}}), out, ses)
+                self.assertEqual(out.getvalue(), b"")
+                replies = {m["id"]: m for m in read(bridge)}
+                self.assertEqual(replies[11]["result"], {"content": "language: en\n"})
+                self.assertEqual(replies[12]["result"], {})
+                self.assertEqual(replies[13]["result"], {"content": "pending"})
+
+    def test_home_access_does_not_expose_other_files(self):
+        outside = os.path.join(self.tmp, "outside.txt")
+        with open(outside, "w") as stream:
+            stream.write("private")
+        os.symlink(outside, os.path.join(self.jhome, "escape"))
+        os.symlink(self.tmp, os.path.join(self.jhome, "outside-directory"))
+        for path in (outside, os.path.join(self.jhome, "..", "outside.txt"),
+                     self.jhome + "-other/file", os.path.join(self.jhome, "escape"),
+                     os.path.join(self.jhome, "outside-directory", "new.txt")):
+            for method in ("fs/read_text_file", "fs/write_text_file"):
+                with self.subTest(path=path, method=method):
+                    error, result = agent.serve_fs({"method": method,
+                        "params": {"path": path, "content": "changed"}}, self.ws)
+                    self.assertEqual(error["code"], -32602)
+                    self.assertIsNone(result)
+        with open(outside) as stream:
+            self.assertEqual(stream.read(), "private")
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "new.txt")))
 
 
 if __name__ == "__main__":

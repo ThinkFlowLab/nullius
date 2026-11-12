@@ -30,6 +30,8 @@ changes, each taken from the protocol itself:
   that offers no files (Nullius on docker, where this wrapper runs in the
   agent's container) gets none: ``initialize`` offers them to the bridge, and
   this wrapper answers each request itself, inside the session's cwd.
+  Requests for the unit's own JiuwenSwarm home are served by this wrapper
+  on both backends, so its config and todo files remain accessible.
 
 When the bridge ends, the servers are stopped.
 """
@@ -168,11 +170,17 @@ class Sessions:
             self.agent_in.flush()
 
 
+def in_home(path):
+    home = os.path.realpath(JHOME)
+    path = os.path.realpath(path)
+    return path == home or path.startswith(home + os.sep)
+
+
 def serve_fs(msg, cwd):
-    """An fs/ request answered here, in the container: a path inside the session's cwd only."""
+    """Serve files in the session workspace or this unit's JiuwenSwarm home."""
     params, root = msg["params"], os.path.realpath(cwd or "/nonexistent")
     path = os.path.realpath(str(params.get("path") or ""))
-    if path != root and not path.startswith(root + os.sep):
+    if path != root and not path.startswith(root + os.sep) and not in_home(path):
         return {"code": -32602, "message": f"{params.get('path')} is outside the session's directory"}, None
     try:
         if msg["method"] == "fs/write_text_file":
@@ -246,7 +254,8 @@ def to_client(src, dst, ses):
                 path, cwd = params.get("path"), ses.of(params.get("sessionId"))
                 if isinstance(path, str) and path and not os.path.isabs(path) and cwd:
                     params["path"] = os.path.normpath(os.path.join(cwd, path))
-                if ses.serve_fs and "id" in msg:
+                own_home = isinstance(params.get("path"), str) and in_home(params["path"])
+                if (ses.serve_fs or own_home) and "id" in msg:
                     err, res = serve_fs(msg, ses.of(params.get("sessionId")))
                     reply = {"jsonrpc": "2.0", "id": msg["id"], **({"error": err} if err else {"result": res})}
                     ses.to_bridge((json.dumps(reply) + "\n").encode())
