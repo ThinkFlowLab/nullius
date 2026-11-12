@@ -517,6 +517,8 @@ def _host(d: dict) -> List[str]:
             bad.append(f"{w}.summary: what it is for")
         if not isinstance(r.get("check"), list) or not r["check"] or any(not _PROGRAM.match(str(x)) for x in r["check"]):
             bad.append(f"{w}.check: the programs it puts on PATH")
+        if "gpu_memory_mb" in r and (type(r["gpu_memory_mb"]) is not int or r["gpu_memory_mb"] <= 0):
+            bad.append(f"{w}.gpu_memory_mb: a positive whole number of MiB")
         if "install" not in r:
             continue
         inst = r["install"]

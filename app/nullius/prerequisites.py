@@ -15,11 +15,12 @@ A need is one of:
 - ``harbor``: a recipe from before the pin runs the ``harbor`` on PATH;
 - ``python3``, ``git``: the standard's cli, on a host;
 - a benchmark's machine setup (``host`` in its definition): its programs,
-  and the commands that install them.
+  optional GPU memory minimum, and the commands that install them.
 
 Nothing here installs anything or writes anything: each check is
-``command -v`` and ``docker version`` here, or one ssh probe for a host
-(``hosts.test``).
+``command -v``, ``docker version`` and, when needed, ``nvidia-smi`` here,
+or one ssh probe for a host (``hosts.test``). Remote GPU memory is checked
+by the run as it starts there.
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ import time
 from typing import Callable, Dict, List, Optional
 
 from nullius import hosts
-from nullius.standard import container
+from nullius.standard import container, hostreq
 
 LABEL = {"docker": "Docker", "uv": "uv", "harbor": "Harbor on PATH", "python3": "python3", "git": "git"}
 
@@ -53,7 +54,8 @@ def row(name: str, state: str, detail: str = "", install: Optional[List[str]] = 
 def check_here(needs: List[str], setups: Optional[Dict[str, dict]] = None, *,
                which: Optional[Callable] = None, docker: Optional[Callable] = None) -> List[dict]:
     """The rows for this machine. ``setups``: a benchmark's machine setups by
-    name, each ``{summary, check: [programs], install: [commands]}``. ``which``
+    name, each ``{summary, check: [programs], install: [commands]}``, with an
+    optional ``gpu_memory_mb`` minimum. ``which``
     and ``docker`` are looked up at call time, so a test can stand in for them."""
     which = which or shutil.which
     docker = docker or docker_here
@@ -68,10 +70,10 @@ def check_here(needs: List[str], setups: Optional[Dict[str, dict]] = None, *,
             rows.append(row(n, "ok") if which("harbor") else row(n, "missing", "a recipe from before the pin runs the harbor on PATH: pin a Harbor on the Harbor step"))
         else:
             rows.append(row(n, "ok") if which(n) else row(n, "missing", f"{n} is not on this machine's PATH"))
+    lacking = hostreq.problems({"host": setups or {}}, list(setups or {}), which)
     for name, s in (setups or {}).items():
-        gone = [p for p in s.get("check") or [] if not which(p)]
-        rows.append(row("setup:" + name, "missing", ", ".join(gone) + " not on PATH", s.get("install"), label=name)
-                    if gone else row("setup:" + name, "ok", s.get("summary", ""), label=name))
+        rows.append(row("setup:" + name, "missing", lacking[name], s.get("install"), label=name)
+                    if name in lacking else row("setup:" + name, "ok", s.get("summary", ""), label=name))
     return rows
 
 
