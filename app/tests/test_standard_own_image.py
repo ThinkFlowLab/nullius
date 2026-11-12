@@ -99,6 +99,7 @@ class Setup(unittest.TestCase):
         r.inst = ""
         b = container.Box("job", "unit", "image", workdir="/testbed", path="/image/bin",
                           env={"PATH": "/task/bin", "CONDA_DEFAULT_ENV": "testbed", "HOME": "/task/home"})
+        b.agent_proxy = {"HTTPS_PROXY": "http://egress:3128", "NO_PROXY": "localhost,relay"}
         rl = type("Relay", (), {"unit_secrets": {"LICENCE": "run-licence"}})()
         argv, env = r.place(rl, ["sh", "-c", "python -V"],
                             {"PATH": "/host/bin", "HOME": "/run/home", "OPENAI_BASE_URL": "http://relay/v1"},
@@ -108,6 +109,8 @@ class Setup(unittest.TestCase):
         self.assertEqual(env["HOME"], "/run/home")
         self.assertEqual(env["OPENAI_BASE_URL"], "http://relay/v1")
         self.assertEqual(env["LICENCE"], "run-licence")
+        self.assertEqual(env["HTTPS_PROXY"], "http://egress:3128")
+        self.assertEqual(env["NO_PROXY"], "localhost,relay")
         self.assertNotIn("testbed", argv)  # values travel in the process environment, not arguments
 
     def test_a_driver_names_the_tasks_files_and_nothing_else(self):

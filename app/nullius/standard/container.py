@@ -1523,9 +1523,10 @@ class Box:
     ``egress`` (``egress.py``) and reaches public addresses only - never
     link-local (cloud metadata), private ranges, the shared range some clouds
     keep their metadata in, nor the machine itself through the docker
-    bridge - and the check alone is told of it (``HTTP_PROXY``,
-    ``HTTPS_PROXY``). It needs no root on the machine, so every host runs the
-    check the same way; ``egress.py`` says why that beat firewall rules.
+    bridge. A benchmark may also grant it for the agent's work with
+    ``internet: true``; it is removed before the check. Each phase is told
+    of its proxy through ``HTTP_PROXY`` and ``HTTPS_PROXY``. It needs no root
+    on the machine, so every host runs the check the same way; ``egress.py`` says why that beat firewall rules.
 
     **The agent's mounts stay for the check.** A running container's mounts
     cannot be changed, and taking its home away would mean a second container
@@ -1667,13 +1668,14 @@ class Box:
         ``egress``. The box itself stays on its internal network. The
         variables the check is run with, which name the proxy - and leave
         the box's own services (``localhost``) to be reached directly."""
-        image = base_image()
-        name = self.name + "-egress"
-        self.egress = name
-        make_bridge()
-        _docker(egress_argv(image, name=name, job=self.job)[1:])
-        _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.net, name])
-        wait_listening(name, "the check's proxy")
+        if self.egress is None:
+            image = base_image()
+            name = self.name + "-egress"
+            self.egress = name
+            make_bridge()
+            _docker(egress_argv(image, name=name, job=self.job)[1:])
+            _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.net, name])
+            wait_listening(name, "the task's proxy")
         proxy = f"http://{EGRESS_ALIAS}:{EGRESS_PORT}"
         local = "localhost,127.0.0.1,::1"
         return {"HTTP_PROXY": proxy, "HTTPS_PROXY": proxy, "http_proxy": proxy, "https_proxy": proxy,

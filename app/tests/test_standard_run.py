@@ -204,6 +204,22 @@ class RunTest(unittest.TestCase):
         self.assertIn("agent-acp", by_unit["good"].exception_message)
         self.assertEqual(by_unit["wrong"].exception_type, "")
 
+    def test_internet_is_a_boolean_task_policy_only_in_an_own_image(self):
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        o = definitions.get("agent", "fake", ROOT)
+        for value, own in ((True, False), (False, False), ("true", True), (1, True), (None, True)):
+            with self.subTest(value=value, own=own), mock.patch.object(run.Run, "unit_environment", return_value=("task", {"image": "own"} if own else {})), \
+                    mock.patch.object(run.Run, "not_run", return_value=None), mock.patch.object(run.Run, "own_box") as box:
+                driver = mock.Mock()
+                driver.request.side_effect = lambda op, **kw: {"units": ["one"]} if op == "units" else {"internet": value}
+                with mock.patch.object(run.Run, "driver", return_value=driver):
+                    path = run.run(b, o, model="m", provider="custom", jobs_root=self.tmp, env=self.env,
+                                   say=lambda s: None, unsandboxed=True, name=f"internet-{own}-{value}")
+                trials, _ = self.outcomes(path)
+                self.assertEqual(trials["one"].exception_type, "EnvironmentSetupError")
+                self.assertIn("internet", trials["one"].exception_message)
+                box.assert_not_called()
+
     def test_a_unit_still_running_when_the_run_is_stopped_ends_cancelled(self):
         """Stop ends a unit's agent and relay under it, and it then failed
         with whatever that broke - an EnvironmentSetupError for a relay

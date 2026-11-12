@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import runpy
 import shutil
 import socket
 import subprocess
@@ -250,6 +251,63 @@ class Prepare(unittest.TestCase):
         self.assertNotIn("settle", box.did)
 
 
+class AgentInternet(unittest.TestCase):
+    setUp = Prepare.setUp
+
+    def test_task_policy_closes_before_check_on_success_failure_and_cancellation(self):
+        rl = container.Unit.__new__(container.Unit)
+        rl.doors, rl.reach = [("benchmark-tools", 9000, "/socket")], {"licence:80": "licence-server-1:80"}
+        for error in (None, RuntimeError("agent failed"), KeyboardInterrupt()):
+            box = FakeBox()
+            online = box.online
+            def proxy():
+                return dict(online(), NO_PROXY="localhost,127.0.0.1,::1")
+            box.online = proxy
+            try:
+                with self.r.agent_internet({"internet": True, "verify": {"keep_processes": True}}, box, rl, self.trial):
+                    self.assertEqual(box.agent_proxy["NO_PROXY"], "localhost,127.0.0.1,::1,relay,benchmark-tools,licence-server-1")
+                    self.r.in_box(box, {"run": ["solve"]}, collect=False, what="oracle")
+                    self.assertEqual(box.did[-1][2], box.agent_proxy)
+                    if error:
+                        raise error
+            except (RuntimeError, KeyboardInterrupt) as caught:
+                self.assertIs(caught, error)
+            self.assertEqual(box.did[-1], "offline")
+            self.assertEqual(box.agent_proxy, {})
+            self.r.verify({"run": ["check"], "keep_processes": True}, box, self.trial)
+            self.assertNotIn("settle", box.did)
+            self.assertEqual(box.did[-1], ("run", "check", {}))
+            with open(os.path.join(self.trial, "agent", "egress.log")) as f:
+                self.assertIn("refused", f.read())
+
+    def test_unrequested_internet_does_nothing_and_failed_teardown_prevents_verification(self):
+        for policy in ({}, {"internet": False}):
+            box = FakeBox()
+            with self.r.agent_internet(policy, box, None, self.trial):
+                pass
+            self.assertEqual(box.did, [])
+        box = FakeBox(fail_offline=True)
+        box.online = lambda: {"NO_PROXY": "localhost"}
+        with self.assertRaises(run._Ended) as caught:
+            with self.r.agent_internet({"internet": True}, box, None, self.trial):
+                pass
+            self.fail("verification must not start")
+        self.assertEqual(caught.exception.kind, "VerifierError")
+        self.assertEqual(box.agent_proxy, {})
+
+    def test_an_existing_proxy_is_not_started_twice(self):
+        box = container.Box("test", "u0001", "img", workdir="/")
+        with mock.patch.object(container, "base_image", return_value="base"), \
+                mock.patch.object(container, "make_bridge") as bridge, \
+                mock.patch.object(container, "_docker") as docker, mock.patch.object(container, "wait_listening") as ready:
+            first = box.online()
+            started = list(docker.call_args_list)
+            self.assertEqual(box.online(), first)
+            self.assertEqual(docker.call_args_list, started)
+        ready.assert_called_once()
+        bridge.assert_called_once()
+
+
 class Rule(unittest.TestCase):
     def test_only_global_addresses_are_reached(self):
         for no in ("169.254.169.254", "100.100.100.200", "10.1.2.3", "172.17.0.1", "192.168.1.1", "127.0.0.1",
@@ -323,7 +381,7 @@ class TerminalBench(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        for t in ("mailman", "regex-log"):
+        for t in ("mailman", "regex-log", "build-pmars", "nginx-request-logging"):
             os.makedirs(os.path.join(self.tmp, t))
             with open(os.path.join(self.tmp, t, "instruction.md"), "w") as f:
                 f.write("do it\n")
@@ -342,6 +400,18 @@ class TerminalBench(unittest.TestCase):
         plain = self.setup_of("regex-log")["verify"]
         self.assertNotIn("keep_processes", plain)
         self.assertEqual(container.step_problems(plain, collect=True), [])
+        self.assertNotIn("internet", self.setup_of("regex-log"))
+        self.assertIs(self.setup_of("build-pmars")["internet"], True)
+        self.assertIs(self.setup_of("nginx-request-logging")["verify"]["keep_processes"], True)
+
+    def test_all_tasks_have_image_pins_and_only_the_36_added_tasks_get_internet(self):
+        data = runpy.run_path(os.path.join(TB, "driver.py"), run_name="metadata")
+        self.assertEqual((len(data["ALL"]), len(data["INTERNET"]), len(data["OFFLINE"])), (89, 36, 53))
+        self.assertFalse(set(data["INTERNET"]) & set(data["OFFLINE"]))
+        self.assertEqual(set(data["ALL"]), set(data["IMAGES"]))
+        for image in data["IMAGES"].values():
+            self.assertEqual(container.spec_problems({"pull": image}), [])
+        self.assertEqual(data["DATASETS"]["full"], data["ALL"])
 
     def test_every_task_is_prepared_with_tmux_through_the_proxy(self):
         for unit in ("mailman", "regex-log"):
