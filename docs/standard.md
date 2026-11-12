@@ -391,7 +391,7 @@ use the source folders and repository checks.
 
 #### The driver's environment
 
-The upstream's dependencies go in `driver.install` (a capability's `install` is the same block), installed once per digest under `drivers/<key>/<digest>/` in `STANDARD_DIR` by an installer handed no variable named like a secret; `{install}` in `driver.command` names it. A driver without one runs on the machine's `python3`; never in Nullius's own interpreter or the agent's container.
+The upstream's dependencies go in `driver.install` (a capability's `install` is the same block), installed once per digest under `drivers/<key>/<digest>/` in `STANDARD_DIR` by an installer handed no variable named like a secret; `{install}` in `driver.command` names it. It is installed on this machine with its `uv`, which downloads the Python it names when the machine has none, unless `UV_PYTHON_DOWNLOADS` says otherwise. A driver without one runs on the machine's `python3`; never in Nullius's own interpreter or the agent's container.
 
 ```json title="standard.json · driver"
 "driver": {
