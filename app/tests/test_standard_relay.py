@@ -655,6 +655,31 @@ class PassThroughTest(unittest.TestCase):
         self.assertEqual((back["x-request-id"], back["x-ratelimit-remaining-tokens"]), ("req_1", "99"))
         self.assertNotIn("set-cookie", back)
 
+    def test_a_search_route_pins_embeddings_separately_and_keeps_other_routes(self):
+        led = ledger.Ledger.create(os.path.join(tempfile.mkdtemp(), "ledger.json"), 1.0)
+        rates = {"embedding": {"input": 1, "output": 0}, "reranker": {"input": 3, "output": 15},
+                 "agent": {"input": 2, "output": 4}, "reviewer": {"input": 1, "output": 1}}
+        r = self.relay(model="agent", side_models=["reviewer"], prices=rates, ledger=led.path)
+        r.url("search", model="reranker", embeddings="embedding")
+        schema = {"type": "json_schema", "json_schema": {"name": "RelevanceScore", "strict": True,
+                  "schema": {"type": "object", "properties": {"relevance_score": {"type": "integer"}},
+                             "required": ["relevance_score"], "additionalProperties": False}}}
+        for tag, path, asked, sent in (("search", "/embeddings", "asked", "embedding"),
+                                     ("search", "/chat/completions", "asked", "reranker"),
+                                     ("search", "/responses", "asked", "reranker"),
+                                     ("agent", "/embeddings", "asked", "agent"),
+                                     ("agent", "/chat/completions", "reviewer", "reviewer")):
+            status, _, _ = self.post(r, tag, path, {"model": asked, "input": "query", "max_tokens": 8,
+                                                   "response_format": schema, "reasoning_effort": "low"})
+            self.assertEqual(status, 200)
+            request = KeptAlive.seen[-1][2]
+            self.assertEqual((request["model"], request["response_format"], request["reasoning_effort"]),
+                             (sent, schema, "low"))
+            record = r.calls(tag)[-1]
+            self.assertEqual((record["model"], record["model_asked"]), (sent, asked))
+            self.assertIsNotNone(record["cost_usd"])
+        self.assertAlmostEqual(led.state()["spent_usd"], sum(x["cost_usd"] for t in ("search", "agent") for x in r.calls(t)))
+
     def test_a_side_model_goes_as_asked_and_another_is_the_runs(self):
         r = self.relay(model="run-model", side_models=["reviewer"])
         self.post(r, "u", "/responses", {"model": "reviewer", "input": "x"})

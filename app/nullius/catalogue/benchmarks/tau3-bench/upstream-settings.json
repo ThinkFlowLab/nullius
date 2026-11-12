@@ -326,28 +326,28 @@
     "setting": "--retrieval-config openai_embeddings_reranker",
     "values": "a retrieval variant",
     "default": "alltools",
-    "nullius": "not offered - its pointwise reranker asks gpt-5.2 through the OpenAI client (OPENAI_BASE_URL), which in a run is the embeddings route the relay sends as text-embedding-3-large, or no route at all; it needs a route of its own on the run's relay"
+    "nullius": "option:retrieval"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",
     "setting": "--retrieval-config openai_embeddings_reranker_grep",
     "values": "a retrieval variant",
     "default": "alltools",
-    "nullius": "not offered - its pointwise reranker asks gpt-5.2 through the OpenAI client (OPENAI_BASE_URL), which in a run is the embeddings route the relay sends as text-embedding-3-large, or no route at all; it needs a route of its own on the run's relay"
+    "nullius": "option:retrieval"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",
     "setting": "--retrieval-config bm25_reranker",
     "values": "a retrieval variant",
     "default": "alltools",
-    "nullius": "not offered - its pointwise reranker asks gpt-5.2 through the OpenAI client (OPENAI_BASE_URL), which in a run is the embeddings route the relay sends as text-embedding-3-large, or no route at all; it needs a route of its own on the run's relay"
+    "nullius": "option:retrieval"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",
     "setting": "--retrieval-config bm25_reranker_grep",
     "values": "a retrieval variant",
     "default": "alltools",
-    "nullius": "not offered - its pointwise reranker asks gpt-5.2 through the OpenAI client (OPENAI_BASE_URL), which in a run is the embeddings route the relay sends as text-embedding-3-large, or no route at all; it needs a route of its own on the run's relay"
+    "nullius": "option:retrieval"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",

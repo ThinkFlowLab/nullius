@@ -366,7 +366,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         if chosen_opts.get(k, v) != v:
             add("dataset", f"Like the leaderboard sets {(b.get('options') or {})[k].get('label') or k.replace('_', ' ')} to {v}: choose Any of your choice for {chosen_opts[k]}.")
     chosen_opts = {**(lb.get("bench_options") or {}), **chosen_opts}
-    per_ds, needs = {}, {"embeddings": [], "host": []}
+    per_ds, needs = {}, {"embeddings": [], "reranker": [], "host": []}
     scopes = list(dict.fromkeys(p["o"]["key"] if p.get("setup") else "yours" for p in picks)) or ["yours"]
     for x in dss:
         # Original's retrievers have machine requirements too; collect the
@@ -382,6 +382,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         n = definitions.option_needs(b, vals)
         needs["embeddings"] += [m for m in n["embeddings"] if m not in needs["embeddings"]]
         needs["host"] += [h for h in n["host"] if h not in needs["host"]]
+        needs["reranker"] += [m for m in n["reranker"] if m not in needs["reranker"]]
     if needs["embeddings"] and recipe.get("provider") not in (None, "openai"):
         add("model", f"{', '.join(needs['embeddings'])} is OpenAI's embedding model: choose the OpenAI provider for this search.")
     agents_local = [p["o"]["label"] for p in picks if side == "agent" and not p["control"] and not p.get("setup") and backend == "local"]
@@ -463,7 +464,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         if why:
             add("where", f"The docker backend cannot run on this machine: {why}. Choose local processes, or a host with docker.")
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
-    spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"])
+    spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"])
     paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])
     share = None
     if cap is not None and paying:
@@ -481,6 +482,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             (judge_model or providers.served_as(judge["model"], provider)) if judge else None,
             (sim_model or providers.served_as(sim["model"], provider)) if sim else None,
             (definitions.option_needs(b, per_ds[x["id"]])["embeddings"] or [None])[0], control=p["control"])]
+        called += [providers.served_as(m, provider) for m in needs["reranker"]]
         missing = unpriced([m for m in dict.fromkeys(called) if isinstance(m, str) and m])
         if missing:
             add("limits", f"A spending cap needs a price for {', '.join(missing)}: update the price list in Settings, or set a price there.")
@@ -556,7 +558,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["docker"] = backend == "docker" or (own and any(p["control"] for p in picks))
     out["model"] = model
     # Nothing in the run asks a model: no key is handed to it, and none need be set.
-    out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"]
+    out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"]
     # what the machines must have for the chosen options (``host``): the Where step and its test show it, Run checks it
     reqs = hostreq.requirements(b, needs["host"])
     out["host"] = {"benchmark": b["key"], "needs": [{"name": n, "summary": r["summary"], "check": r["check"],

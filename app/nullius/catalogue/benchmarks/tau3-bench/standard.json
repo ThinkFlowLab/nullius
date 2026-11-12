@@ -147,7 +147,11 @@
         "openai_embeddings_grep",
         "alltools",
         "terminal_use",
-        "terminal_use_write"
+        "terminal_use_write",
+        "bm25_reranker",
+        "bm25_reranker_grep",
+        "openai_embeddings_reranker",
+        "openai_embeddings_reranker_grep"
       ],
       "default": "bm25",
       "about": {
@@ -161,7 +165,11 @@
         "openai_embeddings_grep": "Meaning search with text-embedding-3-large and a grep tool. Its embedding calls go through the run's relay, on the OpenAI provider.",
         "alltools": "The upstream's default and the leaderboard's: word search, meaning search and a read-only shell over the documents. Needs the OpenAI provider and the sandbox tools on the machine.",
         "terminal_use": "Only a read-only shell over the documents: the agent greps and reads them itself. Needs the sandbox tools on the machine.",
-        "terminal_use_write": "A shell over the documents that may also write (a copy of them). Needs the sandbox tools on the machine."
+        "terminal_use_write": "A shell over the documents that may also write (a copy of them). Needs the sandbox tools on the machine.",
+        "bm25_reranker": "Word matching, reranked by the upstream's gpt-5.2. Every model call goes through the run's relay.",
+        "bm25_reranker_grep": "Word matching, reranked by the upstream's gpt-5.2 and a grep tool. Every model call goes through the run's relay.",
+        "openai_embeddings_reranker": "Meaning search with text-embedding-3-large, reranked by the upstream's gpt-5.2. Every model call goes through the run's relay.",
+        "openai_embeddings_reranker_grep": "Meaning search with text-embedding-3-large, reranked by the upstream's gpt-5.2 and a grep tool. Every model call goes through the run's relay."
       },
       "needs": {
         "openai_embeddings": {
@@ -185,6 +193,20 @@
           "host": [
             "sandbox"
           ]
+        },
+        "bm25_reranker": {
+          "reranker": "gpt-5.2"
+        },
+        "bm25_reranker_grep": {
+          "reranker": "gpt-5.2"
+        },
+        "openai_embeddings_reranker": {
+          "reranker": "gpt-5.2",
+          "embeddings": "text-embedding-3-large"
+        },
+        "openai_embeddings_reranker_grep": {
+          "reranker": "gpt-5.2",
+          "embeddings": "text-embedding-3-large"
         }
       },
       "setups": [

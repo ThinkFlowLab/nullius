@@ -144,9 +144,9 @@ VERSIONED = ("upstream", "install", "start", "model", "env", "options", "caches"
 # What a benchmark's version may say for itself: its data, its driver, how it scores, who plays its user, its environments.
 BENCH_VERSIONED = ("upstream", "datasets", "driver", "mcp_servers", "score", "simulator", "limits", "controls", "environments",
                    "options", "host", "setups", "proven", "leaderboard")
-# What a benchmark's option value may need (``options.<name>.needs``): an embedding model its driver calls
-# through the run's relay, and requirements of the machine the driver runs on (``host``).
-NEED_KEYS = ("embeddings", "host")
+# What a benchmark's option value may need (``options.<name>.needs``): embedding and reranker models
+# its driver calls through the run's relay, and requirements of the machine the driver runs on (``host``).
+NEED_KEYS = ("embeddings", "reranker", "host")
 _PROGRAM = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,39}$")
 _PACKAGE = re.compile(r"^[@a-z0-9][a-z0-9@/._+-]{0,99}$")
 HOST_INSTALLERS = ("apt", "npm")
@@ -484,14 +484,15 @@ def _bench_options(d: dict) -> List[str]:
             bad.append(f"{w}.about: a line for some of its values")
         needs = o.get("needs") or {}
         if not isinstance(needs, dict):
-            bad.append(f"{w}.needs: value -> {{embeddings, host}}")
+            bad.append(f"{w}.needs: value -> {{embeddings, reranker, host}}")
             continue
         for v, n in needs.items():
             if option_problem(o, v) is not None or not isinstance(n, dict) or any(k not in NEED_KEYS for k in n):
-                bad.append(f"{w}.needs.{v}: one of its values -> {{embeddings: a model, host: [requirements]}}")
+                bad.append(f"{w}.needs.{v}: one of its values -> {{embeddings: a model, reranker: a model, host: [requirements]}}")
                 continue
-            if "embeddings" in n and not _OPTION_VALUE.match(str(n["embeddings"])):
-                bad.append(f"{w}.needs.{v}.embeddings: the embedding model, as its provider names it")
+            for kind in ("embeddings", "reranker"):
+                if kind in n and not _OPTION_VALUE.match(str(n[kind])):
+                    bad.append(f"{w}.needs.{v}.{kind}: the model, as its provider names it")
             if "host" in n and (not isinstance(n["host"], list) or any(h not in hosts for h in n["host"])):
                 bad.append(f"{w}.needs.{v}.host: names of the benchmark's host requirements")
     return bad
@@ -542,12 +543,13 @@ def bench_options_of(bench: dict, dataset: str, given: Optional[dict] = None, se
 
 
 def option_needs(bench: dict, values: dict) -> dict:
-    """What the chosen option values need: {"embeddings": [models], "host": [requirement names]}."""
-    out = {"embeddings": [], "host": []}
+    """What the chosen option values need: {"embeddings": [models], "reranker": [models], "host": [requirement names]}."""
+    out = {"embeddings": [], "reranker": [], "host": []}
     for n, v in values.items():
         need = ((bench.get("options") or {}).get(n, {}).get("needs") or {}).get(v) or {}
-        if need.get("embeddings") and need["embeddings"] not in out["embeddings"]:
-            out["embeddings"].append(need["embeddings"])
+        for kind in ("embeddings", "reranker"):
+            if need.get(kind) and need[kind] not in out[kind]:
+                out[kind].append(need[kind])
         out["host"] += [h for h in need.get("host") or [] if h not in out["host"]]
     return out
 

@@ -39,7 +39,7 @@ Customer service with domain tools and a simulated user: airline, retail, teleco
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
 | `agent_reasoning_effort` | **`default`**, `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | How much reasoning the benchmark's own agent model uses, with `default` keeping the upstream settings. | `original` |
-| `retrieval` | **`bm25`**, `bm25_grep`, `grep_only`, `no_knowledge`, `full_kb`, `golden_retrieval`, `openai_embeddings`, `openai_embeddings_grep`, `alltools`, `terminal_use`, `terminal_use_write` | How the agent searches the bank's documents in banking_knowledge tasks. | `original`, `yours` |
+| `retrieval` | **`bm25`**, `bm25_grep`, `grep_only`, `no_knowledge`, `full_kb`, `golden_retrieval`, `openai_embeddings`, `openai_embeddings_grep`, `alltools`, `terminal_use`, `terminal_use_write`, `bm25_reranker`, `bm25_reranker_grep`, `openai_embeddings_reranker`, `openai_embeddings_reranker_grep` | How the agent searches the bank's documents in banking_knowledge tasks. | `original`, `yours` |
 | `task_split` | **`base`**, `train`, `test`, `small`, `full` | Which group of tasks to run within the selected domain. | `original`, `yours` |
 | `upstream_agent` | **`llm_agent`**, `llm_agent_gt`, `llm_agent_solo` | Whether the benchmark's own agent runs normally, receives the reference actions, or works alone with the user's tools. | `original` |
 | `user_reasoning_effort` | **`default`**, `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | How much reasoning the simulated user's model uses, with `default` keeping the upstream settings. | `original`, `yours` |
@@ -51,6 +51,10 @@ Customer service with domain tools and a simulated user: airline, retail, teleco
 | `retrieval` | `alltools` | embeddings: text-embedding-3-large; host: sandbox |
 | `retrieval` | `terminal_use` | host: sandbox |
 | `retrieval` | `terminal_use_write` | host: sandbox |
+| `retrieval` | `bm25_reranker` | reranker: gpt-5.2 |
+| `retrieval` | `bm25_reranker_grep` | reranker: gpt-5.2 |
+| `retrieval` | `openai_embeddings_reranker` | reranker: gpt-5.2; embeddings: text-embedding-3-large |
+| `retrieval` | `openai_embeddings_reranker_grep` | reranker: gpt-5.2; embeddings: text-embedding-3-large |
 
 ## Good to know
 
@@ -69,7 +73,7 @@ Customer service with domain tools and a simulated user: airline, retail, teleco
 ## Nullius limitations
 
 - Voice mode is not offered.
-- banking_knowledge's search method is an option, bm25 by default. Scores compare only between runs with the same search. The qwen and reranker methods are not offered.
+- banking_knowledge's search method is an option, bm25 by default. Scores compare only between runs with the same search. Reranker methods use gpt-5.2 through the relay. The qwen methods are not offered.
 - Another agent replaces the upstream's agent. It gets the upstream's instructions and policy, plus two lines from Nullius: where its tools are, and that its last message in a turn goes to the user.
 
 ## Cite

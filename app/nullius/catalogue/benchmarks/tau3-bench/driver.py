@@ -58,8 +58,8 @@ score  - what ``run_tasks`` returned: the Orchestrator's own
          task asks it, is the upstream's evaluator at its own model name,
          reached through the relay's judge route (litellm's own ``api_base``
          and ``api_key``, which it reads before ``OPENAI_BASE_URL``: that one
-         is the embeddings route of a search option's, for the OpenAI client
-         the upstream's embedder makes)
+         is a search option's route, pinning embeddings and reranking
+         separately for the upstream's OpenAI clients)
 oracle - the reference: the task's gold actions made through the upstream's
          ``Environment.get_response``, from the task's initial state set by
          its ``Environment.set_state`` as the Orchestrator sets it, then a message carrying every fact the

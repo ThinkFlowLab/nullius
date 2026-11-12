@@ -417,6 +417,7 @@ class Run:
             raise Refused("; ".join(bad))
         needs = definitions.option_needs(bench, self.bench_options)
         self.embed_model = needs["embeddings"][0] if needs["embeddings"] else None
+        self.rerank_model = providers.served_as(needs["reranker"][0], provider) if needs["reranker"] else None
         # What a call's cost is estimated from when the provider does not say it: the user's price list
         # (nullius.prices), this run's own prices over it. Read once, here: a run never fetches a price.
         self.run_prices = dict(prices or {})
@@ -449,7 +450,7 @@ class Run:
                           + (". Install with: " + " && ".join(lines) if (lines := hostreq.install_lines(bench, list(lacking)))
                              else ". Run it on a machine that has it"))
         self.bench_relay = None
-        keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model
+        keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
         self.limit, self.concurrency = limit, max(1, int(concurrency))
         self.repeat = max(1, int(repeat or 1))
@@ -688,11 +689,11 @@ class Run:
                     self.runtimes = container.runtime_mounts(self.runtimes_needed())
             except container.Unavailable as e:
                 raise Refused(f"the agent's runtime for an own image: {e}")
-        # An option whose driver embeds (a search over documents): its calls go through a relay of the run's
+        # An option whose driver embeds or reranks: its calls go through a relay of the run's
         # own, recorded in the job's .work/relay-benchmark beside the units', never counted as the agent's.
-        if self.embed_model and self.bench_relay is None:
+        if (self.embed_model or self.rerank_model) and self.bench_relay is None:
             self.bench_relay = relay.Relay(self.base, self.key, os.path.join(self.job_dir, ".work", "relay-benchmark"),
-                                           prices=self.prices, model=self.embed_model, ledger=self.ledger_file(), unit_caps=False,
+                                           prices=self.prices, model=self.rerank_model or self.embed_model, ledger=self.ledger_file(), unit_caps=False,
                                            key_header=PROVIDERS[self.provider].get("key_header", "authorization")).start()
 
     def runtimes_needed(self) -> List[str]:
@@ -1041,8 +1042,10 @@ class Run:
         run's, the judge's, the simulator's, an option's embeddings and the
         agent's side models. Any other name a caller asks for is replaced by
         the run's (``relay``), so these are all a run can be priced for."""
-        return ledgers.models(self.other, *(getattr(self, n, None) for n in ("model", "judge_model", "simulator_model", "embed_model")),
-                              control=self.other.get("_kind") == "control")
+        models = ledgers.models(self.other, *(getattr(self, n, None) for n in ("model", "judge_model", "simulator_model", "embed_model")),
+                                control=self.other.get("_kind") == "control")
+        reranker = getattr(self, "rerank_model", None)
+        return models + ([reranker] if reranker and reranker not in models else [])
 
     def unit_relay(self, tag: str, trial: str, setup: dict, env_def: Optional[dict] = None, own: bool = False):
         """The unit's own relay, started: in this process on the local
@@ -1109,11 +1112,13 @@ class Run:
                                **option_env(getattr(self, "bench_options", {})), **self.embeddings_env()})
 
     def embeddings_env(self) -> dict:
-        """Where the driver's (and its MCP servers') embedding calls go: the run's own relay, the
-        model pinned on its route, as an OpenAI client reads it; nothing without an embedding option."""
+        """The driver's (and its MCP servers') search calls: one OpenAI base URL, with embeddings
+        and reranking pinned separately. Nothing when the selected search calls no model."""
         if getattr(self, "bench_relay", None) is None:
             return {}
-        return {"OPENAI_BASE_URL": self.bench_relay.url(self.embeddings_tag(), model=self.embed_model), "OPENAI_API_KEY": relay.PLACEHOLDER_KEY}
+        return {"OPENAI_BASE_URL": self.bench_relay.url(self.embeddings_tag(), model=self.rerank_model or self.embed_model,
+                                                       embeddings=self.embed_model if self.rerank_model else None),
+                "OPENAI_API_KEY": relay.PLACEHOLDER_KEY}
 
     def embeddings_tag(self) -> str:
         """This thread's route on the benchmark's relay. A driver serves one thread, one unit at a time: what

@@ -54,10 +54,39 @@ class Scope(unittest.TestCase):
         self.assertTrue(definitions.bench_options_of(TAU, "airline", {"nope": "x"})[1])
 
     def test_what_a_value_needs(self):
-        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "alltools"}), {"embeddings": ["text-embedding-3-large"], "host": ["sandbox"]})
-        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "terminal_use"}), {"embeddings": [], "host": ["sandbox"]})
-        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "bm25"}), {"embeddings": [], "host": []})
+        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "alltools"}), {"embeddings": ["text-embedding-3-large"], "reranker": [], "host": ["sandbox"]})
+        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "terminal_use"}), {"embeddings": [], "reranker": [], "host": ["sandbox"]})
+        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "bm25"}), {"embeddings": [], "reranker": [], "host": []})
         self.assertEqual(run.option_env({"retrieval": "bm25"}), {"NULLIUS_OPTION_RETRIEVAL": "bm25"})
+
+    def test_rerankers_need_their_chat_model_and_only_embedding_variants_need_embeddings(self):
+        from unittest.mock import Mock
+        for method in ("bm25_reranker", "bm25_reranker_grep", "openai_embeddings_reranker", "openai_embeddings_reranker_grep"):
+            with self.subTest(method=method):
+                vals, bad = definitions.bench_options_of(TAU, "banking_knowledge", {"retrieval": method}, "original")
+                self.assertEqual(bad, [])
+                embedded = method.startswith("openai")
+                self.assertEqual(definitions.option_needs(TAU, vals),
+                                 {"embeddings": ["text-embedding-3-large"] if embedded else [], "reranker": ["gpt-5.2"], "host": []})
+                bench = copy.deepcopy(TAU)
+                bench["score"].pop("judge")
+                bench.pop("simulator")
+                other = definitions.control(bench, "nop")
+                r = run.Run(bench, other, model="", provider="openai", dataset="banking_knowledge",
+                            bench_options={"retrieval": method}, env={"OPENAI_API_KEY": "fixture"})
+                r.bench_relay = Mock()
+                r.embeddings_env()
+                self.assertEqual(r.bench_relay.url.call_args.kwargs,
+                                 {"model": "gpt-5.2", "embeddings": "text-embedding-3-large" if embedded else None})
+                self.assertIn("gpt-5.2", r.models_called())
+                self.assertEqual("text-embedding-3-large" in r.models_called(), embedded)
+                with self.assertRaisesRegex(run.Refused, "OPENAI_API_KEY"):
+                    run.Run(bench, other, model="", provider="openai", dataset="banking_knowledge",
+                            bench_options={"retrieval": method}, env={})
+                if not embedded:
+                    routed = run.Run(bench, other, model="", provider="openrouter", dataset="banking_knowledge",
+                                     bench_options={"retrieval": method}, env={"OPENROUTER_API_KEY": "fixture"})
+                    self.assertEqual(routed.rerank_model, "openai/gpt-5.2")
 
 
 class Host(unittest.TestCase):
@@ -138,6 +167,19 @@ class Recipe(unittest.TestCase):
         self.assertIn("OpenAI provider", " ".join(e["message"] for e in other["errors"]))
         bad = recipe.compile(self.a_recipe(bench_options={"retrieval": "nope"}))
         self.assertEqual(bad["errors"][0]["step"], recipe.STEP["dataset"])
+
+    def test_reranker_price_is_required_by_review_without_charging_for_unused_embeddings(self):
+        for method in ("bm25_reranker", "bm25_reranker_grep", "openai_embeddings_reranker", "openai_embeddings_reranker_grep"):
+            called = []
+            def prices(models):
+                called.extend(models)
+                return [m for m in models if m == "gpt-5.2"]
+            out = recipe.compile(self.a_recipe(bench_options={"retrieval": method}, max_usd=1), unpriced=prices)
+            self.assertIn("gpt-5.2", called)
+            self.assertEqual("text-embedding-3-large" in called, method.startswith("openai"))
+            self.assertTrue(any("price for gpt-5.2" in e["message"] for e in out["errors"]))
+            routed = recipe.compile(self.a_recipe(bench_options={"retrieval": method}, provider="openrouter"))
+            self.assertEqual(any("OpenAI provider" in e["message"] for e in routed["errors"]), method.startswith("openai"))
 
 
 class OtherBenchmarks(unittest.TestCase):
