@@ -181,7 +181,7 @@ class Door(unittest.TestCase):
             said.append((args, dict(env or {})))
             out = "127.0.0.1:5555\n" if args[:1] == ["port"] else '{"event": "listening"}'
             return subprocess.CompletedProcess(args, 0, out, "")
-        with mock.patch.object(container, "_docker", side_effect=docker), mock.patch.object(container, "_rootless", None):
+        with mock.patch.object(container, "_docker", side_effect=docker), mock.patch.object(container, "_security", None):
             u = container.Unit("job", "u0001", tempfile.mkdtemp(), image="img", app="/app", base="https://x/v1", key="k",
                                doors=[("mcp-1-tools", 9000, "/tmp/d/s")]).start()
         runs = [(a, e) for a, e in said if a[:1] == ["run"]]

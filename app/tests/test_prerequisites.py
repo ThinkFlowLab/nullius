@@ -24,6 +24,12 @@ class Here(unittest.TestCase):
         got = by_name(prerequisites.check_here(["docker"], docker=lambda: None))
         self.assertEqual(got["docker"]["state"], "ok")
 
+    def test_the_standard_s_docker_row_says_its_containers_run_outside_a_userns_remap(self):
+        for standard, remap, said in ((True, True, prerequisites.REMAPPED), (True, False, "the engine answers"),
+                                      (False, True, "the engine answers")):     # Harbor's containers keep the remap
+            got = by_name(prerequisites.check_here(["docker"], standard=standard, docker=lambda: None, remap=lambda: remap))
+            self.assertEqual((got["docker"]["state"], got["docker"]["detail"]), ("ok", said))
+
     def test_uv_harbor_and_a_setup_s_programs_are_looked_for_on_path(self):
         have = {"uvx", "srt"}
         rows = by_name(prerequisites.check_here(["uv", "harbor"], SETUP, which=lambda p: p in have, docker=lambda: None))
@@ -79,6 +85,14 @@ class OnAHost(unittest.TestCase):
         self.assertEqual(sorted(asked["programs"]), ["bwrap", "git", "python3", "srt"])
         self.assertEqual((rows["python3"]["state"], rows["git"]["state"], rows["setup:sandbox"]["state"]), ("ok", "missing", "missing"))
         self.assertEqual(prerequisites.check_host(self.HOST, ["docker"], test=self.probe())[1]["state"], "ok")
+
+    def test_a_host_s_docker_with_userns_remap_is_said_for_the_standard_alone(self):
+        remapped = self.probe(docker_userns=True)
+        rows = by_name(prerequisites.check_host(self.HOST, ["docker"], standard=True, test=remapped))
+        self.assertEqual((rows["docker"]["state"], rows["docker"]["detail"]), ("ok", prerequisites.REMAPPED))
+        self.assertEqual(by_name(prerequisites.check_host(self.HOST, ["docker"], test=remapped))["docker"]["detail"], "the engine answers")
+        self.assertEqual(by_name(prerequisites.check_host(self.HOST, ["docker"], standard=True, test=self.probe()))["docker"]["detail"],
+                         "the engine answers")
 
 
 class OwnImage(unittest.TestCase):

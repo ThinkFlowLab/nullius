@@ -46,6 +46,8 @@ Checked on each machine when Review opens, on *Check again*, and as the run star
 | A benchmark option's machine setup | Its programs | The chosen value; the install commands are shown |
 | `harbor` on PATH | `command -v` | A Harbor recipe without a pin |
 
+For the standard, the Docker row says when the engine has `userns-remap`, which [the standard](standard.md)'s containers run outside of.
+
 ### Which providers
 
 A provider is *set* when Settings holds `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or `MODEL_API_URL`, for both runners.
