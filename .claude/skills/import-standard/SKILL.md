@@ -136,8 +136,11 @@ never a second key. Preserve both routes when it already runs through Harbor.
 ## 2. The ports - the decision that matters most
 
 - **A benchmark needs the fewest ports that are true of it.** Work done in
-  files: `agent.workspace/v1`. An environment of tools: serve them as an MCP
-  server from the driver's `setup` and need `agent.tools/v1`. A user who
+  files: `agent.workspace/v1`. Search and source retrieval with the agent's
+  own tools: `agent.search/v1`; the public web also needs the environment's
+  `network` (`docs/standard.md`, "Public web requirements"). An environment
+  of tools: serve them as an MCP server from the driver's `setup` and need
+  `agent.tools/v1`. A user who
   speaks more than once: `agent.conversation/v1` and a `turn` in the driver;
   a user a model plays: its model in `simulator`, asked through the relay from
   `turn` (`docs/standard.md`, step 4 of "A benchmark"). A leaderboard whose
@@ -251,10 +254,15 @@ prints the writable folder under the active user catalogue. Work there, then:
   runtime): `environments`, one Dockerfile each in the benchmark's folder, a
   layer on the base (no `FROM`, `COPY` only of its listed `files`), the
   unit's `setup` naming it (`"environment"`) or its dataset giving a default;
-  a licence is a `needs_secrets` entry with `to: agent` or `to: driver` and a
-  `kind` - `value` (a key), `file` (mounted at its `path`) or `server` (the
-  one `host:port` the agent may reach) - never a file in the image; the user
-  sets it on the benchmark's page (`docs/standard.md`, "Per-task environments");
+  a required credential (a dataset token or tool licence) is a `needs_secrets`
+  entry with `to: agent` or `to: driver` and a `kind` - `value` (a key or token),
+  `file` (mounted at its `path`) or `server` (the one `host:port` the agent
+  may reach) - never a file in the image; a Hugging Face token says
+  `"provider": "huggingface"` (a `value` to the driver, set in Settings → Data
+  providers), other credentials are set in Settings → Custom keys
+  (`docs/standard.md`, "Per-task environments");
+- data that may not be redistributed (a gated dataset):
+  `units.redistribute: false`, so `cli prove` records no unit id;
 - tasks that are containers (each its own Dockerfile and `FROM`, the task
   the container's state): one environment with `"image": "own"`; `setup`
   names the unit's `image` (`build`, a folder of the upstream, or `pull` by
@@ -300,8 +308,8 @@ prints the writable folder under the active user catalogue. Work there, then:
 - `install` pinned (`npm` `name@version`, `pip` `name==version`);
 - `start.acp` with `{install}` or `{here}`: the agent's own ACP, or a
   maintained adapter (the vendor's first); an agent without either, its own
-  non-interactive command as a `start.command` carrying `{prompt}` (task and
-  workspace only). Never an agent loop of ours;
+  non-interactive command as a `start.command` carrying `{prompt}` (task,
+  workspace and search only). Never an agent loop of ours;
 - `model.env` / `model.files` with `{base_url}`, `{key}`, `{model}`, `{home}`
   so its calls reach the relay. Prove it: after a trial,
   `agent/calls.jsonl` holds its calls. Empty means it went around the relay -

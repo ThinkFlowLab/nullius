@@ -7,9 +7,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import socket
+import socketserver
 import stat
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 import urllib.error
@@ -45,6 +48,19 @@ class ArgvTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))
+
+    def test_agent_home_does_not_replace_host_docker_context(self):
+        with mock.patch.dict(os.environ, {"HOME": "/host-home", "PATH": "/bin"}, clear=True):
+            env = container.client_env({"HOME": "/trial-home", "AGENT_TOKEN": "synthetic"})
+        self.assertEqual(env["HOME"], "/trial-home")
+        self.assertEqual(env["DOCKER_CONFIG"], "/host-home/.docker")
+        self.assertEqual(env["AGENT_TOKEN"], "synthetic")
+
+    def test_agent_home_preserves_explicit_docker_configuration(self):
+        with mock.patch.dict(os.environ, {"HOME": "/host-home", "DOCKER_CONFIG": "/custom-docker", "DOCKER_CONTEXT": "desktop-linux"}, clear=True):
+            env = container.client_env({"HOME": "/trial-home"})
+        self.assertEqual(env["DOCKER_CONFIG"], "/custom-docker")
+        self.assertEqual(env["DOCKER_CONTEXT"], "desktop-linux")
 
     def test_mounts_each_folder_once_at_its_own_path(self):
         ws, home, app = (os.path.join(self.tmp, n) for n in ("ws", "home", "app"))
@@ -136,12 +152,12 @@ class ArgvTest(unittest.TestCase):
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Ok)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.shutdown)
-        with mock.patch.object(container, "bridge_gateway", return_value="127.0.0.2"):  # a second loopback address stands in for it
+        with mock.patch.object(container, "bridge_gateway", return_value="127.0.0.1"):  # a separate loopback port stands in for the bridge
             door = container.Loopback(f"http://localhost:{srv.server_address[1]}/v1").start()
         self.addCleanup(door.stop)
         port = int(door.base.rsplit(":", 1)[1].split("/")[0])
-        self.assertEqual(door.hosts, {"host.docker.internal": "127.0.0.2"})
-        self.assertEqual(urllib.request.urlopen(f"http://127.0.0.2:{port}/v1", timeout=10).read(), b"ok")
+        self.assertEqual(door.hosts, {"host.docker.internal": "127.0.0.1"})
+        self.assertEqual(urllib.request.urlopen(f"http://127.0.0.1:{port}/v1", timeout=10).read(), b"ok")
 
     def test_wrap_passes_values_in_the_docker_programs_environment_and_leaves_host_paths_out(self):
         u = container.Unit("job one", "u0002", os.path.join(self.tmp, "rec"), image="img", app="/app", base="b", key="sk-real")
@@ -229,6 +245,66 @@ class ArgvTest(unittest.TestCase):
         from unittest import mock
         with mock.patch.object(container, "DOCKER", "nullius-no-such-docker"):
             self.assertEqual(container.unusable(), "docker is not installed on this machine")
+
+
+class MacDoorTest(unittest.TestCase):
+    """macOS: a door is a loopback bridge here, its nonce a key file given to
+    the forwarder. Needs no docker."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))
+
+    def test_the_bridge_serves_a_connection_only_after_the_nonce_line(self):
+        short = tempfile.TemporaryDirectory(prefix="nb-", dir="/tmp")       # a socket's path has a length limit
+        self.addCleanup(short.cleanup)
+        path, accepted, got = os.path.join(short.name, "s"), [], []
+
+        class Echo(socketserver.BaseRequestHandler):
+            def handle(self):
+                accepted.append(1)
+                while data := self.request.recv(64):
+                    got.append(data)
+                    self.request.sendall(data)
+        echo = socketserver.ThreadingUnixStreamServer(path, Echo)
+        echo.daemon_threads = True
+        threading.Thread(target=echo.serve_forever, daemon=True).start()
+        self.addCleanup(echo.server_close)
+        self.addCleanup(echo.shutdown)
+        seen = {}
+
+        def docker(args, env=None, **_):
+            if args[0] == "run":                 # the forwarder: its nonce as the key file it mounts
+                src = args[args.index("--mount") + 1].split(",")[1].removeprefix("source=")
+                with open(src) as f:
+                    seen.update(path=src, nonce=f.read(), mode=stat.S_IMODE(os.stat(src).st_mode), argv=args)
+            return subprocess.CompletedProcess(args, 0, "", "")
+        u = container.Unit("job", "u0000", os.path.join(self.tmp, "rec"), image="img", app="/app", base="b", key="k")
+        with mock.patch.object(container.platform, "system", return_value="Darwin"), \
+                mock.patch.object(container, "_docker", mock.Mock(side_effect=docker)) as calls, \
+                mock.patch.object(container.Unit, "_wait"):
+            u._door(1, "web-search", 9001, path)
+            nonce, port = seen["nonce"], u.socket_bridges[0].server_address[1]
+            a = seen["argv"]
+            self.assertEqual(a[a.index("--mount") + 1], f"type=bind,source={seen['path']},target={container.FORWARD_NONCE_IN},readonly")
+            self.assertEqual(a[-2:], ["--nonce-file", container.FORWARD_NONCE_IN])
+            self.assertEqual((len(nonce), seen["mode"]), (64, 0o600))
+            self.assertEqual(os.path.dirname(os.path.dirname(seen["path"])), container.key_root())
+            self.assertFalse(os.path.exists(seen["path"]))                   # gone once the forwarder listens
+            self.assertNotIn(nonce, repr(calls.call_args_list))              # no argument, no variable
+            with socket.create_connection(("127.0.0.1", port), timeout=10) as c:
+                c.sendall(b"0" * 64 + b"\n")
+                self.assertEqual(c.recv(64), b"")
+            self.assertEqual((accepted, got), ([], []))                      # nothing reached the socket
+            with socket.create_connection(("127.0.0.1", port), timeout=10) as c:
+                c.sendall((nonce + "\n").encode() + b"ping")
+                back = b""
+                while len(back) < 4 and (chunk := c.recv(64)):
+                    back += chunk
+            self.assertEqual(back, b"ping")
+            u.stop()
+        self.assertEqual(u.socket_bridges, [])
 
 
 def _ready() -> str:

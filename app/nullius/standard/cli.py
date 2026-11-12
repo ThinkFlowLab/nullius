@@ -16,8 +16,8 @@
 An agent runs commands as you on the local backend, which is not a sandbox:
 an agent's run or conformance check there is refused without ``--unsandboxed``.
 ``--backend docker`` runs each unit's agent or capability in a container whose
-only way out is the unit's relay (``standard/container.py``), and needs no
-such yes.
+only way out is the unit's relay, or a public web proxy when its environment
+declares ``network`` (``standard/container.py``), and needs no such yes.
 A benchmark's control (``nop``, ``oracle``: its ``controls``) runs no agent
 and calls no model - only a judged benchmark's judge - so it asks for neither.
 ``prove`` runs a benchmark's controls and checks its units and that nothing

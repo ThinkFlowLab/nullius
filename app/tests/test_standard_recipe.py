@@ -385,7 +385,7 @@ class Conformance(unittest.TestCase):
             got = recipe.conformance("agent", "fake", model="gpt-5-mini", provider="openai", unsandboxed=True, stamp="2026-10-10__12-00-00")
         self.assertEqual(got["errors"], [])
         self.assertEqual([j["name"] for j in got["jobs"]],
-                         [conform.job_name("2026-10-10__12-00-00", k, "fake") for k in ("agent-task-v1", "agent-workspace-v1", "agent-tools-v1", "agent-conversation-v1")])   # an ACP agent takes every kit
+                         [conform.job_name("2026-10-10__12-00-00", k, "fake") for k in ("agent-task-v1", "agent-workspace-v1", "agent-tools-v1", "agent-conversation-v1", "agent-search-v1")])   # an ACP agent takes every kit
         self.assertIn("conform fake --model gpt-5-mini --provider openai --stamp 2026-10-10__12-00-00 --unsandboxed --from-run", got["script"])
 
     def test_docker_conformance_does_not_grant_local_permissions(self):

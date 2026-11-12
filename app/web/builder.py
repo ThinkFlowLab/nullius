@@ -201,13 +201,17 @@ def new_run_harbor_agents():
 
 def _licence_states() -> dict:
     """{benchmark: {name: {set, on, expires, expired}}} for each standard
-    benchmark whose environments need licences: what its store holds."""
+    benchmark whose environments need licences: what is held of each name
+    they declare, a data provider's token in that provider's store."""
     from nullius import secrets
     from nullius.standard import definitions
-    out = {}
+    out: dict = {}
     for b in definitions.load("benchmark", every=True)[0]:
-        if definitions.secrets_of(b) and b["key"] not in out:
-            out[b["key"]] = {n: {k: s[k] for k in ("set", "on", "expires", "expired")} for n, s in secrets.status(b["key"]).items()}
+        for s in definitions.secrets_of(b):
+            held = out.setdefault(b["key"], {})
+            got = secrets.state(b["key"], s["name"], s.get("provider") or "")
+            if got and s["name"] not in held:
+                held[s["name"]] = {k: got[k] for k in ("set", "on", "expires", "expired")}
     return out
 
 

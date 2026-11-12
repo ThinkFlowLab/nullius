@@ -231,8 +231,8 @@ Twelve classes. The four marked **yes** under Infrastructure leave the adjusted 
 | `patch_not_applied` | Patch did not apply | no | Malformed context lines, or edits against the wrong revision. |
 | `no_patch` | No patch produced | no | Finished without changing anything. |
 | `agent_error` | Agent error | no | Timed out, filled its context, truncated its output, refused, exited non-zero, or reached its own spending cap. A result, counted against the agent. |
-| `rate_limited` | Rate limited | yes | An HTTP 429 ended the trial. |
-| `api_error` | API error | yes | Any other provider failure: overloaded, unreachable, out of quota, key rejected. |
+| `rate_limited` | Rate limited | yes | An HTTP 429 ended the trial. A standard unit that passed keeps its pass. |
+| `api_error` | API error | yes | Any other provider failure: overloaded, unreachable, out of quota, key rejected. A standard unit that passed keeps its pass. |
 | `setup_error` | Setup error | yes | The environment or image never came up, or the unit was not run for want of a secret or docker it needs, so the agent never ran. |
 | `spending_cap` | Spending cap | yes | The run reached its spending cap and its relay refused a call the unit needed. No attempt was had. |
 | `unknown` | Unknown | no | No verdict, or an exception on neither list. Counted, charged to nobody; the trial page shows the recorded type. |

@@ -1,5 +1,5 @@
 // The Sandbox section: docker's state, asked once when the section is first shown;
-// the Docker Hub login (its username only comes back); the images Nullius fetched, per benchmark.
+// the images Nullius fetched, per benchmark.
 (() => {
   const section = document.getElementById('sandbox');
   if (!section) return;
@@ -13,13 +13,6 @@
       const j = await r.json();
       return j.ok ? j : {ok: false, error: j.error || (j.failed && j.failed.length ? j.failed.length + ' still in use by a container' : 'HTTP ' + r.status)};
     } catch (err) { return {ok: false, error: String(err)}; }
-  };
-
-  const showUser = user => {
-    $('[data-hub-user]').hidden = !user;
-    $('[data-hub-name]').textContent = user || '';
-    const form = $('[data-hub-login]'); if (form) form.hidden = !!user;
-    const none = $('[data-hub-none]'); if (none) none.hidden = !!user;
   };
 
   const showImages = groups => {
@@ -54,27 +47,9 @@
     const state = $('[data-docker-state]');
     state.textContent = j.docker.ok ? '✓ ' + j.docker.version : '✕ ' + j.docker.error;
     state.className = 'st-row-value ' + (j.docker.ok ? 'ok' : 'bad');
-    $('[data-hub]').hidden = !j.docker.ok;
     $('[data-images]').hidden = !j.docker.ok;
-    if (j.docker.ok) { showUser(j.user); showImages(j.images || []); }
+    if (j.docker.ok) showImages(j.images || []);
   };
-
-  const form = $('[data-hub-login]');
-  if (form) form.addEventListener('submit', async e => {
-    e.preventDefault();
-    const f = new FormData(form), button = form.querySelector('[type=submit]');
-    button.disabled = true;
-    const r = await post(section.dataset.login, {username: f.get('username'), token: f.get('token')});
-    form.querySelector('[name=token]').value = ''; button.disabled = false;
-    tell(r.ok ? 'Logged in to Docker Hub' : r.error, !r.ok);
-    if (r.ok) showUser(r.user);
-  });
-  const out = $('[data-hub-logout]');
-  if (out) out.addEventListener('click', async () => {
-    const r = await post(section.dataset.logout, {});
-    tell(r.ok ? 'Logged out of Docker Hub' : r.error, !r.ok);
-    if (r.ok) showUser(null);
-  });
 
   // Asked the first time the section is shown, not on every visit to Settings.
   const ask = () => { if (!asked && !section.hidden) load(); };

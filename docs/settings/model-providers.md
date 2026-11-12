@@ -51,8 +51,8 @@ your existing `settings.json` ([location and precedence](README.md#save)).
 
     The judges.
 
-- [Agent keys](agent-keys.md)
+- [Custom keys](agent-keys.md)
 
-    An agent's vendor.
+    Agent and benchmark credentials.
 
 </div>

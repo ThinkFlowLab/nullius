@@ -1,17 +1,19 @@
 # Settings
 
-Configure model providers, judges, agent keys, run hosts and Docker. Existing
-results open without credentials. Changes save automatically.
+Configure model and data providers, judges, custom keys, run hosts and Docker.
+Existing results open without credentials. Model provider, agent key and host
+changes save automatically; data providers and benchmark credentials use **Save**.
 
 | Page | Sets |
 | --- | --- |
 | [Model providers](model-providers.md) | A run's key or endpoint |
 | [System One provider](system-one.md) | The System One judgement |
 | [LLM judge provider](llm-judge.md) | The second judge |
-| [Agent keys](agent-keys.md) | A Harbor agent's vendor credentials |
+| [Custom keys](agent-keys.md) | Agent credentials, dataset keys and benchmark tool licences |
 | [Model prices](model-prices.md) | What a run's cost is estimated from |
 | [Run hosts](run-hosts.md) | SSH machines |
-| [Sandbox](sandbox.md) | Docker: its Docker Hub login and the images runs keep |
+| [Data providers](data-providers.md) | Hugging Face and Docker Hub connections |
+| [Sandbox](sandbox.md) | Docker and the images runs keep |
 | [General](other.md) | Tour and checklist; start-up options remain in the environment |
 
 ## Variables
@@ -24,14 +26,14 @@ results open without credentials. Changes save automatically.
 | `ANTHROPIC_API_KEY` | Standard runs on Anthropic; the relay alone holds it |
 | `SYSTEM_ONE_PROVIDER`, `SYSTEM_ONE_MODEL`, `TYPESAFE_API_KEY` | [System One](system-one.md) |
 | `LLM_JUDGE_PROVIDER`, `LLM_JUDGE_MODEL` | [LLM judge](llm-judge.md) |
-| `AGENT_KEYS` | Agent key names, one line each; Harbor runs only |
+| `AGENT_KEYS` | Comma-separated agent key names; Harbor runs only |
 | `HOSTS` | The run hosts |
 
 | Rule | |
 | --- | --- |
 | Offered | Only the providers set here ([the rule](../builder.md#which-providers)) |
-| Sent | A run gets its provider's key and endpoint, no other secret |
-| Licences | Set on the benchmark's page (*Licences*), kept under the configuration directory's `secrets/<benchmark>/` ([per-task environments](../standard.md#per-task-environments)); a declared name migrated into settings: *Move it here* |
+| Model credentials | A run gets its selected provider's key and endpoint |
+| Custom keys | Agent keys go to Harbor runs; benchmark credentials only to their declared driver or agent ([details](agent-keys.md)) |
 | GitHub | No token; Git uses this machine's credentials |
 
 ## Start-up options
@@ -58,7 +60,7 @@ and job roots also have command-line options. The app does not load `app/.env`.
 | Edited by hand | Read on the next page, no restart |
 | Precedence | The process environment wins; its row is read-only |
 | Keys | No provider-specific length check; values must be single-line and contain no spaces. Agent key names use environment-variable syntax, without a length limit |
-| Secrets | Shown as `********`; Replace or Remove |
+| Secrets | Provider values are masked; custom-key rows show their saved status, never the value |
 | Guards | Its own address in the Host header, loopback browser, same origin, form token |
 | Validation | One bad value, nothing written |
 | Code | `app/nullius/settings.py`; `app/.env.example` documents variable names for scripts and migration |
@@ -72,7 +74,8 @@ directory and installation:
 | Stores | Default |
 | --- | --- |
 | Saved settings | `~/.config/nullius/settings.json` |
-| Benchmark licences | `~/.config/nullius/secrets/<benchmark>/` |
+| Benchmark credentials | `~/.config/nullius/secrets/<benchmark>/` |
+| Hugging Face token | `~/.config/nullius/secrets/data-provider-huggingface/` |
 | Model prices | `~/.config/nullius/prices.json` |
 | User catalogue | `~/.local/share/nullius/catalogue/` |
 | Workspaces | `~/.local/share/nullius/workspaces/` |
@@ -107,7 +110,7 @@ nullius migrate --from /path/to/old-checkout --apply
 | Settings | Copies `app/.env`; it is never loaded automatically |
 | Workspaces | Preserves an explicit `WORKSPACES_DIR`; otherwise copies the checkout's workspaces |
 | Runs | Stay at their original paths; keep those directories available |
-| Licences | Include with `--secrets /path/to/old/secrets` |
+| Benchmark credentials | Include with `--secrets /path/to/old/secrets` |
 | Linked folders | Selected storage roots can point to another disk; links inside copied contents are refused |
 | Conflicts | Differing destination files or folder contents stop the copy |
 | Catalogue | User copies override bundled updates; **Use bundled entry** on the entry's page restores the bundle |

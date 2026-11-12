@@ -106,13 +106,28 @@ class CitationSeal(PageCase):
 
 
 class BenchmarksList(PageCase):
+    def test_overlapping_datasets_use_the_distinct_headline_count(self):
+        datasets = [catalog.Dataset(key=f"overlap-{n}", title=f"Subset {n}", benchmark="overlap",
+                                    tasks=n, source="Hugging Face") for n in (165, 53, 86, 26)]
+        benchmark = catalog.Benchmark(key="overlap", title="Overlap", category="QA", harness=["harbor"],
+                                      task_count=165, datasets=[d.key for d in datasets])
+        cat = catalog.Catalog(benchmarks=[benchmark], datasets=datasets)
+        with patch.object(web.shared, "_catalog_cached", return_value=cat):
+            self.html = self.get("/benchmarks")
+            self.assertIn("165 tasks", visible(self.card("overlap")))
+            page = self.page("overlap")
+            self.assertIn("Tasks 165", page)
+            self.assertNotIn("26–165", page)
+            for n in (53, 86, 26):
+                self.assertIn(f"Tasks {n}", page)
+
     def test_every_listed_benchmark_is_a_card_opening_its_page(self):
         cat = catalog.load()
         keys = re.findall(r'<a class="bench-card" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
-        self.assertEqual(len(keys), 7)
+        self.assertEqual(len(keys), 8)
         # two shelves, the official benchmarks then the experiments; a shelf with nothing on it is not shown
-        official = self.html[self.html.index('data-shelf="official"'):]
+        official = self.html[self.html.index('data-shelf="official"'):].split('</section>', 1)[0]
         for b in cat.listed_benchmarks:
             with self.subTest(b.key):
                 self.assertEqual('/benchmarks/%s"' % b.key in official, b.origin == "official")
@@ -247,6 +262,16 @@ class DatasetsOnTheirPage(PageCase):
         self.assertIn("Nullius GitHub sierra-research/tau2-bench v1.0.1 · fc0055d", text)   # the standard reads the upstream's release
         self.assertIn('href="https://github.com/sierra-research/tau2-bench/tree/fc0055dc4e0a316c3f83133267fbd6faaa770992"', html)
         self.assertNotIn("harbor datasets download", html)                                   # nothing for a person to run
+
+    def test_a_dataset_the_driver_downloads_names_it_not_the_scorer(self):
+        text = self.page("gaia")
+        self.assertEqual(text.count("Nullius Hugging Face gaia-benchmark/GAIA 682dd72"), 4)   # data-source.json, not the leaderboard Space
+        self.assertNotIn("Repository https://huggingface.co/spaces/", text)
+
+    def test_environments_add_no_section_to_a_benchmark_page(self):
+        for key in ("gaia", "terminal-bench"):
+            with self.subTest(key):
+                self.assertNotIn("Environment requirements", self.page(key))
 
 
 class SetupsOnTheirPage(PageCase):

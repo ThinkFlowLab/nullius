@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from nullius.standard import definitions, install, match, recipe, run
@@ -157,11 +158,13 @@ class SetupRun(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.up.shutdown()
+        cls.up.server_close()
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self._home = install.HOME
         install.HOME = os.path.join(self.tmp, "home")
+        self.enterContext(patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))   # a unit's relay writes its key file there
         Echo.silent = False
         self.b = bench(self.tmp)
 
@@ -169,11 +172,11 @@ class SetupRun(unittest.TestCase):
         install.HOME = self._home
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def go(self, which, model):
+    def go(self, which, model, **kwargs):
         o, why = definitions.setup(self.b, which, model, "custom")
         assert o, why
         return run.run(self.b, o, model=model, provider="custom", jobs_root=os.path.join(self.tmp, "jobs"),
-                       concurrency=2, env=self.env, say=lambda s: None)
+                       concurrency=2, env=self.env, say=lambda s: None, **kwargs)
 
     def trials(self, job_dir):
         out = {}
@@ -189,6 +192,8 @@ class SetupRun(unittest.TestCase):
         for t in os.listdir(job_dir):
             d = os.path.join(job_dir, t, ".work", "relay")
             for n in os.listdir(d) if os.path.isdir(d) else []:
+                if not n.endswith(".jsonl"):
+                    continue
                 with open(os.path.join(d, n)) as f:
                     got += [json.loads(x) for x in f if x.strip()]
         return got
@@ -220,10 +225,65 @@ class SetupRun(unittest.TestCase):
         self.assertEqual(r["exception_info"]["exception_type"], "OutputLengthExceededError")
         self.assertIn("thinker returned no text (3 of its 3 tokens were reasoning)", r["exception_info"]["exception_message"])
 
-    def test_a_setup_runs_on_local_processes_only(self):
+    def test_a_docker_setup_still_requires_a_working_daemon(self):
         o, _ = definitions.setup(self.b, "original")
-        with self.assertRaisesRegex(run.Refused, "local processes"):
-            run.Run(self.b, o, model="paper-1", provider="custom", jobs_root=self.tmp, env=self.env, backend="docker")
+        with patch("nullius.standard.container.unusable", return_value="daemon unavailable"):
+            with self.assertRaisesRegex(run.Refused, "daemon unavailable"):
+                run.Run(self.b, o, model="paper-1", provider="custom", jobs_root=self.tmp, env=self.env, backend="docker")
+
+    def test_docker_setup_runs_driver_and_linux_dependencies_with_scoped_credentials(self):
+        from tests import docker_tier
+        from nullius.standard import container
+        why = docker_tier.why_not()
+        if why:
+            self.skipTest(why)
+        here = self.b["_here"]
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write("import os, packaging\nassert os.path.isfile('/.dockerenv')\n"
+                    "assert packaging.__version__ == '24.2'\n"
+                    "assert os.environ['HF_TOKEN'] == 'fixture-gated-token'\n"
+                    "assert open(os.environ['TOOL_FILE']).read() == 'fixture licence'\n"
+                    "assert open(os.environ['NULLIUS_DATASET']).read() == 'fixture data'\n"
+                    "assert 'MODEL_API_KEY' not in os.environ\n" + DRIVER)
+        self.b["driver"] = {"command": ["{install}/.venv/bin/python", "{here}/driver.py"],
+                            "install": {"python": "3.12", "pip": ["packaging==24.2"]}}
+        data = os.path.join(here, "data.txt")
+        with open(data, "w") as f:
+            f.write("fixture data")
+        self.b["datasets"][0].update(path="data.txt", sha256=install.sha256_of(data), environment="data")
+        credential = os.path.join(self.tmp, "tool.lic")
+        with open(credential, "w") as f:
+            f.write("fixture licence")
+        self.b["environments"] = {"data": {"local_ok": True, "needs_secrets": [
+            {"name": "HF_TOKEN", "kind": "value", "to": "driver"},
+            {"name": "TOOL_LICENSE", "kind": "file", "to": "driver", "env": "TOOL_FILE"}]}}
+        held = run.Licences(self.b, {"HF_TOKEN": {"kind": "value", "value": "fixture-gated-token"},
+                                    "TOOL_LICENSE": {"kind": "file", "path": credential}})
+        job_dir = self.go("original", "paper-1", backend="docker", licences=held)
+        trials = self.trials(job_dir)
+        self.assertEqual(set(trials), {"c1", "c2"})
+        self.assertTrue(all(t.get("verifier_result", {}).get("rewards", {}).get("score") == 1 for t in trials.values()), trials)
+        self.assertEqual({c["model"] for c in self.calls(job_dir)}, {"paper-1"})
+        with open(os.path.join(job_dir, "config.json")) as f:
+            self.assertEqual(json.load(f)["standard"]["backend"], "docker")
+        left = container._docker(["ps", "-aq", "--filter", "label=nullius.job=" + os.path.basename(job_dir)])
+        self.assertFalse(left.stdout.strip())
+        Echo.silent = True
+        failed = self.go("model", "thinker", backend="docker", licences=held)
+        self.assertTrue(all(t["exception_info"]["exception_type"] == "OutputLengthExceededError"
+                            for t in self.trials(failed).values()))
+        left = container._docker(["ps", "-aq", "--filter", "label=nullius.job=" + os.path.basename(failed)])
+        self.assertFalse(left.stdout.strip())
+        # A driver that exits before listing units must also leave no container.
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write("raise RuntimeError('fixture startup failure')\n")
+        other, _ = definitions.setup(self.b, "original", "paper-1", "custom")
+        broken = run.Run(self.b, other, model="paper-1", provider="custom", jobs_root=self.tmp,
+                         env=self.env, backend="docker", licences=held, say=lambda s: None)
+        with self.assertRaisesRegex(Exception, "fixture startup failure"):
+            broken.start()
+        left = container._docker(["ps", "-aq", "--filter", "label=nullius.job=" + broken.name])
+        self.assertFalse(left.stdout.strip())
 
 
 class Recipe(unittest.TestCase):
@@ -311,9 +371,11 @@ class Recipe(unittest.TestCase):
     def test_old_model_participant_is_not_a_recipe_choice(self):
         self.assertTrue(self.compiled(others=["model"], model="vendor/model")["errors"])
 
-    def test_a_setup_is_refused_on_the_docker_backend(self):
-        msgs = [e["message"] for e in self.compiled(others=["original"], model="vendor/model", backend="docker")["errors"]]
-        self.assertTrue(any("choose local processes" in m for m in msgs), msgs)
+    def test_a_setup_compiles_for_docker_without_local_agent_consent(self):
+        out = self.compiled(others=["original"], model="vendor/model", backend="docker")
+        self.assertEqual(out["errors"], [])
+        self.assertIn("--backend docker", out["script"])
+        self.assertNotIn("--unsandboxed", out["script"])
 
 
 

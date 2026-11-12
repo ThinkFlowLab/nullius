@@ -26,6 +26,10 @@ A dataset's ``source`` is a short phrase (Harbor registry, Harbor hub,
 GitHub, …). Each benchmark carries a ``category`` (Coding, Terminal, Customer
 service, …) used as a tag and a filter.
 
+An optional ``task_count`` gives the number of distinct tasks when datasets
+overlap, such as a full split beside difficulty subsets. It controls the
+benchmark headline only; every dataset keeps its own count.
+
 Every entry says where it comes from (``origin``): ``official``, the
 publisher's own benchmark, run the way its publisher certifies, or
 ``experiment``, one taken from wherever it was found - its official source or
@@ -116,6 +120,8 @@ class Benchmark:
     citation: str = ""
     #: where that citation was taken from
     citation_source: str = ""
+    #: Distinct tasks across dataset views, when known; otherwise show their count summary.
+    task_count: int | None = None
 
     @property
     def label(self) -> str:
@@ -213,7 +219,10 @@ class Catalog:
     def tasks_of(self, b: "Benchmark") -> tuple:
         """Its tasks as a number and a label, for a card: ``("500", "tasks")``,
         ``("500", "tasks each")`` when its datasets agree, ``("10–89", "tasks")``
-        when they do not, ``("—", "tasks")`` when none is recorded."""
+        when they do not, ``("—", "tasks")`` when none is recorded.
+        An explicit distinct task count takes precedence over those summaries."""
+        if type(b.task_count) is int and b.task_count > 0:
+            return f"{b.task_count:,}", "tasks"
         counts = [d.tasks for d in self.datasets_of(b) if d.tasks]
         if not counts:
             return "—", "tasks"
@@ -387,6 +396,11 @@ def validate(cat: Catalog) -> list:
     for b in cat.benchmarks:
         if b.origin not in ORIGINS:
             bad.append(f"{b.key}: origin is official or experiment")
+        if b.task_count is not None:
+            if type(b.task_count) is not int or b.task_count < 1:
+                bad.append(f"{b.key}: task_count must be a positive integer")
+            elif any(d.tasks > b.task_count for d in cat.datasets_of(b)):
+                bad.append(f"{b.key}: task_count cannot be smaller than a dataset")
         if b.published and not (isinstance(b.published, dict) and isinstance(b.published.get("agent"), str) and b.published["agent"]
                                 and isinstance(b.published.get("says"), str) and b.published["says"]):
             bad.append(f"{b.key}: published is {{agent: a Harbor agent's name, says: why it is the published one}}")

@@ -48,7 +48,7 @@
       body.set('agent_key_name', current.get('agent_key_name') || '');
       body.set('agent_key_value', current.get('agent_key_value') || '');
       if (!body.get('agent_key_name') || !body.get('agent_key_value')) {
-        say('Enter both the agent key name and its value.', true);
+        say('Enter both the key name and its value.', true);
         return false;
       }
     }
@@ -112,7 +112,7 @@
   }
   async function flush() {
     if (pending) { const ok = await pending; return ok ? flush() : false; }
-    if (!changes(snapshot()).length) return true;
+    if (!changes(snapshot()).length) { say(''); return true; }
     pending = write();
     let ok;
     try { ok = await pending; } finally { pending = null; }
@@ -126,6 +126,7 @@
   const replacing = input => input.name?.startsWith('value:') && !input.hidden
     && input.closest('.st-field')?.querySelector('[data-replace]') ? input.closest('.st-field') : null;
   form.addEventListener('change', event => {
+    if (event.target.closest('[data-key-new]')) return; // Add/Cancel or leaving the key editor owns this draft.
     const field = replacing(event.target);
     if (!field) { void flush(); return; }
     setTimeout(() => {

@@ -14,3 +14,7 @@ The mark follows the existing Nullius circle-and-slash geometry; wordmark letter
 https://framerusercontent.com/images/aNFzSFxM4fjICmnibw7npfZjcQ.png.
 It identifies the provider in the catalogue and connection editor. It is a
 third-party brand asset, not a Nullius mark or part of Nullius's font licensing.
+
+`docker.svg` is the Docker mark from [Simple Icons](https://github.com/simple-icons/simple-icons/blob/develop/icons/docker.svg), distributed under CC0, rendered in Docker blue. The Docker trademark belongs to Docker, Inc. It identifies Docker Hub under Data providers.
+
+`huggingface.svg` is Hugging Face’s official mark, copied from https://huggingface.co/front/assets/huggingface_logo-noborder.svg. It identifies the data provider; its trademark belongs to Hugging Face.

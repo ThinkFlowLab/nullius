@@ -153,13 +153,13 @@ HOST_INSTALLERS = ("apt", "npm")
 # A benchmark's environment (``environments``): its name, what it may say, and where a secret it needs may go -
 # into the agent's container (``agent``) or the driver's process, which scores (``driver``).
 _ENV_KEY = re.compile(r"^[a-z][a-z0-9-]{0,29}$")
-ENV_FIELDS = ("summary", "dockerfile", "files", "needs_secrets", "local_ok", "image")
+ENV_FIELDS = ("summary", "dockerfile", "files", "needs_secrets", "local_ok", "image", "network")
 OWN_IMAGE = "own"                    # an environment whose units each bring their own image (``image``)
 SECRET_TO = ("agent", "driver")
 # A licence's shape (``kind``): a key the process gets as a variable, a file mounted read-only where the
 # software looks for it, or a licence server - the one address the agent's container may reach.
 SECRET_KINDS = ("value", "file", "server")
-SECRET_FIELDS = ("name", "to", "summary", "kind", "path", "env")
+SECRET_FIELDS = ("name", "to", "summary", "kind", "path", "env", "provider")
 _ABS = re.compile(r"^(?:/[A-Za-z0-9_@+-][A-Za-z0-9_.@+-]*)+$")
 _NOT_UNDER = ("/proc", "/sys", "/dev")       # where a licence file is never mounted: the kernel's own
 BASE_ENV = "base"                    # the name no environment may take: the base image itself
@@ -781,10 +781,11 @@ def _environments(envs, here: Optional[str]) -> List[str]:
     local_ok?}, or {summary, image: "own", needs_secrets?} for units that
     each bring their own image. ``dockerfile`` and each of ``files`` are paths in the
     benchmark's folder; ``needs_secrets`` is [{name, to, kind, ...}] - a
-    licence the user sets on the benchmark's page (``nullius.secrets``), its
+    credential the user sets in Settings → Data providers (one with ``provider``)
+    or Custom keys (``nullius.secrets``), its
     shape (:func:`_secrets`), and where it goes: ``agent``, into the agent's
     container, or ``driver``, into the driver's process, which scores. One
-    name is one kind in every environment that asks for it."""
+    name is one kind, and one source, in every environment that asks for it."""
     if envs is None:
         return []
     if not isinstance(envs, dict) or not envs:
@@ -831,25 +832,33 @@ def _environments(envs, here: Optional[str]) -> List[str]:
                 bad.append(f"{w}.dockerfile: {df} is not in the benchmark's folder")
         if "local_ok" in e and not isinstance(e["local_ok"], bool):
             bad.append(f"{w}.local_ok: true or false")
+        if "network" in e:
+            from . import network_requirements
+            bad += [f"{w}.{message}" for message in network_requirements.problems(e["network"])]
         bad += _secrets(w, e.get("needs_secrets"), bool(e.get("local_ok")), settings)
     kinds: Dict[str, set] = {}
+    sources: Dict[str, set] = {}
     for e in envs.values():
         for s in (e.get("needs_secrets") or []) if isinstance(e, dict) and isinstance(e.get("needs_secrets"), list) else []:
             if isinstance(s, dict) and isinstance(s.get("name"), str):
                 kinds.setdefault(s["name"], set()).add(s.get("kind") or "value")
+                sources.setdefault(s["name"], set()).add(str(s.get("provider") or "the benchmark"))
     bad += [f"environments: {n} is a {' and a '.join(sorted(k))} - one name, one kind, in every environment"
             for n, k in kinds.items() if len(k) > 1]
+    bad += [f"environments: {n} comes from {' and from '.join(sorted(k))} - one name, one source, in every environment"
+            for n, k in sources.items() if len(k) > 1]
     return bad
 
 
 def _secrets(w: str, secrets, local_ok: bool, settings) -> List[str]:
     """An environment's ``needs_secrets``: [{name, to, kind?, summary?,
-    path?, env?}]. ``kind`` (``value`` when unsaid): a ``value`` reaches its
+    path?, env?, provider?}]. ``kind`` (``value`` when unsaid): a ``value`` reaches its
     process as the variable ``name``; a ``file`` is mounted read-only at
     ``path`` in the agent's container, and ``env``, when said, names the
     variable that points to it - the only way a driver, or an agent on local
     processes, finds it; a ``server`` (``host:port``) is the variable
-    ``name``, and on docker the one address the agent's container may reach."""
+    ``name``, and on docker the one address the agent's container may reach.
+    ``provider`` (``huggingface``): a ``value`` to the ``driver``, from Settings → Data providers alone."""
     if secrets is None:
         return []
     if not isinstance(secrets, list):
@@ -872,6 +881,14 @@ def _secrets(w: str, secrets, local_ok: bool, settings) -> List[str]:
         if kind not in SECRET_KINDS:
             bad.append(f"{sw}.kind: one of {SECRET_KINDS}")
             continue
+        if "provider" in s:
+            from nullius.secrets import PROVIDERS          # the data providers Settings keeps a token for
+            if not isinstance(s["provider"], str) or s["provider"] not in PROVIDERS:
+                bad.append(f"{sw}.provider: one of {', '.join(PROVIDERS)}")
+            if to != "driver":
+                bad.append(f"{sw}.to: driver - a data provider's token never reaches an agent")
+            if kind != "value":
+                bad.append(f"{sw}.kind: value - a data provider's token is a key")
         p, v = s.get("path"), s.get("env")
         if kind != "file":
             if p is not None or v is not None:
@@ -922,8 +939,8 @@ def own_image(env_def: Optional[dict]) -> bool:
 
 def secrets_of(bench: dict) -> List[dict]:
     """Every licence the benchmark's environments need: {name, to, kind,
-    environment, summary, path?, env?}, once per environment that asks."""
-    return [dict({k: s[k] for k in ("path", "env") if k in s}, name=s["name"], to=s["to"], kind=s.get("kind") or "value",
+    environment, summary, path?, env?, provider?}, once per environment that asks."""
+    return [dict({k: s[k] for k in ("path", "env", "provider") if k in s}, name=s["name"], to=s["to"], kind=s.get("kind") or "value",
                  environment=n, summary=s.get("summary", ""))
             for n, e in (bench.get("environments") or {}).items() if isinstance(e, dict)
             for s in e.get("needs_secrets") or [] if isinstance(s, dict) and s.get("name")]
@@ -1236,6 +1253,8 @@ def problems(d: dict, kind: str) -> List[str]:
         u = d.get("units") or {}
         if not (isinstance(u.get("noun"), str) and isinstance(u.get("nouns"), str)):
             bad.append("units: {noun, nouns}")
+        if "redistribute" in u and not isinstance(u["redistribute"], bool):
+            bad.append("units.redistribute: false when the data may not be redistributed")
         lim = d.get("limits")
         if lim is not None:
             if not isinstance(lim, dict):
@@ -1287,9 +1306,9 @@ def problems(d: dict, kind: str) -> List[str]:
             bad += _command("start.command", st["command"])
             if not any("{prompt}" in w for w in st.get("command") or []):
                 bad.append("start.command: carries {prompt}")
-            extra = [p for p in d.get("offers") or [] if p not in ("agent.task/v1", "agent.workspace/v1")]
+            extra = [p for p in d.get("offers") or [] if p not in ("agent.task/v1", "agent.workspace/v1", "agent.search/v1")]
             if extra:
-                bad.append(f"offers: a command agent can offer only agent.task/v1 and agent.workspace/v1, not {extra}")
+                bad.append(f"offers: a command agent can offer only agent.task/v1, agent.workspace/v1 and agent.search/v1, not {extra}")
         bad += _ports("offers", d.get("offers") or [], "agent")
         only = d.get("only_for")
         if only is not None and (not isinstance(only, list) or not only or len(set(map(str, only))) != len(only)

@@ -2,14 +2,18 @@
 fit only on ports offered and proven."""
 from __future__ import annotations
 
+import argparse
+import contextlib
 import copy
+import io
 import json
 import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
-from nullius.standard import definitions, jsonl, match, ports
+from nullius.standard import cli, definitions, jsonl, match, ports
 from tests import APP
 
 BENCH = {
@@ -272,6 +276,16 @@ class Load(unittest.TestCase):
         for kind in definitions.KINDS:
             _, bad = definitions.load(kind, definitions.CATALOGUE)
             self.assertEqual(bad, [], kind)
+
+    def test_the_bundle_passes_nullius_standard_check(self):
+        """Every definition, kit, settings inventory and catalogue entry, under an empty profile."""
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {"NULLIUS_HOME": home}), \
+                contextlib.redirect_stdout(out):
+            os.environ.pop("NULLIUS_CATALOGUE", None)
+            code = cli.cmd_check(argparse.Namespace(path=None))
+        self.assertEqual(out.getvalue(), "ok\n")
+        self.assertEqual(code, 0)
 
 
 if __name__ == "__main__":

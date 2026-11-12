@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import os
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
-from nullius import execution, hosts, paths, prices, sandbox, settings
+from nullius import execution, hosts, paths, prices, sandbox, secrets, settings
 from nullius.standard import container
+from nullius.standard import recipe as standard_recipe
 from nullius.judge import client
 
 from .core import app
@@ -25,8 +26,21 @@ def settings_page():
     rows = settings.states(shared.ENV_FILE)
     withheld = set(execution.withheld())             # what a run never inherits, read or not
     groups = [(g, [r for r in rows if r["group"] == g]) for g in settings.GROUPS]
+    access = []
+    filed = settings.in_file(shared.ENV_FILE)
+    for benchmark in shared._catalog_cached().benchmarks:
+        if "standard" not in benchmark.harness:
+            continue
+        needs = {}
+        for environment in standard_recipe.licences_of(benchmark.key):
+            for secret in environment["needs"]:
+                if secret.get("provider"):                   # a data provider's token: Data providers alone
+                    continue
+                needs.setdefault(secret["name"], dict(secret, movable=secret["name"] in filed))
+        if needs:
+            access.append({"key": benchmark.key, "title": benchmark.title, "needs": list(needs.values())})
     # A written value that goes unseen is said rather than left silent: a key no setting reads.
-    return render_template("settings/settings.html", embedded=request.args.get("embedded") == "1", groups=groups, csrf=shared._csrf_token(), writable=_local_client(),
+    return render_template("settings/settings.html", embedded=request.args.get("embedded") == "1", groups=groups, benchmark_access=access, csrf=shared._csrf_token(), writable=_local_client(),
                            env_file=shared.ENV_FILE,
                            storage_paths=[("Settings", shared.ENV_FILE), ("User catalogue", paths.catalogue_dir()),
                                           ("Workspaces", paths.workspaces_dir()), ("Runs", paths.runs_dir()),
@@ -103,16 +117,41 @@ def settings_host_enrol():
 
 @app.route("/settings/sandbox")
 def settings_sandbox():
-    """The Sandbox section's state, asked when the section opens: docker, the
-    Docker Hub login (its username only) and the images Nullius fetched."""
+    """The Sandbox section's state, asked when the section opens: docker and
+    the images Nullius fetched."""
     state = sandbox.docker_state()
     if not state["ok"]:
-        return jsonify(docker=state, user=None, images=[])
+        return jsonify(docker=state, images=[])
     try:
         held = sandbox.images()
     except container.Unavailable as e:
         held, state = [], {"ok": False, "error": str(e)}
-    return jsonify(docker=state, user=sandbox.login_user(), images=held)
+    return jsonify(docker=state, images=held)
+
+
+@app.route("/settings/data-providers")
+def settings_data_providers():
+    """Connection metadata only; no credential is returned."""
+    return jsonify(huggingface=bool(secrets.status(secrets.HUGGINGFACE).get("HF_TOKEN", {}).get("set")),
+                   dockerhub=sandbox.login_user())
+
+
+@app.route("/settings/data-providers/huggingface", methods=["POST"])
+def settings_huggingface():
+    _sandbox_guard("Data providers are changed")
+    action = request.form.get("action", "save")
+    try:
+        if action == "remove":
+            secrets.delete(secrets.HUGGINGFACE, "HF_TOKEN")
+        elif action == "save":
+            secrets.set(secrets.HUGGINGFACE, "HF_TOKEN", request.form.get("token", ""))
+        else:
+            return jsonify(ok=False, error="Unknown action."), 400
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    except OSError:
+        return jsonify(ok=False, error="Could not update the credential store."), 500
+    return jsonify(ok=True)
 
 
 def _sandbox_guard(what):
@@ -226,7 +265,7 @@ def settings_save():
     new_value = (request.form.get("agent_key_value") or "").strip()
     if new_name or new_value:
         if not (new_name and new_value):
-            return _saved_response("An agent key needs its name and its value.", False, "#agent-keys")
+            return _saved_response("A custom key needs its name and its value.", False, "#custom-keys")
         if new_name not in keep:
             keep.append(new_name)
         changes[new_name] = new_value

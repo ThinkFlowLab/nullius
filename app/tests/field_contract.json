@@ -60,6 +60,7 @@
    "route_case",
    "routes",
    "scoring",
+   "task_count",
    "timeouts",
    "title",
    "upstream_limitations",

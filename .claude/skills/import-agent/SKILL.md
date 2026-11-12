@@ -105,7 +105,7 @@ link and the agent's own docs, find, in this order:
    pins the agent's core or takes a range.
 3. **Without ACP:** its own non-interactive command (a `run`, `exec` or
    `--print` mode that takes the task and exits). It can then offer only
-   `agent.task/v1` and `agent.workspace/v1`; say so.
+   `agent.task/v1`, `agent.workspace/v1` and `agent.search/v1`; say so.
 4. **Its model client:** which variables or config file set its endpoint,
    key and model; which APIs it speaks (`chat`, `responses`, `messages`).
 5. **Licence**, and whether it has a CLI of its own (for fidelity).

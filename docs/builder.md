@@ -22,17 +22,18 @@ Then [read its results](results.md).
 
 | Stage | Decides |
 | --- | --- |
-| Benchmark | A catalogue entry of either runner, and a version when it has several (`key@version`). A licence is set on the benchmark's page, never in Settings |
+| Benchmark | A catalogue entry of either runner, and a version when it has several (`key@version`) |
 | Runner | **Nullius**, [the standard](standard.md#from-the-app), or **Harbor** with its pin ([Which Harbor](#which-harbor)). A choice only when the benchmark runs on both; Nullius is preselected |
-| Dataset | One or more; each dataset with each agent is a job of its own. Each shows its proofs and the licences its units may need |
+| Dataset | One or more; each dataset with each agent is a job of its own. Each shows its proofs. A missing or expired credential is named once, linked to **Settings → Data providers** (Hugging Face) or **Custom keys** |
 | Agent (*Memory* on a memory benchmark) | Reference agents first, or **No agent · Original** for a direct-model benchmark. Memory benchmarks offer **Original memory** alongside compatible memory capabilities. Controls follow separately; each choice has its own settings tab |
 | Model | **Like the paper** keeps what the paper fixed: the model picker shows only documented paper models when the benchmark lists them (the filter applies to the selected agent or capability too), and the user simulator and judge are their official models. A benchmark that lists no paper models but has an official simulator or judge leaves the model to you. **Like the leaderboard**, on a benchmark that declares its leaderboard's rules, leaves the model to you and fixes what the leaderboard does: its user simulator and judge, the options it sets and at least its attempts per unit. **Any of your choice** opens the provider's full list and lets the simulator and judge be changed. Nothing fixed by the paper: the paper choice is disabled |
 | Limits | Task limit (empty is every task), a task-name glob, concurrency, retries, attempts per unit, timeouts in minutes. On the Nullius runner, a [spending cap](cli/run.md#a-spending-cap) for the run and one per unit |
 | Where | This machine, a Settings host, or several machines, one shard each, merged into one job. The backend: *local processes*, as you, with the explicit yes to running unsandboxed; or *Docker*. A benchmark option's machine setup is installed on a click (`sudo -n`), or its commands are given |
 | Review | One row per decision and the prerequisites. **Run** |
 
-!!! note "Units needing a missing licence are recorded as not run"
-    The Dataset stage says what a dataset *may* need; which units need it is the driver's answer at setup.
+Original setups run on local processes or in Docker; Docker changes isolation only.
+A unit whose credential is unset is **not run**; an unset credential the driver
+needs to list the units stops the run.
 
 ### Prerequisites
 
@@ -107,7 +108,7 @@ Harbor's tasks, run by Harbor's agents through the Harbor the recipe pins. What 
 | Dataset | Hub, registry, a local folder or generated tasks; one dataset per recipe |
 | Agent | The pinned Harbor's agents; custom agents as `module:Class`; the controls. *Common settings* apply to every agent; an agent's `--ak` options sit under its tab; *Extra parameters* override the agent, harness, environment or verifier |
 | Model | `<provider>/<model>` (a custom endpoint as `openai/`), with `LLM_API_KEY`, `OPENAI_API_KEY` and the provider's `*_BASE_URL`. The selected provider is kept; model IDs retain their vendor prefix |
-| Where | One machine. An agent's own vendor credentials come from [Agent keys](settings/agent-keys.md) |
+| Where | One machine. An agent's own vendor credentials come from [Custom keys](settings/agent-keys.md) |
 
 ### Which Harbor
 

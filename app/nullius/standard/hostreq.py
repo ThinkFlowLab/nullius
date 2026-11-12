@@ -1,7 +1,7 @@
 """A benchmark's host requirements (``host`` in its ``standard.json``): what
 the machine its driver runs on must have for some of its options - programs on
-PATH, installed by ``apt`` and ``npm`` - whatever the backend, since the driver
-runs on the machine, never in a container.
+PATH, installed by ``apt`` and ``npm``. Drivers for agent/capability runs stay
+on the machine; Docker Original setups install and check these in their image.
 
 Each requirement is checked by its programs (:func:`missing`) and installed by the commands
 :func:`install_lines` gives: shown to a person to run, or run for them on an

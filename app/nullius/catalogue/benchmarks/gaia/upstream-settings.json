@@ -1,0 +1,275 @@
+[
+  {
+    "entry": "GAIA dataset card",
+    "setting": "2023_all / validation",
+    "values": "metadata.parquet",
+    "default": "validation",
+    "nullius": "dataset:gaia-validation"
+  },
+  {
+    "entry": "GAIA dataset card",
+    "setting": "2023_level1 / validation",
+    "values": "metadata.level1.parquet",
+    "default": "validation",
+    "nullius": "dataset:gaia-validation-level1"
+  },
+  {
+    "entry": "GAIA dataset card",
+    "setting": "2023_level2 / validation",
+    "values": "metadata.level2.parquet",
+    "default": "validation",
+    "nullius": "dataset:gaia-validation-level2"
+  },
+  {
+    "entry": "GAIA dataset card",
+    "setting": "2023_level3 / validation",
+    "values": "metadata.level3.parquet",
+    "default": "validation",
+    "nullius": "dataset:gaia-validation-level3"
+  },
+  {
+    "entry": "GAIA dataset card",
+    "setting": "test split",
+    "values": "301 questions; answers withheld",
+    "default": "test",
+    "nullius": "not offered - reference answers are private and the local scorer cannot evaluate them"
+  },
+  {
+    "entry": "GAIA dataset card",
+    "setting": "revision",
+    "values": "immutable dataset revision",
+    "default": "682dd723ee1e1697e00360edccf2366dc8418dd9",
+    "nullius": "fixed:682dd723ee1e1697e00360edccf2366dc8418dd9 - pinned data and attachments"
+  },
+  {
+    "entry": "GAIA dataset card",
+    "setting": "loader",
+    "values": "Hugging Face datasets; Parquet metadata and relative attachment paths",
+    "default": "Parquet",
+    "nullius": "fixed:Hugging Face Parquet loader - reads the published split without a rewritten parser"
+  },
+  {
+    "entry": "content.py",
+    "setting": "formatting prompt",
+    "values": "SUBMISSION_TEXT first fenced block",
+    "default": "published prompt",
+    "nullius": "fixed:imported verbatim - official formatting instructions"
+  },
+  {
+    "entry": "scorer.py",
+    "setting": "answer type dispatch",
+    "values": "number, ordered list, normalized string",
+    "default": "ground truth determines type",
+    "nullius": "fixed:question_scorer - imported unchanged from pinned upstream"
+  },
+  {
+    "entry": "scorer.py",
+    "setting": "numeric normalization",
+    "values": "remove dollar sign, percent sign and commas; compare floats",
+    "default": "official implementation",
+    "nullius": "fixed:official normalization - no local scorer implementation"
+  },
+  {
+    "entry": "scorer.py",
+    "setting": "list separators and order",
+    "values": "comma or semicolon; compare elements in order",
+    "default": "comma and semicolon",
+    "nullius": "fixed:official ordered-list comparison - retain punctuation in string list elements"
+  },
+  {
+    "entry": "scorer.py",
+    "setting": "string normalization",
+    "values": "lowercase; remove whitespace and optionally punctuation",
+    "default": "remove_punct=True",
+    "nullius": "fixed:official normalization - called by question_scorer"
+  },
+  {
+    "entry": "paper section 4",
+    "setting": "no-tools API procedure",
+    "values": "GPT-4, GPT-4 Turbo",
+    "default": "published prefix then question",
+    "nullius": "setup:original"
+  },
+  {
+    "entry": "paper section 4",
+    "setting": "API repetitions",
+    "values": "3 runs; mean score",
+    "default": "3",
+    "nullius": "fixed:runner repeat control - choose three repeats to match the paper; this entry does not change the runner default"
+  },
+  {
+    "entry": "paper section 4",
+    "setting": "generation temperature",
+    "values": "not specified",
+    "default": "not specified",
+    "nullius": "option:temperature"
+  },
+  {
+    "entry": "paper section 4",
+    "setting": "ChatGPT plugins and Advanced Data Analysis",
+    "values": "manual choice of mode or up to three plugins for each question",
+    "default": "manual",
+    "nullius": "not offered - no API or stable per-question configuration published for the historical procedure"
+  },
+  {
+    "entry": "paper section 4",
+    "setting": "AutoGPT",
+    "values": "ed172dec1947466cc0942abf75bb77b027cd433d with GPT-4",
+    "default": "paper commit",
+    "nullius": "not offered - this import evaluates the chosen Nullius agent or direct model, not the historical AutoGPT stack"
+  },
+  {
+    "entry": "driver.py (Nullius)",
+    "setting": "final-answer extraction",
+    "values": "last literal FINAL ANSWER:; trim whitespace; fail absent/empty",
+    "default": "strict marker",
+    "nullius": "fixed:Nullius extraction - authorized adaptation around the unchanged scorer"
+  },
+  {
+    "entry": "driver.py (Nullius)",
+    "setting": "attachment staging",
+    "values": "agent workspace; original no-tools baseline has no attachment input",
+    "default": "unmodified file",
+    "nullius": "fixed:one question’s attachment only - keep answers and annotator metadata outside agent workspaces"
+  },
+  {
+    "entry": "driver.py (Nullius)",
+    "setting": "agent prompt role",
+    "values": "published prefix and question delivered together over ACP",
+    "default": "ACP user prompt",
+    "nullius": "fixed:agent protocol - agent system instructions stay its own"
+  },
+  {
+    "entry": "driver.py (Nullius)",
+    "setting": "HF_TOKEN",
+    "values": "driver-only credential",
+    "default": "Settings → Data providers → Hugging Face",
+    "nullius": "fixed:Settings → Data providers → Hugging Face - the driver alone receives it"
+  },
+  {
+    "entry": "driver.py (Nullius)",
+    "setting": "cache",
+    "values": "pinned Hugging Face artifacts under upstream/.gaia-cache",
+    "default": "shared driver cache",
+    "nullius": "fixed:shared pinned cache - outside agent workspace and catalogue payload"
+  },
+  {
+    "entry": "app.py",
+    "setting": "TOKEN",
+    "values": "Space service credential",
+    "default": "Space service credential",
+    "nullius": "not offered - the local driver uses its declared HF_TOKEN and never accesses internal repositories"
+  },
+  {
+    "entry": "app.py",
+    "setting": "OWNER",
+    "values": "gaia-benchmark",
+    "default": "gaia-benchmark",
+    "nullius": "fixed:gaia-benchmark - organisation constant"
+  },
+  {
+    "entry": "app.py",
+    "setting": "DATA_DATASET",
+    "values": "gaia-benchmark/GAIA",
+    "default": "gaia-benchmark/GAIA",
+    "nullius": "fixed:gaia-benchmark/GAIA - public gated dataset used by this import"
+  },
+  {
+    "entry": "app.py",
+    "setting": "INTERNAL_DATA_DATASET",
+    "values": "gaia-benchmark/GAIA_internal",
+    "default": "gaia-benchmark/GAIA_internal",
+    "nullius": "not offered - private reference answers"
+  },
+  {
+    "entry": "app.py",
+    "setting": "SUBMISSION_DATASET",
+    "values": "gaia-benchmark/submissions_internal",
+    "default": "gaia-benchmark/submissions_internal",
+    "nullius": "not offered - online publication is not part of a run"
+  },
+  {
+    "entry": "app.py",
+    "setting": "SUBMISSION_DATASET_PUBLIC",
+    "values": "gaia-benchmark/submissions_public",
+    "default": "gaia-benchmark/submissions_public",
+    "nullius": "not offered - online publication is not part of a run"
+  },
+  {
+    "entry": "app.py",
+    "setting": "CONTACT_DATASET",
+    "values": "gaia-benchmark/contact_info",
+    "default": "gaia-benchmark/contact_info",
+    "nullius": "not offered - online account records are not part of a run"
+  },
+  {
+    "entry": "app.py",
+    "setting": "RESULTS_DATASET",
+    "values": "gaia-benchmark/results_public",
+    "default": "gaia-benchmark/results_public",
+    "nullius": "not offered - online leaderboard display is not part of a run"
+  },
+  {
+    "entry": "app.py",
+    "setting": "LEADERBOARD_PATH",
+    "values": "gaia-benchmark/leaderboard",
+    "default": "gaia-benchmark/leaderboard",
+    "nullius": "not offered - online leaderboard display is not part of a run"
+  },
+  {
+    "entry": "app.py",
+    "setting": "YEAR_VERSION",
+    "values": "2023",
+    "default": "2023",
+    "nullius": "fixed:2023 - only published year"
+  },
+  {
+    "entry": "app.py",
+    "setting": "ref_scores_len",
+    "values": "validation 165; test 301",
+    "default": "validation 165; test 301",
+    "nullius": "fixed:validation 165; test 301 - published full-split counts"
+  },
+  {
+    "entry": "app.py",
+    "setting": "ref_level_len",
+    "values": "validation 53/86/26; test 93/159/49",
+    "default": "validation 53/86/26; test 93/159/49",
+    "nullius": "fixed:validation 53/86/26; test 93/159/49 - published per-level counts"
+  },
+  {
+    "entry": "app.py",
+    "setting": "LOCAL_DEBUG",
+    "values": "False",
+    "default": "False",
+    "nullius": "not offered - Space upload/debug behavior"
+  },
+  {
+    "entry": "app.py",
+    "setting": "submission fields",
+    "values": "model, model_family, system_prompt, url, file, organisation, mail, OAuth profile",
+    "default": "model, model_family, system_prompt, url, file, organisation, mail, OAuth profile",
+    "nullius": "not offered - online submission metadata"
+  },
+  {
+    "entry": "app.py",
+    "setting": "submission split",
+    "values": "test",
+    "default": "test",
+    "nullius": "not offered - validation leaderboard is closed"
+  },
+  {
+    "entry": "app.py",
+    "setting": "submission checks",
+    "values": "account age 60 days; one submission/day; unique task ids; complete counts; reject all-perfect split scores",
+    "default": "account age 60 days; one submission/day; unique task ids; complete counts; reject all-perfect split scores",
+    "nullius": "not offered - online anti-abuse controls, not local per-question scoring"
+  },
+  {
+    "entry": "app.py",
+    "setting": "UI options",
+    "values": "top 100; percentage display; Gradio launch debug=True",
+    "default": "top 100; percentage display; Gradio launch debug=True",
+    "nullius": "not offered - leaderboard interface"
+  }
+]

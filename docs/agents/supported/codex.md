@@ -17,10 +17,10 @@ OpenAI's coding agent.
 ## Versions
 
 <table>
-<thead><tr><th rowspan="2">Version</th><th rowspan="2">Upstream</th><th colspan="4" class="group">Ports</th><th colspan="3" class="group">Tools</th></tr><tr><th>One task</th><th>Workspace files</th><th>MCP tools</th><th>Conversation</th><th>decoys</th><th>chain</th><th>retry</th></tr></thead>
+<thead><tr><th rowspan="2">Version</th><th rowspan="2">Upstream</th><th colspan="5" class="group">Ports</th><th colspan="3" class="group">Tools</th></tr><tr><th>One task</th><th>Workspace files</th><th>MCP tools</th><th>Conversation</th><th>Search</th><th>decoys</th><th>chain</th><th>retry</th></tr></thead>
 <tbody>
-<tr><td><code>codex@2.2.2</code> (default)</td><td><code>2.2.2</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
-<tr><td><code>codex@0.16.0</code></td><td><code>0.16.0</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>codex@2.2.2</code> (default)</td><td><code>2.2.2</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>codex@0.16.0</code></td><td><code>0.16.0</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 </tbody></table>
 
 - `key@version`: a revision of the definition and driver; a recipe pins one, the builder offers the default.
@@ -34,8 +34,10 @@ OpenAI's coding agent.
 ## Benchmarks it fits
 
 <table>
-<thead><tr><th rowspan="2"></th><th colspan="1" class="group"><a href="../../benchmarks/supported/gsm8k.md">GSM8K</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/humaneval.md">HumanEval</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/swe-bench-verified.md">SWE-bench Verified</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/tau3-bench.md">τ³-bench</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/terminal-bench.md">Terminal-Bench 2.0</a></th></tr><tr><th>One task</th><th>Workspace files</th><th>Workspace files</th><th>MCP tools, Conversation</th><th>Workspace files</th></tr></thead>
+<thead><tr><th rowspan="2"></th><th colspan="1" class="group"><a href="../../benchmarks/supported/gaia.md">GAIA</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/gsm8k.md">GSM8K</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/humaneval.md">HumanEval</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/swe-bench-verified.md">SWE-bench Verified</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/tau3-bench.md">τ³-bench</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/terminal-bench.md">Terminal-Bench 2.0</a></th></tr><tr><th>One task, Workspace files, Search</th><th>One task</th><th>Workspace files</th><th>Workspace files</th><th>MCP tools, Conversation</th><th>Workspace files</th></tr></thead>
 <tbody>
-<tr><td><code>codex@2.2.2</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
-<tr><td><code>codex@0.16.0</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>codex@2.2.2</code></td><td><abbr class="mark no" title="lacks `agent.search/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>codex@0.16.0</code></td><td><abbr class="mark no" title="lacks `agent.search/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 </tbody></table>
+
+- ✗: the missing port, on hover.

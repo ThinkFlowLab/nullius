@@ -50,7 +50,7 @@ _nullius_app = "app"
 dependencies = {file = ["app/requirements.txt"]}
 
 [tool.setuptools.package-data]
-"nullius.catalogue" = ["agents/*/*.json", "agents/*/*.py", "agents/*/*.toml", "agents/*/*.yaml", "benchmarks/*/*.json", "benchmarks/*/*.py", "capabilities/*/*.json", "capabilities/*/*.py"]
+"nullius.catalogue" = ["agents/*/*.json", "agents/*/*.py", "agents/*/*.toml", "agents/*/*.yaml", "benchmarks/*/env/*", "benchmarks/*/*.json", "benchmarks/*/*.py", "capabilities/*/*.json", "capabilities/*/*.py"]
 "nullius.standard" = ["kits/*/*.json", "kits/*/*.py"]
 "nullius.judge" = ["floors.json"]
 _nullius_app = ["templates/**/*.html", "static/**/*.css", "static/**/*.js", "static/**/*.svg", "static/**/*.png", "static/**/*.json", "static/**/*.woff2", "static/**/*.ttf", "static/**/*.txt", "static/**/*.md", "requirements.txt", ".env.example"]

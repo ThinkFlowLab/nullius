@@ -120,7 +120,7 @@ class Variable:
         }[self.kind](value)
 
 
-GROUPS = ["Model credentials", "Run hosts", "Agent keys"]
+GROUPS = ["Model credentials", "Run hosts", "Custom keys"]
 # The key a run on a local or self-hosted endpoint is sent with when
 # MODEL_API_KEY is not set: many such servers check none, but an
 # OpenAI-compatible client refuses to start without one.
@@ -162,7 +162,7 @@ STARTUP: Dict[str, str] = {
     "HARBOR_PINS": "where the Harbor a recipe pins is built and kept on this machine (default harbor-pins/ beside the runs)",
     "STANDARD_DIR": "where the Nullius standard installs agents, capabilities and benchmark upstreams (default standard/ in the user data directory)",
     "STANDARD_DATA_DIR": "where the Nullius standard keeps the datasets it downloads, which can be gigabytes (default datasets/ in STANDARD_DIR)",
-    "SECRETS_DIR": "where each benchmark's licences are kept, a folder per benchmark, set on its page (default secrets/ in the user configuration directory)",
+    "SECRETS_DIR": "where each benchmark's licences (Settings → Custom keys) and the Hugging Face token (Settings → Data providers) are kept (default secrets/ in the user configuration directory)",
 }
 BY_NAME: Dict[str, Variable] = {v.name: v for v in VARIABLES}
 LOADED_KEYS: set = set()   # variables ``load`` set from the file (so: not held by the process environment)

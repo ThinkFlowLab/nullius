@@ -1,0 +1,25 @@
+{
+  "repository": "gaia-benchmark/GAIA",
+  "revision": "682dd723ee1e1697e00360edccf2366dc8418dd9",
+  "datasets": {
+    "gaia-validation": {
+      "file": "2023/validation/metadata.parquet",
+      "units": 165
+    },
+    "gaia-validation-level1": {
+      "file": "2023/validation/metadata.level1.parquet",
+      "units": 53,
+      "level": 1
+    },
+    "gaia-validation-level2": {
+      "file": "2023/validation/metadata.level2.parquet",
+      "units": 86,
+      "level": 2
+    },
+    "gaia-validation-level3": {
+      "file": "2023/validation/metadata.level3.parquet",
+      "units": 26,
+      "level": 3
+    }
+  }
+}

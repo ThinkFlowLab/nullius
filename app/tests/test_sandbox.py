@@ -1,6 +1,7 @@
-"""The Settings page's Sandbox, without a daemon: a Docker Hub login hands the
-token to docker over stdin and keeps nothing; the username is all that is read
-back; images are counted and removed per benchmark, only those Nullius fetched."""
+"""Docker's state, without a daemon: the Docker Hub login Data providers uses
+hands the token to docker over stdin and keeps nothing; the username is all
+that is read back; the images runs keep are counted and removed per benchmark,
+only those Nullius fetched."""
 from __future__ import annotations
 
 import base64

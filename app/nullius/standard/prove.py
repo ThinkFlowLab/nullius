@@ -34,7 +34,9 @@ it needs no key - except a judged benchmark's, whose judge still grades.
 A check that passes is recorded with its date, its counts and its job; one
 that fails is taken back, as ``conform`` takes back a port - what it reached kept
 under ``failed``, for a page to say why. A check run on
-fewer units (``--limit``) does not replace one that covered more. Parity
+fewer units (``--limit``) does not replace one that covered more. A
+benchmark whose units may not be redistributed (``units.redistribute``) is
+recorded without what names them: no ``in_prompt.first``, no problems. Parity
 with the authors' own scorer is not checked yet (``docs/standard.md``).
 """
 from __future__ import annotations
@@ -64,17 +66,21 @@ class _Driver:
     """The benchmark's driver, started as a run starts it, for the checks
     that talk to it directly (units, leak)."""
 
-    def __init__(self, bench: dict, ds: dict, work: str):
+    def __init__(self, bench: dict, ds: dict, work: str, licences=None):
         self.up = install.upstream(bench)
         self.data = install.dataset(bench, ds, self.up)
         install.driver_packages(bench)                  # its driver.install, once: start() then finds it
         self.bench, self.ds, self.work = bench, ds, work
+        self.licences = licences if licences is not None else run.Licences(bench)
 
     def start(self, n: int) -> jsonl.Proc:
         home = os.path.join(self.work, f"driver-home-{n}")
         os.makedirs(home, exist_ok=True)
         cmd, extra = install.driver_argv(self.bench)
-        env = run.base_env(home, {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
+        credentials = {}
+        for environment in (self.bench.get("environments") or {}).values():
+            credentials.update(definitions.secret_values(environment, self.licences, "driver"))
+        env = run.base_env(home, {**extra, **credentials, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                                   "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": run.driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                                   "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
                                   **run.option_env(definitions.bench_options_of(self.bench, self.ds["id"])[0])})   # the options at their defaults
@@ -266,7 +272,7 @@ def prove(bench: dict, *, dataset: Optional[str] = None, limit: Optional[int] = 
         checks: Dict[str, dict] = {}
         try:
             try:
-                driver = _Driver(bench, ds, work)
+                driver = _Driver(bench, ds, work, licences=licences)
             except install.InstallFailed as e:
                 raise run.Refused(f"could not install what the proof needs: {e}")
             checks["units"] = units_check(driver, ds)
@@ -309,8 +315,20 @@ def record(bench: dict, got: Dict[str, dict]) -> None:
     passed replaces its record unless that one covered more units; one that
     failed is taken back. The failure itself is kept under ``failed`` - what
     it reached, against what bound, its job - so a page can say "0.9955 < 1"
-    rather than only "not proven"; the next pass of that check clears it."""
+    rather than only "not proven"; the next pass of that check clears it.
+    Units that may not be redistributed are never named (:func:`_unnamed`)."""
+    if (bench.get("units") or {}).get("redistribute") is False:
+        got = {ds: {name: _unnamed(r) for name, r in checks.items()} for ds, checks in got.items()}
     definitions.save(bench, lambda cur: cur.update(proven=_merged(cur.get("proven") or {}, got)))
+
+
+def _unnamed(r: dict) -> dict:
+    """A check's record without the units it names: the leak check's first
+    prompts that name their answer, and a failed check's problems."""
+    r = dict(r, problems=[])
+    if "in_prompt" in r:
+        r["in_prompt"] = {k: v for k, v in r["in_prompt"].items() if k != "first"}
+    return r
 
 
 def _merged(proven: dict, got: Dict[str, dict]) -> dict:

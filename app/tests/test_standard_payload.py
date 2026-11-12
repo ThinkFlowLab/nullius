@@ -1,6 +1,7 @@
 """Installed standard snapshots: exact effective code, no configuration transport."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -13,7 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from nullius import execution, paths
-from nullius.standard import payload
+from nullius.standard import install, payload
 
 
 class Snapshot(unittest.TestCase):
@@ -64,6 +65,19 @@ class Snapshot(unittest.TestCase):
                              env=dict(os.environ, PYTHONPATH=str(Path(here) / "app")), capture_output=True, text=True)
         self.assertEqual(ran.returncode, 0, ran.stderr)
         self.assertEqual(ran.stdout, "offline runner\n")
+
+    def test_driver_dataset_metadata_travels_and_changes_snapshot_identity(self):
+        entry = self.bench(self.catalogue)
+        self.write(entry / "data-source.json", {"revision": "pinned-fixture-revision"})
+        self.write(entry / "driver.py", "import json\nfrom pathlib import Path\n"
+                   "print(json.loads((Path(__file__).parent / 'data-source.json').read_text())['revision'])\n")
+        key, here = self.build()
+        driver = Path(here) / "app/nullius/catalogue/benchmarks/sample/driver.py"
+        ran = subprocess.run([sys.executable, str(driver)], cwd=self.tmp, capture_output=True, text=True)
+        self.assertEqual(ran.returncode, 0, ran.stderr)
+        self.assertEqual(ran.stdout.strip(), "pinned-fixture-revision")
+        self.write(entry / "data-source.json", {"revision": "next-fixture-revision"})
+        self.assertNotEqual(self.build()[0], key)
 
     def test_effective_user_entry_replaces_the_whole_bundled_folder(self):
         bundled = self.bench(self.package / "catalogue")
@@ -129,6 +143,78 @@ class Snapshot(unittest.TestCase):
         for name in ("templates/config.txt", "Dockerfile", "setup.sh", "tools.py", "helpers/__init__.py", "helpers/value.py"):
             self.assertTrue((copied / name).is_file(), name)
         self.assertFalse((copied / "helpers/unused.py").exists())
+
+    def test_local_dataset_survives_snapshot_and_its_bytes_change_the_content_id(self):
+        entry = self.bench(self.catalogue)
+        data = '{"question": "fixture"}\n'
+        dataset = {"id": "local", "path": "data/tasks.jsonl",
+                   "sha256": hashlib.sha256(data.encode()).hexdigest()}
+        definition = json.loads((entry / "standard.json").read_text())
+        definition["datasets"] = [dataset]
+        self.write(entry / "standard.json", definition)
+        self.write(entry / dataset["path"], data)
+        self.write(entry / "data/unrelated.jsonl", "not a declared resource")
+        identity, snapshot = self.build()
+        copied = Path(snapshot) / "app/nullius/catalogue/benchmarks/sample"
+        restored = json.loads((copied / "standard.json").read_text())
+        restored["_here"] = str(copied)
+        installed = install.dataset(restored, restored["datasets"][0], None)
+        self.assertEqual(Path(installed).read_text(), data)
+        self.assertFalse((copied / "data/unrelated.jsonl").exists())
+        self.write(entry / dataset["path"], data + '{"question": "another"}\n')
+        changed, _ = self.build()
+        self.assertNotEqual(identity, changed)
+        self.assertEqual(Path(installed).read_text(), data)  # Earlier snapshots stay immutable.
+
+    def test_dataset_resources_follow_effective_versions_and_inherited_upstreams(self):
+        entry = self.bench(self.catalogue)
+        definition = {"schema": "nullius.benchmark/v1", "key": "sample", "default": "local",
+                      "driver": {"command": ["python3", "{here}/driver.py"]},
+                      "datasets": [{"id": "shared", "path": "shared.jsonl"}],
+                      "versions": {"local": {},
+                                   "other": {"datasets": [{"id": "other", "path": "other.jsonl"}]},
+                                   "remote": {"upstream": {"repository": "https://example.org/repo"},
+                                              "datasets": [{"id": "remote", "path": "missing.jsonl"}]}}}
+        self.write(entry / "standard.json", definition)
+        self.write(entry / "shared.jsonl", "shared\n")
+        self.write(entry / "other.jsonl", "other\n")
+        files = payload._entry(entry)
+        self.assertTrue({"shared.jsonl", "other.jsonl"} <= files.keys())
+        self.assertNotIn("missing.jsonl", files)
+        # An empty version block retains the root's upstream repository.
+        definition["upstream"] = {"repository": "https://example.org/repo"}
+        self.write(entry / "standard.json", definition)
+        self.assertEqual(set(payload._entry(entry)), {"standard.json", "driver.py"})
+
+    def test_downloaded_and_upstream_datasets_are_not_catalogue_resources(self):
+        entry = self.bench(self.catalogue)
+        for dataset, upstream in [({"id": "remote", "path": "missing.jsonl"},
+                                   {"repository": "https://example.org/repo"}),
+                                  ({"id": "download", "url": "https://example.org/tasks.jsonl"}, {})]:
+            with self.subTest(dataset=dataset):
+                self.write(entry / "standard.json", {"datasets": [dataset], "upstream": upstream})
+                self.assertEqual(set(payload._entry(entry)), {"standard.json"})
+
+    def test_dataset_paths_keep_resource_containment_checks(self):
+        entry = self.bench(self.catalogue)
+        for path in ("../outside", str(self.tmp / "outside"), ".env", "credentials.json",
+                     "secrets/tasks.jsonl", "data\\tasks.jsonl", "key.pem"):
+            with self.subTest(path=path):
+                self.write(entry / "standard.json", {"datasets": [{"id": "local", "path": path}]})
+                with self.assertRaisesRegex(ValueError, "not a runner resource"):
+                    self.build()
+
+    def test_dataset_file_and_parent_symlinks_are_refused(self):
+        entry = self.bench(self.catalogue)
+        outside = self.tmp / "outside"
+        self.write(outside / "tasks.jsonl", "private-fixture-value-never-sent")
+        (entry / "file.jsonl").symlink_to(outside / "tasks.jsonl")
+        (entry / "linked").symlink_to(outside, target_is_directory=True)
+        for path in ("file.jsonl", "linked/tasks.jsonl"):
+            with self.subTest(path=path):
+                self.write(entry / "standard.json", {"datasets": [{"id": "local", "path": path}]})
+                with self.assertRaisesRegex(ValueError, "symlinks"):
+                    self.build()
 
     def test_symlinks_and_secret_resources_are_refused_without_reading_targets(self):
         entry = self.bench(self.catalogue)

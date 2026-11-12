@@ -1,4 +1,5 @@
-"""The Settings page's Sandbox: docker on this machine.
+"""Docker on this machine, as Settings shows it: the Sandbox section, and the
+Docker Hub login under Data providers.
 
 Three things, each something a user acts on:
 

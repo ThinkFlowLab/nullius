@@ -1,6 +1,8 @@
 """Where a dataset's data comes from, one row per way its benchmark runs."""
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -32,6 +34,19 @@ class SourcesTest(unittest.TestCase):
         (row,) = sources.of(d, ["standard"], std)
         self.assertEqual((row["from"], row["name"], row["pin"]), ("Hugging Face", "org/data", "0123456"))
         self.assertEqual(row["files"][0]["size"], "2.8 MB")
+
+    def test_a_dataset_the_driver_downloads_from_hugging_face_names_it_not_the_upstream(self):
+        d = catalog.Dataset(key="main", title="Main")
+        with tempfile.TemporaryDirectory() as here:
+            std = {"_here": here, "upstream": {"repository": "https://huggingface.co/spaces/org/scorer", "tested": COMMIT},
+                   "datasets": [{"id": "main", "units": 3}]}
+            (row,) = sources.of(d, ["standard"], std)
+            self.assertEqual((row["from"], row["name"]), ("Repository", "https://huggingface.co/spaces/org/scorer"))
+            with open(os.path.join(here, "data-source.json"), "w") as f:
+                json.dump({"repository": "org/data", "revision": COMMIT, "datasets": {"main": {"file": "main.parquet"}}}, f)
+            (row,) = sources.of(d, ["standard"], std)
+        self.assertEqual((row["from"], row["name"], row["pin"]), ("Hugging Face", "org/data", "0123456"))
+        self.assertEqual(row["href"], f"https://huggingface.co/datasets/org/data/tree/{COMMIT}")
 
     def test_no_harbor_row_without_a_harbor_name(self):
         d = catalog.Dataset(key="main", title="Main", source="GitHub")

@@ -25,6 +25,7 @@ class Table(unittest.TestCase):
         src = (HERE.parent / "app.py").read_text() + "".join(p.read_text() for p in list((HERE.parent / "nullius").rglob("*.py")) + list((HERE.parent / "web").glob("*.py")) if p.name != "settings.py" and own(p))
         import re
         read = set(re.findall(r'environ(?:\.get\(|\[)\s*"([A-Z][A-Z0-9_]*)"', src)) | set(re.findall(r'env\.get\("([A-Z][A-Z0-9_]*)"', src))
+        read -= {"HOME"}                                                  # the user's home directory, not a Nullius setting
         read -= {"GH_TOKEN"}                                              # stripped from subprocesses, never read
         read -= {"LOCALAPPDATA"}                                          # Windows's user directory, not a Nullius setting
         read -= {"OPENAI_BASE_URL"}                                       # what a run's launcher hands it (execution.URL_NAMES), read by the run: standard cli --from-run
@@ -57,7 +58,7 @@ class Table(unittest.TestCase):
         for old in ("HOST", "PORT"):
             self.assertNotIn(old, settings.BY_NAME); self.assertNotIn(old, settings.STARTUP)
         self.assertEqual((settings.INSTEAD["HOST"], settings.INSTEAD["PORT"]), ("APP_HOST", "APP_PORT"))
-        self.assertEqual(settings.GROUPS, ["Model credentials", "Run hosts", "Agent keys"])
+        self.assertEqual(settings.GROUPS, ["Model credentials", "Run hosts", "Custom keys"])
         example = settings.example()
         self.assertIn("#   APP_PORT: ", example); self.assertNotIn("\nAPP_PORT=", example); self.assertNotIn("\nPORT=", example)
 

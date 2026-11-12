@@ -23,7 +23,7 @@ Nullius runs AI evaluations on your machines and opens every score into the evid
 
 | Section | Holds |
 | --- | --- |
-| [Settings](settings/README.md) | Model providers, judges, agent keys, run hosts |
+| [Settings](settings/README.md) | Model and data providers, judges, custom keys, run hosts |
 | [Benchmarks](benchmarks/supported/README.md) | Every benchmark, and how to add one |
 | [Agents](agents/supported/README.md) | Every agent, its proven ports, how to add one |
 | [Capabilities](capabilities/supported/README.md) | Every capability, its port, how to add one |

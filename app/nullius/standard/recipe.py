@@ -109,9 +109,9 @@ def _bench_page(b: dict) -> dict:
             # its versions, each by the ref a recipe names it with (the bare key: the default)
             "versions": [{"ref": b["key"] if v == b.get("_default") else f"{b['key']}@{v}", "version": v, "default": v == b.get("_default")}
                          for v in b.get("_versions") or []] if versioned else [],
-            "environments": {n: {"summary": e.get("summary", ""), "local_ok": bool(e.get("local_ok")),
+            "environments": {n: {"summary": e.get("summary", ""), "local_ok": bool(e.get("local_ok")), "network": e.get("network"),
                                  "needs_secrets": [{"name": s["name"], "to": s["to"], "kind": s.get("kind") or "value",
-                                                    "summary": s.get("summary", ""), **{k: s[k] for k in ("path", "env") if k in s}}
+                                                    "summary": s.get("summary", ""), **{k: s[k] for k in ("path", "env", "provider") if k in s}}
                                                    for s in e.get("needs_secrets") or []]}
                              for n, e in (b.get("environments") or {}).items()},
             "needs": list(b.get("needs") or []), "units": b.get("units") or {"noun": "unit", "nouns": "units"},
@@ -202,10 +202,11 @@ def choices() -> dict:
 
 
 def licences_of(key: str) -> List[dict]:
-    """The licences a benchmark's environments need, every version's, as its
-    page lists them: [{environment, summary, needs: [{name, kind, to,
-    summary, path?, env?, status}]}], ``status`` the store's
-    (``secrets.status``: dates, never a value) or {"set": False}."""
+    """The credentials a benchmark's environments need, every version's, as its
+    Settings lists them: [{environment, summary, needs: [{name, kind, to,
+    summary, path?, env?, provider?, status}]}], ``status`` the store's
+    (``secrets.status``: dates, never a value; a data provider's token, its
+    provider's) or {"set": False}."""
     from nullius import secrets
     have = secrets.status(key)
     out: Dict[str, dict] = {}
@@ -216,7 +217,8 @@ def licences_of(key: str) -> List[dict]:
             env = out.setdefault(n, {"environment": n, "summary": e.get("summary", ""), "needs": []})
             for s in definitions.secrets_of({"environments": {n: e}}):
                 if all(x["name"] != s["name"] for x in env["needs"]):
-                    env["needs"].append(dict(s, status=have.get(s["name"]) or {"set": False}))
+                    held = secrets.state(key, s["name"], s["provider"]) if s.get("provider") else have.get(s["name"])
+                    env["needs"].append(dict(s, status=held or {"set": False}))
     return [e for e in out.values() if e["needs"]]
 
 
@@ -378,8 +380,6 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if needs["embeddings"] and recipe.get("provider") not in (None, "openai"):
         add("model", f"{', '.join(needs['embeddings'])} is OpenAI's embedding model: choose the OpenAI provider for this search.")
     agents_local = [p["o"]["label"] for p in picks if side == "agent" and not p["control"] and not p.get("setup") and backend == "local"]
-    if backend != "local" and any(p.get("setup") for p in picks):
-        add("where", "A setup runs the benchmark's own code on the machine, as published: choose local processes.")
     if agents_local and recipe.get("unsandboxed") is not True:
         add("where", f"{', '.join(agents_local)} would run as you, not sandboxed: tick Run it as me, or choose Docker.")
     only_controls = bool(picks) and all(p["control"] for p in picks)
@@ -514,7 +514,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--simulator-model", sim_model] if sim_model and not p["control"] else []),
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
-                 *(["--backend", "docker"] if backend == "docker" else []),
+                 *(["--backend", backend] if backend != "local" else []),
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
                  *(["--shard", f"{index}/{of}", "--launch", launch] if of > 1 else []), "--from-run"]
         return " ".join(shlex.quote(w) for w in words) + ' --jobs "${NULLIUS_JOBS:-jobs_standard}"'
@@ -554,8 +554,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     reqs = hostreq.requirements(b, needs["host"])
     out["host"] = {"benchmark": b["key"], "needs": [{"name": n, "summary": r["summary"], "check": r["check"]} for n, r in reqs.items()],
                    "check": [p for r in reqs.values() for p in r["check"]], "install": hostreq.install_lines(b, list(reqs))}
-    # The licences its environments may need, by name: what a run on a host is sent of the benchmark's store.
-    out["licences"] = {"benchmark": b["key"], "names": sorted({s["name"] for s in definitions.secrets_of(b)})}
+    # The licences its environments may need, by name: what a run on a host is sent of the benchmark's store,
+    # a data provider's token of that provider's.
+    declared = definitions.secrets_of(b)
+    out["licences"] = {"benchmark": b["key"], "names": sorted({s["name"] for s in declared}),
+                       "providers": {s["name"]: s["provider"] for s in declared if s.get("provider")}}
 
 
     def row(p: dict) -> list:

@@ -29,6 +29,7 @@ A pair is an **agent benchmark** × an **agent**, or a **capability benchmark** 
 | `agent.workspace/v1` | The session's `cwd` is the unit's workspace; the agent reads and writes there | Write a file; fix a one-line bug so a test passes |
 | `agent.tools/v1` | The agent calls the tools of the MCP servers given to its session | Two basic checks, three skills ([the tools kit](#the-tools-kit)) |
 | `agent.conversation/v1` | Several prompts in one session, the earlier turns remembered | Turn 2 asks for what turn 1 said |
+| `agent.search/v1` | Search an HTTP collection with the agent's own tools, retrieve a source and answer with evidence | Find a source, choose the current one, follow a reference (3 checks) |
 | `agent.browser/v1` | A browser, through an MCP server Nullius starts | Defined; its kit comes with the first browser benchmark |
 | `cap.memory/v1` | `add {session}` then `recall {question}` → `{memory}`; a session is `{id, date, turns: [{role, text}], text}` | Recall a place and an exact name among distractors (2 checks); nothing it stores is a credential |
 
@@ -105,6 +106,12 @@ A proof from before skills were recorded reads as every skill shown on the curre
 - **Tool never named.** The prompts say what to find.
 - **Logged.** Every call goes to `verifier/mcp-calls.jsonl`, outside the workspace; a check passes only when the final message carries the answer *and* the log shows the calls that produce it.
 
+### The Search kit
+
+Three checks on a local website, with the agent's own tools: find a source, choose the current one, follow a reference. The answer is JSON `{answer, source, evidence}`; the site's log must show the search before the source was opened.
+
+A driver serves such a site with `setup.web_services: [{name, port, socket}]`: a `web-` name, a port from 1024 to 65535 and an existing Unix socket; the prompt carries its URL.
+
 ## A run
 
 ```text title="One run"
@@ -134,9 +141,9 @@ record); verifier/reward.txt and score.json
 | --- | --- |
 | Units | Run `-j` at a time, each with its own workspace (a git repository of its own), home and relay |
 | A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost |
-| Backends (`--backend`) | `local`: processes on this machine. `docker`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`). The driver stays on the machine either way; on docker a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image |
+| Backends (`--backend`) | `local`: processes on this machine. `docker`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`). For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`). On Docker a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image |
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
-| Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate; a turn past its limit is the agent's timeout. `"kind": "score"` leaves a score and no pass |
+| Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate, unless the unit passed; a turn past its limit is the agent's timeout. `"kind": "score"` leaves a score and no pass |
 | The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. Provider `anthropic` speaks Anthropic's Messages (`ANTHROPIC_API_KEY` as `x-api-key`) |
 | A spending cap (`--max-usd`, `--max-usd-per-unit`) | Each relay books a call in the job's ledger (`.work/ledger`, `standard/ledger.py`) before sending it, and refuses the one that does not fit the run's cap or its unit's ([Run a benchmark](cli/run.md#a-spending-cap)) |
 
@@ -151,7 +158,8 @@ The docker backend (`--backend docker`) is the isolation, and needs no such yes.
 | --- | --- |
 | One base image | `nullius/base:<hash>`: Ubuntu 24.04, git, python3, curl, CA certificates, tmux and Node 22. Environments are layers on it ([Per-task environments](#per-task-environments)), or each task's own image ([Own images](#own-images)) |
 | The agent's container | Runs as you (`--user`), no capabilities, only on the unit's internal network: no route out. Read-write: the unit's workspace and home, the MCP call log folder. Read-only, at its path here: the agent's install and definition folder, its MCP servers' files. Never `app/` (refused), the benchmark's folder or upstream |
-| The relay is a sidecar | On that network as `relay`, and on the default bridge: the agent's one way out, `http://relay:8080/<unit>/v1`; its port on 127.0.0.1 for the driver. The key reaches the relay's container only, as an owner-only file in the user's cache (`relay-keys/`), mounted read-only and removed from this machine once the relay listens. It stays readable in that container until it stops. `docker inspect` does not show it, and it is never in the agent's environment, files or mounts |
+| The relay is a sidecar | On that network as `relay`, and on the default bridge: the agent's one way out besides the public web proxy below, `http://relay:8080/<unit>/v1`; its port on 127.0.0.1 for the driver. The key reaches the relay's container only, as an owner-only file in the user's cache (`relay-keys/`), mounted read-only and removed from this machine once the relay listens. It stays readable in that container until it stops. `docker inspect` does not show it, and it is never in the agent's environment, files or mounts |
+| Public web | Only for an agent whose environment declares `network`: an `egress` proxy on the unit's network, to public addresses only ([Public web requirements](#public-web-requirements)) |
 | A model server on this machine | An endpoint on its loopback (`http://localhost:11434/v1`) is reached by the relays as `host.docker.internal`, through a forwarder the run keeps on the default bridge's gateway alone; the agents' internal networks do not reach it |
 | Cleanup | Everything a unit starts is labelled `nullius.job=<job>` and removed when it ends, after an error too; the run sweeps the label |
 
@@ -176,8 +184,8 @@ The agent's session still gets a stdio server (`standard/mcp_machine.py`):
 
 | Backend | How the agent reaches it |
 | --- | --- |
-| local | The server's own command, `{here}` and `{install}` filled, started by the agent in the driver's environment; the driver's licences are not passed |
-| docker | A listener per server per unit here, a Unix socket in a 0700 folder; each connection is one start. The unit gets **one door**, a `forward.py` container on its internal network with the socket mounted in; the agent's entry is `mcp_bridge.py`, joining its stdio to the door (`NULLIUS_MCP_AT`). Nothing of the server enters the agent's container |
+| local | The server's own command, `{here}` and `{install}` filled, started by the agent in the driver's environment; the driver's benchmark credentials are not passed |
+| docker | A listener per server per unit here, a Unix socket in a 0700 folder; each connection is one start. The unit gets **one door**, a `forward.py` container on its internal network with the socket mounted in; the agent's entry is `mcp_bridge.py`, joining its stdio to the door (`NULLIUS_MCP_AT`). macOS uses a host-loopback bridge instead. Nothing of the server enters the agent's container |
 
 - A server started twice in a unit is two processes.
 - A server may pass each call to the driver over a socket the unit's setup names ([below](#a-driver-that-holds-the-conversation)).
@@ -231,19 +239,21 @@ A benchmark whose tasks need different software names **environments**.
 | Which unit uses which | `setup` may reply `"environment": "<name>"`, a dataset may name a default, none is the base; an undeclared name is a setup error. The trial records `standard.environment` and `standard.image` |
 | Local backend | Runs only the base; another environment is refused unless `local_ok: true`. A control is never refused for an environment, but still not run without the secrets |
 
-**Licences** (`needs_secrets`): each entry says `to` (`agent` or `driver`) and a `kind`.
+**Required credentials** (`needs_secrets`): dataset access tokens, tool licence keys,
+files or server addresses. Each entry says `to` (`agent` or `driver`) and a `kind`.
+An entry with `"provider": "huggingface"` is a `value` to the `driver`, read from **Settings → Data providers** alone.
 
 | Kind | Given as | On docker |
 | --- | --- | --- |
-| `value` (default) | A key, the variable `name` of its process | By name, never on an argument list |
+| `value` (default) | A key or access token, the variable `name` of its process | By name, never on an argument list |
 | `file` | A licence file; `env` names a variable holding its path, required on local processes | Mounted read-only at `path` (absolute, not under `/proc`, `/sys` or `/dev`) |
 | `server` | A licence server, `host:port`, as the variable `name` | A forwarder beside the relay (`standard/forward.py`) under the server's own name, the one address the agent may reach; an IPv4 address as `licence-server-<i>`, `host.docker.internal` the machine the run is on |
 
 | Rule | Detail |
 | --- | --- |
 | One name, one kind | In every environment that asks for it. Never into a build, a request, a log or a recorded config |
-| Kept per benchmark | `~/.config/nullius/secrets/<benchmark>/<NAME>` on Linux by default (`SECRETS_DIR` moves the root), 0700 and 0600, with an `index.json` of when each was set and its expiry, never a value. Never in Settings |
-| Set on the benchmark's page | Its **Licences** panel, loopback browser only; a value is never shown back. A declared name explicitly migrated from old `app/.env` into user settings is offered as *Move from saved settings* |
+| Kept per benchmark | `~/.config/nullius/secrets/<benchmark>/<NAME>` on Linux by default (`SECRETS_DIR` moves the root), 0700 and 0600, with an `index.json` of when each was set and its expiry, never a value; the Hugging Face token of Data providers in `secrets/data-provider-huggingface/`. Separate from `settings.json` |
+| Set in Settings | **Data providers → Hugging Face** for the shared dataset token; **Custom keys** for benchmark-specific credentials. Loopback browser only; a value is never shown back. A declared name explicitly migrated from old `app/.env` into user settings is offered as *Move from saved settings* |
 | Read when a unit starts | On a host, the declared names that are set go over the launcher's stdin, in memory, except a licence file, written to `/dev/shm/nullius-<run>/` (0600) and removed when the part ends. Harbor's runs never get them |
 | Not set | The unit is **not run**: `EnvironmentSecretMissingError`, "not run: needs NAME", a setup error that is no one's result |
 
@@ -291,6 +301,19 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 | Controls | `nop` leaves the image as it is; `oracle` replies `{"answer": "", "solve": {copy, write, run, seconds}}`, run in the container. Neither needs the docker backend, both need docker |
 | Where it cannot run | An agent's unit needs the docker backend (never `local_ok`); a capability benchmark has no own image |
 
+### Public web requirements
+
+An environment declares `"network": {"access": "public", "probe": "<an HTTPS URL>"}` when agents need the public web (agent runs only).
+
+| Backend | |
+| --- | --- |
+| local | The probe must answer before any unit, or the run is refused |
+| docker | Each unit gets an HTTP(S) proxy to public addresses only; its tools must honour the proxy variables. A failed probe is that unit's setup error |
+
+### Docker Original setups
+
+On Docker, an Original setup's driver, answerer and scorer run in a container with the packages its chosen options need. It may download data; its declared credentials come as a read-only, owner-only file, never as environment; model keys stay in the relay. No GPU.
+
 ## Many machines
 
 N machines are N runs of the same command, each with `--shard I/N`, and one merge.
@@ -317,7 +340,7 @@ The [builder](builder.md) runs the standard; what it adds:
 | Surface | What it does |
 | --- | --- |
 | The builder | Each dataset with each choice is a `cli run --from-run` and a job (`<name>-<dataset>-<agent>`); each machine a shard and a job (`<name>-shard-<I>of<N>`) |
-| A run on a host | Gets a content-addressed snapshot of the running backend and effective catalogue into `~/.nullius/app/<content-id>`; source edits and user entries are included, configuration and credential stores excluded; needs `python3`, `git` and, for the docker backend, docker; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back every 10 s |
+| A run on a host | Gets a content-addressed snapshot of the running backend and effective catalogue into `~/.nullius/app/<content-id>`; source edits, user entries, `data-source.json` and catalogue-local dataset files are included; configuration and credential stores are excluded; needs `python3`, `git` and, for the docker backend, docker; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back every 10 s |
 | Agents and Capabilities tabs | Each definition's ports proven and the benchmarks it runs; *Prove its ports* runs `cli conform --from-run` here, with local processes or Docker, and rewrites the definition |
 | A benchmark's page | Its proofs per dataset; *Run control checks* runs `cli prove --from-run` here, handed no key unless the benchmark is judged. A failed check is kept under `proven.<dataset>.failed` until it passes |
 
@@ -354,7 +377,7 @@ use the source folders and repository checks.
 
 1. **Scaffold it.** `cli new benchmark KEY` (`--family capability --port cap.memory/v1` for a capability benchmark) writes `benchmarks/<key>/standard.json` and `driver.py` under your user catalogue (`nullius paths`).
 2. **Pin the data.** `upstream.repository` and `upstream.tested`, a full commit: the latest release tag's (`upstream.tag`; an annotated tag's commit is the `^{}` line of `git ls-remote --tags`), a default-branch commit only without a release. Each dataset: its `path` in the upstream or its `url` at a revision, its `sha256` and `units`. Installs and upstreams go under `STANDARD_DIR` (`~/.local/share/nullius/standard` on Linux by default), downloaded datasets under its `datasets/` or `STANDARD_DATA_DIR`.
-3. **Choose the needs.** The fewest ports: `agent.workspace/v1` for files, `agent.tools/v1` for MCP tools, `agent.conversation/v1` if a user speaks more than once; a skill the units cannot be done without goes in `needs_skills`.
+3. **Choose the needs.** The fewest ports: `agent.workspace/v1` for files, `agent.search/v1` for search and source retrieval, `agent.tools/v1` for MCP tools, `agent.conversation/v1` if a user speaks more than once; a skill the units cannot be done without goes in `needs_skills`.
 4. **Write the driver.** It answers the [ops below](#driver-ops); the dataset file is `$NULLIUS_DATASET` (empty for a dataset with no `path` or `url`), the upstream `$NULLIUS_UPSTREAM`, the version `$NULLIUS_VERSION`. Keep the tests out of the workspace until `score`; prints go to stderr.
 5. **Its own options**, when the upstream offers a choice a run should make ([below](#benchmark-options)).
 6. **Add the catalogue entry.** `benchmark.json` beside it, with `standard` in `harness`. Personal additions use the default icon; the form can upload a logo. A contribution to the bundled catalogue also adds its mark in `app/static/catalogue/marks.svg`.
@@ -380,13 +403,14 @@ use the source folders and repository checks.
 | `leaderboard` | `{says, simulator?, judge?, bench_options?, repeat?}`: what the upstream's leaderboard fixes besides the ranked model, from its own submission rules - the user simulator's and judge's models, the benchmark's options it sets and the fewest attempts per unit. The builder then offers **Like the leaderboard** |
 | `limits.turns` | At most this many agent turns in a conversation (default 20) |
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
+| `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
 
 !!! note "Call the upstream, never copy it"
     The driver imports the upstream from `$NULLIUS_UPSTREAM` and calls its loader, prompts, scorer, judge and loop. Never patch its bugs: say it in the limitations; a fix is a fork's, brought in as a [version](#versions).
 
 #### The driver's environment
 
-The upstream's dependencies go in `driver.install` (a capability's `install` is the same block), installed once per digest under `drivers/<key>/<digest>/` in `STANDARD_DIR` by an installer handed no variable named like a secret; `{install}` in `driver.command` names it. A driver without one runs on the machine's `python3`; never in Nullius's own interpreter or the agent's container.
+The upstream's dependencies go in `driver.install` (a capability's `install` is the same block), installed once per digest under `drivers/<key>/<digest>/` in `STANDARD_DIR` by an installer handed no variable named like a secret; `{install}` in `driver.command` names it. A driver without one uses `python3`, outside Nullius's own interpreter. For Docker Original setups, the driver runs in its own container and dependencies are installed in a separate Linux cache under `docker-setups/`; host virtual environments are never reused.
 
 ```json title="standard.json · driver"
 "driver": {
@@ -541,7 +565,7 @@ already accepts arbitrary models needs only the `original` method.
 | `original` driver method | A model of `models` only, by the name the upstream knows; the relay sends it as `served_as` says, with the prefix `providers` gives. A provider not in `providers` is refused. A model the upstream asks besides the answerer is a `side_models` entry. Without `models`, any model: its own agent runs as the run's model |
 | `model` driver method | The upstream is told `runs_as` (its window, batching and token budget) while the relay sends the model chosen; one that reasons by default can spend that budget first: `OutputLengthExceededError` |
 | `units` | A setup may count its own units; `units` is sent `setup` |
-| `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes only |
+| `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes or the Original setup driver container |
 | Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper` |
 | Attempts | `cli run --repeat K` runs each unit K times; `result.json` carries `pass_hat_k` (C(c, k) / C(n, k) averaged over the units, an errored unit left out) |
 

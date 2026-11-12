@@ -35,7 +35,8 @@
 /* a card's rows: a label, then what it holds - an endpoint, a key, a field */
 .st-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 16px; align-items: center; }
 .st-row-label { font-size: 14px; font-weight: 500; color: var(--text); }
-#AGENT_KEYS { display: grid; gap: 24px; }
+#AGENT_KEYS, .st-key-group { display: grid; gap: 12px; }
+.st-key-group-title { margin: 8px 0 0; font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-dim); overflow-wrap: anywhere; }
 .st-row-value { min-width: 0; display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
 .st-row-value.mono { display: block; font-size: 13px; }
 .st-about { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-faint); }
@@ -50,6 +51,45 @@
 .st-input:focus { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .st-input[hidden] { display: none; }
 .st-note { margin: 0; font-size: 12px; color: var(--text-dim); }
+
+/* Custom keys: compact summaries; credentials and help appear only while editing. */
+.st-key-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.st-key-card { border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); min-width: 0; overflow: hidden; }
+.st-key-summary { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 18px 20px; }
+.st-key-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--surface-2); color: var(--text-dim); }
+.st-key-icon svg { width: 21px; height: 21px; }
+.st-key-copy { min-width: 0; }
+.st-key-copy h3, .st-key-new h3 { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text); overflow-wrap: anywhere; }
+.st-key-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+.st-key-state::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.st-key-state[data-key-state="saved"] { color: var(--ok); }
+.st-key-state[data-key-state="expired"] { color: var(--bad); }
+.st-key-edit { min-width: 64px; }
+.st-key-editor { border-top: 1px solid var(--border-soft); padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.st-key-editor[hidden], .st-key-new[hidden] { display: none; }
+.st-key-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.st-key-field > label { font-size: 12px; color: var(--text-dim); }
+.st-key-field input { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.st-key-inputrow { display: flex; align-items: center; gap: 10px; }
+.st-key-inputrow input { flex: 1; }
+.st-key-inputrow button { flex: none; min-height: 40px; padding-inline: 18px; }
+.st-key-footer { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.st-key-footer > .st-key-actions { margin-left: auto; }
+.st-key-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.st-key-expiry { color: var(--text-dim); font-size: 12px; }
+.st-key-expiry summary { cursor: pointer; }
+.st-key-expiry[open] summary { margin-bottom: 10px; }
+.st-key-expiry label { display: block; margin-bottom: 6px; }
+.st-key-new { padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; }
+.st-key-new-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 560px) {
+  .st-key-summary { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; padding: 14px; }
+  .st-key-icon { width: 30px; height: 30px; }
+  .st-key-state { grid-column: 2; grid-row: 2; margin-top: -6px; }
+  .st-key-edit { grid-column: 3; grid-row: 1 / span 2; }
+  .st-key-editor, .st-key-new { padding: 14px; }
+  .st-key-new-fields { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* run hosts: a row each - its name tests it, the result says what answered */
 .st-hosts { padding: 14px 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); }
@@ -225,7 +265,7 @@
 .st-sandbox-rows { display: grid; gap: 14px; }
 .st-sandbox-rows > .st-row + .st-row { padding-top: 14px; border-top: 1px solid var(--border-soft); }
 .settings-page .st-sandbox-rows .st-input { height: 34px; min-height: 34px; padding-block: 0; }
-.settings-page #sandbox .st-row-value.st-value, .settings-page #prices .st-row-value.st-value { flex-direction: row; justify-content: flex-start; align-items: center; }
+.settings-page #sandbox .st-row-value.st-value, .settings-page #prices .st-row-value.st-value, .settings-page #data-providers .st-row-value.st-value { flex-direction: row; justify-content: flex-start; align-items: center; }
 #prices [data-prices-update] .ic { width: 15px; height: 15px; }
 #prices [data-prices-update].busy .ic { animation: st-prices-spin .9s linear infinite; }
 @keyframes st-prices-spin { to { transform: rotate(360deg); } }

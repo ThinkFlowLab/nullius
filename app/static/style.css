@@ -1679,14 +1679,6 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 /* A port's skills under it, shown or not (an agent's page, the builder's agent step): the skill's id in small type. */
 .std-skills { display: block; }
 .std-skills code { font-size: 11px; color: var(--text-faint); }
-.std-envs { margin-top: 18px; }
-.std-envs h3 { font-size: 13px; margin: 0 0 2px; }
-.std-envs > small { color: var(--text-dim); font-size: 12px; }
-.std-envs ul { list-style: none; margin: 8px 0 0; padding: 0; }
-.std-envs li { padding: 8px 0; border-top: 1px solid var(--border-soft); font-size: 13px; }
-.std-envs li small { display: block; color: var(--text-dim); font-size: 12px; margin-top: 2px; }
-.std-envs .std-secret { color: var(--ok); }
-.std-envs .std-secret-missing { color: var(--bad); }
 .std-options { margin-top: 18px; }
 .std-options h3 { font-size: 13px; margin: 0 0 2px; }
 .std-options > small { display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 10px; }

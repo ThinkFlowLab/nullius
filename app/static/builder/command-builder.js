@@ -369,21 +369,23 @@
   function standardWhere(rec) {
     const here = schema.standardHere || {}, list = C.whereList(rec), H = schema.hosts || [], b = C.standardBench(rec);
     const backend = rec.backend || 'local';
-    const dockerWhy = list.includes('local') ? here.docker : null;
-    const agentRun = b && b.family === 'agent' && C.standardOthers(rec).some(o => C.chosenOf(rec).includes(o.key) && !o.control);
+    const selected = C.standardOthers(rec).filter(o => C.chosenOf(rec).includes(o.key));
+    const dockerWhy = list.includes('local') && here.docker ? 'Not on this machine: ' + here.docker : '';
+    const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));
     const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? '$' : '▣', title: t, tip: sub});
     const dockerOnly = Object.entries((b || {}).environments || {}).filter(([, e]) => !e.local_ok).map(([n]) => n);
+    const web = agentRun && Object.values((b || {}).environments || {}).some(e => e.network);   // an agent's public web proxy
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
       + `<div class="nb-pick-grid nb-where">${machine('local', 'This machine', 'Nullius runs it here, in runs/' + rec.name + '.')}${H.map(h => machine(h.entry, h.label, 'Over ssh: the standard\'s code at this commit is sent there, uv put there if missing; its job comes back as it runs.')).join('')}</div>`
       + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Run hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
       + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
       + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
-      + how('docker', 'Docker', 'Sandboxed: each unit in a container whose only way out is its relay.', dockerWhy ? 'Not on this machine: ' + dockerWhy : '') + '</div>'
+      + how('docker', 'Docker', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
+        : 'Sandboxed: each unit in a container whose only way out is its relay.', dockerWhy) + '</div>'
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
       + (dockerOnly.length && backend === 'local' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} docker - on local processes their units are recorded as not run.</p>` : '')
-      + hostSetup(rec)
-      + (b ? environmentsOf(b) : '');
+      + hostSetup(rec);
   }
   // What the chosen options of the benchmark need: an embedding model, requirements of the machine (standard.json host).
   function optionNeeds(rec) {
@@ -466,45 +468,31 @@
           : `<div class="std-valgrid" style="--w:${Math.max(7, ...o.values.map(v => String(v).length))}ch" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(v => `<button class="nb-tile std-val" data-bench-opt="${esc(n)}" data-bench-val="${esc(v)}" aria-pressed="${v === cur}" title="${esc((o.about || {})[v] || (v === o.default ? 'default' : v))}"><strong>${esc(v)}</strong>${v === o.default ? '<small>default</small>' : ''}</button>`).join('')}</div>`);
     }).join('');
   }
-  // A benchmark's licences, kept on its own page (never in Settings): what the store holds of each, by name - never a value.
-  const licenceState = (b, name) => (((schema.standardHere || {}).licences || {})[b.key] || {})[name] || null;
-  const KIND_WORD = {value: 'a key', file: 'a licence file', server: 'a licence server'};
-  const licencePage = b => button(`Set it on ${esc(b.label)}'s page`, `data-href="/benchmarks/${esc(b.key)}#licences"`, 'nb-inlinebutton');
-  function licenceLine(b, s) {
-    const st = licenceState(b, s.name), to = s.to === 'agent' ? 'the agent\'s container' : 'the driver';
-    if (!st) return `<small class="std-secret std-secret-missing">${esc(s.name)} (${KIND_WORD[s.kind] || 'a key'}) is missing: units needing it will be recorded as not run. ${licencePage(b)}</small>`;
-    return `<small class="std-secret${st.expired ? ' std-secret-missing' : ''}">${esc(s.name)} ✓ set ${esc(st.on || '')}${st.expires ? (st.expired ? ' · expired ' : ' · expires ') + esc(st.expires) : ''} · ${KIND_WORD[s.kind] || 'a key'}, sent to ${to}</small>`;
-  }
-  // A benchmark's per-task environments: what each is, whether it needs docker, the licences it needs.
-  function environmentsOf(b) {
-    const envs = Object.entries(b.environments || {});
-    if (!envs.length) return '';
-    return `<div class="std-envs"><h3>Environments</h3><small>Each unit runs in one of ${esc(b.label)}'s environments.</small><ul>` + envs.map(([n, e]) =>
-      `<li><b class="nb-mono">${esc(n)}</b> <span class="nb-tag">${e.local_ok ? 'docker or local processes' : 'needs docker'}</span><small>${esc(e.summary)}</small>`
-      + (e.needs_secrets || []).map(s => licenceLine(b, s)).join('') + '</li>').join('') + '</ul></div>';
-  }
-  // The Dataset step: the licences the chosen dataset's units may need. Which environment a unit uses is the
-  // driver's answer at its setup, unless the dataset names one: only then is it known before the run.
-  function datasetLicences(b, ds) {
-    const envs = Object.entries(b.environments || {}).filter(([, e]) => (e.needs_secrets || []).length);
-    if (!ds || !envs.length) return '';
-    const named = ds.environment ? envs.filter(([n]) => n === ds.environment) : [];
-    const shown = named.length ? named : (ds.environment ? [] : envs);
-    if (!shown.length) return '';
-    const missing = shown.some(([, e]) => (e.needs_secrets || []).some(s => { const st = licenceState(b, s.name); return !st; }));
-    return `<div class="std-envs std-dslicences"><h3>Licences</h3><small>${named.length
-        ? `${esc(ds.label || ds.id)} runs its ${esc((b.units || {}).nouns || 'units')} in the environment ${esc(ds.environment)}, unless a unit's setup names another.`
-        : `Which environment a unit uses is known only when it is set up: these may be needed by units using the environment named.`}</small><ul>`
-      + shown.map(([n, e]) => `<li><b class="nb-mono">${esc(n)}</b>${named.length ? '' : ' <span class="nb-tag">may be needed</span>'}`
-        + (e.needs_secrets || []).map(s => licenceLine(b, s)).join('') + '</li>').join('') + '</ul>'
-      + (missing ? `<p class="nb-note">Units needing a missing licence will be recorded as not run - no one's result. They cannot be left out beforehand: which units need it is known only at their setup.</p>` : '')
-      + '</div>';
+  // Only credentials needing attention belong in the builder. Without a dataset's default
+  // environment, a credential may be needed; task setup decides. Shared requirements appear once.
+  // A data provider's token (its provider, not its name) is set in Data providers; the rest in Custom keys.
+  function credentialWarnings(b, datasets) {
+    const needed = new Map(), states = ((schema.standardHere || {}).licences || {})[b.key] || {};
+    datasets.forEach(ds => Object.entries(b.environments || {}).filter(([n]) => !ds.environment || n === ds.environment)
+      .forEach(([, e]) => (e.needs_secrets || []).forEach(s => { const had = needed.get(s.name) || {};
+        needed.set(s.name, {required: had.required || !!ds.environment, provider: had.provider || s.provider || ''}); })));
+    return [...needed].map(([name, {required, provider}]) => {
+      const state = states[name];
+      if (state && !state.expired) return '';
+      const settings = provider
+        ? button('Data providers', 'data-href="/settings#data-providers"', 'nb-inlinebutton')
+        : button('Custom keys', `data-href="/settings#access-${esc(b.key)}"`, 'nb-inlinebutton');
+      const what = provider ? `${esc(({huggingface: 'Hugging Face'})[provider] || provider)} token` : esc(name);
+      return `<p class="nb-note nb-error">${state ? `Replace the expired ${what}` : `Add ${provider ? 'a ' : ''}${what}`} in ${settings}${required ? '' : ' (some tasks may need it)'}.</p>`;
+    }).join('');
   }
   // The benchmark step, both ways (Harbor's catalogue, the standard's benchmarks): a search, filter chips and a grid
   // of tiles, as the Benchmarks page draws them. The filter hides tiles in place (applyPick), so typing keeps focus.
   const picks = {}, pickOf = () => (picks[step] ||= {q: '', cat: '', fam: ''});   // each step its own search and filters
   const catOf = key => (schema.benchmarks || []).find(b => b.key === key) || {};
-  const tasksOf = key => { const t = schema.datasets.filter(d => d.benchmark === key && d.tasks).map(d => d.tasks);
+  const tasksOf = key => { const total = catOf(key).task_count;
+    if (Number.isInteger(total) && total > 0) return `${total.toLocaleString('en-US')} tasks`;
+    const t = schema.datasets.filter(d => d.benchmark === key && d.tasks).map(d => d.tasks);
     return !t.length ? '' : t.every(n => n === t[0]) && t.length > 1 ? `${t[0]} tasks each` : `${t.reduce((a, n) => a + n, 0)} tasks`; };
   const pickChip = (attr, v, label, on) => `<button type="button" class="nb-pick-chip" data-${attr}="${esc(v)}" aria-pressed="${on}">${esc(label)}</button>`;
   // one tile: {attr, key, on, title, mark, cat, origin, line, meta, foot, find, fam, data (more attributes), tip (its title)}
@@ -553,7 +541,7 @@
           tip: x.summary || '', meta: x.units ? x.units + ' ' + u.nouns : '',
           foot: (x.controls || []).map(c => controlChip(c)).join('') + checkChip('stable', (x.proofs || {}).units, (x.failed || {}).units, 'the same ids twice, each unique')
             + ((b.controls || []).some(c => c.key === 'oracle') ? checkChip('no leak', (x.proofs || {}).leak, (x.failed || {}).leak, 'nothing of the reference shows before the run') : '')})).join('')}</div>`
-        + b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)).map(x => datasetLicences(b, x)).join('');
+        + credentialWarnings(b, b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)));
     if (step === S.agent) {
       const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && !o.setup);
       const setups = all.filter(o => o.setup), controls = all.filter(o => o.control);

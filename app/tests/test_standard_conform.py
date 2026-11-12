@@ -66,9 +66,9 @@ class ConformTest(unittest.TestCase):
 
     def test_candidates_follow_the_family_and_the_form(self):
         a = definitions.get("agent", "fake", self.root)
-        self.assertEqual(conform.candidates(a), ["agent.task/v1", "agent.workspace/v1", "agent.tools/v1", "agent.conversation/v1"])
+        self.assertEqual(conform.candidates(a), ["agent.task/v1", "agent.workspace/v1", "agent.tools/v1", "agent.conversation/v1", "agent.search/v1"])
         cmd = dict(a, start={"command": ["x", "{prompt}"]})
-        self.assertEqual(conform.candidates(cmd), ["agent.task/v1", "agent.workspace/v1"])
+        self.assertEqual(conform.candidates(cmd), ["agent.task/v1", "agent.workspace/v1", "agent.search/v1"])
         self.assertEqual(conform.candidates(definitions.get("capability", "fakemem", self.root)), ["cap.memory/v1"])
 
 

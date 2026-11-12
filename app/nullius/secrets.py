@@ -8,12 +8,15 @@ under that benchmark: ``secrets/<benchmark>/<NAME>`` in the user configuration d
 folder is 0700 and each entry a 0600 file holding the bytes it was given -
 a licence file keeps its bytes, a key or a server address its text - so
 nothing of it is ever in the settings file or in this process's environment.
+A data provider's token (Settings → Data providers) has a folder of its own
+(``PROVIDERS``): a credential declared with that ``provider`` is read from
+there alone, never from the benchmark's (:func:`store_of`).
 
 ``index.json`` beside them says, per name, when it was set, when it expires
 (when said), its kind and the file it came from - never the value. A page
-reads :func:`status`; only a run reads :func:`value` or :func:`path`, when a
-unit starts (``standard/run.py``), or to send it to a host over stdin
-(``execution``). Standard library only.
+reads :func:`status` or :func:`state`; only a run reads :func:`value` or
+:func:`path`, when a unit starts (``standard/run.py``), or to send it to a
+host over stdin (``execution``). Standard library only.
 """
 from __future__ import annotations
 
@@ -23,11 +26,16 @@ import os
 import re
 import tempfile
 import time
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Tuple, Union
 from nullius import paths
 
 KINDS = ("value", "file", "server")
 INDEX = "index.json"
+# Shared data-provider credentials remain in the owner-only secret store.
+HUGGINGFACE = "data-provider-huggingface"
+# The data providers a benchmark's credential may name (``provider`` in its ``needs_secrets``):
+# the folder each one's token is kept in, and its name there.
+PROVIDERS = {"huggingface": (HUGGINGFACE, "HF_TOKEN")}
 _BENCH = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,79}$")
 _NAME = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -175,6 +183,24 @@ def value(bench: str, name: str) -> Optional[bytes]:
         return None
     with open(p, "rb") as f:
         return f.read()
+
+
+def store_of(bench: str, name: str, provider: str = "") -> Tuple[str, str]:
+    """Where ``bench``'s credential ``name`` is kept, (folder, name): its
+    data provider's alone when ``provider`` is said, else the benchmark's.
+    ValueError for a provider that is not one."""
+    if not provider:
+        return bench, name
+    if provider not in PROVIDERS:
+        raise ValueError(f"{provider!r} is not a data provider ({', '.join(PROVIDERS)})")
+    return PROVIDERS[provider]
+
+
+def state(bench: str, name: str, provider: str = "") -> Optional[dict]:
+    """:func:`status` of one credential, read where it is kept
+    (:func:`store_of`); None when it is not set."""
+    folder, kept = store_of(bench, name, provider)
+    return status(folder).get(kept)
 
 
 # What a run on a host is handed of the licences, one line of its launcher's stdin (``execution``).

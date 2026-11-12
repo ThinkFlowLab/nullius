@@ -40,6 +40,12 @@ PORTS = {
         "summary": "Several prompts in one session, each answered in its own turn, the earlier ones remembered.",
         "kit": "agent-conversation-v1",
     },
+    "agent.search/v1": {
+        "label": "Search",
+        "family": "agent",
+        "summary": "Search an HTTP collection, retrieve a source and answer with its evidence using the agent's available tools.",
+        "kit": "agent-search-v1",
+    },
     "agent.browser/v1": {
         "label": "Browser",
         "family": "agent",

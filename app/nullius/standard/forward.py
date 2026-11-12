@@ -16,6 +16,12 @@ A benchmark's MCP server run on the machine (``mcp_machine``) is reached the
 same way: a forwarder on the unit's internal network only, the server's
 socket mounted into it alone, ``--to unix:<socket>``.
 
+On macOS, Docker Desktop cannot reach that socket through a mount: the
+forwarder, on the default bridge too, goes to a loopback TCP bridge on the
+machine (``container.Unit._door``), which serves a connection only after its
+nonce. ``--nonce-file`` holds the nonce, mounted read-only and read once,
+before it listens: each connection's first line.
+
 Run as a file on its own (``python3 forward.py --listen 0.0.0.0:27000``,
 the server in ``NULLIUS_FORWARD_TO``), mounted alone into the base image: it imports
 nothing of this application, so its container is given nothing of it.
@@ -45,6 +51,7 @@ def _pump(src: socket.socket, dst: socket.socket) -> None:
                 s.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
+            s.close()
 
 
 def _connect(targets) -> socket.socket:
@@ -64,11 +71,16 @@ def _connect(targets) -> socket.socket:
     raise error
 
 
-def _serve(conn: socket.socket, targets) -> None:
+def _serve(conn: socket.socket, targets, nonce: str = "") -> None:
+    up = None
     try:
         up = _connect(targets)
+        if nonce:
+            up.sendall((nonce + "\n").encode())
         up.settimeout(None)
     except OSError as e:
+        if up is not None:
+            up.close()
         print(json.dumps({"event": "unreachable", "error": str(e)[:200]}), flush=True)
         conn.close()
         return
@@ -88,9 +100,21 @@ def main(argv=None) -> int:
     ap.add_argument("--listen", required=True, help="address:port to listen on")
     ap.add_argument("--to", default=os.environ.get("NULLIUS_FORWARD_TO", ""),
                     help="the one host:port, or unix:/path, every connection goes to (default: NULLIUS_FORWARD_TO)")
+    ap.add_argument("--nonce-file", help="a file whose text is sent as the first line of every connection")
     a = ap.parse_args(argv)
     if not a.to:
         ap.error("--to, or NULLIUS_FORWARD_TO: where to forward")
+    nonce = ""
+    if a.nonce_file:
+        try:
+            with open(a.nonce_file) as f:
+                nonce = f.read().strip()
+        except OSError as e:
+            print(json.dumps({"event": "no-nonce", "error": str(e)[:200]}), flush=True)
+            return 1
+        if not nonce:
+            print(json.dumps({"event": "no-nonce", "error": "the nonce file is empty"}), flush=True)
+            return 1
     lhost, lport = _split(a.listen)
     host, port = _split(a.to)
     if port is None:
@@ -108,7 +132,7 @@ def main(argv=None) -> int:
     print(json.dumps({"event": "listening", "port": lport}), flush=True)
     while True:
         conn, _ = srv.accept()
-        threading.Thread(target=_serve, args=(conn, targets), daemon=True).start()
+        threading.Thread(target=_serve, args=(conn, targets, nonce), daemon=True).start()
 
 
 if __name__ == "__main__":

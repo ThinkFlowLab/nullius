@@ -1,0 +1,278 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "gaia",
+  "label": "GAIA",
+  "summary": "Answer real-world questions with optional attachments; the authors\u2019 scorer checks the final answer.",
+  "family": "agent",
+  "needs": [
+    "agent.task/v1",
+    "agent.workspace/v1",
+    "agent.search/v1"
+  ],
+  "upstream": {
+    "repository": "https://huggingface.co/spaces/gaia-benchmark/leaderboard",
+    "tested": "9f133d71362e77b3539f1514f31b9c101a545fec",
+    "license": "Apache-2.0",
+    "tested_date": "2026-11-06"
+  },
+  "driver": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/driver.py"
+    ],
+    "install": {
+      "python": "3.12",
+      "pip": [
+        "numpy==2.5.4",
+        "datasets==5.1.0",
+        "huggingface-hub==2.4.0"
+      ]
+    }
+  },
+  "datasets": [
+    {
+      "id": "gaia-validation",
+      "label": "Validation \u00b7 All levels",
+      "units": 165,
+      "environment": "data"
+    },
+    {
+      "id": "gaia-validation-level1",
+      "label": "Validation \u00b7 Level 1",
+      "units": 53,
+      "environment": "data"
+    },
+    {
+      "id": "gaia-validation-level2",
+      "label": "Validation \u00b7 Level 2",
+      "units": 86,
+      "environment": "data"
+    },
+    {
+      "id": "gaia-validation-level3",
+      "label": "Validation \u00b7 Level 3",
+      "units": 26,
+      "environment": "data"
+    }
+  ],
+  "units": {
+    "noun": "question",
+    "nouns": "questions",
+    "redistribute": false
+  },
+  "environments": {
+    "data": {
+      "summary": "Access to the gated GAIA dataset.",
+      "dockerfile": "env/data.Dockerfile",
+      "local_ok": true,
+      "needs_secrets": [
+        {
+          "name": "HF_TOKEN",
+          "to": "driver",
+          "provider": "huggingface",
+          "summary": "Hugging Face access token."
+        }
+      ],
+      "network": {
+        "access": "public",
+        "probe": "https://en.wikipedia.org/"
+      }
+    }
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "No agent runs and the answer is empty; a missing FINAL ANSWER: marker fails."
+    },
+    "oracle": {
+      "source": "adapter",
+      "from": "The official validation Final answer field, prefixed with FINAL ANSWER:. The raw reference is also written only by the oracle so the leak check can inspect it.",
+      "in_prompt": "A question that asks for one of the choices it lists names its answer among those choices."
+    }
+  },
+  "score": {
+    "kind": "pass",
+    "says": "The authors' scorer, unchanged, compares the text after the last FINAL ANSWER: marker with the reference; no marker, or nothing after it, fails."
+  },
+  "setups": {
+    "original": {
+      "summary": "The paper's no-tools API procedure: its formatting prompt as the system message, the question as the user message, one call, the authors' scorer unchanged. Attachments are not read. OpenAI no longer serves the paper's GPT-4 snapshots; choose a served model.",
+      "providers": {
+        "openai": "",
+        "openrouter": "",
+        "custom": ""
+      },
+      "paper": "GAIA, section 4: direct GPT-4 and GPT-4 Turbo evaluation without plugins; API runs repeated three times.",
+      "comparable": false
+    }
+  },
+  "options": {
+    "temperature": {
+      "label": "Temperature",
+      "summary": "Provider default sends none; a non-negative decimal sets it. The paper does not state it.",
+      "pattern": "default|(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?",
+      "default": "default",
+      "setups": [
+        "original"
+      ]
+    }
+  },
+  "proven": {
+    "gaia-validation": {
+      "units": {
+        "units": 165,
+        "passed": "165 ids, the same twice, unique",
+        "on": "2026-11-11"
+      },
+      "leak": {
+        "units": 165,
+        "looked_for": 210,
+        "short": 120,
+        "passed": "165/165",
+        "in_prompt": {
+          "units": 1,
+          "why": "A question that asks for one of the choices it lists names its answer among those choices."
+        },
+        "note": "120 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 1 prompt(s) name their answer, as the benchmark says they may: A question that asks for one of the choices it lists names its answer among those choices.",
+        "on": "2026-11-11"
+      },
+      "nop": {
+        "passed": "0/165",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 165,
+        "job": "2026-11-11__23-16-20__gaia__gaia-validation__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-11"
+      },
+      "oracle": {
+        "passed": "165/165",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 165,
+        "job": "2026-11-11__23-16-20__gaia__gaia-validation__prove-oracle",
+        "source": "adapter",
+        "on": "2026-11-11"
+      }
+    },
+    "gaia-validation-level1": {
+      "units": {
+        "units": 53,
+        "passed": "53 ids, the same twice, unique",
+        "on": "2026-11-11"
+      },
+      "leak": {
+        "units": 53,
+        "looked_for": 69,
+        "short": 37,
+        "passed": "53/53",
+        "in_prompt": {
+          "units": 1,
+          "why": "A question that asks for one of the choices it lists names its answer among those choices."
+        },
+        "note": "37 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 1 prompt(s) name their answer, as the benchmark says they may: A question that asks for one of the choices it lists names its answer among those choices.",
+        "on": "2026-11-11"
+      },
+      "nop": {
+        "passed": "0/53",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 53,
+        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level1__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-11"
+      },
+      "oracle": {
+        "passed": "53/53",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 53,
+        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level1__prove-oracle",
+        "source": "adapter",
+        "on": "2026-11-11"
+      }
+    },
+    "gaia-validation-level2": {
+      "units": {
+        "units": 86,
+        "passed": "86 ids, the same twice, unique",
+        "on": "2026-11-11"
+      },
+      "leak": {
+        "units": 86,
+        "looked_for": 106,
+        "short": 66,
+        "passed": "86/86",
+        "note": "66 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-11"
+      },
+      "nop": {
+        "passed": "0/86",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 86,
+        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level2__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-11"
+      },
+      "oracle": {
+        "passed": "86/86",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 86,
+        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level2__prove-oracle",
+        "source": "adapter",
+        "on": "2026-11-11"
+      }
+    },
+    "gaia-validation-level3": {
+      "units": {
+        "units": 26,
+        "passed": "26 ids, the same twice, unique",
+        "on": "2026-11-11"
+      },
+      "leak": {
+        "units": 26,
+        "looked_for": 35,
+        "short": 17,
+        "passed": "26/26",
+        "note": "17 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-11"
+      },
+      "nop": {
+        "passed": "0/26",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 26,
+        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level3__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-11"
+      },
+      "oracle": {
+        "passed": "26/26",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 26,
+        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level3__prove-oracle",
+        "source": "adapter",
+        "on": "2026-11-11"
+      }
+    }
+  }
+}

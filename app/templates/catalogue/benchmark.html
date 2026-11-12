@@ -143,42 +143,7 @@
         {% endfor %}
       </section>
       {% endif %}
-      {% if licences %}
-      {#- Its licences, per environment: kept for this benchmark alone, outside the repository; a value is never shown back. #}
-      <section class="bench-section std-licences" id="licences" aria-labelledby="licences-title">
-        <h2 id="licences-title">Licences</h2>
-        <p class="bench-ds-note">What {{ std.label }}'s environments need of licensed software. Each is kept for {{ std.label }} alone, in your licence storage outside the application, and sent only where it says, to the units whose environment needs it. A unit whose licence is missing is recorded as not run - no one's result.</p>
-        {% for e in licences %}
-        <h3 class="std-licenv"><span class="mono">{{ e.environment }}</span><small>{{ e.summary }}</small></h3>
-        <ul class="std-liclist">
-          {% for s in e.needs %}
-          <li class="std-lic{% if not s.status.set %} std-lic-missing{% endif %}">
-            <div class="std-lichead">
-              <b class="mono">{{ s.name }}</b>
-              <span class="std-lickind">{{ {'value': 'a key', 'file': 'a licence file', 'server': 'a licence server'}[s.kind] }}</span>
-              <span class="std-licstate">{% if s.status.set %}set {{ s.status.on }}{% if s.status.filename %} · {{ s.status.filename }}{% endif %}{% if s.status.expires %} · {% if s.status.expired %}<em class="std-licexpired">expired {{ s.status.expires }}</em>{% else %}expires {{ s.status.expires }}{% endif %}{% endif %}{% else %}missing{% endif %}</span>
-            </div>
-            <small>{% if s.summary %}{{ s.summary }} · {% endif %}{% if s.kind == 'file' %}{% if s.to == 'agent' %}mounted read-only at <span class="mono">{{ s.path }}</span> in the agent's container{% if s.env %}, its path in <span class="mono">{{ s.env }}</span>{% endif %}{% else %}to the driver, which scores: its path in <span class="mono">{{ s.env }}</span>{% endif %}{% elif s.kind == 'server' %}host:port, as <span class="mono">{{ s.name }}</span>{% if s.to == 'agent' %} - on docker the one address the agent's container may reach{% else %} to the driver, which scores{% endif %}{% else %}as <span class="mono">{{ s.name }}</span>, to the {{ "agent's container" if s.to == 'agent' else 'driver, which scores' }}{% endif %}</small>
-            {% if local %}
-            <div class="std-licforms">
-              <form method="post" action="{{ url_for('benchmark_licence', key=b.key) }}" {% if s.kind == 'file' %}enctype="multipart/form-data"{% endif %} class="std-licset">
-                <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ s.name }}"><input type="hidden" name="action" value="set">
-                {% if s.kind == 'file' %}<input type="file" name="file" required aria-label="{{ s.name }}: the licence file">
-                {% else %}<input name="value" type="password" required autocomplete="off" spellcheck="false" aria-label="{{ s.name }}" placeholder="{{ 'host:port' if s.kind == 'server' else ('replace it' if s.status.set else 'its value') }}">{% endif %}
-                <label class="std-licexp">expires<input name="expires" type="date"></label>
-                <button class="btn" type="submit">{{ 'Replace' if s.status.set else 'Set' }}</button>
-              </form>
-              {% if s.status.set %}<form method="post" action="{{ url_for('benchmark_licence', key=b.key) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ s.name }}"><input type="hidden" name="action" value="delete"><button class="btn std-licquiet" type="submit">Remove</button></form>{% endif %}
-              {% if s.name in movable %}<form method="post" action="{{ url_for('benchmark_licence', key=b.key) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ s.name }}"><input type="hidden" name="action" value="move"><button class="btn std-licquiet" type="submit" title="Saved settings hold {{ s.name }}: move its value here and remove it there">Move from saved settings</button></form>{% endif %}
-            </div>
-            {% endif %}
-          </li>
-          {% endfor %}
-        </ul>
-        {% endfor %}
-        {% if not local %}<p class="bench-ds-note">Licences are set from a browser on the application host only.</p>{% endif %}
-      </section>
-      {% endif %}
+
       {% endif %}
 
       {% if ds %}
