@@ -405,6 +405,9 @@
   function hostSetup(rec) {
     const b = C.standardBench(rec), need = optionNeeds(rec).host;
     if (!b || !need.length) return '';
+    // a container setup's image installs what it can, and Review refuses the rest: nothing is asked of a machine
+    const chosen = C.standardOthers(rec).filter(o => C.chosenOf(rec).includes(o.key));
+    if ((rec.backend || 'local') === 'container' && chosen.length && chosen.every(o => o.setup)) return '';
     const reqs = need.map(n => [n, (b.host || {})[n]]).filter(([, r]) => r);
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
     // what installs them; none for a machine's own hardware (a GPU), which no package puts there

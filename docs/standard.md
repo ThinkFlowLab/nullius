@@ -322,12 +322,12 @@ An environment declares `"network": {"access": "public", "probe": "<an HTTPS URL
 
 | Backend | |
 | --- | --- |
-| local | The probe must answer before any unit, or the run is refused |
-| docker | Each unit gets an HTTP(S) proxy to public addresses only; its tools must honour the proxy variables. A failed probe is that unit's setup error |
+| Any | The probe must answer before any unit, or the run is refused |
+| container | Each unit gets an HTTP(S) proxy to public addresses only; its tools must honour the proxy variables. The first unit also probes through its proxy; a failed probe is its setup error |
 
 ### Docker Original setups
 
-On Docker, an Original setup's driver, answerer and scorer run in a container with the packages its chosen options need. It may download data; its declared credentials come as a read-only, owner-only file, never as environment; model keys stay in the relay. No GPU.
+In a container, an Original setup's driver, answerer and scorer run with the packages its chosen options need; an option needing a GPU is refused. It may download data; its declared credentials come as a read-only, owner-only file, never as environment; model keys stay in the relay.
 
 ## Many machines
 

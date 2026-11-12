@@ -153,6 +153,20 @@ class DriverContainer(unittest.TestCase):
             self.assertEqual(launch(root + '/credentials'), 'fixture-only')
             self.assertEqual(launch(), 'unset')
 
+    def test_the_container_starts_the_driver_with_the_command_a_host_run_starts(self):
+        from nullius.standard import install
+        with tempfile.TemporaryDirectory() as root:
+            bench = {'key': 'fixture', '_here': root, 'driver': {'command': [sys.executable, '{here}/show.py']}}
+            with open(root + '/show.py', 'w') as f:
+                f.write("import sys; sys.stdout.write(' '.join(sys.argv))")
+            with open(root + '/setup.json', 'w') as f:
+                json.dump({'bench': bench, 'upstream': None, 'needs': []}, f)
+            env = {'PATH': os.environ.get('PATH', ''), 'PYTHONPATH': APP, 'NULLIUS_HOME': root + '/profile'}
+            said = subprocess.run([sys.executable, '-m', 'nullius.standard.setup_container', root + '/setup.json',
+                                   root + '/cache', 'run'], env=env, capture_output=True, text=True, timeout=60).stdout
+            command, extra = install.driver_argv(bench, root + '/cache')
+            self.assertEqual((said, extra), (' '.join(command[1:]), {}))
+
 
 @unittest.skipIf(docker_tier.why_not(), docker_tier.why_not() or "")
 class DockerDriver(unittest.TestCase):
@@ -186,3 +200,25 @@ class DockerDriver(unittest.TestCase):
             finally:
                 proc.close()
                 container.sweep(job)
+
+
+class SetupDriverFiles(unittest.TestCase):
+    """A benchmark's downloaded files reach its Docker setup driver as they reach a local one."""
+
+    def test_the_files_are_in_the_drivers_environment_and_mounted(self):
+        from nullius.standard import run
+        tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)
+        got = {}
+
+        class FakeSetup:
+            def start(self, env, cwd, log, *, files=(), servers=(), stopped=None):
+                got.update(env=env, files=list(files))
+                return object()
+        r = run.Run.__new__(run.Run)
+        r.local, r.drivers, r.setup_driver, r.job_dir = run.threading.local(), [], FakeSetup(), tmp
+        r.up, r.data, r.ds, r.bench, r.bench_options, r.licences = "/up", "/data", {"id": "all"}, {"key": "b"}, {}, {}
+        r.bench_relay, r._stopped = None, run.threading.Event()
+        r.file_env = {"NULLIUS_FILE_INDEX": os.path.join(tmp, "index.bin")}
+        r.driver()
+        self.assertEqual(got["env"]["NULLIUS_FILE_INDEX"], r.file_env["NULLIUS_FILE_INDEX"])
+        self.assertIn(r.file_env["NULLIUS_FILE_INDEX"], got["files"])

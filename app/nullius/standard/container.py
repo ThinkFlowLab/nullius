@@ -932,6 +932,16 @@ def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
             image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}"]
 
 
+def proxy_env(direct: Iterable[str] = ()) -> Dict[str, str]:
+    """The variables that send HTTP(S) through the ``egress`` proxy; this
+    machine's loopback and ``direct`` (the unit's relay, doors and servers) are
+    reached as they are."""
+    proxy = f"http://{EGRESS_ALIAS}:{EGRESS_PORT}"
+    local = ",".join(dict.fromkeys(["localhost", "127.0.0.1", "::1", *direct]))
+    return {"HTTP_PROXY": proxy, "HTTPS_PROXY": proxy, "http_proxy": proxy, "https_proxy": proxy,
+            "NO_PROXY": local, "no_proxy": local}
+
+
 def egress_argv(image: str, *, name: str, job: str) -> List[str]:
     """``docker run`` for an own image's check's proxy (``egress.py``): on the
     default bridge (``BRIDGE`` on podman), its one file mounted, nothing else given."""
@@ -966,7 +976,7 @@ class Unit:
                  model: Optional[str] = None, routes: Optional[Dict[str, str]] = None, prices: Optional[dict] = None,
                  side_models=(), key_header: str = "authorization", servers: Iterable[str] = (),
                  doors: Iterable[Tuple[str, int, str]] = (), hosts: Optional[Dict[str, str]] = None,
-                 ledger: Optional[str] = None, network_probe: Optional[str] = None):
+                 ledger: Optional[str] = None, network_probe: Optional[str] = None, probe_now: bool = True):
         self.job, self.tag, self.dir, self.image, self.app = job, tag, record_dir, image, app
         self.ledger = ledger                     # the file of the run's spending cap, when it has one
         self.servers = list(servers)             # licence servers, host:port each: a forwarder apiece
@@ -981,6 +991,7 @@ class Unit:
         self.network = False
         self.key_dir: Optional[str] = None     # its secret files' folder, until what reads them listens
         self.network_probe = network_probe
+        self.probe_now = probe_now               # the run's first unit checks the proxy route; the rest trust it
         self.network_env = {}
         self.socket_doors: List[SocketDoor] = []
         os.makedirs(record_dir, exist_ok=True)
@@ -1013,6 +1024,12 @@ class Unit:
             raise
         return self
 
+    def direct(self) -> List[str]:
+        """What the agent reaches without the public web proxy: its relay, its
+        doors and its licence servers' forwarders."""
+        return [RELAY_ALIAS, *[alias for alias, _, _ in self.doors],
+                *[address.rsplit(":", 1)[0] for address in getattr(self, "reach", {}).values()]]
+
     def _key_file(self, name: str = "key", text: Optional[str] = None) -> str:
         """Write the key, or ``text``, to an owner-only file in the unit's key
         folder, a new one under :func:`key_root` when it has none, and return
@@ -1033,13 +1050,9 @@ class Unit:
         _docker(egress_argv(self.image, name=name, job=self.job)[1:])
         _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.names["network"], name])
         self._wait(name, "the agent's public web proxy")
-        proxy = f"http://{EGRESS_ALIAS}:{EGRESS_PORT}"
-        local = ",".join(["localhost", "127.0.0.1", "::1", RELAY_ALIAS,
-                          *[alias for alias, _, _ in self.doors],
-                          *[server_alias(address, i)[0] for i, address in enumerate(self.servers, 1)]])
-        self.network_env = {"HTTP_PROXY": proxy, "HTTPS_PROXY": proxy,
-                            "http_proxy": proxy, "https_proxy": proxy,
-                            "NO_PROXY": local, "no_proxy": local}
+        self.network_env = proxy_env(self.direct())
+        if not self.probe_now:
+            return
         # Check the actual network path, without mounts or credentials.
         code = ("import sys,urllib.request; "
                 "r=urllib.request.urlopen(urllib.request.Request(sys.argv[1], headers={'User-Agent': 'Nullius-connectivity-check'}), timeout=10); "
@@ -1719,10 +1732,7 @@ class Box:
             _docker(egress_argv(image, name=name, job=self.job)[1:])
             _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.net, name])
             wait_listening(name, "the task's proxy")
-        proxy = f"http://{EGRESS_ALIAS}:{EGRESS_PORT}"
-        local = "localhost,127.0.0.1,::1"
-        return {"HTTP_PROXY": proxy, "HTTPS_PROXY": proxy, "http_proxy": proxy, "https_proxy": proxy,
-                "NO_PROXY": local, "no_proxy": local}
+        return proxy_env()
 
     def offline(self):
         """The way out :meth:`online` gave taken away again: its proxy

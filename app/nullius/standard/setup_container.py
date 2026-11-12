@@ -199,9 +199,8 @@ def main():
     for path in credentials:                     # a JSON object: no shell reads a value
         with open(path) as f:
             env.update(json.load(f))
-    if where:
-        env.update(install.process_env(definition, where, cache))
-    command = install.words(bench["driver"]["command"], {"here": bench["_here"], "install": where or ""})
+    command, extra = install.driver_command(bench, where, cache)
+    env.update(extra)
     os.execvpe(command[0], command, env)
 
 

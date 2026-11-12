@@ -133,6 +133,7 @@ class GaiaDriver(unittest.TestCase):
             result = self.driver.answer("fixture-task", str(self.workspace), "original", "fixture-model",
                                         "https://fixture.invalid/v1/", "fixture-key")
         self.assertEqual(result, {"answer": "FINAL ANSWER: unchanged", "model": "fixture-model"})
+        self.assertEqual(call.call_args.kwargs, {"timeout": 600})                     # a stalled endpoint never holds the driver
         request = call.call_args.args[0]
         self.assertEqual(request.full_url, "https://fixture.invalid/v1/chat/completions")
         self.assertEqual(json.loads(request.data), {"model": "fixture-model", "messages": [
@@ -199,6 +200,19 @@ class GaiaDriver(unittest.TestCase):
             self.driver.load()
         fetch.assert_called_once_with(self.driver.SOURCE["datasets"][DATASET]["file"])
         dataset.load_dataset.assert_called_once()
+
+    def test_every_dataset_pins_its_metadata_by_checksum(self):
+        for key, definition in self.driver.SOURCE["datasets"].items():
+            with self.subTest(key):
+                self.assertRegex(definition["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_load_refuses_metadata_whose_checksum_differs(self):
+        dataset = self.metadata([self.row])
+        self.driver.SOURCE["datasets"][DATASET]["sha256"] = "0" * 64
+        with patch.dict("sys.modules", {"datasets": dataset}), patch.object(self.driver, "cached_file", return_value=self.attachment), \
+                self.assertRaisesRegex(ValueError, "checksum differs"):
+            self.driver.load()
+        dataset.load_dataset.assert_not_called()
 
     def test_load_rejects_invalid_rows_before_caching_them(self):
         cases = [(dict(self.row, task_id=""), "nonempty"),

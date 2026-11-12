@@ -77,9 +77,7 @@ class _Driver:
         home = os.path.join(self.work, f"driver-home-{n}")
         os.makedirs(home, exist_ok=True)
         cmd, extra = install.driver_argv(self.bench)
-        credentials = {}
-        for environment in (self.bench.get("environments") or {}).values():
-            credentials.update(definitions.secret_values(environment, self.licences, "driver"))
+        credentials = run.driver_secrets(self.bench, self.licences)
         env = run.base_env(home, {**extra, **credentials, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                                   "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": run.driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                                   "NULLIUS_VERSION": str(self.bench.get("_version") or ""),

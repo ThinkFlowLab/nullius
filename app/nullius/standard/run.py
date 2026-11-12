@@ -109,6 +109,7 @@ IMAGE_SECONDS = 3600                  # an own image's pull or build (container.
 MAX_AGENT_SECONDS = 6 * 3600          # the longest a unit's own agent limit (setup's agent_seconds) may ask
 MAX_TURNS = 20
 BACKENDS = definitions.names.BACKENDS
+_PROBED = threading.Lock()                # a run's first unit, claimed once (Run.first_probe)
 
 
 class Refused(Exception):
@@ -134,6 +135,14 @@ def provider_endpoint(provider: str, env=os.environ) -> tuple:
 
 def _slug(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", s).strip("_")[:60] or "unit"
+
+
+def driver_secrets(bench: dict, licences) -> dict:
+    """The set secrets a benchmark's environments send to its driver (``to: driver``)."""
+    out = {}
+    for e in (bench.get("environments") or {}).values():
+        out.update(definitions.secret_values(e, licences, "driver"))
+    return out
 
 
 def option_env(values: dict) -> dict:
@@ -454,7 +463,16 @@ class Run:
                 raise Refused("a spending cap needs a price for every model the run calls, and there is none for "
                               + ", ".join(unpriced) + ": nullius prices update, nullius prices set MODEL INPUT OUTPUT, "
                               "or --price MODEL=INPUT,OUTPUT")
-        lacking = {} if self.upstream and backend == "container" else hostreq.problems(bench, needs["host"], which)
+        on_host = needs["host"]
+        if self.upstream and backend == "container":
+            # its image installs what has an install; nothing else reaches its container
+            imaged = hostreq.in_image(bench, on_host)
+            cannot = [n for n in hostreq.requirements(bench, on_host) if n not in imaged]
+            if cannot:
+                raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs "
+                              f"{', '.join(cannot)}, which a container setup cannot provide: choose local processes")
+            on_host = []
+        lacking = hostreq.problems(bench, on_host, which)
         if lacking:
             raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
                           + "; ".join(f"{n} ({why})" for n, why in lacking.items())
@@ -507,10 +525,10 @@ class Run:
                 os.makedirs(cwd, exist_ok=True)
                 env = {"HOME": home, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                        "NULLIUS_DATASET_ID": self.ds["id"], "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
-                       **option_env(self.bench_options), **self.embeddings_env(), **self.driver_secrets()}
+                       **option_env(self.bench_options), **self.file_env, **self.embeddings_env(), **self.driver_secrets()}
                 files = [h["path"] for s in definitions.secrets_of(self.bench)
                          if s.get("to") == "driver" and s.get("kind") == "file"
-                         for h in [self.licences.get(s["name"])] if h]
+                         for h in [self.licences.get(s["name"])] if h] + list(self.file_env.values())
                 d = self.setup_driver.start(env, cwd, os.path.join(self.job_dir, ".work", f"driver-{threading.get_ident()}.log"),
                                             files=files, stopped=self._stopped,
                                             servers=[s["name"] for s in definitions.secrets_of(self.bench)
@@ -736,7 +754,7 @@ class Run:
         when it declares one (``driver.install``), the agent's or capability's
         packages. Refused when one cannot be had."""
         from . import network_requirements
-        why = network_requirements.check(self.bench, self.other, self.backend)
+        why = network_requirements.check(self.bench, self.other)
         if why:
             raise Refused("; ".join(why))
         p = self.progress
@@ -1100,14 +1118,19 @@ class Run:
             return ("EnvironmentSecretMissingError", "not run: needs " + ", ".join(missing))
         return None
 
+    def first_probe(self) -> bool:
+        """True once a run: its first unit checks the public web proxy's route,
+        the check before the run having found the public web reachable."""
+        with _PROBED:
+            first = not getattr(self, "_probed", False)
+            self._probed = True
+        return first
+
     def driver_secrets(self) -> dict:
         """The secrets the benchmark's environments send to its driver
         (``to: driver``) that are set: in its process's environment, never in
         a request, so never in a log."""
-        out = {}
-        for e in (self.bench.get("environments") or {}).values():
-            out.update(definitions.secret_values(e, self.licences, "driver"))
-        return out
+        return driver_secrets(self.bench, self.licences)
 
     # -- the unit's relay, and where its process runs ------------------------
     def agent_licences(self, env_def: Optional[dict], rl) -> dict:
@@ -1208,13 +1231,13 @@ class Run:
                 ln.stop()
             raise _Ended("EnvironmentSetupError", f"the unit's web services: {e}")
         door = getattr(self, "loopback", None)
+        probe = ((env_def or {}).get("network") or {}).get("probe") if self.other["_kind"] == "agent" else None
         rl = container.Unit(self.name, tag, record, image=self.image, app=APP, base=door.base if door else self.base, key=self.key,
                             model=self.model, routes=routes, side_models=side, key_header=key_header,
                             prices=price_list.given(self.models_called(), getattr(self, "prices", None)),   # a sidecar's argv: its models' rows
                             servers=self.agent_servers(env_def), doors=doors, hosts=door.hosts if door else None,
                             ledger=self.ledger_file(),
-                            network_probe=((env_def or {}).get("network") or {}).get("probe")
-                            if self.other["_kind"] == "agent" else None)
+                            network_probe=probe, probe_now=bool(probe) and self.first_probe())
         rl.mcp_listeners = listeners
         try:
             try:
@@ -1344,13 +1367,8 @@ class Run:
             return
         try:
             try:
-                proxy = box.online()
-                direct = [container.RELAY_ALIAS]
-                if isinstance(rl, container.Unit):
-                    direct += [alias for alias, _, _ in rl.doors]
-                    direct += [address.rsplit(":", 1)[0] for address in rl.reach.values()]
-                proxy["NO_PROXY"] = proxy["no_proxy"] = ",".join(dict.fromkeys([proxy["NO_PROXY"], *direct]))
-                box.agent_proxy = proxy
+                box.online()
+                box.agent_proxy = container.proxy_env(rl.direct() if isinstance(rl, container.Unit) else [container.RELAY_ALIAS])
             except (container.Unavailable, ValueError) as e:
                 raise _Ended("EnvironmentSetupError", f"the task's internet access: {e}")
             yield
