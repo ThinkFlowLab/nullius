@@ -18,7 +18,7 @@ The AAIF's open-source agent, formerly Block's.
 <table>
 <thead><tr><th rowspan="2">Version</th><th rowspan="2">Upstream</th><th colspan="5" class="group">Ports</th><th colspan="3" class="group">Tools</th></tr><tr><th>One task</th><th>Workspace files</th><th>MCP tools</th><th>Conversation</th><th>Search</th><th>decoys</th><th>chain</th><th>retry</th></tr></thead>
 <tbody>
-<tr><td><code>goose</code></td><td><code>1.53.0</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>goose</code></td><td><code>1.53.0</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 </tbody></table>
 
 ## Options
@@ -32,7 +32,5 @@ The AAIF's open-source agent, formerly Block's.
 <table>
 <thead><tr><th rowspan="2"></th><th colspan="1" class="group"><a href="../../benchmarks/supported/gaia.md">GAIA</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/gsm8k.md">GSM8K</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/humaneval.md">HumanEval</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/swe-bench-verified.md">SWE-bench Verified</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/tau3-bench.md">τ³-bench</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/terminal-bench.md">Terminal-Bench 2.0</a></th></tr><tr><th>One task, Workspace files, Search</th><th>One task</th><th>Workspace files</th><th>Workspace files</th><th>MCP tools, Conversation</th><th>Workspace files</th></tr></thead>
 <tbody>
-<tr><td><code>goose</code></td><td><abbr class="mark no" title="lacks `agent.search/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>goose</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 </tbody></table>
-
-- ✗: the missing port, on hover.

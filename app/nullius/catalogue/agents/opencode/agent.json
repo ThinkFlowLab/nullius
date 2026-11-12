@@ -63,7 +63,8 @@
     "agent.task/v1",
     "agent.workspace/v1",
     "agent.tools/v1",
-    "agent.conversation/v1"
+    "agent.conversation/v1",
+    "agent.search/v1"
   ],
   "proven": {
     "agent.task/v1": {
@@ -119,6 +120,16 @@
       "kit_version": 1,
       "backend": "docker",
       "job": "2026-11-02__14-14-07__kit__agent-conversation-v1__opencode"
+    },
+    "agent.search/v1": {
+      "passed": "3/3",
+      "on": "2026-11-12",
+      "model": "meta/muse-spark-1.3-contributor",
+      "provider": "openrouter",
+      "version": "1.18.35",
+      "kit_version": 1,
+      "backend": "docker",
+      "job": "2026-11-12__11-10-20__kit__agent-search-v1__opencode"
     }
   }
 }
