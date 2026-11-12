@@ -262,10 +262,12 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 }
 ```
 
-```json title="setup reply · image and verify"
+```json title="setup reply · image, prepare and verify"
 {"prompt": "...", "environment": "task",
  "image": {"build": "<task>/environment", "memory_mb": 2048, "cpus": 1},
  "workdir": "/app",
+ "prepare": {"run": ["sh", "-c", "command -v tmux || apt-get install -y tmux"],
+             "seconds": 600, "network": true},
  "verify": {"copy": {"<task>/tests": "/tests"}, "run": ["bash", "/tests/test.sh"],
             "collect": "/logs/verifier", "seconds": 900, "network": true,
             "keep_processes": false}}
@@ -277,6 +279,7 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 | `image.pull` | A reference pinned by its digest (`name@sha256:...`) |
 | `image.memory_mb`, `image.cpus` | The task's limits |
 | `workdir` | The session's `cwd` when not the image's working directory |
+| `prepare` | A step (`copy`, `write`, `run`, `seconds`, `network`) run as root in the unit's container before the agent or a control starts: what the task's own harness adds to every image |
 | `verify.copy` | Folders of the upstream copied in only after the agent ends |
 | `verify.write` | `{absolute path inside: text}`, written in only after the agent ends |
 | `verify.run` | In the working directory, same container |
@@ -290,6 +293,7 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 | The agent is added at run time | The container runs the image for the whole unit (`container.Box`), as the image's own user, default capabilities and no way to gain more, on the unit's internal network. The agent is started with `docker exec`; ACP's `fs` is off. Home, install, definition and MCP files are mounted as on the base |
 | Runtimes | Read-only under `/opt/nullius`: the base's Node for an agent from npm, a pinned standalone Python (`uv python install` in the base image) for one started as `python3` with no uv environment. A uv environment's interpreter is in its install. The start command names it; `PATH` keeps the image's own `python3` and `node` first. The home written as root is given back to you |
 | A runtime the image cannot start | Tried once before the agent; a failure (glibc in a musl image) is a setup error: "not run: the agent's runtime (node) needs glibc; this task's image is musl-based" |
+| A preparation leaves no way out | Its `network: true` is the check's proxy; the proxy container is removed and shown gone, and what the step left running is stopped, before the agent starts. `setup/prepare.txt` and `setup/egress.log` keep its output. A failure, or a way out that cannot be closed, is an `EnvironmentSetupError` |
 | The check runs where the work is | `score` is sent `verified: {exit, timed_out, output, dir, collected}`; the driver never runs docker. What changed in the container is `agent/container-changes.txt` |
 | Nothing of the agent runs during the check | Every process but init and the keep-alive is stopped, then killed; `verifier/stopped.txt` names each, one that cannot be stopped is a `VerifierError`. `keep_processes: true` lets them run on, free to alter the tests |
 | The check's way out is a proxy | `network: true` adds a proxy container (`standard/egress.py`) as `egress`, told to the check's command alone (`HTTP_PROXY`, `HTTPS_PROXY`); it connects only to global addresses, never `169.254.0.0/16`, `100.64.0.0/10`, private ranges, loopback or the docker bridge. `verifier/egress.log` keeps what it let through and refused. A download has to honour the proxy variables |
@@ -371,7 +375,7 @@ use the source folders and repository checks.
 | Op | Sent | Replies |
 | --- | --- | --- |
 | `units` | `dataset`, `setup` | Every unit id |
-| `setup` | `unit`, `dir` | `{prompt}`, any `mcp` servers, `environment`, an own image's `image` and `verify`, and `agent_seconds`, the unit's own agent timeout (up to 6 hours, instead of `limits.turn_seconds`) |
+| `setup` | `unit`, `dir` | `{prompt}`, any `mcp` servers, `environment`, an own image's `image`, `prepare` and `verify`, and `agent_seconds`, the unit's own agent timeout (up to 6 hours, instead of `limits.turn_seconds`) |
 | `turn` | The transcript so far; `simulator: {model, base_url, key}` when there is one; `judge` for an upstream that grades as the conversation ends; `attempt` with `limits.attempts` | The next message, `{done: true}`, or `restart` |
 | `produce` | A capability benchmark's recall, `base_url` and `key` | The reading, through the relay |
 | `answer` | `unit, dir, setup, model, base_url, key` | `{answer}`: the upstream's own answerer, for a [setup](#setups-as-published-your-model-your-agent-or-capability) |

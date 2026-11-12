@@ -1497,6 +1497,23 @@ class Box:
         return {"HTTP_PROXY": proxy, "HTTPS_PROXY": proxy, "http_proxy": proxy, "https_proxy": proxy,
                 "NO_PROXY": local, "no_proxy": local}
 
+    def offline(self):
+        """The way out :meth:`online` gave taken away again: its proxy
+        container removed, then shown gone - no container of that name, and
+        none answering to ``egress`` on the box's network. Unavailable when
+        either is still there: the agent is never started beside it."""
+        name = self.egress
+        if not name:
+            return
+        _docker(["rm", "-f", name], check=False, timeout=60)
+        left = _docker(["ps", "-aq", "--filter", f"name=^/{name}$"], check=False, timeout=30)
+        if left.returncode != 0 or left.stdout.strip():
+            raise Unavailable(f"the way out ({name}) could not be removed")
+        on = _docker(["network", "inspect", "-f", "{{range .Containers}}{{.Name}} {{end}}", self.net], check=False, timeout=30)
+        if on.returncode != 0 or name in on.stdout.split():
+            raise Unavailable(f"the way out ({name}) is still on the unit's network")
+        self.egress = None
+
     def egress_said(self) -> str:
         """What the check's proxy let through and refused, a JSON line each."""
         if not self.egress:
