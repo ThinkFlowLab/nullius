@@ -7,7 +7,7 @@
   "harness": [
     "standard"
   ],
-  "origin": "experiment",
+  "origin": "official",
   "good_to_know": [
     "Agents need public internet access.",
     "Accept GAIA's access conditions on Hugging Face, then add a token in Settings → Data providers. Do not redistribute its questions or answers in a crawlable form.",

@@ -1,4 +1,4 @@
-/* Benchmarks: two shelves of cards, official then experiments; a card opens its benchmark's page. */
+/* Benchmarks: two shelves of cards, official then community; a card opens its benchmark's page. */
 .bench-index, .bench-page { width: 100%; max-width: 1120px; margin: 0 auto; }
 .bench-index:not(.bench-new) { max-width: 1320px; }
 .bench-index-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
@@ -21,7 +21,7 @@
 .bench-shelf[hidden], .bench-card[hidden] { display: none; }
 .bench-shelf h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 13px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--text); }
 .shelf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--status-color); }
-.bench-shelf.st-experiment .shelf-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--status-color); }
+.bench-shelf.st-community .shelf-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--status-color); }
 .shelf-n { color: var(--text-faint); font-weight: 500; }
 /* four cards a line on a wide screen, two on a narrower one, one on a phone */
 .bench-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
@@ -30,8 +30,8 @@
 .bench-card { display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-soft); color: var(--text); transition: border-color .13s ease; }
 .bench-card:hover { border-color: var(--accent); text-decoration: none; }
 .bench-card:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
-.bench-shelf.st-experiment .bench-card { background: transparent; border-style: dashed; border-color: var(--border); }
-.bench-shelf.st-experiment .bench-card:hover { border-color: var(--accent); }
+.bench-shelf.st-community .bench-card { background: transparent; border-style: dashed; border-color: var(--border); }
+.bench-shelf.st-community .bench-card:hover { border-color: var(--accent); }
 .bench-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .bench-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .bench-harness { font: 12px var(--mono); color: var(--text-faint); }

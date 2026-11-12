@@ -153,7 +153,7 @@ def build(form: dict) -> dict:
                "verifier": g("verifier")}
     entry = {"key": g("key"), "title": g("title"), "category": g("category_new") or g("category"),
              "domain": g("domain"), "scoring": g("scoring"), "harness": ["harbor"],
-             "origin": g("origin") or "experiment"}
+             "origin": g("origin") or "official"}
     if _lines(form.get("upstream_limitations")):
         entry["upstream_limitations"] = _lines(form.get("upstream_limitations"))
     entry["limitations"] = _lines(form.get("limitations"))
@@ -281,7 +281,7 @@ def values_of(entry: dict) -> dict:
     t = entry.get("timeouts") or {}
     values = {"key": entry.get("key", ""), "title": entry.get("title", ""), "category": entry.get("category", ""),
               "domain": entry.get("domain", ""), "scoring": entry.get("scoring", ""),
-              "origin": "experiment" if entry.get("experiment") or entry.get("origin") == "community"
+              "origin": "official" if entry.get("experiment") or entry.get("origin") == "experiment"
               else entry.get("origin", "official"), "upstream_limitations": "\n".join(entry.get("upstream_limitations") or []),
               "limitations": "\n".join(entry.get("limitations") or []),
               "citation": entry.get("citation", ""),

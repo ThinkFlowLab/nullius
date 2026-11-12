@@ -130,7 +130,7 @@ class RouteCases(CompilerCase):
         self.assertIn('terminal-bench', self.offered())
         ok = self.route('terminal-bench')
         self.assertEqual((ok['blocker'], ok['errors']), ('', []))
-        # every offered benchmark is one the catalogue names on Harbor, official or an experiment
+        # every offered benchmark is one the catalogue names on Harbor, official or community
         usable = {b['key'] for b in self.schema['benchmarks'] if 'harbor' in b['harness']}
         self.assertEqual(set(self.offered()), usable)
 

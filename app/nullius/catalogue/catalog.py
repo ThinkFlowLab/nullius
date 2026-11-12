@@ -31,11 +31,10 @@ overlap, such as a full split beside difficulty subsets. It controls the
 benchmark headline only; every dataset keeps its own count.
 
 Every entry says where it comes from (``origin``): ``official``, the
-publisher's own benchmark, run the way its publisher certifies, or
-``experiment``, one taken from wherever it was found - its official source or
-not - and adapted here: published, but with flaws still to find. A card and
-a page show it as a tag beside the category, and the Benchmarks page shelves
-by it. Whether anyone has run it is not part of an entry.
+publisher's own benchmark, or
+``community``, adapted by the community. A card and a page show it as a tag
+beside the category, and the Benchmarks page shelves by it. Whether anyone
+has run it is not part of an entry.
 
 Routes: a benchmark reaches a run through a harness, and ``Benchmark.routes``
 says, for each harness in ``HARNESSES``, whether that route is usable here.
@@ -53,9 +52,9 @@ from dataclasses import dataclass, field
 from nullius import paths
 from . import storage
 
-# Where an entry comes from: the publisher's, run as it certifies (official),
-# or found and adapted here, flaws still to find (experiment).
-ORIGINS = ("official", "experiment")
+# Where an entry comes from: the publisher's benchmark (official),
+# or adapted by the community (community).
+ORIGINS = ("official", "community")
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BENCHMARKS = "benchmarks"          # the folder of benchmark folders, under ROOT
 ENTRY = "benchmark.json"           # a benchmark's entry, in its folder
@@ -106,7 +105,7 @@ class Benchmark:
     #: agent_run, verify) as recorded from a real run; empty when no run has
     #: recorded them
     timeouts: dict = field(default_factory=dict)
-    #: the publisher's, run as it certifies, or adapted here (ORIGINS)
+    #: the publisher's benchmark or a community adaptation (ORIGINS)
     origin: str = "official"
     #: how it runs as published when Harbor runs it: the upstream's own agent, by
     #: the name Harbor registers it (``agent``), and why it is the published one
@@ -327,8 +326,8 @@ def _entry(path: str, name: str) -> tuple:
     entry = _read(path)
     if not isinstance(entry, dict):
         raise ValueError("not a JSON object")
-    if entry.get("experiment") or entry.get("origin") == "community":
-        entry = {**entry, "origin": "experiment"}   # an entry written before origin said it
+    if entry.get("experiment") or entry.get("origin") == "experiment":
+        entry = {**entry, "origin": "official"}   # experiment is now official
     nested = [d for d in entry.get("datasets", []) if isinstance(d, dict)]
     return (_pick(Benchmark, {**entry, "datasets": [d.get("key") for d in nested]}),
             [_pick(Dataset, {**d, "benchmark": name}) for d in nested])
@@ -395,7 +394,7 @@ def validate(cat: Catalog) -> list:
             claimed.setdefault(s.strip().lower(), b.key)
     for b in cat.benchmarks:
         if b.origin not in ORIGINS:
-            bad.append(f"{b.key}: origin is official or experiment")
+            bad.append(f"{b.key}: origin is official or community")
         if b.task_count is not None:
             if type(b.task_count) is not int or b.task_count < 1:
                 bad.append(f"{b.key}: task_count must be a positive integer")

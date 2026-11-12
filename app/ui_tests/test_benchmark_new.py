@@ -73,9 +73,10 @@ class AddBenchmark(unittest.TestCase):
     def test_the_list_offers_the_form_and_the_form_its_choices(self):
         self.assertIn('href="/benchmarks/new"', self.get("/benchmarks").get_data(as_text=True))
         html = self.get("/benchmarks/new").get_data(as_text=True)
-        for name, value in (("source", "hub"), ("source", "registry"), ("origin", "official"), ("origin", "experiment"),
+        for name, value in (("source", "hub"), ("source", "registry"), ("origin", "official"), ("origin", "community"),
                             ("harness", "harbor")):
             self.assertIn(f'name="{name}" value="{value}"', html)
+        self.assertIn('name="origin" value="official" checked', html)
         self.assertIn("<option>Coding</option>", html)                                         # the catalogue's own categories
         for phase in ("env_setup", "agent_setup", "agent_run", "verify"):
             self.assertIn(f'name="timeout_{phase}"', html)

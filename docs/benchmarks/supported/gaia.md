@@ -8,7 +8,7 @@ Real-world questions needing reasoning, web research and file understanding.
 <tbody>
 <tr><th>Key</th><td><code>gaia</code></td></tr>
 <tr><th>Category</th><td>General assistance</td></tr>
-<tr><th>Origin</th><td><a href="https://huggingface.co/spaces/gaia-benchmark/leaderboard/blob/9f133d71362e77b3539f1514f31b9c101a545fec/content.py">Experiment</a></td></tr>
+<tr><th>Origin</th><td><a href="https://huggingface.co/spaces/gaia-benchmark/leaderboard/blob/9f133d71362e77b3539f1514f31b9c101a545fec/content.py">Official</a></td></tr>
 <tr><th>Runs on</th><td>Nullius</td></tr>
 <tr><th>Tasks</th><td>165</td></tr>
 <tr><th>Paper</th><td><a href="https://arxiv.org/abs/2311.12983">GAIA: a benchmark for General AI Assistants</a>, arXiv · 2023</td></tr>

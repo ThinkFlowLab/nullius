@@ -389,7 +389,7 @@ def render_feature_page(versions: list) -> str:
 
 
 def _origin(entry) -> str:
-    """Official or Experiment, linked to the benchmark's own repository."""
+    """Official or Community, linked to the benchmark's own repository."""
     url = (entry.citation_source or "").strip()
     return f'<a href="{url}">{entry.label}</a>' if url.startswith("http") else entry.label
 

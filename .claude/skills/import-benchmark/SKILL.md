@@ -146,8 +146,8 @@ When they do, write it locally:
 - **The entry.** `benchmark.json` in the writable benchmark folder located
   above, named after the key, mirroring an existing Harbor benchmark's:
   `harness: ["harbor"]`, its `origin` per the docstring of
-  `app/nullius/catalogue/catalog.py` (`official`, the publisher's run as it
-  certifies, or `experiment`, adapted here), its `scoring` in two or three words (the
+  `app/nullius/catalogue/catalog.py` (`official`, the publisher's benchmark,
+  or `community`, adapted by the community), its `scoring` in two or three words (the
   card's tag: `Tests`, `Lean compiler`), and its `datasets` nested in it, one by
   registry or Hub name (or local path) with its task count, `official` link,
   and `verifier` - and its `citation` and `citation_source`. The builder takes a benchmark's first dataset as its default, so a

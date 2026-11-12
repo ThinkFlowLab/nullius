@@ -252,7 +252,7 @@ def _opened(key: str):
 @app.route("/benchmarks/new", methods=["GET"])
 def benchmark_new():
     """The form that adds a Harbor benchmark to the catalogue."""
-    return _form({"source": "hub", "origin": "experiment"})
+    return _form({"source": "hub", "origin": "official"})
 
 
 @app.route("/benchmarks/new/read", methods=["POST"])

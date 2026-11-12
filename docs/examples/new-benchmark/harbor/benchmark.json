@@ -7,7 +7,7 @@
   "harness": [
     "harbor"
   ],
-  "origin": "experiment",
+  "origin": "official",
   "limitations": [
     "What a reader must know before trusting a score: no internet in the task container."
   ],

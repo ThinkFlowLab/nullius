@@ -68,13 +68,15 @@ class PageCase(unittest.TestCase):
 
 class OriginTags(PageCase):
     """Every benchmark card and page says whether it is official - the
-    publisher's, run as it certifies - or an experiment adapted here: a tag
+    publisher's benchmark - or adapted by the community: a tag
     beside the category."""
 
     def test_a_card_and_its_page_carry_the_origin(self):
         key = "terminal-bench"
         self.assertIn('<span class="origin-tag official">Official</span>', self.card(key))
         self.assertIn('<span class="origin-tag official">Official</span>', self.page_html(key))
+        self.assertIn('<span class="origin-tag official">Official</span>', self.card("gaia"))
+        self.assertIn('<span class="origin-tag official">Official</span>', self.page_html("gaia"))
         self.assertIn('<div class="bench-card-tags"><span class="cat-tag">', self.card(key))       # beside the category, on the left
 
     def test_the_list_filters_by_what_runs_it(self):
@@ -88,7 +90,9 @@ class OriginTags(PageCase):
         for o in catalog.ORIGINS:
             self.assertIn(f'data-value="{o}"', html)
         self.assertIn('data-origin="official"', self.card("terminal-bench"))
-        self.assertIn('data-origin="official"', self.card("longmemeval"))                 # every shipped entry is official
+        self.assertIn('data-origin="official"', self.card("longmemeval"))
+        self.assertIn('data-origin="official"', self.card("gaia"))
+        self.assertNotIn('data-value="experiment"', html)
 
 
 class CitationSeal(PageCase):
@@ -126,12 +130,12 @@ class BenchmarksList(PageCase):
         keys = re.findall(r'<a class="bench-card" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
         self.assertEqual(len(keys), 8)
-        # two shelves, the official benchmarks then the experiments; a shelf with nothing on it is not shown
+        # two shelves, the official benchmarks then the community benchmarks; a shelf with nothing on it is not shown
         official = self.html[self.html.index('data-shelf="official"'):].split('</section>', 1)[0]
         for b in cat.listed_benchmarks:
             with self.subTest(b.key):
                 self.assertEqual('/benchmarks/%s"' % b.key in official, b.origin == "official")
-        self.assertEqual('data-shelf="experiment"' in self.html, any(b.origin == "experiment" for b in cat.listed_benchmarks))
+        self.assertEqual('data-shelf="community"' in self.html, any(b.origin == "community" for b in cat.listed_benchmarks))
 
     def test_a_card_says_what_it_holds(self):
         swe = visible(self.card("swe-bench-verified"))

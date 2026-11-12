@@ -174,7 +174,7 @@
 #nullius-builder .nb-tile-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 #nullius-builder .nb-tile-tags > span { font-size: 11px; font-weight: 500; letter-spacing: .02em; padding: 1px 7px; border-radius: 4px; color: var(--nb-muted); background: var(--nb-soft); }
 #nullius-builder .nb-tile-tags .nb-tile-cat { color: var(--nb-blue); background: var(--nb-tint); }
-#nullius-builder .nb-tile-tags .nb-tile-exp { color: var(--origin-experiment, #b8741a); background: color-mix(in srgb, var(--origin-experiment, #b8741a) 16%, transparent); }
+#nullius-builder .nb-tile-tags .nb-tile-community { color: var(--origin-community, #b8741a); background: color-mix(in srgb, var(--origin-community, #b8741a) 16%, transparent); }
 #nullius-builder .nb-tile-line { font-size: 12.5px; line-height: 1.5; color: var(--nb-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 #nullius-builder .nb-tile-note { font-size: 11.5px; color: var(--nb-warn); }
 #nullius-builder .nb-tile-foot { margin-top: auto; padding-top: 9px; border-top: 1px solid var(--nb-line); display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; font-size: 11.5px; color: var(--nb-muted); }
