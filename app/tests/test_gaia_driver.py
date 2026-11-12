@@ -112,13 +112,20 @@ class GaiaDriver(unittest.TestCase):
         scorer.assert_called_once_with("wrong", "synthetic-reference")
         self.assertEqual((result["reward"], result["passed"]), (0.0, False))
 
-    def test_unformatted_answers_fail_without_asking_the_scorer(self):
-        for answer in (None, {}, "", "synthetic-reference", "final answer: x", "FINAL ANSWER: \n"):
+    def test_a_reply_without_the_marker_is_scored_whole(self):
+        for answer, given in (("synthetic-reference", "synthetic-reference"), (" final answer: x \n", "final answer: x")):
+            with self.subTest(answer=answer), patch.object(self.driver.SCORER, "question_scorer", return_value=True) as scorer:
+                result = self.driver.score("fixture-task", str(self.workspace), [], answer)
+                scorer.assert_called_once_with(given, "synthetic-reference")
+                self.assertEqual(result["reward"], 1.0)
+                self.assertFalse(result["detail"]["marker"])
+
+    def test_empty_answers_fail_without_asking_the_scorer(self):
+        for answer in (None, {}, "", "  \n", "FINAL ANSWER: \n"):
             with self.subTest(answer=answer), patch.object(self.driver.SCORER, "question_scorer") as scorer:
                 result = self.driver.score("fixture-task", str(self.workspace), [], answer)
                 scorer.assert_not_called()
                 self.assertEqual(result["reward"], 0.0)
-                self.assertFalse(result["detail"]["format_ok"])
 
     def test_original_calls_the_model_with_only_the_official_prefix_and_question(self):
         reply = {"choices": [{"message": {"content": "FINAL ANSWER: unchanged"}}]}

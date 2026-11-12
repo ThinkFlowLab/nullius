@@ -1,8 +1,8 @@
 """GAIA on the Nullius standard, using the pinned authors' prompt and scorer.
 
 Our glue loads pinned Parquet splits with Hugging Face datasets, stages only a
-question's attachment, and extracts text after the last literal FINAL ANSWER:
-marker. Missing/empty markers fail. The official scorer is imported unchanged.
+question's attachment, and gives the official scorer, imported unchanged, the
+text after the last literal FINAL ANSWER: marker, or the whole reply without one.
 Original is the paper's no-tools API procedure, implemented here: one system
 prefix and user question per call, with no file conversion or agent loop.
 Agent runs receive that prefix and question through ACP and use their own tools.
@@ -124,9 +124,9 @@ def setup(unit, dir):
 
 
 def extracted(answer):
-    if not isinstance(answer, str) or MARKER not in answer:
+    if not isinstance(answer, str):
         return None
-    value = answer.rsplit(MARKER, 1)[1].strip()
+    value = answer.rsplit(MARKER, 1)[-1].strip()
     return value or None
 
 
@@ -137,9 +137,9 @@ def score(unit, dir, transcript, answer, setup=None, **_):
         passed = value is not None and bool(SCORER.question_scorer(value, row["Final answer"]))
     return {"reward": float(passed), "passed": passed,
             "detail": {"model_answer": value, "level": row["Level"],
-                       "format_ok": value is not None,
+                       "marker": isinstance(answer, str) and MARKER in answer,
                        "dataset_revision": SOURCE["revision"],
-                       "reason": "official GAIA matching" if value is not None else "missing or empty FINAL ANSWER: marker"}}
+                       "reason": "official GAIA matching" if value is not None else "empty answer"}}
 
 
 def oracle(unit, dir):

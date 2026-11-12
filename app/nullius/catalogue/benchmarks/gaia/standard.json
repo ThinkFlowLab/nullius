@@ -82,7 +82,7 @@
   "controls": {
     "nop": {
       "source": "nullius",
-      "from": "No agent runs and the answer is empty; a missing FINAL ANSWER: marker fails."
+      "from": "No agent runs and the answer is empty."
     },
     "oracle": {
       "source": "adapter",
@@ -92,11 +92,11 @@
   },
   "score": {
     "kind": "pass",
-    "says": "The authors' scorer, unchanged, compares the text after the last FINAL ANSWER: marker with the reference; no marker, or nothing after it, fails."
+    "says": "The authors' scorer, unchanged, compares the text after the last FINAL ANSWER: marker, or the whole reply without one, with the reference."
   },
   "setups": {
     "original": {
-      "summary": "The paper's no-tools API procedure: its formatting prompt as the system message, the question as the user message, one call, the authors' scorer unchanged. Attachments are not read. OpenAI no longer serves the paper's GPT-4 snapshots; choose a served model.",
+      "summary": "The paper's no-tools API procedure: its formatting prompt as the system message, the question as the user message, one call, the authors' scorer unchanged. Attachments are not read.",
       "providers": {
         "openai": "",
         "openrouter": "",

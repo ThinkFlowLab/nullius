@@ -12,17 +12,14 @@
     "Agents need public internet access.",
     "Accept GAIA's access conditions on Hugging Face, then add a token in Settings → Data providers. Do not redistribute its questions or answers in a crawlable form.",
     "Levels 1, 2 and 3 (53, 86 and 26 questions) split the 165 validation questions.",
-    "Only the text after the last FINAL ANSWER: marker is scored, by the authors' scorer; no marker, or nothing after it, fails.",
+    "The authors' scorer gets the text after the last FINAL ANSWER: marker, or the whole reply without one.",
     "Original is the paper's no-tools API baseline; choose an agent for files and web research. The paper ran it 3 times: 3 attempts per question."
   ],
   "upstream_limitations": [
     "The 301 test questions have private answers and are excluded from local scoring.",
-    "GAIA uses the live web; some evidence may have changed or become unavailable.",
-    "The paper’s ChatGPT-with-plugins evaluation used manual, per-question plugin selection and supplies no reproducible plugin configuration."
+    "GAIA uses the live web; some evidence may have changed or become unavailable."
   ],
-  "limitations": [
-    "Docker agent tools must support HTTP(S) proxy settings to access the public web."
-  ],
+  "limitations": [],
   "datasets": [
     {
       "key": "gaia-validation",

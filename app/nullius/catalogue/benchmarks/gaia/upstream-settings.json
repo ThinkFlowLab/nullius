@@ -121,8 +121,8 @@
   {
     "entry": "driver.py (Nullius)",
     "setting": "final-answer extraction",
-    "values": "last literal FINAL ANSWER:; trim whitespace; fail absent/empty",
-    "default": "strict marker",
+    "values": "text after the last literal FINAL ANSWER:, else the whole reply; trim whitespace; fail empty",
+    "default": "marker when present",
     "nullius": "fixed:Nullius extraction - authorized adaptation around the unchanged scorer"
   },
   {
