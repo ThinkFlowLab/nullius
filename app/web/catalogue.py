@@ -45,16 +45,11 @@ def benchmark_page(key):
     ds = cat.datasets_of(b)
     data = {d.key: sources.of(d, b.harness, std_def, only=len(ds) == 1) for d in ds}
     jobs = {j.job_id for j in shared._jobs_for_request()} if std else set()
-    # its licences, per environment: what each needs and whether it is set - dates, never a value; and the
-    # names saved settings still hold a value for, which the page offers to move here
-    licences = standard_recipe.licences_of(key) if std else []
-    filed = settings.in_file(shared.ENV_FILE) if licences else {}
-    movable = {s["name"] for e in licences for s in e["needs"] if s["name"] in filed}
     return render_template("catalogue/benchmark.html", cat=cat, b=b, csrf=shared._csrf_token(), papers=citation.parse(b.citation), data=data,
                            editable=entry is not None and not harbor_entry.not_editable(entry), std=std, std_jobs=jobs,
                            deletable=os.path.isfile(os.path.join(paths.catalogue_dir(), catalog.BENCHMARKS, key, catalog.ENTRY)),
                            restore_bundle=storage.can_restore("benchmarks", key, catalog.ROOT),
-                           licences=licences, movable=movable, local=settings_web._local_client(),
+                           local=settings_web._local_client(),
                            providers=[(p, providers.label(p)) for p in providers.available(os.environ)])
 
 
@@ -110,23 +105,24 @@ def benchmark_prove(key):
 
 @app.route("/benchmarks/<key>/licences", methods=["POST"])
 def benchmark_licence(key):
-    """Set, replace, remove or move one of a benchmark's licences, kept in its
-    own store (``nullius.secrets``), never in Settings: a key or a server's
+    """Set, replace, remove or move one of a benchmark's credentials, kept in its
+    own store (``nullius.secrets``), managed in Settings: a key or a server's
     address from the text field, a licence file from the upload. Only a name
-    the benchmark's environments declare, as the kind they declare it. A
-    browser on this machine only, with the form token, as Settings. *Move it
-    here* takes a value saved settings still hold into the store and
-    out of the file - on this click, never by itself. Nothing is ever sent
-    back of a value."""
+    the benchmark's environments declare, as the kind they declare it, never
+    a data provider's token (Settings → Data providers). A
+    browser on this machine only, with the form token, as Settings. *Move
+    from saved settings* takes a value saved settings still hold into the
+    store and out of the file - on this click, never by itself. Nothing is
+    ever sent back of a value."""
     shared._require_csrf()
     if not settings_web._local_client():
-        abort(403, description="Licences are set from a browser on the application host only.")
-    back = url_for("benchmark_page", key=key) + "#licences"
+        abort(403, description="Credentials are set from a browser on the application host only.")
+    back = settings_web._settings_return() + "#access-" + key
     name, action = request.form.get("name", ""), request.form.get("action", "set")
     declared = {s["name"]: s for e in standard_recipe.licences_of(key) for s in e["needs"]}
     s = declared.get(name)
-    if s is None:
-        flash(f"{name or 'That'} is not a licence this benchmark's environments need.", "error")
+    if s is None or s.get("provider"):
+        flash(f"{name} is set in Settings → Data providers." if s else f"{name or 'That'} is not a credential this benchmark needs.", "error")
         return redirect(back)
     try:
         if action == "delete":
@@ -139,7 +135,7 @@ def benchmark_licence(key):
                 return redirect(back)
             secrets.set(key, name, value, kind=s["kind"])
             settings.take(shared.ENV_FILE, name)
-            flash(f"{name} moved here from saved settings, and removed there.", "ok")
+            flash(f"{name} moved out of saved settings.", "ok")
         else:
             expires = request.form.get("expires", "").strip()
             if s["kind"] == "file":
@@ -256,7 +252,7 @@ def _opened(key: str):
 @app.route("/benchmarks/new", methods=["GET"])
 def benchmark_new():
     """The form that adds a Harbor benchmark to the catalogue."""
-    return _form({"source": "hub", "origin": "experiment"})
+    return _form({"source": "hub", "origin": "official"})
 
 
 @app.route("/benchmarks/new/read", methods=["POST"])

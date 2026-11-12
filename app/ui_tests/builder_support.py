@@ -28,7 +28,7 @@ class CompilerCase(unittest.TestCase):
 
     # A benchmark no harness here can run: it names none. None ships, so the cases that need one
     # are given this one.
-    BLOCKED = {"key": "blocked-example", "title": "Blocked Example", "category": "Coding", "domain": "a benchmark the catalogue knows and no harness can run", "harness": [], "limitations": [], "docs": [], "datasets": [], "timeouts": {}, "origin": "experiment", "label": "Experiment"}
+    BLOCKED = {"key": "blocked-example", "title": "Blocked Example", "category": "Coding", "domain": "a benchmark the catalogue knows and no harness can run", "harness": [], "limitations": [], "docs": [], "datasets": [], "timeouts": {}, "origin": "official", "label": "Official"}
 
     def js(self, code, schema=None):
         program = 'const C=require('+json.dumps(str(APP/'static/builder/command-builder-core.js'))+')('+json.dumps(schema or self.schema)+');\n'+code

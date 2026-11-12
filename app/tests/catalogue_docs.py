@@ -261,7 +261,7 @@ def render_agents_index() -> str:
         rows.append([_link(a.get("label", ""), _page_of(a)), _chips(_ref(v) for v in versions), a.get("summary", ""),
                      _driven(a), _from(a), _licence(a) or "not stated"])
     out += [_table(["Agent", "Versions (bare key: the default)", "What it is", "Driven over", "From", "Licence"], rows), "",
-            "- ACP (`start.acp`) can prove task, workspace, tools and conversation; a command (`start.command` with `{prompt}`) task and workspace only."]
+            "- ACP (`start.acp`) can prove task, workspace, tools, conversation and search; a command (`start.command` with `{prompt}`) task, workspace and search only."]
     if examples:
         out += ["- Examples, never offered for a run: "
                 + "; ".join(f"`{_ref(a)}` ({a.get('label')}: {a.get('summary')})" for a in examples)]
@@ -389,7 +389,7 @@ def render_feature_page(versions: list) -> str:
 
 
 def _origin(entry) -> str:
-    """Official or Experiment, linked to the benchmark's own repository."""
+    """Official or Community, linked to the benchmark's own repository."""
     url = (entry.citation_source or "").strip()
     return f'<a href="{url}">{entry.label}</a>' if url.startswith("http") else entry.label
 
@@ -465,6 +465,13 @@ def _standard_of(key: str):
     return definitions.find(definitions.load("benchmark", root=definitions.CATALOGUE)[0], key)
 
 
+def _tasks(entry, sets) -> int:
+    """Distinct tasks: the entry's ``task_count`` where its datasets overlap, else their sum."""
+    if type(entry.task_count) is int and entry.task_count > 0:
+        return entry.task_count
+    return sum(d.tasks for d in sets if isinstance(d.tasks, int))
+
+
 def render_benchmarks_index() -> str:
     cat = catalog.load(root=catalog.ROOT)
     entries = sorted(cat.benchmarks, key=lambda b: catalog.sort_key(b.title))
@@ -476,7 +483,7 @@ def render_benchmarks_index() -> str:
     rows = []
     for b in entries:
         sets = [d for d in cat.datasets if d.benchmark == b.key]
-        tasks = sum(d.tasks for d in sets if isinstance(d.tasks, int))
+        tasks = _tasks(b, sets)
         rows.append([f'<a href="{b.key}.md">{b.title}</a><br><code>{b.key}</code>', f'<span class="what">{b.domain or b.scoring}</span>', b.category,
                      MARK[YES if "standard" in b.harness else NONE], MARK[YES if "harbor" in b.harness else NONE], tasks, _origin(b)])
     out += [_grouped([("Benchmark", ["Benchmark"]), ("What it is", ["What it is"]), ("Category", ["Category"]),
@@ -507,7 +514,7 @@ def render_benchmark_page(entry, cat, by_key: dict, versions: list) -> str:
     std_def = _standard_of(entry.key) if d else None
     out = [PAGE_MARK, "", f"# {entry.title}", "", entry.domain or entry.scoring, ""]
     sets = cat.datasets_of(entry)
-    tasks = sum(x.tasks for x in sets if isinstance(x.tasks, int))
+    tasks = _tasks(entry, sets)
     facts = [("Key", f"<code>{entry.key}</code>"), ("Category", entry.category), ("Origin", _origin(entry)),
              ("Runs on", ", ".join(RUNNERS[h] for h in RUNNERS if h in entry.harness)), ("Tasks", str(tasks)), ("Paper", _html(_paper(entry)))]
     out += [_facts(facts + ([("Needs, ports proven", ", ".join(_port_html(n) for n in d.get("needs") or []) or "nothing")] if d else [])), ""]

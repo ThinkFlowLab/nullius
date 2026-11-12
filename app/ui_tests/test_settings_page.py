@@ -137,7 +137,7 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('data-provider="typesafe" data-available="false" hidden', html)
         self.assertIn('data-provider="openrouter" data-available="true"', html)
         self.assertIn('data-provider="openai" data-available="false" hidden', html)
-        judge_section = html.split('id="judge"')[1].split('id="agent-keys"')[0]
+        judge_section = html.split('id="judge"')[1].split('id="custom-keys"')[0]
         self.assertNotIn('id="TYPESAFE_API_KEY"', judge_section)
         self.assertNotIn('type="password"', judge_section)
         self.assertIn('data-provider-card="typesafe"', html)
@@ -148,7 +148,7 @@ class SettingsPage(unittest.TestCase):
         Path(self.env_file).write_text("OPENROUTER_API_KEY=sk-or-fromthefile\nHOSTS=bench\n")
         settings.load(self.env_file)
         html = self.page()
-        for section in ("general", "appearance", "providers", "agent-keys", "judge", "hosts", "sandbox", "storage"):
+        for section in ("general", "appearance", "providers", "data-providers", "custom-keys", "judge", "hosts", "sandbox", "storage"):
             self.assertIn(f'id="{section}"', html); self.assertIn(f'href="#{section}"', html)
         for title in ("Evaluation", "Execution", "Application", "General", "Appearance", "Judges", "Local data"):
             self.assertIn(">" + title + "<", html)
@@ -163,7 +163,7 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('data-provider-select="openai"', html)
         self.assertIn('data-provider-add aria-label="Add a provider"', html)
         self.assertNotIn("<details", html.split('<dialog id="add-host"')[0])
-        for section in ("general", "appearance", "providers", "agent-keys", "judge", "hosts", "storage"):
+        for section in ("general", "appearance", "providers", "data-providers", "custom-keys", "judge", "hosts", "storage"):
             self.assertIn(f'href="#{section}" data-section="{section}"', html)                      # the menu: a link per section, one shown at a time
 
     def test_nothing_is_assumed_and_nothing_is_suggested(self):
@@ -177,7 +177,7 @@ class SettingsPage(unittest.TestCase):
             return re.search(r'<article[^>]*id="%s".*?</article>' % name, html, re.S).group(0)
         hosts_row, key = row("HOSTS"), row("MODEL_API_KEY")
         self.assertNotIn(">not set<", hosts_row); self.assertNotIn('class="chip st-watch host-pill"', hosts_row); self.assertIn("+ Add host", hosts_row)
-        self.assertEqual(re.findall(r'placeholder="([^"]*)"', html.split('<dialog id="add-host"')[0]), ["Search settings", "Search providers…", "(optional)", "(optional)"])                           # no field suggests anything
+        self.assertEqual(re.findall(r'placeholder="([^"]*)"', html.split('<dialog id="add-host"')[0]), ["Search settings", "Search providers…", "(optional)", "(optional)", "Search data providers…"])                           # no field suggests anything
         self.assertNotIn("agtai", html); self.assertNotIn("10.0.0.4", html)                      # (ssh aliases offered come from this machine's own config)
         self.assertIn('data-source="unset"', key); self.assertIn('data-provider-card="local" data-configured="false" data-ready="false"', html)
 
@@ -563,18 +563,20 @@ class SettingsPage(unittest.TestCase):
         html = self.page()
         section = html[html.index('id="sandbox"'):html.index('id="general"')]
         self.assertIn('data-sandbox="/settings/sandbox"', section)
+        self.assertNotIn("data-images", section)                                         # no Images card
         self.assertNotIn('name="value:', section)                                       # outside Save: nothing of it lands in the file
-        self.assertIn('name="token" type="password"', section)
+        for login in ("Docker Hub", 'type="password"', "data-login", "data-logout"):      # signed in once, under Data providers
+            self.assertNotIn(login, section)
+        self.assertNotIn('data-data-form', section)
+        providers = html[html.index('id="data-providers"'):html.index('id="sandbox"')]
+        self.assertIn('data-data-search', providers)
+        self.assertIn('<h3>Docker Hub</h3>', providers)
+        self.assertIn('<h3>Hugging Face</h3>', providers)
+        self.assertIn('name="token" type="password"', providers)
         with patch.object(sandbox, "docker_state", lambda: {"ok": True, "version": "29.0"}), \
-                patch.object(sandbox, "login_user", lambda: "someone"), \
-                patch.object(sandbox, "images", lambda: [{"key": "swe", "label": "SWE", "images": 2, "bytes": 8}]):
+                patch.object(sandbox, "login_user", lambda: self.fail("asked")):
             r = self.client.get("/settings/sandbox"); self.addCleanup(r.close)
-        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"}, "user": "someone",
-                                  "images": [{"key": "swe", "label": "SWE", "images": 2, "bytes": 8}]})
-        with patch.object(sandbox, "docker_state", lambda: {"ok": False, "error": "docker is not installed on this machine"}), \
-                patch.object(sandbox, "images", lambda: self.fail("asked")):
-            r = self.client.get("/settings/sandbox"); self.addCleanup(r.close)
-        self.assertEqual(r.json["images"], [])
+        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"}})
         seen = []
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
         with patch.object(sandbox, "login", lambda u, t: seen.append((u, t)) or {"ok": True, "user": u}):
@@ -587,15 +589,28 @@ class SettingsPage(unittest.TestCase):
         self.assertEqual(seen, [("someone", "dckr_pat_synthetic")])
         self.assertIsNone(self.file())
 
-    def test_images_are_removed_per_benchmark_only_from_this_machines_browser(self):
-        headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
-        with patch.object(sandbox, "remove", lambda b: {"ok": False, "removed": 1, "failed": ["a2"]}):
-            r = self.client.post("/settings/sandbox/images/remove", data={"benchmark": "swe"}, headers=headers); self.addCleanup(r.close)
-            self.assertEqual((r.status_code, r.json["removed"]), (409, 1))
-            self.assertEqual(self.client.post("/settings/sandbox/images/remove", data={"benchmark": ""}, headers=headers).status_code, 400)
-            self.assertEqual(self.client.post("/settings/sandbox/images/remove", data={"benchmark": "swe"}, headers=headers,
-                                              environ_base={"REMOTE_ADDR": "10.0.0.7"}).status_code, 403)
-
+    def test_data_provider_save_is_local_guarded_and_never_echoes_token(self):
+        from nullius import secrets
+        from nullius.standard import definitions, run
+        gaia = run.Licences(definitions.get("benchmark", "gaia"))                  # GAIA's HF_TOKEN: this provider's alone
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"SECRETS_DIR": folder}):
+            headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
+            url = "/settings/data-providers/huggingface"
+            for kwargs in ({"headers": {"Origin": "http://localhost"}},
+                           {"headers": headers, "environ_base": {"REMOTE_ADDR": "10.0.0.7"}}):
+                self.assertEqual(self.client.post(url, data={"token": "synthetic-data-token"}, **kwargs).status_code, 403)
+            response = self.client.post(url, data={"token": "synthetic-data-token"}, headers=headers)
+            self.assertTrue(response.json["ok"])
+            self.assertNotIn("synthetic-data-token", response.get_data(as_text=True))
+            self.assertEqual(secrets.value(secrets.HUGGINGFACE, "HF_TOKEN"), b"synthetic-data-token")
+            self.assertEqual(gaia.get("HF_TOKEN"), {"kind": "value", "value": "synthetic-data-token"})
+            with patch.object(sandbox, "login_user", return_value=None):
+                state = self.client.get("/settings/data-providers").json
+            self.assertEqual(state, {"huggingface": True, "dockerhub": None})
+            self.assertIsNone(self.file())
+            response = self.client.post(url, data={"action": "remove"}, headers=headers)
+            self.assertTrue(response.json["ok"])
+            self.assertIsNone(gaia.get("HF_TOKEN"))
 
     def test_the_price_list_is_updated_and_priced_only_from_this_machines_browser(self):
         self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_PRICES": str(self.tmp / "prices.json")}))

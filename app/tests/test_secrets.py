@@ -29,6 +29,33 @@ class Store(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
 
+    def test_a_data_providers_token_is_read_from_its_provider_alone(self):
+        secrets.set(secrets.HUGGINGFACE, "HF_TOKEN", "shared-synthetic")
+        secrets.set("bench-a", "HF_TOKEN", "stale-synthetic")
+        self.assertEqual(secrets.store_of("bench-a", "HF_TOKEN", "huggingface"), (secrets.HUGGINGFACE, "HF_TOKEN"))
+        self.assertEqual(secrets.store_of("bench-a", "HF_TOKEN"), ("bench-a", "HF_TOKEN"))
+        self.assertEqual(secrets.value(*secrets.store_of("bench-a", "HF_TOKEN", "huggingface")), b"shared-synthetic")
+        self.assertIsNone(secrets.value("bench-b", "HF_TOKEN"))                      # never by its name
+        self.assertEqual(secrets.status("bench-b"), {})
+        self.assertTrue(secrets.state("bench-b", "HF_TOKEN", "huggingface")["set"])
+        self.assertIsNone(secrets.state("bench-b", "HF_TOKEN"))
+        secrets.delete(secrets.HUGGINGFACE, "HF_TOKEN")
+        self.assertIsNone(secrets.state("bench-a", "HF_TOKEN", "huggingface"))      # the benchmark's own is not read
+        with self.assertRaises(ValueError):
+            secrets.store_of("bench-a", "HF_TOKEN", "elsewhere")
+
+    def test_a_run_reads_a_data_providers_token_from_its_provider_alone(self):
+        from nullius.standard import run
+        bench = {"key": "bench-a", "environments": {"e": {"needs_secrets": [
+            {"name": "HF_TOKEN", "to": "driver", "provider": "huggingface"}, {"name": "LICENSE_KEY", "to": "driver"}]}}}
+        secrets.set("bench-a", "HF_TOKEN", "stale-synthetic")
+        secrets.set("bench-a", "LICENSE_KEY", KEY)
+        held = run.Licences(bench)
+        self.assertIsNone(held.get("HF_TOKEN"))
+        self.assertEqual(held.get("LICENSE_KEY"), {"kind": "value", "value": KEY})
+        secrets.set(secrets.HUGGINGFACE, "HF_TOKEN", "shared-synthetic")
+        self.assertEqual(held.get("HF_TOKEN"), {"kind": "value", "value": "shared-synthetic"})
+
     def mode(self, p):
         return stat.S_IMODE(os.stat(p).st_mode)
 

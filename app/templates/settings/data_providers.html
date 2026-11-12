@@ -1,0 +1,27 @@
+<section class="st-section" id="data-providers" aria-labelledby="data-providers-h" data-state="{{ url_for('settings_data_providers') }}"{% if writable %} data-csrf="{{ csrf }}" data-huggingface="{{ url_for('settings_huggingface') }}" data-dockerhub="{{ url_for('settings_sandbox_login') }}" data-dockerhub-remove="{{ url_for('settings_sandbox_logout') }}"{% endif %}>
+  <div class="st-section-head"><div class="st-provider-heading"><h2 id="data-providers-h">Data providers</h2>{% if writable %}<button type="button" class="btn sm ghost" data-data-add hidden><span aria-hidden="true">+</span> Add</button>{% endif %}</div></div>
+  <p class="bad" data-data-error role="status" hidden></p>
+  <button type="button" class="btn ghost st-provider-back" data-data-back hidden>← Data providers</button>
+  <p class="st-about" data-data-empty hidden>No providers added yet.</p>
+  {% macro logo(key) %}{% if key == 'huggingface' %}<img class="st-logo" src="{{ url_for('static', filename='brand/huggingface.svg') }}" alt="" width="28" height="28">{% else %}<img class="st-logo" src="{{ url_for('static', filename='brand/docker.svg') }}" alt="" width="28" height="28">{% endif %}{% endmacro %}
+  <div class="st-provider-catalogue" data-data-catalogue hidden>
+    <h3>Add a provider</h3>
+    <label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-data-search placeholder="Search data providers…" aria-label="Search data providers" autocomplete="off"></label>
+    <div class="st-provider-grid">{% for key, name in [('huggingface', 'Hugging Face'), ('dockerhub', 'Docker Hub')] %}<button type="button" class="st-provider-choice" data-data-select="{{ key }}" data-name="{{ name }}">{{ logo(key) }}<span>{{ name }}</span></button>{% endfor %}</div>
+    <p class="st-about" data-data-no-results hidden>No providers found.</p>
+  </div>
+  {% for key, name in [('huggingface', 'Hugging Face'), ('dockerhub', 'Docker Hub')] %}
+  <div class="st-card" data-data-card="{{ key }}" hidden>
+    <div class="st-provider-summary">{{ logo(key) }}<div><h3>{{ name }}</h3><p class="st-about" data-data-account></p></div><button type="button" class="btn sm ghost" data-data-edit>{{ 'Edit' if writable else 'View' }}</button></div>
+    <div data-data-fields hidden>
+      {% if writable %}
+      <form class="st-sandbox-rows" data-data-form autocomplete="off">
+        {% if key == 'dockerhub' %}<div class="st-row"><label class="st-row-label" for="data-dockerhub-user">Username</label><div class="st-row-value"><input class="st-input" id="data-dockerhub-user" name="username" type="text" autocomplete="off" spellcheck="false" required></div></div>{% endif %}
+        <div class="st-row"><label class="st-row-label" for="data-{{ key }}-token">Access token</label><div class="st-row-value"><input class="st-input" id="data-{{ key }}-token" name="token" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false" required></div></div>
+        <div class="st-row"><span class="st-row-label"></span><span class="st-row-value st-value"><button type="submit" class="btn sm">Save</button><button type="button" class="btn sm ghost" data-data-remove hidden>Remove</button></span></div>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</section>

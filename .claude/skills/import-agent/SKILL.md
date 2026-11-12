@@ -105,7 +105,7 @@ link and the agent's own docs, find, in this order:
    pins the agent's core or takes a range.
 3. **Without ACP:** its own non-interactive command (a `run`, `exec` or
    `--print` mode that takes the task and exits). It can then offer only
-   `agent.task/v1` and `agent.workspace/v1`; say so.
+   `agent.task/v1`, `agent.workspace/v1` and `agent.search/v1`; say so.
 4. **Its model client:** which variables or config file set its endpoint,
    key and model; which APIs it speaks (`chat`, `responses`, `messages`).
 5. **Licence**, and whether it has a CLI of its own (for fidelity).
@@ -156,7 +156,8 @@ contents):
   when there is no release or the user asks. Never patch the agent's or the
   adapter's bugs: keep its behaviour, say it in the report (a one-clause note
   in `summary` only when someone choosing it must know), ask when it blocks.
-- `install` pinned: `npm` as `name@version`, `pip` as `name==version`
+- `install` pinned: `npm` as `name@version`, `pip` as `name==version` or
+  `name @ git+https://repository@<full 40-character commit>`
   (`python` for its version). An adapter whose core floats (a caret range)
   gets the core pinned beside it.
 - `start.acp`: the ACP program, with `{install}` (its install folder) or

@@ -43,6 +43,17 @@ def timeline(events=EVENTS, calls=(), other=AGENT, produce=(T, T + 30)):
 
 
 class AgentTrace(unittest.TestCase):
+    def test_message_ids_keep_distinct_answers_in_distinct_steps(self):
+        events = [ev(1, "agent_message_chunk", messageId="stream", content={"type": "text", "text": "lan"}),
+                  ev(2, "agent_thought_chunk", messageId="thought", content={"type": "text", "text": "hm"}),
+                  ev(3, "agent_message_chunk", messageId="stream", content={"type": "text", "text": "tern"}),
+                  ev(4, "agent_message_chunk", messageId="final", content={"type": "text", "text": "lantern"})]
+        steps = job.trajectory_from_events(events, [], AGENT, "m", "s")["steps"]
+        self.assertEqual([s["message"] for s in steps], ["lantern", "lantern"])
+        self.assertEqual(steps[0]["reasoning_content"], "hm")
+        self.assertNotIn("reasoning_content", steps[1])
+        self.assertEqual([s["timestamp"] for s in steps], [job.iso(T + 1), job.iso(T + 4)])
+
     def setUp(self):
         self.doc = timeline(calls=[call(0.5, 2.5), call(22, 25)])
         self.session = self.doc["spans"][0]

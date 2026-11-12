@@ -1,4 +1,4 @@
-/* Benchmarks: two shelves of cards, official then experiments; a card opens its benchmark's page. */
+/* Benchmarks: two shelves of cards, official then community; a card opens its benchmark's page. */
 .bench-index, .bench-page { width: 100%; max-width: 1120px; margin: 0 auto; }
 .bench-index:not(.bench-new) { max-width: 1320px; }
 .bench-index-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
@@ -21,7 +21,7 @@
 .bench-shelf[hidden], .bench-card[hidden] { display: none; }
 .bench-shelf h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 13px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--text); }
 .shelf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--status-color); }
-.bench-shelf.st-experiment .shelf-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--status-color); }
+.bench-shelf.st-community .shelf-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--status-color); }
 .shelf-n { color: var(--text-faint); font-weight: 500; }
 /* four cards a line on a wide screen, two on a narrower one, one on a phone */
 .bench-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
@@ -30,8 +30,8 @@
 .bench-card { display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-soft); color: var(--text); transition: border-color .13s ease; }
 .bench-card:hover { border-color: var(--accent); text-decoration: none; }
 .bench-card:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
-.bench-shelf.st-experiment .bench-card { background: transparent; border-style: dashed; border-color: var(--border); }
-.bench-shelf.st-experiment .bench-card:hover { border-color: var(--accent); }
+.bench-shelf.st-community .bench-card { background: transparent; border-style: dashed; border-color: var(--border); }
+.bench-shelf.st-community .bench-card:hover { border-color: var(--accent); }
 .bench-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .bench-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .bench-harness { font: 12px var(--mono); color: var(--text-faint); }
@@ -318,23 +318,6 @@ dialog.std-how::backdrop { background: rgba(0, 0, 0, .45); }
 .std-prooftable .std-ctls { margin-top: 0; }
 .std-joblink { display: inline-block; font-size: 11.5px; margin: 6px 10px 0 0; }
 @media (max-width: 760px) { .std-prooftable th, .std-prooftable td { display: block; width: auto; } .std-prooftable td { border-top: 0; padding-top: 0; } }
-/* A benchmark's licences (the standard's): per environment, each with what it is, its state and its forms. */
-.std-licenv { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin: 16px 0 4px; font-size: 14px; }
-.std-licenv small { font-weight: 400; color: var(--text-dim); font-size: 12px; }
-.std-liclist { list-style: none; margin: 0; padding: 0; font-size: 13px; }
-.std-lic { padding: 10px 0; border-top: 1px solid var(--border-soft); }
-.std-lic > small { display: block; color: var(--text-dim); font-size: 12px; margin-top: 3px; }
-.std-lichead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.std-lickind { color: var(--text-faint); font-size: 12px; }
-.std-licstate { margin-left: auto; font-size: 12px; color: var(--ok); }
-.std-lic-missing .std-licstate { color: var(--bad); }
-.std-licexpired { color: var(--bad); font-style: normal; }
-.std-licforms { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
-.std-licforms form { margin: 0; }
-.std-licset { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.std-licforms input { padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text); font-size: 12.5px; max-width: 100%; }
-.std-licexp { display: inline-flex; gap: 6px; align-items: center; color: var(--text-dim); font-size: 12px; }
-.std-licquiet { background: none; color: var(--text-dim); }
 /* The Add dialog on the Agents and Capabilities tabs: two tabs, the assistant's three fields and the prompt they build. */
 .std-how-tabs { display: flex; gap: 4px; margin: 14px 0 4px; border-bottom: 1px solid var(--border); }
 .std-how-tabs [role=tab] { font: inherit; font-size: 13.5px; font-weight: 500; color: var(--text-dim); background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 12px; min-height: 40px; cursor: pointer; }

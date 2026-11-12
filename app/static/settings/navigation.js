@@ -10,7 +10,7 @@
   function fromHash() {
     let id;
     try { id = decodeURIComponent(location.hash.slice(1)); } catch { id = ''; }
-    id = {other: 'general', file: 'storage', 'other-vars': 'providers'}[id] || id;
+    id = {other: 'general', file: 'storage', 'other-vars': 'providers', 'agent-keys': 'custom-keys', 'benchmark-access': 'custom-keys'}[id] || id;
     const target = document.getElementById(id);
     const section = target?.closest('.st-section');
     show(section?.id || 'providers');

@@ -9,17 +9,21 @@ openJiuwen's agent.
 <tr><th>Key</th><td><code>jiuwenswarm</code></td></tr>
 <tr><th>Driven over</th><td>ACP</td></tr>
 <tr><th>From</th><td>PyPI</td></tr>
-<tr><th>Installed</th><td><code>workswarm==0.2.7</code></td></tr>
+<tr><th>Installed</th><td><code>workswarm==0.2.8</code>, <code>openjiuwen @ git+https:/<wbr>/<wbr>github.com/<wbr>openJiuwen-ai/<wbr>agent-core.git@79f6ec656f513dadc412aaafa13f60ecf7f0fc04</code></td></tr>
 <tr><th>Licence</th><td>Apache-2.0</td></tr>
+<tr><th>Core</th><td>openjiuwen 0.1.20 at 79f6ec656f513dadc412aaafa13f60ecf7f0fc04, pinned in install</td></tr>
 </tbody></table>
 
 ## Versions
 
 <table>
-<thead><tr><th rowspan="2">Version</th><th rowspan="2">Upstream</th><th colspan="4" class="group">Ports</th><th colspan="3" class="group">Tools</th></tr><tr><th>One task</th><th>Workspace files</th><th>MCP tools</th><th>Conversation</th><th>decoys</th><th>chain</th><th>retry</th></tr></thead>
+<thead><tr><th rowspan="2">Version</th><th rowspan="2">Upstream</th><th colspan="5" class="group">Ports</th><th colspan="3" class="group">Tools</th></tr><tr><th>One task</th><th>Workspace files</th><th>MCP tools</th><th>Conversation</th><th>Search</th><th>decoys</th><th>chain</th><th>retry</th></tr></thead>
 <tbody>
-<tr><td><code>jiuwenswarm</code></td><td><code>0.2.7</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>jiuwenswarm@0.2.7</code></td><td><code>0.2.7</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>jiuwenswarm@0.2.8</code> (default)</td><td><code>0.2.8</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 </tbody></table>
+
+- `key@version`: a revision of the definition and driver; a recipe pins one, the builder offers the default.
 
 ## Options
 
@@ -30,7 +34,10 @@ openJiuwen's agent.
 ## Benchmarks it fits
 
 <table>
-<thead><tr><th rowspan="2"></th><th colspan="1" class="group"><a href="../../benchmarks/supported/gsm8k.md">GSM8K</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/humaneval.md">HumanEval</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/swe-bench-verified.md">SWE-bench Verified</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/tau3-bench.md">τ³-bench</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/terminal-bench.md">Terminal-Bench 2.0</a></th></tr><tr><th>One task</th><th>Workspace files</th><th>Workspace files</th><th>MCP tools, Conversation</th><th>Workspace files</th></tr></thead>
+<thead><tr><th rowspan="2"></th><th colspan="1" class="group"><a href="../../benchmarks/supported/gaia.md">GAIA</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/gsm8k.md">GSM8K</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/humaneval.md">HumanEval</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/swe-bench-verified.md">SWE-bench Verified</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/tau3-bench.md">τ³-bench</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/terminal-bench.md">Terminal-Bench 2.0</a></th></tr><tr><th>One task, Workspace files, Search</th><th>One task</th><th>Workspace files</th><th>Workspace files</th><th>MCP tools, Conversation</th><th>Workspace files</th></tr></thead>
 <tbody>
-<tr><td><code>jiuwenswarm</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>jiuwenswarm@0.2.7</code></td><td><abbr class="mark no" title="lacks `agent.search/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>jiuwenswarm@0.2.8</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 </tbody></table>
+
+- ✗: the missing port, on hover.

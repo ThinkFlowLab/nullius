@@ -1577,14 +1577,14 @@ a.chip { text-decoration: none; }
 .st-branch { --status-color: var(--patch_failed_tests); }
 .st-watch { --status-color: var(--text-faint); }
 .st-blocked { --status-color: var(--bad); }
-.st-experiment { --status-color: var(--text-faint); }
-.chip:is(.st-runs, .st-lane, .st-branch, .st-watch, .st-blocked, .st-experiment) {
+.st-community { --status-color: var(--text-faint); }
+.chip:is(.st-runs, .st-lane, .st-branch, .st-watch, .st-blocked, .st-community) {
   color: color-mix(in srgb, var(--status-color) 90%, var(--text));
   background: color-mix(in srgb, var(--status-color) 10%, var(--surface));
   border-color: color-mix(in srgb, var(--status-color) 35%, var(--border));
   font-weight: 500;
 }
-.chip:is(.st-runs, .st-lane, .st-branch, .st-watch, .st-blocked, .st-experiment)::before {
+.chip:is(.st-runs, .st-lane, .st-branch, .st-watch, .st-blocked, .st-community)::before {
   width: 8px; height: 8px; flex: none; background: var(--status-color);
 }
 .chip.sm { font-size: .72rem; padding: .05rem .5rem; }
@@ -1608,8 +1608,8 @@ a.pill:hover { color: var(--text); border-color: var(--text-faint); text-decorat
 .rubric-level.current { color: var(--text); font-weight: 500; }
 .rubric-level .mono { margin-right: .4rem; }
 pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32rem; overflow: auto; }
-/* an experiment is listed, greyed: adapted here, flaws still to find */
-.tree-item.leaf.st-experiment .lbl { color: var(--text-faint); }
+/* Community entries use the secondary label color. */
+.tree-item.leaf.st-community .lbl { color: var(--text-faint); }
 
 /* what a run is doing: a stepper of its stages, then its units. A step is a mark, the
    line to the next step, its name and its time; done reads filled and checked, the
@@ -1647,13 +1647,13 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 .execution-progress { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
 .execution-progress progress { flex: 1; max-width: 420px; height: 8px; accent-color: var(--accent); }
 
-/* Where an entry comes from: the publisher's, run as it certifies (Official), or adapted here (Experiment) - beside the category tag on benchmark cards and pages. */
+/* Where an entry comes from: the publisher's benchmark (Official), or adapted by the community (Community) - beside the category tag on benchmark cards and pages. */
 
 .origin-tag { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 500; letter-spacing: .03em; padding: .12rem .55rem; border-radius: 5px; }
 
 .origin-tag.official { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
 
-.origin-tag.experiment { color: var(--origin-experiment, #b8741a); background: color-mix(in srgb, var(--origin-experiment, #b8741a) 16%, transparent); }
+.origin-tag.community { color: var(--origin-community, #b8741a); background: color-mix(in srgb, var(--origin-community, #b8741a) 16%, transparent); }
 
 /* A notice (flash) as a toast at the bottom right, as the builder's: its bar counts down the seconds it stays
    (an error twice as many), paused while pointed at; the × closes it at once. */
@@ -1683,14 +1683,6 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 /* A port's skills under it, shown or not (an agent's page, the builder's agent step): the skill's id in small type. */
 .std-skills { display: block; }
 .std-skills code { font-size: 11px; color: var(--text-faint); }
-.std-envs { margin-top: 18px; }
-.std-envs h3 { font-size: 13px; margin: 0 0 2px; }
-.std-envs > small { color: var(--text-dim); font-size: 12px; }
-.std-envs ul { list-style: none; margin: 8px 0 0; padding: 0; }
-.std-envs li { padding: 8px 0; border-top: 1px solid var(--border-soft); font-size: 13px; }
-.std-envs li small { display: block; color: var(--text-dim); font-size: 12px; margin-top: 2px; }
-.std-envs .std-secret { color: var(--ok); }
-.std-envs .std-secret-missing { color: var(--bad); }
 .std-options { margin-top: 18px; }
 .std-options h3 { font-size: 13px; margin: 0 0 2px; }
 .std-options > small { display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 10px; }

@@ -88,7 +88,8 @@ belongs to (``withheld``); a host gets nothing of it but stdin.
 
 A standard run on a host is also sent its benchmark's licences
 (``Plan.licences``: the benchmark and the names its environments declare,
-read from its store, ``nullius.secrets``, when each part is launched) as one
+read from its store, ``nullius.secrets``, or a data provider's token from that
+provider's, when each part is launched) as one
 more stdin line, ``NULLIUS_LICENCES``: in the launcher's environment, never
 on disk there - but for a licence file, which the run writes to
 ``/dev/shm/nullius-<run>/`` (0600, in memory) and the part's detached shell
@@ -256,7 +257,7 @@ class Plan:
     harbor_pin: dict = field(default_factory=dict)   # the Harbor the recipe pins (harbor/source.py pin_of); {} for a plan from before: the harbor on PATH
     docker: bool = False                      # a runner that needs docker on its target though it is not Harbor (the standard's container backend)
     keyless: bool = False                     # nothing in it calls a model (the standard's controls): handed no key and no endpoint at all
-    licences: dict = field(default_factory=dict)     # the standard's on a host: {"benchmark", "names"} - what it is sent of that benchmark's licences
+    licences: dict = field(default_factory=dict)     # the standard's on a host: {"benchmark", "names", "providers"} - what it is sent of that benchmark's licences
 
     def steps(self) -> List[dict]:
         return [p for p in self.parts if p.get("script")] or [{"id": "run", "label": "the run", "script": self.script}]
@@ -299,19 +300,27 @@ def subprocess_run(argv: List[str], timeout: float = 600.0, stdin: Optional[str]
     except OSError as e:
         return 127, str(e)
     deadline = time.monotonic() + timeout
-    data = stdin if stdin is not None else ""
-    while True:
+    got = {}
+
+    def talk():
+        # one communicate, whole: a retried one after a timeout stopped sending
+        # input past the pipe's buffer (a 465 KB price list never landed)
         try:
-            out, _ = proc.communicate(input=data, timeout=STOP_POLL if stop is not None else timeout)
-            return proc.returncode, out or ""
-        except subprocess.TimeoutExpired:
-            data = None                                        # sent; a retry must not send it again
-            if stop is not None and stop.is_set():
-                proc.kill(); proc.communicate()
-                return 130, "stopped"
-            if time.monotonic() >= deadline:
-                proc.kill(); proc.communicate()
-                return 124, f"no answer within {int(timeout)} s"
+            got["out"] = proc.communicate(input=stdin if stdin is not None else "")[0]
+        except (OSError, ValueError) as e:
+            got["out"] = str(e)
+    talker = threading.Thread(target=talk, daemon=True)
+    talker.start()
+    while True:
+        talker.join(STOP_POLL if stop is not None else max(0.0, deadline - time.monotonic()))
+        if not talker.is_alive():
+            return proc.returncode, got.get("out") or ""
+        if stop is not None and stop.is_set():
+            proc.kill(); talker.join()
+            return 130, "stopped"
+        if time.monotonic() >= deadline:
+            proc.kill(); talker.join()
+            return 124, f"no answer within {int(timeout)} s"
 
 
 # A part's log, as a look at the target prints it: between these, then its size in bytes (_log_since, _logged).
@@ -325,11 +334,11 @@ def withheld() -> List[str]:
     (``settings.INSTEAD``, those that stand for a secret), the launcher's own
     names for the run's key and endpoint, the agent keys (a Harbor run is
     sent them by its launcher, as the key), the names a standard benchmark's
-    licences go by - kept in its own store (``nullius.secrets``), although
-    imported saved settings may still hold a value until it is moved from
-    the benchmark's page - and GitHub tokens from saved settings or the
+    own licences go by - kept in its own store (``nullius.secrets``), although
+    imported saved settings may still hold a value until it is moved in
+    Custom keys - and GitHub tokens from saved settings or the
     shell Nullius was started in. Every named endpoint's settings too, so a
-    run gets its own endpoint's key alone."""
+    run gets its own endpoint's key alone. A data provider's token name is not one."""
     secret = {v.name for v in settings.VARIABLES if v.secret or v.kind == "endpoint"} | set(settings.endpoint_names())
     return sorted(secret | {old for old, new in settings.INSTEAD.items() if new in secret}
                   | set(KEY_NAMES + URL_NAMES) | {"GITHUB_TOKEN", "GH_TOKEN"} | set(settings.agent_key_names())
@@ -337,10 +346,13 @@ def withheld() -> List[str]:
 
 
 def _licence_names() -> List[str]:
-    """Every name a standard benchmark's environments give a licence."""
+    """Every name a standard benchmark's environments give a licence of its
+    own; a data provider's token (``provider``) is none, so a shell's reaches
+    a Harbor run. A standard driver or agent never inherits it (``run.KEEP``)."""
     try:
         from nullius.standard import definitions
-        return sorted({s["name"] for b in definitions.load("benchmark", every=True)[0] for s in definitions.secrets_of(b)})
+        return sorted({s["name"] for b in definitions.load("benchmark", every=True)[0] for s in definitions.secrets_of(b)
+                       if not s.get("provider")})
     except Exception:
         return []
 
@@ -1373,17 +1385,18 @@ class Execution:
     def _licence_line(self) -> str:
         """The benchmark's licences, as the one line a host's run reads
         (base64 of {name: base64 bytes}): only the names its environments declare, only
-        those set, and nothing at all for a run on this machine, which reads
-        the store itself."""
+        those set - a data provider's token from that provider's store - and nothing
+        at all for a run on this machine, which reads the store itself."""
         lic = self.plan.licences or {}
         if not self._licence_dir():
             return ""
         names = [n for n in lic.get("names") or [] if isinstance(n, str)]
+        providers = lic.get("providers") if isinstance(lic.get("providers"), dict) else {}
         if self._licences_given is not None:
             got = {n: v for n, v in self._licences_given.items() if n in names and v}
         else:
             try:
-                got = {n: secrets.value(lic.get("benchmark") or "", n) for n in names}
+                got = {n: secrets.value(*secrets.store_of(lic.get("benchmark") or "", n, providers.get(n) or "")) for n in names}
             except ValueError:
                 got = {}
             got = {n: v for n, v in got.items() if v}

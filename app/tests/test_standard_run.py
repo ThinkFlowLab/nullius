@@ -70,6 +70,11 @@ SWALLOWING_DRIVER = (UNEVEN_DRIVER.replace('"model " + ("x" * 3000', '("swallow 
                      .replace("from nullius.standard.jsonl import serve", "import os\nfrom nullius.standard.jsonl import serve")
                      .replace('"score": lambda unit, dir, transcript, answer: {',
                               '"score": lambda unit, dir, transcript, answer: open(os.path.join(dir, "scored"), "w").close() or {'))
+# one unit whose agent takes a refused call in its stride and ends its turn, and whose answer fails
+GAVE_UP_DRIVER = '''from nullius.standard.jsonl import serve
+serve({"units": lambda dataset: {"units": ["s"]}, "setup": lambda unit, dir: {"prompt": "swallow hi"},
+       "score": lambda unit, dir, transcript, answer: {"reward": 0.0, "passed": False, "detail": {}}})
+'''
 
 
 class Echo(BaseHTTPRequestHandler):
@@ -457,6 +462,50 @@ class RunTest(unittest.TestCase):
         with open(os.path.join(job_dir, "config.json")) as f:
             self.assertNotIn("prices", json.load(f)["standard"])
 
+    def test_a_pass_survives_a_failed_call_after_its_answer(self):
+        """An agent's background request once it has answered (jiuwenswarm's image probe), refused by the
+        model: a pass stands; a failed unit's last call is the endpoint's. Both keep the call."""
+        original = run.relay.Relay.calls
+        failure = {"status": 400, "error": "Reasoning is mandatory for this endpoint and cannot be disabled.",
+                   "t0": 1, "t1": 2, "model": "m-1", "request": {"last": [{"role": "user", "content": "What color is this image?"}]}}
+        def calls(relay, tag):
+            return original(relay, tag) + [failure]
+        with mock.patch.object(run.relay.Relay, "calls", calls):
+            job_dir = self.go("fakebench", "fake", limit=2)
+        got, _ = self.outcomes(job_dir)
+        self.assertEqual((got["good"].reward, got["good"].exception_type), (1.0, ""))
+        self.assertEqual((got["wrong"].exception_type, got["wrong"].outcome), ("ApiError", classify.API_ERROR))
+        for name in ("good", "wrong"):
+            path = os.path.join(job_dir, got[name].trial_name, "agent", "calls.jsonl")
+            with open(path) as f:
+                self.assertEqual(json.loads(f.readlines()[-1])["status"], 400)
+
+    def test_a_failed_unit_whose_last_call_got_a_429_is_rate_limited(self):
+        """Its agent took the 429 in its stride and ended its turn, and its answer failed: not the agent's miss."""
+        here = os.path.join(self.tmp, "gave-up")
+        os.makedirs(here)
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(GAVE_UP_DRIVER)
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), _here=here, driver={"command": ["python3", "{here}/driver.py"]})
+        Echo.status = 429
+        job_dir = run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                          concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True)
+        (t,) = parse.parse_job(job_dir).trials
+        self.assertEqual((t.exception_type, t.outcome, t.reward), ("RateLimitError", classify.RATE_LIMITED, None))
+        self.assertEqual([c["status"] for c in self.relay_calls(job_dir)], [429, 429])  # run once more after a rate limit
+
+    def test_a_cap_refusal_in_a_passed_unit_is_still_the_caps(self):
+        """The run's cap and the unit's own end a unit wherever their refusal falls, its last call included."""
+        original = run.relay.Relay.calls
+        for by, kind, outcome in (("cap", ledger.ERROR, classify.SPENDING_CAP), ("unit", ledger.UNIT_ERROR, classify.AGENT_ERROR)):
+            refusal = {"status": 402, "refused": by, "error": "nullius relay: over the cap", "t0": 1, "t1": 1, "model": "m-1"}
+
+            def calls(relay, tag, refusal=refusal):
+                return original(relay, tag) + [refusal]
+            with self.subTest(refused=by), mock.patch.object(run.relay.Relay, "calls", calls):
+                got, _ = self.outcomes(self.go("fakebench", "fake", limit=1, name=f"refused-{by}"))
+                self.assertEqual((got["good"].exception_type, got["good"].outcome), (kind, outcome))
+
     def test_the_trajectory_carries_the_prompt_the_tool_call_and_the_answer(self):
         job_dir = self.go("fakebench", "fake", limit=1)
         trial = [d for d in os.listdir(job_dir) if d.startswith("good__")][0]
@@ -781,6 +830,59 @@ class RunTest(unittest.TestCase):
             self.assertEqual(run.Run(b, a, model="m", provider="custom", env=env, backend="docker").backend, "container")
         with self.assertRaisesRegex(run.Refused, "backend 'vm'"):
             run.Run(b, a, model="m", provider="custom", env=env, unsandboxed=True, backend="vm")
+
+    def test_docker_verifier_keeps_host_context_when_driver_home_is_isolated(self):
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        a = definitions.get("agent", "fake", ROOT)
+        host = os.path.join(self.tmp, "host-home")
+        with mock.patch.object(container, "unusable", return_value=None), \
+                mock.patch.dict(os.environ, {"HOME": host}, clear=True), \
+                mock.patch.object(container, "_context", return_value={"DOCKER_HOST": "unix:///run/alt.sock"}), \
+                mock.patch.object(run.jsonl, "Proc") as proc:
+            r = run.Run(b, a, model="m", provider="custom", env=self.env,
+                        backend="docker", jobs_root=self.tmp)
+            r.image, r.up, r.data = "fixture-image", None, None
+            r.driver()
+            environment = proc.call_args.args[2]
+            self.assertNotEqual(environment["HOME"], host)
+            self.assertEqual(environment["DOCKER_HOST"], "unix:///run/alt.sock")
+            self.assertNotIn("DOCKER_CONFIG", environment)
+            self.assertEqual(environment[container.CHECK_IMAGE], "fixture-image")
+
+    def test_a_docker_original_setups_driver_starts_in_its_setup_container(self):
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        a = definitions.get("agent", "fake", ROOT)
+        started = []
+
+        class Setup:
+            image = "nullius/setup:fixture"
+
+            def start(self, env, cwd, log, **kw):
+                started.append((env, cwd, log, kw))
+                return mock.Mock(p=None)
+        with mock.patch.object(container, "unusable", return_value=None):
+            r = run.Run(b, a, model="m", provider="custom", env=self.env, backend="docker", jobs_root=self.tmp)
+        r.bench = dict(r.bench, environments={"e": {"summary": "s", "needs_secrets": [
+            {"name": "TOOL_KEY", "to": "driver"},
+            {"name": "TOOL_FILE", "to": "driver", "kind": "file", "path": "/opt/tool.lic", "env": "TOOL_FILE_PATH"},
+            {"name": "TOOL_SERVER", "to": "driver", "kind": "server"},
+            {"name": "AGENT_ONLY", "to": "agent"}]}})
+        r.licences = run.Licences(r.bench, {"TOOL_KEY": {"kind": "value", "value": "fixture-key"},
+                                            "TOOL_FILE": {"kind": "file", "path": "/held/tool.lic"},
+                                            "TOOL_SERVER": {"kind": "server", "value": "127.0.0.1:27000"},
+                                            "AGENT_ONLY": {"kind": "value", "value": "never-the-driver"}})
+        r.up, r.data, r.setup_driver = "/upstream", "/data", Setup()
+        with mock.patch.object(run.install, "driver_argv", side_effect=AssertionError("started on this machine")):
+            d = r.driver()
+            self.assertIs(r.driver(), d)                                         # kept for the thread's next unit
+        self.assertEqual(len(started), 1)
+        env, cwd, log, kw = started[0]
+        self.assertEqual((env["NULLIUS_UPSTREAM"], env["NULLIUS_DATASET"], env["TOOL_KEY"], env["TOOL_FILE_PATH"]),
+                         ("/upstream", "/data", "fixture-key", "/held/tool.lic"))
+        self.assertNotIn("AGENT_ONLY", env)
+        self.assertEqual((kw["files"], kw["servers"]), (["/held/tool.lic"], ["TOOL_SERVER"]))
+        self.assertTrue(cwd.startswith(r.job_dir) and log.startswith(r.job_dir))
+        self.assertEqual(r.drivers, [d])
 
     def test_on_the_docker_backend_the_agent_is_installed_in_the_base_image_whatever_this_machine(self):
         from unittest import mock

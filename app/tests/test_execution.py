@@ -286,6 +286,22 @@ class Transport(unittest.TestCase):
         rc, out = execution.subprocess_run(["bash", "-c", "printf 'a\\x81b\\xe2\\x94'"])
         self.assertEqual((rc, out), (0, "a\ufffdb\ufffd"))
 
+    def test_input_past_the_pipes_buffer_lands_whole_while_a_stop_is_watched(self):
+        rc, out = execution.subprocess_run(["bash", "-c", "sleep 1; wc -c"], 20, stdin="x" * 500_000, stop=threading.Event())
+        self.assertEqual((rc, out.strip()), (0, "500000"))
+
+    def test_a_stop_ends_a_command_still_reading_its_input(self):
+        stop = threading.Event()
+        threading.Timer(0.5, stop.set).start()
+        started = time.monotonic()
+        rc, out = execution.subprocess_run(["bash", "-c", "sleep 30"], 60, stdin="x" * 500_000, stop=stop)
+        self.assertEqual((rc, out), (130, "stopped"))
+        self.assertLess(time.monotonic() - started, 10)
+
+    def test_a_command_that_never_answers_times_out(self):
+        rc, out = execution.subprocess_run(["bash", "-c", "sleep 30"], 1, stdin="x" * 500_000, stop=threading.Event())
+        self.assertEqual((rc, out), (124, "no answer within 1 s"))
+
 
 class SshWarnsAtEveryConnection(LocalHost):
     """OpenSSH 10 warns on stderr at every connection to a host without a
@@ -755,6 +771,26 @@ class StandardOnHost(HostBase):
                          f"~/.nullius/app/{self.COMMIT}")
         self.assertEqual(json.loads((self.tmp / "runs" / "std-shard-2of2" / "run.json").read_text())["catalogue_on_target"],
                          "~/.nullius/runs/std-shard-2of2/catalogue")
+
+    def test_gaias_hugging_face_token_is_handed_from_data_providers_alone(self):
+        # over the launcher's stdin as a licence is, read from Settings → Data providers; a value GAIA's own folder
+        # holds under that name is never sent
+        from nullius import secrets
+        from nullius.standard import definitions, recipe
+        gaia = definitions.get("benchmark", "gaia")
+        out = recipe.compile({"version": 1, "harness": "standard", "name": "gaia-nop", "title": "t", "benchmark": "gaia",
+                              "dataset": "gaia-validation", "other": "nop", "provider": "openai", "model": "", "limit": 1,
+                              "concurrency": 1, "unsandboxed": False, "where": "local"}, {"benchmark": [gaia], "agent": [], "capability": []})
+        self.assertEqual(out["licences"], {"benchmark": "gaia", "names": ["HF_TOKEN"], "providers": {"HF_TOKEN": "huggingface"}})
+        secrets.set("gaia", "HF_TOKEN", "hf-stale-not-real")
+        secrets.set(secrets.HUGGINGFACE, "HF_TOKEN", "hf-synthetic-not-real")
+        self.plan.licences = out["licences"]
+        ex = self.run_it()
+        self.assertEqual((ex.state, ex.exit_code), ("done", 0), ex.lines)
+        stdin = next(s for c, s in self.calls if c[0] == "ssh" and "setsid nohup" in c[-1])
+        line = next(l for l in stdin.splitlines() if l.startswith(secrets.HANDED + "="))
+        self.assertEqual(secrets.unpack(line.split("=", 1)[1]), {"HF_TOKEN": b"hf-synthetic-not-real"})
+        self.assertNotIn("hf-synthetic-not-real", "\n".join(ex.lines))
 
     def test_the_price_list_goes_with_the_run_even_empty_so_the_host_s_own_is_never_read(self):
         ex = self.run_it()

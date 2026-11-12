@@ -1,0 +1,72 @@
+{
+  "key": "gaia",
+  "title": "GAIA",
+  "category": "General assistance",
+  "domain": "Real-world questions needing reasoning, web research and file understanding.",
+  "scoring": "Answer accuracy",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "good_to_know": [
+    "Agents need public internet access.",
+    "Accept GAIA's access conditions on Hugging Face, then add a token in Settings → Data providers. Do not redistribute its questions or answers in a crawlable form.",
+    "Levels 1, 2 and 3 (53, 86 and 26 questions) split the 165 validation questions.",
+    "The authors' scorer gets the text after the last FINAL ANSWER: marker, or the whole reply without one.",
+    "Original is the paper's no-tools API baseline; choose an agent for files and web research. The paper ran it 3 times: 3 attempts per question."
+  ],
+  "upstream_limitations": [
+    "The 301 test questions have private answers and are excluded from local scoring.",
+    "GAIA uses the live web; some evidence may have changed or become unavailable."
+  ],
+  "limitations": [],
+  "datasets": [
+    {
+      "key": "gaia-validation",
+      "title": "Validation · All levels",
+      "tasks": 165,
+      "official": "https://huggingface.co/datasets/gaia-benchmark/GAIA",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "The authors' scorer at the pinned commit, after Nullius extracts the final answer.",
+      "notes": "Official 2023 validation split."
+    },
+    {
+      "key": "gaia-validation-level1",
+      "title": "Validation · Level 1",
+      "tasks": 53,
+      "official": "https://huggingface.co/datasets/gaia-benchmark/GAIA",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "The authors' scorer at the pinned commit, after Nullius extracts the final answer.",
+      "notes": "Official 2023 validation split."
+    },
+    {
+      "key": "gaia-validation-level2",
+      "title": "Validation · Level 2",
+      "tasks": 86,
+      "official": "https://huggingface.co/datasets/gaia-benchmark/GAIA",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "The authors' scorer at the pinned commit, after Nullius extracts the final answer.",
+      "notes": "Official 2023 validation split."
+    },
+    {
+      "key": "gaia-validation-level3",
+      "title": "Validation · Level 3",
+      "tasks": 26,
+      "official": "https://huggingface.co/datasets/gaia-benchmark/GAIA",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "The authors' scorer at the pinned commit, after Nullius extracts the final answer.",
+      "notes": "Official 2023 validation split."
+    }
+  ],
+  "citation": "@misc{mialon2023gaia,\n      title={GAIA: a benchmark for General AI Assistants},\n      author={Grégoire Mialon and Clémentine Fourrier and Craig Swift and Thomas Wolf and Yann LeCun and Thomas Scialom},\n      year={2023},\n      eprint={2311.12983},\n      archivePrefix={arXiv},\n      primaryClass={cs.CL}\n}",
+  "citation_source": "https://huggingface.co/spaces/gaia-benchmark/leaderboard/blob/9f133d71362e77b3539f1514f31b9c101a545fec/content.py",
+  "task_count": 165
+}

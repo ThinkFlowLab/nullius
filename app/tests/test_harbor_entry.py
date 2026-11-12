@@ -87,7 +87,7 @@ class Entry(unittest.TestCase):
         self.assertEqual(e["limitations"], ["One run so far", "Scores not yet compared"]); self.assertNotIn("todo", e)
         for gone in ("status", "status_note", "experiment"):
             self.assertNotIn(gone, e)
-        self.assertEqual(h.build({k: v for k, v in form().items() if k != "origin"})["origin"], "experiment")
+        self.assertEqual(h.build({k: v for k, v in form().items() if k != "origin"})["origin"], "official")
         d = e["datasets"][0]
         self.assertEqual((d["key"], d["source"], d["hub"], d["tasks"]), ("code-bench", "Harbor hub", "acme/code-bench", 731))
         self.assertEqual(d["registry"], "acme/code-bench")                                 # what the builder runs: harbor run -d <registry>
@@ -136,6 +136,24 @@ class Edit(Entry):
         h.update(new, self.root)
         self.assertEqual(h.entry_of("swe-bench-verified", self.root)["title"], "SWE-bench Verified (edited)")
         self.assertEqual(catalog.validate(catalog.load(self.root)), [])
+
+    def test_legacy_experiments_save_as_official_and_community_is_preserved(self):
+        for extra, expected in (({"experiment": True}, "official"),
+                                ({"origin": "experiment"}, "official"), ({"origin": "community"}, "community")):
+            with self.subTest(extra=extra):
+                old = {**h.build(form()), **extra}
+                folder = os.path.join(self.root, "benchmarks", "code-bench")
+                os.makedirs(folder, exist_ok=True)
+                with open(os.path.join(folder, "benchmark.json"), "w") as f:
+                    json.dump(old, f)
+                values = h.values_of(h.entry_of("code-bench", self.root))
+                self.assertEqual(values["origin"], expected)
+                new = h.merged(old, h.build(values))
+                h.update(new, self.root)
+                saved = h.entry_of("code-bench", self.root)
+                self.assertEqual(saved["origin"], expected)
+                self.assertNotIn("experiment", saved)
+                self.assertEqual(catalog.validate(catalog.load(self.root)), [])
 
     def test_a_hub_entry_edited_keeps_its_hub_name(self):
         old = h.entry_of("tau3-bench", self.root)

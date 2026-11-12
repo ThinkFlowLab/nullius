@@ -1,7 +1,8 @@
 """A benchmark's host requirements (``host`` in its ``standard.json``): what
 the machine its driver runs on must have for some of its options - programs on
-PATH, installed by ``apt`` and ``npm`` - whatever the backend, since the driver
-runs on the machine, never in a container.
+PATH, installed by ``apt`` and ``npm``. Drivers for agent/capability runs stay
+on the machine; Docker Original setups install those with an ``install`` in
+their image and are refused the rest (a GPU).
 
 Each requirement is checked by its programs and optional GPU memory minimum
 (:func:`problems`) and installed by the commands
@@ -21,6 +22,12 @@ def requirements(bench: dict, names: List[str]) -> Dict[str, dict]:
     """The named requirements, as the benchmark declares them."""
     h = bench.get("host") or {}
     return {n: h[n] for n in names if n in h}
+
+
+def in_image(bench: dict, names: List[str]) -> List[str]:
+    """The named requirements a Docker Original setup's image installs (its
+    ``install``); the rest, a GPU above all, no image can provide."""
+    return [n for n, r in requirements(bench, names).items() if r.get("install")]
 
 
 def missing(bench: dict, names: List[str], which=shutil.which) -> Dict[str, List[str]]:

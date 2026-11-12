@@ -55,9 +55,8 @@
     </div>
   </div>
 
-  {# Two shelves: the official benchmarks, then the experiments - adapted here,
-     flaws still to find. A card opens the benchmark's own page. #}
-  {% for state, heading in [('official', 'Official'), ('experiment', 'Experiments')] %}
+  {# Two shelves: the official benchmarks, then the community benchmarks. A card opens the benchmark's own page. #}
+  {% for state, heading in [('official', 'Official'), ('community', 'Community')] %}
   {% set shelf = listed|selectattr('origin', 'equalto', state)|list %}
   {% if shelf %}
   <section class="bench-shelf st-{{ state }}" data-shelf="{{ state }}" aria-labelledby="shelf-{{ state }}">

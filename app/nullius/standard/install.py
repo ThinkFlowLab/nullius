@@ -303,8 +303,14 @@ def driver_argv(bench: dict, home: str = HOME) -> tuple:
     ``driver.install`` folder, installed first when it is not) filled, and
     what that install adds to the driver's environment (``HF_HUB_CACHE``
     when it prefetched models). Every place that starts a driver - a run, a
-    shard, a proof's checks - starts it here."""
-    where = driver_packages(bench, home)
+    shard, a proof's checks - starts it here; a container setup, whose install
+    is made in its image, through :func:`driver_command`."""
+    return driver_command(bench, driver_packages(bench, home), home)
+
+
+def driver_command(bench: dict, where: Optional[str], home: str = HOME) -> tuple:
+    """A driver's command and what its install in ``where`` adds to its
+    environment; ``where`` None for a driver that declares no install."""
     extra = process_env(definitions.driver_install(bench), where, home) if where else {}
     return words(bench["driver"]["command"], {"here": bench["_here"], "install": where or ""}), extra
 

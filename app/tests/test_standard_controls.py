@@ -49,6 +49,12 @@ class Schema(unittest.TestCase):
         self.assertTrue(any("is not a field" in p for p in self.problems({"nop": dict(CONTROLS["nop"], answer="x")})))
         self.assertIn("controls: an object, nop and/or oracle", self.problems({}))
 
+    def test_units_that_may_not_be_redistributed_say_so_with_a_boolean(self):
+        units = dict(self.b["units"], redistribute=False)
+        self.assertEqual(definitions.problems(dict(self.b, units=units), "benchmark"), [])
+        self.assertIn("units.redistribute: false when the data may not be redistributed",
+                      definitions.problems(dict(self.b, units=dict(units, redistribute="no")), "benchmark"))
+
     def test_an_agent_cannot_take_a_controls_name(self):
         a = definitions.get("agent", "fake", FIX)
         self.assertIn("key: nop is the word for a benchmark's control", definitions.problems(dict(a, key="nop"), "agent"))
@@ -66,6 +72,15 @@ class Schema(unittest.TestCase):
         for b in definitions.load("benchmark")[0] + definitions.kits():
             for c in (b.get("controls") or {}).values():
                 self.assertIn(c["source"], definitions.SOURCES, b["key"])
+
+    def test_a_catalogued_proof_of_units_that_may_not_be_redistributed_names_none(self):
+        held = [b for b in definitions.load("benchmark")[0] if b["units"].get("redistribute") is False]
+        self.assertIn("gaia", [b["key"] for b in held])
+        for b in held:
+            for ds, checks in (b.get("proven") or {}).items():
+                with self.subTest(benchmark=b["key"], dataset=ds):
+                    self.assertNotIn("first", (checks.get("leak") or {}).get("in_prompt") or {})
+                    self.assertFalse([p for r in (checks.get("failed") or {}).values() for p in r.get("problems") or []])
 
 
 class ControlRun(unittest.TestCase):
@@ -233,6 +248,38 @@ class Prove(unittest.TestCase):
         self.assertTrue(any("repeat" in p for p in r["problems"]))
         self.assertTrue(any("says 3 units" in p for p in r["problems"]))
 
+    def test_units_that_may_not_be_redistributed_are_counted_never_named(self):
+        """A prompt naming its answer as declared, and a reference left in a
+        file: the definition keeps the counts, not the units; one whose units
+        may be redistributed names them, as before."""
+        here = os.path.join(self.tmp, "held")
+        os.makedirs(here)
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(HELD)
+        d = {"schema": "nullius.benchmark/v1", "key": "held", "label": "Held", "summary": "Synthetic units.", "family": "agent",
+             "needs": ["agent.task/v1"], "driver": {"command": ["python3", "{here}/driver.py"]},
+             "datasets": [{"id": "choice", "units": 1}, {"id": "leaky", "units": 1}],
+             "units": {"noun": "question", "nouns": "questions", "redistribute": False},
+             "controls": dict(CONTROLS, oracle=dict(CONTROLS["oracle"], in_prompt="A choice question names its answer.")),
+             "score": {"kind": "pass", "says": "The reference."}}
+        with open(os.path.join(here, "standard.json"), "w") as f:
+            json.dump(d, f)
+        b, bad = definitions._read(os.path.join(here, "standard.json"), "benchmark", "held")
+        self.assertEqual(bad, [])
+        got = self.prove(b)
+        self.assertEqual((got["choice"]["leak"]["in_prompt"]["first"], got["leaky"]["leak"]["ok"]), (["held-unit-1"], False))
+        with open(os.path.join(here, "standard.json")) as f:
+            text = f.read()
+        self.assertNotIn("held-unit", text)
+        proven = json.loads(text)["proven"]
+        self.assertEqual(proven["choice"]["leak"]["in_prompt"], {"units": 1, "why": "A choice question names its answer."})
+        self.assertEqual((proven["leaky"]["failed"]["leak"]["passed"], proven["leaky"]["failed"]["leak"]["problems"]), ("0/1", []))
+        self.assertEqual(proven["leaky"]["oracle"]["passed"], "1/1")
+        b["units"] = {"noun": "question", "nouns": "questions"}
+        prove.record(b, got)
+        self.assertEqual(b["proven"]["choice"]["leak"]["in_prompt"]["first"], ["held-unit-1"])
+        self.assertIn("held-unit-2", b["proven"]["leaky"]["failed"]["leak"]["problems"][0])
+
 
 LEAKY = '''from nullius.standard.jsonl import serve
 import os
@@ -252,6 +299,23 @@ def oracle(unit, dir):
     return {"answer": ANSWER}
 def score(unit, dir, transcript, answer):
     return {"reward": 0.0}
+serve({"units": units, "setup": setup, "oracle": oracle, "score": score})
+'''
+
+HELD = '''from nullius.standard.jsonl import serve
+import os
+ANSWER = "the reference answer is forty-two"
+UNITS = {"choice": ["held-unit-1"], "leaky": ["held-unit-2"]}
+def units(dataset):
+    return {"units": UNITS[dataset]}
+def setup(unit, dir):
+    if unit == "held-unit-2":
+        open(os.path.join(dir, "notes.txt"), "w").write(ANSWER + "\\n")
+    return {"prompt": "Is it " + ANSWER + ", or not?"}
+def oracle(unit, dir):
+    return {"answer": ANSWER}
+def score(unit, dir, transcript, answer):
+    return {"reward": float(answer == ANSWER), "passed": answer == ANSWER}
 serve({"units": units, "setup": setup, "oracle": oracle, "score": score})
 '''
 
@@ -322,6 +386,38 @@ class Builder(unittest.TestCase):
                          {"nop": ("nullius", False), "oracle": ("official", True)})
         self.assertEqual(ds["proofs"], {"units": None, "leak": None})
         self.assertEqual(c["fits"]["fakebench"], {"fake": [], "nop": [], "oracle": []})
+
+
+class ProofDriverCredentials(unittest.TestCase):
+    def test_units_receive_saved_or_handed_driver_credentials_only(self):
+        from nullius import secrets
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"SECRETS_DIR": os.path.join(tmp, "secrets")}):
+            secrets.set(secrets.HUGGINGFACE, "HF_TOKEN", "synthetic-proof-token")
+            here = Path(tmp) / "benchmark"
+            here.mkdir()
+            (here / "driver.py").write_text('''import os
+from nullius.standard.jsonl import serve
+def units(dataset):
+    assert os.environ.get("HF_TOKEN") == "synthetic-proof-token"
+    assert "AGENT_ONLY" not in os.environ
+    return {"units": ["one"]}
+serve({"units": units})
+''')
+            bench = {"key": "credential-fixture", "label": "Credential fixture", "family": "agent", "_here": str(here),
+                     "driver": {"command": ["python3", "{here}/driver.py"]}, "datasets": [{"id": "all", "units": 1}],
+                     "environments": {"data": {"needs_secrets": [
+                         {"name": "HF_TOKEN", "kind": "value", "to": "driver", "provider": "huggingface"},
+                         {"name": "AGENT_ONLY", "kind": "value", "to": "agent"}]}}}
+            secrets.set(bench["key"], "AGENT_ONLY", "synthetic-agent-token")
+            secrets.set(bench["key"], "HF_TOKEN", "synthetic-stale-token")          # never read: its provider's alone
+            handed = run.Licences.handed(bench, {"HF_TOKEN": b"synthetic-proof-token", "AGENT_ONLY": b"synthetic-agent-token"}, tmp)
+            for name, held in (("saved", None), ("handed", handed)):
+                with self.subTest(name):
+                    if held is not None:
+                        secrets.delete(secrets.HUGGINGFACE, "HF_TOKEN")
+                    result = prove.prove(bench, write=False, licences=held, say=lambda _: None)
+                    self.assertTrue(result["all"]["units"]["ok"], result)
 
 
 if __name__ == "__main__":

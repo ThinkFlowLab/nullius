@@ -130,7 +130,7 @@ class RouteCases(CompilerCase):
         self.assertIn('terminal-bench', self.offered())
         ok = self.route('terminal-bench')
         self.assertEqual((ok['blocker'], ok['errors']), ('', []))
-        # every offered benchmark is one the catalogue names on Harbor, official or an experiment
+        # every offered benchmark is one the catalogue names on Harbor, official or community
         usable = {b['key'] for b in self.schema['benchmarks'] if 'harbor' in b['harness']}
         self.assertEqual(set(self.offered()), usable)
 
@@ -153,7 +153,7 @@ class RouteCases(CompilerCase):
             sch = dict(schema, credentials=dict(schema["credentials"], agent_keys=held))
             return self.js(code + 'C.agentById=C.agentById;process.stdout.write(JSON.stringify(C.validate(Object.assign(r,{agents:["cursor-cli"]})).notes));', sch)
         missing = notes([])
-        self.assertTrue(any("needs CURSOR_API_KEY of its own: add it in Settings, Agent keys" in n for n in missing), missing)
+        self.assertTrue(any("needs CURSOR_API_KEY of its own: add it in Settings, Custom keys" in n for n in missing), missing)
         self.assertFalse(any("CURSOR_API_KEY" in n for n in notes(["CURSOR_API_KEY"])))
 
     def test_the_catalogue_page_link_opens_the_route_it_names(self):

@@ -226,6 +226,21 @@ class Shapes(unittest.TestCase):
         said = definitions.problems(dict(d, _here=HERE), "benchmark")
         self.assertTrue(any("one name, one kind" in p for p in said), said)
 
+    def test_a_data_providers_token_is_a_value_to_the_driver(self):
+        hf = {"name": "HF_TOKEN", "to": "driver", "provider": "huggingface"}
+        self.assertEqual(self.problems(hf, dict(hf, name="HF_TOKEN_TOO", kind="value")), [])
+        for s, said in ((dict(hf, to="agent"), ".to: driver"), (dict(hf, kind="server"), ".kind: value"),
+                        (dict(hf, provider="elsewhere"), ".provider: one of"), (dict(hf, provider=["huggingface"]), ".provider: one of")):
+            with self.subTest(s=s):
+                got = self.problems(s)
+                self.assertTrue(any(said in p for p in got), got)
+
+    def test_one_name_is_one_source_across_environments(self):
+        d = _load(os.path.join(HERE, "standard.json"))
+        d["environments"]["tool"]["needs_secrets"] = [{"name": "FAKE_SCORER_TOKEN", "to": "driver", "provider": "huggingface"}]
+        said = definitions.problems(dict(d, _here=HERE), "benchmark")
+        self.assertTrue(any("FAKE_SCORER_TOKEN comes from huggingface and from the benchmark" in p for p in said), said)
+
 
 class Withheld(unittest.TestCase):
     def test_a_licence_name_is_never_inherited_by_another_run(self):
@@ -235,6 +250,20 @@ class Withheld(unittest.TestCase):
         with mock.patch.object(definitions, "load", return_value=([bench()], [])):
             self.assertIn("FAKE_TOOL_LICENSE_FILE", execution.withheld())
         self.assertNotIn("Benchmark secrets", settings.GROUPS)
+
+    def test_a_data_providers_token_name_is_inherited_as_before(self):
+        # the shell's HF_TOKEN reaches a Harbor run, as when no benchmark declared it; a standard driver or agent
+        # never inherits it (run.KEEP), and is given the provider's token alone
+        from nullius import execution
+        b = bench()
+        b["environments"]["licensed"]["needs_secrets"].append({"name": "HF_TOKEN", "to": "driver", "provider": "huggingface"})
+        with mock.patch.object(definitions, "load", return_value=([b], [])), \
+                mock.patch.dict(os.environ, {"HF_TOKEN": "synthetic-shell-token"}):
+            self.assertNotIn("HF_TOKEN", execution._licence_names())
+            self.assertIn("FAKE_SCORER_TOKEN", execution._licence_names())
+            self.assertEqual(execution._clean_env().get("HF_TOKEN"), "synthetic-shell-token")
+            self.assertNotIn("HF_TOKEN", run.base_env("/nonexistent-home"))
+        self.assertNotIn("HF_TOKEN", execution._licence_names())                     # GAIA's, as bundled
 
 
 class Handed(unittest.TestCase):

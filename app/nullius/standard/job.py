@@ -87,6 +87,7 @@ def trajectory_from_events(events: List[dict], calls: List[dict], agent: dict, m
         return steps[-1]
 
     open_msg = None
+    message_id = None
     for e in events:
         u, t = e.get("update") or {}, e.get("t")
         kind = u.get("sessionUpdate")
@@ -94,8 +95,11 @@ def trajectory_from_events(events: List[dict], calls: List[dict], agent: dict, m
             open_msg = None
             add("user", t, message=_text(u.get("content")))
         elif kind in ("agent_message_chunk", "agent_thought_chunk"):
-            if open_msg is None:
+            chunk_id = u.get("messageId") if kind == "agent_message_chunk" else None
+            if open_msg is None or (chunk_id and message_id and chunk_id != message_id):
                 open_msg = add("agent", t, message="", model_name=model)
+                message_id = None
+            message_id = chunk_id or message_id
             if kind == "agent_message_chunk":
                 open_msg["message"] += _text(u.get("content"))
             else:

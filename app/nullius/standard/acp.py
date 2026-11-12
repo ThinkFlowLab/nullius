@@ -75,24 +75,28 @@ _METADATA = {"session_info_update", "available_commands_update", "current_mode_u
 
 
 def last_message(events: List[dict]) -> str:
-    """A turn's answer: the agent's last message - its message chunks after
-    the last event of any other kind (a tool call, a plan, a notice). ACP has
-    no other boundary between messages; this one keeps a remark made before a
-    tool call, or a notice an agent sends as text, out of the answer. Session
+    """A turn's answer: the agent's last message, separated by ACP messageId
+    or another event (a tool call, a plan, a notice). Without IDs, session
     metadata parts two messages only when another message follows it."""
     parts: List[str] = []
     parted = False
+    message_id = None
     for e in events:
         u = e.get("update") or {}
         kind = u.get("sessionUpdate")
         if kind == "agent_message_chunk":
-            if parted:
-                parts, parted = [], False
+            chunk_id = u.get("messageId")
+            new_message = chunk_id != message_id if chunk_id and message_id else parted
+            if new_message:
+                parts, message_id = [], None
+            message_id = chunk_id or message_id
+            parted = False
             parts.append(((u.get("content") or {}).get("text")) or "")
         elif kind in _METADATA:
             parted = True
         elif kind not in _IN_MESSAGE:
             parts, parted = [], False
+            message_id = None
     return "".join(parts)
 
 

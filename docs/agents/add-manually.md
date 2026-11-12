@@ -112,8 +112,8 @@ nullius standard new agent another-agent
 
 | Entry point | Field | Ports it can prove |
 | --- | --- | --- |
-| ACP, native or an adapter | `start.acp` | Task, workspace, tools, conversation, as proven |
-| A CLI that takes a prompt | `start.command` with `{prompt}` | Task and workspace only |
+| ACP, native or an adapter | `start.acp` | Task, workspace, tools, conversation, search, as proven |
+| A CLI that takes a prompt | `start.command` with `{prompt}` | Task, workspace and search only |
 
 ```json title="agent.json · a command entry point (mini-swe-agent)"
 {

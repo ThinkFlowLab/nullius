@@ -2,19 +2,24 @@
 
 A benchmark that runs with Harbor and the Nullius standard reads its data two
 ways: Harbor from its registry or hub, the standard from the upstream it pins
-(a repository at a commit, or a file at a revision). Each row names the source, the pin and who fetches it - always
+(a repository at a commit, or a file at a revision) or from the Hugging Face
+dataset its driver downloads (``data-source.json``: ``repository`` and
+``revision``). Each row names the source, the pin and who fetches it - always
 the harness, on a run, never the person - and the files a definition
 checks by their sha256. Nothing here reads the network: it reads the
 catalogue entry and the definitions beside it.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 from typing import List, Optional
 
 _GITHUB = re.compile(r"^https://github\.com/([^/]+/[^/]+?)(?:\.git)?/?$")
 _HF = re.compile(r"^https://huggingface\.co/datasets/([^/]+/[^/]+)/resolve/([^/]+)/")
+_HF_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_REVISION = re.compile(r"^[^/\s]+$")
 
 
 def _size(n) -> str:
@@ -47,12 +52,28 @@ def _files(defined: List[dict]) -> List[dict]:
     return out
 
 
-def _own(upstream: dict, defined: List[dict], who: str) -> dict:
+def _data_source(here) -> Optional[tuple]:
+    """The Hugging Face dataset a driver downloads itself, ``data-source.json``
+    beside its definition: (repository, revision), or None."""
+    if not here:
+        return None
+    try:
+        with open(os.path.join(here, "data-source.json")) as f:
+            src = json.load(f)
+        repo, rev = src["repository"], src["revision"]
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    ok = isinstance(repo, str) and _HF_REPO.match(repo) and isinstance(rev, str) and _REVISION.match(rev)
+    return (repo, rev) if ok else None
+
+
+def _own(upstream: dict, defined: List[dict], who: str, source: Optional[tuple] = None) -> dict:
     """A row for a harness that reads the upstream itself: from Hugging Face when
-    every file it names is there, else from the repository it clones."""
+    its driver names a dataset there (``source``) or every file it names is
+    there, else from the repository it clones."""
     hf = [_HF.match(d.get("url") or "") for d in defined]
-    if defined and all(hf):
-        name, rev = hf[0].group(1), hf[0].group(2)
+    if source or (defined and all(hf)):
+        name, rev = source or (hf[0].group(1), hf[0].group(2))
         row = {"from": "Hugging Face", "name": name, "href": f"https://huggingface.co/datasets/{name}/tree/{rev}",
                "pin": rev[:7], "by": f"{who} downloads it on the first run and keeps it"}
     else:
@@ -76,7 +97,8 @@ def of(dataset, harness: List[str], standard: Optional[dict] = None, only: bool 
     the entry; ``only`` says the entry has one dataset."""
     rows = []
     if standard:
-        rows.append(dict(_own(standard.get("upstream") or {}, _matching(standard.get("datasets") or [], dataset.key, only), "Nullius"),
+        rows.append(dict(_own(standard.get("upstream") or {}, _matching(standard.get("datasets") or [], dataset.key, only), "Nullius",
+                              _data_source(standard.get("_here"))),
                          way="standard", label="Nullius"))
     if "harbor" in harness and (dataset.hub or dataset.registry):
         rows.append({"way": "harbor", "label": "Harbor", "from": "Harbor hub" if dataset.hub else "Harbor registry",

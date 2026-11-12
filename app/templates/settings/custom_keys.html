@@ -1,0 +1,82 @@
+{% macro key_summary(name, state, editor) %}
+<div class="st-key-summary">
+  <span class="st-key-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="4"/><path d="m11 12 8 8 3-3-2-2-2 2-2-2 2-2-3-3"/></svg></span>
+  <div class="st-key-copy"><h3>{{ name }}</h3></div>
+  <span class="st-key-state" data-key-state="{{ state }}">{{ {'saved': 'Saved', 'missing': 'Not set', 'expired': 'Expired'}[state] }}</span>
+  <button type="button" class="btn sm ghost st-key-edit" data-key-edit data-key-label="{{ 'View' if not writable else 'Set up' if state == 'missing' else 'Edit' }}" aria-expanded="true" aria-controls="{{ editor }}" hidden>{{ 'View' if not writable else 'Set up' if state == 'missing' else 'Edit' }}</button>
+</div>
+{% endmacro %}
+<section class="st-section" id="custom-keys" aria-labelledby="custom-keys-h">
+  <div class="st-section-head">
+    <div class="st-key-heading"><h2 id="custom-keys-h">Custom keys</h2>{% if writable %}<button type="button" class="btn sm ghost" data-key-add aria-controls="custom-key-new" aria-expanded="false" hidden><span aria-hidden="true">+</span> Add key</button>{% endif %}</div>
+    <p>Credentials for your agents and benchmarks.</p>
+  </div>
+  {% for b in benchmark_access %}
+  <div class="st-key-group" id="access-{{ b.key }}">
+    <h3 class="st-key-group-title">{{ b.title }}</h3>
+    {% for s in b.needs %}
+    {% set field_id = 'access-' ~ b.key ~ '-' ~ s.name %}
+    <article class="st-key-card" data-key-card="{{ field_id }}" data-key-kind="benchmark">
+      {{ key_summary(s.name, 'expired' if s.status.expired else 'saved' if s.status.set else 'missing', field_id ~ '-editor') }}
+      <div class="st-key-editor" id="{{ field_id }}-editor" data-key-editor>
+        {% if s.summary %}<p class="st-note">{{ s.summary }}</p>{% endif %}
+        {% if s.status.filename %}<p class="st-note">{{ s.status.filename }}</p>{% endif %}
+        {% if s.status.expires %}<p class="st-note">{{ 'Expired' if s.status.expired else 'Expires' }} {{ s.status.expires }}</p>{% endif %}
+        {% if writable %}
+        <div class="st-key-field">
+          <label for="{{ field_id }}">{{ {'value': 'Access key', 'file': 'Licence file', 'server': 'Server address'}[s.kind] }}</label>
+          <div class="st-key-inputrow">
+            {% if s.kind == 'file' %}<input id="{{ field_id }}" type="file" name="file" form="{{ field_id }}-set" required aria-label="{{ s.name }}: the licence file">
+            {% else %}<input class="st-input" id="{{ field_id }}" name="value" form="{{ field_id }}-set" type="password" required autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false" aria-label="{{ s.name }}" placeholder="{{ 'host:port' if s.kind == 'server' else 'Enter a new key' if s.status.set else 'Paste your key' }}">{% endif %}
+            <button class="btn sm" type="submit" form="{{ field_id }}-set">Save</button>
+          </div>
+        </div>
+        {% if s.kind != 'value' or s.status.set or s.movable %}
+        <div class="st-key-footer">
+          {% if s.kind != 'value' %}<details class="st-key-expiry"><summary>Expiry</summary><label for="{{ field_id }}-expires">Expires on <span class="st-about">(optional)</span></label><input class="st-input" id="{{ field_id }}-expires" name="expires" form="{{ field_id }}-set" type="date"></details>{% endif %}
+          <div class="st-key-actions">
+          {% for action, label, show in [('delete', 'Remove', s.status.set), ('move', 'Move from saved settings', s.movable)] %}{% if show %}
+            <button class="btn sm ghost" type="submit" form="{{ field_id }}-{{ action }}">{{ label }}</button>
+          {% endif %}{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  <p class="st-about" data-keys-empty{% if benchmark_access or agent_keys %} hidden{% endif %}>No custom keys yet.</p>
+  <div id="AGENT_KEYS">
+    {% for name in agent_keys %}{% if by.get(name) %}
+    {% set r = by[name] %}
+    <article class="st-key-card" data-key-card="agent-{{ name }}" data-key-kind="agent">
+      {{ key_summary(name, 'saved' if r.source != 'unset' else 'missing', 'agent-' ~ name ~ '-editor') }}
+      <div class="st-key-editor" id="agent-{{ name }}-editor" data-key-editor>
+        <article class="st-field st-key-field" id="{{ name }}" data-source="{{ r.source }}" data-secret="yes">
+          {% if writable %}
+          <label for="value-{{ name }}">Access key</label>
+          <input class="st-input" id="value-{{ name }}" name="value:{{ name }}" type="password" aria-label="New value for {{ name }}" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false">
+          <input type="hidden" name="clear:{{ name }}" value="">
+          {% if r.source != 'unset' %}<div class="st-key-actions"><button type="button" class="btn sm ghost" data-unset="{{ name }}">Remove key</button></div>{% endif %}
+          {% endif %}
+          {% if r.source == 'environment' %}<p class="st-note">Also set in the process environment. A replacement applies after restarting the app.</p>{% endif %}
+          {% if r.shadowed %}<p class="st-note">The file holds a different value, shadowed by the environment.</p>{% endif %}
+          {% if r.advice %}<p class="st-note">{{ r.advice }}</p>{% endif %}
+        </article>
+      </div>
+    </article>
+    {% endif %}{% endfor %}
+    {% if writable %}
+    <div class="st-key-card st-key-new" id="custom-key-new" data-key-new>
+      <h3>Add a key</h3>
+      <div class="st-key-new-fields">
+        <div class="st-key-field"><label for="agent-key-name">Name</label><input class="st-input" id="agent-key-name" name="agent_key_name" type="text" spellcheck="false" autocomplete="off" pattern="[A-Za-z_][A-Za-z0-9_]*"></div>
+        <div class="st-key-field"><label for="agent-key-value">Key</label><input class="st-input" id="agent-key-value" name="agent_key_value" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false"></div>
+      </div>
+      <div class="st-key-actions"><button type="button" class="btn sm ghost" data-key-new-cancel hidden>Cancel</button><button type="button" class="btn sm" data-key-new-save hidden>Add key</button></div>
+    </div>
+    {% endif %}
+  </div>
+</section>

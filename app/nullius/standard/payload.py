@@ -19,13 +19,14 @@ import tempfile
 from pathlib import Path
 
 from nullius import paths
+from nullius.standard import definitions
 
 PACKAGE = Path(__file__).resolve().parents[1]
 FORMAT = 1
 _KINDS = {"benchmarks": ("benchmark.json", "standard.json"),
           "agents": ("agent.json",), "capabilities": ("capability.json",)}
 _DOCUMENTS = {"feature.json", "benchmark.json", "standard.json", "agent.json", "capability.json",
-              "upstream-settings.json", "images.json"}
+              "upstream-settings.json", "images.json", "data-source.json"}
 _PRIVATE = {"credentials", "credentials.json", "secret", "secret.json", "secrets", "secrets.json", "settings.json",
             "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", "node_modules", "__pycache__"}
 _KEY = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
@@ -95,6 +96,26 @@ def _resources(d: dict) -> set[str]:
     return out
 
 
+def _dataset_resources(d: dict) -> set[str]:
+    """Dataset files installed beside each effective benchmark version.
+
+    Upstream checkout paths and downloaded datasets belong to the installer,
+    not the catalogue snapshot. Resolve versions to retain inherited upstreams
+    and datasets exactly as the runner sees them.
+    """
+    out = set()
+    for version in definitions.versions(d):
+        bench = definitions.resolve(d, version)
+        if bench is None or (bench.get("upstream") or {}).get("repository"):
+            continue
+        for dataset in bench.get("datasets") or []:
+            if isinstance(dataset, dict) and not dataset.get("url"):
+                path = dataset.get("path")
+                if isinstance(path, str) and path:
+                    out.add(path)
+    return out
+
+
 def _imports(root: Path, relative: str, content: bytes) -> set[str]:
     """Follow local Python imports from a declared driver without sweeping its folder."""
     if not relative.endswith(".py"):
@@ -143,6 +164,8 @@ def _entry(root: Path, *, kit: bool = False) -> dict[str, tuple[bytes, int]]:
             files[name] = content
             if name in {"standard.json", "agent.json", "capability.json", "feature.json"}:
                 resources.update(_resources(d))
+            if name == "standard.json":
+                resources.update(_dataset_resources(d))
     while resources - files.keys():
         name = min(resources - files.keys())
         files[name] = _read(root, name)

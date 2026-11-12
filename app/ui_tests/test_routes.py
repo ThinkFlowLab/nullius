@@ -219,7 +219,7 @@ class Routes(unittest.TestCase):
                 with self.subTest(benchmark=b.key, dataset=key):
                     self.assertIn(key, ids)
         self.assertIn("Official", html)
-        self.assertEqual("Experiments" in html, any(b.origin == "experiment" for b in cat.listed_benchmarks))   # a shelf only when something is on it
+        self.assertEqual('data-shelf="community"' in html, any(b.origin == "community" for b in cat.listed_benchmarks))   # a shelf only when something is on it
         self.assertIn("<b>500</b><span>tasks</span>", html)
         # Datasets belong on their benchmark's page.
         response = self.client.get("/datasets")

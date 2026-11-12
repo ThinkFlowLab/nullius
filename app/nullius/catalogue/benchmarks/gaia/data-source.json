@@ -1,0 +1,29 @@
+{
+  "repository": "gaia-benchmark/GAIA",
+  "revision": "682dd723ee1e1697e00360edccf2366dc8418dd9",
+  "datasets": {
+    "gaia-validation": {
+      "file": "2023/validation/metadata.parquet",
+      "units": 165,
+      "sha256": "d9141bad0081af438d1ee36d188c5197035dc22a01f64e3f2ee17e45469518e9"
+    },
+    "gaia-validation-level1": {
+      "file": "2023/validation/metadata.level1.parquet",
+      "units": 53,
+      "level": 1,
+      "sha256": "5e574b0faeb4603b816e426cf7c7aefb1fe398d32f9c4861e1a4e3304f2b1281"
+    },
+    "gaia-validation-level2": {
+      "file": "2023/validation/metadata.level2.parquet",
+      "units": 86,
+      "level": 2,
+      "sha256": "36fe47d728ef4e4a4477ab21bbddb88e6739ac81a885ededf99f8b395b196f2c"
+    },
+    "gaia-validation-level3": {
+      "file": "2023/validation/metadata.level3.parquet",
+      "units": 26,
+      "level": 3,
+      "sha256": "5d004e101d8fa8b071cc50d323f8437051975aea7e894892e7d5584e9920790d"
+    }
+  }
+}

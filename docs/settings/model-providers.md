@@ -95,8 +95,8 @@ properties into your existing `settings.json`
 
     The judges.
 
-- [Agent keys](agent-keys.md)
+- [Custom keys](agent-keys.md)
 
-    An agent's vendor.
+    Agent and benchmark credentials.
 
 </div>

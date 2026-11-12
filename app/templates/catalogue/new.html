@@ -81,7 +81,7 @@
 
       <fieldset class="nb-set nb-entry"><legend>Origin</legend>
         <div class="nb-choices">
-          {% for o in origins %}{{ radio('origin', o, o|capitalize, 'the publisher\'s, run the way it certifies' if o == 'official' else 'found and adapted here: published, flaws still to find') }}{% endfor %}
+          {% for o in origins %}{{ radio('origin', o, o|capitalize, 'the publisher\'s benchmark' if o == 'official' else 'adapted by the community') }}{% endfor %}
         </div>
       </fieldset>
 

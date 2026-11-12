@@ -35,7 +35,8 @@ runs in this machine's user namespace (:func:`_userns`). On podman it
 runs with no SELinux label (:func:`_security_opt`), as on Docker's default
 daemon.
 
-**The relay is a sidecar, and the agent's only way out.** Per unit, an
+**The relay is a sidecar, and the agent's only way out** but for the public
+web proxy of an environment that declares ``network``. Per unit, an
 internal network (``docker network create --internal``: no route off it); a
 relay container (``python3 -m nullius.standard.relay serve``) on the default
 bridge *and* on that network as ``relay``; the agent's container on the
@@ -44,8 +45,8 @@ and nothing else answers it. The real key reaches the relay's container
 only, as an owner-only file under :func:`key_root`, mounted read-only and
 removed from this machine once the relay listens: never on an argument list
 (``ps``) or in the container's environment (``docker inspect``). The relay
-publishes its port on 127.0.0.1 so the driver, which stays on this machine
-(it owns the answers), reaches the judge's route and a capability
+publishes its port on 127.0.0.1 so the driver (on the machine for
+agent/capability runs) reaches the judge's route and a capability
 benchmark's reader. Its record folder is mounted read-write, so the host
 reads each call as the local relay's are read. On podman the default bridge
 is Nullius's own (:data:`BRIDGE`, :func:`way_out`). A model endpoint on this
@@ -72,8 +73,11 @@ environment, behind a Unix socket (``mcp_machine.Listener``). The unit gets
 a forwarder for it (``doors``): on the unit's internal network *only* - no
 bridge, no route anywhere - under the alias the agent's entry names, the
 socket alone mounted into it, passing every connection to that socket and
-nothing else. The agent starts ``mcp_bridge.py`` (mounted alone, read-only),
-which joins its stdio to that door.
+nothing else. On macOS, where the socket cannot be mounted, the forwarder
+is on the default bridge too and goes to a loopback TCP bridge here, which
+wants the door's nonce first, given as a key file (``forward.py``). The
+agent starts ``mcp_bridge.py`` (mounted alone, read-only), which joins its
+stdio to that door.
 
 **An own image** (an environment with ``"image": "own"``) is the other way
 round: the task's image, built from its own Dockerfile - its own ``FROM``,
@@ -97,6 +101,7 @@ the image - a glibc build in a musl one - is found before the agent starts
 Everything a unit starts carries the label ``nullius.job=<job>`` and is
 removed when the unit ends, after an error or an interrupt too; :func:`sweep`
 removes whatever a killed run left behind.
+Docker Original setup drivers are handled by ``setup_container.py``.
 """
 from __future__ import annotations
 
@@ -109,6 +114,7 @@ import platform
 import re
 import shutil
 import socket
+import socketserver
 import stat
 import subprocess
 import tarfile
@@ -117,6 +123,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from secrets import compare_digest, token_hex
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from nullius import paths
@@ -148,6 +155,7 @@ RELAY_PORT = 8080
 RELAY_ALIAS = "relay"
 FORWARD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "forward.py")
 FORWARD_IN = "/opt/nullius/forward.py"     # where the forwarder's one file is mounted in its container
+FORWARD_NONCE_IN = "/opt/nullius/forward-nonce"    # a door's nonce's one file, in its forwarder's container
 EGRESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "egress.py")
 EGRESS_IN = "/opt/nullius/egress.py"       # the check's proxy's one file, in its container
 EGRESS_PORT = 3128
@@ -891,18 +899,20 @@ def server_alias(address: str, i: int = 1) -> Tuple[str, str, int]:
     return (f"licence-server-{i}" if _IPV4.match(host) else host), host, int(port)
 
 
-def forward_argv(image: str, *, name: str, job: str, port: int) -> List[str]:
+def forward_argv(image: str, *, name: str, job: str, port: int, nonce_file: Optional[str] = None) -> List[str]:
     """``docker run`` for a licence server's forwarder: on the default bridge
     (``BRIDGE`` on podman), its one file mounted, listening on the server's
     port. Where it forwards is named, never given: ``-e NULLIUS_FORWARD_TO``.
     ``host.docker.internal`` is the machine the run is on, for a server there
     (where :func:`use_socket_doors`, ``Unit._forward`` gives such a server a
-    door instead)."""
+    door instead). A macOS door mounts its nonce read-only."""
+    mount = ["--mount", f"type=bind,source={nonce_file},target={FORWARD_NONCE_IN},readonly"] if nonce_file else []
     return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_keep_id(), "--user", _user(),
             "--cap-drop", "ALL", *_security_opt(), "--init",
-            "--add-host", "host.docker.internal:host-gateway", "-v", f"{FORWARD}:{FORWARD_IN}:ro",
+            "--add-host", "host.docker.internal:host-gateway", "-v", f"{FORWARD}:{FORWARD_IN}:ro", *mount,
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
-            image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}"]
+            image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}",
+            *(["--nonce-file", FORWARD_NONCE_IN] if nonce_file else [])]
 
 
 def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
@@ -920,6 +930,16 @@ def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
             "-v", f"{FORWARD}:{FORWARD_IN}:ro", "-v", f"{socket_path}:{socket_path}:ro",
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
             image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}"]
+
+
+def proxy_env(direct: Iterable[str] = ()) -> Dict[str, str]:
+    """The variables that send HTTP(S) through the ``egress`` proxy; this
+    machine's loopback and ``direct`` (the unit's relay, doors and servers) are
+    reached as they are."""
+    proxy = f"http://{EGRESS_ALIAS}:{EGRESS_PORT}"
+    local = ",".join(dict.fromkeys(["localhost", "127.0.0.1", "::1", *direct]))
+    return {"HTTP_PROXY": proxy, "HTTPS_PROXY": proxy, "http_proxy": proxy, "https_proxy": proxy,
+            "NO_PROXY": local, "no_proxy": local}
 
 
 def egress_argv(image: str, *, name: str, job: str) -> List[str]:
@@ -956,7 +976,7 @@ class Unit:
                  model: Optional[str] = None, routes: Optional[Dict[str, str]] = None, prices: Optional[dict] = None,
                  side_models=(), key_header: str = "authorization", servers: Iterable[str] = (),
                  doors: Iterable[Tuple[str, int, str]] = (), hosts: Optional[Dict[str, str]] = None,
-                 ledger: Optional[str] = None):
+                 ledger: Optional[str] = None, network_probe: Optional[str] = None, probe_now: bool = True):
         self.job, self.tag, self.dir, self.image, self.app = job, tag, record_dir, image, app
         self.ledger = ledger                     # the file of the run's spending cap, when it has one
         self.servers = list(servers)             # licence servers, host:port each: a forwarder apiece
@@ -966,9 +986,13 @@ class Unit:
         self.hosts = dict(hosts or {})
         self.names = names(job, tag)
         self.host: Optional[str] = None
+        self.socket_bridges = []
         self.started: List[str] = []           # containers to remove
         self.network = False
-        self.key_dir: Optional[str] = None     # the key file's folder, until the relay listens
+        self.key_dir: Optional[str] = None     # its secret files' folder, until what reads them listens
+        self.network_probe = network_probe
+        self.probe_now = probe_now               # the run's first unit checks the proxy route; the rest trust it
+        self.network_env = {}
         self.socket_doors: List[SocketDoor] = []
         os.makedirs(record_dir, exist_ok=True)
 
@@ -993,28 +1017,65 @@ class Unit:
                 self.reach[address] = self._forward(i, address)
             for i, (alias, port, sock) in enumerate(self.doors, 1):
                 self._door(f"{self.names['agent']}-mcp{i}", alias, port, sock, "the door to the benchmark's MCP server")
+            if self.network_probe:
+                self._online()
         except Exception:
             self.stop()
             raise
         return self
 
-    def _key_file(self) -> str:
-        """Write the key to an owner-only file in a new folder under
-        :func:`key_root`, and return its path. Not the record folder: it is kept."""
-        root = key_root()
-        os.makedirs(root, exist_ok=True)
-        os.chmod(root, 0o700)
-        forget_stale_keys()
-        self.key_dir = tempfile.mkdtemp(prefix=key_prefix(self.job), dir=root)
-        path = os.path.join(self.key_dir, "key")
-        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
-            f.write(self.key)
-        return path
+    def direct(self) -> List[str]:
+        """What the agent reaches without the public web proxy: its relay, its
+        doors and its licence servers' forwarders."""
+        return [RELAY_ALIAS, *[alias for alias, _, _ in self.doors],
+                *[address.rsplit(":", 1)[0] for address in getattr(self, "reach", {}).values()]]
+
+    def _key_file(self, name: str = "key", text: Optional[str] = None) -> str:
+        """Write the key, or ``text``, to an owner-only file in the unit's key
+        folder, a new one under :func:`key_root` when it has none, and return
+        its path. Not the record folder: it is kept."""
+        if not self.key_dir:
+            self.key_dir = key_folder(self.job)
+        return secret_file(os.path.join(self.key_dir, name), self.key if text is None else text)
 
     def _forget_key(self):
         if self.key_dir:
             shutil.rmtree(self.key_dir, ignore_errors=True)
             self.key_dir = None
+
+    def _online(self):
+        """Opt-in public HTTP(S), with private destinations blocked by the proxy."""
+        name = self.names["agent"] + "-egress"
+        self.started.append(name)
+        _docker(egress_argv(self.image, name=name, job=self.job)[1:])
+        _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.names["network"], name])
+        self._wait(name, "the agent's public web proxy")
+        self.network_env = proxy_env(self.direct())
+        if not self.probe_now:
+            return
+        # Check the actual network path, without mounts or credentials.
+        code = ("import sys,urllib.request; "
+                "r=urllib.request.urlopen(urllib.request.Request(sys.argv[1], headers={'User-Agent': 'Nullius-connectivity-check'}), timeout=10); "
+                "assert 200 <= r.status < 400")
+        probe = self.names["agent"] + "-network-check"
+        # Docker startup competes with other units for daemon/network locks.
+        # Its deadline must not consume the HTTP check's own execution budget.
+        # Track the name before starting so cancellation also removes it.
+        self.started.append(probe)
+        args = ["run", "-d", "--name", probe, "--label", f"{LABEL}={self.job}",
+                "--init", "--network", self.names["network"],
+                "--cap-drop", "ALL", "--security-opt", "no-new-privileges"]
+        for key in self.network_env:
+            args += ["-e", key]
+        try:
+            _docker(args + [self.image, "python3", "-c", code, self.network_probe],
+                    env=client_env(self.network_env), timeout=120)
+            result = _docker(["wait", probe], timeout=30)
+            if result.stdout.strip() != "0":
+                logs = _docker(["logs", probe], check=False, timeout=10)
+                raise Unavailable((logs.stderr or logs.stdout).strip()[-500:] or "probe exited unsuccessfully")
+        except Unavailable as error:
+            raise Unavailable(f"the public HTTPS connectivity check: {error}") from error
 
     def _forward(self, i: int, address: str) -> str:
         """A licence server's forwarder, started and on the unit's network
@@ -1038,12 +1099,46 @@ class Unit:
         return f"{alias}:{port}"
 
     def _door(self, name: str, alias: str, port: int, sock: str, what: str) -> None:
-        """A door container to a socket on this machine, on the unit's network alone as ``alias``."""
+        """A door to a server on this machine, on the unit's network alone. On
+        macOS, a forwarder to a loopback TCP bridge here that serves a
+        connection only after the door's nonce line, given as a key file."""
         self.started.append(name)
-        _docker(door_argv(self.image, name=name, job=self.job, network=self.names["network"], alias=alias,
-                          port=port, socket_path=sock)[1:],
-                env=client_env({"NULLIUS_FORWARD_TO": "unix:" + sock}))
+        if platform.system() == "Darwin":
+            # Docker Desktop cannot connect to host Unix sockets through a
+            # file mount. Expose only this socket via a loopback TCP bridge.
+            from nullius.standard import forward
+            nonce = token_hex(32)
+            class Handler(socketserver.BaseRequestHandler):
+                def handle(self):
+                    self.request.settimeout(5)
+                    expected = (nonce + "\n").encode()
+                    received = b""
+                    try:
+                        while len(received) < len(expected):
+                            chunk = self.request.recv(len(expected) - len(received))
+                            if not chunk:
+                                return
+                            received += chunk
+                    except OSError:
+                        return
+                    if not compare_digest(received, expected):
+                        return
+                    self.request.settimeout(None)
+                    forward._serve(self.request, [(socket.AF_UNIX, sock)])
+            bridge = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Handler)
+            bridge.daemon_threads = True
+            self.socket_bridges.append(bridge)
+            threading.Thread(target=bridge.serve_forever, daemon=True).start()
+            _docker(forward_argv(self.image, name=name, job=self.job, port=port,
+                                 nonce_file=self._key_file(name, nonce))[1:],
+                    env=client_env({"NULLIUS_FORWARD_TO": f"host.docker.internal:{bridge.server_address[1]}"}))
+            _docker(["network", "connect", "--alias", alias, self.names["network"], name])
+        else:
+            _docker(door_argv(self.image, name=name, job=self.job, network=self.names["network"], alias=alias,
+                              port=port, socket_path=sock)[1:],
+                    env=client_env({"NULLIUS_FORWARD_TO": "unix:" + sock}))
         self._wait(name, what)
+        self._forget_key()                       # read before it listens
 
     def _wait(self, name: str, what: str, timeout: float = 30):
         wait_listening(name, what, timeout)
@@ -1079,7 +1174,7 @@ class Unit:
         for src, _ in binds:                     # a licence comes from its store, never from in here
             if src.startswith(app + os.sep):
                 raise ValueError(f"{src} is in this application's folder: a licence is never mounted from there")
-        inside = {k: v for k, v in env.items() if k not in HOST_ONLY}
+        inside = {k: v for k, v in {**env, **self.network_env}.items() if k not in HOST_ONLY}
         argv = run_argv(image or self.image, cmd, name=self.names["agent"], network=self.names["network"], job=self.job,
                         workdir=workdir, mounted=mounted, env=inside, path=inside.get("PATH") or IMAGE_PATH,
                         interactive=interactive, binds=binds)
@@ -1097,12 +1192,24 @@ class Unit:
                     f.write(r.stdout + r.stderr)
             except (Unavailable, OSError):
                 pass
+        if self.network_probe and self.names["agent"] + "-egress" in self.started:
+            try:
+                r = _docker(["logs", self.names["agent"] + "-egress"], check=False, timeout=30)
+                with open(os.path.join(self.dir, "egress.log"), "w") as f:
+                    f.write(r.stdout + r.stderr)
+            except (Unavailable, OSError):
+                pass
         for n in dict.fromkeys(self.started):
             try:
                 _docker(["rm", "-f", n], check=False, timeout=60)
             except Unavailable:
                 pass
         self.started = []
+        for bridge in self.socket_bridges:
+            bridge.shutdown()
+            bridge.server_close()
+        self.socket_bridges = []
+
         for d in self.socket_doors:
             d.stop()
         self.socket_doors = []
@@ -1293,7 +1400,6 @@ def own_image(bench: dict, spec: dict, root: str, log_dir: Optional[str] = None)
                 raise Unavailable(f"pulling {ref}: {(r.stderr or r.stdout).strip()[-300:]}")
             _built[ref] = True
             _fetched.add(ref)
-            remember(ref, bench["key"])
         return ref
     path = within(root, spec["build"])
     if not os.path.isfile(os.path.join(path, "Dockerfile")):
@@ -1314,56 +1420,7 @@ def own_image(bench: dict, spec: dict, root: str, log_dir: Optional[str] = None)
             raise Unavailable(f"building {spec['build']} ({tag}): {(r.stderr or r.stdout).strip()[-300:]}")
         _built[tag] = True
         _fetched.add(tag)
-        remember(tag, bench["key"])
         return tag
-
-
-IMAGES = "images.json"          # under install.HOME: {image: the benchmark it was fetched for}
-_ledger_lock = threading.Lock()
-
-
-def _ledger_path() -> str:
-    return os.path.join(install.HOME, IMAGES)
-
-
-def fetched_images() -> Dict[str, str]:
-    """Every image Nullius pulled or built for a benchmark's units, and that
-    benchmark: what the Settings page counts and may remove. An image that was
-    on the machine before is not here, so it is never offered for removal."""
-    try:
-        with open(_ledger_path()) as f:
-            got = json.load(f)
-    except (OSError, ValueError):
-        return {}
-    return {str(k): str(v) for k, v in got.items()} if isinstance(got, dict) else {}
-
-
-def _write_ledger(got: Dict[str, str]) -> None:
-    os.makedirs(install.HOME, exist_ok=True)
-    part = _ledger_path() + f".{os.getpid()}.part"
-    with open(part, "w") as f:
-        json.dump(got, f, indent=1, sort_keys=True)
-    os.replace(part, _ledger_path())
-
-
-def remember(image: str, bench: str) -> None:
-    with _ledger_lock:
-        got = fetched_images()
-        if got.get(image) == bench:
-            return
-        got[image] = bench
-        _write_ledger(got)
-
-
-def forget(images: Iterable[str]) -> None:
-    with _ledger_lock:
-        got = fetched_images()
-        gone = [i for i in images if i in got]
-        if not gone:
-            return
-        for i in gone:
-            got.pop(i)
-        _write_ledger(got)
 
 
 def fetched(image: str) -> bool:
@@ -1380,8 +1437,7 @@ def drop_image(image: str) -> None:
     if image in _fetched:
         _fetched.discard(image)
         _built.pop(image, None)
-        if _docker(["rmi", image], timeout=600, check=False).returncode == 0:
-            forget([image])
+        _docker(["rmi", image], timeout=600, check=False)
 
 
 def image_config(image: str) -> dict:
@@ -1676,10 +1732,7 @@ class Box:
             _docker(egress_argv(image, name=name, job=self.job)[1:])
             _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.net, name])
             wait_listening(name, "the task's proxy")
-        proxy = f"http://{EGRESS_ALIAS}:{EGRESS_PORT}"
-        local = "localhost,127.0.0.1,::1"
-        return {"HTTP_PROXY": proxy, "HTTPS_PROXY": proxy, "http_proxy": proxy, "https_proxy": proxy,
-                "NO_PROXY": local, "no_proxy": local}
+        return proxy_env()
 
     def offline(self):
         """The way out :meth:`online` gave taken away again: its proxy
@@ -1762,9 +1815,26 @@ class Box:
 
 
 def key_root() -> str:
-    """The relays' key folders, in the user's cache: Colima and Lima share the
-    home with their engine, not the temporary folder."""
+    """The key folders (a relay's key, a door's nonce, a setup driver's
+    credentials), in the user's cache: Colima and Lima share the home with
+    their engine, not the temporary folder."""
     return os.path.join(paths.cache_dir(), "relay-keys")
+
+
+def key_folder(job: str) -> str:
+    """A new owner-only folder for a job's secret files under :func:`key_root`."""
+    root = key_root()
+    os.makedirs(root, exist_ok=True)
+    os.chmod(root, 0o700)
+    forget_stale_keys()
+    return tempfile.mkdtemp(prefix=key_prefix(job), dir=root)
+
+
+def secret_file(path: str, text: str) -> str:
+    """``text`` in a new file at ``path`` that only its owner reads."""
+    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
+        f.write(text)
+    return path
 
 
 def forget_stale_keys():
@@ -1785,7 +1855,7 @@ def key_prefix(job: str) -> str:
 
 def sweep(job: str):
     """Remove every container and network a job's units left, by its label,
-    its relays' key folders, and stale key folders."""
+    its key folders, and stale key folders."""
     for d in glob.glob(os.path.join(glob.escape(key_root()), glob.escape(key_prefix(job)) + "*")):
         shutil.rmtree(d, ignore_errors=True)
     forget_stale_keys()

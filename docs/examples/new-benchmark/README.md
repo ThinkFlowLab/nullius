@@ -36,7 +36,7 @@ folder replaces the entire bundled entry of the same key, and survives upgrades.
 | --- | --- |
 | `key`, `title`, `category`, `domain`, `scoring` | The folder's name; the name shown; one tag (Coding, Memory); one line on the tasks; how a task is scored, in two or three words |
 | `harness` | `["harbor"]`, plus `"standard"` when it runs there too |
-| `origin` | `official` (default): the publisher's, run as it certifies; `experiment`: adapted here, flaws still to find |
+| `origin` | `official` (default): the publisher's benchmark; `community`: adapted by the community |
 | `upstream_limitations` | What the benchmark as published gets wrong or leaves out: not Nullius's to fix |
 | `limitations` | Nullius's own: where running it here differs, or what is not offered yet |
 | `datasets` | `key`, `title`, `tasks`, `official` (upstream link), `source` (a phrase), `registry` (`name@version`) or `hub` (`org/name`), `verifier` |

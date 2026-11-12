@@ -470,11 +470,11 @@
     }
     if (harborExecutable(r).kind === 'development') notes.push('Development Harbor executable: ' + r.harborDev + ' is a checkout, not an immutable release; runs from it are development evidence.');
     else if (harborExecutable(r).kind === 'path' && !hp) notes.push('Choose Harbor on the Runner step.');
-    // an agent that calls its own vendor (Cursor's CLI agent) needs that vendor's key: Settings, Agent keys
+    // an agent that calls its own vendor (Cursor's CLI agent) needs that vendor's key: Settings, Custom keys
     const held = (schema.credentials || {}).agent_keys || [];
     for (const id of r.agents) {
       const want = (schema.agentNeeds || {})[agentById(id, r)?.arg || id];
-      if (want && !want.some(k => held.includes(k))) notes.push((agentById(id, r)?.label || id) + ' needs ' + want.join(' or ') + ' of its own: add it in Settings, Agent keys, or its trials fail at the start.');
+      if (want && !want.some(k => held.includes(k))) notes.push((agentById(id, r)?.label || id) + ' needs ' + want.join(' or ') + ' of its own: add it in Settings, Custom keys, or its trials fail at the start.');
     }
     return {errors, notes: [...new Set(notes)]};
   }

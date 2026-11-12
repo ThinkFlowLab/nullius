@@ -161,6 +161,11 @@ class Entries(unittest.TestCase):
 
 
 class Door(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))   # start() writes the relay's key file
+
     def test_the_door_is_on_the_units_network_alone_with_the_socket_alone(self):
         self.enterContext(mock.patch.object(container, "rootless", return_value=False))
         a = container.door_argv("img", name="n", job="j", network="net", alias="mcp-1-tools", port=9000, socket_path="/tmp/x/s")
@@ -181,7 +186,7 @@ class Door(unittest.TestCase):
             said.append((args, dict(env or {})))
             out = "127.0.0.1:5555\n" if args[:1] == ["port"] else '{"event": "listening"}'
             return subprocess.CompletedProcess(args, 0, out, "")
-        with mock.patch.object(container, "_docker", side_effect=docker), mock.patch.object(container, "_security", None):
+        with mock.patch.object(container, "_docker", side_effect=docker), mock.patch.object(container.platform, "system", return_value="Linux"), mock.patch.object(container, "_security", None):
             u = container.Unit("job", "u0001", tempfile.mkdtemp(), image="img", app="/app", base="https://x/v1", key="k",
                                doors=[("mcp-1-tools", 9000, "/tmp/d/s")]).start()
         runs = [(a, e) for a, e in said if a[:1] == ["run"]]
@@ -205,7 +210,7 @@ class DockerUnit(unittest.TestCase):
     def runner(self):
         r = run.Run.__new__(run.Run)
         r.base, r.key, r.model, r.provider = "https://x/v1", "k", "m", "custom"
-        r.judge_model = r.simulator_model = None
+        r.judge_model = r.simulator_model = r.setup_driver = None
         r.backend, r.other, r.bench, r.name, r.image = "container", agent(), bench("/defs/b"), "job", "img"
         r.up, r.data, r.ds, r.licences = "/up", "/data", {"id": "all"}, {}
         return r

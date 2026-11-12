@@ -86,6 +86,18 @@ class Tabs(unittest.TestCase):
         fixture_html = self.get("/agents").get_data(as_text=True)
         self.assertIn('std-mark small', fixture_html)
 
+    def test_jiuwenswarm_default_shows_its_search_proof_and_can_run_gaia(self):
+        from urllib.parse import unquote
+        with patch.object(definitions, "load", _LOAD):
+            html = self.get("/agents/jiuwenswarm").get_data(as_text=True)
+        row = next(row for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", html, re.S) if "agent.search/v1" in row)
+        self.assertIn('/kits/agent-search-v1', row)
+        self.assertIn('>3/3</b>', row)
+        self.assertNotIn("not offered", row)
+        self.assertIn('href="/agents/jiuwenswarm?v=0.2.8" aria-current="page"', html)
+        link = next(link for link in re.findall(r'href="([^"]+)"', html) if "standard=gaia" in link)
+        self.assertIn("other=jiuwenswarm@0.2.8", unquote(link))
+
     def test_sidebar_lists_agents_and_capabilities(self):
         html = self.get("/agents").get_data(as_text=True)
         for kind, route in (("agent", "agents"), ("capability", "capabilities")):
@@ -144,7 +156,7 @@ class Tabs(unittest.TestCase):
         self.assertIn("<h1>Agents</h1>", html)
         card = html[html.index('id="fake"'):]
         self.assertIn('href="/agents/fake"', card)
-        self.assertIn("<b>2/5</b><span>ports proven</span>", card)                    # task and workspace, of the five agent ports
+        self.assertIn("<b>2/6</b><span>ports proven</span>", card)                    # task and workspace, of the six agent ports
         self.assertIn("<b>1/1</b><span>benchmarks it runs</span>", card)
         self.assertNotIn("agent.task/v1", card[:card.index("</a>")])                  # the detail is on its page
         self.assertEqual(self.get("/agents/nope").status_code, 404)
@@ -266,10 +278,10 @@ class Tabs(unittest.TestCase):
         self.assertIn("v1.0 · 2 versions", html)
         html = self.get("/agents/fake").get_data(as_text=True)                          # the default
         self.assertIn('<nav class="std-versions"', html)
-        self.assertIn('href="/agents/fake?v=1.0" aria-current="page"><b>1.0</b><small>2/5 proven · default</small>', html)
+        self.assertIn('href="/agents/fake?v=1.0" aria-current="page"><b>1.0</b><small>2/6 proven · default</small>', html)
         self.assertIn('href="/new-run?standard=fakebench&amp;other=fake@1.0"', html)
         html = self.get("/agents/fake?v=2.0").get_data(as_text=True)
-        self.assertIn('aria-current="page"><b>2.0</b><small>0/5 proven</small>', html)
+        self.assertIn('aria-current="page"><b>2.0</b><small>0/6 proven</small>', html)
         self.assertIn("which Fake agent 2.0 does not offer", html)                       # its own proofs, none yet
         self.assertIn('<input type="hidden" name="version" value="2.0">', html)
         self.assertEqual(self.get("/agents/fake?v=9").status_code, 404)

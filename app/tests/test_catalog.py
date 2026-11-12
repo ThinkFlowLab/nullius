@@ -6,14 +6,17 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import pathlib
 import shutil
 import unittest
 
 from nullius.catalogue import catalog
+from nullius.standard import definitions as standard_definitions
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+UUID = re.compile(rb"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 
 
 class Shipped(unittest.TestCase):
@@ -28,10 +31,10 @@ class Shipped(unittest.TestCase):
         for d in cat.datasets:
             self.assertIsNotNone(cat.benchmark(d.benchmark), d.key)
 
-    def test_an_entry_says_official_or_experiment_and_nothing_of_its_runs(self):
+    def test_an_entry_says_official_or_community_and_nothing_of_its_runs(self):
         for b in catalog.load(catalog.ROOT).benchmarks:
             self.assertIn(b.origin, catalog.ORIGINS, b.key)
-        self.assertEqual(catalog.ORIGINS, ("official", "experiment"))
+        self.assertEqual(catalog.ORIGINS, ("official", "community"))
         for gone in ("status", "status_note", "branch", "experiment"):
             self.assertNotIn(gone, catalog.Benchmark.__dataclass_fields__)
 
@@ -41,12 +44,60 @@ class Shipped(unittest.TestCase):
         self.assertEqual(titles, sorted(titles, key=catalog.sort_key))
         # what has a usable route is listed, whoever made it and whether or not it has run
         listed = {x.key for x in cat.listed_benchmarks}
-        self.assertEqual(sorted(listed), ["gsm8k", "humaneval", "locomo", "longmemeval", "swe-bench-verified", "tau3-bench", "terminal-bench"])
+        self.assertEqual(sorted(listed), ["gaia", "gsm8k", "humaneval", "locomo", "longmemeval", "swe-bench-verified", "tau3-bench", "terminal-bench"])
         self.assertEqual((cat.benchmark("longmemeval").origin, cat.benchmark("longmemeval").label), ("official", "Official"))
         self.assertEqual(cat.benchmark("tau3-bench").label, "Official")
         # τ³ files as "t3…", before "te…": a reader looking under T finds it
         self.assertLess(titles.index("τ³-bench"), titles.index("Terminal-Bench 2.0"))
         self.assertTrue(all(d.source for d in cat.datasets))
+
+    def test_units_that_may_not_be_redistributed_are_named_nowhere(self):
+        """No UUID-shaped string, a task id's shape, in such a benchmark's folder or its generated page.
+        A failure names the files, never what was found."""
+        held = {b["key"]: b["_here"] for b in standard_definitions.load("benchmark", standard_definitions.CATALOGUE, every=True)[0]
+                if b["units"].get("redistribute") is False}
+        self.assertIn("gaia", held)
+        for key, here in held.items():
+            files = [os.path.join(REPO, "docs", "benchmarks", "supported", f"{key}.md")]
+            for folder, dirs, names in os.walk(here):
+                dirs[:] = [d for d in dirs if d != "__pycache__"]
+                files += [os.path.join(folder, n) for n in names]
+            named = []
+            for path in files:
+                with open(path, "rb") as f:
+                    if UUID.search(f.read()):
+                        named.append(os.path.relpath(path, REPO))
+            self.assertEqual(named, [], key)
+
+
+class TaskCounts(unittest.TestCase):
+    def catalogue(self, count=None):
+        datasets = [catalog.Dataset(key=f"d{i}", title=f"D{i}", benchmark="overlap", tasks=n,
+                                    source="Hugging Face") for i, n in enumerate((165, 53, 86, 26))]
+        benchmark = catalog.Benchmark(key="overlap", title="Overlap", category="QA",
+                                      datasets=[d.key for d in datasets], task_count=count)
+        return catalog.Catalog(benchmarks=[benchmark], datasets=datasets), benchmark
+
+    def test_distinct_headline_preserves_dataset_counts_and_builder_payload(self):
+        from nullius.recipes import launch
+        cat, benchmark = self.catalogue(165)
+        self.assertEqual(catalog.validate(cat), [])
+        self.assertEqual(cat.tasks_of(benchmark), ("165", "tasks"))
+        self.assertEqual([d.tasks for d in cat.datasets_of(benchmark)], [165, 53, 86, 26])
+        self.assertEqual(launch.payload(cat, [])["benchmarks"][0]["task_count"], 165)
+
+    def test_no_explicit_count_retains_dataset_summary(self):
+        cat, benchmark = self.catalogue()
+        self.assertEqual(cat.tasks_of(benchmark), ("26–165", "tasks"))
+        for dataset in cat.datasets:
+            dataset.tasks = 500
+        self.assertEqual(cat.tasks_of(benchmark), ("500", "tasks each"))
+
+    def test_invalid_or_impossible_distinct_count_is_named(self):
+        for count in (True, "165", 165.0, 0, -1, 164):
+            with self.subTest(count=count):
+                cat, _ = self.catalogue(count)
+                self.assertTrue(any("task_count" in p for p in catalog.validate(cat)))
 
 
 class DeclaredTimeouts(unittest.TestCase):
@@ -73,7 +124,7 @@ class Validation(unittest.TestCase):
             benchmarks=[catalog.Benchmark(key="x", title="X", origin="maybe", datasets=["d"])],
             datasets=[])
         bad = catalog.validate(cat)
-        self.assertIn("x: origin is official or experiment", bad)
+        self.assertIn("x: origin is official or community", bad)
         self.assertTrue(any("dataset 'd'" in m for m in bad))
 
     def test_a_dataset_its_benchmark_does_not_list_is_named(self):
@@ -204,7 +255,7 @@ class Routes(unittest.TestCase):
         self.assertEqual(tb.blocker, "")
 
     def test_a_named_harness_that_is_here_is_usable_run_or_not(self):
-        b = self._bench(harness=["harbor"], origin="experiment")
+        b = self._bench(harness=["harbor"], origin="community")
         self.assertEqual([r.summary for r in b.routes], ["Harbor · runnable"])
         self.assertEqual((b.route_case, b.blocker), ("harbor-only", ""))
 
@@ -218,15 +269,16 @@ class Routes(unittest.TestCase):
         self.assertTrue(any("harness 'docker'" in m for m in catalog.validate(cat)))
         self.assertEqual(cat.listed_benchmarks, [])
 
-    def test_an_entry_written_before_origin_reads_as_an_experiment(self):
+    def test_legacy_experiments_become_official_and_community_stays_community(self):
         with tempfile.TemporaryDirectory() as root:
-            for key, extra in (("old-exp", {"status": "blocked", "experiment": True}), ("old-com", {"origin": "community"})):
+            for key, extra in (("old-exp", {"status": "blocked", "experiment": True}),
+                               ("old-origin", {"origin": "experiment"}), ("community", {"origin": "community"})):
                 p = pathlib.Path(root, catalog.BENCHMARKS, key); p.mkdir(parents=True)
                 (p / catalog.ENTRY).write_text(json.dumps(
                     {"key": key, "title": key, "category": "Coding", "harness": ["harbor"], "datasets": [], **extra}))
             cat = catalog.load(root)
             self.assertEqual([(b.key, b.origin, b.blocker) for b in cat.benchmarks],
-                             [("old-com", "experiment", ""), ("old-exp", "experiment", "")])
+                             [("community", "community", ""), ("old-exp", "official", ""), ("old-origin", "official", "")])
 
 
 class Example(unittest.TestCase):
@@ -251,7 +303,7 @@ class Example(unittest.TestCase):
         self.assertEqual([b.key for b in cat.benchmarks], ["example-harbor"])
         self.assertEqual(catalog.validate(cat), [])
         self.assertEqual([b.key for b in cat.listed_benchmarks], ["example-harbor"])
-        self.assertEqual({b.origin for b in cat.benchmarks}, {"experiment"})
+        self.assertEqual({b.origin for b in cat.benchmarks}, {"official"})
 
 class ReportSources(unittest.TestCase):
     def test_a_source_two_benchmarks_claim_is_named(self):

@@ -82,14 +82,17 @@
     <div class="st-nav-group">
       <div class="st-nav-label">Evaluation</div>
       {{ section_link('providers', 'Model providers', 'capability', 'openrouter openai anthropic openai-compatible local endpoint ollama vllm api key model_api_url') }}
-      {{ section_link('agent-keys', 'Agent keys', 'agent', 'credentials cursor copilot token agent_keys') }}
+      {% set access_search = namespace(words='agent keys agent_keys cursor copilot dataset credentials token licence benchmark access') %}
+      {% for b in benchmark_access %}{% set access_search.words = access_search.words ~ ' ' ~ b.title %}{% for s in b.needs %}{% set access_search.words = access_search.words ~ ' ' ~ s.name ~ ' ' ~ s.summary %}{% endfor %}{% endfor %}
+      {{ section_link('data-providers', 'Data providers', 'ws', 'hugging face huggingface hf_token docker hub login registry token dataset pull limit') }}
+      {{ section_link('custom-keys', 'Custom keys', 'agent', access_search.words) }}
       {{ section_link('judge', 'Judges', 'compare', 'typesafe system one llm model judgement') }}
       {{ section_link('prices', 'Model prices', 'dollar', 'cost price estimate usd tokens list update') }}
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Execution</div>
       {{ section_link('hosts', 'Run hosts', 'runs', 'ssh remote machines server hosts') }}
-      {{ section_link('sandbox', 'Sandbox', 'kit', 'docker hub login registry images disk pull limit container') }}
+      {{ section_link('sandbox', 'Sandbox', 'kit', 'docker container') }}
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Application</div>
@@ -211,26 +214,7 @@
     {% endif %}
   </section>
 
-  <section class="st-section" id="agent-keys" aria-labelledby="agent-keys-h">
-    <div class="st-section-head">
-      <h2 id="agent-keys-h">Agent keys</h2>
-      <p>Some agents may require additional keys.</p>
-    </div>
-    <div id="AGENT_KEYS">
-    {% for name in agent_keys %}{% if by.get(name) %}
-    <fieldset class="st-card"><legend>{{ name }}</legend>{{ field(by[name], 'Key', writable) }}</fieldset>
-    {% endif %}{% endfor %}
-    {% if writable %}
-    <fieldset class="st-card st-card-unset st-agent-add">
-      <legend>Add a key</legend>
-      <div class="st-row"><label class="st-row-label" for="agent-key-name">Name</label>
-        <div class="st-row-value"><input class="st-input" id="agent-key-name" name="agent_key_name" type="text" spellcheck="false" autocomplete="off" pattern="[A-Za-z_][A-Za-z0-9_]*"></div></div>
-      <div class="st-row"><label class="st-row-label" for="agent-key-value">Key</label>
-        <div class="st-row-value"><input class="st-input" id="agent-key-value" name="agent_key_value" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false"></div></div>
-    </fieldset>
-    {% elif not agent_keys %}<p class="faint">No agent key yet.</p>{% endif %}
-    </div>
-  </section>
+  {% include "settings/custom_keys.html" %}
 
   <section class="st-section" id="hosts" aria-labelledby="hosts-h">
     <div class="st-section-head">
@@ -257,30 +241,25 @@
   <div class="st-savebar" role="status" aria-live="polite"><span class="st-changes" data-changes></span><button class="btn" type="submit" data-settings-retry hidden>Retry save</button><noscript><button class="btn" type="submit">Save</button></noscript></div>
   </form>
   {% endif %}
-  {# the container backend's engine on this machine, outside the form: asked when the section opens (sandbox.js); a login goes to the engine, never to the file #}
-  <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}"{% if writable %} data-csrf="{{ csrf }}" data-login="{{ url_for('settings_sandbox_login') }}" data-logout="{{ url_for('settings_sandbox_logout') }}" data-remove="{{ url_for('settings_sandbox_remove') }}"{% endif %}>
+  {# Benchmark controls share the Custom keys section, but each submits to its own form.
+     Keep these forms outside settings-form so browser form ownership stays unambiguous. #}
+  {% if writable %}<div hidden>
+    {% for b in benchmark_access %}{% for s in b.needs %}
+    {% for action, show in [('set', true), ('delete', s.status.set), ('move', s.movable)] %}{% if show %}
+    <form id="access-{{ b.key }}-{{ s.name }}-{{ action }}" method="post" action="{{ url_for('benchmark_licence', key=b.key) }}"{% if s.kind == 'file' and action == 'set' %} enctype="multipart/form-data"{% endif %}>
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ s.name }}"><input type="hidden" name="action" value="{{ action }}">
+      {% if embedded %}<input type="hidden" name="embedded" value="1">{% endif %}
+    </form>
+    {% endif %}{% endfor %}
+    {% endfor %}{% endfor %}
+  </div>{% endif %}
+  {% include 'settings/data_providers.html' %}
+  {# the container backend's engine on this machine, outside the form: asked when the section opens (sandbox.js) #}
+  <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}">
     <div class="st-section-head"><h2 id="sandbox-h">Sandbox</h2><p>Where agents run, apart from this machine.</p></div>
     <div class="st-card">
       <div class="st-row"><span class="st-row-label">Engine</span><span class="st-row-value" data-docker-state>Checking…</span></div>
     </div>
-    <fieldset class="st-card" data-hub hidden>
-      <legend>Docker Hub</legend>
-      <div class="st-row" data-hub-user hidden><span class="st-row-label">Account</span><span class="st-row-value st-value"><span class="mono" data-hub-name></span>{% if writable %} <button type="button" class="btn sm ghost" data-hub-logout>Log out</button>{% endif %}</span></div>
-      {% if writable %}
-      <form class="st-sandbox-rows" data-hub-login autocomplete="off" hidden>
-        <div class="st-row"><label class="st-row-label" for="hub-user">Username</label>
-          <div class="st-row-value"><input class="st-input" id="hub-user" name="username" type="text" spellcheck="false" autocomplete="off" maxlength="64" required></div></div>
-        <div class="st-row"><label class="st-row-label" for="hub-token">Access token</label>
-          <div class="st-row-value"><input class="st-input" id="hub-token" name="token" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false" required title="A read-only personal access token from your Docker Hub account settings"></div></div>
-        <div class="st-row"><span class="st-row-label"></span><span class="st-row-value st-value"><button type="submit" class="btn sm">Log in</button></span></div>
-      </form>
-      {% else %}<p class="st-about" data-hub-none hidden>Not logged in.</p>{% endif %}
-    </fieldset>
-    <fieldset class="st-card" data-images hidden>
-      <legend>Images</legend>
-      <div class="st-sandbox-rows" data-image-rows></div>
-      <p class="st-about" data-images-none hidden>No images yet.</p>
-    </fieldset>
   </section>
 
   {# the user's price list (nullius.prices), outside the form: prices.js draws the state and answers the buttons #}
@@ -351,6 +330,7 @@
 <script src="{{ url_for('static', filename='settings/providers.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/sandbox.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/prices.js') }}"></script>
+<script src="{{ url_for('static', filename='settings/data-providers.js') }}"></script>
 {% if writable %}
 <dialog id="add-host" class="settings-dialog">
   {# a host: one of the ssh config's, or by hand — who and where, and how ssh gets in without a prompt. Test before Add; no password is ever stored, one is used once to put this machine's key on the host. #}
@@ -578,6 +558,7 @@
   });
 </script>
 <script src="{{ url_for('static', filename='settings/autosave.js') }}"></script>{% endif %}
+<script src="{{ url_for('static', filename='settings/custom-keys.js') }}"></script>
 
 </div>
 {% endblock %}

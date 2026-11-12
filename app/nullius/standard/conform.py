@@ -40,13 +40,13 @@ def job_name(stamp: str, kit: str, key: str) -> str:
 
 def candidates(other: dict) -> List[str]:
     """The ports of the other side's family that have a kit; a command agent
-    can only ever offer the two its form allows."""
+    can only ever offer the ports its form allows."""
     fam = other["_kind"]
     out = [p for p, s in ports.PORTS.items() if ports.family(p) == fam and s["kit"]]
     if fam == "capability":
         out = [p for p in out if p.split(".", 1)[1].split("/")[0] == other.get("kind")]
     if fam == "agent" and "command" in (other.get("start") or {}):
-        out = [p for p in out if p in ("agent.task/v1", "agent.workspace/v1")]
+        out = [p for p in out if p in ("agent.task/v1", "agent.workspace/v1", "agent.search/v1")]
     return out
 
 

@@ -33,6 +33,8 @@ A standard benchmark from a scaffold, its driver calling the upstream's own code
 
 4. Add `benchmark.json` beside it: the listing.
 
+    Overlapping datasets: `task_count` is the number of distinct tasks.
+
 5. Check, prove, run:
 
     ```bash title="Check one definition, then the whole catalogue"
@@ -51,6 +53,7 @@ A standard benchmark from a scaffold, its driver calling the upstream's own code
 | The scaffold | No units, an empty prompt, a zero reward until implemented |
 | To copy | `app/nullius/catalogue/benchmarks/gsm8k/` |
 | The upstream | Called, never copied; its bugs kept, named in the limitations |
+| Public web | An environment's `network` ([details](../standard.md#public-web-requirements)) |
 
 The commands also work [from source](../cli/README.md). Additions go under the
 user catalogue reported by `nullius paths`, without changing the installed

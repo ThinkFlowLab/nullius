@@ -60,6 +60,19 @@ class UpstreamTest(unittest.TestCase):
 
 
 
+class PipPins(unittest.TestCase):
+    def test_git_and_release_pins_resolve_together_and_repin_installs_beside(self):
+        pin = "sdk @ git+https://example.org/team/sdk.git@" + "a" * 40
+        d = {"key": "a", "_kind": "agent", "install": {"pip": ["agent==1.0", pin]}}
+        with tempfile.TemporaryDirectory() as home, mock.patch.object(install, "_run") as run:
+            where = install.packages(d, home)
+            command = run.call_args.args[0]
+            self.assertEqual(command[:3], ["uv", "pip", "install"])
+            self.assertEqual(command[-2:], ["agent==1.0", pin])
+            other = dict(d, install={"pip": ["agent==1.0", pin[:-40] + "b" * 40]})
+            self.assertNotEqual(install.packages_dir(other, home), where)
+
+
 class InstallEnv(unittest.TestCase):
     def test_a_process_gets_its_own_variables_and_the_prefetched_models(self):
         d = {"_here": "/def", "install": {"prefetch": ["a/b"]}, "env": {"HF_HUB_OFFLINE": "1", "WHERE": "{install}/x:{home}"}}
