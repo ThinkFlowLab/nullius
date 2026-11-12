@@ -79,7 +79,9 @@ def _run(cmd: List[str], cwd: str, log: str, env: Optional[dict] = None):
         f.write("$ " + " ".join(cmd) + "\n")
         f.flush()
         try:
-            r = subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.STDOUT, env=install_env() if env is None else env)
+            # uv may download its Python over a system setting against it (Fedora's), unless this environment says otherwise
+            env = {"UV_PYTHON_DOWNLOADS": "automatic", **(install_env() if env is None else env)}
+            r = subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.STDOUT, env=env)
         except FileNotFoundError:
             raise InstallFailed(f"{cmd[0]} is not on this machine")
     if r.returncode != 0:
