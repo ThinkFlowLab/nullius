@@ -91,6 +91,7 @@ removes whatever a killed run left behind.
 """
 from __future__ import annotations
 
+import functools
 import glob
 import hashlib
 import json
@@ -174,9 +175,37 @@ def _docker(args: List[str], *, env: Optional[dict] = None, input: Optional[str]
 def client_env(extra: Optional[dict] = None) -> dict:
     """The docker program's environment: what it needs to find the daemon, and
     the values of the variables a ``-e NAME`` passes on."""
-    env = {k: os.environ[k] for k in CLIENT_KEEP if k in os.environ}
+    env = {**_context(), **{k: os.environ[k] for k in CLIENT_KEEP if k in os.environ}}
     env.setdefault("PATH", os.defpath)
     env.update(extra or {})
+    return env
+
+
+@functools.cache
+def _context() -> Dict[str, str]:
+    """The daemon that ``docker context use`` selected, as the variables that
+    name it. The user's ``~/.docker`` keeps that selection, and a unit or a
+    driver has a home of its own. Only the endpoint goes on: the registry
+    logins in ``~/.docker`` do not. Read once per process."""
+    if os.environ.get("DOCKER_HOST") or os.environ.get("DOCKER_CONTEXT"):
+        return {}
+    try:
+        r = subprocess.run([DOCKER, "context", "inspect"], capture_output=True, text=True, timeout=30)
+        c = json.loads(r.stdout)[0]
+        ep = c["Endpoints"]["docker"]
+    except (OSError, subprocess.SubprocessError, ValueError, LookupError):
+        return {}
+    if c.get("Name") == "default":
+        return {}
+    env = {"DOCKER_HOST": ep["Host"]}
+    tls = bool(c.get("TLSMaterial", {}).get("docker"))
+    if tls:
+        env["DOCKER_CERT_PATH"] = os.path.join(c["Storage"]["TLSPath"], "docker")
+    # shortcut: docker reads a ca.pem from DOCKER_CERT_PATH, so a skip-verify context with a client certificate and no CA is not reached
+    if ep.get("SkipTLSVerify"):
+        env["DOCKER_TLS"] = "1"
+    elif tls:
+        env["DOCKER_TLS_VERIFY"] = "1"
     return env
 
 

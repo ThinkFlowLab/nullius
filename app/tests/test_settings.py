@@ -32,6 +32,7 @@ class Table(unittest.TestCase):
         read -= {"NULLIUS_FORWARD_TO"}                                    # a licence server's forwarder's, in its own container (standard/forward.py)
         read -= {"NULLIUS_MCP_AT"}                                        # the MCP bridge's, in the agent's container (standard/mcp_bridge.py)
         read -= {"DOCKER_CONFIG"}                                         # docker's own: where it keeps a login (sandbox.py reads the username)
+        read -= {"DOCKER_HOST", "DOCKER_CONTEXT"}                         # docker's own: when set, container.py leaves the current context to them
         missing = sorted(v for v in read if v not in settings.BY_NAME and v not in settings.STARTUP)
         self.assertEqual(missing, [], f"read by the application but neither on the page nor a named start-up option: {missing}")
         self.assertEqual(sorted(set(settings.BY_NAME) & set(settings.STARTUP)), [])
