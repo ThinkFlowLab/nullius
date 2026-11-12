@@ -101,7 +101,7 @@ def new_run_runner():
 def new_run_prerequisites():
     """What the recipe needs of each machine it runs on, and whether that
     machine has it (``nullius/prerequisites.py``): {machines: [{where,
-    label, rows}], ready}. The Review step asks on opening and on *Check
+    label, rows}], ready, notes}. The Review step asks on opening and on *Check
     again*, and Run waits for ``ready``; the run asks again as it starts.
     A host is asked over ssh, so this is never asked on a page load."""
     shared._require_csrf()
@@ -144,7 +144,11 @@ def new_run_prerequisites():
     # (an unreachable host alone holds a probe 8 to 12 s)
     with ThreadPoolExecutor(max(1, min(8, len(wheres)))) as pool:
         machines = list(pool.map(machine, wheres))
-    return jsonify(machines=machines, ready=prerequisites.ready(machines), errors=[])
+    # a notice, not a refusal: the provider's last test in Settings failed (providers.test)
+    choice = str(body.get("provider") or "")
+    last = providers.tests().get(choice)
+    notes = [f"{providers.label(choice)} failed its last test in Settings: {providers.said(last)}"] if isinstance(last, dict) and not last.get("ok") else []
+    return jsonify(machines=machines, ready=prerequisites.ready(machines), errors=[], notes=notes)
 
 
 # The Harbor a recipe pins (nullius/harbor/source.py): PyPI's releases and a

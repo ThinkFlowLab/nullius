@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from nullius import execution, prerequisites
+from nullius import execution, prerequisites, providers
 from nullius.standard import hostreq
 from .test_routes import web
 
@@ -106,6 +106,16 @@ class PrerequisitesRoute(unittest.TestCase):
             took = time.monotonic() - t0
         self.assertEqual([m["where"] for m in j["machines"]], names)
         self.assertLess(took, 1.2)                                    # not 4 x 0.4 s
+
+    def test_review_notes_a_provider_whose_last_test_failed_and_still_runs(self):
+        self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_HOME": str(self.tmp)}))
+        failed = {"at": "2026-11-12T10:00:00Z", "ok": False, "reached": True, "key": "refused", "models": None, "ms": 5, "error": ""}
+        providers.remember({"openai": failed, "openrouter": dict(failed, ok=True, key="accepted")})
+        with patch.object(prerequisites, "docker_here", lambda fresh=False: None), patch("shutil.which", lambda p: "/x/" + p):
+            notes = {p: self.post("/new-run/prerequisites", {"recipe": self.harbor(), "provider": p}).get_json() for p in ("openai", "openrouter", "custom")}
+        self.assertEqual(notes["openai"]["notes"], ["OpenAI failed its last test in Settings: Key refused · 2026-11-12 10:00 UTC"])
+        self.assertTrue(notes["openai"]["ready"])
+        self.assertEqual((notes["openrouter"]["notes"], notes["custom"]["notes"]), ([], []))
 
 
 if __name__ == "__main__":
