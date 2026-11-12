@@ -299,19 +299,27 @@ def subprocess_run(argv: List[str], timeout: float = 600.0, stdin: Optional[str]
     except OSError as e:
         return 127, str(e)
     deadline = time.monotonic() + timeout
-    data = stdin if stdin is not None else ""
-    while True:
+    got = {}
+
+    def talk():
+        # one communicate, whole: a retried one after a timeout stopped sending
+        # input past the pipe's buffer (a 465 KB price list never landed)
         try:
-            out, _ = proc.communicate(input=data, timeout=STOP_POLL if stop is not None else timeout)
-            return proc.returncode, out or ""
-        except subprocess.TimeoutExpired:
-            data = None                                        # sent; a retry must not send it again
-            if stop is not None and stop.is_set():
-                proc.kill(); proc.communicate()
-                return 130, "stopped"
-            if time.monotonic() >= deadline:
-                proc.kill(); proc.communicate()
-                return 124, f"no answer within {int(timeout)} s"
+            got["out"] = proc.communicate(input=stdin if stdin is not None else "")[0]
+        except (OSError, ValueError) as e:
+            got["out"] = str(e)
+    talker = threading.Thread(target=talk, daemon=True)
+    talker.start()
+    while True:
+        talker.join(STOP_POLL if stop is not None else max(0.0, deadline - time.monotonic()))
+        if not talker.is_alive():
+            return proc.returncode, got.get("out") or ""
+        if stop is not None and stop.is_set():
+            proc.kill(); talker.join()
+            return 130, "stopped"
+        if time.monotonic() >= deadline:
+            proc.kill(); talker.join()
+            return 124, f"no answer within {int(timeout)} s"
 
 
 # A part's log, as a look at the target prints it: between these, then its size in bytes (_log_since, _logged).

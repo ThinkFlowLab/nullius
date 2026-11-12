@@ -264,6 +264,22 @@ class Transport(unittest.TestCase):
         rc, out = execution.subprocess_run(["bash", "-c", "printf 'a\\x81b\\xe2\\x94'"])
         self.assertEqual((rc, out), (0, "a\ufffdb\ufffd"))
 
+    def test_input_past_the_pipes_buffer_lands_whole_while_a_stop_is_watched(self):
+        rc, out = execution.subprocess_run(["bash", "-c", "sleep 1; wc -c"], 20, stdin="x" * 500_000, stop=threading.Event())
+        self.assertEqual((rc, out.strip()), (0, "500000"))
+
+    def test_a_stop_ends_a_command_still_reading_its_input(self):
+        stop = threading.Event()
+        threading.Timer(0.5, stop.set).start()
+        started = time.monotonic()
+        rc, out = execution.subprocess_run(["bash", "-c", "sleep 30"], 60, stdin="x" * 500_000, stop=stop)
+        self.assertEqual((rc, out), (130, "stopped"))
+        self.assertLess(time.monotonic() - started, 10)
+
+    def test_a_command_that_never_answers_times_out(self):
+        rc, out = execution.subprocess_run(["bash", "-c", "sleep 30"], 1, stdin="x" * 500_000, stop=threading.Event())
+        self.assertEqual((rc, out), (124, "no answer within 1 s"))
+
 
 class SshWarnsAtEveryConnection(LocalHost):
     """OpenSSH 10 warns on stderr at every connection to a host without a
