@@ -89,6 +89,16 @@ class InstallEnv(unittest.TestCase):
         self.assertEqual(install.install_env(env), {"PATH": "/bin", "HOME": "/h", "npm_config_cache": "/c", "GIT_CONFIG_KEY_0": "safe.directory"})
 
 
+    def test_on_this_machine_uv_may_download_its_python_unless_told_otherwise(self):
+        log = os.path.join(self.enterContext(tempfile.TemporaryDirectory()), "x.log")
+        for given, want in (({}, "automatic"), ({"UV_PYTHON_DOWNLOADS": "never"}, "never")):
+            with self.subTest(given=given), mock.patch.dict(os.environ, given), \
+                 mock.patch.object(install.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as ran:
+                if not given:
+                    os.environ.pop("UV_PYTHON_DOWNLOADS", None)
+                install._run(["uv", "venv", "x"], "/", log)
+            self.assertEqual(ran.call_args.kwargs["env"]["UV_PYTHON_DOWNLOADS"], want)       # over /etc/uv/uv.toml
+
 class DataDirTest(unittest.TestCase):
     def test_datasets_go_where_standard_data_dir_says_else_into_the_home(self):
         self.assertEqual(install.data_dir("/st", env={}), "/st/datasets")
