@@ -109,6 +109,7 @@ IMAGE_SECONDS = 3600                  # an own image's pull or build (container.
 MAX_AGENT_SECONDS = 6 * 3600          # the longest a unit's own agent limit (setup's agent_seconds) may ask
 MAX_TURNS = 20
 BACKENDS = definitions.names.BACKENDS
+_PROBED = threading.Lock()                # a run's first unit, claimed once (Run.first_probe)
 
 
 class Refused(Exception):
@@ -1112,7 +1113,7 @@ class Run:
     def first_probe(self) -> bool:
         """True once a run: its first unit checks the public web proxy's route,
         the check before the run having found the public web reachable."""
-        with self._said:
+        with _PROBED:
             first = not getattr(self, "_probed", False)
             self._probed = True
         return first
@@ -1361,13 +1362,8 @@ class Run:
             return
         try:
             try:
-                proxy = box.online()
-                direct = [container.RELAY_ALIAS]
-                if isinstance(rl, container.Unit):
-                    direct += [alias for alias, _, _ in rl.doors]
-                    direct += [address.rsplit(":", 1)[0] for address in rl.reach.values()]
-                proxy["NO_PROXY"] = proxy["no_proxy"] = ",".join(dict.fromkeys([proxy["NO_PROXY"], *direct]))
-                box.agent_proxy = proxy
+                box.online()
+                box.agent_proxy = container.proxy_env(rl.direct() if isinstance(rl, container.Unit) else [container.RELAY_ALIAS])
             except (container.Unavailable, ValueError) as e:
                 raise _Ended("EnvironmentSetupError", f"the task's internet access: {e}")
             yield

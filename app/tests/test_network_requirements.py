@@ -87,7 +87,6 @@ class NetworkRequirements(unittest.TestCase):
             self.assertNotIn(unit.names['agent'] + '-network-check', str(docker.call_args_list))
         from nullius.standard import run
         r = run.Run.__new__(run.Run)
-        r._said = run.threading.Lock()
         self.assertEqual([r.first_probe() for _ in range(3)], [True, False, False])
 
     def test_probe_start_timeout_names_the_check_and_removes_its_container(self):
