@@ -11,6 +11,8 @@ from tests.test_standard_recipe import defs, a_recipe
 
 class NetworkRequirements(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.object(container, "_security", ""))
+        self.enterContext(patch.object(container, "DOCKER", "docker"))
         self.bench = {'label': 'Research', 'environments': {'web': {
             'network': {'access': 'public', 'probe': 'https://example.org/'}}}}
         self.agent = {'_kind': 'agent'}

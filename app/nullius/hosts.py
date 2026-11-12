@@ -11,7 +11,8 @@ separated:
   supplies its display label without changing the SSH target. The key stays a path.
 
 ``test`` asks the host what a run needs: that ssh gets in without a prompt,
-and whether ``uv``, ``docker`` and ``harbor`` answer there. It runs ssh with
+and whether ``uv``, ``docker``, ``podman`` and ``harbor`` answer there, and
+whether its docker has ``userns-remap``. It runs ssh with
 ``BatchMode=yes`` so a password prompt is a refusal, not a hang, and it never
 sends anything but that one command. Nothing is stored beyond the host list.
 """
@@ -28,9 +29,10 @@ from nullius import paths
 
 _ALIAS = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _MANUAL = re.compile(r"^(?P<user>[A-Za-z0-9._-]+)@(?P<host>[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(?::(?P<port>[0-9]{1,5}))?(?::(?P<key>(?:/|~/)[^\s,:]+))?$")
-PROBE = ("printf 'ok\\n'; for c in uv docker harbor; do command -v \"$c\" >/dev/null 2>&1 && printf '%s=yes\\n' \"$c\" || printf '%s=no\\n' \"$c\"; done; "
+PROBE = ("printf 'ok\\n'; for c in uv docker podman harbor; do command -v \"$c\" >/dev/null 2>&1 && printf '%s=yes\\n' \"$c\" || printf '%s=no\\n' \"$c\"; done; "
          "command -v harbor >/dev/null 2>&1 && printf 'harbor_version=%s\\n' \"$(harbor --version 2>/dev/null | sed -n 1p)\"; "
-         "command -v docker >/dev/null 2>&1 && (docker ps >/dev/null 2>&1 && printf 'docker_ok=yes\\n' || printf 'docker_ok=no\\n'); "
+         "for c in docker podman; do command -v $c >/dev/null 2>&1 && ($c ps >/dev/null 2>&1 && printf '%s_ok=yes\\n' $c || printf '%s_ok=no\\n' $c); done; "
+         "docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q name=userns && printf 'docker_userns=yes\\n'; "
          "printf 'hostname=%s\\n' \"$(hostname)\"")
 
 
@@ -175,8 +177,9 @@ _PROGRAM = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,39}$")
 
 
 def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, programs: Optional[List[str]] = None) -> dict:
-    """What the host answers: reachable or why not, and whether uv, docker
-    and harbor are there - and, given ``programs`` (a benchmark's host
+    """What the host answers: reachable or why not, and whether uv, docker,
+    podman and harbor are there (``engine``: which of docker and podman the
+    standard's docker backend runs there, or None) - and, given ``programs`` (a benchmark's host
     requirements), which of them are not on its PATH (``missing``). Nothing
     but the probe command is sent. ``run`` is looked up at call time so a
     test can stand in for ssh."""
@@ -187,7 +190,8 @@ def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, prog
     rc, out, err = (run or subprocess_run)(host.argv(probe, timeout=min(timeout, 8.0)), timeout)
     ms = int((time.monotonic() - started) * 1000)
     result: Dict = {"entry": host.entry, "label": host.label, "ok": False, "latency_ms": ms, "uv": None, "docker": None,
-                    "docker_ok": None, "harbor": None, "harbor_version": None, "hostname": None, "error": None,
+                    "docker_ok": None, "docker_userns": False, "podman": None, "podman_ok": None, "engine": None,
+                    "harbor": None, "harbor_version": None, "hostname": None, "error": None,
                     **({"missing": []} if programs else {})}
     if rc != 0 or "ok" not in out.split():
         text = (err or out or "").strip().splitlines()
@@ -195,16 +199,16 @@ def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, prog
         return result
     for line in out.splitlines():
         k, _, v = line.partition("=")
-        if k in ("uv", "docker", "harbor"):
+        if k in ("uv", "docker", "podman", "harbor", "docker_ok", "podman_ok", "docker_userns"):
             result[k] = v == "yes"
-        elif k == "docker_ok":
-            result["docker_ok"] = v == "yes"
         elif k == "harbor_version":
             result["harbor_version"] = v.strip().removeprefix("harbor ").strip() or None
         elif k == "hostname":
             result["hostname"] = v.strip() or None
         elif k == "missing" and programs and v.strip() in programs:
             result["missing"].append(v.strip())
+    # the standard's docker backend's engine there: docker when the probe finds it, else podman
+    result["engine"] = "docker" if result["docker"] else "podman" if result["podman"] else None
     result["ok"] = True
     return result
 

@@ -75,6 +75,41 @@ class Setup(unittest.TestCase):
         self.assertTrue(any("write:" in p for p in container.step_problems(dict(step, write={"eval.sh": "x"}), collect=True)))
         self.assertTrue(any("write:" in p for p in container.step_problems(dict(step, write={"/eval.sh": 3}), collect=True)))
 
+    def test_task_variables_are_validated_before_starting_a_container(self):
+        self.assertEqual(container.task_env_problems({"PATH": "/opt/test/bin:/usr/bin",
+                                                      "CONDA_DEFAULT_ENV": "testbed", "_CE_M": ""}), [])
+        for env in (None, [], {"a-b": "x"}, {"lower": "x"}, {"X": 1}, {"X": "a\0b"},
+                    {"PATH": ""}, {"PATH": "relative"}, {"PATH": "/bin:"},
+                    {"OPENAI_BASE_URL": "x"}, {"ANTHROPIC_API_KEY": "x"}, {"API_TOKEN": "x"},
+                    {"AWS_SECRET_ACCESS_KEY": "x"}, {"NULLIUS_RELAY_KEY": "x"}, {"DOCKER_HOST": "x"}):
+            with self.subTest(env=env):
+                self.assertTrue(container.task_env_problems(env))
+        self.assertTrue(container.task_env_problems({"CUSTOM_ADDRESS": "x"}, ["CUSTOM_ADDRESS"]))
+        r = run.Run.__new__(run.Run)
+        r.other = {}
+        with mock.patch.object(container, "unusable") as probe:
+            with self.assertRaisesRegex(run._Ended, "env.PATH"):
+                r.own_box("unit", {"image": {"pull": "x/y@sha256:" + "a" * 64},
+                                   "env": {"PATH": "relative"}}, None, "/home")
+        probe.assert_not_called()
+
+    def test_task_environment_reaches_agent_and_runner_variables_win(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))     # podman takes HOME by value
+        r = run.Run.__new__(run.Run)
+        r.inst = ""
+        b = container.Box("job", "unit", "image", workdir="/testbed", path="/image/bin",
+                          env={"PATH": "/task/bin", "CONDA_DEFAULT_ENV": "testbed", "HOME": "/task/home"})
+        rl = type("Relay", (), {"unit_secrets": {"LICENCE": "run-licence"}})()
+        argv, env = r.place(rl, ["sh", "-c", "python -V"],
+                            {"PATH": "/host/bin", "HOME": "/run/home", "OPENAI_BASE_URL": "http://relay/v1"},
+                            "/testbed", "/run/home", box=b)
+        self.assertIn("PATH=/task/bin:/image/bin", argv)
+        self.assertEqual(env["CONDA_DEFAULT_ENV"], "testbed")
+        self.assertEqual(env["HOME"], "/run/home")
+        self.assertEqual(env["OPENAI_BASE_URL"], "http://relay/v1")
+        self.assertEqual(env["LICENCE"], "run-licence")
+        self.assertNotIn("testbed", argv)  # values travel in the process environment, not arguments
+
     def test_a_driver_names_the_tasks_files_and_nothing_else(self):
         self.assertTrue(container.within(HERE, "tasks/one/tests").endswith("tasks/one/tests"))
         for bad in ("../ownbench/../../..", "/etc", "tasks/../../envbench", "tasks/none"):
@@ -121,23 +156,52 @@ class Runtime(unittest.TestCase):
         # mini-swe-agent, terminus-2: their environment's own interpreter, whatever it links to
         r.other = {"start": {"command": ["{install}/.venv/bin/python", "{here}/run.py", "{prompt}"]}}
         self.assertEqual(r.runtimes_needed(), [])
+        # python3 beside an environment made in the base image: its interpreter is in the install, mounted with it
+        r.inst = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, r.inst, True)
+        os.makedirs(os.path.join(r.inst, ".venv"))
+        with open(os.path.join(r.inst, ".venv", "pyvenv.cfg"), "w") as f:
+            f.write(f"home = {r.inst}/.python/cpython-3.12-linux-x86_64-gnu/bin\n")
+        r.other = {"start": {"acp": ["python3", "{here}/agent.py"]}}
+        self.assertEqual(r.runtimes_needed(), [])
 
     def test_an_environments_interpreter_is_never_swapped_for_the_runtime(self):
         venv_py = "/inst/mini-swe-agent/.venv/bin/python"
         self.assertEqual(container.in_runtime([venv_py, "/x/run.py"], self.RT), [venv_py, "/x/run.py"])
 
+    def test_the_box_runs_in_the_machines_user_namespace_on_a_docker_with_userns_remap_alone(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))     # podman's box always runs so
+        for remap in (True, False):
+            calls = []
+            b = container.Box("job", "u0001", "img", workdir="/app", network="net")
+            with self.subTest(remap=remap), mock.patch.object(container, "userns_remap", return_value=remap), \
+                    mock.patch.object(container, "_docker", lambda a, **kw: calls.append(a)), \
+                    mock.patch.object(b, "keeper", return_value="7"):
+                b.start()
+                self.assertEqual("--userns=host" in calls[0], remap)
+
     def test_exec_passes_variables_by_name_and_the_runtimes_read_only(self):
         b = container.Box("job", "u0001", "img", workdir="/app", runtimes=self.RT)
         argv = b.exec_argv(["node", "x"], {"HOME": "/h", "NULLIUS_RELAY_KEY": "placeholder", "PATH": "/p"}, "/usr/bin:/opt/nullius/node/bin")
-        self.assertEqual(argv[:6], ["docker", "exec", "-i", "-w", "/app", "-e"])
+        self.assertEqual(argv[:6], [container.DOCKER, "exec", "-i", "-w", "/app", "-e"])
         self.assertIn("PATH=/usr/bin:/opt/nullius/node/bin", argv)
         self.assertIn("NULLIUS_RELAY_KEY", argv)
         self.assertNotIn("placeholder", " ".join(argv))
         self.assertEqual(argv[-3:], [b.name, "node", "x"])
 
 
+    def test_on_podman_the_agent_in_its_own_image_gets_its_home_by_value(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        r = run.Run.__new__(run.Run)
+        r.inst = ""
+        b = container.Box("job", "u0001", "img", workdir="/app", runtimes={})
+        argv, env = r.place(None, ["sh", "x"], {"HOME": "/h", "NULLIUS_RELAY_KEY": "placeholder", "PATH": "/p"}, "/app", "/h", box=b)
+        self.assertEqual(argv[:2], ["podman", "exec"])
+        self.assertEqual([argv[i + 1] for i, w in enumerate(argv) if w == "-e"][1:], ["HOME=/h", "NULLIUS_RELAY_KEY"])
+        self.assertEqual((env.get("HOME"), env["NULLIUS_RELAY_KEY"]), (os.environ.get("HOME"), "placeholder"))
+
 def _docker_ready() -> str:
-    return docker_tier.why_not("ubuntu:24.04")
+    return docker_tier.why_not("docker.io/library/ubuntu:24.04")
 
 
 class LocalRun(unittest.TestCase):
@@ -185,9 +249,9 @@ class DockerRun(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         # the fixture's image goes, and so does this process's memory of having built it
-        for line in subprocess.run(["docker", "images", "-q", "--filter", "label=nullius.own=ownbench"],
+        for line in subprocess.run([container.DOCKER, "images", "-q", "--filter", "label=nullius.own=ownbench"],
                                    stdout=subprocess.PIPE, text=True).stdout.split():
-            subprocess.run(["docker", "rmi", "-f", line], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([container.DOCKER, "rmi", "-f", line], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for tag in [t for t in container._built if t.startswith("nullius/own-ownbench-")]:
             container._built.pop(tag)
             container._fetched.discard(tag)
@@ -258,7 +322,7 @@ class ImagesKept(unittest.TestCase):
             return mock.Mock(returncode=0, stdout="", stderr="")
         self.addCleanup(container._fetched.difference_update, {"theirs@sha256:1", "pulled@sha256:2"})
         self.addCleanup(lambda: [container._built.pop(t, None) for t in ("theirs@sha256:1", "pulled@sha256:2")])
-        with mock.patch.object(container, "_docker", docker):
+        with mock.patch.object(container, "_docker", docker), mock.patch.object(container, "_security", None):
             self.assertEqual(container.own_image({"key": "b"}, {"pull": "theirs@sha256:1"}, "/r"), "theirs@sha256:1")
             self.assertEqual(container.own_image({"key": "b"}, {"pull": "pulled@sha256:2"}, "/r"), "pulled@sha256:2")
             self.assertFalse(container.fetched("theirs@sha256:1"))

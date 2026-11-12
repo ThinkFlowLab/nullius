@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 from unittest import mock
 
-from nullius.standard import container
+from nullius.standard import container, install
 from tests import docker_tier
 
 
@@ -30,11 +30,13 @@ class ImageTest(unittest.TestCase):
         self.assertRegex(container.image_tag(a), r"^nullius/base:[0-9a-f]{12}$")
         self.assertNotEqual(container.image_tag(a), container.image_tag(container.dockerfile("aarch64")))
 
-    def test_the_dockerfile_pins_ubuntu_and_node_by_checksum(self):
+    def test_the_dockerfile_pins_ubuntu_node_and_uv_by_checksum(self):
         text = container.dockerfile("x86_64")
-        self.assertTrue(text.startswith("FROM ubuntu:24.04\n"))
+        self.assertTrue(text.startswith("FROM docker.io/library/ubuntu:24.04\n"))       # in full: podman's short names vary
         self.assertIn(f"node-v{container.NODE_VERSION}-linux-x64.tar.xz", text)
         self.assertIn(container.NODE_SHA256["x64"] + "  /tmp/node.tar.xz\" | sha256sum -c -", text)
+        self.assertRegex(container.UV_DIGEST, r"^sha256:[0-9a-f]{64}$")
+        self.assertIn(f"COPY --from=ghcr.io/astral-sh/uv:{container.UV_VERSION}@{container.UV_DIGEST} /uv /uvx /usr/local/bin/\n", text)
         for pkg in ("git", "python3", "ca-certificates", "curl", "tmux"):
             self.assertIn(f" {pkg} ", text)
 
@@ -43,17 +45,125 @@ class ImageTest(unittest.TestCase):
             container.dockerfile("riscv64")
 
 
-class ArgvTest(unittest.TestCase):
+class EngineTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def program(self, name: str, text: str = "") -> str:
+        path = os.path.join(self.tmp, name)
+        with open(path, "w") as f:
+            f.write(text)
+        os.chmod(path, 0o755)
+        return path
+
+    def engine(self) -> str:
+        with mock.patch.dict(os.environ, {"PATH": self.tmp}):
+            return container.engine()
+
+    def test_docker_is_the_engine_unless_podman_stands_in_for_it(self):
+        self.assertEqual(self.engine(), "docker")                          # neither: docker, said missing
+        podman = self.program("podman", "\x7fELF")
+        self.assertEqual(self.engine(), "podman")
+        docker = self.program("docker", "\x7fELF")
+        self.assertEqual(self.engine(), "docker")
+        self.program("docker", "#!/bin/sh\n# not podman\nexec /usr/libexec/docker-cli \"$@\"\n")   # a wrapper of Docker's
+        self.assertEqual(self.engine(), "docker")
+        self.program("docker", "#!/bin/sh\n[ -e /etc/containers/nodocker ] || echo podman >&2\nexec /usr/bin/podman \"$@\"\n")
+        self.assertEqual(self.engine(), "podman")                            # podman-docker's script
+        os.remove(docker)
+        os.symlink(podman, docker)
+        self.assertEqual(self.engine(), "podman")
+
+    def test_a_docker_that_refuses_this_user_says_podman_is_there(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))
+        refused = subprocess.CompletedProcess([], 1, "", "permission denied while trying to connect to the docker API\n")
+        self.enterContext(mock.patch.object(container, "_docker", return_value=refused))
+        said = "docker is installed but not usable by this user: permission denied while trying to connect to the docker API" \
+               " (add this user to the docker group, then log in again)"
+        with mock.patch.object(container.shutil, "which", return_value=None):
+            self.assertEqual(container.unusable(), said)
+        with mock.patch.object(container.shutil, "which", return_value="/usr/bin/podman"):
+            self.assertEqual(container.unusable(), said + ". podman is on this machine: Nullius uses it when docker is not on the PATH")
+
+    def test_podman_is_asked_whether_it_is_rootless_in_its_own_terms(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        for said, rootless in (("name=rootless\n", True), ("\n", False)):
+            self.enterContext(mock.patch.object(container, "_security", None))
+            with mock.patch.object(container, "_docker", return_value=subprocess.CompletedProcess([], 0, said, "")) as ask:
+                self.assertEqual((container.rootless(), container.userns_remap()), (rootless, False))
+            self.assertEqual(ask.call_args.args[0], ["info", "--format", "{{if .Host.Security.Rootless}}name=rootless{{end}}"])
+
+    def test_on_podman_a_container_with_a_way_out_starts_on_a_bridge_with_dns(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))
+        argvs = lambda: [container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="b",
+                                              model="m", routes={}),
+                         container.forward_argv("img", name="f", job="j", port=1), container.egress_argv("img", name="e", job="j"),
+                         container.door_argv("img", name="d", job="j", port=8000, socket_path="/s")]
+        for argv in argvs():
+            self.assertNotIn("--network", argv)                              # docker's default bridge
+        with mock.patch.object(container, "DOCKER", "podman"):
+            for argv in argvs():
+                self.assertEqual(argv[argv.index("--network") + 1], container.BRIDGE)
+            ok = subprocess.CompletedProcess([], 0, "", "")
+            with mock.patch.object(container, "_docker", return_value=ok) as made:
+                container.make_bridge()
+                container.make_bridge()
+            self.assertEqual(made.call_args_list, 2 * [mock.call(["network", "create", "--ignore", "--label", "nullius.bridge=1",
+                                                                  container.BRIDGE])])     # asked each time: it may have gone
+
+    def test_a_drivers_check_finds_the_engine_from_its_own_home(self):
+        env = {"HOME": "/home/u", "PATH": "/bin", "DOCKER_HOST": "unix:///d.sock", "XDG_RUNTIME_DIR": "/run/user/1",
+               "XDG_CONFIG_HOME": "/home/u/conf", "CONTAINER_HOST": "unix:///p.sock"}
+        self.enterContext(mock.patch.dict(os.environ, env, clear=True))
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        with mock.patch.object(container, "DOCKER", "docker"):
+            self.assertEqual(container.check_env(), {"DOCKER_HOST": "unix:///d.sock"})
+        with mock.patch.object(container, "DOCKER", "podman"):
+            got = container.check_env()
+            start = container.check_start()
+        engine = json.loads(got.pop(container.CHECK_ENGINE))
+        self.assertEqual(got, {"DOCKER_HOST": "unix:///d.sock", "XDG_RUNTIME_DIR": "/run/user/1",
+                               "CONTAINER_HOST": "unix:///p.sock"})     # no XDG folder of the user's
+        self.assertEqual(engine, ["env", "XDG_DATA_HOME=/home/u/.local/share", "XDG_CONFIG_HOME=/home/u/conf", *start])
+        with mock.patch.dict(os.environ, {container.CHECK_IMAGE: "img", container.CHECK_ENGINE: json.dumps(engine), "HOME": "/driver"}):
+            self.assertEqual(container.check_argv("/w", [], ["true"]), [*engine, "-v", "/w:/w:rw", "-w", "/w", "img", "true"])
+
+    def test_podman_without_netavark_is_refused_plainly(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        said = lambda net: (lambda args, **kw: subprocess.CompletedProcess([], 0, net if args[0] == "info" else "5.8.9\n", ""))
+        with mock.patch.object(container, "_docker", said("cni\n")):
+            self.assertEqual(container.unusable(), "podman's network backend is cni: Nullius needs netavark"
+                                                   ' (podman 4.7 or later, network_backend = "netavark")')
+        with mock.patch.object(container, "_docker", said("netavark\n")):
+            self.assertIsNone(container.unusable())
+
+    def test_podman_that_does_not_say_its_network_backend_is_a_reason_not_an_error(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        def answer(args, **kw):
+            if args[0] == "info":
+                raise container.Unavailable("podman info did not answer in 30 s")
+            return subprocess.CompletedProcess([], 0, "5.8.9\n", "")
+        with mock.patch.object(container, "_docker", answer):
+            self.assertEqual(container.unusable(), "podman info did not answer in 30 s")
+
+
+class ArgvTest(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(mock.patch.object(container, "_security", ""))      # a default rootful docker, never asked
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))
 
     def test_agent_home_does_not_replace_host_docker_context(self):
-        with mock.patch.dict(os.environ, {"HOME": "/host-home", "PATH": "/bin"}, clear=True):
+        with mock.patch.dict(os.environ, {"HOME": "/host-home", "PATH": "/bin"}, clear=True), \
+                mock.patch.object(container, "_context", return_value={"DOCKER_HOST": "unix:///run/alt.sock"}):
             env = container.client_env({"HOME": "/trial-home", "AGENT_TOKEN": "synthetic"})
         self.assertEqual(env["HOME"], "/trial-home")
-        self.assertEqual(env["DOCKER_CONFIG"], "/host-home/.docker")
+        self.assertEqual(env["DOCKER_HOST"], "unix:///run/alt.sock")
+        self.assertNotIn("DOCKER_CONFIG", env)
         self.assertEqual(env["AGENT_TOKEN"], "synthetic")
 
     def test_agent_home_preserves_explicit_docker_configuration(self):
@@ -70,35 +180,55 @@ class ArgvTest(unittest.TestCase):
         got = container.mounts([ws, home], [here, app, app, os.path.join(self.tmp, "missing"), ""])
         self.assertEqual(got, [(ws, False), (home, False), (app, True)])     # here sits inside app: once
 
-    def test_a_uv_environments_interpreter_is_found_from_pyvenv_cfg(self):
-        py = os.path.join(self.tmp, "uvpython", "cpython-3.12", "bin")
-        os.makedirs(py)
-        os.makedirs(os.path.join(self.tmp, "inst", ".venv"))
-        with open(os.path.join(self.tmp, "inst", ".venv", "pyvenv.cfg"), "w") as f:
-            f.write(f"home = {py}\nversion = 3.12\n")
-        self.assertEqual(container.python_homes(os.path.join(self.tmp, "inst")), [os.path.dirname(py)])
-        self.assertEqual(container.python_homes(self.tmp), [])
-        # uv names the home by a link (cpython-3.12-...) to the release folder: both are mounted, so
-        # the environment's bin/python link, written through the first, resolves in the container
-        link = os.path.join(self.tmp, "uvpython", "cpython-3.12-link")
-        os.symlink(os.path.dirname(py), link)
-        with open(os.path.join(self.tmp, "inst", ".venv", "pyvenv.cfg"), "w") as f:
-            f.write(f"home = {link}/bin\nversion = 3.12\n")
-        self.assertEqual(container.python_homes(os.path.join(self.tmp, "inst")), [link, os.path.dirname(py)])
-
     def test_an_install_in_the_base_image_sees_its_folder_alone_as_this_user(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        self.enterContext(mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://u:secret@proxy:3128", "UNRELATED": "x"}))
         a = container.install_argv("img", "/s/agents/x/abc", ["npm", "install", "p@1"])
         self.assertEqual(a[:3], ["docker", "run", "--rm"])
+        self.assertIn(["-e", "HTTPS_PROXY"], [a[i:i + 2] for i in range(len(a))])     # this machine's proxy, by name
+        self.assertNotIn("secret", " ".join(a))
+        self.assertNotIn("UNRELATED", " ".join(a))
         self.assertEqual(a[a.index("--user") + 1], f"{os.getuid()}:{os.getgid()}")
         self.assertEqual([a[i + 1] for i, w in enumerate(a) if w == "-v"], ["/s/agents/x/abc:/s/agents/x/abc:rw"])
         self.assertEqual(a[a.index("img"):], ["img", "npm", "install", "p@1"])
-        self.assertIn("npm_config_cache=/s/agents/x/abc/.npm-cache", a)
+        env = dict(a[i + 1].split("=", 1) for i, w in enumerate(a) if w == "-e" and "=" in a[i + 1])
+        self.assertEqual(env, {"HOME": "/s/agents/x/abc/.home", "npm_config_cache": "/s/agents/x/abc/.npm-cache",
+                               "UV_CACHE_DIR": "/s/agents/x/abc/.uv-cache", "UV_PYTHON_DOWNLOADS": "automatic",
+                               "UV_PYTHON_INSTALL_DIR": "/s/agents/x/abc/.python"})    # inside: the agent's container mounts it
+        self.assertEqual({os.path.basename(env[k]) for k in ("HOME", "npm_config_cache", "UV_CACHE_DIR")},
+                         set(install.SCRATCH))                # what the install removes after
         self.assertNotIn("--network", a)                     # it downloads the packages; no unit, no key
+        a = container.install_argv("img", "/w", ["python", "-c", "x"], {"HF_HUB_CACHE": "/w/hf"})
+        self.assertIn("HF_HUB_CACHE=/w/hf", a)
+
+    def test_the_standalone_python_is_installed_in_the_base_image_and_its_scratch_removed(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        self.enterContext(mock.patch.object(container, "runtimes_dir", return_value=self.tmp))
+        self.enterContext(mock.patch.object(container, "base_image", return_value="nullius/base:x"))
+        self.enterContext(mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://proxy:3128"}))
+        where = os.path.join(self.tmp, f"python-{container.PYTHON_VERSION}")
+
+        def run(argv, **kw):
+            os.makedirs(os.path.join(where, f"cpython-{container.PYTHON_VERSION}-linux-x86_64-gnu"))
+            for scratch in install.SCRATCH:
+                os.makedirs(os.path.join(where, scratch))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        with mock.patch.object(container.subprocess, "run", side_effect=run) as ran:
+            got = container.python_runtime()
+        argv = ran.call_args.args[0]
+        self.assertEqual(argv[:2], ["docker", "run"])
+        self.assertIn(["-e", "HTTPS_PROXY"], [argv[i:i + 2] for i in range(len(argv))])
+        self.assertEqual(ran.call_args.kwargs["env"]["HTTPS_PROXY"], "http://proxy:3128")    # the value -e HTTPS_PROXY passes on
+        self.assertEqual(argv[argv.index("nullius/base:x"):],
+                         ["nullius/base:x", "uv", "python", "install", container.PYTHON_VERSION, "--install-dir", where, "--no-bin"])
+        self.assertEqual(got, os.path.join(where, f"cpython-{container.PYTHON_VERSION}-linux-x86_64-gnu"))
+        self.assertEqual(sorted(os.listdir(where)), sorted([install.MARK, os.path.basename(got)]))
 
     def test_the_agents_container_is_on_the_units_network_with_its_variables_by_name(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
         a = container.run_argv("img", ["codex-acp"], name="nullius-j-u0000", network="nullius-j-u0000", job="j",
                                workdir="/w", mounted=[("/w", False), ("/i", True)],
-                               env_names=["HOME", "NULLIUS_RELAY_KEY", "PATH"], path="/i/bin:/usr/bin")
+                               env=dict.fromkeys(["HOME", "NULLIUS_RELAY_KEY", "PATH"], ""), path="/i/bin:/usr/bin")
         self.assertEqual(a[:3], ["docker", "run", "-i"])
         self.assertEqual(a[a.index("--network") + 1], "nullius-j-u0000")
         self.assertEqual(a[a.index("--label") + 1], "nullius.job=j")
@@ -138,13 +268,140 @@ class ArgvTest(unittest.TestCase):
                                  model="m", routes={}, hosts={"host.docker.internal": "172.17.0.1"})
         self.assertEqual(a[a.index("--add-host") + 1], "host.docker.internal:172.17.0.1")
         self.assertNotIn("--add-host", container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="b", model="m", routes={}))
-        with mock.patch.object(container, "bridge_gateway", return_value=""):          # Docker Desktop: the bridge is elsewhere
+        with mock.patch.object(container, "bridge_gateway", return_value=""), \
+                mock.patch.object(container, "rootless", return_value=False):           # Docker Desktop: the bridge is elsewhere
             door = container.Loopback("http://user@localhost:11434/v1?x=1").start()
-        self.assertEqual((door.base, door.hosts), ("http://user@host.docker.internal:11434/v1?x=1", {"host.docker.internal": "host-gateway"}))
         door.stop()
+        self.assertEqual((door.base, door.hosts), ("http://user@host.docker.internal:11434/v1?x=1", {"host.docker.internal": "host-gateway"}))
+        self.assertIsNone(door.door)
 
-    def test_the_loopback_forwarder_passes_each_connection_to_the_endpoint(self):
-        import http.server, threading, urllib.request
+    def _rootless_loopback(self, fail=None, ip="10.88.0.7 \n"):
+        said = []
+
+        def docker(args, env=None, **_):
+            said.append((args, dict(env or {})))
+            if fail and args[:1] == [fail]:
+                raise container.Unavailable(f"docker {fail}: no")
+            return subprocess.CompletedProcess(args, 0, ip if args[:1] == ["inspect"] else "", "")
+        self.enterContext(mock.patch.object(container, "_docker", side_effect=docker))
+        self.enterContext(mock.patch.object(container, "wait_listening"))
+        self.enterContext(mock.patch.object(container, "rootless", return_value=True))
+        self.enterContext(mock.patch.object(container.platform, "system", return_value="Linux"))
+        return container.Loopback("http://user@localhost:80/v1?x=1", image="img", job="job"), said
+
+    def test_on_a_rootless_engine_an_endpoint_on_this_machines_loopback_is_one_door_for_the_run(self):
+        door, said = self._rootless_loopback()
+        door.start()
+        self.addCleanup(door.stop)
+        self.assertEqual((door.base, door.hosts), ("http://user@host.docker.internal:8000/v1?x=1",
+                                                   {"host.docker.internal": "10.88.0.7"}))
+        self.assertEqual(door.door.target, ("localhost", 80))
+        (a, env), = [(a, e) for a, e in said if a[:1] == ["run"]]
+        self.assertNotIn("--network", a)                                               # the default network, as the relays
+        self.assertEqual(a[a.index("--name") + 1], "nullius-job-model")
+        self.assertEqual(a[a.index("--label") + 1], "nullius.job=job")
+        self.assertEqual(a[a.index("--user") + 1], "0:0")
+        self.assertIn(f"{door.door.path}:{door.door.path}:ro", a)
+        self.assertEqual(a[-1], "0.0.0.0:8000")
+        self.assertEqual(env["NULLIUS_FORWARD_TO"], "unix:" + door.door.path)
+        r = container.relay_argv("img", name="r", job="job", app="/app", record="/rec", key_file="/k", base=door.base,
+                                 model="m", routes={}, hosts=door.hosts)
+        self.assertEqual(r[r.index("--add-host") + 1], "host.docker.internal:10.88.0.7")
+        said.clear()
+        door.stop()
+        self.assertIn(["rm", "-f", "nullius-job-model"], [a for a, _ in said])
+        self.assertFalse(os.path.exists(door.door.dir))
+
+    def test_a_model_door_that_fails_to_start_removes_what_it_made(self):
+        for fail, ip in (("run", ""), ("inspect", ""), (None, " \n")):           # the last: inspect gives no address
+            door, said = self._rootless_loopback(fail, ip)
+            with self.assertRaises(container.Unavailable):
+                door.start()
+            self.assertIn(["rm", "-f", "nullius-job-model"], [a for a, _ in said])
+            self.assertFalse(os.path.exists(door.door.dir))
+            self.assertIsNone(door.container)
+
+    def test_on_rootful_podman_an_endpoint_on_this_machines_loopback_is_one_door_on_its_bridge(self):
+        door, said = self._rootless_loopback()
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))     # its bridge has no address here yet
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        door.start()
+        self.addCleanup(door.stop)
+        self.assertEqual(door.hosts, {"host.docker.internal": "10.88.0.7"})
+        self.assertEqual([a for a, _ in said][0], ["network", "create", "--ignore", "--label", "nullius.bridge=1", container.BRIDGE])
+        (a, _), = [(a, e) for a, e in said if a[:1] == ["run"]]
+        self.assertEqual(a[a.index("--network") + 1], container.BRIDGE)
+
+    def test_a_rootless_engine_off_linux_keeps_the_gateway_forwarder(self):
+        with mock.patch.object(container, "bridge_gateway", return_value=""), \
+                mock.patch.object(container, "rootless", return_value=True), \
+                mock.patch.object(container.platform, "system", return_value="Darwin"):   # podman machine, Lima
+            door = container.Loopback("http://localhost:11434/v1").start()
+        door.stop()
+        self.assertEqual((door.base, door.door), ("http://host.docker.internal:11434/v1", None))
+
+    def test_a_socket_door_passes_each_connection_to_its_endpoint_and_removes_its_folder(self):
+        import socket, threading
+        srv = socket.create_server(("127.0.0.1", 0))
+        self.addCleanup(srv.close)
+        def echo():
+            c, _ = srv.accept()
+            with c:
+                c.sendall(c.recv(100).upper())
+        threading.Thread(target=echo, daemon=True).start()
+        door = container.SocketDoor("127.0.0.1", srv.getsockname()[1])
+        self.addCleanup(door.stop)
+        self.assertTrue(os.path.basename(door.dir).startswith("nullius-door-"))
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(10)
+            s.connect(door.path)
+            s.sendall(b"hello")
+            self.assertEqual(s.recv(100), b"HELLO")
+        door.stop()
+        self.assertFalse(os.path.exists(door.dir))
+
+    def _started(self, **kw):
+        said = []
+
+        def docker(args, env=None, **_):
+            said.append((args, dict(env or {})))
+            return subprocess.CompletedProcess(args, 0, "127.0.0.1:5555\n" if args[:1] == ["port"] else "", "")
+        self.enterContext(mock.patch.object(container, "_docker", side_effect=docker))
+        self.enterContext(mock.patch.object(container, "wait_listening"))
+        u = container.Unit("job", "u0001", os.path.join(self.tmp, "rec"), image="img", app="/app", key="k", **kw).start()
+        return u, said
+
+    def test_a_licence_server_on_this_machine_on_a_rootless_engine_is_reached_through_a_door(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=True))
+        self.enterContext(mock.patch.object(container.platform, "system", return_value="Linux"))
+        u, said = self._started(base="https://x/v1", servers=["host.docker.internal:27000", "lic.example:1055", "localhost:27001"])
+        self.assertEqual(u.reach, {"host.docker.internal:27000": "licence-server-1:27000", "lic.example:1055": "lic.example:1055",
+                                   "localhost:27001": "localhost:27001"})                # as on a rootful engine: the forwarder's own
+        sd, = u.socket_doors
+        self.addCleanup(sd.stop)
+        self.assertEqual(sd.target, ("127.0.0.1", 27000))
+        steps = [(a, e) for a, e in said if a[:1] == ["run"]]
+        a, env = next((a, e) for a, e in steps if u.names["agent"] + "-lic1" in a)
+        self.assertEqual((a[a.index("--network") + 1], a[a.index("--network-alias") + 1]), (u.names["network"], "licence-server-1"))
+        self.assertEqual(env["NULLIUS_FORWARD_TO"], "unix:" + sd.path)
+        a, env = next((a, e) for a, e in steps if u.names["agent"] + "-lic2" in a)
+        self.assertIn("host.docker.internal:host-gateway", a)                          # elsewhere: the forwarder as it is
+        self.assertEqual(env["NULLIUS_FORWARD_TO"], "lic.example:1055")
+        u.stop()
+        self.assertFalse(os.path.exists(sd.dir))
+        self.assertEqual(u.socket_doors, [])
+
+    def test_a_licence_server_on_this_machine_on_rootful_podman_is_reached_through_a_door(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))      # its bridge has no address here until a container joins it
+        self.enterContext(mock.patch.object(container.platform, "system", return_value="Linux"))
+        u, _ = self._started(base="https://x/v1", servers=["host.docker.internal:27000"])
+        self.addCleanup(u.stop)
+        self.assertEqual(u.reach, {"host.docker.internal:27000": "licence-server-1:27000"})
+        self.assertEqual(u.socket_doors[0].target, ("127.0.0.1", 27000))
+
+    def test_the_loopback_forwarder_passes_connections_until_it_stops(self):
+        import http.server, socket, threading, urllib.request
         class Ok(http.server.BaseHTTPRequestHandler):
             def log_message(self, *a): pass
             def do_GET(self):
@@ -152,12 +409,16 @@ class ArgvTest(unittest.TestCase):
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Ok)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.shutdown)
-        with mock.patch.object(container, "bridge_gateway", return_value="127.0.0.1"):  # a separate loopback port stands in for the bridge
+        with mock.patch.object(container, "bridge_gateway", return_value="127.0.0.1"), \
+                mock.patch.object(container, "rootless", return_value=False):           # a separate loopback port stands in for the bridge
             door = container.Loopback(f"http://localhost:{srv.server_address[1]}/v1").start()
         self.addCleanup(door.stop)
         port = int(door.base.rsplit(":", 1)[1].split("/")[0])
         self.assertEqual(door.hosts, {"host.docker.internal": "127.0.0.1"})
         self.assertEqual(urllib.request.urlopen(f"http://127.0.0.1:{port}/v1", timeout=10).read(), b"ok")
+        door.stop()                                                                    # after it, nothing listens on the gateway
+        with self.assertRaises(ConnectionRefusedError):
+            socket.create_connection(("127.0.0.1", port), timeout=2).close()
 
     def test_wrap_passes_values_in_the_docker_programs_environment_and_leaves_host_paths_out(self):
         u = container.Unit("job one", "u0002", os.path.join(self.tmp, "rec"), image="img", app="/app", base="b", key="sk-real")
@@ -173,6 +434,7 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(u.inside("u0002"), "http://relay:8080/u0002/v1")
 
     def test_a_licence_forwarder_listens_before_it_takes_the_servers_name(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
         u = container.Unit("j", "u0001", os.path.join(self.tmp, "rec"), image="img", app="/app", base="b", key="k")
         calls = []
         with mock.patch.object(container, "_docker", side_effect=lambda argv, **kw: calls.append(argv[:2])), \
@@ -236,6 +498,107 @@ class ArgvTest(unittest.TestCase):
         self.start()[0].stop()
         self.assertEqual((os.path.exists(old), os.path.exists(fresh)), (False, True))
 
+    def test_on_podman_a_units_home_goes_by_value_and_podman_keeps_its_own(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        env = {"HOME": "/h", "XDG_CONFIG_HOME": "/h/c", "NULLIUS_RELAY_KEY": "r", "PATH": "/p"}
+        for engine, envs in (("docker", ["PATH=/p", "HOME", "NULLIUS_RELAY_KEY", "XDG_CONFIG_HOME"]),
+                             ("podman", ["PATH=/p", "HOME=/h", "XDG_CONFIG_HOME=/h/c", "NULLIUS_RELAY_KEY"])):
+            with mock.patch.object(container, "DOCKER", engine):
+                u = container.Unit("job", "u0004", os.path.join(self.tmp, "rec"), image="img", app="/app", base="b", key="k")
+                argv, prog = u.wrap(["agent"], env, "/w", [("/w", False)])
+            self.assertEqual([argv[i + 1] for i, w in enumerate(argv) if w == "-e"], envs)
+            self.assertEqual(prog["NULLIUS_RELAY_KEY"], "r")
+            self.assertEqual((prog.get("HOME"), prog.get("XDG_CONFIG_HOME")),
+                             ("/h", "/h/c") if engine == "docker" else (os.environ.get("HOME"), os.environ.get("XDG_CONFIG_HOME")))
+
+    def _argvs(self) -> dict:
+        self.enterContext(mock.patch.dict(os.environ, {container.CHECK_IMAGE: "img"}))
+        return {"agent": container.run_argv("img", ["a"], name="n", network="n", job="j", workdir="/w", mounted=[], env={}, path="/p"),
+                "check": container.check_argv("/w", [], []), "install": container.install_argv("img", "/w", ["a"]),
+                "relay": container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="b", model="m", routes={}),
+                "forward": container.forward_argv("img", name="f", job="j", port=1),
+                "door": container.door_argv("img", name="d", job="j", network="n", alias="a", port=1, socket_path="/s"),
+                "egress": container.egress_argv("img", name="e", job="j")}
+
+    def _users(self) -> set:
+        return {a[a.index("--user") + 1] for a in self._argvs().values()}
+
+    def test_on_podman_every_container_runs_without_an_selinux_label(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        box = mock.patch.object(container, "_docker", side_effect=container.Unavailable("stop at the first call"))
+        for engine in ("docker", "podman"):
+            with mock.patch.object(container, "DOCKER", engine), box as ran, self.assertRaises(container.Unavailable):
+                argvs = list(self._argvs().values())
+                container.Box("j", "u0000", "img", workdir="/", network="n").start()
+            argvs.append(ran.call_args_list[0].args[0])                              # an own image's container
+            self.assertEqual({"label=disable" in a for a in argvs}, {engine == "podman"})
+
+    def test_rootless_podman_runs_every_container_of_nullius_as_this_users_uid(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        self.enterContext(mock.patch.object(container, "userns_remap", return_value=False))
+        me = f"{os.getuid()}:{os.getgid()}"
+        with mock.patch.object(container, "rootless", return_value=True):
+            argvs = self._argvs().values()
+            self.assertEqual({(a[a.index("--user") + 1], a.count("--userns=keep-id"), "--userns=host" in a) for a in argvs},
+                             {(me, 1, False)})                                   # keep-id once: that uid is this user
+            box = mock.patch.object(container, "_docker", side_effect=container.Unavailable("stop here"))
+            with box as ran, self.assertRaises(container.Unavailable):
+                container.Box("j", "u0000", "img", workdir="/", network="n").start()
+            started = ran.call_args_list[0].args[0]
+            self.assertEqual([w for w in started if w.startswith("--userns")], ["--userns=host"])   # an own image's root stays this user
+            self.assertNotIn("--user", started)
+        with mock.patch.object(container, "rootless", return_value=False):
+            self.assertFalse([a for a in self._argvs().values() if any(w.startswith("--userns") for w in a)])
+
+    def test_an_own_images_root_gives_back_to_its_root_on_a_rootless_engine(self):
+        for engine, rl, owner in (("docker", False, f"{os.getuid()}:{os.getgid()}"), ("docker", True, "0:0"), ("podman", True, "0:0")):
+            with mock.patch.object(container, "DOCKER", engine), mock.patch.object(container, "rootless", return_value=rl):
+                b = container.Box("j", "u0000", "img", workdir="/", network="n")
+                b.up = True
+                with mock.patch.object(b, "run") as ran:
+                    b.give_back(["/h"])
+                self.assertEqual(ran.call_args.args[0], ["chown", "-R", owner, "/h"])      # the box's root is this user there
+
+    def test_rootless_docker_runs_every_container_as_its_root_which_is_this_user(self):
+        with mock.patch.object(container, "rootless", return_value=True):
+            self.assertEqual(self._users(), {"0:0"})
+        with mock.patch.object(container, "rootless", return_value=False):
+            self.assertEqual(self._users(), {f"{os.getuid()}:{os.getgid()}"})
+
+    def test_a_docker_with_userns_remap_runs_what_uses_this_users_files_in_the_machines_user_namespace(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        with mock.patch.object(container, "userns_remap", return_value=True):
+            on = {k for k, a in self._argvs().items() if "--userns=host" in a}
+            self.assertEqual(on, {"agent", "check", "install", "relay", "door"})   # the forwarder and the proxy read one public file
+            self.assertEqual(self._users(), {f"{os.getuid()}:{os.getgid()}"})
+        with mock.patch.object(container, "userns_remap", return_value=False):
+            self.assertFalse([k for k, a in self._argvs().items() if "--userns=host" in a])
+
+    def test_the_engine_is_asked_once_whether_it_is_rootless_and_one_that_cannot_answer_counts_as_rootful(self):
+        self.enterContext(mock.patch.object(container, "_security", None))
+        with mock.patch.object(container, "_docker", side_effect=container.Unavailable("no docker")):
+            self.assertFalse(container.rootless())
+        down = subprocess.CompletedProcess([], 1, "", "Cannot connect to the Docker daemon")
+        with mock.patch.object(container, "_docker", return_value=down):
+            self.assertFalse(container.rootless())
+        self.assertIsNone(container._security)                             # not an answer: asked again next time
+        said = subprocess.CompletedProcess([], 0, "[name=seccomp,profile=builtin name=rootless name=cgroupns]\n", "")
+        with mock.patch.object(container, "_docker", return_value=said) as ask:
+            self.assertTrue(container.rootless())
+            self.assertTrue(container.rootless())
+        self.assertEqual(ask.call_count, 1)
+        container._security = None
+        said = subprocess.CompletedProcess([], 0, "[name=apparmor name=seccomp,profile=builtin name=cgroupns]\n", "")
+        with mock.patch.object(container, "_docker", return_value=said):
+            self.assertFalse(container.rootless())
+            self.assertFalse(container.userns_remap())
+        container._security = None
+        said = subprocess.CompletedProcess([], 0, "[name=seccomp,profile=builtin name=userns name=cgroupns]\n", "")
+        with mock.patch.object(container, "_docker", return_value=said) as ask:
+            self.assertTrue(container.userns_remap())
+            self.assertFalse(container.rootless())
+        self.assertEqual(ask.call_count, 1)                                # one question answers both
+
     def test_a_long_job_name_gives_a_short_unique_slug(self):
         a, b = container.slug("x" * 200), container.slug("x" * 199 + "y")
         self.assertLessEqual(len(a), 80)
@@ -244,7 +607,42 @@ class ArgvTest(unittest.TestCase):
     def test_missing_docker_is_said_plainly(self):
         from unittest import mock
         with mock.patch.object(container, "DOCKER", "nullius-no-such-docker"):
-            self.assertEqual(container.unusable(), "docker is not installed on this machine")
+            self.assertEqual(container.unusable(), "nullius-no-such-docker is not installed on this machine")
+
+
+class ContextTest(unittest.TestCase):
+    """A Docker selected only by ``docker context use`` is in the user's
+    ``~/.docker``: the docker program still reaches it with a unit's home."""
+    ALT = {"Name": "alt", "Endpoints": {"docker": {"Host": "unix:///run/alt.sock", "SkipTLSVerify": False}},
+           "TLSMaterial": {}, "Storage": {"TLSPath": "/u/.docker/contexts/tls/abc"}}
+
+    def env(self, inspect: dict, **environ) -> dict:
+        container._context.cache_clear()
+        self.addCleanup(container._context.cache_clear)
+        kept = {k: v for k, v in os.environ.items() if not k.startswith("DOCKER")}
+        done = subprocess.CompletedProcess([], 0, json.dumps([inspect]), "")
+        with mock.patch.dict(os.environ, {**kept, **environ}, clear=True), \
+                mock.patch.object(container.subprocess, "run", return_value=done):
+            return container.client_env({"HOME": "/unit-home"})
+
+    def test_the_current_context_is_passed_as_its_host(self):
+        env = self.env(self.ALT)
+        self.assertEqual((env["HOME"], env["DOCKER_HOST"]), ("/unit-home", "unix:///run/alt.sock"))
+        self.assertNotIn("DOCKER_CONFIG", env)                                     # not the user's logins
+        self.assertNotIn("DOCKER_HOST", self.env(dict(self.ALT, Name="default")))
+
+    def test_docker_host_and_docker_context_win(self):
+        self.assertEqual(self.env(self.ALT, DOCKER_HOST="tcp://h:2375")["DOCKER_HOST"], "tcp://h:2375")
+        env = self.env(self.ALT, DOCKER_CONTEXT="other")
+        self.assertEqual((env["DOCKER_CONTEXT"], env.get("DOCKER_HOST")), ("other", None))
+
+    def test_a_tls_context_passes_its_certificates(self):
+        tls = dict(self.ALT, TLSMaterial={"docker": ["ca.pem", "cert.pem", "key.pem"]})
+        env = self.env(tls)
+        self.assertEqual((env["DOCKER_CERT_PATH"], env["DOCKER_TLS_VERIFY"]), ("/u/.docker/contexts/tls/abc/docker", "1"))
+        tls["Endpoints"] = {"docker": {"Host": "tcp://h:2376", "SkipTLSVerify": True}}
+        env = self.env(tls)
+        self.assertEqual((env["DOCKER_TLS"], env.get("DOCKER_TLS_VERIFY")), ("1", None))
 
 
 class MacDoorTest(unittest.TestCase):
@@ -284,7 +682,7 @@ class MacDoorTest(unittest.TestCase):
         with mock.patch.object(container.platform, "system", return_value="Darwin"), \
                 mock.patch.object(container, "_docker", mock.Mock(side_effect=docker)) as calls, \
                 mock.patch.object(container.Unit, "_wait"):
-            u._door(1, "web-search", 9001, path)
+            u._door("nullius-job-u0000-mcp1", "web-search", 9001, path, "the HTTP fixture")
             nonce, port = seen["nonce"], u.socket_bridges[0].server_address[1]
             a = seen["argv"]
             self.assertEqual(a[a.index("--mount") + 1], f"type=bind,source={seen['path']},target={container.FORWARD_NONCE_IN},readonly")
@@ -326,7 +724,7 @@ class DockerTest(unittest.TestCase):
                            base="http://127.0.0.1:9/v1", key="sk-test-not-real")      # an endpoint no one serves
         try:
             u.start()
-            seen = subprocess.run(["docker", "inspect", u.names["relay"]], stdout=subprocess.PIPE, text=True).stdout
+            seen = subprocess.run([container.DOCKER, "inspect", u.names["relay"]], stdout=subprocess.PIPE, text=True).stdout
             self.assertIn(container.RELAY_KEY_IN, seen)
             self.assertNotIn("sk-test-not-real", seen)                                 # the key is in no configuration
             with self.assertRaises(urllib.error.HTTPError) as e:                       # the host reaches it
@@ -345,8 +743,8 @@ class DockerTest(unittest.TestCase):
         finally:
             u.stop()
             container.sweep(job)
-        left = subprocess.run(["docker", "ps", "-aq", "--filter", f"label=nullius.job={job}"], stdout=subprocess.PIPE, text=True)
-        nets = subprocess.run(["docker", "network", "ls", "-q", "--filter", f"label=nullius.job={job}"], stdout=subprocess.PIPE, text=True)
+        left = subprocess.run([container.DOCKER, "ps", "-aq", "--filter", f"label=nullius.job={job}"], stdout=subprocess.PIPE, text=True)
+        nets = subprocess.run([container.DOCKER, "network", "ls", "-q", "--filter", f"label=nullius.job={job}"], stdout=subprocess.PIPE, text=True)
         self.assertEqual((left.stdout.strip(), nets.stdout.strip()), ("", ""))
 
     def test_a_relay_reaches_a_model_server_on_this_machines_loopback(self):
@@ -368,7 +766,7 @@ class DockerTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, True)
         app = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         job = "test-loopback-" + os.path.basename(tmp)
-        door = container.Loopback(f"http://localhost:{srv.server_address[1]}/v1").start()
+        door = container.Loopback(f"http://localhost:{srv.server_address[1]}/v1", image=container.base_image(), job=job).start()
         u = container.Unit(job, "u0000", os.path.join(tmp, "rec"), image=container.base_image(), app=app,
                            base=door.base, key="sk-test-not-real", hosts=door.hosts)
         try:

@@ -1,15 +1,18 @@
 """The container backend: each unit's agent, or capability, in a container of its
-own, and its relay in another beside it. Docker only; this module shells out
-to the ``docker`` program and imports nothing outside the standard library.
+own, and its relay in another beside it. This module shells out to the
+engine's program (:data:`DOCKER`) and imports nothing outside the standard
+library. That is ``docker``, or ``podman`` on a machine without Docker or
+where ``docker`` is podman's own (:func:`engine`). Podman needs no Docker API
+socket and no settings of its own for Nullius.
 
 **One base image** (``nullius/base:<hash>``), built once and named by the
 hash of its Dockerfile, so a change to it builds a new one beside the old:
-Ubuntu 24.04 - the glibc of the machine the packages were installed on, so an
-install made here runs there - with git, python3, curl, CA certificates, tmux
-(Terminus's terminal) and Node 22 from its official tarball, checked by its
-sha256. A unit's image is chosen by :func:`image_for`: the base image, or the
-benchmark's environment the unit asks for - a layer on the base, its
-Dockerfile in the benchmark's folder, named by the hash of what it is built from
+Ubuntu 24.04 with git, python3, curl, CA certificates, tmux (Terminus's
+terminal), Node 22 from its official tarball, checked by its sha256, and uv
+from its official image, pinned by digest. A unit's image is chosen by
+:func:`image_for`: the base image, or the benchmark's environment the unit
+asks for - a layer on the base, its Dockerfile in the benchmark's folder,
+named by the hash of what it is built from
 (``nullius/env-<benchmark>-<name>:<hash>``) and built the first time a unit
 uses it (:func:`env_image`).
 
@@ -20,11 +23,17 @@ each file a unit's stdio MCP server is started from, alone (:func:`mcp_mounts`)
 refuses it) nor the benchmark's folder or upstream (their data holds the
 answers). All where they are on this machine, so every path a
 definition's templates rendered (``{home}``, ``{install}``, ``{here}``) holds
-inside unchanged. A uv environment's interpreter lives outside the install
-(``pyvenv.cfg`` names it); its folder is mounted read-only too. The container
-runs as this machine's user (``--user uid:gid``), with no capabilities and no
-way to gain privileges, so what it writes in the workspace is the user's to
-read and remove.
+inside unchanged. A uv environment's interpreter is in the install
+(``.python``), installed with it in the base image (:func:`install_argv`).
+The container runs as this machine's user, with no capabilities and no way to gain
+privileges, so what it writes in the workspace is the user's to read and
+remove. That is ``--user uid:gid``, with ``--userns=keep-id`` on rootless
+podman, which maps that uid to this user, or ``--user 0:0`` on rootless
+Docker, where only a container's root is this machine's user. On a Docker with
+``userns-remap``, a container that uses this machine's user's files also
+runs in this machine's user namespace (:func:`_userns`). On podman it
+runs with no SELinux label (:func:`_security_opt`), as on Docker's default
+daemon.
 
 **The relay is a sidecar, and the agent's only way out** but for the public
 web proxy of an environment that declares ``network``. Per unit, an
@@ -39,18 +48,24 @@ removed from this machine once the relay listens: never on an argument list
 publishes its port on 127.0.0.1 so the driver (on the machine for
 agent/capability runs) reaches the judge's route and a capability
 benchmark's reader. Its record folder is mounted read-write, so the host
-reads each call as the local relay's are read.
+reads each call as the local relay's are read. On podman the default bridge
+is Nullius's own (:data:`BRIDGE`, :func:`way_out`). A model endpoint on this
+machine's loopback is reached by the relays alone (:class:`Loopback`):
+through a forwarder on the default bridge's gateway, or, on a rootless
+engine or podman, a door container on the engine's default network.
 
 **A licence server is one more door.** A unit whose environment needs a
 licence of kind ``server`` (``host:port``) gets a forwarder beside its relay
-(``forward.py``, mounted alone into the base image): on the default bridge,
-and on the unit's network under the server's own name, listening on its
+(``forward.py``, mounted alone into the base image): on the default bridge
+(``BRIDGE`` on podman), and on the unit's network under the server's own name, listening on its
 port and passing every connection to that one address. The agent reaches
 the server by the address it was given; nothing else is opened. A server
 named by an IPv4 address is reached as ``licence-server-<i>`` instead, a
 network alias being a name; ``host.docker.internal`` is the machine the run
-is on. A licence file is mounted read-only, alone, at the path its
-environment declares (``wrap``'s ``binds``).
+is on. On a rootless engine or podman on Linux, a server at
+``host.docker.internal`` is reached through a :class:`SocketDoor` instead, as ``licence-server-<i>``
+on the unit's network alone. A licence file is mounted read-only, alone, at
+the path its environment declares (``wrap``'s ``binds``).
 
 **A benchmark's MCP server on the machine is one door more.** A server the
 benchmark declares in ``mcp_servers`` runs on this machine, in the driver's
@@ -90,6 +105,7 @@ Docker Original setup drivers are handled by ``setup_container.py``.
 """
 from __future__ import annotations
 
+import functools
 import glob
 import hashlib
 import json
@@ -113,7 +129,27 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from nullius import paths
 from nullius.standard import definitions, install
 
-DOCKER = "docker"
+def _runs_podman(path: str) -> bool:
+    """Whether the program at ``path`` is podman under another name: a link to
+    it, or a script that runs it (``podman-docker``'s ``docker``)."""
+    if os.path.basename(os.path.realpath(path)) == "podman":
+        return True
+    try:
+        with open(path, "rb") as f:
+            head = f.read(4096)
+    except OSError:
+        return False
+    return head.startswith(b"#!") and re.search(rb"^\s*exec\s+\S*podman\b", head, re.M) is not None
+
+
+def engine() -> str:
+    """``podman`` when it is on the PATH and ``docker`` is not, or is podman
+    under that name; else ``docker``."""
+    docker, podman = shutil.which("docker"), shutil.which("podman")
+    return "podman" if podman and (not docker or _runs_podman(docker)) else "docker"
+
+
+DOCKER = engine()                          # the engine's program, chosen once
 LABEL = "nullius.job"
 RELAY_PORT = 8080
 RELAY_ALIAS = "relay"
@@ -124,10 +160,14 @@ EGRESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "egress.py")
 EGRESS_IN = "/opt/nullius/egress.py"       # the check's proxy's one file, in its container
 EGRESS_PORT = 3128
 EGRESS_ALIAS = "egress"
+BRIDGE = "nullius-bridge"                  # podman: the network a container with a way out starts on (way_out)
 RELAY_KEY_IN = "/opt/nullius/relay-key"    # the key's one file, in the relay's container
 KEY_STALE = 600                            # older than any start can take: a killed run left it
 IMAGE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
+# uv and PYTHON_VERSION move together: this uv must know that Python
+UV_VERSION = "0.13.5"
+UV_DIGEST = "sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff"    # its index: every platform
 NODE_VERSION = "22.23.3"
 NODE_SHA256 = {
     "x64": "df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de",
@@ -135,8 +175,10 @@ NODE_SHA256 = {
 }
 _ARCH = {"x86_64": "x64", "amd64": "x64", "aarch64": "arm64", "arm64": "arm64"}
 
+# FROM in full: podman resolves a short name by this machine's registries
 DOCKERFILE = """\
-FROM ubuntu:24.04
+FROM docker.io/library/ubuntu:24.04
+COPY --from=ghcr.io/astral-sh/uv:{uv_version}@{uv_digest} /uv /uvx /usr/local/bin/
 RUN apt-get update \\
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git python3 ca-certificates curl tmux xz-utils \\
  && rm -rf /var/lib/apt/lists/*
@@ -150,13 +192,20 @@ ENV PATH={path}
 # What a unit's process holds of this machine's environment that names a
 # place on this machine: meaningless, or wrong, inside.
 HOST_ONLY = ("TMPDIR", "NVM_DIR", "NODE_PATH", "SSL_CERT_FILE", "SSL_CERT_DIR")
-# What the docker program itself keeps of this process's environment, to
-# find the daemon. Not a key among them.
-CLIENT_KEEP = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
+# What the engine's program keeps of this process's environment, to find the
+# daemon, or podman its storage and settings. Not a key among them, though
+# CONTAINER_HOST may name an ssh URL with a password: it is never on an argument list.
+CLIENT_KEEP = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY",
+               "XDG_RUNTIME_DIR", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "CONTAINERS_CONF", "CONTAINERS_STORAGE_CONF",
+               "CONTAINERS_REGISTRIES_CONF", "REGISTRY_AUTH_FILE", "CONTAINER_HOST", "CONTAINER_CONNECTION")
 
 
 class Unavailable(Exception):
-    """Docker is missing, not usable by this user, or failed at something."""
+    """The engine is missing, not usable by this user, or failed at something."""
+
+
+def podman() -> bool:
+    return DOCKER == "podman"
 
 
 def _docker(args: List[str], *, env: Optional[dict] = None, input: Optional[str] = None, timeout: float = 120,
@@ -165,25 +214,49 @@ def _docker(args: List[str], *, env: Optional[dict] = None, input: Optional[str]
         r = subprocess.run([DOCKER] + args, env=env if env is not None else client_env(), input=input, text=True,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
     except FileNotFoundError:
-        raise Unavailable("docker is not installed on this machine")
+        raise Unavailable(f"{DOCKER} is not installed on this machine")
     except subprocess.TimeoutExpired:
-        raise Unavailable(f"docker {args[0]} did not answer in {int(timeout)} s")
+        raise Unavailable(f"{DOCKER} {args[0]} did not answer in {int(timeout)} s")
     if check and r.returncode != 0:
-        raise Unavailable(f"docker {' '.join(args[:2])}: {(r.stderr or r.stdout).strip()[-300:]}")
+        raise Unavailable(f"{DOCKER} {' '.join(args[:2])}: {(r.stderr or r.stdout).strip()[-300:]}")
     return r
 
 
 def client_env(extra: Optional[dict] = None) -> dict:
-    """The docker program's environment: what it needs to find the daemon, and
-    the values of the variables a ``-e NAME`` passes on."""
-    env = {k: os.environ[k] for k in CLIENT_KEEP if k in os.environ}
+    """The engine program's environment: what it needs to find the daemon, or
+    podman its storage and settings (``CLIENT_KEEP``), and the values of the
+    variables a ``-e NAME`` passes on."""
+    env = {**_context(), **{k: os.environ[k] for k in CLIENT_KEEP if k in os.environ}}
     env.setdefault("PATH", os.defpath)
-    # HOME is also passed by name to the agent's container. Keep Docker's
-    # host-side context/credential lookup anchored before that HOME changes.
-    config = env.get("DOCKER_CONFIG") or os.path.expanduser("~/.docker")
     env.update(extra or {})
-    if extra and "HOME" in extra and extra["HOME"] != os.environ.get("HOME"):
-        env.setdefault("DOCKER_CONFIG", config)
+    return env
+
+
+@functools.cache
+def _context() -> Dict[str, str]:
+    """The daemon that ``docker context use`` selected, as the variables that
+    name it. The user's ``~/.docker`` keeps that selection, and a unit or a
+    driver has a home of its own. Only the endpoint goes on: the registry
+    logins in ``~/.docker`` do not. Read once per process."""
+    if os.environ.get("DOCKER_HOST") or os.environ.get("DOCKER_CONTEXT"):
+        return {}
+    try:
+        r = subprocess.run([DOCKER, "context", "inspect"], capture_output=True, text=True, timeout=30)
+        c = json.loads(r.stdout)[0]
+        ep = c["Endpoints"]["docker"]
+    except (OSError, subprocess.SubprocessError, ValueError, LookupError):
+        return {}
+    if c.get("Name") == "default":
+        return {}
+    env = {"DOCKER_HOST": ep["Host"]}
+    tls = bool(c.get("TLSMaterial", {}).get("docker"))
+    if tls:
+        env["DOCKER_CERT_PATH"] = os.path.join(c["Storage"]["TLSPath"], "docker")
+    # shortcut: docker reads a ca.pem from DOCKER_CERT_PATH, so a skip-verify context with a client certificate and no CA is not reached
+    if ep.get("SkipTLSVerify"):
+        env["DOCKER_TLS"] = "1"
+    elif tls:
+        env["DOCKER_TLS_VERIFY"] = "1"
     return env
 
 
@@ -195,8 +268,19 @@ def unusable() -> Optional[str]:
         return str(e)
     if r.returncode != 0:
         said = (r.stderr or r.stdout).strip().splitlines()
-        hint = " (add this user to the docker group, then log in again)" if "permission denied" in r.stderr.lower() else ""
-        return "docker is installed but not usable by this user: " + (said[-1][:200] if said else f"exit {r.returncode}") + hint
+        hint = (" (add this user to the docker group, then log in again)"
+                if not podman() and "permission denied" in r.stderr.lower() else "")
+        if not podman() and shutil.which("podman"):     # docker wins (engine), so say podman is there
+            hint += ". podman is on this machine: Nullius uses it when docker is not on the PATH"
+        return f"{DOCKER} is installed but not usable by this user: " + (said[-1][:200] if said else f"exit {r.returncode}") + hint
+    if podman():
+        try:
+            net = _docker(["info", "--format", "{{.Host.NetworkBackend}}"], timeout=30, check=False).stdout.strip()
+        except Unavailable as e:
+            return str(e)
+        if net != "netavark":
+            return (f"podman's network backend is {net or 'unknown'}: Nullius needs netavark"
+                    ' (podman 4.7 or later, network_backend = "netavark")')
     return None
 
 
@@ -204,7 +288,7 @@ def dockerfile(machine: Optional[str] = None) -> str:
     arch = _ARCH.get((machine or platform.machine()).lower())
     if not arch:
         raise Unavailable(f"no Node build pinned for {machine or platform.machine()}")
-    return DOCKERFILE.format(node=NODE_VERSION, arch=arch, sha=NODE_SHA256[arch], path=IMAGE_PATH)
+    return DOCKERFILE.format(uv_version=UV_VERSION, uv_digest=UV_DIGEST, node=NODE_VERSION, arch=arch, sha=NODE_SHA256[arch], path=IMAGE_PATH)
 
 
 def image_tag(text: str) -> str:
@@ -338,26 +422,6 @@ def names(job: str, tag: str) -> Dict[str, str]:
     return {"network": base, "agent": base, "relay": base + "-relay"}
 
 
-def python_homes(inst: str) -> List[str]:
-    """The interpreter a uv environment in the install links to, which lives
-    outside it: the folder holding its ``bin``, from ``pyvenv.cfg`` - as
-    written there and, when that is a link (uv's ``cpython-3.12-...`` to
-    ``cpython-3.12.15-...``), where it leads, so the environment's own
-    ``bin/python`` link resolves inside the container too."""
-    out = []
-    try:
-        with open(os.path.join(inst, ".venv", "pyvenv.cfg")) as f:
-            for line in f:
-                k, _, v = line.partition("=")
-                if k.strip() == "home" and v.strip():
-                    for home in (os.path.dirname(v.strip()), os.path.dirname(os.path.realpath(v.strip()))):
-                        if home not in ("/usr", "/", "/usr/local") and home not in out and os.path.isdir(home):
-                            out.append(home)
-    except OSError:
-        pass
-    return out
-
-
 def mcp_mounts(servers: Iterable[dict], trial: str) -> Tuple[List[str], List[str]]:
     """What a unit's stdio MCP servers need inside the agent's container,
     which starts them: each file their command, arguments or environment
@@ -409,30 +473,131 @@ def mounts(rw: Iterable[str], ro: Iterable[str], files: Iterable[str] = ()) -> L
     return out
 
 
+_security: Optional[str] = None
+
+
+def _security_options() -> str:
+    """The engine's security options (``docker info``), or podman's answer in
+    their terms (``name=rootless``): podman has no ``SecurityOptions``. The
+    first answer is kept. An engine that does not answer gives none and is
+    asked again."""
+    global _security
+    if _security is None:
+        asked = "{{if .Host.Security.Rootless}}name=rootless{{end}}" if podman() else "{{.SecurityOptions}}"
+        try:
+            r = _docker(["info", "--format", asked], check=False, timeout=30)
+        except Unavailable:
+            return ""
+        if r.returncode != 0:
+            return ""
+        _security = r.stdout
+    return _security
+
+
+def rootless() -> bool:
+    """Whether the engine is rootless (Docker or podman): its uid 0 is this
+    machine's user, every other uid a sub-uid."""
+    return "name=rootless" in _security_options()
+
+
+def userns_remap() -> bool:
+    """Whether a rootful Docker remaps its containers' users (``userns-remap``):
+    every uid inside, root too, is then a sub-uid of this machine."""
+    return "name=userns" in _security_options()
+
+
+def _keep_id() -> List[str]:
+    """``--userns=keep-id`` on rootless podman, which maps :func:`_user`'s uid
+    to this machine's user, as on rootful Docker. Rootless Docker cannot map
+    a uid, and runs its containers as root, which is this user there."""
+    return ["--userns=keep-id"] if podman() and rootless() else []
+
+
+def _userns() -> List[str]:
+    """The user namespace of a container that uses this machine's user's files:
+    :func:`_keep_id` on podman, ``--userns=host`` on a Docker with
+    ``userns-remap``, where a container's uids are otherwise sub-uids that
+    cannot use those files."""
+    if podman():
+        return _keep_id()
+    return ["--userns=host"] if userns_remap() else []
+
+
+def make_bridge() -> None:
+    """On podman, make ``BRIDGE`` when it is missing (``--ignore``: asked each
+    time, so a network removed between units is made again): a bridge with
+    DNS, as podman's default network has DNS off. Docker has its default bridge."""
+    if podman():
+        _docker(["network", "create", "--ignore", "--label", "nullius.bridge=1", BRIDGE])
+
+
+def way_out() -> List[str]:
+    """The network of a container that reaches out, or that the relays reach
+    (the relay, a licence server's forwarder, the check's proxy, the door to a
+    model server): the engine's default, or ``BRIDGE`` on podman
+    (:func:`make_bridge`). A rootless podman container starts on pasta, which
+    cannot join a network after it starts."""
+    return ["--network", BRIDGE] if podman() else []
+
+
 def _user() -> str:
-    return f"{os.getuid()}:{os.getgid()}"
+    """The ``--user`` that gives a container's files to this machine's user:
+    ``0:0`` on rootless Docker, ``uid:gid`` otherwise (:func:`_keep_id`)."""
+    return "0:0" if rootless() and not podman() else f"{os.getuid()}:{os.getgid()}"
+
+
+def _security_opt() -> List[str]:
+    """Every container's ``--security-opt``: no way to gain privileges, and on
+    podman no SELinux label. Docker's default daemon (``selinux-enabled`` off)
+    gives none, so a container reads the folders it mounts, which are never
+    relabelled (``:z`` would relabel the user's). Labels are future work."""
+    return ["--security-opt", "no-new-privileges", *(["--security-opt", "label=disable"] if podman() else [])]
+
+
+def by_value(env: Dict[str, str]) -> Dict[str, str]:
+    """What of a unit's environment podman itself reads (``CLIENT_KEEP``:
+    ``HOME``, the XDG folders...) but ``PATH``: on podman passed by value
+    (``-e NAME=value``), so the podman program keeps this machine's own and
+    finds its images. Nothing on Docker."""
+    return {k: v for k, v in env.items() if k in CLIENT_KEEP and k != "PATH"} if podman() else {}
+
+
+def program_env(env: Dict[str, str]) -> dict:
+    """The engine program's environment for a unit's process given ``env``:
+    the values of what goes by name (``-e NAME``), never ``PATH`` nor
+    :func:`by_value`'s."""
+    given = by_value(env)
+    return client_env({k: v for k, v in env.items() if k != "PATH" and k not in given})
+
+
+def env_args(env: Dict[str, str], path: str) -> Tuple[List[str], List[str]]:
+    """A unit's process's ``-e`` words: ``PATH``, the container's and no
+    secret, and :func:`by_value`'s by value; then the rest by name, the value
+    in the engine program's own environment (:func:`program_env`), never on
+    an argument list."""
+    given = by_value(env)
+    return (["-e", "PATH=" + path, *[w for k, v in sorted(given.items()) for w in ("-e", f"{k}={v}")]],
+            [w for k in sorted(set(env) - {"PATH"} - set(given)) for w in ("-e", k)])
 
 
 def run_argv(image: str, cmd: List[str], *, name: str, network: str, job: str, workdir: str,
-             mounted: List[Tuple[str, bool]], env_names: Iterable[str], path: str, interactive: bool = True,
+             mounted: List[Tuple[str, bool]], env: Dict[str, str], path: str, interactive: bool = True,
              binds: Iterable[Tuple[str, str]] = ()) -> List[str]:
-    """``docker run`` for a unit's agent or capability. Its environment is passed
-    by name only (``-e NAME``, the value in the docker program's own
-    environment), but for ``PATH``, which is the container's and no secret.
-    ``binds``: (a file on this machine, its path inside), each read-only - a
-    licence file where its environment says the software looks for it."""
+    """``docker run`` for a unit's agent or capability, its environment as
+    :func:`env_args` gives it. ``binds``: (a file on this machine, its path
+    inside), each read-only - a licence file where its environment says the
+    software looks for it."""
+    values, named = env_args(env, path)
     a = [DOCKER, "run", "--rm", "--name", name, "--network", network, "--label", f"{LABEL}={job}",
-         "--user", _user(), "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
-         "-w", workdir, "-e", "PATH=" + path]
+         *_userns(), "--user", _user(), "--cap-drop", "ALL", *_security_opt(), "--init",
+         "-w", workdir, *values]
     if interactive:
         a.insert(2, "-i")
     for p, ro in mounted:
         a += ["-v", f"{p}:{p}:{'ro' if ro else 'rw'}"]
     for src, dest in binds:
         a += ["-v", f"{src}:{dest}:ro"]
-    for k in sorted(set(env_names) - {"PATH"}):
-        a += ["-e", k]
-    return a + [image] + list(cmd)
+    return a + named + [image] + list(cmd)
 
 
 def plain_only(root: str) -> List[str]:
@@ -455,31 +620,67 @@ def plain_only(root: str) -> List[str]:
     return gone
 
 
-CHECK_IMAGE = "NULLIUS_CHECK_IMAGE"     # set in a driver's environment on the docker backend: the unit's image
+CHECK_IMAGE = "NULLIUS_CHECK_IMAGE"     # driver checks: the unit's image, or the base image for a local setup
+CHECK_ENGINE = "NULLIUS_CHECK_ENGINE"   # beside it on podman: check_start as podman runs from the driver, JSON
+_XDG = (("XDG_DATA_HOME", ".local/share"), ("XDG_CONFIG_HOME", ".config"))     # where podman keeps its images and settings
+
+
+def check_start() -> List[str]:
+    """A check's container command up to its mounts (:func:`check_argv`): no
+    network, no capabilities, as this machine's user."""
+    return [DOCKER, "run", "--rm", "--network", "none", *_userns(), "--user", _user(), "--cap-drop", "ALL",
+            *_security_opt()]
+
+
+def check_env() -> dict:
+    """What a driver, which runs with a home of its own, gets to run
+    :func:`check_argv` on the same engine as the units. On Docker: the
+    ``DOCKER_*`` variables of :func:`client_env`. On podman: the variables of
+    ``CLIENT_KEEP`` (``CONTAINER_HOST``, ``REGISTRY_AUTH_FILE``...) except ``PATH``, ``HOME``,
+    ``XDG_DATA_HOME`` and ``XDG_CONFIG_HOME``, and ``CHECK_ENGINE``. That is
+    :func:`check_start` behind ``env``, which gives podman this user's XDG data
+    and config folders. The driver's own processes do not use these folders."""
+    if not podman():
+        return {k: v for k, v in client_env().items() if k.startswith("DOCKER")}
+    home = os.path.expanduser("~")
+    xdg = [f"{k}={os.environ.get(k) or os.path.join(home, d)}" for k, d in _XDG]
+    return {**{k: os.environ[k] for k in CLIENT_KEEP if k not in ("PATH", "HOME", *dict(_XDG)) and k in os.environ},
+            CHECK_ENGINE: json.dumps(["env", *xdg, *check_start()])}
 
 
 def check_argv(workdir: str, here: List[str], inside: List[str]) -> List[str]:
-    """How a driver's check runs code the agent left in ``workdir``. On the
-    docker backend (``CHECK_IMAGE`` set) in a throwaway container of the
-    unit's image - no network, no capabilities, only the workspace mounted -
-    because the driver itself runs on this machine and the agent's code must
-    not; otherwise ``here``, as the agent itself ran here, with the user's yes."""
+    """With CHECK_IMAGE, run in a throwaway container with no network or
+    capabilities and only the workspace mounted. Otherwise return ``here``."""
     image = os.environ.get(CHECK_IMAGE)
     if not image:
         return list(here)
-    return [DOCKER, "run", "--rm", "--network", "none", "--user", _user(), "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges", "-v", f"{workdir}:{workdir}:rw", "-w", workdir, image, *inside]
+    start = json.loads(os.environ[CHECK_ENGINE]) if os.environ.get(CHECK_ENGINE) else check_start()
+    return [*start, "-v", f"{workdir}:{workdir}:rw", "-w", workdir, image, *inside]
 
 
-def install_argv(image: str, where: str, cmd: List[str]) -> List[str]:
-    """``docker run`` for an install step on a machine without the program
-    it needs (``install.packages``' ``npm_in``): in the base image, as this
-    machine's user, with the install folder alone mounted, at its own path,
-    and npm's home and cache inside it (removed after). It has the network -
-    it downloads the packages - and nothing of a run: no key, no unit."""
-    return [DOCKER, "run", "--rm", "--label", "nullius.install=1", "--user", _user(), "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges", "-v", f"{where}:{where}:rw", "-w", where,
-            "-e", f"HOME={where}/.npm-home", "-e", f"npm_config_cache={where}/.npm-cache", image] + list(cmd)
+# where this machine gets its packages from, passed by name: a proxy's URL may hold its password
+INSTALL_KEEP = ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+                "UV_INDEX", "UV_INDEX_URL", "UV_DEFAULT_INDEX", "UV_EXTRA_INDEX_URL", "UV_PYTHON_INSTALL_MIRROR",
+                "PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "npm_config_registry", "NPM_CONFIG_REGISTRY", "HF_ENDPOINT")
+
+
+def install_argv(image: str, where: str, cmd: List[str], env: Optional[dict] = None) -> List[str]:
+    """``docker run`` for an install step (``install.packages``' ``run_in``):
+    in the base image, as this machine's user, with the install folder alone
+    mounted, at its own path. The home and npm's and uv's caches are inside
+    it, removed after (``install.SCRATCH``). uv's Python is inside it too
+    (``.python``), and kept: the environment links to it, and the agent's
+    container mounts the folder. ``env``: the step's own variables. This
+    machine's proxy and package indexes (``INSTALL_KEEP``) are passed by name.
+    It has the network - it downloads the packages - and nothing of a run: no
+    key, no unit."""
+    home, npm, uv = (f"{where}/{s}" for s in install.SCRATCH)
+    env = {"HOME": home, "npm_config_cache": npm, "UV_CACHE_DIR": uv,
+           "UV_PYTHON_INSTALL_DIR": f"{where}/.python", "UV_PYTHON_DOWNLOADS": "automatic", **(env or {})}
+    return [DOCKER, "run", "--rm", "--label", "nullius.install=1", *_userns(), "--user", _user(), "--cap-drop", "ALL",
+            *_security_opt(), "-v", f"{where}:{where}:rw", "-w", where,
+            *[w for k, v in env.items() for w in ("-e", f"{k}={v}")],
+            *[w for k in INSTALL_KEEP if k in os.environ for w in ("-e", k)], image] + list(cmd)
 
 
 def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_file: str, base: str,
@@ -494,8 +695,8 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
     (``--add-host``), the machine's own for an endpoint on its loopback.
     ``ledger``: the file of the run's spending cap, its folder mounted so
     this relay books its calls where every other relay of the job does."""
-    a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
-         "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
+    a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_userns(), "--user", _user(),
+         "--cap-drop", "ALL", *_security_opt(), "--init",
          *[w for n, ip in sorted((hosts or {}).items()) for w in ("--add-host", f"{n}:{ip}")],
          "-p", f"127.0.0.1::{RELAY_PORT}", "-v", f"{app}:{app}:ro", "-v", f"{record}:{record}:rw",
          *(["-v", f"{os.path.dirname(ledger)}:{os.path.dirname(ledger)}:rw"] if ledger else []),
@@ -535,6 +736,80 @@ def bridge_gateway() -> str:
     return next((w for w in r.stdout.split() if _IPV4.match(w)), "")
 
 
+def _pump(src: socket.socket, dst: socket.socket) -> None:
+    try:
+        while data := src.recv(65536):
+            dst.sendall(data)
+    except OSError:
+        pass
+    finally:
+        for sk in (src, dst):
+            try:
+                sk.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+
+def _pass_each(server: socket.socket, target: Tuple[str, int]) -> None:
+    """Pass each connection ``server`` accepts to ``target``, until it is closed."""
+    while True:
+        try:
+            inside, _ = server.accept()
+        except OSError:
+            return
+        try:
+            outside = socket.create_connection(target, timeout=10)
+            outside.settimeout(None)
+        except OSError:
+            inside.close()
+            continue
+        for a, b in ((inside, outside), (outside, inside)):
+            threading.Thread(target=_pump, args=(a, b), daemon=True).start()
+
+
+def _close(server: socket.socket) -> None:
+    """Close a listening socket. The shutdown wakes the thread blocked in its
+    ``accept``, which a close alone does not do on Linux."""
+    try:
+        server.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+    server.close()
+
+
+def use_socket_doors() -> bool:
+    """Whether a server on this machine's loopback is reached through a
+    :class:`SocketDoor`: on a rootless engine on Linux, or on podman there,
+    whose bridge has no address on this machine until a container joins it.
+    Elsewhere the engine runs in a virtual machine, which this machine's
+    sockets may not reach."""
+    return (rootless() or podman()) and platform.system() == "Linux"
+
+
+class SocketDoor:
+    """A Unix socket in a folder of its own that passes each connection to one
+    ``host:port`` here: a rootless engine's door container mounts it to reach
+    this machine's loopback. ``stop`` closes it and removes the folder."""
+
+    def __init__(self, host: str, port: int):
+        self.dir = tempfile.mkdtemp(prefix="nullius-door-")
+        self.path, self.target = os.path.join(self.dir, "s"), (host, port)     # short: a socket path has ~108 bytes
+        self._server: Optional[socket.socket] = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            self._server.bind(self.path)
+            self._server.listen(64)
+        except OSError:
+            self.stop()
+            raise
+        threading.Thread(target=_pass_each, args=(self._server, self.target), daemon=True).start()
+
+    def stop(self) -> None:
+        server, self._server = self._server, None
+        if server is not None:
+            _close(server)
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+
 class Loopback:
     """An endpoint on this machine's loopback, as the relays' containers reach
     it: ``base`` and the ``hosts`` they are given. On Linux, a forwarder for
@@ -542,15 +817,25 @@ class Loopback:
     container there has for this machine, reached by the relays and by no
     agent, whose networks are internal - and passing each connection to the
     endpoint; the relays call it ``host.docker.internal``. Where the bridge
-    is not on this machine (Docker Desktop's virtual machine), that name
-    already reaches its loopback: only the name changes."""
+    is not on this machine and the engine runs as root (Docker Desktop's
+    virtual machine), that name already reaches its loopback: only the name
+    changes. On Linux, a rootless engine's gateway is in its own network
+    namespace, and podman's bridge has no address here until a container
+    joins it, so a :class:`SocketDoor` (``door``) passes each connection
+    instead, and one door container for the run reaches it, on the engine's
+    default network as the relays are. The relays call it
+    ``host.docker.internal`` there too, at the door's address, on port 8000."""
 
     NAME = "host.docker.internal"
+    DOOR_PORT = 8000                      # not the endpoint's: below 1024 needs a capability on podman
 
-    def __init__(self, base: str):
+    def __init__(self, base: str, *, image: str = "", job: str = ""):
         self.target = urllib.parse.urlsplit(base)
         self.base, self.hosts = base, {}
+        self.image, self.job = image, job       # the door container's (use_socket_doors)
         self._server: Optional[socket.socket] = None
+        self.door: Optional[SocketDoor] = None
+        self.container: Optional[str] = None
 
     def _url(self, port: Optional[int]) -> str:
         t = self.target
@@ -558,6 +843,24 @@ class Loopback:
         return urllib.parse.urlunsplit((t.scheme, netloc, t.path, t.query, t.fragment))
 
     def start(self) -> "Loopback":
+        if use_socket_doors():
+            self.door = SocketDoor(*self._endpoint())
+            self.container = f"nullius-{slug(self.job)}-model"
+            try:
+                make_bridge()
+                _docker(door_argv(self.image, name=self.container, job=self.job, port=self.DOOR_PORT,
+                                  socket_path=self.door.path)[1:],
+                        env=client_env({"NULLIUS_FORWARD_TO": "unix:" + self.door.path}))
+                wait_listening(self.container, "the door to the model server")
+                ip = _docker(["inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
+                              self.container]).stdout.split()
+                if not ip:
+                    raise Unavailable("the door to the model server has no address on the default network")
+            except Exception:
+                self.stop()
+                raise
+            self.base, self.hosts = self._url(self.DOOR_PORT), {self.NAME: ip[0]}
+            return self
         gateway = bridge_gateway()
         try:
             if not gateway:
@@ -567,43 +870,25 @@ class Loopback:
             self.base, self.hosts = self._url(self.target.port), {self.NAME: "host-gateway"}
             return self
         self.base, self.hosts = self._url(self._server.getsockname()[1]), {self.NAME: gateway}
-        threading.Thread(target=self._accept, daemon=True).start()
+        threading.Thread(target=_pass_each, args=(self._server, self._endpoint()), daemon=True).start()
         return self
 
-    def _accept(self) -> None:
-        port = self.target.port or (443 if self.target.scheme == "https" else 80)
-        while self._server is not None:
-            try:
-                inside, _ = self._server.accept()
-            except OSError:
-                return
-            try:
-                outside = socket.create_connection((self.target.hostname, port), timeout=10)
-                outside.settimeout(None)
-            except OSError:
-                inside.close()
-                continue
-            for a, b in ((inside, outside), (outside, inside)):
-                threading.Thread(target=self._pump, args=(a, b), daemon=True).start()
-
-    @staticmethod
-    def _pump(src: socket.socket, dst: socket.socket) -> None:
-        try:
-            while data := src.recv(65536):
-                dst.sendall(data)
-        except OSError:
-            pass
-        finally:
-            for sk in (src, dst):
-                try:
-                    sk.shutdown(socket.SHUT_RDWR)
-                except OSError:
-                    pass
+    def _endpoint(self) -> Tuple[str, int]:
+        t = self.target
+        return t.hostname, t.port or (443 if t.scheme == "https" else 80)
 
     def stop(self) -> None:
         server, self._server = self._server, None
         if server is not None:
-            server.close()
+            _close(server)
+        name, self.container = self.container, None
+        if name is not None:
+            try:
+                _docker(["rm", "-f", name], check=False, timeout=60)
+            except Unavailable:
+                pass
+        if self.door is not None:
+            self.door.stop()
 
 
 def server_alias(address: str, i: int = 1) -> Tuple[str, str, int]:
@@ -615,29 +900,33 @@ def server_alias(address: str, i: int = 1) -> Tuple[str, str, int]:
 
 
 def forward_argv(image: str, *, name: str, job: str, port: int, nonce_file: Optional[str] = None) -> List[str]:
-    """``docker run`` for a licence server's forwarder: on the default bridge,
-    its one file mounted, listening on the server's port. Where it forwards
-    is named, never given: ``-e NULLIUS_FORWARD_TO``. ``host.docker.internal``
-    is the machine the run is on, for a server there. ``nonce_file``: a
-    door's nonce, mounted read-only at ``FORWARD_NONCE_IN`` as the relay's
-    key is, never given."""
+    """``docker run`` for a licence server's forwarder: on the default bridge
+    (``BRIDGE`` on podman), its one file mounted, listening on the server's
+    port. Where it forwards is named, never given: ``-e NULLIUS_FORWARD_TO``.
+    ``host.docker.internal`` is the machine the run is on, for a server there
+    (where :func:`use_socket_doors`, ``Unit._forward`` gives such a server a
+    door instead). A macOS door mounts its nonce read-only."""
     mount = ["--mount", f"type=bind,source={nonce_file},target={FORWARD_NONCE_IN},readonly"] if nonce_file else []
-    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
-            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
+    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_keep_id(), "--user", _user(),
+            "--cap-drop", "ALL", *_security_opt(), "--init",
             "--add-host", "host.docker.internal:host-gateway", "-v", f"{FORWARD}:{FORWARD_IN}:ro", *mount,
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
             image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}",
             *(["--nonce-file", FORWARD_NONCE_IN] if nonce_file else [])]
 
 
-def door_argv(image: str, *, name: str, job: str, network: str, alias: str, port: int, socket_path: str) -> List[str]:
-    """``docker run`` for a door to a server on this machine (``mcp_machine``):
-    on the unit's internal network alone, as ``alias``, its one file and the
-    server's socket mounted, each alone and read-only. Where it forwards is
-    named, never given: ``-e NULLIUS_FORWARD_TO`` (``unix:<socket>``)."""
-    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
-            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
-            "--network", network, "--network-alias", alias,
+def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
+              network: Optional[str] = None, alias: Optional[str] = None) -> List[str]:
+    """``docker run`` for a door to a server on this machine (``mcp_machine``,
+    a :class:`SocketDoor`): on one internal network alone, as ``alias``, or
+    without ``network`` on the default one (``BRIDGE`` on podman: a
+    :class:`Loopback`'s), its one
+    file and the server's socket mounted, each alone and read-only. Where it
+    forwards is named, never given: ``-e NULLIUS_FORWARD_TO``
+    (``unix:<socket>``)."""
+    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *_userns(), "--user", _user(),
+            "--cap-drop", "ALL", *_security_opt(), "--init",
+            *(["--network", network, "--network-alias", alias] if network else way_out()),
             "-v", f"{FORWARD}:{FORWARD_IN}:ro", "-v", f"{socket_path}:{socket_path}:ro",
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
             image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}"]
@@ -645,9 +934,9 @@ def door_argv(image: str, *, name: str, job: str, network: str, alias: str, port
 
 def egress_argv(image: str, *, name: str, job: str) -> List[str]:
     """``docker run`` for an own image's check's proxy (``egress.py``): on the
-    default bridge, its one file mounted, nothing else given."""
-    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
-            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
+    default bridge (``BRIDGE`` on podman), its one file mounted, nothing else given."""
+    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_keep_id(), "--user", _user(),
+            "--cap-drop", "ALL", *_security_opt(), "--init",
             "-v", f"{EGRESS}:{EGRESS_IN}:ro", "-e", "PYTHONDONTWRITEBYTECODE=1",
             image, "python3", EGRESS_IN, "--listen", f"0.0.0.0:{EGRESS_PORT}"]
 
@@ -693,10 +982,12 @@ class Unit:
         self.key_dir: Optional[str] = None     # its secret files' folder, until what reads them listens
         self.network_probe = network_probe
         self.network_env = {}
+        self.socket_doors: List[SocketDoor] = []
         os.makedirs(record_dir, exist_ok=True)
 
     def start(self) -> "Unit":
         try:
+            make_bridge()
             _docker(["network", "create", "--internal", "--label", f"{LABEL}={self.job}", self.names["network"]])
             self.network = True
             argv = relay_argv(self.image, name=self.names["relay"], job=self.job, app=self.app, record=self.dir,
@@ -714,7 +1005,7 @@ class Unit:
             for i, address in enumerate(self.servers, 1):
                 self.reach[address] = self._forward(i, address)
             for i, (alias, port, sock) in enumerate(self.doors, 1):
-                self._door(i, alias, port, sock)
+                self._door(f"{self.names['agent']}-mcp{i}", alias, port, sock, "the door to the benchmark's MCP server")
             if self.network_probe:
                 self._online()
         except Exception:
@@ -776,9 +1067,17 @@ class Unit:
     def _forward(self, i: int, address: str) -> str:
         """A licence server's forwarder, started and on the unit's network
         under the server's name: the address the agent reaches it by. It joins
-        that network once it listens, after it resolves the server's name."""
+        that network once it listens, after it resolves the server's name. One
+        at ``host.docker.internal``, where :func:`use_socket_doors`, is a door
+        to a :class:`SocketDoor` instead, as ``licence-server-<i>``."""
         alias, host, port = server_alias(address, i)
         name = f"{self.names['agent']}-lic{i}"
+        if use_socket_doors() and host == Loopback.NAME:
+            door = SocketDoor("127.0.0.1", port)
+            self.socket_doors.append(door)
+            alias = f"licence-server-{i}"
+            self._door(name, alias, port, door.path, "the licence server's forwarder")
+            return f"{alias}:{port}"
         self.started.append(name)
         _docker(forward_argv(self.image, name=name, job=self.job, port=port)[1:],
                 env=client_env({"NULLIUS_FORWARD_TO": f"{host}:{port}"}))
@@ -786,11 +1085,10 @@ class Unit:
         _docker(["network", "connect", "--alias", alias, self.names["network"], name])
         return f"{alias}:{port}"
 
-    def _door(self, i: int, alias: str, port: int, sock: str) -> None:
+    def _door(self, name: str, alias: str, port: int, sock: str, what: str) -> None:
         """A door to a server on this machine, on the unit's network alone. On
         macOS, a forwarder to a loopback TCP bridge here that serves a
         connection only after the door's nonce line, given as a key file."""
-        name = f"{self.names['agent']}-mcp{i}"
         self.started.append(name)
         if platform.system() == "Darwin":
             # Docker Desktop cannot connect to host Unix sockets through a
@@ -819,14 +1117,14 @@ class Unit:
             self.socket_bridges.append(bridge)
             threading.Thread(target=bridge.serve_forever, daemon=True).start()
             _docker(forward_argv(self.image, name=name, job=self.job, port=port,
-                                 nonce_file=self._key_file(f"door-{i}", nonce))[1:],
+                                 nonce_file=self._key_file(name, nonce))[1:],
                     env=client_env({"NULLIUS_FORWARD_TO": f"host.docker.internal:{bridge.server_address[1]}"}))
             _docker(["network", "connect", "--alias", alias, self.names["network"], name])
         else:
             _docker(door_argv(self.image, name=name, job=self.job, network=self.names["network"], alias=alias,
                               port=port, socket_path=sock)[1:],
                     env=client_env({"NULLIUS_FORWARD_TO": "unix:" + sock}))
-        self._wait(name, "the door to the benchmark's MCP server")
+        self._wait(name, what)
         self._forget_key()                       # read before it listens
 
     def _wait(self, name: str, what: str, timeout: float = 30):
@@ -853,7 +1151,7 @@ class Unit:
              image: Optional[str] = None, interactive: bool = True,
              binds: Iterable[Tuple[str, str]] = ()) -> Tuple[List[str], dict]:
         """A command and its environment turned into ``docker run`` and the
-        docker program's environment, the process's variables passed by name;
+        engine program's environment (:func:`env_args`, :func:`program_env`);
         ``binds``, licence files mounted read-only where they are declared."""
         app = os.path.abspath(self.app)
         binds = [(os.path.abspath(src), dest) for src, dest in binds]
@@ -865,10 +1163,10 @@ class Unit:
                 raise ValueError(f"{src} is in this application's folder: a licence is never mounted from there")
         inside = {k: v for k, v in {**env, **self.network_env}.items() if k not in HOST_ONLY}
         argv = run_argv(image or self.image, cmd, name=self.names["agent"], network=self.names["network"], job=self.job,
-                        workdir=workdir, mounted=mounted, env_names=inside, path=inside.get("PATH") or IMAGE_PATH,
+                        workdir=workdir, mounted=mounted, env=inside, path=inside.get("PATH") or IMAGE_PATH,
                         interactive=interactive, binds=binds)
         self.started.append(self.names["agent"])
-        return argv, client_env({k: v for k, v in inside.items() if k != "PATH"})
+        return argv, program_env(inside)
 
     def stop(self):
         """Remove the unit's containers and network, and the key's file if the
@@ -898,6 +1196,10 @@ class Unit:
             bridge.shutdown()
             bridge.server_close()
         self.socket_bridges = []
+
+        for d in self.socket_doors:
+            d.stop()
+        self.socket_doors = []
         if self.network:
             try:
                 _docker(["network", "rm", self.names["network"]], check=False, timeout=60)
@@ -908,7 +1210,7 @@ class Unit:
 
 # -- an own image: the task's container, the agent added at run time -------------
 RUNTIMES = "/opt/nullius"                # where an own image is given what the agent runs on
-PYTHON_VERSION = "3.12.14"               # the standalone Python an agent started as python3 runs on there
+PYTHON_VERSION = "3.12.14"               # the standalone Python an agent started as python3 runs on there; moves with UV_VERSION
 _PULL = re.compile(r"^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$")
 IMAGE_SPEC = ("build", "pull", "memory_mb", "cpus")
 STEP = ("copy", "write", "run", "collect", "seconds", "network", "keep_processes")
@@ -992,6 +1294,25 @@ def spec_problems(spec) -> List[str]:
     for k in ("memory_mb", "cpus"):
         if k in spec and (not isinstance(spec[k], (int, float)) or isinstance(spec[k], bool) or spec[k] <= 0):
             bad.append(f"image.{k}: a positive number")
+    return bad
+
+
+def task_env_problems(env, reserved: Iterable[str] = ()) -> List[str]:
+    """Task variables for an agent in its own image, never its model configuration."""
+    if not isinstance(env, dict):
+        return ["env: an object of variable names and string values"]
+    bad = []
+    for name, value in env.items():
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Z_][A-Z0-9_]*", name):
+            bad.append("env: variable names use capitals, digits and underscores")
+            continue
+        if (name in reserved or name.startswith(("NULLIUS_", "DOCKER_"))
+                or re.search(r"(^|_)(API|AUTH|KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?|BASE_URL|ENDPOINT|MODEL)(_|$)", name)):
+            bad.append(f"env.{name}: model settings and credentials belong to the run")
+        if not isinstance(value, str) or "\0" in value:
+            bad.append(f"env.{name}: a string without NUL")
+        elif name == "PATH" and any(not part.startswith("/") for part in value.split(":")):
+            bad.append("env.PATH: absolute folders separated by ':'")
     return bad
 
 
@@ -1154,18 +1475,24 @@ def python_runtime() -> str:
     """A standalone Python for an own image (python-build-standalone, by
     ``uv python install``, which checks it by its own pinned digests),
     installed once into ``<STANDARD_DIR>/runtimes/python-<version>``: the
-    interpreter's folder. A glibc build, as Node's is."""
+    interpreter's folder. Installed in the base image, so it is a glibc
+    build, as Node's is, whatever this machine's libc."""
     where = os.path.join(runtimes_dir(), f"python-{PYTHON_VERSION}")
     found = lambda: sorted(glob.glob(os.path.join(where, f"cpython-{PYTHON_VERSION}-linux-*-gnu")))
     if install.ready(where) and found():
         return found()[0]
     with install._locked(where):
         if not (install.ready(where) and found()):
+            os.makedirs(where, exist_ok=True)
             try:
-                r = subprocess.run(["uv", "python", "install", PYTHON_VERSION, "--install-dir", where, "--no-bin"],
-                                   env=install.install_env(), capture_output=True, text=True, timeout=1800)
+                r = subprocess.run(install_argv(base_image(), where, ["uv", "python", "install", PYTHON_VERSION,
+                                                                     "--install-dir", where, "--no-bin"]),
+                                   env=client_env({k: os.environ[k] for k in INSTALL_KEEP if k in os.environ}),
+                                   capture_output=True, text=True, timeout=1800)
             except (OSError, subprocess.TimeoutExpired) as e:
                 raise Unavailable(f"installing Python {PYTHON_VERSION}: {e}")
+            finally:
+                install.remove_scratch(where)
             if r.returncode != 0 or not found():
                 raise Unavailable(f"installing Python {PYTHON_VERSION}: {(r.stderr or r.stdout).strip()[-300:]}")
             open(os.path.join(where, install.MARK), "w").close()
@@ -1254,9 +1581,10 @@ class Box:
     def __init__(self, job: str, tag: str, image: str, *, workdir: str, path: str = IMAGE_PATH,
                  network: Optional[str] = None, mounted: Iterable[Tuple[str, bool]] = (),
                  runtimes: Optional[Dict[str, Tuple[str, str]]] = None, memory_mb=None, cpus=None,
-                 app: Optional[str] = None):
+                 app: Optional[str] = None, env: Optional[dict] = None):
         n = names(job, tag)
         self.job, self.image, self.workdir, self.path = job, image, workdir, path
+        self.env = dict(env or {})
         self.name = n["agent"]
         self.net = network or n["network"]
         self.own_net = network is None
@@ -1275,8 +1603,10 @@ class Box:
         try:
             if self.own_net:
                 _docker(["network", "create", "--internal", "--label", f"{LABEL}={self.job}", self.net])
+            # in the machine's user namespace on podman (its root stays this user on rootless podman whatever
+            # containers.conf sets: keep-id makes it a sub-uid) and on a Docker with userns-remap
             a = ["run", "-d", "--name", self.name, "--label", f"{LABEL}={self.job}", "--network", self.net, "--init",
-                 "--security-opt", "no-new-privileges", "-w", self.workdir]
+                 *_security_opt(), "-w", self.workdir, *(["--userns=host"] if podman() else _userns())]
             if self.memory_mb:
                 a += ["--memory", f"{int(self.memory_mb)}m"]
             if self.cpus:
@@ -1293,15 +1623,13 @@ class Box:
             raise
         return self
 
-    def exec_argv(self, cmd: List[str], env_names: Iterable[str], path: str, *, interactive: bool = True,
+    def exec_argv(self, cmd: List[str], env: Dict[str, str], path: str, *, interactive: bool = True,
                   workdir: Optional[str] = None) -> List[str]:
-        """``docker exec`` of a command in the box, its environment passed by
-        name (``-e NAME``, the value in the docker program's own environment)
-        but for ``PATH``."""
-        a = [DOCKER, "exec"] + (["-i"] if interactive else []) + ["-w", workdir or self.workdir, "-e", "PATH=" + path]
-        for k in sorted(set(env_names) - {"PATH"}):
-            a += ["-e", k]
-        return a + [self.name] + list(cmd)
+        """``docker exec`` of a command in the box, its environment as
+        :func:`env_args` gives it."""
+        values, named = env_args(env, path)
+        return [DOCKER, "exec", *(["-i"] if interactive else []), "-w", workdir or self.workdir,
+                *values, *named, self.name, *cmd]
 
     def run(self, cmd: List[str], seconds: float, *, user: Optional[str] = None, env: Optional[dict] = None) -> dict:
         """A command run in the box, to its end or ``seconds``: {exit, output,
@@ -1316,7 +1644,7 @@ class Box:
             out = e.stdout or b""
             return {"exit": None, "output": out.decode("utf-8", "replace") if isinstance(out, bytes) else out, "timed_out": True}
         except FileNotFoundError:
-            raise Unavailable("docker is not installed on this machine")
+            raise Unavailable(f"{DOCKER} is not installed on this machine")
         return {"exit": r.returncode, "output": r.stdout.decode("utf-8", "replace"), "timed_out": False}
 
     def copy_in(self, src: str, dest: str):
@@ -1378,13 +1706,14 @@ class Box:
 
     def online(self) -> Dict[str, str]:
         """A way out for the check: its proxy (``egress.py``, in the base image)
-        started on the default bridge and joined to the box's network as
+        started on the default bridge (``BRIDGE`` on podman) and joined to the box's network as
         ``egress``. The box itself stays on its internal network. The
         variables the check is run with, which name the proxy - and leave
         the box's own services (``localhost``) to be reached directly."""
         image = base_image()
         name = self.name + "-egress"
         self.egress = name
+        make_bridge()
         _docker(egress_argv(image, name=name, job=self.job)[1:])
         _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.net, name])
         wait_listening(name, "the check's proxy")
@@ -1426,11 +1755,12 @@ class Box:
 
     def give_back(self, paths: Iterable[str]):
         """The folders of this machine the box wrote into, given back to this
-        machine's user: what root wrote there is the user's to read and remove."""
+        machine's user: what root wrote there is the user's to read and remove.
+        On a rootless engine the box's root is that user."""
         paths = [p for p in paths if p]
         if self.up and paths:
             try:
-                self.run(["chown", "-R", _user()] + paths, 120, user="0")
+                self.run(["chown", "-R", "0:0" if rootless() else _user()] + paths, 120, user="0")
             except Unavailable:
                 pass
 

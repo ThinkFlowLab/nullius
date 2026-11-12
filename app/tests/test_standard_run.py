@@ -222,7 +222,7 @@ class RunTest(unittest.TestCase):
             info = json.load(f)["exception_info"]
         self.assertEqual(info["exception_type"], "CancelledError")
         self.assertIn("stopped before this unit ended", info["exception_message"])
-        self.assertEqual(classify.from_verdict(info["exception_type"], None), classify.UNKNOWN)   # charged to no one
+        self.assertEqual(classify.from_verdict(info["exception_type"], None), classify.CANCELLED)   # charged to no one
         with open(os.path.join(self.tmp, "stopped", run.live_feed.FEED)) as f:
             ends = [e for e in map(json.loads, f) if e.get("event") == "trial.end" and e.get("task") == "good"]
         self.assertEqual([e.get("outcome") for e in ends], ["cancelled"])         # the live board's word for it
@@ -743,6 +743,7 @@ class RunTest(unittest.TestCase):
         host = os.path.join(self.tmp, "host-home")
         with mock.patch.object(container, "unusable", return_value=None), \
                 mock.patch.dict(os.environ, {"HOME": host}, clear=True), \
+                mock.patch.object(container, "_context", return_value={"DOCKER_HOST": "unix:///run/alt.sock"}), \
                 mock.patch.object(run.jsonl, "Proc") as proc:
             r = run.Run(b, a, model="m", provider="custom", env=self.env,
                         backend="docker", jobs_root=self.tmp)
@@ -750,7 +751,8 @@ class RunTest(unittest.TestCase):
             r.driver()
             environment = proc.call_args.args[2]
             self.assertNotEqual(environment["HOME"], host)
-            self.assertEqual(environment["DOCKER_CONFIG"], os.path.join(host, ".docker"))
+            self.assertEqual(environment["DOCKER_HOST"], "unix:///run/alt.sock")
+            self.assertNotIn("DOCKER_CONFIG", environment)
             self.assertEqual(environment[container.CHECK_IMAGE], "fixture-image")
 
     def test_a_docker_original_setups_driver_starts_in_its_setup_container(self):
@@ -787,6 +789,43 @@ class RunTest(unittest.TestCase):
         self.assertEqual((kw["files"], kw["servers"]), (["/held/tool.lic"], ["TOOL_SERVER"]))
         self.assertTrue(cwd.startswith(r.job_dir) and log.startswith(r.job_dir))
         self.assertEqual(r.drivers, [d])
+
+    def test_on_the_docker_backend_the_agent_is_installed_in_the_base_image_whatever_this_machine(self):
+        from unittest import mock
+        from nullius.standard import container, install
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        a = definitions.get("agent", "fake", ROOT)
+        env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}
+        with mock.patch.object(container, "unusable", return_value=None), \
+                mock.patch.object(container, "present", return_value=True), \
+                mock.patch.object(container, "base_image", return_value="nullius/base:x"):
+            for backend, unsandboxed in (("docker", False), ("local", True)):
+                r = run.Run(b, a, model="m", provider="custom", env=env, backend=backend, unsandboxed=unsandboxed,
+                            jobs_root=os.path.join(self.tmp, "jobs"), say=lambda s: None)
+                with self.subTest(backend=backend), mock.patch.object(install, "packages", return_value=self.tmp) as pk:
+                    r.ready()
+                    kw = pk.call_args.kwargs
+                    if backend == "docker":     # the Linux base image's tools and libc, never this machine's
+                        self.assertEqual(kw["image"], "nullius/base:x")
+                        self.assertEqual(kw["run_in"](["uv", "venv"], "/w")[-3:], ["nullius/base:x", "uv", "venv"])
+                    else:
+                        self.assertEqual((kw["image"], kw["run_in"]), (None, None))
+
+    def test_a_model_door_that_fails_to_open_still_writes_the_jobs_result(self):
+        from unittest import mock
+        from nullius.standard import container
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        a = definitions.get("agent", "fake", ROOT)
+        env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}
+        with mock.patch.object(container, "unusable", return_value=None), mock.patch.object(container, "sweep"), \
+                mock.patch.object(container, "present", return_value=True), \
+                mock.patch.object(container, "base_image", return_value="img"), \
+                mock.patch.object(container.Loopback, "start", side_effect=OSError("cannot bind")):
+            with self.assertRaisesRegex(OSError, "cannot bind"):
+                run.run(b, a, model="m", provider="custom", env=env, backend="docker", jobs_root=os.path.join(self.tmp, "jobs"),
+                        say=lambda s: None, limit=1)
+        (job,) = os.listdir(os.path.join(self.tmp, "jobs"))
+        self.assertTrue(os.path.exists(os.path.join(self.tmp, "jobs", job, "result.json")))
 
     def test_a_missing_key_is_refused(self):
         b = definitions.get("benchmark", "fakebench", ROOT)

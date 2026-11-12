@@ -23,6 +23,7 @@ class Login(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, self.tmp, True)
         patcher = mock.patch.dict(os.environ, {"DOCKER_CONFIG": self.tmp}); patcher.start(); self.addCleanup(patcher.stop)
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))
 
     def config(self, body):
         with open(os.path.join(self.tmp, "config.json"), "w") as f:
@@ -38,6 +39,23 @@ class Login(unittest.TestCase):
         self.assertEqual(given, "dckr_pat_synthetic\n")
         self.assertNotIn("dckr_pat_synthetic", " ".join(args))
         self.assertEqual(os.listdir(self.tmp), [])                          # nothing written by Nullius
+
+    def test_podman_logs_in_to_docker_hub_by_name_and_says_who(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        calls = []
+        answer = lambda args, **kw: calls.append((args, kw.get("input"))) or done(out="someone\n" if "--get-login" in args else "")
+        with mock.patch.object(container, "_docker", answer):
+            self.assertEqual(sandbox.login("someone", "dckr_pat_synthetic"), {"ok": True, "user": "someone"})
+            self.assertEqual(sandbox.logout(), {"ok": True})
+        self.assertEqual(calls, [(["login", "--username", "someone", "--password-stdin", "docker.io"], "dckr_pat_synthetic\n"),
+                                 (["login", "--get-login", "docker.io"], None), (["logout", "docker.io"], None)])
+        with mock.patch.object(container, "_docker", side_effect=container.Unavailable("podman is not installed on this machine")):
+            self.assertIsNone(sandbox.login_user())                              # the page still answers
+
+    def test_the_engine_is_named_with_its_version(self):
+        with mock.patch.object(container, "DOCKER", "podman"), mock.patch.object(container, "unusable", return_value=None), \
+                mock.patch.object(container, "_docker", return_value=done(out="6.1.4\n")):
+            self.assertEqual(sandbox.docker_state(), {"ok": True, "version": "podman 6.1.4"})
 
     def test_a_bad_username_or_empty_token_asks_docker_nothing(self):
         with mock.patch.object(container, "_docker", lambda *a, **kw: self.fail("docker asked")):

@@ -215,7 +215,7 @@
   <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}">
     <div class="st-section-head"><h2 id="sandbox-h">Sandbox</h2><p>Where agents run, apart from this machine.</p></div>
     <div class="st-card">
-      <div class="st-row"><span class="st-row-label">Docker</span><span class="st-row-value" data-docker-state>Checking…</span></div>
+      <div class="st-row"><span class="st-row-label">Engine</span><span class="st-row-value" data-docker-state>Checking…</span></div>
     </div>
   </section>
 
@@ -239,6 +239,10 @@
           <div class="st-row-value"><input class="st-input" id="price-output" name="output" type="number" min="0" step="any" inputmode="decimal" required></div></div>
         <div class="st-row"><label class="st-row-label" for="price-cached">Cached input</label>
           <div class="st-row-value"><input class="st-input" id="price-cached" name="cached" type="number" min="0" step="any" inputmode="decimal"></div></div>
+        <div class="st-row"><label class="st-row-label" for="price-cache-write">Cache write</label>
+          <div class="st-row-value"><input class="st-input" id="price-cache-write" name="cache_write" type="number" min="0" step="any" inputmode="decimal"></div></div>
+        <div class="st-row"><label class="st-row-label" for="price-cache-write-1h">Cache write · 1 hour</label>
+          <div class="st-row-value"><input class="st-input" id="price-cache-write-1h" name="cache_write_1h" type="number" min="0" step="any" inputmode="decimal"></div></div>
         <div class="st-row"><span class="st-row-label"></span><span class="st-row-value st-value"><button type="submit" class="btn sm">Add</button></span></div>
       </form>
       {% endif %}
@@ -372,7 +376,7 @@
       const j = await r.json();
       if (!j.ok) return {ok: false, error: j.error || ('HTTP ' + r.status)};
       const has = k => k + (j[k] ? '' : ' missing');
-      return {ok: true, detail: [j.hostname, has('uv'), j.docker ? (j.docker_ok ? 'docker' : 'docker (no access)') : 'docker missing', j.harbor ? 'harbor ' + (j.harbor_version || '') : 'harbor missing', j.latency_ms + ' ms'].filter(Boolean).join(' · ')};
+      return {ok: true, detail: [j.hostname, has('uv'), j.engine ? j.engine + (j[j.engine + '_ok'] ? '' : ' (no access)') : 'docker or podman missing', j.harbor ? 'harbor ' + (j.harbor_version || '') : 'harbor missing', j.latency_ms + ' ms'].filter(Boolean).join(' · ')};
     } catch (err) { return {ok: false, error: String(err)}; }
   };
   // The Add host dialog. Either panel names one host; Test tries it and Add puts it in the list with what Test found.

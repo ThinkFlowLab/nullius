@@ -126,7 +126,8 @@ class Tag(unittest.TestCase):
 
         container._built.clear()
         with mock.patch.object(container, "base_image", return_value="nullius/base:aaa"), \
-                mock.patch.object(container, "_docker", side_effect=docker):
+                mock.patch.object(container, "_docker", side_effect=docker), \
+                mock.patch.object(container, "_security", None):         # the fake's answer is not kept
             work = os.path.join(self.tmp, "work")
             t1 = container.image_for(b, {"environment": "licensed"}, None, work)
             t2 = container.image_for(b, {"environment": "licensed"}, None, work)
@@ -416,7 +417,7 @@ class DockerRun(_Runs):
         self.assertTrue(t["plain"]["standard"]["image"].startswith("nullius/base:"))
         self.assertEqual(t["licensed"]["exception_info"]["exception_message"], MISSING)
         self.assertTrue(os.path.isfile(os.path.join(job_dir, ".work", "env-tool.log")) or
-                        subprocess.run(["docker", "image", "inspect", t["tool"]["standard"]["image"]],
+                        subprocess.run([container.DOCKER, "image", "inspect", t["tool"]["standard"]["image"]],
                                        stdout=subprocess.DEVNULL).returncode == 0)
 
         self.store(server_host="host.docker.internal")
@@ -431,7 +432,7 @@ class DockerRun(_Runs):
         self.assertEqual(t["plain"]["_score"]["detail"]["server"], "no")
         self.assertRegex(lic["standard"]["image"], r"^nullius/env-envbench-licensed:")
         self.assertNoSecretIn(job_dir)
-        left = subprocess.run(["docker", "ps", "-aq", "--filter", f"label={container.LABEL}={os.path.basename(job_dir)}"],
+        left = subprocess.run([container.DOCKER, "ps", "-aq", "--filter", f"label={container.LABEL}={os.path.basename(job_dir)}"],
                               capture_output=True, text=True).stdout.split()
         self.assertEqual(left, [])                                                               # the forwarder went with its unit
 

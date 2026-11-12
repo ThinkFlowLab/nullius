@@ -18,6 +18,8 @@ import shutil
 import subprocess
 from typing import Callable, Iterable, Optional
 
+from nullius.standard import container
+
 CONTROLS = ("nop", "oracle")
 PROVIDER_KEYS = ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "MODEL_API_URL")
 
@@ -26,7 +28,7 @@ SECTIONS = [
         {"id": "provider", "text": "Add a model provider key", "fact": "provider",
          "target": [["#providers", "Add a key for one provider"]]},
         {"id": "where", "text": "Choose where runs happen", "fact": "where",
-         "target": [["#hosts", "Add a host, or run on this machine with docker"]]},
+         "target": [["#hosts", "Add a host, or run on this machine with Docker or Podman"]]},
         {"id": "judge", "text": "Pick a judge", "fact": "judge", "optional": True,
          "target": [["#judge", "Choose System One or an LLM judge"]]},
     ]},
@@ -62,13 +64,14 @@ SECTIONS = [
 
 
 def docker_answers(timeout: float = 5.0) -> bool:
-    """Whether docker can run a container here: the command *and* ``docker
-    ps`` answering. The command alone is not enough - Docker Desktop's WSL
+    """Whether the docker backend's engine (``container.DOCKER``: docker, or
+    podman) can run a container here: the command *and* ``<engine> ps``
+    answering. The command alone is not enough - Docker Desktop's WSL
     integration leaves ``/usr/bin/docker`` in place while its engine is quit."""
-    if not shutil.which("docker"):
+    if not shutil.which(container.DOCKER):
         return False
     try:
-        return subprocess.run(["docker", "ps"], capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL).returncode == 0
+        return subprocess.run([container.DOCKER, "ps"], capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
 

@@ -167,6 +167,7 @@ class Door(unittest.TestCase):
         self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))   # start() writes the relay's key file
 
     def test_the_door_is_on_the_units_network_alone_with_the_socket_alone(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
         a = container.door_argv("img", name="n", job="j", network="net", alias="mcp-1-tools", port=9000, socket_path="/tmp/x/s")
         self.assertEqual(a[a.index("--network") + 1], "net")
         self.assertIn("--network-alias", a)
@@ -185,7 +186,7 @@ class Door(unittest.TestCase):
             said.append((args, dict(env or {})))
             out = "127.0.0.1:5555\n" if args[:1] == ["port"] else '{"event": "listening"}'
             return subprocess.CompletedProcess(args, 0, out, "")
-        with mock.patch.object(container, "_docker", side_effect=docker), mock.patch.object(container.platform, "system", return_value="Linux"):
+        with mock.patch.object(container, "_docker", side_effect=docker), mock.patch.object(container.platform, "system", return_value="Linux"), mock.patch.object(container, "_security", None):
             u = container.Unit("job", "u0001", tempfile.mkdtemp(), image="img", app="/app", base="https://x/v1", key="k",
                                doors=[("mcp-1-tools", 9000, "/tmp/d/s")]).start()
         runs = [(a, e) for a, e in said if a[:1] == ["run"]]

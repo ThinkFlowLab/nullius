@@ -16,6 +16,23 @@ APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class DriverContainer(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch.object(container, "_security", ""))
+        self.enterContext(patch.object(container, "DOCKER", "docker"))
+
+    def test_podman_keeps_its_host_home_and_uses_the_dns_bridge(self):
+        with tempfile.TemporaryDirectory() as root:
+            os.mkdir(root + "/.work")
+            with patch.object(setup_container.install, "HOME", root + "/installs"):
+                driver = setup_container.Driver({"_here": root + "/benchmark", "key": "fixture"},
+                    image="img", app="/source/app", job="fixture", work=root, upstream=None, data=None, needs=[])
+            with patch.object(container, "DOCKER", "podman"), \
+                    patch.dict(os.environ, {"HOME": "/host-home"}):
+                argv, env, _ = driver.command({"HOME": root + "/driver-home"}, root)
+            self.assertEqual(env["HOME"], "/host-home")
+            self.assertIn("HOME=" + root + "/driver-home", argv)
+            self.assertEqual(argv[argv.index("--network") + 1], container.BRIDGE)
+
     def test_mounts_and_environment_do_not_include_personal_configuration(self):
         with tempfile.TemporaryDirectory() as root:
             os.mkdir(root + '/.work')

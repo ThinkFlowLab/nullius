@@ -167,7 +167,7 @@ class StopAfterThePartEnded(LocalHost):
                     d = root / name if target == "here" else self.on_host(name)
                     gate.write_text("")
                     for _ in range(500):                                         # a ends by itself, before the run looks again
-                        if (d / "run-a.exit").exists():
+                        if (d / "run-a.exit").exists() and (d / "run-a.exit").read_text().strip():
                             break
                         time.sleep(0.02)
                     self.assertEqual((d / "run-a.exit").read_text().strip(), str(rc))

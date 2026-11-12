@@ -141,7 +141,7 @@ record); verifier/reward.txt and score.json
 | --- | --- |
 | Units | Run `-j` at a time, each with its own workspace (a git repository of its own), home and relay |
 | A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost |
-| Backends (`--backend`) | `local`: processes on this machine. `docker`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`). For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`). On Docker a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image |
+| Backends (`--backend`) | `local`: processes on this machine. `docker`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`); on docker a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image |
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
 | Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate, unless the unit passed; a turn past its limit is the agent's timeout. `"kind": "score"` leaves a score and no pass |
 | The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. Provider `anthropic` speaks Anthropic's Messages (`ANTHROPIC_API_KEY` as `x-api-key`) |
@@ -152,16 +152,23 @@ record); verifier/reward.txt and score.json
 !!! warning "The local backend is not a sandbox"
     An agent runs as you, in the unit's workspace, with its own `HOME`, `PATH` and locale. An agent run or conformance check is refused there without `--unsandboxed`; the job's config records it, and that the agent's permission requests were granted. Capabilities are not asked.
 
-The docker backend (`--backend docker`) is the isolation, and needs no such yes. Per unit:
+A benchmark whose check executes submitted code declares `score.runs_code: true` (optional boolean, default false). Its Original setup uses the base image through `NULLIUS_CHECK_IMAGE` when Docker is usable; otherwise it requires `--unsandboxed`. Container failures never fall back to local execution. HumanEval's trial detail records `check: container` or `check: this machine`.
+
+The docker backend (`--backend docker`) is the isolation, and needs no such yes. On Podman, Nullius's containers and an own image's, the agent's included, run with `--security-opt label=disable`, so they read the folders they mount, which are never relabelled. Docker's default daemon (`selinux-enabled` off) gives its containers no SELinux label either. Per unit:
 
 | Piece | Rule |
 | --- | --- |
-| One base image | `nullius/base:<hash>`: Ubuntu 24.04, git, python3, curl, CA certificates, tmux and Node 22. Environments are layers on it ([Per-task environments](#per-task-environments)), or each task's own image ([Own images](#own-images)) |
-| The agent's container | Runs as you (`--user`), no capabilities, only on the unit's internal network: no route out. Read-write: the unit's workspace and home, the MCP call log folder. Read-only, at its path here: the agent's install and definition folder, its MCP servers' files. Never `app/` (refused), the benchmark's folder or upstream |
-| The relay is a sidecar | On that network as `relay`, and on the default bridge: the agent's one way out besides the public web proxy below, `http://relay:8080/<unit>/v1`; its port on 127.0.0.1 for the driver. The key reaches the relay's container only, as an owner-only file in the user's cache (`relay-keys/`), mounted read-only and removed from this machine once the relay listens. It stays readable in that container until it stops. `docker inspect` does not show it, and it is never in the agent's environment, files or mounts |
+| One base image | `nullius/base:<hash>`: Ubuntu 24.04, git, python3, curl, CA certificates, tmux, Node 22 and uv, pinned by digest. Environments are layers on it ([Per-task environments](#per-task-environments)), or each task's own image ([Own images](#own-images)) |
+| The agent's or capability's install | Made in the base image, with the image's Node and uv, into the install folder mounted at its own path; uv's Python goes inside the folder. This machine's proxy and package index variables are passed on. Upstream clones use git on this machine, with its credentials. The folder's digest includes the base image's tag, so an install made for the docker backend is never the local backend's, and a new base image installs every agent again; older folders stay until removed. The machine needs no Node or uv for the agent |
+| The agent's container | Runs as you (`--user`: your uid, with `--userns=keep-id` on rootless Podman, or root on rootless Docker, where root is you), no capabilities, only on the unit's internal network: no route out. Read-write: the unit's workspace and home, the MCP call log folder. Read-only, at its path here: the agent's install and definition folder, its MCP servers' files. Never `app/` (refused), the benchmark's folder or upstream |
+| The relay is a sidecar | On that network as `relay`, and on the default bridge (on Podman, `nullius-bridge`, a bridge with DNS, made when missing): the agent's way out besides the public web proxy below, `http://relay:8080/<unit>/v1`; its port on 127.0.0.1 for the driver. The key reaches the relay's container only, as an owner-only file in the user's cache (`relay-keys/`), mounted read-only and removed from this machine once the relay listens. It stays readable in that container until it stops. `docker inspect` does not show it, and it is never in the agent's environment, files or mounts |
 | Public web | Only for an agent whose environment declares `network`: an `egress` proxy on the unit's network, to public addresses only ([Public web requirements](#public-web-requirements)) |
-| A model server on this machine | An endpoint on its loopback (`http://localhost:11434/v1`) is reached by the relays as `host.docker.internal`, through a forwarder the run keeps on the default bridge's gateway alone; the agents' internal networks do not reach it |
-| Cleanup | Everything a unit starts is labelled `nullius.job=<job>` and removed when it ends, after an error too; the run sweeps the label |
+| A model server on this machine | An endpoint on its loopback (`http://localhost:11434/v1`) is reached by the relays as `host.docker.internal`, through a forwarder the run keeps on the default bridge's gateway alone. On a rootless engine or Podman on Linux, as `host.docker.internal:8000`: one door container for the run, on the engine's default network, to a Unix socket on this machine. The agents' internal networks do not reach it |
+| Cleanup | Everything a unit starts is labelled `nullius.job=<job>` and removed when it ends, after an error too; the run sweeps the label. On Podman, `nullius-bridge` stays for the next run |
+
+Through Podman's Docker API (a docker CLI with `DOCKER_HOST` at `podman system service`'s socket), Nullius runs docker and needs `netns = "bridge"`, a DNS-enabled `default_network`, and `userns` at its default in `containers.conf`: with `keep-id`, a container's root is a sub-uid and cannot write the unit's folders.
+
+A rootful Docker with `userns-remap` maps the uids of each container to sub-uids. There, the containers that use your files (the agent's, the relay, an install, the check, a door and an own image) run with `--userns=host`, as on a default Docker. The licence forwarder and the check's proxy keep the remap.
 
 ### A benchmark's MCP server on the machine
 
@@ -247,7 +254,7 @@ An entry with `"provider": "huggingface"` is a `value` to the `driver`, read fro
 | --- | --- | --- |
 | `value` (default) | A key or access token, the variable `name` of its process | By name, never on an argument list |
 | `file` | A licence file; `env` names a variable holding its path, required on local processes | Mounted read-only at `path` (absolute, not under `/proc`, `/sys` or `/dev`) |
-| `server` | A licence server, `host:port`, as the variable `name` | A forwarder beside the relay (`standard/forward.py`) under the server's own name, the one address the agent may reach; an IPv4 address as `licence-server-<i>`, `host.docker.internal` the machine the run is on |
+| `server` | A licence server, `host:port`, as the variable `name` | A forwarder beside the relay (`standard/forward.py`) under the server's own name, the one address the agent may reach; an IPv4 address as `licence-server-<i>`, `host.docker.internal` the machine the run is on. On a rootless engine or Podman on Linux, `host.docker.internal` is reached as `licence-server-<i>` through a Unix socket |
 
 | Rule | Detail |
 | --- | --- |
@@ -278,10 +285,11 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 
 | Field | Meaning |
 | --- | --- |
-| `image.build` | A folder of the upstream holding a Dockerfile, its whole context: `nullius/own-<benchmark>-<folder>:<hash>`, the sha256 of every file the build reads |
+| `image.build` | A folder of the upstream holding a Dockerfile, its whole context: `nullius/own-<benchmark>-<folder>:<hash>`, the sha256 of every file the build reads. On Podman, a short name in its `FROM` may fail under `short-name-mode = "enforcing"`: name the image in full |
 | `image.pull` | A reference pinned by its digest (`name@sha256:...`) |
 | `image.memory_mb`, `image.cpus` | The task's limits |
 | `workdir` | The session's `cwd` when not the image's working directory |
+| `env` | Task variables for the agent: uppercase names and string values, no model settings or credentials. The run's variables take precedence; `PATH` contains absolute folders prepended to the image's path. SWE-bench uses this for its `testbed` conda environment |
 | `verify.copy` | Folders of the upstream copied in only after the agent ends |
 | `verify.write` | `{absolute path inside: text}`, written in only after the agent ends |
 | `verify.run` | In the working directory, same container |
@@ -292,8 +300,8 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 
 | Rule | Detail |
 | --- | --- |
-| The agent is added at run time | The container runs the image for the whole unit (`container.Box`), as the image's own user, default capabilities and no way to gain more, on the unit's internal network. The agent is started with `docker exec`; ACP's `fs` is off. Home, install, definition and MCP files are mounted as on the base |
-| Runtimes | Read-only under `/opt/nullius`: the base's Node for an agent from npm, a pinned standalone Python (`uv python install`) for one started as `python3`, a uv environment's own interpreter. The start command names it; `PATH` keeps the image's own `python3` and `node` first. The home written as root is given back to you |
+| The agent is added at run time | The container runs the image for the whole unit (`container.Box`), as the image's own user, default capabilities and no way to gain more, on the unit's internal network. On Podman with `--userns=host`, so its root is you on rootless Podman whatever `containers.conf` sets. The agent is started with `docker exec`; ACP's `fs` is off. Home, install, definition and MCP files are mounted as on the base |
+| Runtimes | Read-only under `/opt/nullius`: the base's Node for an agent from npm, a pinned standalone Python (`uv python install` in the base image) for one started as `python3` with no uv environment. A uv environment's interpreter is in its install. The start command names it; `PATH` keeps the image's own `python3` and `node` first. The home written as root is given back to you |
 | A runtime the image cannot start | Tried once before the agent; a failure (glibc in a musl image) is a setup error: "not run: the agent's runtime (node) needs glibc; this task's image is musl-based" |
 | The check runs where the work is | `score` is sent `verified: {exit, timed_out, output, dir, collected}`; the driver never runs docker. What changed in the container is `agent/container-changes.txt` |
 | Nothing of the agent runs during the check | Every process but init and the keep-alive is stopped, then killed; `verifier/stopped.txt` names each, one that cannot be stopped is a `VerifierError`. `keep_processes: true` lets them run on, free to alter the tests |
@@ -340,7 +348,7 @@ The [builder](builder.md) runs the standard; what it adds:
 | Surface | What it does |
 | --- | --- |
 | The builder | Each dataset with each choice is a `cli run --from-run` and a job (`<name>-<dataset>-<agent>`); each machine a shard and a job (`<name>-shard-<I>of<N>`) |
-| A run on a host | Gets a content-addressed snapshot of the running backend and effective catalogue into `~/.nullius/app/<content-id>`; source edits, user entries, `data-source.json` and catalogue-local dataset files are included; configuration and credential stores are excluded; needs `python3`, `git` and, for the docker backend, docker; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back every 10 s |
+| A run on a host | Gets a content-addressed snapshot of the running backend and effective catalogue into `~/.nullius/app/<content-id>`; source edits, user entries and catalogue-local dataset files are included, configuration and credential stores excluded; needs `python3`, `git` and, for the docker backend, Docker or Podman; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back every 10 s |
 | Agents and Capabilities tabs | Each definition's ports proven and the benchmarks it runs; *Prove its ports* runs `cli conform --from-run` here, with local processes or Docker, and rewrites the definition |
 | A benchmark's page | Its proofs per dataset; *Run control checks* runs `cli prove --from-run` here, handed no key unless the benchmark is judged. A failed check is kept under `proven.<dataset>.failed` until it passes |
 
@@ -410,7 +418,7 @@ use the source folders and repository checks.
 
 #### The driver's environment
 
-The upstream's dependencies go in `driver.install` (a capability's `install` is the same block), installed once per digest under `drivers/<key>/<digest>/` in `STANDARD_DIR` by an installer handed no variable named like a secret; `{install}` in `driver.command` names it. A driver without one uses `python3`, outside Nullius's own interpreter. For Docker Original setups, the driver runs in its own container and dependencies are installed in a separate Linux cache under `docker-setups/`; host virtual environments are never reused.
+The upstream's dependencies go in `driver.install` (a capability's `install` is the same block), installed once per digest under `drivers/<key>/<digest>/` in `STANDARD_DIR` by an installer handed no variable named like a secret; `{install}` in `driver.command` names it. It is installed on this machine with its `uv`, which downloads the Python it names when the machine has none, unless `UV_PYTHON_DOWNLOADS` says otherwise. A driver without one runs on the machine's `python3`, outside Nullius's own interpreter. For Docker Original setups, the driver runs in its own container and dependencies are installed in a separate Linux cache under `docker-setups/`; host virtual environments are never reused.
 
 ```json title="standard.json · driver"
 "driver": {
@@ -443,7 +451,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 - **Temperature** in GSM8K and HumanEval's Original setups accepts a non-negative decimal, such as `0.5`. **Provider default** omits the parameter; the provider/model decides. Some models restrict overrides. In the builder, leave the input empty for provider default; the CLI accepts `--bench-option temperature=0.5` or `temperature=default`. This does not override an agent's own sampling settings.
 - **Read** by the driver as `NULLIUS_OPTION_<NAME>`; set with `cli run --bench-option NAME=VALUE`.
 - **`embeddings`**: the value gets the run's own relay as the driver's `OPENAI_BASE_URL` (and its MCP servers'), the model pinned on its route; it wants the OpenAI provider. A judge route handed to litellm goes in its `api_base`.
-- **`host`**: `{summary, check: [programs on PATH], install: {apt, npm}}` (`standard/hostreq.py`), whatever the backend; hardware (a CUDA GPU, by `nvidia-smi`) has no `install`. A run refuses without it and says the commands.
+- **`host`**: `{summary, check: [programs on PATH], install: {apt, npm}}` (`standard/hostreq.py`), whatever the backend; hardware (a CUDA GPU, by `nvidia-smi`) has no `install`. Optional `gpu_memory_mb` is a positive whole number of MiB required on the largest GPU, read with `nvidia-smi` (total memory, not free memory or the sum across cards). The local builder and run startup refuse insufficient memory with the required and available amounts; an unavailable query names `nvidia-smi` instead. Remote GPU memory is checked when the run starts on the host. A run refuses missing programs and says the install commands when supplied.
 - **One integration per benchmark.** Add supported behavior as options on that entry, not numbered integration revisions. Record the selected options with each run and revalidate affected proofs.
 
 ### An agent

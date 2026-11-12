@@ -75,14 +75,15 @@ class Driver:
         name = "nullius-setup-" + uuid.uuid4().hex[:20]
         cmd = ["python3", "-m", "nullius.standard.setup_container", self.config, self.cache,
                "prepare" if prepare else "run"] + ([CREDENTIALS_IN] if credentials else [])
-        argv = container.run_argv(self.image, cmd, name=name, network="bridge", job=self.job,
-                                  workdir=cwd, mounted=mounts, env_names=values, path=container.IMAGE_PATH)
+        argv = container.run_argv(self.image, cmd, name=name, network=container.BRIDGE if container.podman() else "bridge", job=self.job,
+                                  workdir=cwd, mounted=mounts, env=values, path=container.IMAGE_PATH)
         argv[3:3] = ["--add-host", "host.docker.internal:host-gateway"]
         if credentials:                          # as the relay's key: fails when the engine cannot see it
             argv[3:3] = ["--mount", f"type=bind,source={credentials},target={CREDENTIALS_IN},readonly"]
-        return argv, container.client_env({k: v for k, v in values.items() if k != "PATH"}), name
+        return argv, container.program_env(values), name
 
     def prepare(self):
+        container.make_bridge()
         home = os.path.join(self.work, ".work", "setup-install-home")
         os.makedirs(home, exist_ok=True)
         argv, env, name = self.command({"HOME": home}, self.work, prepare=True)

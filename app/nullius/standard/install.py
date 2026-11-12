@@ -17,6 +17,12 @@ Everything goes under ``STANDARD_DIR`` (``standard/`` in the persistent user dat
   ``STANDARD_DATA_DIR`` instead when that is set - datasets can be gigabytes
   where installs are not, so they may sit on a bigger disk than the installs.
 
+On the docker backend an agent's or a capability's packages are installed in
+the base image (``container.install_argv``), and the base image's tag is part
+of their folder's digest. A driver's packages, and all packages on the local
+backend, are installed with this machine's ``npm`` and ``uv``. Git always runs
+on this machine.
+
 A folder is complete when its ``.installed`` marker is; a failed install
 leaves no marker and is tried again from scratch. Two runs installing the same
 thing at once take turns (a lock file beside the folder): the second finds the
@@ -74,18 +80,22 @@ def git_env() -> dict:
     return dict(install_env(), GIT_TERMINAL_PROMPT="0")
 
 
-def _run(cmd: List[str], cwd: str, log: str, env: Optional[dict] = None):
+def _run(cmd: List[str], cwd: str, log: str, env: Optional[dict] = None, shown: Optional[List[str]] = None):
+    """Run one install step, its output to ``log``. ``shown``: the step as a
+    failure names it, when ``cmd`` wraps it (``docker run ...``)."""
     with open(log, "a") as f:
         f.write("$ " + " ".join(cmd) + "\n")
         f.flush()
         try:
-            r = subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.STDOUT, env=install_env() if env is None else env)
+            # uv may download its Python over a system setting against it (Fedora's), unless this environment says otherwise
+            env = {"UV_PYTHON_DOWNLOADS": "automatic", **(install_env() if env is None else env)}
+            r = subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.STDOUT, env=env)
         except FileNotFoundError:
             raise InstallFailed(f"{cmd[0]} is not on this machine")
     if r.returncode != 0:
         with open(log, errors="replace") as f:
             tail = f.read().strip().splitlines()[-3:]
-        raise InstallFailed(f"{' '.join(cmd[:3])}...: exit {r.returncode}: {' | '.join(tail)[-300:]}")
+        raise InstallFailed(f"{' '.join((shown or cmd)[:3])}...: exit {r.returncode}: {' | '.join(tail)[-300:]}")
 
 
 @contextlib.contextmanager
@@ -103,36 +113,42 @@ def _digest(obj) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()[:12]
 
 
-def packages(d: dict, home: str = HOME, npm_in: Optional[Callable[[List[str], str], List[str]]] = None,
-             src: Optional[str] = None) -> str:
+def packages(d: dict, home: str = HOME, run_in: Optional[Callable[..., List[str]]] = None,
+             src: Optional[str] = None, image: Optional[str] = None) -> str:
     """The folder an agent's or a capability's packages are installed in,
     installing them first when they are not. A definition installing nothing
     gets an empty folder all the same, so ``{install}`` always names one.
 
-    ``npm_in``: how to run ``npm`` where this machine has none - the docker
-    backend's base image, which carries Node (``container.install_argv``):
-    given the command and the folder, the argument list that runs it there.
-    A host is not asked for Node to run an agent it will only start in a
-    container. Without it, a machine with no ``npm`` is refused, said.
+    ``run_in``: where every ``npm``, ``uv`` and Python step runs instead of
+    this machine: the docker backend's base image, which carries Node and uv
+    (``container.install_argv``). Given the command, the folder and the
+    step's own variables, it returns the argument list that runs it there.
+    The install is then made on the libc and the tools the agent's container
+    runs on, uv's Python inside the folder (``.python``). Git stays on this
+    machine, with its credentials. ``image``: that base image's tag, part of
+    the folder's digest, so an install made in it never serves a run on this
+    machine. Without ``run_in``, a machine with no ``npm`` is refused, said.
 
     ``src``: a checkout of the definition's upstream at ``upstream.tested``
     already on this machine, which ``project`` is installed from instead of
     a clone of its own (a benchmark's driver: its upstream clone)."""
+    assert (run_in is None) == (image is None), "an install in the base image is named by its tag"
     inst = d.get("install") or {}
     up = (d.get("upstream") or {}) if inst.get("project") else {}
-    where = packages_dir(d, home)
+    where = packages_dir(d, home, image)
     if os.path.exists(os.path.join(where, MARK)):
         return where
     with _locked(where):
-        return _packages(inst, where, up, npm_in, src)
+        return _packages(inst, where, up, run_in, src)
 
 
-def packages_dir(d: dict, home: str = HOME) -> str:
+def packages_dir(d: dict, home: str = HOME, image: Optional[str] = None) -> str:
     """Where ``packages`` installs a definition's packages, installed or not."""
     inst = d.get("install") or {}
     kind = {"agent": "agents", "driver": "drivers"}.get(d.get("_kind"), "capabilities")
     up = (d.get("upstream") or {}) if inst.get("project") else {}
-    return os.path.join(home, kind, d["key"], _digest(dict(inst, _at=up.get("tested")) if up else inst))
+    key = dict(inst, _at=up.get("tested")) if up else inst
+    return os.path.join(home, kind, d["key"], _digest(dict(key, _image=image) if image else key))
 
 
 def ready(where: Optional[str]) -> bool:
@@ -144,9 +160,15 @@ def ready(where: Optional[str]) -> bool:
 HF = "hf"         # inside an install: the models prefetched from the hub (HF_HUB_CACHE at run time)
 WHEELS = "wheels"  # inside an install: the wheels it names by URL, as downloaded
 SRC = "src"       # inside an install: the definition's upstream, at its tested commit, for install.project
+SCRATCH = (".home", ".npm-cache", ".uv-cache")     # what an install in the base image keeps of its own (container.install_argv)
 
 
-def _packages(inst: dict, where: str, up: Optional[dict] = None, npm_in: Optional[Callable] = None,
+def remove_scratch(where: str) -> None:
+    for scratch in SCRATCH:
+        shutil.rmtree(os.path.join(where, scratch), ignore_errors=True)
+
+
+def _packages(inst: dict, where: str, up: Optional[dict] = None, run_in: Optional[Callable] = None,
               src: Optional[str] = None) -> str:
     if os.path.exists(os.path.join(where, MARK)):
         return where                                  # another run finished it while this one waited
@@ -154,25 +176,32 @@ def _packages(inst: dict, where: str, up: Optional[dict] = None, npm_in: Optiona
         shutil.rmtree(where)
     os.makedirs(where)
     log = os.path.join(where, "install.log")
+    if run_in:
+        step = lambda cmd, env=None: _run(run_in(cmd, where, env), where, log, shown=cmd)
+    else:
+        step = lambda cmd, env=None: _run(cmd, where, log, env=dict(install_env(), **(env or {})))
+    try:
+        _steps(inst, where, up, src, log, step, boxed=run_in is not None)
+    finally:
+        remove_scratch(where)
+    with open(os.path.join(where, MARK), "w") as f:
+        json.dump(inst, f)
+    return where
+
+
+def _steps(inst: dict, where: str, up: Optional[dict], src: Optional[str], log: str, step: Callable, boxed: bool):
     if inst.get("npm"):
-        cmd = ["npm", "install", "--no-audit", "--no-fund", "--prefix", where] + list(inst["npm"])
-        if shutil.which("npm"):
-            _run(cmd, where, log)
-        elif npm_in is None:
+        if not boxed and not shutil.which("npm"):
             raise InstallFailed("npm is not on this machine: install Node.js 22 here, or run on the docker backend, "
                                 "which installs with the Node in its base image")
-        else:
-            _run(npm_in(cmd, where), where, log)
-            for scratch in (".npm-home", ".npm-cache"):       # what npm kept of its own, in the container
-                shutil.rmtree(os.path.join(where, scratch), ignore_errors=True)
+        step(["npm", "install", "--no-audit", "--no-fund", "--prefix", where] + list(inst["npm"]))
     if inst.get("pip") or inst.get("project") or inst.get("indexes") or inst.get("wheels"):
         py = os.path.join(where, ".venv", "bin", "python")
-        # uv's own interpreter, never the system's: an own image mounts the one the
-        # environment links to (container.python_homes), and /usr/bin is the image's
-        _run(["uv", "venv", "--quiet", "--python-preference", "only-managed", os.path.join(where, ".venv")]
-             + (["--python", inst["python"]] if inst.get("python") else []), where, log)
+        # uv's own interpreter, never the system's: on docker in the install (.python), mounted with it; /usr/bin is the image's
+        step(["uv", "venv", "--quiet", "--python-preference", "only-managed", os.path.join(where, ".venv")]
+             + (["--python", inst["python"]] if inst.get("python") else []))
         for x in inst.get("indexes") or []:          # first: the project's resolution then keeps them
-            _run(["uv", "pip", "install", "--quiet", "--python", py, "--index-url", x["url"]] + list(x["packages"]), where, log)
+            step(["uv", "pip", "install", "--quiet", "--python", py, "--index-url", x["url"]] + list(x["packages"]))
         wheels = []                                  # each checked by its sha256 before it is installed
         for x in inst.get("wheels") or []:
             os.makedirs(os.path.join(where, WHEELS), exist_ok=True)
@@ -181,33 +210,29 @@ def _packages(inst: dict, where: str, up: Optional[dict] = None, npm_in: Optiona
         locked = bool(inst.get("project") and inst.get("locked"))
         if (inst.get("pip") or wheels) and not locked:
             # resolved together: a wheel's dependencies are pip's pins
-            _run(["uv", "pip", "install", "--quiet", "--python", py] + list(inst.get("pip") or []) + wheels, where, log)
+            step(["uv", "pip", "install", "--quiet", "--python", py] + list(inst.get("pip") or []) + wheels)
         if inst.get("project"):
             if src is None:
                 src = os.path.join(where, SRC)
                 os.makedirs(src)
                 for cmd in (["git", "init", "--quiet"], ["git", "fetch", "--quiet", "--depth", "1", up["repository"], up["tested"]],
                             ["git", "checkout", "--quiet", "FETCH_HEAD"]):
-                    _run(cmd, src, log, env=git_env())
+                    _run(cmd, src, log, env=git_env())        # on this machine, with its git credentials
             proj = os.path.normpath(os.path.join(src, inst["project"]))
             extras = "[" + ",".join(inst["extras"]) + "]" if inst.get("extras") else ""
             if locked:
                 # the project's own lock file, its pins as published, and pip's packages
                 # resolved beside them in one go: a conflict fails the install, said
                 lock = os.path.join(where, "requirements.lock")
-                _run(["uv", "export", "--frozen", "--no-dev", "--no-emit-project", "--no-hashes", "--quiet",
-                      "--project", proj, "-o", lock] + [w for x in inst.get("extras") or [] for w in ("--extra", x)], where, log)
-                _run(["uv", "pip", "install", "--quiet", "--python", py, "-r", lock] + list(inst.get("pip") or []) + wheels, where, log)
-                _run(["uv", "pip", "install", "--quiet", "--python", py, "--no-deps", "-e", proj + extras], where, log)
+                step(["uv", "export", "--frozen", "--no-dev", "--no-emit-project", "--no-hashes", "--quiet",
+                      "--project", proj, "-o", lock] + [w for x in inst.get("extras") or [] for w in ("--extra", x)])
+                step(["uv", "pip", "install", "--quiet", "--python", py, "-r", lock] + list(inst.get("pip") or []) + wheels)
+                step(["uv", "pip", "install", "--quiet", "--python", py, "--no-deps", "-e", proj + extras])
             else:
-                _run(["uv", "pip", "install", "--quiet", "--python", py, "-e", proj + extras], where, log)
+                step(["uv", "pip", "install", "--quiet", "--python", py, "-e", proj + extras])
         if inst.get("prefetch"):
-            env = dict(install_env(), HF_HUB_CACHE=os.path.join(where, HF))
-            _run([py, "-c", "import sys\nfrom huggingface_hub import snapshot_download\nfor m in sys.argv[1:]: snapshot_download(m)"]
-                 + list(inst["prefetch"]), where, log, env=env)
-    with open(os.path.join(where, MARK), "w") as f:
-        json.dump(inst, f)
-    return where
+            step([py, "-c", "import sys\nfrom huggingface_hub import snapshot_download\nfor m in sys.argv[1:]: snapshot_download(m)"]
+                 + list(inst["prefetch"]), env={"HF_HUB_CACHE": os.path.join(where, HF)})
 
 
 def process_env(d: dict, where: str, home: str, options: Optional[dict] = None) -> dict:

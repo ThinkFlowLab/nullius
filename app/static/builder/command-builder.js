@@ -413,7 +413,7 @@
       const st = hostState[w] || (w === 'local' ? {missing: Object.fromEntries(need.filter(n => local[n]).map(n => [n, local[n]]))} : null);
       const gone = st && st.missing ? Object.entries(st.missing).filter(([n]) => need.includes(n)) : [];
       const state = !st ? '<span class="nb-tick">not checked</span>' : st.error ? `<span class="nb-tick no">${esc(st.error)}</span>`
-        : gone.length ? `<span class="nb-tick no">missing ${esc(gone.map(([, ps]) => ps.join(', ')).join(', '))}</span>` : '<span class="nb-tick ok">ready ✓</span>';
+        : gone.length ? `<span class="nb-tick no">${esc(gone.map(([, ps]) => ps.join(', ')).join(', '))}</span>` : '<span class="nb-tick ok">ready ✓</span>';
       return `<li><b>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</b> ${state} ${button('Check', `data-hostreq-check="${esc(w)}"`, 'nb-inlinebutton')}${lines.length && (gone.length || (st && st.error)) ? ' ' + button('Install for me', `data-hostreq-install="${esc(w)}"`, 'nb-inlinebutton') : ''}${st && st.said ? ` <small>${esc(st.said)}</small>` : ''}</li>`;
     };
     return `<div class="nb-sectionhead std-wherehead"><h3>Machine setup</h3><small>Needed by the search you chose, on each machine it runs on</small></div>`
@@ -850,9 +850,10 @@
     const out=$('#nb-hosttest'), st=root.querySelector(`[data-host-state="${CSS.escape(entry)}"]`);
     out.textContent='testing…';
     try{const res=await fetch('/settings/hosts/test',{method:'POST',headers:{'X-CSRF-Token':schema.csrf},body:new URLSearchParams({entry})});const j=await res.json();
-      // only what can stop this recipe there: docker, for a Harbor run or the standard's docker backend (uv is installed when missing)
-      const rec=r(),needsDocker=rec.harness==='harbor'||(C.isStandard(rec)&&rec.backend==='docker'),dockerOk=j.docker&&j.docker_ok;
-      out.textContent=!j.ok?'✕ '+(j.error||('HTTP '+res.status)):needsDocker&&!dockerOk?'✓ Connected · ✕ docker '+(j.docker?'not usable by this user':'missing')+': this run needs it':'✓ Connected';
+      // only what can stop this recipe there: docker for a Harbor run, docker or podman for the standard's docker backend (uv is installed when missing)
+      const rec=r(),harbor=rec.harness==='harbor',needsEngine=harbor||(C.isStandard(rec)&&rec.backend==='docker');
+      const engine=harbor?(j.docker?'docker':null):j.engine,engineOk=engine&&j[engine+'_ok'];
+      out.textContent=!j.ok?'✕ '+(j.error||('HTTP '+res.status)):needsEngine&&!engineOk?'✓ Connected · ✕ '+(engine?engine+' not usable by this user':(harbor?'docker':'docker or podman')+' missing')+': this run needs it':'✓ Connected';
       if(st){st.textContent=j.ok?'connected':'unreachable';st.className='nb-state nb-hoststate '+(j.ok?'':'warn');}
       if(j.ok&&C.isStandard(r())&&optionNeeds(r()).host.length)hostReq(entry,'check');   // and what the chosen search needs of it
     }catch(e){out.textContent='✕ '+e;}

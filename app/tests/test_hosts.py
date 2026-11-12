@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,15 +75,42 @@ class ConnectionTest(unittest.TestCase):
         seen = []
         def run(argv, timeout):
             seen.append(argv)
-            return 0, "ok\nuv=yes\ndocker=yes\nharbor=yes\nharbor_version=harbor 0.22.0+agtai.1\ndocker_ok=yes\nhostname=ecs-bench\n", ""
+            return 0, "ok\nuv=yes\ndocker=yes\npodman=yes\nharbor=yes\nharbor_version=harbor 0.22.0+agtai.1\ndocker_ok=yes\npodman_ok=no\nhostname=ecs-bench\n", ""
         r = hosts.test(hosts.parse("bench"), run=run)
         self.assertTrue(r["ok"]); self.assertEqual((r["uv"], r["docker"], r["docker_ok"], r["harbor"]), (True, True, True, True))
+        self.assertEqual((r["podman"], r["podman_ok"], r["engine"]), (True, False, "docker"))
         self.assertEqual((r["harbor_version"], r["hostname"], r["error"]), ("0.22.0+agtai.1", "ecs-bench", None))
         self.assertEqual(seen[0][-1], hosts.PROBE); self.assertIn("BatchMode=yes", seen[0])   # one command, no prompt possible
+        self.assertFalse(r["docker_userns"])
+
+    def test_the_probe_says_when_the_host_s_docker_has_userns_remap(self):
+        tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)
+        for options, said in (("[name=seccomp,profile=builtin name=userns name=cgroupns]", True), ("[name=seccomp,profile=builtin]", False)):
+            with open(os.path.join(tmp, "docker"), "w") as f:
+                f.write(f"#!/bin/sh\n[ \"$1\" = info ] && echo '{options}'\nexit 0\n")
+            os.chmod(os.path.join(tmp, "docker"), 0o755)
+            env = {"PATH": tmp + os.pathsep + "/usr/bin:/bin"}
+            run = lambda argv, timeout: (lambda p: (p.returncode, p.stdout, p.stderr))(
+                subprocess.run(["sh", "-c", argv[-1]], capture_output=True, text=True, env=env, timeout=timeout))
+            with self.subTest(options=options):
+                self.assertEqual(hosts.test(hosts.parse("bench"), run=run)["docker_userns"], said)
 
     def test_missing_tools_are_said_not_failed(self):
-        r = hosts.test(hosts.parse("bench"), run=lambda a, t: (0, "ok\nuv=no\ndocker=no\nharbor=no\nhostname=x\n", ""))
+        r = hosts.test(hosts.parse("bench"), run=lambda a, t: (0, "ok\nuv=no\ndocker=no\npodman=no\nharbor=no\nhostname=x\n", ""))
         self.assertTrue(r["ok"]); self.assertEqual((r["uv"], r["docker"], r["harbor"], r["harbor_version"]), (False, False, False, None))
+        self.assertEqual((r["podman"], r["podman_ok"], r["engine"]), (False, None, None))
+        r = hosts.test(hosts.parse("bench"), run=lambda a, t: (0, "ok\ndocker=no\npodman=yes\npodman_ok=yes\n", ""))
+        self.assertEqual(r["engine"], "podman")
+
+    def test_the_probe_asks_each_engine_that_is_there(self):
+        with tempfile.TemporaryDirectory() as d:
+            for name, code in (("podman", 0), ("uv", 0)):
+                with open(os.path.join(d, name), "w") as f:
+                    f.write(f"#!/bin/sh\nexit {code}\n")
+                os.chmod(os.path.join(d, name), 0o755)
+            out = subprocess.run(["/bin/sh", "-c", hosts.PROBE], env={"PATH": d}, capture_output=True, text=True).stdout
+        self.assertEqual([l for l in out.splitlines() if l.split("=")[0] in ("docker", "podman", "docker_ok", "podman_ok")],
+                         ["docker=no", "podman=yes", "podman_ok=yes"])
 
     def test_a_refusal_names_its_reason(self):
         denied = hosts.test(hosts.parse("bench"), run=lambda a, t: (255, "", "ubuntu@10.0.0.4: Permission denied (publickey).\n"))

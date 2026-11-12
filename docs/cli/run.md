@@ -5,7 +5,7 @@ One benchmark and one agent, capability, control or setup, into a job.
 ```bash title="Run"
 nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--limit N] [-j N] \
     [--unsandboxed | --backend docker] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
-    [--price MODEL=INPUT,OUTPUT[,CACHED]]... [--max-usd USD] [--max-usd-per-unit USD] \
+    [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] \
     [--repeat K] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
 ```
 
@@ -27,7 +27,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--backend` | `local` (default) or `docker`, each unit in a container with its relay |
 | `--option NAME=VALUE` | An agent's or capability's option (repeatable) |
 | `--bench-option NAME=VALUE` | A benchmark's option (repeatable), read as `NULLIUS_OPTION_<NAME>` |
-| `--price MODEL=INPUT,OUTPUT[,CACHED]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
+| `--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
 | `--max-usd USD`, `--max-usd-per-unit USD` | A spending cap for the run, for each unit: [below](#a-spending-cap) |
 | `--repeat K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--repeat`); by default they stay for the next run |

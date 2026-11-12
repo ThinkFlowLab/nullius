@@ -19,9 +19,11 @@ setup  - the problem statement as the prompt, verbatim; the instance's own
          changes are tested where it made them; the harness would re-apply
          them as a patch in a fresh container.
 score  - the harness's own grading (``swebench.harness.grading.get_eval_report``)
-         of the eval script's output: resolved when every FAIL_TO_PASS test
-         passes and every PASS_TO_PASS test still passes. Its report is kept
-         as ``verifier/report.json``, in the harness's own shape.
+         of the patch and eval script's output: resolved when a patch exists,
+         every FAIL_TO_PASS test passes and every PASS_TO_PASS test still passes. Its report is kept
+         as ``verifier/report.json``, in the harness's own shape; the diff
+         from the instance's base commit, captured before testing, is kept
+         as ``verifier/model.patch`` and given to the grader.
 oracle - the reference control: the gold patch applied in the container with
          ``git apply``, as the harness applies a prediction.
 
@@ -29,6 +31,7 @@ The driver never runs docker: the run does each step in the unit's container.
 """
 import json
 import os
+import shlex
 import sys
 
 import pyarrow.parquet as pq
@@ -39,9 +42,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WORKDIR = "/testbed"
 EVAL_SECONDS = 1800                      # the harness's own --timeout default for one instance's tests
 SOLVE_SECONDS = 300
-# The agent's changes are made in the container, not sent as a patch; the harness's report needs a
-# prediction and this is what stands for it (patch_exists is about this string, not about a diff).
-PREDICTION = "the agent's changes, made in the container"
+RESULTS = "/tmp/nullius-swebench-verifier"
 
 with open(os.path.join(HERE, "images.json")) as f:
     IMAGES = json.load(f)
@@ -69,16 +70,26 @@ def units(dataset):
 
 def setup(unit, dir):
     r = row(unit)
+    capture = (f"cd {WORKDIR} && git add -A && "
+               f"git diff --cached --binary --no-ext-diff --no-textconv {shlex.quote(r['base_commit'])} -- "
+               f"> {RESULTS}/model.patch && exec /bin/bash /eval.sh")
     return {"prompt": r["problem_statement"], "environment": "task", "image": {"pull": IMAGES[unit]}, "workdir": WORKDIR,
-            "verify": {"write": {"/eval.sh": make_test_spec(r).eval_script}, "run": ["/bin/bash", "/eval.sh"],
-                       "seconds": EVAL_SECONDS, "network": True}}
+            "env": {"PATH": "/opt/miniconda3/envs/testbed/bin:/opt/miniconda3/condabin",
+                    "CONDA_DEFAULT_ENV": "testbed", "CONDA_PREFIX": "/opt/miniconda3/envs/testbed",
+                    "CONDA_SHLVL": "1", "CONDA_EXE": "/opt/miniconda3/bin/conda",
+                    "CONDA_PYTHON_EXE": "/opt/miniconda3/bin/python", "_CE_CONDA": "", "_CE_M": "",
+                    "CONDA_PROMPT_MODIFIER": "(testbed) "},
+            "verify": {"write": {"/eval.sh": make_test_spec(r).eval_script}, "run": ["/bin/bash", "-c", capture],
+                       "collect": RESULTS, "seconds": EVAL_SECONDS, "network": True}}
 
 
 def score(unit, dir, transcript, answer, verified=None):
     if not verified:
         return {"reward": 0.0, "passed": False, "detail": {"why": "the instance's tests did not run"}}
     log = os.path.join(verified["dir"], "test-stdout.txt")
-    report = get_eval_report(make_test_spec(row(unit)), {"instance_id": unit, "model_patch": PREDICTION}, log, True)
+    with open(os.path.join(verified["dir"], "model.patch")) as f:
+        patch = f.read()
+    report = get_eval_report(make_test_spec(row(unit)), {"instance_id": unit, "model_patch": patch or None}, log, True)
     with open(os.path.join(verified["dir"], "report.json"), "w") as f:
         json.dump(report, f, indent=1)
     r = report[unit]

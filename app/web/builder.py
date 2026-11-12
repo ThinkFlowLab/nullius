@@ -47,8 +47,9 @@ def new_run():
     data["agentNeeds"] = AGENT_NEEDS
     # The standard's Where step: why its docker backend cannot run on this machine (None: it can); and, per
     # benchmark, the licences its store holds (nullius.secrets) - set, when, until when; never a value.
-    # what this machine lacks of each benchmark's host requirements: {benchmark: {requirement: [programs]}}
-    host = {b["key"]: hostreq.missing(b, list(b.get("host") or {})) for b in definitions.load("benchmark", every=True)[0] if b.get("host")}
+    # what this machine lacks of each benchmark's host requirements: {benchmark: {requirement: [reasons]}}
+    host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"])).items()}
+            for b in definitions.load("benchmark", every=True)[0] if b.get("host")}
     data["standardHere"] = {"docker": execute.docker_problem(), "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
     data["local"] = shared_local_client()
@@ -108,15 +109,16 @@ def new_run_prerequisites():
     if len(json.dumps(recipe)) > 200_000:
         abort(413)
     setups = {}
-    if recipe.get("harness") == standard_recipe.HARNESS:
+    standard = recipe.get("harness") == standard_recipe.HARNESS
+    if standard:
         out = standard_recipe.compile(recipe)
         if out["errors"]:
             return jsonify(machines=[], ready=False, errors=[e["message"] for e in out["errors"]])
         wheres = [sh["where"] for sh in out["shards"]]
-        needs = ["docker"] if out["docker"] else []
+        needs = ["engine"] if out["docker"] else []
         h = out.get("host") or {}
         b = definitions.get("benchmark", h.get("benchmark", "")) if h.get("needs") else None
-        setups = {n["name"]: {"summary": n["summary"], "check": n["check"], "install": hostreq.install_lines(b, [n["name"]])}
+        setups = {n["name"]: {**n, "install": hostreq.install_lines(b, [n["name"]])}
                   for n in h.get("needs") or []} if b else {}
         host_needs = needs + ["python3", "git"]
     elif recipe.get("harness", "harbor") != "harbor":
@@ -131,10 +133,10 @@ def new_run_prerequisites():
 
     def machine(w):
         if w == "local":
-            return {"where": w, "label": "this machine", "rows": prerequisites.check_here(needs, setups)}
+            return {"where": w, "label": "this machine", "rows": prerequisites.check_here(needs, setups, standard=standard)}
         if w not in known:
             return {"where": w, "label": w, "rows": [prerequisites.row("connect", "missing", f"{w} is not one of the hosts in Settings", label="Connection")]}
-        return {"where": w, "label": known[w].label, "rows": prerequisites.check_host(known[w], host_needs, setups)}
+        return {"where": w, "label": known[w].label, "rows": prerequisites.check_host(known[w], host_needs, setups, standard=standard)}
     # one ssh probe per host, all at once: one after another, Review waited for their sum
     # (an unreachable host alone holds a probe 8 to 12 s)
     with ThreadPoolExecutor(max(1, min(8, len(wheres)))) as pool:
@@ -245,17 +247,18 @@ def _host_target():
 
 @app.route("/new-run/host/check", methods=["POST"])
 def new_run_host_check():
-    """What a machine lacks of a benchmark's host requirements: {ok, missing: {requirement: [programs]}, install}."""
+    """What a machine lacks: {ok, missing: {requirement: [reasons]}, install}.
+    Remote GPU memory is checked by the run on its host, not by the SSH probe."""
     b, names, host = _host_target()
     if host is None:
-        gone = hostreq.missing(b, names)
+        gone = {n: [why] for n, why in hostreq.problems(b, names).items()}
     else:
         programs = [p for r in hostreq.requirements(b, names).values() for p in r["check"]]
         got = hosts.test(host, programs=programs)
         if not got["ok"]:
             return jsonify(ok=False, error=got["error"])
         gone = {n: [p for p in r["check"] if p in got["missing"]] for n, r in hostreq.requirements(b, names).items()}
-        gone = {n: ps for n, ps in gone.items() if ps}
+        gone = {n: [", ".join(ps) + " not on PATH"] for n, ps in gone.items() if ps}
     return jsonify(ok=True, missing=gone, install=hostreq.install_lines(b, list(gone)))
 
 

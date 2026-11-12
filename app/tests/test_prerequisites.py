@@ -21,8 +21,22 @@ class Here(unittest.TestCase):
         stopped = "docker is installed but not usable by this user: Cannot connect to the Docker daemon"
         got = by_name(prerequisites.check_here(["docker"], which=lambda p: "/usr/bin/" + p, docker=lambda: stopped))
         self.assertEqual((got["docker"]["state"], got["docker"]["detail"]), ("missing", stopped))
-        got = by_name(prerequisites.check_here(["docker"], docker=lambda: None))
+        got = by_name(prerequisites.check_here(["docker"], which=lambda p: "/usr/bin/" + p, docker=lambda: None))
         self.assertEqual(got["docker"]["state"], "ok")
+
+    def test_the_standard_s_docker_row_says_its_containers_run_outside_a_userns_remap(self):
+        for standard, remap, said in ((True, True, prerequisites.REMAPPED), (True, False, "the engine answers"),
+                                      (False, True, "the engine answers")):     # Harbor's containers keep the remap
+            n = "engine" if standard else "docker"
+            got = by_name(prerequisites.check_here([n], standard=standard, which=lambda p: "/usr/bin/" + p,
+                                                   docker=lambda: None, remap=lambda: remap))
+            self.assertEqual((got[n]["state"], got[n]["detail"]), ("ok", said))
+
+    def test_on_podman_alone_the_standard_runs_and_harbor_does_not(self):
+        podman = lambda p: "/usr/bin/podman" if p == "podman" else None
+        got = by_name(prerequisites.check_here(["engine", "docker"], which=podman, docker=lambda: None))
+        self.assertEqual((got["engine"]["state"], got["engine"]["label"]), ("ok", "Docker or Podman"))
+        self.assertEqual((got["docker"]["state"], got["docker"]["detail"]), ("missing", "Install Docker on this machine: Harbor runs the docker program"))
 
     def test_uv_harbor_and_a_setup_s_programs_are_looked_for_on_path(self):
         have = {"uvx", "srt"}
@@ -54,7 +68,8 @@ class OnAHost(unittest.TestCase):
     HOST = hosts.parse("me@example.invalid")
 
     def probe(self, **answer):
-        base = {"ok": True, "uv": True, "docker": True, "docker_ok": True, "harbor": False, "harbor_version": None,
+        base = {"ok": True, "uv": True, "docker": True, "docker_ok": True, "podman": False, "podman_ok": None, "engine": "docker",
+                "harbor": False, "harbor_version": None,
                 "hostname": "box", "error": None, "missing": []}
         return lambda host, programs=None: dict(base, **answer)
 
@@ -64,6 +79,18 @@ class OnAHost(unittest.TestCase):
         self.assertIn("docker group", rows["docker"]["detail"])
         self.assertEqual(rows["uv"]["state"], "install")
         self.assertFalse(prerequisites.ready([{"rows": list(rows.values())}]))
+
+    def test_a_host_with_podman_alone_runs_the_standard_and_not_harbor(self):
+        podman = dict(docker=False, docker_ok=None, podman=True, podman_ok=True, engine="podman")
+        rows = by_name(prerequisites.check_host(self.HOST, ["engine"], test=self.probe(**podman)))
+        self.assertEqual(rows["engine"]["state"], "ok")
+        rows = by_name(prerequisites.check_host(self.HOST, ["engine"], test=self.probe(**dict(podman, podman_ok=False))))
+        self.assertEqual(rows["engine"]["state"], "missing")
+        self.assertIn("podman ps failed", rows["engine"]["detail"])
+        rows = by_name(prerequisites.check_host(self.HOST, ["docker"], test=self.probe(**podman)))
+        self.assertEqual((rows["docker"]["state"], rows["docker"]["detail"]), ("missing", "docker is not on the host"))
+        rows = by_name(prerequisites.check_host(self.HOST, ["engine"], test=self.probe(**dict(podman, podman=False, engine=None))))
+        self.assertEqual((rows["engine"]["state"], rows["engine"]["detail"]), ("missing", "neither docker nor podman is on the host"))
 
     def test_an_unreachable_host_is_one_row(self):
         rows = prerequisites.check_host(self.HOST, ["docker"], test=self.probe(ok=False, error="ssh: no route"))
@@ -79,6 +106,14 @@ class OnAHost(unittest.TestCase):
         self.assertEqual(sorted(asked["programs"]), ["bwrap", "git", "python3", "srt"])
         self.assertEqual((rows["python3"]["state"], rows["git"]["state"], rows["setup:sandbox"]["state"]), ("ok", "missing", "missing"))
         self.assertEqual(prerequisites.check_host(self.HOST, ["docker"], test=self.probe())[1]["state"], "ok")
+
+    def test_a_host_s_docker_with_userns_remap_is_said_for_the_standard_alone(self):
+        remapped = self.probe(docker_userns=True)
+        rows = by_name(prerequisites.check_host(self.HOST, ["docker"], standard=True, test=remapped))
+        self.assertEqual((rows["docker"]["state"], rows["docker"]["detail"]), ("ok", prerequisites.REMAPPED))
+        self.assertEqual(by_name(prerequisites.check_host(self.HOST, ["docker"], test=remapped))["docker"]["detail"], "the engine answers")
+        self.assertEqual(by_name(prerequisites.check_host(self.HOST, ["docker"], standard=True, test=self.probe()))["docker"]["detail"],
+                         "the engine answers")
 
 
 class OwnImage(unittest.TestCase):

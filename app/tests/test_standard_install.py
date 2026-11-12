@@ -102,6 +102,16 @@ class InstallEnv(unittest.TestCase):
         self.assertEqual(install.install_env(env), {"PATH": "/bin", "HOME": "/h", "npm_config_cache": "/c", "GIT_CONFIG_KEY_0": "safe.directory"})
 
 
+    def test_on_this_machine_uv_may_download_its_python_unless_told_otherwise(self):
+        log = os.path.join(self.enterContext(tempfile.TemporaryDirectory()), "x.log")
+        for given, want in (({}, "automatic"), ({"UV_PYTHON_DOWNLOADS": "never"}, "never")):
+            with self.subTest(given=given), mock.patch.dict(os.environ, given), \
+                 mock.patch.object(install.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as ran:
+                if not given:
+                    os.environ.pop("UV_PYTHON_DOWNLOADS", None)
+                install._run(["uv", "venv", "x"], "/", log)
+            self.assertEqual(ran.call_args.kwargs["env"]["UV_PYTHON_DOWNLOADS"], want)       # over /etc/uv/uv.toml
+
 class DataDirTest(unittest.TestCase):
     def test_datasets_go_where_standard_data_dir_says_else_into_the_home(self):
         self.assertEqual(install.data_dir("/st", env={}), "/st/datasets")
@@ -161,10 +171,11 @@ class PruneTest(unittest.TestCase):
         self.assertTrue(os.path.isdir(os.path.join(self.home, ".npm")))
 
 
-class NpmElsewhereTest(unittest.TestCase):
-    """A host that will only start an agent in a container need not have Node:
-    on the docker backend npm runs in the base image (``npm_in``); without
-    that, a machine with no npm is refused with a sentence, not a traceback."""
+class InBaseImageTest(unittest.TestCase):
+    """On the docker backend every npm, uv and Python step runs in the base
+    image (``run_in``), git on this machine; a host is asked for neither Node
+    nor uv. Without that, a machine with no npm is refused with a sentence,
+    not a traceback."""
 
     def setUp(self):
         self.home = tempfile.mkdtemp()
@@ -178,22 +189,41 @@ class NpmElsewhereTest(unittest.TestCase):
             with self.assertRaisesRegex(install.InstallFailed, "npm is not on this machine.*docker backend"):
                 install.packages(self.agent, self.home)
 
-    def test_no_npm_runs_it_where_npm_in_says_and_leaves_no_npm_scratch(self):
-        seen = []
+    def test_every_step_but_git_runs_where_run_in_says_and_leaves_no_scratch(self):
+        self.agent["install"].update(pip=["p==1"], project=".", prefetch=["m/x"])
+        self.agent["upstream"] = {"repository": "https://example.org/r.git", "tested": "a" * 40}
+        boxed = []
 
-        def npm_in(cmd, where):
-            seen.append((cmd, where))
-            for scratch in (".npm-home", ".npm-cache"):          # what npm leaves in the container
+        def run_in(cmd, where, env=None):
+            boxed.append((cmd, where, env))
+            for scratch in install.SCRATCH:                     # what the install container leaves
                 os.makedirs(os.path.join(where, scratch), exist_ok=True)
-            return ["true"]
-        with mock.patch.object(install.shutil, "which", return_value=None):
-            where = install.packages(self.agent, self.home, npm_in=npm_in)
-        self.assertEqual(seen[0][0][:2], ["npm", "install"])
-        self.assertEqual(seen[0][0][-1], "pkg@1.0.0")
-        self.assertEqual(seen[0][1], where)
+            return ["in-image"] + cmd
+        # this machine's npm and uv are there, and not used
+        with mock.patch.object(install.shutil, "which", return_value="/usr/bin/found"), \
+                mock.patch.object(install, "_run") as ran:
+            where = install.packages(self.agent, self.home, run_in=run_in, image="nullius/base:x")
+        self.assertEqual([c[:2] for c, _, _ in boxed], [["npm", "install"], ["uv", "venv"], ["uv", "pip"], ["uv", "pip"],
+                                                       [os.path.join(where, ".venv", "bin", "python"), "-c"]])
+        self.assertEqual({w for _, w, _ in boxed}, {where})
+        self.assertEqual(boxed[-1][2], {"HF_HUB_CACHE": os.path.join(where, install.HF)})
+        here = [c.args[0] for c in ran.call_args_list if c.args[0][0] != "in-image"]
+        self.assertEqual([c[0] for c in here], ["git"] * 3)                 # its credentials are this machine's
         self.assertTrue(os.path.exists(os.path.join(where, install.MARK)))
-        self.assertFalse(os.path.exists(os.path.join(where, ".npm-home")))
-        self.assertFalse(os.path.exists(os.path.join(where, ".npm-cache")))
+        for scratch in install.SCRATCH:
+            self.assertFalse(os.path.exists(os.path.join(where, scratch)))
+
+    def test_an_install_made_in_the_base_image_has_a_folder_of_its_own(self):
+        here = install.packages_dir(self.agent, self.home)
+        boxed = install.packages_dir(self.agent, self.home, "nullius/base:x")
+        self.assertNotEqual(here, boxed)
+        self.assertNotEqual(boxed, install.packages_dir(self.agent, self.home, "nullius/base:y"))
+        self.assertEqual(os.path.dirname(here), os.path.dirname(boxed))
+
+    def test_a_step_in_the_base_image_fails_by_its_own_name(self):
+        with self.assertRaisesRegex(install.InstallFailed, r"^uv venv --quiet\.\.\.: exit 1"):
+            install._run(["false", "run", "--rm"], self.home, os.path.join(self.home, "x.log"),
+                         shown=["uv", "venv", "--quiet", "x"])
 
     def test_a_program_missing_is_an_install_failure(self):
         with self.assertRaisesRegex(install.InstallFailed, "no-such-program-here is not on this machine"):

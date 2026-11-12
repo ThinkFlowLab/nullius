@@ -18,10 +18,13 @@ not a sandbox - what an agent runs, it runs as the user (``docs/standard.md``,
 "Safety"). ``docker``: the agent or the capability in a container of its own on
 a network whose only way out is the unit's relay, itself a container beside
 it, or a public web proxy when its environment declares ``network``
-(``container``). The driver stays on this machine either way: it owns the
-answers. So do a benchmark's own MCP servers (``mcp_servers``), in the
-driver's environment: on the local backend the agent starts each from it, on
-docker the run does, behind a door on the unit's network (``mcp_machine``).
+(``container``). On docker the agent's or capability's packages are
+installed in the base image, on the libc and tools its container runs on.
+The driver, its environment installed here, stays on this machine either
+way: it owns the answers. So do a benchmark's own MCP servers
+(``mcp_servers``), in the driver's environment: on the local backend the
+agent starts each from it, on docker the run does, behind a door on the
+unit's network (``mcp_machine``).
 
 A unit whose environment is an **own image** (``"image": "own"``) runs in
 the task's own container, whatever the backend (a control's too: nothing of
@@ -317,9 +320,8 @@ class Run:
                  max_usd_per_unit: Optional[float] = None):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
-        ``unsandboxed``: the caller's explicit yes to running an agent on the
-        local backend, which is no sandbox: what the agent runs, it runs as
-        the user. Without it an agent run on that backend is refused.
+        ``unsandboxed``: consent to execute code as the user: required for
+        local agents, and for setup checks that run code without Docker.
         ``backend``: ``local`` or ``docker`` (``container``), which needs
         no such yes and is refused when docker is missing or not usable.
         ``options``: the
@@ -364,6 +366,13 @@ class Run:
             why = container.unusable()
             if why:
                 raise Refused(f"the docker backend cannot run here: {why}")
+        self.container_check = False
+        if backend == "local" and other.get("_kind") == "upstream" and (bench.get("score") or {}).get("runs_code"):
+            why = container.unusable()
+            if why and not unsandboxed:
+                raise Refused(f"{bench['label']}'s check executes generated code, but Docker is unavailable: {why}. "
+                              "Make Docker usable, or explicitly allow execution as you (--unsandboxed).")
+            self.container_check = not why
         self.bench, self.other, self.model, self.provider, self.backend = bench, other, model, provider, backend
         # A setup (definitions.setup): the upstream's own answerer, asked as one model (``asked``), the relay
         # sending another (``sent``); its units may be its own (a conversation where the paper batches questions).
@@ -436,10 +445,10 @@ class Run:
                 raise Refused("a spending cap needs a price for every model the run calls, and there is none for "
                               + ", ".join(unpriced) + ": nullius prices update, nullius prices set MODEL INPUT OUTPUT, "
                               "or --price MODEL=INPUT,OUTPUT")
-        lacking = {} if self.upstream and backend == "docker" else hostreq.missing(bench, needs["host"], which)
+        lacking = {} if self.upstream and backend == "docker" else hostreq.problems(bench, needs["host"], which)
         if lacking:
             raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
-                          + "; ".join(f"{n} ({', '.join(gone)} not on PATH)" for n, gone in lacking.items())
+                          + "; ".join(f"{n} ({why})" for n, why in lacking.items())
                           + (". Install with: " + " && ".join(lines) if (lines := hostreq.install_lines(bench, list(lacking)))
                              else ". Run it on a machine that has it"))
         self.bench_relay = None
@@ -508,10 +517,7 @@ class Run:
                            {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                             "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                             "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
-                            **({container.CHECK_IMAGE: self.image,
-                                **{k: v for k, v in container.client_env({"HOME": os.path.join(self.job_dir, ".work", "driver-home")}).items()
-                                   if k.startswith("DOCKER")}}
-                               if self.backend == "docker" and self.image else {}),
+                            **({container.CHECK_IMAGE: self.image, **container.check_env()} if self.image else {}),
                             **option_env(getattr(self, "bench_options", {})), **self.embeddings_env(), **self.driver_secrets()})
             os.makedirs(env["HOME"], exist_ok=True)
             # its working directory is the job's, never its catalogue folder: an upstream that writes
@@ -528,7 +534,7 @@ class Run:
         os.makedirs(os.path.join(self.job_dir, ".work"), exist_ok=True)
         self.say(f"job {self.job_dir}")
         p, control = self.progress, self.other["_kind"] == "control"
-        p.emit("plan", stages=",".join((["image"] if self.backend == "docker" else [])
+        p.emit("plan", stages=",".join((["image"] if self.backend == "docker" or self.container_check else [])
                                       + (["upstream"] if install.upstream_dir(self.bench) else [])
                                       + (["dataset"] if self.ds.get("url") else [])
                                       + (["driver"] if install.driver_dir(self.bench) else [])
@@ -582,9 +588,7 @@ class Run:
         self._halt, self._refused, self.halted = threading.Event(), [], None
         self._cut: List[str] = []                # units the spending cap cut off
         self._over: List[str] = []               # units that reached their own cap: cut off there, the run going on
-        # a model server on this machine's loopback, which the relays' containers cannot reach as written
-        self.loopback = (container.Loopback(self.base).start()
-                         if self.backend == "docker" and self.base and container.on_loopback(self.base) else None)
+        self.loopback = None
         def work_unit(iur):
             if self._stopped.is_set():
                 return None
@@ -598,6 +602,9 @@ class Run:
         pool = ThreadPoolExecutor(self.concurrency)
         futures = []
         try:
+            # a model server on this machine's loopback, which the relays' containers cannot reach as written
+            if self.backend == "docker" and self.base and container.on_loopback(self.base):
+                self.loopback = container.Loopback(self.base, image=self.image, job=self.name).start()
             for iur in work:
                 futures.append(pool.submit(work_unit, iur))
             for future in as_completed(futures):
@@ -672,16 +679,17 @@ class Run:
         if why:
             raise Refused("; ".join(why))
         p = self.progress
-        if self.backend == "docker":
+        if self.backend == "docker" or self.container_check:
             try:
                 tag = container.base_tag()
                 there = container.present(tag)
                 with p.stage("image", cached=there, start=f"building {tag} (first time on this machine)", **({"detail": tag} if there else {})):
                     self.image = container.base_image(os.path.join(self.job_dir, ".work", "image.log"))
             except container.Unavailable as e:
-                raise Refused(f"the docker backend: {e}")
-        # on docker a machine without npm installs in the base image, which carries the Node the agent will run on
-        npm_in = (lambda cmd, where: container.install_argv(self.image, where, cmd)) if self.backend == "docker" else None
+                raise Refused(f"the Docker image: {e}")
+        # on docker the agent's packages are installed in the base image, with the Node, uv and libc it runs on
+        image = self.image if self.backend == "docker" else None
+        run_in = (lambda cmd, where, env=None: container.install_argv(image, where, cmd, env)) if image else None
         try:
             where = install.upstream_dir(self.bench)
             self.up = None
@@ -709,8 +717,8 @@ class Run:
                     install.driver_packages(self.bench)
             self.inst = ""
             if self.other["_kind"] not in ("control", "upstream"):
-                with p.stage("install", cached=install.ready(install.packages_dir(self.other)), agent=self.other.get("_ref") or self.other["key"]):
-                    self.inst = install.packages(self.other, npm_in=npm_in)
+                with p.stage("install", cached=install.ready(install.packages_dir(self.other, image=image)), agent=self.other.get("_ref") or self.other["key"]):
+                    self.inst = install.packages(self.other, run_in=run_in, image=image)
         except (install.InstallFailed, container.Unavailable) as e:
             if self.backend == "docker":
                 container.sweep(self.name)
@@ -735,11 +743,11 @@ class Run:
         """What the agent needs in an own image that the image may not have:
         Node for an agent npm installs, Python for one started as ``python3``
         with no environment of its own (a uv environment's interpreter is
-        mounted as on the base image, ``container.python_homes``)."""
+        mounted with the install, as on the base image)."""
         a = self.other
         start = (a.get("start") or {}).get("acp") or (a.get("start") or {}).get("command") or [""]
         needs = ["node"] if (a.get("install") or {}).get("npm") else []
-        if container.bare_python(start[0]) and not container.python_homes(self.inst):
+        if container.bare_python(start[0]) and not os.path.isfile(os.path.join(self.inst, ".venv", "pyvenv.cfg")):
             needs.append("python")
         return needs
 
@@ -798,6 +806,8 @@ class Run:
                                                                 self.machine_env(trial)))
                 except mcp_machine.Unknown as e:
                     raise _Ended("EnvironmentSetupError", f"the unit's setup: {e}")
+            if "env" in setup and not own:
+                raise _Ended("EnvironmentSetupError", "the unit's setup: env requires an own image")
             if setup.get("verify") is not None and not own:
                 raise _Ended("EnvironmentSetupError", "the unit's setup: verify runs in an own image, and this unit has none")
             try:
@@ -1196,10 +1206,11 @@ class Run:
         env = dict(env, **(getattr(rl, "unit_secrets", None) or {}))
         env.update(getattr(rl, "network_env", {}))
         if box is not None:
-            inside = {k: v for k, v in env.items() if k not in container.HOST_ONLY}
-            path = os.pathsep.join([box.path] + install.bin_dirs(self.inst) + [d + "/bin" for _, d in box.runtimes.values()])
+            inside = {**box.env, **{k: v for k, v in env.items() if k not in container.HOST_ONLY}}
+            path = ":".join(([box.env["PATH"]] if "PATH" in box.env else []) + [box.path]
+                            + install.bin_dirs(self.inst) + [d + "/bin" for _, d in box.runtimes.values()])
             argv = box.exec_argv(container.in_runtime(cmd, box.runtimes), inside, path, interactive=interactive)
-            return argv, container.client_env({k: v for k, v in inside.items() if k != "PATH"})
+            return argv, container.program_env(inside)
         if self.backend == "local":
             return cmd, env
         ws = os.path.join(os.path.dirname(home), "workspace")
@@ -1208,7 +1219,7 @@ class Run:
         # this application's folder (its .env holds the keys) nor the
         # benchmark's (its data holds the answers).
         mounted = container.mounts([ws, home, *getattr(rl, "unit_rw", [])],
-                                   [self.inst, self.other.get("_here"), *container.python_homes(self.inst)],
+                                   [self.inst, self.other.get("_here")],
                                    getattr(rl, "unit_files", []))
         env = dict(env, PATH=os.pathsep.join(install.bin_dirs(self.inst) + [container.IMAGE_PATH]))
         return rl.wrap(list(cmd), env, workdir, mounted, image=rl.unit_image, interactive=interactive,
@@ -1251,6 +1262,7 @@ class Run:
         glibc runtime in a musl image) is not run, which is no one's result."""
         spec = setup.get("image")
         bad = container.spec_problems(spec)
+        bad += container.task_env_problems(setup.get("env", {}), (self.other.get("model") or {}).get("env", {}))
         if setup.get("verify") is not None:
             bad += ["verify." + p for p in container.step_problems(setup["verify"], collect=True)]
         if setup.get("workdir") is not None and not (isinstance(setup["workdir"], str) and setup["workdir"].startswith("/")):
@@ -1269,13 +1281,13 @@ class Run:
                 # as on the base: its home, its install and definition, its MCP servers' files -
                 # never this application's folder nor the benchmark's; and what it runs on, under /opt/nullius
                 mounted = container.mounts([home, *getattr(rl, "unit_rw", [])],
-                                           [self.inst, self.other.get("_here"), *container.python_homes(self.inst)],
+                                           [self.inst, self.other.get("_here")],
                                            getattr(rl, "unit_files", []))
                 runtimes = self.runtimes
             box = container.Box(self.name, tag, image, workdir=setup.get("workdir") or cfg["workdir"], path=cfg["path"],
                                 network=rl.names["network"] if isinstance(rl, container.Unit) else None,
                                 mounted=mounted, runtimes=runtimes, memory_mb=spec.get("memory_mb"), cpus=spec.get("cpus"),
-                                app=APP).start()
+                                app=APP, env=setup.get("env")).start()
             for name in runtimes:
                 why = box.runtime_problem(name)
                 if why:

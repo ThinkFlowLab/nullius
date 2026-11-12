@@ -53,15 +53,15 @@ Long-term chat memory: questions over timestamped chat histories.
 |---|---|---|
 | `retriever` | `flat-contriever-session` | host: cuda_gpu |
 | `retriever` | `flat-contriever-turn` | host: cuda_gpu |
-| `retriever` | `flat-stella-session` | host: cuda_gpu |
-| `retriever` | `flat-stella-turn` | host: cuda_gpu |
+| `retriever` | `flat-stella-session` | host: stella_gpu |
+| `retriever` | `flat-stella-turn` | host: stella_gpu |
 
 ## Good to know
 
 - The S, M and oracle files run cleaned, and S and M also as first released. The paper's numbers come from the files as first released.
 - An M file is 2.7 GB and needs about 5.5 GB of free disk. STANDARD_DATA_DIR moves the datasets to a disk with room.
 - Reading is chain-of-note by default, or direct. Separate notes work with Original memory only.
-- Original memory offers the paper's Contriever and Stella retrievers and needs a CUDA GPU. Stella needs more than 11 GB of GPU memory.
+- Original memory offers the paper's Contriever and Stella retrievers and needs a CUDA GPU. Stella requires at least 12000 MiB of GPU memory; the run checks it before starting.
 
 ## Upstream limitations
 

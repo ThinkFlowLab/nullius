@@ -82,7 +82,10 @@ class Inventory(unittest.TestCase):
         r = BENCH["options"]["retriever"]
         for v in ("flat-contriever-session", "flat-contriever-turn", "flat-stella-session", "flat-stella-turn"):
             self.assertIn(v, r["values"])
-            self.assertEqual(definitions.option_needs(BENCH, {"retriever": v})["host"], ["cuda_gpu"])
+            need = "stella_gpu" if "stella" in v else "cuda_gpu"
+            self.assertEqual(definitions.option_needs(BENCH, {"retriever": v})["host"], [need])
+        self.assertEqual(BENCH["host"]["stella_gpu"]["gpu_memory_mb"], 12000)
+        self.assertNotIn("gpu_memory_mb", BENCH["host"]["cuda_gpu"])
         self.assertEqual(definitions.option_needs(BENCH, {"retriever": "flat-bm25-session"})["host"], [])
         self.assertFalse([v for v in r["values"] if "gte" in v])
 

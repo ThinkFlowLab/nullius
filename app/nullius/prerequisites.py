@@ -7,19 +7,22 @@ can change between the two - docker quit, a program removed.
 
 A need is one of:
 
-- ``docker``: on PATH **and** its engine answering this user - Docker
-  Desktop's placeholder command, there while the engine is quit, is not
-  docker;
+- ``engine``: the standard's docker backend's engine (``container.DOCKER``:
+  docker, or podman) on PATH **and** answering this user - Docker Desktop's
+  placeholder command, there while the engine is quit, is not docker. Its row also says when
+  the engine has ``userns-remap``, which the standard's containers run outside of;
+- ``docker``: the same, for Harbor, which runs the docker program;
 - ``uv``: on a host it is installed when missing, here it must be there (a
   pinned Harbor runs through ``uvx``, a runner's install builds with it);
 - ``harbor``: a recipe from before the pin runs the ``harbor`` on PATH;
 - ``python3``, ``git``: the standard's cli, on a host;
 - a benchmark's machine setup (``host`` in its definition): its programs,
-  and the commands that install them.
+  optional GPU memory minimum, and the commands that install them.
 
 Nothing here installs anything or writes anything: each check is
-``command -v`` and ``docker version`` here, or one ssh probe for a host
-(``hosts.test``).
+``command -v``, the engine's ``version`` and, when needed, ``nvidia-smi`` here,
+or one ssh probe for a host (``hosts.test``). Remote GPU memory is checked
+by the run as it starts there.
 """
 from __future__ import annotations
 
@@ -28,17 +31,21 @@ import time
 from typing import Callable, Dict, List, Optional
 
 from nullius import hosts
-from nullius.standard import container
+from nullius.standard import container, hostreq
 
-LABEL = {"docker": "Docker", "uv": "uv", "harbor": "Harbor on PATH", "python3": "python3", "git": "git"}
+LABEL = {"engine": "Docker or Podman", "docker": "Docker", "uv": "uv", "harbor": "Harbor on PATH", "python3": "python3", "git": "git"}
 
-# Whether docker answers here, asked at most once a minute: the builder asks on each preview.
+# the docker row's detail for the standard on an engine with userns-remap (container.userns_remap)
+REMAPPED = "the engine answers, and Nullius's containers run outside its userns-remap"
+
+# Whether the engine answers here, asked at most once a minute: the builder asks on each preview.
 _HERE = {"at": 0.0, "why": None}
 
 
 def docker_here(fresh: bool = False) -> Optional[str]:
-    """Why docker cannot run containers on this machine for this user, or
-    None when it can: the engine asked, not only the command looked for.
+    """Why the docker backend's engine (``container.DOCKER``) cannot run
+    containers on this machine for this user, or None when it can: the
+    engine asked, not only the command looked for.
     Kept for a minute unless ``fresh``."""
     if fresh or time.monotonic() - _HERE["at"] > 60:
         _HERE.update(at=time.monotonic(), why=container.unusable())
@@ -50,33 +57,40 @@ def row(name: str, state: str, detail: str = "", install: Optional[List[str]] = 
     return {"name": name, "label": label or LABEL.get(name, name), "state": state, "detail": detail, "install": install or []}
 
 
-def check_here(needs: List[str], setups: Optional[Dict[str, dict]] = None, *,
-               which: Optional[Callable] = None, docker: Optional[Callable] = None) -> List[dict]:
+def check_here(needs: List[str], setups: Optional[Dict[str, dict]] = None, *, standard: bool = False,
+               which: Optional[Callable] = None, docker: Optional[Callable] = None,
+               remap: Optional[Callable] = None) -> List[dict]:
     """The rows for this machine. ``setups``: a benchmark's machine setups by
-    name, each ``{summary, check: [programs], install: [commands]}``. ``which``
-    and ``docker`` are looked up at call time, so a test can stand in for them."""
+    name, each ``{summary, check: [programs], install: [commands]}``, with an
+    optional ``gpu_memory_mb`` minimum. ``standard``: the recipe is the
+    standard's, whose containers Nullius starts. ``which``, ``docker`` and
+    ``remap`` are looked up at call time, so a test can stand in for them."""
     which = which or shutil.which
     docker = docker or docker_here
+    remap = remap or container.userns_remap
     rows = []
     for n in needs:
-        if n == "docker":
+        if n in ("engine", "docker"):
             why = docker()
-            rows.append(row(n, "missing", why) if why else row(n, "ok", "the engine answers"))
+            if not why and n == "docker" and not which("docker"):
+                why = "Install Docker on this machine: Harbor runs the docker program"
+            rows.append(row(n, "missing", why) if why else
+                        row(n, "ok", REMAPPED if standard and remap() else "the engine answers"))
         elif n == "uv":
             rows.append(row(n, "ok") if which("uvx") else row(n, "missing", "uv is not on this machine's PATH", ["curl -LsSf https://astral.sh/uv/install.sh | sh"]))
         elif n == "harbor":
             rows.append(row(n, "ok") if which("harbor") else row(n, "missing", "a recipe from before the pin runs the harbor on PATH: pin a Harbor on the Harbor step"))
         else:
             rows.append(row(n, "ok") if which(n) else row(n, "missing", f"{n} is not on this machine's PATH"))
+    lacking = hostreq.problems({"host": setups or {}}, list(setups or {}), which)
     for name, s in (setups or {}).items():
-        gone = [p for p in s.get("check") or [] if not which(p)]
-        rows.append(row("setup:" + name, "missing", ", ".join(gone) + " not on PATH", s.get("install"), label=name)
-                    if gone else row("setup:" + name, "ok", s.get("summary", ""), label=name))
+        rows.append(row("setup:" + name, "missing", lacking[name], s.get("install"), label=name)
+                    if name in lacking else row("setup:" + name, "ok", s.get("summary", ""), label=name))
     return rows
 
 
 def check_host(host: hosts.Host, needs: List[str], setups: Optional[Dict[str, dict]] = None, *,
-               test: Optional[Callable] = None) -> List[dict]:
+               standard: bool = False, test: Optional[Callable] = None) -> List[dict]:
     """The rows for a host, from one ssh probe. Unreachable: one row, and nothing else is known."""
     test = test or hosts.test
     programs = [p for s in (setups or {}).values() for p in s.get("check") or []]
@@ -87,11 +101,15 @@ def check_host(host: hosts.Host, needs: List[str], setups: Optional[Dict[str, di
     gone = set(got.get("missing") or [])
     rows = [row("connect", "ok", got.get("hostname") or host.label, label="Connection")]
     for n in needs:
-        if n == "docker":
+        if n == "engine" and got["engine"] != "docker":
+            rows.append(row(n, "missing", "neither docker nor podman is on the host") if not got["engine"]
+                        else row(n, "missing", "podman is on the host but this user cannot use it (podman ps failed)")
+                        if got["podman_ok"] is False else row(n, "ok", "the engine answers"))
+        elif n in ("engine", "docker"):
             rows.append(row(n, "missing", "docker is not on the host") if not got["docker"]
                         else row(n, "missing", "docker is on the host but this user cannot use it (docker ps failed): "
                                  "add the user to the docker group there, then log in again") if got["docker_ok"] is False
-                        else row(n, "ok", "the engine answers"))
+                        else row(n, "ok", REMAPPED if standard and got.get("docker_userns") else "the engine answers"))
         elif n == "uv":
             rows.append(row(n, "ok") if got["uv"] else row(n, "install", "installed on the host when the run starts"))
         elif n == "harbor":
