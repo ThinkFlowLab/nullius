@@ -30,7 +30,7 @@ uv run --no-project --with-requirements app/requirements.txt app/app.py --no-deb
 ```
 
 The app opens on [127.0.0.1:5057](http://127.0.0.1:5057). Docker is needed only
-for the docker backend and for Harbor recipes.
+for the container backend and for Harbor recipes.
 
 ## Where things go
 

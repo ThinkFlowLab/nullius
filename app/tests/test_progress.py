@@ -133,8 +133,8 @@ class Fold(unittest.TestCase):
         self.assertEqual((got["stages"][0]["bytes"], got["stages"][0]["total"]), (5_000_000, 9_000_000))
 
     def test_a_refusal_ends_the_list_and_says_why(self):
-        got = progress.fold([ev("plan", stages="image,install,units"), ev("image", "start"), ev("refused", detail="the docker backend: no")])
-        self.assertEqual((got["ended"], got["detail"]), ("refused", "the docker backend: no"))
+        got = progress.fold([ev("plan", stages="image,install,units"), ev("image", "start"), ev("refused", detail="the container backend: no")])
+        self.assertEqual((got["ended"], got["detail"]), ("refused", "the container backend: no"))
         self.assertEqual([(s["stage"], s["state"]) for s in got["stages"]], [("image", "failed")])
         self.assertEqual(progress.refusal([ev("refused", detail="why")]), "why")
         self.assertIsNone(progress.refusal([ev("done")]))

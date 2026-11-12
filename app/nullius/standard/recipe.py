@@ -264,7 +264,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     machine is given (``web/execute.py`` starts one per shard) - and
     ``docker``, whether the runs need docker where they run.
 
-    ``docker_unusable``: asked, when the docker backend is chosen for this
+    ``docker_unusable``: asked, when the container backend is chosen for this
     machine, why docker cannot run here (``container.unusable``) - a reason
     is the Where step's error. Not given, it is not asked: compiling stays a
     function of the definitions alone, and the routes that preview or start
@@ -556,7 +556,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["script"] = "\n".join(pt["script"] for pt in out["shards"][0]["parts"]) if len(pairs) > 1 else out["shards"][0]["script"]
     out["parts"] = [pt for sh in out["shards"] for pt in sh["parts"]]
     out["jobs"] = [j for sh in out["shards"] for j in sh["jobs"]]
-    # docker where it runs: the docker backend, or a control run in each unit's own image, whatever the backend
+    # docker where it runs: the container backend, or a control run in each unit's own image, whatever the backend
     own = any(definitions.own_image(definitions.environment_of(b, None, x)[1]) for x in dss)
     out["docker"] = backend == "container" or (own and any(p["control"] for p in picks))
     out["model"] = model

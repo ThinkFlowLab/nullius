@@ -163,7 +163,7 @@ class PruneTest(unittest.TestCase):
 
 
 class InBaseImageTest(unittest.TestCase):
-    """On the docker backend every npm, uv and Python step runs in the base
+    """On the container backend every npm, uv and Python step runs in the base
     image (``run_in``), git on this machine; a host is asked for neither Node
     nor uv. Without that, a machine with no npm is refused with a sentence,
     not a traceback."""
@@ -177,7 +177,7 @@ class InBaseImageTest(unittest.TestCase):
 
     def test_no_npm_and_no_container_is_refused_said(self):
         with mock.patch.object(install.shutil, "which", return_value=None):
-            with self.assertRaisesRegex(install.InstallFailed, "npm is not on this machine.*docker backend"):
+            with self.assertRaisesRegex(install.InstallFailed, "npm is not on this machine.*container backend"):
                 install.packages(self.agent, self.home)
 
     def test_every_step_but_git_runs_where_run_in_says_and_leaves_no_scratch(self):

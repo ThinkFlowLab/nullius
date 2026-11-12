@@ -16,7 +16,7 @@ proved ``agent.tools/v1`` takes one - and that server is the benchmark's:
 - **local backend**: the entry is the server's own command, rendered
   (:func:`local_entry`): the agent starts it, on this machine, from the
   driver's environment, as it starts any stdio server;
-- **docker backend**: the run starts a :class:`Listener` per server per unit
+- **container backend**: the run starts a :class:`Listener` per server per unit
   on this machine - a Unix socket in a private folder; each connection to it
   is one start of the server, its stdin and stdout the connection - and the
   unit gets one door to it (``container.Unit``'s ``doors``: ``forward.py``
@@ -29,7 +29,7 @@ proved ``agent.tools/v1`` takes one - and that server is the benchmark's:
 
 Either way a server started twice in a unit is two processes, as a stdio
 server is; what it logs, it logs on this machine (the trial's
-``verifier/``), out of the agent's reach on docker.
+``verifier/``), out of the agent's reach in a container.
 """
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ def alias(name: str, i: int) -> str:
 
 
 def bridge_entry(name: str, door: str) -> dict:
-    """The agent's stdio entry on docker: the bridge, told its door."""
+    """The agent's stdio entry in a container: the bridge, told its door."""
     return {"name": name, "command": "python3", "args": [BRIDGE], "env": {"NULLIUS_MCP_AT": door}}
 
 
@@ -160,7 +160,7 @@ class Listener:
 
 def doors(bench: dict, setup: dict, inst: Optional[str], base: dict, cwd: str, log_dir: str
           ) -> Tuple[List[dict], List[Tuple[str, int, str]], List[Listener]]:
-    """For the docker backend: the setup's ``mcp`` with each machine server's
+    """For the container backend: the setup's ``mcp`` with each machine server's
     entry replaced by the bridge's, the doors the unit opens (alias, port,
     socket) and the listeners started - stopped by the caller, also on an
     error. Raises :class:`Unknown` for a server not declared."""

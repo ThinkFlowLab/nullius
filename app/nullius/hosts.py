@@ -179,7 +179,7 @@ _PROGRAM = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,39}$")
 def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, programs: Optional[List[str]] = None) -> dict:
     """What the host answers: reachable or why not, and whether uv, docker,
     podman and harbor are there (``engine``: which of docker and podman the
-    standard's docker backend runs there, or None) - and, given ``programs`` (a benchmark's host
+    standard's container backend runs there, or None) - and, given ``programs`` (a benchmark's host
     requirements), which of them are not on its PATH (``missing``). Nothing
     but the probe command is sent. ``run`` is looked up at call time so a
     test can stand in for ssh."""
@@ -207,7 +207,7 @@ def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, prog
             result["hostname"] = v.strip() or None
         elif k == "missing" and programs and v.strip() in programs:
             result["missing"].append(v.strip())
-    # the standard's docker backend's engine there: docker when the probe finds it, else podman
+    # the standard's container backend's engine there: docker when the probe finds it, else podman
     result["engine"] = "docker" if result["docker"] else "podman" if result["podman"] else None
     result["ok"] = True
     return result

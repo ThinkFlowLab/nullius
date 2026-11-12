@@ -22,12 +22,12 @@ On docker the agent's or capability's packages are installed in the base image, 
 The driver, its environment installed here, stays on this machine either
 way: it owns the answers. So do a benchmark's own MCP servers
 (``mcp_servers``), in the driver's environment: on the local backend the
-agent starts each from it, on docker the run does, behind a door on the
+agent starts each from it, in a container the run does, behind a door on the
 unit's network (``mcp_machine``).
 
 A unit whose environment is an **own image** (``"image": "own"``) runs in
 the task's own container, whatever the backend (a control's too: nothing of
-an agent runs there; an agent's needs the docker backend): its setup names
+an agent runs there; an agent's needs the container backend): its setup names
 the image (``image``: a folder of the upstream to build, or a reference by
 digest) and, optionally, the working directory (``workdir``; the image's own
 by default) and a check (``verify``) - files of the upstream copied in, a
@@ -712,7 +712,7 @@ class Run:
                     self.image = container.base_image(os.path.join(self.job_dir, ".work", "image.log"))
             except container.Unavailable as e:
                 raise Refused(f"the Docker image: {e}")
-        # on docker the agent's packages are installed in the base image, with the Node, uv and libc it runs on
+        # on the container backend the agent's packages are installed in the base image, with the Node, uv and libc it runs on
         image = self.image if self.backend == "container" else None
         run_in = (lambda cmd, where, env=None: container.install_argv(image, where, cmd, env)) if image else None
         try:
@@ -1061,8 +1061,8 @@ class Run:
     def agent_licences(self, env_def: Optional[dict], rl) -> dict:
         """The variables the unit's environment gives the agent of its
         licences (``to: agent``): a key; a file's path, where it is mounted
-        on docker (``rl.unit_binds``) or kept here; a server's address - on
-        docker the one its forwarder answers at (``container.Unit``)."""
+        in a container (``rl.unit_binds``) or kept here; a server's address - in a
+        container the one its forwarder answers at (``container.Unit``)."""
         inside = self.backend == "container"
         out = definitions.secret_values(env_def, self.licences, "agent", inside=inside)
         reach = getattr(rl, "reach", None) or {}
@@ -1120,7 +1120,7 @@ class Run:
 
     def unit_relay(self, tag: str, trial: str, setup: dict, env_def: Optional[dict] = None, own: bool = False):
         """The unit's own relay, started: in this process on the local
-        backend, a sidecar container on docker. Either answers ``url`` (the
+        backend, else a sidecar container. Either answers ``url`` (the
         driver's way in, on this machine), ``calls`` and ``stop``;
         ``unit_url`` is the address the agent or capability is given. ``own``:
         the unit runs in its own image (:meth:`own_box`), not one of the
@@ -1213,10 +1213,10 @@ class Run:
 
     def place(self, rl, cmd: List[str], env: dict, workdir: str, home: str, interactive: bool = True, box=None):
         """A unit's command and environment as they are started: unchanged on
-        the local backend; on docker, ``docker run`` on the unit's network,
+        the local backend; in a container, ``docker run`` on the unit's network,
         with the folders it reads at their own paths and the image's ``PATH``
         behind the install's. The secrets its environment sends the agent
-        (``to: agent``) are added to its environment - on docker passed by
+        (``to: agent``) are added to its environment - in a container passed by
         name, never on an argument list. In an own image (``box``), ``docker
         exec`` in the unit's container, the image's own ``PATH`` first - the
         task's programs are the task's - then the install's and the runtimes'."""

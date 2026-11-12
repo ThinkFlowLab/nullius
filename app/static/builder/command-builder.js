@@ -481,7 +481,7 @@
     const envs = Object.entries(b.environments || {});
     if (!envs.length) return '';
     return `<div class="std-envs"><h3>Environments</h3><small>Each unit runs in one of ${esc(b.label)}'s environments.</small><ul>` + envs.map(([n, e]) =>
-      `<li><b class="nb-mono">${esc(n)}</b> <span class="nb-tag">${e.local_ok ? 'docker or local processes' : 'needs docker'}</span><small>${esc(e.summary)}</small>`
+      `<li><b class="nb-mono">${esc(n)}</b> <span class="nb-tag">${e.local_ok ? 'container or local processes' : 'needs a container'}</span><small>${esc(e.summary)}</small>`
       + (e.needs_secrets || []).map(s => licenceLine(b, s)).join('') + '</li>').join('') + '</ul></div>';
   }
   // The Dataset step: the licences the chosen dataset's units may need. Which environment a unit uses is the

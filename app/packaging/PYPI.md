@@ -19,7 +19,7 @@ the application and command are `nullius`.
 
 Python 3.12 or later is required. Reading existing results needs no model key.
 Running benchmarks requires the appropriate provider credentials and benchmark
-prerequisites; Docker is needed for Harbor and the standard's docker backend.
+prerequisites; Docker is needed for Harbor and the standard's container backend.
 
 This is a release candidate for testing before version `0.1.0`. Release
 validation targets Linux with Python 3.12. The wheel is a Python package with

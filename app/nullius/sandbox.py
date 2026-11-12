@@ -1,4 +1,4 @@
-"""The Settings page's Sandbox: the docker backend's engine on this machine,
+"""The Settings page's Sandbox: the container backend's engine on this machine,
 docker or podman (``container.DOCKER``).
 
 Three things, each something a user acts on:

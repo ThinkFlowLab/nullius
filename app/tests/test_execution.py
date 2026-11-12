@@ -142,7 +142,7 @@ class Here(Base):
 
 class DockerHere(Base):
     """A Harbor run here asks docker first, as a run on a host does - and
-    so does the standard on its docker backend - and starts nothing when it
+    so does the standard on its container backend - and starts nothing when it
     is missing or does not answer: with Docker Desktop quit, /usr/bin/docker
     is still on the PATH. The standard's local backend asks nothing of docker,
     and a restored run is not asked again."""
@@ -591,8 +591,8 @@ class Refused(Base):
         ex = execution.Execution(self.plan(), root=str(self.tmp / "runs"), record={"id": "r", "state": "failed", "launched": "ref",
                                                                                   "ends": {"ref": {"rc": 2, "at": 1.0, "label": "Reference"}}})
         self.assertIsNone(ex.refused("std-r"))                                       # it ran, and its job is not here: not a refusal
-        progress.Reporter(os.path.join(ex.jobs, "std-r")).emit("refused", detail="the docker backend: no Node build pinned")
-        self.assertEqual(ex.refused("std-r"), "the docker backend: no Node build pinned")
+        progress.Reporter(os.path.join(ex.jobs, "std-r")).emit("refused", detail="the container backend: no Node build pinned")
+        self.assertEqual(ex.refused("std-r"), "the container backend: no Node build pinned")
         self.assertEqual(sorted(os.listdir(os.path.join(ex.jobs, "std-r"))), ["progress.jsonl"])   # kept, and nothing reads it as a job
 
     def test_a_run_that_failed_before_any_part_was_refused(self):
