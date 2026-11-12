@@ -20,7 +20,7 @@
   {"entry": "python -m swebench.harness.run_evaluation", "setting": "--report_dir, --rewrite_reports", "values": "", "default": ". / false",
    "nullius": "fixed:the trial's verifier/ folder - the harness's report.json written there once, by its own grading"},
   {"entry": "python -m swebench.harness.run_evaluation", "setting": "--modal", "values": "true, false", "default": "false",
-   "nullius": "not offered - where the containers run, not what is measured; the standard's own docker backend runs them"},
+   "nullius": "not offered - where the containers run, not what is measured; the standard's own container backend runs them"},
   {"entry": "the dataset", "setting": "image (swebench/sweb.eval.x86_64.<instance>:latest)", "values": "the authors' prebuilt image per instance", "default": "latest",
    "nullius": "fixed:the authors' image - pulled by the digest its latest tag had when pinned here (images.json), so a re-push does not move the measure"},
   {"entry": "the dataset", "setting": "eval_script, log_parser, eval_type", "values": "per instance", "default": "per instance",

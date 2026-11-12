@@ -33,10 +33,10 @@ def a_recipe(**kw):
 
 
 class Backend(unittest.TestCase):
-    def test_docker_needs_no_yes_and_says_so_in_the_command(self):
-        out = recipe.compile(a_recipe(backend="docker"), defs(), docker_unusable=lambda: None)
+    def test_a_container_needs_no_yes_and_says_so_in_the_command(self):
+        out = recipe.compile(a_recipe(backend="container"), defs(), docker_unusable=lambda: None)
         self.assertEqual(out["errors"], [])
-        self.assertIn("--backend docker", out["script"])
+        self.assertIn("--backend container", out["script"])
         self.assertNotIn("--unsandboxed", out["script"])
         self.assertTrue(out["docker"])
 
@@ -45,18 +45,18 @@ class Backend(unittest.TestCase):
         self.assertEqual([e["step"] for e in out["errors"]], [recipe.STEP["where"]])
         self.assertIn("--unsandboxed", recipe.compile(a_recipe(unsandboxed=True), defs())["script"])
 
-    def test_docker_this_machine_cannot_run_is_refused_on_the_where_step_with_its_reason(self):
+    def test_a_container_this_machine_cannot_run_is_refused_on_the_where_step_with_its_reason(self):
         why = "docker is installed but not usable by this user: permission denied"
-        out = recipe.compile(a_recipe(backend="docker"), defs(), docker_unusable=lambda: why)
+        out = recipe.compile(a_recipe(backend="container"), defs(), docker_unusable=lambda: why)
         self.assertEqual(out["errors"], [{"step": recipe.STEP["where"],
-                                          "message": f"The docker backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman."}])
+                                          "message": f"The container backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman."}])
 
     def test_this_machines_docker_is_not_asked_for_a_host_or_for_local_processes(self):
         asked = []
         def unusable():
             asked.append(1)
             return "no docker"
-        self.assertEqual(recipe.compile(a_recipe(backend="docker", where="me@bench"), defs(), docker_unusable=unusable)["errors"], [])
+        self.assertEqual(recipe.compile(a_recipe(backend="container", where="me@bench"), defs(), docker_unusable=unusable)["errors"], [])
         self.assertEqual(recipe.compile(a_recipe(unsandboxed=True), defs(), docker_unusable=unusable)["errors"], [])
         self.assertEqual(asked, [])
 

@@ -17,7 +17,7 @@ Everything goes under ``STANDARD_DIR`` (``standard/`` in the persistent user dat
   ``STANDARD_DATA_DIR`` instead when that is set - datasets can be gigabytes
   where installs are not, so they may sit on a bigger disk than the installs.
 
-On the docker backend an agent's or a capability's packages are installed in
+On the container backend an agent's or a capability's packages are installed in
 the base image (``container.install_argv``), and the base image's tag is part
 of their folder's digest. A driver's packages, and all packages on the local
 backend, are installed with this machine's ``npm`` and ``uv``. Git always runs
@@ -120,7 +120,7 @@ def packages(d: dict, home: str = HOME, run_in: Optional[Callable[..., List[str]
     gets an empty folder all the same, so ``{install}`` always names one.
 
     ``run_in``: where every ``npm``, ``uv`` and Python step runs instead of
-    this machine: the docker backend's base image, which carries Node and uv
+    this machine: the container backend's base image, which carries Node and uv
     (``container.install_argv``). Given the command, the folder and the
     step's own variables, it returns the argument list that runs it there.
     The install is then made on the libc and the tools the agent's container
@@ -192,12 +192,12 @@ def _packages(inst: dict, where: str, up: Optional[dict] = None, run_in: Optiona
 def _steps(inst: dict, where: str, up: Optional[dict], src: Optional[str], log: str, step: Callable, boxed: bool):
     if inst.get("npm"):
         if not boxed and not shutil.which("npm"):
-            raise InstallFailed("npm is not on this machine: install Node.js 22 here, or run on the docker backend, "
+            raise InstallFailed("npm is not on this machine: install Node.js 22 here, or run on the container backend, "
                                 "which installs with the Node in its base image")
         step(["npm", "install", "--no-audit", "--no-fund", "--prefix", where] + list(inst["npm"]))
     if inst.get("pip") or inst.get("project") or inst.get("indexes") or inst.get("wheels"):
         py = os.path.join(where, ".venv", "bin", "python")
-        # uv's own interpreter, never the system's: on docker in the install (.python), mounted with it; /usr/bin is the image's
+        # uv's own interpreter, never the system's: on the container backend in the install (.python), mounted with it; /usr/bin is the image's
         step(["uv", "venv", "--quiet", "--python-preference", "only-managed", os.path.join(where, ".venv")]
              + (["--python", inst["python"]] if inst.get("python") else []))
         for x in inst.get("indexes") or []:          # first: the project's resolution then keeps them

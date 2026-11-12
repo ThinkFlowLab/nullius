@@ -39,7 +39,7 @@ ssh -o BatchMode=yes eval-box true
 ```
 
 !!! note "What the host needs"
-    Standard: `python3`, `git`, Docker or Podman for the docker backend. Harbor: Docker answering `docker ps`. Both: `uv`, installed when missing. Review checks each before Run.
+    Standard: `python3`, `git`, Docker or Podman for the container backend. Harbor: Docker answering `docker ps`. Both: `uv`, installed when missing. Review checks each before Run.
 
 <div class="grid cards" markdown>
 

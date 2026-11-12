@@ -3,6 +3,7 @@ Conformance checks require the form token, a local request, and explicit
 permission to run an agent unsandboxed."""
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
@@ -227,20 +228,20 @@ class Tabs(unittest.TestCase):
         self.assertNotIn("sk-test", plan.script)
         self.assertTrue(r.headers["Location"].endswith("/job/" + plan.jobs[0]["name"]))
 
-    def test_docker_checks_require_docker_and_record_the_backend(self):
+    def test_container_checks_require_an_engine_and_record_the_backend(self):
         from web import execute
-        for kind, key in (("agents", "fake"), ("capabilities", "fakemem")):
-            with self.subTest(kind=kind), patch.object(execute, "docker_problem", return_value=None):
+        for (kind, key), value in itertools.product((("agents", "fake"), ("capabilities", "fakemem")), ("container", "docker")):
+            with self.subTest(kind=kind, backend=value), patch.object(execute, "docker_problem", return_value=None):
                 response = self.client.post(f"/{kind}/{key}/check", data={"csrf": self.csrf(), "provider": "openai",
-                                           "model": "m", "backend": "docker"}, headers={"Origin": "http://localhost"})
+                                           "model": "m", "backend": value}, headers={"Origin": "http://localhost"})
                 self.assertEqual(response.status_code, 302)
                 plan = self.started[-1]
                 self.assertTrue(plan.docker)
-                self.assertIn("--backend docker", plan.script)
+                self.assertIn("--backend container", plan.script)
                 self.assertNotIn("--unsandboxed", plan.script)
         count = len(self.started)
         with patch.object(execute, "docker_problem", return_value="Start Docker first."):
-            self.client.post("/agents/fake/check", data={"csrf": self.csrf(), "provider": "openai", "model": "m", "backend": "docker"},
+            self.client.post("/agents/fake/check", data={"csrf": self.csrf(), "provider": "openai", "model": "m", "backend": "container"},
                              headers={"Origin": "http://localhost"})
         self.assertEqual(len(self.started), count)
 
@@ -381,7 +382,7 @@ class BuilderStandard(unittest.TestCase):
         (plan,) = self.started
         self.assertEqual((plan.host.entry, plan.runner, plan.name, plan.docker), ("me@bench", "standard", "fake-0101-120000", False))
         self.started.clear()
-        r = self.post("/run", {"name": "x", "where": ["local", "me@bench"], "recipe": self.recipe(where=["local", "me@bench"], backend="docker")})
+        r = self.post("/run", {"name": "x", "where": ["local", "me@bench"], "recipe": self.recipe(where=["local", "me@bench"], backend="container")})
         self.assertTrue(r.get_json()["ok"], r.get_json())
         self.assertEqual([(p.host.entry if p.host else "local", p.name, p.docker) for p in self.started],
                          [("local", "fake-0101-120000-shard-1of2", True), ("me@bench", "fake-0101-120000-shard-2of2", True)])
@@ -441,7 +442,7 @@ class StandardPieces(unittest.TestCase):
                              "fidelity": {"verdict": "same", "on": "2026-10-12", "model": "m", "passes": 2, "differs": []}})
         html = self.get("/agents/fake").get_data(as_text=True)
         self.assertRegex(html, r'<b class="std-portname"[^>]*><a href="/kits/agent-tools-v1">MCP tools</a></b> <code class="std-portid">agent.tools/v1</code>')
-        self.assertIn("kit v1, docker", html)                                       # in the title: no date, model or kit as text
+        self.assertIn("kit v1, container", html)                                    # in the title: no date, model or kit as text; docker its earlier name
         self.assertIn("ACP = its own CLI ✓", html)
         self.assertIn("<code>effort</code> <span class=\"std-tag\">medium (its default)</span><small>takes low, medium, high</small>", html)
 
@@ -488,7 +489,7 @@ class StandardPieces(unittest.TestCase):
         r = self.get("/new-run")
         csrf = json.loads(re.search(r'<script id="nb-schema" type="application/json">(.*?)</script>', r.get_data(as_text=True), re.S).group(1))["csrf"]
         recipe = {"version": 1, "harness": "standard", "name": "fake-0101-120000", "title": "t", "benchmark": "fakebench", "dataset": "all",
-                  "other": "fake", "provider": "openai", "model": "gpt-5-mini", "limit": 2, "concurrency": 2, "where": "local", "backend": "docker"}
+                  "other": "fake", "provider": "openai", "model": "gpt-5-mini", "limit": 2, "concurrency": 2, "where": "local", "backend": "container"}
         headers = {"Origin": "http://localhost", "X-CSRF-Token": csrf}
         out = self.client.post("/new-run/runner", data=json.dumps({"recipe": recipe}), content_type="application/json", headers=headers).get_json()
         self.assertEqual([e["step"] for e in out["errors"]], [7])
@@ -498,7 +499,7 @@ class StandardPieces(unittest.TestCase):
         ok = self.client.post("/new-run/runner", data=json.dumps({"recipe": dict(recipe, where="me@bench")}), content_type="application/json",
                               headers=headers).get_json()
         self.assertEqual(ok["errors"], [])                                              # a host's docker is the host's to check
-        self.assertIn("docker", str(ok["review"]).lower())
+        self.assertIn("container backend", str(ok["review"]))
         self.assertEqual(self.started, [])
 
     def test_the_recipe_core_keeps_backend_options_machines_and_lets_a_control_run_keyless(self):
@@ -517,7 +518,7 @@ class StandardPieces(unittest.TestCase):
                    "process.stdout.write(JSON.stringify({where:C.whereList(r),label:C.whereLabel(r),backend:r.backend,options:r.options,others:r.others,many:m.others,manyOptions:m.options,mixedKeyless:C.standardKeyless(m),"
                    "keyless:C.standardKeyless(c),agentKeyless:C.standardKeyless(r),controls:C.standardOthers(c).filter(o=>o.control).map(o=>o.source)}));")
         out = json.loads(subprocess.run([node, "-e", program], check=True, capture_output=True, text=True).stdout)
-        self.assertEqual(out, {"where": ["local", "me@bench"], "label": "This machine + me@bench", "backend": "docker", "options": {"fake": {"effort": "high"}},
+        self.assertEqual(out, {"where": ["local", "me@bench"], "label": "This machine + me@bench", "backend": "container", "options": {"fake": {"effort": "high"}},
                                "others": ["fake"], "many": ["fake", "nop"], "manyOptions": {"fake": {"effort": "low"}}, "mixedKeyless": False,   # a recipe from before: its one agent's options
                                "keyless": True, "agentKeyless": False, "controls": ["nullius", "adapter"]})
 

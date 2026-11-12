@@ -120,7 +120,7 @@
     const picked = Array.isArray(raw.others) ? raw.others.filter(k => typeof k === 'string') : typeof raw.other === 'string' && raw.other ? [raw.other] : null;
     if (picked) r.others = [...new Set(picked)];
     if (Array.isArray(raw.where) && raw.where.length && raw.where.every(w => typeof w === 'string')) r.where = raw.where.length > 1 ? [...raw.where] : raw.where[0];
-    if (['local', 'docker'].includes(raw.backend)) r.backend = raw.backend;
+    if (['local', 'container', 'docker'].includes(raw.backend)) r.backend = raw.backend === 'docker' ? 'container' : raw.backend;   // docker: its earlier name
     if (raw.bench_options && typeof raw.bench_options === 'object' && !Array.isArray(raw.bench_options))   // the benchmark's own options, a word each
       r.bench_options = ownOptions(standardBench(r), Object.fromEntries(Object.entries(raw.bench_options).filter(([, v]) => typeof v === 'string')));
     // Options per choice, {ref: {name: word}}; a single agent also accepts flat {name: word} options.

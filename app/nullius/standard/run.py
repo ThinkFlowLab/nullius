@@ -22,12 +22,12 @@ On docker the agent's or capability's packages are installed in the base image, 
 The driver, its environment installed here, stays on this machine either
 way: it owns the answers. So do a benchmark's own MCP servers
 (``mcp_servers``), in the driver's environment: on the local backend the
-agent starts each from it, on docker the run does, behind a door on the
+agent starts each from it, in a container the run does, behind a door on the
 unit's network (``mcp_machine``).
 
 A unit whose environment is an **own image** (``"image": "own"``) runs in
 the task's own container, whatever the backend (a control's too: nothing of
-an agent runs there; an agent's needs the docker backend): its setup names
+an agent runs there; an agent's needs the container backend): its setup names
 the image (``image``: a folder of the upstream to build, or a reference by
 digest) and, optionally, the working directory (``workdir``; the image's own
 by default) and a check (``verify``) - files of the upstream copied in, a
@@ -107,7 +107,7 @@ DRIVER_SECONDS = 600                  # a driver's setup, oracle and score reque
 IMAGE_SECONDS = 3600                  # an own image's pull or build (container.own_image)
 MAX_AGENT_SECONDS = 6 * 3600          # the longest a unit's own agent limit (setup's agent_seconds) may ask
 MAX_TURNS = 20
-BACKENDS = ("local", "docker")
+BACKENDS = definitions.names.BACKENDS
 
 
 class Refused(Exception):
@@ -318,7 +318,7 @@ class Run:
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
         local agents, and for setup checks that run code without Docker.
-        ``backend``: ``local`` or ``docker`` (``container``), which needs
+        ``backend``: ``local`` or ``container`` (``docker``, its earlier name), which needs
         no such yes and is refused when docker is missing or not usable.
         ``options``: the
         agent's or capability's options set for this run, by name; the rest keep
@@ -348,6 +348,7 @@ class Run:
         defaults; a value that needs an embedding model gets a relay of the
         run's own for it, one that needs something of this machine
         (``host``) is refused without it."""
+        backend = definitions.names.backend(backend)
         if backend not in BACKENDS:
             raise Refused(f"backend {backend!r} is not one of {list(BACKENDS)}")
         if other.get("_kind") == "upstream" and backend != "local":
@@ -355,16 +356,16 @@ class Run:
                           "agent or capability to put in a container - run it on local processes")
         if backend == "local" and other.get("_kind") == "agent" and not unsandboxed:
             raise Refused(f"{other['label']} would run commands as you: the local backend is not a sandbox. "
-                          "Say so explicitly to go on (--unsandboxed), or run it in a container (--backend docker).")
+                          "Say so explicitly to go on (--unsandboxed), or run it in a container (--backend container).")
         why = match.fit(bench, other)
         if proving:
             why = [w for w in why if "does not offer" not in w and "has not passed its kit" not in w]
         if why:
             raise Refused(f"{other['label']} cannot run {bench['label']}: " + "; ".join(why))
-        if backend == "docker":
+        if backend == "container":
             why = container.unusable()
             if why:
-                raise Refused(f"the docker backend cannot run here: {why}")
+                raise Refused(f"the container backend cannot run here: {why}")
         self.container_check = False
         if backend == "local" and other.get("_kind") == "upstream" and (bench.get("score") or {}).get("runs_code"):
             why = container.unusable()
@@ -404,7 +405,7 @@ class Run:
             _, env_def = definitions.environment_of(bench, None, self.ds)
         except ValueError as e:
             raise Refused(str(e))
-        if backend != "docker" and other.get("_kind") == "control" and definitions.own_image(env_def):
+        if backend != "container" and other.get("_kind") == "control" and definitions.own_image(env_def):
             why = container.unusable()
             if why:
                 raise Refused(f"each {(bench.get('units') or {}).get('noun', 'unit')} of {bench['label']} runs in its own image, "
@@ -520,7 +521,7 @@ class Run:
         os.makedirs(os.path.join(self.job_dir, ".work"), exist_ok=True)
         self.say(f"job {self.job_dir}")
         p, control = self.progress, self.other["_kind"] == "control"
-        p.emit("plan", stages=",".join((["image"] if self.backend == "docker" or self.container_check else [])
+        p.emit("plan", stages=",".join((["image"] if self.backend == "container" or self.container_check else [])
                                       + (["upstream"] if install.upstream_dir(self.bench) else [])
                                       + (["dataset"] if self.ds.get("url") else [])
                                       + (["driver"] if install.driver_dir(self.bench) else [])
@@ -591,7 +592,7 @@ class Run:
         futures = []
         try:
             # a model server on this machine's loopback, which the relays' containers cannot reach as written
-            if self.backend == "docker" and self.base and container.on_loopback(self.base):
+            if self.backend == "container" and self.base and container.on_loopback(self.base):
                 self.loopback = container.Loopback(self.base, image=self.image, job=self.name).start()
             for iur in work:
                 futures.append(pool.submit(work_unit, iur))
@@ -603,7 +604,7 @@ class Run:
         except BaseException:
             self._stopped.set()
             self._halt.set()
-            if self.backend == "docker":
+            if self.backend == "container":
                 container.sweep(self.name)
             raise
         finally:
@@ -615,7 +616,7 @@ class Run:
                 d.close()
             if self.bench_relay is not None:
                 self.bench_relay.stop()
-            if self.backend == "docker":
+            if self.backend == "container":
                 container.sweep(self.name)          # whatever an interrupted unit left
             if self.loopback is not None:
                 self.loopback.stop()
@@ -703,7 +704,7 @@ class Run:
         when it declares one (``driver.install``), the agent's or capability's
         packages. Refused when one cannot be had."""
         p = self.progress
-        if self.backend == "docker" or self.container_check:
+        if self.backend == "container" or self.container_check:
             try:
                 tag = container.base_tag()
                 there = container.present(tag)
@@ -711,8 +712,8 @@ class Run:
                     self.image = container.base_image(os.path.join(self.job_dir, ".work", "image.log"))
             except container.Unavailable as e:
                 raise Refused(f"the Docker image: {e}")
-        # on docker the agent's packages are installed in the base image, with the Node, uv and libc it runs on
-        image = self.image if self.backend == "docker" else None
+        # on the container backend the agent's packages are installed in the base image, with the Node, uv and libc it runs on
+        image = self.image if self.backend == "container" else None
         run_in = (lambda cmd, where, env=None: container.install_argv(image, where, cmd, env)) if image else None
         try:
             where = install.upstream_dir(self.bench)
@@ -746,7 +747,7 @@ class Run:
         # An own image has none of what the agent runs on: it is mounted in, fetched once on this machine.
         self.runtimes: Dict[str, tuple] = {}
         owns = any(definitions.own_image(e) for e in (self.bench.get("environments") or {}).values())
-        if owns and self.other["_kind"] == "agent" and self.backend == "docker" and self.runtimes_needed():
+        if owns and self.other["_kind"] == "agent" and self.backend == "container" and self.runtimes_needed():
             try:
                 with p.stage("runtime", start="fetching " + ", ".join(self.runtimes_needed()), name=",".join(self.runtimes_needed())):
                     self.runtimes = container.runtime_mounts(self.runtimes_needed())
@@ -869,7 +870,7 @@ class Run:
             checking = (time.time(), None)
             self.phase(name, unit, "verify", DRIVER_SECONDS + (float(step.get("seconds") or self.turn_seconds) if step else 0))
             verified = self.verify(setup["verify"], box, trial) if box is not None and setup.get("verify") else None
-            if self.backend == "docker":     # the agent could write here (an MCP server's log folder): no link it left is read
+            if self.backend == "container":     # the agent could write here (an MCP server's log folder): no link it left is read
                 container.plain_only(os.path.join(trial, "verifier"))
             try:
                 judge = self.judge(rl, tag)
@@ -1040,8 +1041,8 @@ class Run:
         if name is None:
             return None
         if self.backend == "local" and self.other["_kind"] not in ("control", "upstream") and not env_def.get("local_ok"):
-            return ("EnvironmentSetupError", f"not run: the environment {name} needs the docker backend "
-                                             "(--backend docker); it does not say local_ok")
+            return ("EnvironmentSetupError", f"not run: the environment {name} needs the container backend "
+                                             "(--backend container); it does not say local_ok")
         missing = definitions.missing_secrets(env_def, self.licences)
         if missing:
             return ("EnvironmentSecretMissingError", "not run: needs " + ", ".join(missing))
@@ -1060,9 +1061,9 @@ class Run:
     def agent_licences(self, env_def: Optional[dict], rl) -> dict:
         """The variables the unit's environment gives the agent of its
         licences (``to: agent``): a key; a file's path, where it is mounted
-        on docker (``rl.unit_binds``) or kept here; a server's address - on
-        docker the one its forwarder answers at (``container.Unit``)."""
-        inside = self.backend == "docker"
+        in a container (``rl.unit_binds``) or kept here; a server's address - in a
+        container the one its forwarder answers at (``container.Unit``)."""
+        inside = self.backend == "container"
         out = definitions.secret_values(env_def, self.licences, "agent", inside=inside)
         reach = getattr(rl, "reach", None) or {}
         for s in (env_def or {}).get("needs_secrets") or []:
@@ -1119,7 +1120,7 @@ class Run:
 
     def unit_relay(self, tag: str, trial: str, setup: dict, env_def: Optional[dict] = None, own: bool = False):
         """The unit's own relay, started: in this process on the local
-        backend, a sidecar container on docker. Either answers ``url`` (the
+        backend, else a sidecar container. Either answers ``url`` (the
         driver's way in, on this machine), ``calls`` and ``stop``;
         ``unit_url`` is the address the agent or capability is given. ``own``:
         the unit runs in its own image (:meth:`own_box`), not one of the
@@ -1212,10 +1213,10 @@ class Run:
 
     def place(self, rl, cmd: List[str], env: dict, workdir: str, home: str, interactive: bool = True, box=None):
         """A unit's command and environment as they are started: unchanged on
-        the local backend; on docker, ``docker run`` on the unit's network,
+        the local backend; in a container, ``docker run`` on the unit's network,
         with the folders it reads at their own paths and the image's ``PATH``
         behind the install's. The secrets its environment sends the agent
-        (``to: agent``) are added to its environment - on docker passed by
+        (``to: agent``) are added to its environment - in a container passed by
         name, never on an argument list. In an own image (``box``), ``docker
         exec`` in the unit's container, the image's own ``PATH`` first - the
         task's programs are the task's - then the install's and the runtimes'."""

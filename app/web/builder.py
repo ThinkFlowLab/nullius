@@ -45,7 +45,7 @@ def new_run():
                            # the agent keys Settings holds, by name only: a Harbor agent that needs one it lacks is named on Review
                            "agent_keys": sorted(settings.agent_key_values(os.environ))}
     data["agentNeeds"] = AGENT_NEEDS
-    # The standard's Where step: why its docker backend cannot run on this machine (None: it can); and, per
+    # The standard's Where step: why its container backend cannot run on this machine (None: it can); and, per
     # benchmark, the licences its store holds (nullius.secrets) - set, when, until when; never a value.
     # what this machine lacks of each benchmark's host requirements: {benchmark: {requirement: [reasons]}}
     host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"])).items()}

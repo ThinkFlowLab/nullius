@@ -900,7 +900,7 @@ def _secrets(w: str, secrets, local_ok: bool, settings) -> List[str]:
     ``path`` in the agent's container, and ``env``, when said, names the
     variable that points to it - the only way a driver, or an agent on local
     processes, finds it; a ``server`` (``host:port``) is the variable
-    ``name``, and on docker the one address the agent's container may reach."""
+    ``name``, and in a container the one address the agent's container may reach."""
     if secrets is None:
         return []
     if not isinstance(secrets, list):

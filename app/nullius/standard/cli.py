@@ -6,8 +6,8 @@
     PYTHONPATH=app python3 -m nullius.standard.cli pins BENCHMARK[@VERSION] [--tag TAG] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
-    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend docker]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--unsandboxed | --backend docker]
+    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--unsandboxed | --backend container]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -16,7 +16,7 @@
 
 An agent runs commands as you on the local backend, which is not a sandbox:
 an agent's run or conformance check there is refused without ``--unsandboxed``.
-``--backend docker`` runs each unit's agent or capability in a container whose
+``--backend container`` (``docker``, its earlier name) runs each unit's agent or capability in a container whose
 only way out is the unit's relay (``standard/container.py``), and needs no
 such yes.
 A benchmark's control (``nop``, ``oracle``: its ``controls``) runs no agent
@@ -628,8 +628,9 @@ def main(argv=None):
         p.add_argument("--jobs", default="jobs_standard", help="where jobs are written (default jobs_standard/, gitignored)")
         p.add_argument("--unsandboxed", action="store_true",
                        help="allow an agent, or a setup check without Docker, to execute code on this machine as you")
-        p.add_argument("--backend", default="local", choices=list(run.BACKENDS),
-                       help="local processes (the default), or docker: each unit in a container, its relay beside it")
+        p.add_argument("--backend", default="local", type=definitions.names.backend, choices=list(run.BACKENDS),
+                       help="local processes (the default), or container: each unit in a container, its relay beside it "
+                            "(docker: its earlier name)")
         p.add_argument("--from-run", action="store_true",
                        help="started by Nullius: the key is OPENAI_API_KEY (and OPENAI_BASE_URL), saved settings are not read")
         p.add_argument("--option", action="append", metavar="NAME=VALUE",

@@ -13,7 +13,7 @@ evidence behind it: what failed, the agent or the benchmark.
 ## Quickstart
 
 Python 3.12+ and [uv](https://docs.astral.sh/uv/); a model key to run
-benchmarks; Docker or Podman for the docker backend; Docker for Harbor.
+benchmarks; Docker or Podman for the container backend; Docker for Harbor.
 
 Install the latest version with `uv`. The PyPI package is `nullius-eval`;
 the application and its command remain `nullius`:
@@ -69,7 +69,7 @@ With no agent, the nop control must score nothing and the oracle everything; the
 
 ### Run anywhere
 
-Several agents and datasets in one run. This machine, a host over ssh, or several machines, one shard each, merged into one job by `cli merge`. The docker backend gives each unit's agent or capability its own container. On the Nullius standard a relay per unit holds the key, which the agent never sees, and records every model call.
+Several agents and datasets in one run. This machine, a host over ssh, or several machines, one shard each, merged into one job by `cli merge`. The container backend gives each unit's agent or capability its own container. On the Nullius standard a relay per unit holds the key, which the agent never sees, and records every model call.
 
 The Run builder: **Runner → Benchmark → Dataset → Agent → Model → Limits → Where →
 Review**. Review checks each machine before Run; follow each trial in the job's

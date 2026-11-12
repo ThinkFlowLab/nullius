@@ -1,5 +1,12 @@
-"""Canonical capability names, with read compatibility for earlier catalogues."""
+"""Canonical names, with read compatibility for earlier catalogues, jobs and recipes."""
 from __future__ import annotations
+
+BACKENDS = ("local", "container")
+
+
+def backend(value):
+    """``docker``, the container backend's earlier name, reads as ``container``."""
+    return "container" if value == "docker" else value
 
 
 def kind(value: str) -> str:

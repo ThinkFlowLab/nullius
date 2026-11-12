@@ -29,6 +29,7 @@ import shutil
 from typing import Dict, List, Optional
 
 from nullius.standard import job
+from nullius.standard.names import backend as backend_name
 
 
 # What every shard of one launch shares, as (what a refusal calls it, where it is in config.json).
@@ -92,6 +93,8 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
     for d in job_dirs:
         d = os.path.abspath(d.rstrip("/"))
         cfg, res = _read(os.path.join(d, "config.json")), _read(os.path.join(d, "result.json"))
+        if isinstance(cfg.get("standard"), dict) and "backend" in cfg["standard"]:
+            cfg["standard"]["backend"] = backend_name(cfg["standard"]["backend"])
         if cfg.get("runner") != "standard":
             raise Refused(f"{d}: not a job of the Nullius standard (no config.json naming it)")
         sh = _at(cfg, ("standard", "shard"))

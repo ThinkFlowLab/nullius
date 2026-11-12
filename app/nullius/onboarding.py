@@ -64,7 +64,7 @@ SECTIONS = [
 
 
 def docker_answers(timeout: float = 5.0) -> bool:
-    """Whether the docker backend's engine (``container.DOCKER``: docker, or
+    """Whether the container backend's engine (``container.DOCKER``: docker, or
     podman) can run a container here: the command *and* ``<engine> ps``
     answering. The command alone is not enough - Docker Desktop's WSL
     integration leaves ``/usr/bin/docker`` in place while its engine is quit."""

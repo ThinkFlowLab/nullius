@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
 from nullius.standard import cli, definitions, match, names, payload, ports
@@ -91,3 +91,21 @@ class Compatibility(unittest.TestCase):
         got = names.definition(value)
         self.assertIn('cap.memory/v1', got['versions']['1']['proven'])
         self.assertEqual(got['options'], value['options'])
+
+
+class Backend(unittest.TestCase):
+    """``docker``, the container backend's earlier name, is read as ``container``."""
+
+    def test_docker_reads_as_container_and_other_values_are_kept(self):
+        self.assertEqual([names.backend(v) for v in ("docker", "container", "local", "vm", None)],
+                         ["container", "container", "local", "vm", None])
+
+    def test_the_cli_takes_either_name_and_refuses_another(self):
+        seen = []
+        with patch.object(cli, "cmd_run", side_effect=lambda a: seen.append(a.backend)), \
+             patch.object(cli, "_exit_on_term"), patch.object(cli.progress, "ECHO"):
+            for value in ("container", "docker"):
+                cli.main(["run", "fakebench", "fake", "--from-run", "--backend", value])
+            with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+                cli.main(["run", "fakebench", "fake", "--from-run", "--backend", "vm"])
+        self.assertEqual(seen, ["container", "container"])

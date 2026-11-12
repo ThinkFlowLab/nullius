@@ -7,7 +7,7 @@ can change between the two - docker quit, a program removed.
 
 A need is one of:
 
-- ``engine``: the standard's docker backend's engine (``container.DOCKER``:
+- ``engine``: the standard's container backend's engine (``container.DOCKER``:
   docker, or podman) on PATH **and** answering this user - Docker Desktop's
   placeholder command, there while the engine is quit, is not docker. Its row also says when
   the engine has ``userns-remap``, which the standard's containers run outside of;
@@ -43,7 +43,7 @@ _HERE = {"at": 0.0, "why": None}
 
 
 def docker_here(fresh: bool = False) -> Optional[str]:
-    """Why the docker backend's engine (``container.DOCKER``) cannot run
+    """Why the container backend's engine (``container.DOCKER``) cannot run
     containers on this machine for this user, or None when it can: the
     engine asked, not only the command looked for.
     Kept for a minute unless ``fresh``."""

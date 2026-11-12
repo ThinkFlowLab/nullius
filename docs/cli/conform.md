@@ -4,7 +4,7 @@ Run each port's conformance kit; a port enters `offers` only through a pass, rec
 
 ```bash title="Conform"
 nullius standard conform <other>[@version] --model M [--provider P] [--port PORT]... \
-    [--unsandboxed | --backend docker] [--option NAME=VALUE]... [--repeat K] [--jobs DIR] [--stamp STAMP] [--from-run]
+    [--unsandboxed | --backend container] [--option NAME=VALUE]... [--repeat K] [--jobs DIR] [--stamp STAMP] [--from-run]
 ```
 
 | Flag | Does |
@@ -12,7 +12,7 @@ nullius standard conform <other>[@version] --model M [--provider P] [--port PORT
 | `<other>` | `KEY` (its default version) or `KEY@VERSION` |
 | `--model`, `--provider` | The kits' model; `anthropic`, `custom`, `openai` or `openrouter` |
 | `--port PORT` | Only this port's kit (repeatable) |
-| `--unsandboxed`, `--backend` | As for a run: as you on this machine, or each check in docker |
+| `--unsandboxed`, `--backend` | As for a run: as you on this machine, or each check in a container |
 | `--option NAME=VALUE` | An agent's or capability's option (repeatable) |
 | `--repeat K` | Each check K times (`u0002r1` to `u0002rK`, one kit job); a majority passes it. Default 1 |
 | `--jobs`, `--stamp` | Where kit jobs go (default `jobs_standard/`), and their time stamp |

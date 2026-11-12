@@ -80,7 +80,7 @@ class PrerequisitesRoute(unittest.TestCase):
 
     def test_a_docker_with_userns_remap_is_said_for_a_standard_recipe_alone(self):
         rec = {"version": 1, "harness": "standard", "name": "s", "title": "s", "benchmark": "tau3-bench", "datasets": ["airline"],
-               "others": ["nop"], "provider": "openai", "model": "", "limit": 1, "concurrency": 1, "where": "local", "backend": "docker"}
+               "others": ["nop"], "provider": "openai", "model": "", "limit": 1, "concurrency": 1, "where": "local", "backend": "container"}
         with patch.object(prerequisites, "docker_here", lambda fresh=False: None), patch("shutil.which", lambda p: "/x/" + p), \
                 patch.object(prerequisites.container, "userns_remap", lambda: True):
             standard = self.post("/new-run/prerequisites", {"recipe": rec}).get_json()

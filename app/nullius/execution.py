@@ -26,7 +26,7 @@ thread of its own and writes what it does to a log the page follows:
   directory synced back with rsync every few seconds while it runs and once
   more at the end, so each trial appears here as it finishes;
 - on this machine: the same, with the local paths, in ``runs/<name>``; a
-  run that needs docker (Harbor's, or the standard's on its docker backend)
+  run that needs docker (Harbor's, or the standard's on its container backend)
   first asks that it answer here (``docker_here``) and starts nothing when
   it does not.
 
@@ -39,7 +39,7 @@ configuration or credentials. Snapshots live in ``standard-app/<content-id>/``
 beside the runs and are sent to ``~/.nullius/app/<content-id>`` the way a task
 folder is. There it needs ``python3`` and ``git``, gets ``uv`` when missing
 (an agent's pip install builds with it), and docker when the plan says so
-(``docker``: a recipe on the docker backend) - checked, like a Harbor run's,
+(``docker``: a recipe on the container backend) - checked, like a Harbor run's,
 before anything is sent. A run split over several machines is one plan per
 machine, each one shard (``standard/shard.py``).
 
@@ -158,7 +158,7 @@ def app_root(runs: str) -> str:
 def docker_here(sh: Callable, needs: str = "a Harbor run needs it", program: str = "docker") -> Optional[str]:
     """Why a run cannot use ``program`` on this machine, or None when it can
     (``needs`` says why the run asks): ``docker`` for Harbor, the standard's
-    engine (``container.DOCKER``) for its docker backend. The command on the
+    engine (``container.DOCKER``) for its container backend. The command on the
     PATH *and* ``<program> ps`` answered, as a host's probe asks
     (``hosts.PROBE``). The command alone is not enough - Docker Desktop's WSL
     integration leaves ``/usr/bin/docker`` in place while its engine is quit.
@@ -253,7 +253,7 @@ class Plan:
     recipe: dict = field(default_factory=dict)       # the builder's recipe the script was compiled from, so the run can be opened again as one; {} for a plan from before
     runner: str = "harbor"                    # or "standard" (standard/recipe.py): the Nullius standard's own cli
     harbor_pin: dict = field(default_factory=dict)   # the Harbor the recipe pins (harbor/source.py pin_of); {} for a plan from before: the harbor on PATH
-    docker: bool = False                      # a runner that needs docker on its target though it is not Harbor (the standard's docker backend)
+    docker: bool = False                      # a runner that needs docker on its target though it is not Harbor (the standard's container backend)
     keyless: bool = False                     # nothing in it calls a model (the standard's controls): handed no key and no endpoint at all
     licences: dict = field(default_factory=dict)     # the standard's on a host: {"benchmark", "names"} - what it is sent of that benchmark's licences
 

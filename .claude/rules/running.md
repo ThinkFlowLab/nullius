@@ -16,7 +16,7 @@ through the execution backend (`docs/builder.md`).
   are included; configuration and credential stores are excluded. Several
   machines run one shard each.
 - **Keys**: a run gets only its provider's key and endpoint, as environment
-  (over stdin to a host, and the key to a docker relay as a file); logs are
+  (over stdin to a host, and the key to a relay in a container as a file); logs are
   redacted. The standard's agents and upstream scripts get only the relay's
   word, never a key.
 - What a recipe needs of each machine is asked before Run and again as it

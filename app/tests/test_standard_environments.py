@@ -334,7 +334,7 @@ class LocalRun(_Runs):
         self.assertIn(classify.SETUP_ERROR, classify.INFRA_OUTCOMES)
         tool = t["tool"]["exception_info"]
         self.assertEqual(tool["exception_type"], "EnvironmentSetupError")             # the local backend cannot give it
-        self.assertIn("needs the docker backend", tool["exception_message"])
+        self.assertIn("needs the container backend", tool["exception_message"])
         self.assertEqual(t["tool"]["standard"]["environment"], "tool")
         self.assertEqual(t["plain"]["verifier_result"]["rewards"]["reward"], 1.0)
         self.assertNotIn("environment", t["plain"]["standard"])

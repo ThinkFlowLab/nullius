@@ -185,7 +185,7 @@ Then `cli check` - no problems.
 
 `--unsandboxed` runs the agent on this machine as the user: it is the
 user's word, not yours. Ask once with the question tool before the first
-run, saying what it means, and offer `--backend docker` (each unit in a
+run, saying what it means, and offer `--backend container` (each unit in a
 container, its relay beside it) when docker is usable. Without a way to ask,
 run only if your instructions already say yes.
 

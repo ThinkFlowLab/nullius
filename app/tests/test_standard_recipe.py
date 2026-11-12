@@ -388,14 +388,16 @@ class Conformance(unittest.TestCase):
                          [conform.job_name("2026-10-10__12-00-00", k, "fake") for k in ("agent-task-v1", "agent-workspace-v1", "agent-tools-v1", "agent-conversation-v1")])   # an ACP agent takes every kit
         self.assertIn("conform fake --model gpt-5-mini --provider openai --stamp 2026-10-10__12-00-00 --unsandboxed --from-run", got["script"])
 
-    def test_docker_conformance_does_not_grant_local_permissions(self):
+    def test_container_conformance_does_not_grant_local_permissions(self):
         for kind in ("agent", "capability"):
             definition = definitions.load(kind, ROOT)[0][0]
             with patch.object(definitions, "get", return_value=definition):
                 got = recipe.conformance(kind, definition["key"], model="m", provider="openai", unsandboxed=False,
-                                         stamp="2026-10-10__12-00-00", backend="docker")
+                                         stamp="2026-10-10__12-00-00", backend="container")
                 self.assertEqual(got["errors"], [])
-                self.assertIn("--backend docker", got["script"])
+                self.assertIn("--backend container", got["script"])
+                self.assertEqual(recipe.conformance(kind, definition["key"], model="m", provider="openai", unsandboxed=False,
+                                                    stamp="2026-10-10__12-00-00", backend="docker"), got)     # its earlier name
                 self.assertNotIn("--unsandboxed", got["script"])
                 bad = recipe.conformance(kind, definition["key"], model="m", provider="openai", unsandboxed=True,
                                          stamp="2026-10-10__12-00-00", backend="unknown")
@@ -454,11 +456,12 @@ class Where(unittest.TestCase):
         self.assertIn("3 shards, one per machine", out["review"][-1][2])
         self.assertIn("of each shard", out["review"][-2][2])                                 # a shard's limit is its own
 
-    def test_the_docker_backend_needs_no_yes_and_says_it_needs_docker(self):
-        out = recipe.compile(a_recipe(where="me@bench", backend="docker", unsandboxed=False), defs())
+    def test_the_container_backend_needs_no_yes_and_says_it_needs_docker(self):
+        out = recipe.compile(a_recipe(where="me@bench", backend="container", unsandboxed=False), defs())
         self.assertEqual(out["errors"], [])
         self.assertTrue(out["docker"])
-        self.assertIn("--backend docker", out["script"]); self.assertNotIn("--unsandboxed", out["script"])
+        self.assertIn("--backend container", out["script"]); self.assertNotIn("--unsandboxed", out["script"])
+        self.assertEqual(recipe.compile(a_recipe(where="me@bench", backend="docker", unsandboxed=False), defs()), out)   # its earlier name
         self.assertFalse(recipe.compile(a_recipe(), defs())["docker"])
         self.assertEqual(recipe.compile(a_recipe(backend="vm"), defs())["errors"][0]["step"], recipe.STEP["where"])
 

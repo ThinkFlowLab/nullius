@@ -206,7 +206,7 @@ class DockerUnit(unittest.TestCase):
         r = run.Run.__new__(run.Run)
         r.base, r.key, r.model, r.provider = "https://x/v1", "k", "m", "custom"
         r.judge_model = r.simulator_model = None
-        r.backend, r.other, r.bench, r.name, r.image = "docker", agent(), bench("/defs/b"), "job", "img"
+        r.backend, r.other, r.bench, r.name, r.image = "container", agent(), bench("/defs/b"), "job", "img"
         r.up, r.data, r.ds, r.licences = "/up", "/data", {"id": "all"}, {}
         return r
 
