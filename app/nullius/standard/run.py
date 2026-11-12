@@ -493,7 +493,7 @@ class Run:
                             "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                             "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
                             **({container.CHECK_IMAGE: self.image,
-                                **{k: os.environ[k] for k in container.CLIENT_KEEP if k.startswith("DOCKER") and k in os.environ}}
+                                **{k: v for k, v in container.client_env().items() if k.startswith("DOCKER")}}
                                if self.image else {}),
                             **option_env(getattr(self, "bench_options", {})), **self.embeddings_env(), **self.driver_secrets()})
             os.makedirs(env["HOME"], exist_ok=True)

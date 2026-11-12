@@ -380,6 +380,41 @@ class ArgvTest(unittest.TestCase):
             self.assertEqual(container.unusable(), "docker is not installed on this machine")
 
 
+class ContextTest(unittest.TestCase):
+    """A Docker selected only by ``docker context use`` is in the user's
+    ``~/.docker``: the docker program still reaches it with a unit's home."""
+    ALT = {"Name": "alt", "Endpoints": {"docker": {"Host": "unix:///run/alt.sock", "SkipTLSVerify": False}},
+           "TLSMaterial": {}, "Storage": {"TLSPath": "/u/.docker/contexts/tls/abc"}}
+
+    def env(self, inspect: dict, **environ) -> dict:
+        container._context.cache_clear()
+        self.addCleanup(container._context.cache_clear)
+        kept = {k: v for k, v in os.environ.items() if not k.startswith("DOCKER")}
+        done = subprocess.CompletedProcess([], 0, json.dumps([inspect]), "")
+        with mock.patch.dict(os.environ, {**kept, **environ}, clear=True), \
+                mock.patch.object(container.subprocess, "run", return_value=done):
+            return container.client_env({"HOME": "/unit-home"})
+
+    def test_the_current_context_is_passed_as_its_host(self):
+        env = self.env(self.ALT)
+        self.assertEqual((env["HOME"], env["DOCKER_HOST"]), ("/unit-home", "unix:///run/alt.sock"))
+        self.assertNotIn("DOCKER_CONFIG", env)                                     # not the user's logins
+        self.assertNotIn("DOCKER_HOST", self.env(dict(self.ALT, Name="default")))
+
+    def test_docker_host_and_docker_context_win(self):
+        self.assertEqual(self.env(self.ALT, DOCKER_HOST="tcp://h:2375")["DOCKER_HOST"], "tcp://h:2375")
+        env = self.env(self.ALT, DOCKER_CONTEXT="other")
+        self.assertEqual((env["DOCKER_CONTEXT"], env.get("DOCKER_HOST")), ("other", None))
+
+    def test_a_tls_context_passes_its_certificates(self):
+        tls = dict(self.ALT, TLSMaterial={"docker": ["ca.pem", "cert.pem", "key.pem"]})
+        env = self.env(tls)
+        self.assertEqual((env["DOCKER_CERT_PATH"], env["DOCKER_TLS_VERIFY"]), ("/u/.docker/contexts/tls/abc/docker", "1"))
+        tls["Endpoints"] = {"docker": {"Host": "tcp://h:2376", "SkipTLSVerify": True}}
+        env = self.env(tls)
+        self.assertEqual((env["DOCKER_TLS"], env.get("DOCKER_TLS_VERIFY")), ("1", None))
+
+
 def _ready() -> str:
     return docker_tier.why_not()
 
