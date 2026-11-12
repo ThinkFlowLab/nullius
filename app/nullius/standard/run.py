@@ -16,9 +16,9 @@ unit backs off on its own, as it always did. Its record sits in the trial's
 Two backends (``backend``). ``local``: processes on this machine, which are
 not a sandbox - what an agent runs, it runs as the user (``docs/standard.md``,
 "Safety"). ``docker``: the agent or the capability in a container of its own on
-a network whose only way out is the unit's relay, itself a container beside
-it (``container``). On docker the agent's or capability's packages are
-installed in the base image, on the libc and tools its container runs on.
+an internal network with the unit's relay beside it (``container``); an
+own-image task may grant a public-address proxy with ``internet: true``.
+On docker the agent's or capability's packages are installed in the base image, on the libc and tools its container runs on.
 The driver, its environment installed here, stays on this machine either
 way: it owns the answers. So do a benchmark's own MCP servers
 (``mcp_servers``), in the driver's environment: on the local backend the
@@ -63,6 +63,7 @@ import time
 import traceback
 import tempfile
 from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from typing import Callable, Dict, List, Optional
 
 from nullius import paths, prices as price_list, progress, providers
@@ -756,6 +757,8 @@ class Run:
             if why:
                 raise _Ended(*why)
             own = definitions.own_image(env_def)
+            if "internet" in setup and (not isinstance(setup["internet"], bool) or not own):
+                raise _Ended("EnvironmentSetupError", "the unit's setup: internet is true or false, only in an own image")
             if self.other["_kind"] == "agent" and self.backend == "local" and mcp_machine.wanted(setup):
                 try:                             # the benchmark's own servers: the agent starts them from the driver's environment
                     setup = dict(setup, mcp=mcp_machine.entries(self.bench, setup, install.driver_dir(self.bench),
@@ -783,14 +786,15 @@ class Run:
             self.phase(name, unit, "agent_run", self.turn_limit(setup) if self.other["_kind"] != "control"
                        else DRIVER_SECONDS if self.other["key"] == "oracle" else None)
             try:
-                if self.other["_kind"] == "control":
-                    answer = self.control_answer(unit, ws, box, name)
-                elif self.upstream:
-                    answer, traj = self.drive_upstream(unit, ws, tag, transcript, rl)
-                elif self.other["_kind"] == "agent":
-                    answer, traj, logs = self.drive_agent(unit, ws, home, tag, setup, transcript, rl, box, name)
-                else:
-                    answer, traj = self.drive_feature(unit, ws, home, tag, setup, transcript, rl)
+                with self.agent_internet(setup, box, rl, trial):
+                    if self.other["_kind"] == "control":
+                        answer = self.control_answer(unit, ws, box, name)
+                    elif self.upstream:
+                        answer, traj = self.drive_upstream(unit, ws, tag, transcript, rl)
+                    elif self.other["_kind"] == "agent":
+                        answer, traj, logs = self.drive_agent(unit, ws, home, tag, setup, transcript, rl, box, name)
+                    else:
+                        answer, traj = self.drive_feature(unit, ws, home, tag, setup, transcript, rl)
             finally:
                 produce = (p0, time.time())
                 if box is not None:              # what the agent (or the control) left in the container, before the check
@@ -1150,7 +1154,8 @@ class Run:
         task's programs are the task's - then the install's and the runtimes'."""
         env = dict(env, **(getattr(rl, "unit_secrets", None) or {}))
         if box is not None:
-            inside = {**box.env, **{k: v for k, v in env.items() if k not in container.HOST_ONLY}}
+            inside = {**box.env, **{k: v for k, v in env.items() if k not in container.HOST_ONLY},
+                      **getattr(box, "agent_proxy", {})}
             path = ":".join(([box.env["PATH"]] if "PATH" in box.env else []) + [box.path]
                             + install.bin_dirs(self.inst) + [d + "/bin" for _, d in box.runtimes.values()])
             argv = box.exec_argv(container.in_runtime(cmd, box.runtimes), inside, path, interactive=interactive)
@@ -1198,6 +1203,42 @@ class Run:
         return str(reply.get("answer") or "")
 
     # -- an own image: the unit's container ------------------------------------
+    @contextmanager
+    def agent_internet(self, setup: dict, box, rl, trial: str):
+        """The benchmark's task policy, never a run option: a public-address proxy
+        during the agent or reference solution, removed before any verification.
+        Internal relay/server aliases stay direct; failed and cancelled work closes
+        the same door and keeps its traffic record in ``agent/egress.log``."""
+        if not setup.get("internet"):
+            yield
+            return
+        try:
+            try:
+                proxy = box.online()
+                direct = [container.RELAY_ALIAS]
+                if isinstance(rl, container.Unit):
+                    direct += [alias for alias, _, _ in rl.doors]
+                    direct += [address.rsplit(":", 1)[0] for address in rl.reach.values()]
+                proxy["NO_PROXY"] = proxy["no_proxy"] = ",".join(dict.fromkeys([proxy["NO_PROXY"], *direct]))
+                box.agent_proxy = proxy
+            except (container.Unavailable, ValueError) as e:
+                raise _Ended("EnvironmentSetupError", f"the task's internet access: {e}")
+            yield
+        finally:
+            box.agent_proxy = {}
+            try:
+                try:
+                    said = box.egress_said()
+                    if said:
+                        out = os.path.join(trial, "agent")
+                        os.makedirs(out, exist_ok=True)
+                        with open(os.path.join(out, "egress.log"), "w") as f:
+                            f.write(said)
+                finally:
+                    box.offline()
+            except container.Unavailable as e:
+                raise _Ended("VerifierError", f"the task's internet access could not be closed: {e}")
+
     def own_box(self, tag: str, setup: dict, rl, home: str):
         """The unit's own container, started (``container.Box``): the image its
         setup names, built or pulled on first use and said as a stage; for an
@@ -1311,7 +1352,7 @@ class Run:
                 box.copy_in(container.within(root, src), dest)
             for dest, text in (step.get("write") or {}).items():
                 box.write_in(dest, text)
-            env = box.online() if step.get("network") else None
+            env = box.online() if step.get("network") else (getattr(box, "agent_proxy", None) if not collect else None)
             if step.get("collect"):
                 box.run(["mkdir", "-p", step["collect"]], 60, user="0")
             return box.run(step["run"], float(step.get("seconds") or self.turn_seconds), env=env)

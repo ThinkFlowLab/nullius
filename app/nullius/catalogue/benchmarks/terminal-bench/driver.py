@@ -7,7 +7,7 @@ which writes ``/logs/verifier/reward.txt``) and ``solution/solve.sh`` (the
 authors' reference solution).
 
 units  - the dataset's tasks: a few that build fast (``small``), or every
-         task whose reference solution downloads nothing (``offline``)
+         task whose reference solution downloads nothing (``offline``), or all 89 (``full``)
 setup  - the task's instruction as the prompt; its own image (``image``:
          by the run's image option, the prebuilt image its task.toml names,
          pulled by digest, or its environment folder built as published - a
@@ -38,7 +38,7 @@ SMALL = ["cancel-async-tasks", "regex-log", "sqlite-db-truncate", "fix-git", "po
          "git-leak-recovery", "sanitize-git-repo", "extract-elf"]
 
 # Every task whose solve.sh fetches nothing (no package manager, no download): the agent works with
-# no way out but its model, so a task that needs the internet to be solved is left out for now.
+# no way out but its model on these tasks.
 OFFLINE = [
     "bn-fit-modify", "break-filter-js-from-html", "cancel-async-tasks", "circuit-fibsqrt", "code-from-image",
     "constraints-scheduling", "custom-memory-heap-crash", "db-wal-recovery", "distribution-search", "extract-elf",
@@ -52,7 +52,21 @@ OFFLINE = [
     "sanitize-git-repo", "schemelike-metacircular-eval", "sqlite-db-truncate", "torch-pipeline-parallelism",
     "torch-tensor-parallelism", "tune-mjcf", "video-processing", "vulnerable-secret", "write-compressor",
 ]
-DATASETS = {"small": SMALL, "offline": OFFLINE}
+# Tasks whose solutions need the internet at the pinned upstream. The benchmark grants it,
+# through the public-address proxy, to the agent and reference solution alike.
+INTERNET = [
+    "adaptive-rejection-sampler", "build-cython-ext", "build-pmars", "build-pov-ray",
+    "caffe-cifar-10", "chess-best-move", "cobol-modernization", "compile-compcert",
+    "configure-git-webserver", "count-dataset-tokens", "crack-7z-hash", "dna-assembly",
+    "dna-insert", "financial-document-processor", "gcode-to-text", "hf-model-inference",
+    "install-windows-3.11", "kv-store-grpc", "largest-eigenval", "log-summary-date-ranges",
+    "make-doom-for-mips", "mcmc-sampling-stan", "merge-diff-arc-agi-task", "mteb-leaderboard",
+    "nginx-request-logging", "overfull-hbox", "protein-assembly", "pypi-server",
+    "pytorch-model-cli", "raman-fitting", "rstan-to-pystan", "sam-cell-seg",
+    "sparql-university", "sqlite-with-gcov", "train-fasttext", "winning-avg-corewars",
+]
+ALL = sorted(OFFLINE + INTERNET)
+DATASETS = {"small": SMALL, "offline": OFFLINE, "full": ALL}
 
 # The prebuilt image each task's task.toml names (environment.docker_image, the one Harbor runs unless told
 # to build), by the digest its tag had when pinned here (Docker Hub, 2026-10-14).
@@ -110,6 +124,43 @@ IMAGES = {
     "video-processing": "docker.io/alexgshaw/video-processing@sha256:a2c0f39e3ab04e67ac6e49cad9167bb0d987babe32511768c01aa0c6905a875f",
     "vulnerable-secret": "docker.io/alexgshaw/vulnerable-secret@sha256:61ebb40454dd103aa2f7e71ad6dafd91cf2b301e6bb07e69d5b472412d1ee15b",
     "write-compressor": "docker.io/alexgshaw/write-compressor@sha256:3618e1f8a997b437c09cd3dbaac736705809c05f6f12f584b65722175970ebe1",
+    # The additional internet tasks: task.toml tags resolved on 2026-11-12.
+    "adaptive-rejection-sampler": "docker.io/alexgshaw/adaptive-rejection-sampler@sha256:985bed39e8448bc95f138b5f766b59003a95c4be171c96af8e76448338f3dd8f",
+    "build-cython-ext": "docker.io/alexgshaw/build-cython-ext@sha256:3612a38fadb89a96f74a1a951fb0b0af734198fd160571eeaba6401593234594",
+    "build-pmars": "docker.io/alexgshaw/build-pmars@sha256:57a82706f7491e0b2d1ff7e927e97ae5339892dd09c47ac43290b4ba1f5abc6f",
+    "build-pov-ray": "docker.io/alexgshaw/build-pov-ray@sha256:874baf49341e2853a15a9184e308c7eb632e97f434359fcff2891c6e5ca1b39b",
+    "caffe-cifar-10": "docker.io/alexgshaw/caffe-cifar-10@sha256:5b54d6e8f1b392cdeb819e28215853f500b72b8e08b91270c7a3693bf44d1fe2",
+    "chess-best-move": "docker.io/alexgshaw/chess-best-move@sha256:bb447f94d9e2a8ed879f85c85a514b213b7418f9fe11fd7b2428a0b0e436e647",
+    "cobol-modernization": "docker.io/alexgshaw/cobol-modernization@sha256:593ab9df3d83f771e927888b2d9436b380cdf7ec4d0af2a9f0802d541edebba0",
+    "compile-compcert": "docker.io/alexgshaw/compile-compcert@sha256:f316947b7be23ad0d187320126eb1cbb5685f48342c6543fdd3ac839aa9e1a7f",
+    "configure-git-webserver": "docker.io/alexgshaw/configure-git-webserver@sha256:9e48389b917fd4650dda1f64406bd7198bbf20dc1c6b0e5c4d81a3c16369f88c",
+    "count-dataset-tokens": "docker.io/alexgshaw/count-dataset-tokens@sha256:9c513c4ba342bd95be501f6f5eadd4806a2b18749c87c251615825100130232d",
+    "crack-7z-hash": "docker.io/alexgshaw/crack-7z-hash@sha256:0f4453abd774c5a3d3d7e66ba28fae88ec2e49ada3a993b324ebc16c348666d3",
+    "dna-assembly": "docker.io/alexgshaw/dna-assembly@sha256:d1adf6835f1dd91205ba70e452c699d0aea601010038e5617f370716efb50569",
+    "dna-insert": "docker.io/alexgshaw/dna-insert@sha256:4dd8760694e355de85ecf03605cb487ccdb33322f6afad513d2920829baa33b2",
+    "financial-document-processor": "docker.io/alexgshaw/financial-document-processor@sha256:ef6c9cfaaf14cdd200163008a188d5baa9f626f3bfb8d3e7d6f30c08518e6251",
+    "gcode-to-text": "docker.io/alexgshaw/gcode-to-text@sha256:0979ef40c6a3e8c4e7ab5b6c2524c74625a84799e15cd45dd98dcf83b11efd4d",
+    "hf-model-inference": "docker.io/alexgshaw/hf-model-inference@sha256:f96dd7d3c85c7257b404fd63ba8d24ced2478cd90232c20e297c372f953fa607",
+    "install-windows-3.11": "docker.io/alexgshaw/install-windows-3.11@sha256:c6695097316ef8810abce0545e347e65354aef9d51d4f7f662c3242e742f6a3e",
+    "kv-store-grpc": "docker.io/alexgshaw/kv-store-grpc@sha256:3399400800dcb207634daa42bc1b052e831e285cc9d221eea66c47bc0fc79791",
+    "largest-eigenval": "docker.io/alexgshaw/largest-eigenval@sha256:cb9e3e3b09d0783f3bbcfeec8d77bc32d3791204fb2be6650b19be4fbc082b2e",
+    "log-summary-date-ranges": "docker.io/alexgshaw/log-summary-date-ranges@sha256:cbeb6ba905c2fec294f16cd5e16e3ea7f2e04d38ac2484d51a11de262aa7dc51",
+    "make-doom-for-mips": "docker.io/alexgshaw/make-doom-for-mips@sha256:80a9459f1b94b692ea8346f68e6b864f6c4d984fbdf6ffd68ad332308300c2ec",
+    "mcmc-sampling-stan": "docker.io/alexgshaw/mcmc-sampling-stan@sha256:073fc36a3347b4f6b43bd6e98339542c41ed531c771af8bee40ba10f00cfabaf",
+    "merge-diff-arc-agi-task": "docker.io/alexgshaw/merge-diff-arc-agi-task@sha256:bfc2a235f2ceea64ffb1ffc5529c2acebf570bff61f3668f0e5669ef570c17d4",
+    "mteb-leaderboard": "docker.io/alexgshaw/mteb-leaderboard@sha256:968de9456bfc53728f7df0cb6c9ce33e17bd0e5563ddfe031e6ed2964965aecf",
+    "nginx-request-logging": "docker.io/alexgshaw/nginx-request-logging@sha256:693e64431a0dbf45952e8b91a298d54fd60247e501c6623fb8fa3ebc07fc3d3d",
+    "overfull-hbox": "docker.io/alexgshaw/overfull-hbox@sha256:67fe0ccc0ff2305d6fcb3652977d377b901bb7bd96904b6765835935574992e1",
+    "protein-assembly": "docker.io/alexgshaw/protein-assembly@sha256:94de701b57e7ecfdbada6044f8534876e4b58874f8f313184dadc4d7533e0818",
+    "pypi-server": "docker.io/alexgshaw/pypi-server@sha256:d18bb30f47c7dcaa3acdbc31ac7413c98eadca2ea16540bbd380f2f063b95276",
+    "pytorch-model-cli": "docker.io/alexgshaw/pytorch-model-cli@sha256:c996884b5fb5fb2c0c07d67da2c4f974f271f07234ed28e1a868240375c57a67",
+    "raman-fitting": "docker.io/alexgshaw/raman-fitting@sha256:401fa95d5d491f44a473eda9d2c52930f9565cc889c796eabcb6e20fec26852e",
+    "rstan-to-pystan": "docker.io/alexgshaw/rstan-to-pystan@sha256:b23d48839408524326095c15ada4145c772b87646cf299022ff1f58c97baba91",
+    "sam-cell-seg": "docker.io/alexgshaw/sam-cell-seg@sha256:d76bdeef19d8113f4094013249c982eca93e62e46130484846269b2d378879d0",
+    "sparql-university": "docker.io/alexgshaw/sparql-university@sha256:92fa4304e51167f9fb4466144eba33ef9272a7df0ac1cab9fc3986bccd1ab708",
+    "sqlite-with-gcov": "docker.io/alexgshaw/sqlite-with-gcov@sha256:f986820b00c74ce75db7288719d364df313fde7c7917bea6eb6352a08431a89f",
+    "train-fasttext": "docker.io/alexgshaw/train-fasttext@sha256:3c77da9617e7fa577de04aef73fb1ac3114be32d7ffef72609c83929d842b157",
+    "winning-avg-corewars": "docker.io/alexgshaw/winning-avg-corewars@sha256:ad7a6b1c53aed59e10916c692aa7e2ae00042a4283187430aee1e3e79f72d5c6",
 }
 # Tasks whose Dockerfile no longer builds as published (it clones a repository that is gone): pulled whatever
 # the run's image option says.
@@ -122,7 +173,8 @@ LOGS = "/logs/verifier"
 # Tasks whose tests talk to a service the agent was asked to start and leave running (a mail server, an
 # SSH or telnet login into a VM, a web server behind a push hook): what the agent left running is kept
 # for their check. Every other task's check runs with nothing of the agent's still running.
-KEEP_PROCESSES = {"git-multibranch", "mailman", "qemu-alpine-ssh", "qemu-startup"}
+KEEP_PROCESSES = {"git-multibranch", "mailman", "qemu-alpine-ssh", "qemu-startup",
+                  "configure-git-webserver", "kv-store-grpc", "nginx-request-logging", "pypi-server"}
 
 
 # Terminal-Bench's own harness gives every task's container tmux (its reference agent works in a tmux
@@ -148,7 +200,7 @@ PREPARE = {"run": ["sh", "-c", TMUX], "seconds": 600, "network": True}
 
 
 def task(unit):
-    if unit not in OFFLINE:
+    if unit not in ALL:
         raise ValueError(f"{unit} is not a task of this benchmark's datasets")
     here = os.path.join(os.environ["NULLIUS_UPSTREAM"], unit)
     with open(os.path.join(here, "task.toml"), "rb") as f:
@@ -172,6 +224,7 @@ def setup(unit, dir):
     # the task's own agent timeout from version 2 on; version 1 ran every task at the run's turn_seconds
     agent = (t.get("agent") or {}).get("timeout_sec") if os.environ.get("NULLIUS_VERSION", "1") != "1" else None
     return {"prompt": prompt, "environment": "task", "image": image,
+            **({"internet": True} if unit in INTERNET else {}),
             **({"agent_seconds": agent} if agent else {}),                # the task's own agent timeout, not the run's
             "prepare": PREPARE,
             "verify": {"copy": {f"{unit}/tests": "/tests"}, "run": ["bash", "/tests/test.sh"], "collect": LOGS,
