@@ -56,7 +56,8 @@ class DriverContainer(unittest.TestCase):
     def test_nested_relay_urls_are_forwarded_and_closed_on_failure(self):
         doors = []
         class Door:
-            def __init__(self, url):
+            def __init__(self, url, **kw):
+                self.container = None
                 self.base = url.replace('127.0.0.1', 'host.docker.internal')
                 self.closed = False
                 doors.append(self)
@@ -77,6 +78,26 @@ class DriverContainer(unittest.TestCase):
         self.assertIn('127.0.0.1', original['judge']['base_url'])
         self.assertEqual(len(doors), 2)
         self.assertTrue(all(d.closed for d in doors))
+
+    def test_rootless_relay_doors_get_an_image_unique_names_and_reachable_addresses(self):
+        from types import SimpleNamespace
+        opened = []
+        def door(url, *, image, job):
+            d = SimpleNamespace(base='http://host.docker.internal:8000/v1',
+                                hosts={'host.docker.internal': f'10.88.0.{len(opened) + 2}'},
+                                container='door', closed=False, image=image, job=job)
+            d.start = lambda: d
+            d.stop = lambda: setattr(d, 'closed', True)
+            opened.append(d)
+            return d
+        proc = setup_container.Process([], '/', {}, '/tmp/unused', name='fixture', image='base-img', doors=[])
+        with patch.object(container, 'Loopback', side_effect=door), \
+                patch.object(jsonl.Proc, 'request', return_value={}) as request:
+            proc.request('answer', base_url='http://127.0.0.1:345/v1', judge={'base_url': 'http://127.0.0.1:678/v1'})
+        self.assertEqual(request.call_args.kwargs['base_url'], 'http://10.88.0.2:8000/v1')
+        self.assertEqual(request.call_args.kwargs['judge']['base_url'], 'http://10.88.0.3:8000/v1')
+        self.assertEqual(len({d.job for d in opened}), 2)
+        self.assertTrue(all(d.image == 'base-img' and d.closed for d in opened))
 
     def test_close_removes_container_even_if_protocol_cleanup_fails(self):
         proc = setup_container.Process([], '/', {}, '/tmp/unused', name='fixture', doors=[])

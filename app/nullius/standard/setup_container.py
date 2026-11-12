@@ -26,6 +26,12 @@ UV_VERSION = "0.13.4"
 CREDENTIALS_IN = "/opt/nullius/credentials"    # the driver's credentials' one file, in its container
 
 
+def door_base(door):
+    # A rootless door is another container. The driver may already be running,
+    # so use its bridge address rather than changing the driver's hosts file.
+    return door.base.replace("host.docker.internal", door.hosts["host.docker.internal"], 1) if door.container else door.base
+
+
 def credential_names(bench: dict) -> set:
     """The variables the benchmark's credentials for its driver set
     (``needs_secrets``, ``to: driver``): a value's or a server's name, a
@@ -107,15 +113,15 @@ class Driver:
             for key, value in env.items():
                 target = "tcp://" + value if key in servers else value
                 if (key.endswith("BASE_URL") or key in servers) and container.on_loopback(target):
-                    door = container.Loopback(target).start()
+                    door = container.Loopback(target, image=self.image, job=f"{self.job}-{uuid.uuid4().hex[:12]}").start()
                     doors.append(door)
-                    env[key] = urlsplit(door.base).netloc if key in servers else door.base
+                    env[key] = urlsplit(door_base(door)).netloc if key in servers else door_base(door)
             held = {k: env.pop(k) for k in sorted(credential_names(self.bench)) if k in env}
             if held:
                 keys = container.key_folder(self.job)
                 credentials = container.secret_file(os.path.join(keys, "credentials"), json.dumps(held))
             argv, client, name = self.command(env, cwd, files=files, credentials=credentials)
-            process = Process(argv, cwd, client, log, stopped=stopped, name=name, doors=doors, keys=keys)
+            process = Process(argv, cwd, client, log, stopped=stopped, name=name, image=self.image, doors=doors, keys=keys)
             try:
                 return process.start()
             except BaseException:
@@ -130,9 +136,9 @@ class Driver:
 
 
 class Process(jsonl.Proc):
-    def __init__(self, *args, name, doors, keys=None, **kwargs):
+    def __init__(self, *args, name, doors, image="", keys=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.name, self.doors = name, doors
+        self.name, self.doors, self.image = name, doors, image
         self.keys = keys                         # the credentials' folder, until the driver answers or ends
 
     def forget(self):
@@ -151,9 +157,9 @@ class Process(jsonl.Proc):
         def url(value):
             if not container.on_loopback(value):
                 return value
-            door = container.Loopback(value).start()
+            door = container.Loopback(value, image=self.image, job=f"{self.name}-{len(doors)}").start()
             doors.append(door)
-            return door.base
+            return door_base(door)
         try:
             return super().request(op, timeout=timeout, **rewrite(kw))
         finally:
