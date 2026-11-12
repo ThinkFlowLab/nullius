@@ -180,7 +180,7 @@
         "flat-bm25-turn": "run_retrieval.py flat-bm25 at turn granularity (a user turn is the key), then --retriever_type flat-turn: the top-k rounds.",
         "flat-contriever-session": "run_retrieval.py flat-contriever (facebook/contriever, mean pooling) at session granularity, then --retriever_type flat-session.",
         "flat-contriever-turn": "run_retrieval.py flat-contriever at turn granularity, then --retriever_type flat-turn.",
-        "flat-stella-session": "run_retrieval.py flat-stella (Stella V5 1.5B, its 1024-dimension head) at session granularity; the model fetched into the upstream's model_cache first, as its README has it downloaded by hand. Its fixed batch of 64 needs more than 11 GB of GPU memory.",
+        "flat-stella-session": "run_retrieval.py flat-stella (Stella V5 1.5B, its 1024-dimension head) at session granularity; the model fetched into the upstream's model_cache first, as its README has it downloaded by hand. Its fixed batch of 64 needs at least 12000 MiB of GPU memory.",
         "flat-stella-turn": "run_retrieval.py flat-stella at turn granularity, then --retriever_type flat-turn."
       },
       "needs": {
@@ -196,12 +196,12 @@
         },
         "flat-stella-session": {
           "host": [
-            "cuda_gpu"
+            "stella_gpu"
           ]
         },
         "flat-stella-turn": {
           "host": [
-            "cuda_gpu"
+            "stella_gpu"
           ]
         }
       }
@@ -285,10 +285,17 @@
   },
   "host": {
     "cuda_gpu": {
-      "summary": "An NVIDIA GPU with CUDA, for LongMemEval's dense retrievers: run_retrieval.py starts one process a GPU and moves its encoder to it. Its driver's nvidia-smi on PATH; the driver's own torch (2.3.1, CUDA 12.1, as requirements-full.txt) brings the rest; Stella 1.5B's weights take about 6 GB of its memory, and run_retrieval.py's fixed batch of 64 more than an 11 GB card has left.",
+      "summary": "An NVIDIA GPU with CUDA, for LongMemEval's Contriever retrievers.",
       "check": [
         "nvidia-smi"
       ]
+    },
+    "stella_gpu": {
+      "summary": "An NVIDIA GPU with CUDA and at least 12000 MiB of GPU memory, for Stella's fixed batch of 64.",
+      "check": [
+        "nvidia-smi"
+      ],
+      "gpu_memory_mb": 12000
     }
   },
   "setups": {

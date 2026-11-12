@@ -3,7 +3,8 @@ the machine its driver runs on must have for some of its options - programs on
 PATH, installed by ``apt`` and ``npm`` - whatever the backend, since the driver
 runs on the machine, never in a container.
 
-Each requirement is checked by its programs (:func:`missing`) and installed by the commands
+Each requirement is checked by its programs and optional GPU memory minimum
+(:func:`problems`) and installed by the commands
 :func:`install_lines` gives: shown to a person to run, or run for them on an
 explicit choice (``web/execute.py``), with ``sudo -n`` so a password is never
 asked for - a machine where sudo needs one is told the commands instead.
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import shlex
 import shutil
+import subprocess
 from typing import Dict, List, Optional
 
 
@@ -28,6 +30,37 @@ def missing(bench: dict, names: List[str], which=shutil.which) -> Dict[str, List
         gone = [p for p in r.get("check") or [] if not which(p)]
         if gone:
             out[n] = gone
+    return out
+
+
+def gpu_memory_mb() -> Optional[int]:
+    """The largest GPU's total memory in MiB, or None when it cannot be read.
+    Never add cards together or treat an unavailable query as zero memory."""
+    try:
+        result = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                                capture_output=True, text=True, timeout=5)
+        values = [line.strip() for line in result.stdout.splitlines()]
+        if result.returncode == 0 and values and all(v.isascii() and v.isdecimal() and int(v) > 0 for v in values):
+            return max(map(int, values))
+    except (OSError, subprocess.TimeoutExpired, UnicodeError):
+        pass
+    return None
+
+
+def problems(bench: dict, names: List[str], which=None) -> Dict[str, str]:
+    """Why each selected requirement is missing on this machine, shared by
+    the builder and run startup. Query GPU memory only when needed, once."""
+    which = which or shutil.which
+    out = {n: ", ".join(ps) + " not on PATH" for n, ps in missing(bench, names, which).items()}
+    gpu = {n: r["gpu_memory_mb"] for n, r in requirements(bench, names).items()
+           if n not in out and "gpu_memory_mb" in r}
+    if gpu:
+        available = gpu_memory_mb() if which("nvidia-smi") else None
+        for n, needed in gpu.items():
+            if available is None:
+                out[n] = "nvidia-smi could not report GPU memory" if which("nvidia-smi") else "nvidia-smi not on PATH"
+            elif available < needed:
+                out[n] = f"needs at least {needed} MiB of GPU memory; largest GPU has {available} MiB"
     return out
 
 

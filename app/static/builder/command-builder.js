@@ -411,7 +411,7 @@
       const st = hostState[w] || (w === 'local' ? {missing: Object.fromEntries(need.filter(n => local[n]).map(n => [n, local[n]]))} : null);
       const gone = st && st.missing ? Object.entries(st.missing).filter(([n]) => need.includes(n)) : [];
       const state = !st ? '<span class="nb-tick">not checked</span>' : st.error ? `<span class="nb-tick no">${esc(st.error)}</span>`
-        : gone.length ? `<span class="nb-tick no">missing ${esc(gone.map(([, ps]) => ps.join(', ')).join(', '))}</span>` : '<span class="nb-tick ok">ready ✓</span>';
+        : gone.length ? `<span class="nb-tick no">${esc(gone.map(([, ps]) => ps.join(', ')).join(', '))}</span>` : '<span class="nb-tick ok">ready ✓</span>';
       return `<li><b>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</b> ${state} ${button('Check', `data-hostreq-check="${esc(w)}"`, 'nb-inlinebutton')}${lines.length && (gone.length || (st && st.error)) ? ' ' + button('Install for me', `data-hostreq-install="${esc(w)}"`, 'nb-inlinebutton') : ''}${st && st.said ? ` <small>${esc(st.said)}</small>` : ''}</li>`;
     };
     return `<div class="nb-sectionhead std-wherehead"><h3>Machine setup</h3><small>Needed by the search you chose, on each machine it runs on</small></div>`
