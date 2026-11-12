@@ -33,7 +33,7 @@ A pair is an **agent benchmark** × an **agent**, or a **capability benchmark** 
 | `agent.browser/v1` | A browser, through an MCP server Nullius starts | Defined; its kit comes with the first browser benchmark |
 | `cap.memory/v1` | `add {session}` then `recall {question}` → `{memory}`; a session is `{id, date, turns: [{role, text}], text}` | Recall a place and an exact name among distractors (2 checks); nothing it stores is a credential |
 
-- **The last message** is the agent's text after its last other event (a tool call, a notice); session metadata parts two messages but ends nothing after the last one.
+- **The last message** follows ACP `messageId` boundaries and other events (a tool call, a notice). Without IDs, session metadata parts messages but never erases the final answer.
 - **Notices** (`session.notices`): an adapter sends its warnings as a `notice`, a system step of the trajectory, never as text in front of the answer.
 - **A capability's trace**: a reply may carry `trace`, what the library did (what it wrote, each hit's score, its warnings). The trajectory records the whole reply; the benchmark reads only the port's fields.
 

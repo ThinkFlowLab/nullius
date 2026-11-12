@@ -12,14 +12,36 @@ from nullius.standard import acp
 FAKE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "fake_acp_agent.py")
 
 
-def ev(kind, text=None):
-    u = {"sessionUpdate": kind}
+def ev(kind, text=None, **fields):
+    u = {"sessionUpdate": kind, **fields}
     if text is not None:
         u["content"] = {"type": "text", "text": text}
     return {"t": 0, "update": u}
 
 
 class LastMessage(unittest.TestCase):
+    def test_message_ids_separate_streamed_and_final_answers(self):
+        answer = '{"answer":"lantern"}'
+        evs = [ev("agent_message_chunk", answer[:10], messageId="stream"),
+               ev("agent_message_chunk", answer[10:], messageId="stream"),
+               ev("agent_message_chunk", answer, messageId="final"), ev("session_info_update")]
+        self.assertEqual(acp.last_message(evs), answer)
+
+    def test_same_message_id_joins_chunks_across_metadata_and_thoughts(self):
+        evs = [ev("agent_message_chunk", "lan", messageId="answer"), ev("session_info_update"),
+               ev("agent_thought_chunk", "thinking", messageId="thought"), ev("usage_update"),
+               ev("agent_message_chunk", "tern", messageId="answer")]
+        self.assertEqual(acp.last_message(evs), "lantern")
+
+    def test_missing_ids_keep_the_existing_message_boundaries(self):
+        evs = [ev("agent_message_chunk", "lan", messageId="answer"), ev("agent_message_chunk", "tern"),
+               ev("agent_message_chunk", "!", messageId="answer")]
+        self.assertEqual(acp.last_message(evs), "lantern!")
+        evs += [ev("available_commands_update"), ev("agent_message_chunk", "final")]
+        self.assertEqual(acp.last_message(evs), "final")
+        evs += [ev("tool_call"), ev("agent_message_chunk", "new", messageId="answer")]
+        self.assertEqual(acp.last_message(evs), "new")
+
     def test_the_answer_is_the_message_after_the_last_other_event(self):
         evs = [ev("user_message_chunk", "q"), ev("agent_message_chunk", "Model metadata not found."),
                ev("available_commands_update"), ev("agent_message_chunk", "I'll look."), ev("tool_call"),
