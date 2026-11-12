@@ -68,9 +68,11 @@ class InstallEnv(unittest.TestCase):
     def test_a_downloaded_dataset_is_kept_only_when_its_digest_matches(self):
         import hashlib, http.server
         body = b"[1, 2]"
+        requests = []
         class One(http.server.BaseHTTPRequestHandler):
             def log_message(self, *a): pass
             def do_GET(self):
+                requests.append(self.path)
                 self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), One)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -79,6 +81,8 @@ class InstallEnv(unittest.TestCase):
         url = f"http://127.0.0.1:{srv.server_address[1]}/d.json"
         got = install.download(url, hashlib.sha256(body).hexdigest(), home)
         self.assertEqual(open(got, "rb").read(), body)
+        self.assertEqual(install.download(url, hashlib.sha256(body).hexdigest(), home), got)
+        self.assertEqual(requests, ["/d.json"])
         with self.assertRaises(install.InstallFailed):
             install.download(url, "0" * 64, home)
         self.assertFalse(os.path.exists(os.path.join(home, "datasets", "0" * 64, "d.json")))

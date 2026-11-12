@@ -417,6 +417,8 @@ class Run:
         if bad:
             raise Refused("; ".join(bad))
         needs = definitions.option_needs(bench, self.bench_options)
+        self.files = needs["files"]
+        self.file_env: Dict[str, str] = {}
         for m in needs["embeddings"]:
             why = providers.embedding_problem(m, provider)
             if why:
@@ -502,7 +504,7 @@ class Run:
                             "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                             "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
                             **({container.CHECK_IMAGE: self.image, **container.check_env()} if self.image else {}),
-                            **option_env(getattr(self, "bench_options", {})), **self.embeddings_env(), **self.driver_secrets()})
+                            **option_env(getattr(self, "bench_options", {})), **self.file_env, **self.embeddings_env(), **self.driver_secrets()})
             os.makedirs(env["HOME"], exist_ok=True)
             # its working directory is the job's, never its catalogue folder: an upstream that writes
             # beside itself (tau2's embeddings cache) would write into the package or the runner snapshot
@@ -725,6 +727,12 @@ class Run:
                     self.data = install.dataset(self.bench, self.ds, self.up, progress=None if there else p.download("dataset"))
             else:
                 self.data = install.dataset(self.bench, self.ds, self.up)
+            for name in self.files:
+                f = self.bench["files"][name]
+                there = os.path.isfile(install.download_path(f["url"], f["sha256"]))
+                with p.stage("file", cached=there, start=f"downloading {name}", name=name):
+                    self.file_env["NULLIUS_FILE_" + name.upper()] = install.download(
+                        f["url"], f["sha256"], progress=None if there else p.download("file"))
             drv = install.driver_dir(self.bench)
             if drv is not None:                  # the environment the upstream's own code needs, for the driver
                 with p.stage("driver", cached=install.ready(drv), start=f"installing {self.bench['key']}'s driver environment"):

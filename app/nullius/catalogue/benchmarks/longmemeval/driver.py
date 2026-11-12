@@ -27,9 +27,13 @@ import inspect
 import json
 import os
 import re
+import shutil
+import stat
 import subprocess
+import tarfile
 import sys
 import textwrap
+import zipfile
 
 sys.path.insert(0, os.path.join(os.environ["NULLIUS_UPSTREAM"], "src"))
 with contextlib.redirect_stdout(sys.stderr):    # stdout is the protocol's: the upstream's prints go to the log
@@ -245,6 +249,42 @@ def _run(argv, cwd, env, log, what):
         raise RuntimeError(f"{what} exited {rc}: " + " | ".join(tail))
 
 
+# Exact members of the authors' released archive; no search by suffix and no archive-wide extraction.
+EXPANSIONS = {
+    "session-summ": "merged_cache_session-summ_llama-3.1-8b-instruct_zeroshot.json",
+    "session-keyphrase": "merged_cache_session-keyphrase_llama-3.1-8b-instruct_zeroshot.json",
+    "session-userfact": "merged_cache_session-userfact_llama-3.1-8b-instruct_ICL.json",
+    "turn-keyphrase": "merged_cache_turn-keyphrase_llama-3.1-8b-instruct_zeroshot.json",
+    "turn-userfact": "merged_cache_turn-userfact_llama-3.1-8b-instruct_ICL.json",
+}
+
+
+def expansion_cache(method, dir):
+    member = EXPANSIONS[method]
+    path = os.path.join(dir, member)
+    with tarfile.open(os.environ["NULLIUS_FILE_INDEX_EXPANSIONS"]) as archive:
+        info = archive.getmember(member)
+        if not info.isfile():
+            raise ValueError(f"index expansion cache {member} is not a regular file")
+        with archive.extractfile(info) as source, open(path, "wb") as target:
+            shutil.copyfileobj(source, target)
+    return path
+
+
+def summary_tokenizer(dir):
+    root = os.path.join(dir, "nltk_data")
+    target_dir = os.path.join(root, "tokenizers", "punkt_tab", "english")
+    os.makedirs(target_dir, exist_ok=True)
+    with zipfile.ZipFile(os.environ["NULLIUS_FILE_PUNKT_TAB"]) as archive:
+        for name in ("collocations.tab", "sent_starters.txt", "abbrev_types.txt", "ortho_context.tab"):
+            info = archive.getinfo("punkt_tab/english/" + name)
+            if info.is_dir() or stat.S_ISLNK(info.external_attr >> 16):
+                raise ValueError(f"tokenizer member {name} is not a regular file")
+            with archive.open(info) as source, open(os.path.join(target_dir, name), "wb") as target:
+                shutil.copyfileobj(source, target)
+    return root
+
+
 def answer(unit, dir, setup, model, base_url, key, judge=None, simulator=None, attempt=None):
     up = os.environ["NULLIUS_UPSTREAM"]
     retriever = _opt("retriever", "full-history-session")
@@ -265,11 +305,19 @@ def answer(unit, dir, setup, model, base_url, key, judge=None, simulator=None, a
         out = os.path.join(dir, RETRIEVED)
         os.makedirs(out, exist_ok=True)
         cache = model_cache(up, m.group(1))
+        expansion = _opt(m.group(2) + "_expansion", "none")
+        if expansion != "none" and not expansion.startswith(m.group(2) + "-"):
+            raise ValueError("index expansion must match the retriever's granularity")
+        expansion_file = expansion_cache(expansion, dir) if expansion != "none" else "none"
+        join = _opt("expansion_join", "separate") if expansion != "none" else "none"
+        retrieval_env = dict(env, PYTHONPATH=up, HF_HOME=cache)
+        if expansion == "session-summ" and join.startswith("split-"):
+            retrieval_env["NLTK_DATA"] = summary_tokenizer(dir)
         _run([sys.executable, "run_retrieval.py", "--in_file", in_file, "--retriever", m.group(1), "--granularity", m.group(2),
-              "--index_expansion_method", "none", "--index_expansion_result_join_mode", "none",
-              "--index_expansion_llm", "none", "--index_expansion_result_cache", "none",
+              "--index_expansion_method", expansion, "--index_expansion_result_join_mode", join,
+              "--index_expansion_llm", "none", "--index_expansion_result_cache", expansion_file,
               "--out_dir", out, "--outfile_prefix", "none", "--cache_dir", cache],
-             os.path.join(up, "src", "retrieval"), dict(env, PYTHONPATH=up, HF_HOME=cache),
+             os.path.join(up, "src", "retrieval"), retrieval_env,
              os.path.join(dir, "run_retrieval.log"), "run_retrieval.py")
         # its log is JSON lines, which run_generation.py reads only when json.load fails on it - and a log of one
         # question is one line, which json.load reads as that question's object: the same entries are handed
@@ -317,7 +365,8 @@ def score_setup(unit, dir, judge):
                        "reference": q["answer"], "answer": rows[0]["hypothesis"],
                        "options": {n: _opt(n, d) for n, d in (("retriever", "full-history-session"), ("topk", "1000"),
                                    ("reading", "con"), ("separate_notes", "false"), ("history_format", "json"), ("useronly", "false"),
-                                   ("merge_key_expansion", "none"))}}}
+                                   ("merge_key_expansion", "none"), ("session_expansion", "none"), ("turn_expansion", "none"),
+                                   ("expansion_join", "separate"))}}}
 
 
 HANDLERS = {"units": units, "setup": setup, "produce": produce, "score": score, "oracle": oracle, "answer": answer}

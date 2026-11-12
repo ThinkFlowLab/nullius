@@ -54,10 +54,29 @@ class Scope(unittest.TestCase):
         self.assertTrue(definitions.bench_options_of(TAU, "airline", {"nope": "x"})[1])
 
     def test_what_a_value_needs(self):
-        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "alltools"}), {"embeddings": ["text-embedding-3-large"], "reranker": [], "host": ["sandbox"]})
-        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "terminal_use"}), {"embeddings": [], "reranker": [], "host": ["sandbox"]})
-        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "bm25"}), {"embeddings": [], "reranker": [], "host": []})
+        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "alltools"}), {"embeddings": ["text-embedding-3-large"], "reranker": [], "host": ["sandbox"], "files": []})
+        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "terminal_use"}), {"embeddings": [], "reranker": [], "host": ["sandbox"], "files": []})
+        self.assertEqual(definitions.option_needs(TAU, {"retrieval": "bm25"}), {"embeddings": [], "reranker": [], "host": [], "files": []})
         self.assertEqual(run.option_env({"retrieval": "bm25"}), {"NULLIUS_OPTION_RETRIEVAL": "bm25"})
+
+    def test_only_active_options_need_files_and_saved_values_reactivate(self):
+        b = tau(files={"expansions": {"url": "https://example.org/cache.zip", "sha256": "a" * 64}})
+        b["options"]["expansion"] = {"summary": "extra retrieval keys", "values": ["none", "facts"], "default": "none",
+                                     "when": {"retrieval": ["alltools"]}, "needs": {"facts": {"files": ["expansions"], "reranker": "gpt-5.2"}}}
+        self.assertEqual(definitions.problems(b, "benchmark"), [])
+        saved = {"retrieval": "bm25", "expansion": "facts"}
+        self.assertEqual(definitions.option_needs(b, saved)["files"], [])
+        self.assertEqual(definitions.option_needs(b, saved)["reranker"], [])
+        saved["retrieval"] = "alltools"
+        self.assertEqual(definitions.option_needs(b, saved),
+                         {"embeddings": ["text-embedding-3-large"], "reranker": ["gpt-5.2"], "host": ["sandbox"], "files": ["expansions"]})
+        self.assertEqual(saved["expansion"], "facts")
+        for files in ([], {"BAD-NAME": {}}, {"expansions": {"url": "http://example.org/x", "sha256": "short"}}):
+            self.assertTrue(any(p.startswith("files") for p in definitions.problems(dict(b, files=files), "benchmark")))
+        b["options"]["expansion"]["needs"]["facts"]["when"] = {"missing": ["yes"]}
+        self.assertTrue(any("needs.facts.when" in p for p in definitions.problems(b, "benchmark")))
+        b["options"]["expansion"]["needs"]["facts"]["files"] = ["absent"]
+        self.assertTrue(any("needs.facts.files" in p for p in definitions.problems(b, "benchmark")))
 
     def test_rerankers_need_their_chat_model_and_only_embedding_variants_need_embeddings(self):
         from unittest.mock import Mock
@@ -67,7 +86,7 @@ class Scope(unittest.TestCase):
                 self.assertEqual(bad, [])
                 embedded = method.startswith("openai")
                 self.assertEqual(definitions.option_needs(TAU, vals),
-                                 {"embeddings": ["text-embedding-3-large"] if embedded else [], "reranker": ["gpt-5.2"], "host": []})
+                                 {"embeddings": ["text-embedding-3-large"] if embedded else [], "reranker": ["gpt-5.2"], "host": [], "files": []})
                 bench = copy.deepcopy(TAU)
                 bench["score"].pop("judge")
                 bench.pop("simulator")

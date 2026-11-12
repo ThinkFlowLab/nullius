@@ -427,7 +427,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `summary`, `values` or `pattern`, `default` | What it changes, its allowed choices or input pattern, and its value when unset |
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
-| `needs` | What a value needs: an `embeddings` model, a `reranker` model, or `host` requirements |
+| `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, or named `files` |
 | `when` | Another option's values that make it apply |
 | `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`) |
 
@@ -435,6 +435,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 - **Read** by the driver as `NULLIUS_OPTION_<NAME>`; set with `cli run --bench-option NAME=VALUE`.
 - **`embeddings`**: the value gets the run's own relay as the driver's `OPENAI_BASE_URL` (and its MCP servers'), the model pinned on its route. Bare OpenAI model names work on OpenAI or OpenRouter; qualified names such as `qwen/qwen3-embedding-8b` require OpenRouter. On OpenRouter, bare names acquire their maker's prefix in both the price inventory and the sent request. A judge route handed to litellm goes in its `api_base`.
 - **`reranker`**: the chat model used by the upstream search. The driver receives one `OPENAI_BASE_URL`: embeddings requests use the embedding pin when present, while chat and Responses requests use the reranker pin. A BM25 reranker needs no embedding model. Both models count toward the run's price requirements and spending cap.
+- **`files`**: a benchmark declares `{name: {url: "https://…", sha256: "…"}}`; an option value names them with `needs.files: [name]`. A needs block may add `when: {other_option: [values]}` to require its resources only under those selections. Only active options and needs fetch files, once per digest under `STANDARD_DATA_DIR` (the dataset cache by default), refusing a mismatched download. The driver receives each path as `NULLIUS_FILE_<NAME>` (upper case). Names use lower case letters and underscores.
 - **`host`**: `{summary, check: [programs on PATH], install: {apt, npm}}` (`standard/hostreq.py`), whatever the backend; hardware (a CUDA GPU, by `nvidia-smi`) has no `install`. Optional `gpu_memory_mb` is a positive whole number of MiB required on the largest GPU, read with `nvidia-smi` (total memory, not free memory or the sum across cards). The local builder and run startup refuse insufficient memory with the required and available amounts; an unavailable query names `nvidia-smi` instead. Remote GPU memory is checked when the run starts on the host. A run refuses missing programs and says the install commands when supplied.
 - **One integration per benchmark.** Add supported behavior as options on that entry, not numbered integration revisions. Record the selected options with each run and revalidate affected proofs.
 
