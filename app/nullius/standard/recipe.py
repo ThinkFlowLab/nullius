@@ -464,7 +464,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     elif backend == "docker" and "local" in targets and docker_unusable is not None:
         why = docker_unusable()
         if why:
-            add("where", f"The docker backend cannot run on this machine: {why}. Choose local processes, or a host with docker.")
+            add("where", f"The docker backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman.")
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
     spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"])
     paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])

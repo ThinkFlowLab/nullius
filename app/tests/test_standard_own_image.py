@@ -94,6 +94,7 @@ class Setup(unittest.TestCase):
         probe.assert_not_called()
 
     def test_task_environment_reaches_agent_and_runner_variables_win(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))     # podman takes HOME by value
         r = run.Run.__new__(run.Run)
         r.inst = ""
         b = container.Box("job", "unit", "image", workdir="/testbed", path="/image/bin",
@@ -169,6 +170,7 @@ class Runtime(unittest.TestCase):
         self.assertEqual(container.in_runtime([venv_py, "/x/run.py"], self.RT), [venv_py, "/x/run.py"])
 
     def test_the_box_runs_in_the_machines_user_namespace_on_a_docker_with_userns_remap_alone(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))     # podman's box always runs so
         for remap in (True, False):
             calls = []
             b = container.Box("job", "u0001", "img", workdir="/app", network="net")
@@ -181,15 +183,25 @@ class Runtime(unittest.TestCase):
     def test_exec_passes_variables_by_name_and_the_runtimes_read_only(self):
         b = container.Box("job", "u0001", "img", workdir="/app", runtimes=self.RT)
         argv = b.exec_argv(["node", "x"], {"HOME": "/h", "NULLIUS_RELAY_KEY": "placeholder", "PATH": "/p"}, "/usr/bin:/opt/nullius/node/bin")
-        self.assertEqual(argv[:6], ["docker", "exec", "-i", "-w", "/app", "-e"])
+        self.assertEqual(argv[:6], [container.DOCKER, "exec", "-i", "-w", "/app", "-e"])
         self.assertIn("PATH=/usr/bin:/opt/nullius/node/bin", argv)
         self.assertIn("NULLIUS_RELAY_KEY", argv)
         self.assertNotIn("placeholder", " ".join(argv))
         self.assertEqual(argv[-3:], [b.name, "node", "x"])
 
 
+    def test_on_podman_the_agent_in_its_own_image_gets_its_home_by_value(self):
+        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
+        r = run.Run.__new__(run.Run)
+        r.inst = ""
+        b = container.Box("job", "u0001", "img", workdir="/app", runtimes={})
+        argv, env = r.place(None, ["sh", "x"], {"HOME": "/h", "NULLIUS_RELAY_KEY": "placeholder", "PATH": "/p"}, "/app", "/h", box=b)
+        self.assertEqual(argv[:2], ["podman", "exec"])
+        self.assertEqual([argv[i + 1] for i, w in enumerate(argv) if w == "-e"][1:], ["HOME=/h", "NULLIUS_RELAY_KEY"])
+        self.assertEqual((env.get("HOME"), env["NULLIUS_RELAY_KEY"]), (os.environ.get("HOME"), "placeholder"))
+
 def _docker_ready() -> str:
-    return docker_tier.why_not("ubuntu:24.04")
+    return docker_tier.why_not("docker.io/library/ubuntu:24.04")
 
 
 class LocalRun(unittest.TestCase):
@@ -237,9 +249,9 @@ class DockerRun(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         # the fixture's image goes, and so does this process's memory of having built it
-        for line in subprocess.run(["docker", "images", "-q", "--filter", "label=nullius.own=ownbench"],
+        for line in subprocess.run([container.DOCKER, "images", "-q", "--filter", "label=nullius.own=ownbench"],
                                    stdout=subprocess.PIPE, text=True).stdout.split():
-            subprocess.run(["docker", "rmi", "-f", line], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([container.DOCKER, "rmi", "-f", line], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for tag in [t for t in container._built if t.startswith("nullius/own-ownbench-")]:
             container._built.pop(tag)
             container._fetched.discard(tag)

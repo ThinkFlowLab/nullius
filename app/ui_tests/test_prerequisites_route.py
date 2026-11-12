@@ -85,10 +85,10 @@ class PrerequisitesRoute(unittest.TestCase):
                 patch.object(prerequisites.container, "userns_remap", lambda: True):
             standard = self.post("/new-run/prerequisites", {"recipe": rec}).get_json()
             harbor = self.post("/new-run/prerequisites", {"recipe": self.harbor()}).get_json()
-        docker = lambda j: {r["name"]: r for r in j["machines"][0]["rows"]}["docker"]
-        self.assertEqual((docker(standard)["state"], docker(standard)["detail"]), ("ok", prerequisites.REMAPPED))
+        engine = lambda j, n: {r["name"]: r for r in j["machines"][0]["rows"]}[n]
+        self.assertEqual((engine(standard, "engine")["state"], engine(standard, "engine")["detail"]), ("ok", prerequisites.REMAPPED))
         self.assertTrue(standard["ready"])                            # a notice, not a refusal
-        self.assertEqual(docker(harbor)["detail"], "the engine answers")
+        self.assertEqual(engine(harbor, "docker")["detail"], "the engine answers")
 
     def test_hosts_are_probed_at_once_and_listed_in_order(self):
         import time
