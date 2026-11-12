@@ -109,7 +109,8 @@ def new_run_prerequisites():
     if len(json.dumps(recipe)) > 200_000:
         abort(413)
     setups = {}
-    if recipe.get("harness") == standard_recipe.HARNESS:
+    standard = recipe.get("harness") == standard_recipe.HARNESS
+    if standard:
         out = standard_recipe.compile(recipe)
         if out["errors"]:
             return jsonify(machines=[], ready=False, errors=[e["message"] for e in out["errors"]])
@@ -132,10 +133,10 @@ def new_run_prerequisites():
 
     def machine(w):
         if w == "local":
-            return {"where": w, "label": "this machine", "rows": prerequisites.check_here(needs, setups)}
+            return {"where": w, "label": "this machine", "rows": prerequisites.check_here(needs, setups, standard=standard)}
         if w not in known:
             return {"where": w, "label": w, "rows": [prerequisites.row("connect", "missing", f"{w} is not one of the hosts in Settings", label="Connection")]}
-        return {"where": w, "label": known[w].label, "rows": prerequisites.check_host(known[w], host_needs, setups)}
+        return {"where": w, "label": known[w].label, "rows": prerequisites.check_host(known[w], host_needs, setups, standard=standard)}
     # one ssh probe per host, all at once: one after another, Review waited for their sum
     # (an unreachable host alone holds a probe 8 to 12 s)
     with ThreadPoolExecutor(max(1, min(8, len(wheres)))) as pool:
