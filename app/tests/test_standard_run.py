@@ -373,6 +373,7 @@ class RunTest(unittest.TestCase):
         """A cap's refusal of a driver's own call (an option's embeddings) is the unit's that driver served, never one beside it."""
         r = run.Run.__new__(run.Run)
         r.embed_model = "embed-1"
+        r.rerank_model = None
         r.bench_relay = relay.Relay("http://127.0.0.1:9/v1", "sk-real", os.path.join(self.tmp, "relay-benchmark")).start()
         self.addCleanup(r.bench_relay.stop)
         route = lambda: (r.embeddings_tag(), r.embeddings_env()["OPENAI_BASE_URL"])

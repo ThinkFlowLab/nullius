@@ -384,16 +384,21 @@ class Relay:
         self.side_models = {a: (b or a) for a, _, b in (str(m).partition("=") for m in side_models or ())}
         self.key_header = key_header.lower()
         self.models: Dict[str, str] = {}
+        self.embedding_models: Dict[str, str] = {}
         self.lock = threading.Lock()
         self.pool = _Pool(self.base)
         self.server: Optional[ThreadingHTTPServer] = None
         os.makedirs(record_dir, exist_ok=True)
 
-    def url(self, tag: str, model: Optional[str] = None) -> str:
+    def url(self, tag: str, model: Optional[str] = None, *, embeddings: Optional[str] = None) -> str:
+        """A route's model pin, with an optional override only for /embeddings requests on this tag.
+        Reusing the URL without new pins preserves them; other tags keep their own routing."""
         if not _TAG.match(tag):
             raise ValueError(f"tag {tag!r}")
         if model:
             self.models[tag] = model
+        if embeddings:
+            self.embedding_models[tag] = embeddings
         return f"{self.public or self._own()}/{tag}/v1"
 
     def _own(self) -> str:
@@ -461,7 +466,9 @@ class Relay:
         asked = req.get("model") if isinstance(req, dict) else None
         side = False
         if isinstance(req, dict) and req:
-            if self.models.get(tag):
+            if rest.split("?")[0] == "/embeddings" and self.embedding_models.get(tag):
+                req["model"] = self.embedding_models[tag]
+            elif self.models.get(tag):
                 req["model"] = self.models[tag]
             elif self.model and asked != self.model and asked in self.side_models:
                 side = True
