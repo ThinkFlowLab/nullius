@@ -137,6 +137,30 @@ class KeysOntoHosts(unittest.TestCase):
                 hosts.save_key("u", "h", bad, key_dir=str(self.tmp / "k"))
         self.assertEqual(hosts.parse(f"ubuntu@10.0.0.4:22:{path}").key, path)
 
+    def test_a_host_removed_from_the_list_takes_only_the_key_saved_for_it(self):
+        k = self.tmp / "k"
+        saved = [hosts.save_key("u", h, b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n", key_dir=str(k)) for h in ("a", "b", "c")]
+        for name in ("id_ed25519", "id_ed25519.pub"):
+            (k / name).write_text(name)
+        mine = self.tmp / "u@d"; mine.write_text("mine")
+        old = f"u@a:{saved[0]}, u@b:{saved[1]}, Lab=u@b:2222:{saved[1]}, u@c:{saved[2]}, u@e:{k / 'id_ed25519'}, u@d:{mine}, u@f:{saved[2]}, bench"
+        self.assertEqual(hosts.forget_keys(old, f"Lab=u@b:2222:{saved[1]}", key_dir=str(k)), [])
+        self.assertEqual(sorted(p.name for p in k.iterdir()), ["id_ed25519", "id_ed25519.pub", "u@b"])   # u@b: still named
+        self.assertTrue(mine.exists())                                    # the user's own file, not save_key's
+        self.assertEqual(hosts.forget_keys("not a host", "", key_dir=str(k)), [])
+
+    def test_a_key_that_cannot_be_deleted_is_said_and_the_others_still_go(self):
+        k = self.tmp / "k"
+        a, b = (hosts.save_key("u", h, b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n", key_dir=str(k)) for h in ("a", "b"))
+        unlink = os.unlink
+        def refuse(path):
+            if path == a:
+                raise PermissionError(13, "Permission denied", path)
+            unlink(path)
+        with patch.object(os, "unlink", refuse):
+            self.assertEqual(hosts.forget_keys(f"u@a:{a}, u@b:{b}", "", key_dir=str(k)), [(a, "Permission denied")])
+        self.assertTrue(os.path.exists(a)); self.assertFalse(os.path.exists(b))
+
     def test_the_own_key_is_made_once(self):
         calls = []
         def keygen(argv, timeout):

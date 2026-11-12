@@ -518,6 +518,47 @@ class SettingsPage(unittest.TestCase):
         self.assertEqual(self.client.post("/settings/hosts/enrol", data={"user": "u", "host": "h", "password": "p"}, headers={"Origin": "http://localhost"}).status_code, 403)
         self.assertEqual(self.client.post("/settings/hosts/key", data={"user": "u", "host": "h"}, headers=headers, environ_base={"REMOTE_ADDR": "10.0.0.7"}).status_code, 403)
 
+    def test_a_removed_host_takes_the_key_file_saved_for_it(self):
+        from io import BytesIO
+        keys = self.tmp / "keys"
+        self.stack.enter_context(patch.object(hosts, "KEY_DIR", str(keys)))
+        headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
+        def upload(user, host):
+            r = self.client.post("/settings/hosts/key", data={"user": user, "host": host, "key": (BytesIO(b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n"), "id")}, headers=headers); self.addCleanup(r.close)
+            return r.json["entry"]
+        own, mine = keys / "id_ed25519", self.tmp / "my_key"
+        keys.mkdir(); own.write_text("own"); (keys / "id_ed25519.pub").write_text("pub"); mine.write_text("mine")
+        a, b = upload("ubuntu", "10.0.0.4"), upload("ubuntu", "10.0.0.5")
+        enrolled, by_path = f"root@10.0.0.6:{own}", f"me@10.0.0.7:{mine}"
+        twice = f"Lab=ubuntu@10.0.0.5:2222:{keys / 'ubuntu@10.0.0.5'}"   # a second entry naming b's key
+        self.post({"HOSTS": ", ".join([a, b, twice, enrolled, by_path])})
+        # without the form token: nothing written, nothing deleted
+        self.assertEqual(self.post({"HOSTS": "bench"}, csrf="wrong").status_code, 403)
+        self.assertTrue((keys / "ubuntu@10.0.0.4").exists())
+        self.post({"HOSTS": ", ".join([twice, enrolled, by_path])})
+        self.assertFalse((keys / "ubuntu@10.0.0.4").exists())
+        self.assertTrue((keys / "ubuntu@10.0.0.5").exists())                # another entry still uses it
+        self.post(clear=["HOSTS"])
+        self.assertEqual(sorted(p.name for p in keys.iterdir()), ["id_ed25519", "id_ed25519.pub"])   # Nullius's own key stays
+        self.assertTrue(mine.exists())                                        # a key named by path is the user's
+        # HOSTS from the process environment is not this page's: nothing deleted
+        c = upload("ubuntu", "10.0.0.8")
+        os.environ["HOSTS"] = c
+        self.post(clear=["HOSTS"])
+        self.assertTrue((keys / "ubuntu@10.0.0.8").exists())
+
+    def test_a_key_file_that_cannot_be_removed_is_said_and_the_list_is_saved(self):
+        self.stack.enter_context(patch.object(hosts, "KEY_DIR", str(self.tmp / "keys")))
+        key = hosts.save_key("ubuntu", "10.0.0.4", b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n")
+        self.post({"HOSTS": f"ubuntu@10.0.0.4:{key}, bench"})
+        def refuse(path):
+            raise PermissionError(13, "Permission denied", path)
+        with patch.object(os, "unlink", refuse):
+            r = self.post({"HOSTS": "bench"}, headers={"Origin": "http://localhost", "Accept": "application/json"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json["message"], "Saved. The key file for ubuntu@10.0.0.4 could not be removed: Permission denied.")
+        self.assertEqual(self.file(), "HOSTS=bench\n"); self.assertTrue(os.path.exists(key))
+
     def test_the_sandbox_is_asked_when_shown_and_a_login_goes_to_docker_only(self):
         html = self.page()
         section = html[html.index('id="sandbox"'):html.index('id="general"')]
