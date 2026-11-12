@@ -168,6 +168,16 @@ class Runtime(unittest.TestCase):
         venv_py = "/inst/mini-swe-agent/.venv/bin/python"
         self.assertEqual(container.in_runtime([venv_py, "/x/run.py"], self.RT), [venv_py, "/x/run.py"])
 
+    def test_the_box_runs_in_the_machines_user_namespace_on_a_docker_with_userns_remap_alone(self):
+        for remap in (True, False):
+            calls = []
+            b = container.Box("job", "u0001", "img", workdir="/app", network="net")
+            with self.subTest(remap=remap), mock.patch.object(container, "userns_remap", return_value=remap), \
+                    mock.patch.object(container, "_docker", lambda a, **kw: calls.append(a)), \
+                    mock.patch.object(b, "keeper", return_value="7"):
+                b.start()
+                self.assertEqual("--userns=host" in calls[0], remap)
+
     def test_exec_passes_variables_by_name_and_the_runtimes_read_only(self):
         b = container.Box("job", "u0001", "img", workdir="/app", runtimes=self.RT)
         argv = b.exec_argv(["node", "x"], {"HOME": "/h", "NULLIUS_RELAY_KEY": "placeholder", "PATH": "/p"}, "/usr/bin:/opt/nullius/node/bin")
