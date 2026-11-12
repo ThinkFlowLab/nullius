@@ -86,10 +86,37 @@ class ProviderFromSettings(CompilerCase):
     Run says why, until another is chosen; with none set, every provider stays
     visible and Run waits for a key."""
 
-    def on(self, available, code, model_key=True):
-        schema = dict(self.schema, credentials={'available': available, 'model_key': model_key})
+    def on(self, available, code, model_key=True, endpoints=None):
+        schema = dict(self.schema, credentials={'available': available, 'model_key': model_key, 'endpoints': endpoints or {}})
         program = 'const C=require(' + json.dumps(str(APP / 'static/builder/command-builder-core.js')) + ')(' + json.dumps(schema) + ');\n' + code
         return json.loads(subprocess.run([self.node, '-e', program], check=True, capture_output=True, text=True).stdout)
+
+    def test_a_recipe_names_its_endpoint_by_id_and_the_step_lists_each_by_name(self):
+        """A named OpenAI-compatible endpoint: the recipe keeps provider custom
+        and the endpoint's id, saved and read back; the Model step offers it by
+        its name; one that is gone is said before Run, by its id."""
+        endpoints = {'GPU': 'GPU box'}
+        code = ("const out=[];for(const harness of ['harbor','standard']){const r=harness==='harbor'?C.create():C.createStandard('longmemeval');"
+                + PIN.replace('%', '%%') + "r.model='m';C.setChoice(r,%s);const back=C.fromJSON(JSON.stringify(r));"
+                "out.push([back.provider,back.endpoint||'',C.choiceOf(back),C.labelOf(C.choiceOf(back)),C.providerBlocker(back)]);}"
+                "process.stdout.write(JSON.stringify(out))")
+        on_gpu = self.on(['openrouter', 'custom', 'custom:GPU'], code % "'custom:GPU'", endpoints=endpoints)
+        self.assertEqual(on_gpu, [['custom', 'GPU', 'custom:GPU', 'GPU box', '']] * 2)
+        on_default = self.on(['openrouter', 'custom', 'custom:GPU'], code % "'custom'", endpoints=endpoints)
+        self.assertEqual(on_default, [['custom', '', 'custom', 'OpenAI-compatible', '']] * 2)                # custom alone: MODEL_API_URL's
+        gone = self.on(['openrouter', 'custom:GPU'], code % "'custom:GONE'", endpoints=endpoints)
+        self.assertEqual(gone[0][:4], ['custom', 'GONE', 'custom:GONE', 'GONE'])
+        self.assertEqual(gone[0][4], 'This recipe runs on GONE, and MODEL_GONE_API_URL is not set in Settings. '
+                                     'Choose OpenRouter or GPU box on the Model step to run it, or set it in Settings.')
+        self.assertEqual(self.on(['custom:GPU'], code % "'openai'", endpoints=endpoints)[0][:2], ['openai', ''])   # another provider drops the id
+        bad = json.loads(subprocess.run([self.node, '-e', 'const C=require(' + json.dumps(str(APP / 'static/builder/command-builder-core.js')) + ')('
+                                         + json.dumps(dict(self.schema, credentials={'available': ['custom:GPU'], 'endpoints': endpoints, 'broken': ['custom:BAD']})) + ');'
+                                         + "const r=C.create();r.agents=['tau3-llm-agent'];" + PIN + "r.model='m';C.setChoice(r,'custom:BAD');process.stdout.write(JSON.stringify(C.providerBlocker(r)))"],
+                                        check=True, capture_output=True, text=True).stdout)
+        self.assertEqual(bad, 'This recipe runs on BAD, and its URL in Settings holds a credential or is not an http(s) URL. Put the key in the Key field in Settings.')
+        odd = self.on(['custom:GPU'], "const r=C.fromJSON(JSON.stringify({...C.create(),provider:'custom',endpoint:'gpu box'}));"
+                                      "process.stdout.write(JSON.stringify(r.endpoint||''))", endpoints=endpoints)
+        self.assertEqual(odd, '')                                                                           # not an id: not kept
 
     def test_a_new_recipe_starts_on_the_first_provider_set(self):
         new = "process.stdout.write(JSON.stringify([C.create().provider,C.prefill({model:'gpt-x'}).provider]))"
@@ -105,7 +132,7 @@ class ProviderFromSettings(CompilerCase):
         provider, why, errors, compile_errors = self.on(['openrouter', 'custom'], state % "'openai'")       # a saved recipe on OpenAI
         self.assertEqual((provider, compile_errors), ('openai', 0))                                          # kept as it was; execution still requires credentials
         self.assertEqual(why, 'This recipe runs on OpenAI, and OPENAI_API_KEY is not set in Settings. '
-                              'Choose OpenRouter or Local or self-hosted OpenAI-compatible endpoint on the Model step to run it, or set it in Settings.')
+                              'Choose OpenRouter or OpenAI-compatible on the Model step to run it, or set it in Settings.')
         self.assertEqual(errors, [why])
         provider, why, errors, compile_errors = self.on([], state % "'openrouter'")
         self.assertEqual((provider, compile_errors, errors), ('openrouter', 0, [why]))

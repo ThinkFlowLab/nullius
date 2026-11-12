@@ -316,20 +316,20 @@
       th.style.left = to.left + 'px'; th.style.width = to.width + 'px'; thumbAt[seg.dataset.seg] = to;
     }
   };
-  // The provider is one whose key (a local endpoint: its URL) is set in Settings. One is said, nothing to choose;
-  // several are a select of those alone; none, every provider. A recipe naming one
-  // whose key is not set keeps it, marked, until another is chosen.
+  // The provider is one whose key (an OpenAI-compatible endpoint: its URL) is set in Settings, each endpoint by its
+  // name. One is said, nothing to choose; several are a select of those alone; none, every provider. A recipe
+  // naming one whose key is not set keeps it, marked, until another is chosen.
   const providerField = (rec, offered) => {
-    const have = C.available().filter(p => offered.some(([x]) => x === p)), current = C.recipeProvider(rec);
+    const have = C.available().filter(p => offered.includes(p.split(':')[0])), current = C.choiceOf(rec);
     if (have.length === 1 && current === have[0])
-      return `<div class="nb-field"><span>Provider</span><span class="nb-fixed">${esc(offered.find(([p]) => p === current)[1])}</span><small>The only one set in Settings.</small></div>`;
-    return select('Provider', 'provider', current, !have.length ? offered
-      : offered.filter(([p]) => have.includes(p) || p === current).map(([p, t]) => [p, have.includes(p) ? t : t + ' · not set in Settings']));
+      return `<div class="nb-field"><span>Provider</span><span class="nb-fixed">${esc(C.labelOf(current))}</span><small>The only one set in Settings.</small></div>`;
+    const shown = !have.length ? offered : [...have, ...(have.includes(current) ? [] : [current])];
+    return select('Provider', 'provider', current, shown.map(p => [p, have.length && !have.includes(p) ? C.labelOf(p) + ' · not set in Settings' : C.labelOf(p)]));
   };
   // Show only a missing-provider blocker; configured credentials need no confirmation line.
   const keyLine = rec => {
-    const p = C.recipeProvider(rec), blocked = C.providerBlocker(rec), at = name => button('Settings', `data-href="/settings#${name}"`, 'nb-inlinebutton');
-    if (blocked) return note('Not set in Settings', esc(blocked) + ' ' + at(C.PROVIDER_NEEDS[p] || 'MODEL_API_URL'));
+    const blocked = C.providerBlocker(rec), at = name => button('Settings', `data-href="/settings#${name}"`, 'nb-inlinebutton');
+    if (blocked) return note('Not set in Settings', esc(blocked) + ' ' + at(C.needsOf(C.choiceOf(rec))));
     return '';
   };
   // The Nullius standard (C.isStandard): a benchmark, then an agent or a capability among every one there is - the
@@ -606,7 +606,7 @@
     if (step === S.model) {
       const lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
       return `<div class="nb-sectionhead"><h2>Choose the model.</h2></div>` + modelChoiceCards(rec)
-        + providerField(rec, C.PROVIDERS.map(p => [p, C.PROVIDER_LABEL[p]]))
+        + providerField(rec, C.PROVIDERS)
         + field('Model', 'model', rec.model, {list:'nb-models', placeholder:paper && C.paperListed(rec) ? 'Choose a paper model' : 'Search or enter a model ID'})
         // the benchmark's other models: the user simulator its conversations need, the judge that grades - each its official one
         // unless named; like the paper, the official one; like the leaderboard, its own and the options it fixes
@@ -673,7 +673,7 @@
       if(C.needsCredentials(rec)){
         const controlOnly=!rec.agents.some(id=>!schema.agents.find(a=>a.id===id)?.control);
         const tau3=rec.benchmark==='tau3-bench';
-        html+=providerField(rec,C.PROVIDERS.map(p=>[p,C.PROVIDER_LABEL[p]]));
+        html+=providerField(rec,C.PROVIDERS);
         if(tau3&&controlOnly)html+=`<div class="nb-two">${field('Model · customer','userModel',rec.userModel,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'})}${field('Model · evaluator','evalModel',rec.evalModel,{list:'nb-models',placeholder:'same as the customer'})}</div>`;
         else if(tau3)html+=field('Model · agent','model',rec.model,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'})+`<div class="nb-two">${field('Model · customer','userModel',rec.userModel,{list:'nb-models',placeholder:'same as the agent'})}${field('Model · evaluator','evalModel',rec.evalModel,{list:'nb-models',placeholder:'same as the customer'})}</div>`;
         else html+=field('Model','model',rec.model,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'});
@@ -685,7 +685,7 @@
   }
   function renderForm() {
     preselectRelease();
-    root.dataset.modelProvider = C.recipeProvider(r());
+    root.dataset.modelProvider = C.choiceOf(r());
     root.dataset.paperModels = JSON.stringify(r().model_choice === 'paper' && C.paperListed(r()) ? ((C.paperModels(r()).sent || {})[r().provider] || {}) : null);
     root.dataset.standardModel = String(C.isStandard(r()));
     const rec=r(), d=C.dataset(rec);
@@ -824,7 +824,7 @@
     if(!schema.local)return note('Run from the application host','Runs start from a browser on the machine Nullius runs on.');
     // A provider not set in Settings: Run waits and says why.
     const blocked=C.providerBlocker(rec);
-    if(blocked)return `<div class="nb-runbox" id="nb-runbox"><div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run" disabled data-held title="'+esc(blocked)+'"','nb-button nb-primary')}</div><p class="nb-note nb-error">${esc(blocked)} ${button('Model step','data-step="'+S.model+'"','nb-inlinebutton')} · ${button('Settings','data-href="/settings#'+(C.PROVIDER_NEEDS[C.recipeProvider(rec)]||'MODEL_API_URL')+'"','nb-inlinebutton')}</p></div>`;
+    if(blocked)return `<div class="nb-runbox" id="nb-runbox"><div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run" disabled data-held title="'+esc(blocked)+'"','nb-button nb-primary')}</div><p class="nb-note nb-error">${esc(blocked)} ${button('Model step','data-step="'+S.model+'"','nb-inlinebutton')} · ${button('Settings','data-href="/settings#'+C.needsOf(C.choiceOf(rec))+'"','nb-inlinebutton')}</p></div>`;
     if(C.isStandard(rec)){
       const out=runnerOut||{errors:[{message:'Compiling the recipe…'}]}, noun=C.isStandard(rec)?unitsOf(rec).noun:'item';
       return `<div class="nb-runbox" id="nb-runbox">${(out.errors||[]).length?out.errors.map(e=>`<p class="nb-note">${esc(e.message)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"','nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(out.confirm?`<p class="nb-note nb-nolimit">No ${esc(noun)} limit: ${esc(out.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
@@ -963,7 +963,8 @@
       else if(d.field.startsWith('adapterPath:')){const id=d.field.slice(12);if(String(value).trim())rec.adapterPaths[id]=String(value).trim();else delete rec.adapterPaths[id];}
       else if(!d.providerModel&&['model','userModel','evalModel'].includes(d.field)&&/^(openrouter|openai)\//.test(String(value))){rec.provider=C.providerOf(rec,value);rec[d.field]=C.bareModel(value);
         renderForm();refreshPlan();const f=root.querySelector(`[data-field="${d.field}"]`);if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);}return;}   // the provider the prefix named, and whether it is set
-      else{rec[d.field]=value;if(d.field==='provider'){renderForm();refreshPlan();return;}}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
+      else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
+      else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
     }else if(d.minutes){C.setPhaseMinutes(rec,d.minutes,el.value===''?'':Number(el.value));const row=el.closest('tr');if(row){const m=row.querySelector('.nb-mono');const t=C.effectiveTimeouts(rec);const p=t&&t.phases.find(x=>x.key===d.minutes);if(m&&p)m.textContent='×'+p.multiplier;}refreshPlan();return;}
     else if(d.customAgent!==undefined){rec.customAgents[Number(d.customAgent)]=el.value;refreshPlan();return;}
