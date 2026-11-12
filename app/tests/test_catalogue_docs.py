@@ -34,7 +34,7 @@ class SupportedPages(unittest.TestCase):
             # a key is a code chip: markdown's in a table, HTML's on a card
             self.assertTrue(f"`{key}`" in text or f"<code>{key}</code>" in text, key)
         agents = catalogue_docs.render_agents_index()
-        for key in ("codex@2.2.2", "codex@0.16.0", "goose", "jiuwenswarm", "mini-swe-agent", "opencode", "terminus-2"):
+        for key in ("codex@2.2.2", "codex@0.16.0", "goose", "jiuwenswarm@0.2.7", "jiuwenswarm@0.2.8", "mini-swe-agent", "opencode", "terminus-2"):
             named(key, agents)
         for port in ("agent.task/v1", "agent.workspace/v1", "agent.tools/v1", "agent.conversation/v1"):
             self.assertIn(f"`{port}`", agents)

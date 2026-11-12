@@ -85,6 +85,18 @@ class Tabs(unittest.TestCase):
         fixture_html = self.get("/agents").get_data(as_text=True)
         self.assertIn('std-mark small', fixture_html)
 
+    def test_jiuwenswarm_default_shows_its_search_proof_and_can_run_gaia(self):
+        from urllib.parse import unquote
+        with patch.object(definitions, "load", _LOAD):
+            html = self.get("/agents/jiuwenswarm").get_data(as_text=True)
+        row = next(row for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", html, re.S) if "agent.search/v1" in row)
+        self.assertIn('/kits/agent-search-v1', row)
+        self.assertIn('>3/3</b>', row)
+        self.assertNotIn("not offered", row)
+        self.assertIn('href="/agents/jiuwenswarm?v=0.2.8" aria-current="page"', html)
+        link = next(link for link in re.findall(r'href="([^"]+)"', html) if "standard=gaia" in link)
+        self.assertIn("other=jiuwenswarm@0.2.8", unquote(link))
+
     def test_sidebar_lists_agents_and_capabilities(self):
         html = self.get("/agents").get_data(as_text=True)
         for kind, route in (("agent", "agents"), ("capability", "capabilities")):

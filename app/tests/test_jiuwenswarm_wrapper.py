@@ -9,6 +9,7 @@ import io
 import json
 import os
 import shutil
+import socket
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -32,6 +33,43 @@ def lines(*msgs):
 
 def read(buf):
     return [json.loads(x) for x in buf.getvalue().decode().splitlines()]
+
+
+class RuntimeSocket(unittest.TestCase):
+    def test_each_unit_gets_a_short_private_socket_directory_that_is_cleaned(self):
+        paths = []
+
+        def run(path):
+            paths.append(path)
+            self.assertLess(len(path.encode()), 104)
+            self.assertEqual(os.stat(os.path.dirname(path)).st_mode & 0o777, 0o700)
+            with socket.socket(socket.AF_UNIX) as listener:
+                listener.bind(path)
+            if len(paths) == 1:
+                agent.main()
+            return 0
+
+        with patch.object(agent, "HOME", "/long/" + "job/" * 50), patch.object(agent, "run", side_effect=run):
+            self.assertEqual(agent.main(), 0)
+        self.assertNotEqual(paths[0], paths[1])
+        for path in paths:
+            self.assertFalse(os.path.exists(os.path.dirname(path)))
+
+    def test_runtime_directory_is_cleaned_when_startup_fails(self):
+        paths = []
+
+        def fail(path):
+            paths.append(path)
+            raise RuntimeError("startup failed")
+
+        with patch.object(agent, "run", side_effect=fail), self.assertRaisesRegex(RuntimeError, "startup failed"):
+            agent.main()
+        self.assertFalse(os.path.exists(os.path.dirname(paths[0])))
+
+    def test_older_versions_without_a_worker_need_no_shutdown_call(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(agent.subprocess, "run") as run:
+            agent.stop_worker({"JIUWENSWARM_RUNTIME_SOCKET": os.path.join(directory, "missing.sock")})
+        run.assert_not_called()
 
 
 class FilesWithoutTheClient(unittest.TestCase):

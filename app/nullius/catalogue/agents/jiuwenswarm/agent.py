@@ -33,7 +33,8 @@ changes, each taken from the protocol itself:
   Requests for the unit's own JiuwenSwarm home are served by this wrapper
   on both backends, so its config and todo files remain accessible.
 
-When the bridge ends, the servers are stopped.
+The resident worker uses a short, private socket path. When the bridge ends,
+the servers and worker are stopped.
 """
 import json
 import os
@@ -41,6 +42,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -265,7 +267,26 @@ def to_client(src, dst, ses):
         dst.flush()
 
 
-def main():
+def stop_worker(env):
+    """0.2.8's resident worker outlives the frontend; use its shutdown API."""
+    path = env["JIUWENSWARM_RUNTIME_SOCKET"]
+    if not os.path.exists(path):
+        return
+    code = ("import asyncio, os, sys\n"
+            "from jiuwenswarm.server.supervisor.worker_process import request_resident_worker_shutdown\n"
+            "async def stop():\n"
+            "    await request_resident_worker_shutdown(sys.argv[1])\n"
+            "    while os.path.exists(sys.argv[1]):\n"
+            "        await asyncio.sleep(0.05)\n"
+            "asyncio.run(asyncio.wait_for(stop(), 25))\n")
+    try:
+        subprocess.run([PY, "-c", code, path], env=env, stdin=subprocess.DEVNULL,
+                       stdout=sys.stderr, stderr=sys.stderr, timeout=30, check=True)
+    except (subprocess.SubprocessError, OSError) as e:
+        say("runtime worker shutdown failed:", e)
+
+
+def run(runtime_socket):
     os.makedirs(HOME, exist_ok=True)
     if not os.path.isfile(os.path.join(CONFIG, "config.yaml")):
         r = subprocess.run([PY, "-c", "from jiuwenswarm.common.utils import prepare_workspace\n"
@@ -278,7 +299,8 @@ def main():
     reasoning_level()
     ports = free_ports(4)
     write_env(ports)
-    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1",
+               JIUWENSWARM_RUNTIME_SOCKET=runtime_socket)
     server = subprocess.Popen([PY, "-m", "jiuwenswarm.app"], stdin=subprocess.DEVNULL,
                               stdout=sys.stderr, stderr=sys.stderr, cwd=HOME, env=env)
     bridge = None
@@ -319,6 +341,14 @@ def main():
         return code
     finally:
         stop()
+        stop_worker(env)
+
+
+def main():
+    # A long job path exceeds the Unix socket limit. Each unit owns a short,
+    # private directory, including on the local backend where /tmp is shared.
+    with tempfile.TemporaryDirectory(prefix="nj-", dir="/tmp") as runtime:
+        return run(os.path.join(runtime, "worker.sock"))
 
 
 if __name__ == "__main__":
