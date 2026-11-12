@@ -312,9 +312,8 @@ class Run:
                  max_usd_per_unit: Optional[float] = None):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
-        ``unsandboxed``: the caller's explicit yes to running an agent on the
-        local backend, which is no sandbox: what the agent runs, it runs as
-        the user. Without it an agent run on that backend is refused.
+        ``unsandboxed``: consent to execute code as the user: required for
+        local agents, and for setup checks that run code without Docker.
         ``backend``: ``local`` or ``docker`` (``container``), which needs
         no such yes and is refused when docker is missing or not usable.
         ``options``: the
@@ -362,6 +361,13 @@ class Run:
             why = container.unusable()
             if why:
                 raise Refused(f"the docker backend cannot run here: {why}")
+        self.container_check = False
+        if backend == "local" and other.get("_kind") == "upstream" and (bench.get("score") or {}).get("runs_code"):
+            why = container.unusable()
+            if why and not unsandboxed:
+                raise Refused(f"{bench['label']}'s check executes generated code, but Docker is unavailable: {why}. "
+                              "Make Docker usable, or explicitly allow execution as you (--unsandboxed).")
+            self.container_check = not why
         self.bench, self.other, self.model, self.provider, self.backend = bench, other, model, provider, backend
         # A setup (definitions.setup): the upstream's own answerer, asked as one model (``asked``), the relay
         # sending another (``sent``); its units may be its own (a conversation where the paper batches questions).
@@ -488,7 +494,7 @@ class Run:
                             "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
                             **({container.CHECK_IMAGE: self.image,
                                 **{k: os.environ[k] for k in container.CLIENT_KEEP if k.startswith("DOCKER") and k in os.environ}}
-                               if self.backend == "docker" and self.image else {}),
+                               if self.image else {}),
                             **option_env(getattr(self, "bench_options", {})), **self.embeddings_env(), **self.driver_secrets()})
             os.makedirs(env["HOME"], exist_ok=True)
             # its working directory is the job's, never its catalogue folder: an upstream that writes
@@ -505,7 +511,7 @@ class Run:
         os.makedirs(os.path.join(self.job_dir, ".work"), exist_ok=True)
         self.say(f"job {self.job_dir}")
         p, control = self.progress, self.other["_kind"] == "control"
-        p.emit("plan", stages=",".join((["image"] if self.backend == "docker" else [])
+        p.emit("plan", stages=",".join((["image"] if self.backend == "docker" or self.container_check else [])
                                       + (["upstream"] if install.upstream_dir(self.bench) else [])
                                       + (["dataset"] if self.ds.get("url") else [])
                                       + (["driver"] if install.driver_dir(self.bench) else [])
@@ -635,14 +641,14 @@ class Run:
         when it declares one (``driver.install``), the agent's or capability's
         packages. Refused when one cannot be had."""
         p = self.progress
-        if self.backend == "docker":
+        if self.backend == "docker" or self.container_check:
             try:
                 tag = container.base_tag()
                 there = container.present(tag)
                 with p.stage("image", cached=there, start=f"building {tag} (first time on this machine)", **({"detail": tag} if there else {})):
                     self.image = container.base_image(os.path.join(self.job_dir, ".work", "image.log"))
             except container.Unavailable as e:
-                raise Refused(f"the docker backend: {e}")
+                raise Refused(f"the Docker image: {e}")
         # on docker a machine without npm installs in the base image, which carries the Node the agent will run on
         npm_in = (lambda cmd, where: container.install_argv(self.image, where, cmd)) if self.backend == "docker" else None
         try:

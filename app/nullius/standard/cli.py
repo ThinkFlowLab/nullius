@@ -595,7 +595,7 @@ def main(argv=None):
         p.add_argument("--provider", default="openai", choices=sorted(run.PROVIDERS))
         p.add_argument("--jobs", default="jobs_standard", help="where jobs are written (default jobs_standard/, gitignored)")
         p.add_argument("--unsandboxed", action="store_true",
-                       help="run an agent on this machine as you: the local backend is not a sandbox")
+                       help="allow an agent, or a setup check without Docker, to execute code on this machine as you")
         p.add_argument("--backend", default="local", choices=list(run.BACKENDS),
                        help="local processes (the default), or docker: each unit in a container, its relay beside it")
         p.add_argument("--from-run", action="store_true",

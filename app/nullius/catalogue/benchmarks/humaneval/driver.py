@@ -37,11 +37,6 @@ again: the agent's definition is the one the test calls.
 The tests are never in the workspace while the agent works: the upstream
 reads them from the problem when the score is taken.
 
-Where the check runs: on the docker backend, in a throwaway container of the
-unit's image (``container.check_argv``: no network, no capabilities, the
-workspace alone mounted), with the upstream's own human_eval package copied in
-beside the problem - the agent's code never runs on this machine. On local
-processes, here, as the agent itself ran, with the user's yes.
 """
 import ast
 import json
@@ -196,7 +191,8 @@ def score(unit, dir, transcript, answer, setup=None, **_):
     except Exception:                                             # the names explain the verdict, never replace it
         left = []
     return {"reward": 1.0 if ok else 0.0, "passed": ok,
-            "detail": {"result": r["result"], "timeout": TIMEOUT, "completion": how, "solution.py": text[-4000:],
+            "detail": {"check": "container" if os.environ.get(CHECK_IMAGE) else "this machine",
+                       "result": r["result"], "timeout": TIMEOUT, "completion": how, "solution.py": text[-4000:],
                        **({"not_tested": left} if left else {})}}
 
 
