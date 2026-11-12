@@ -78,6 +78,18 @@ class PrerequisitesRoute(unittest.TestCase):
             self.assertTrue(self.post("/new-run/prerequisites", {"recipe": rec}).get_json()["ready"])
 
 
+    def test_a_docker_with_userns_remap_is_said_for_a_standard_recipe_alone(self):
+        rec = {"version": 1, "harness": "standard", "name": "s", "title": "s", "benchmark": "tau3-bench", "datasets": ["airline"],
+               "others": ["nop"], "provider": "openai", "model": "", "limit": 1, "concurrency": 1, "where": "local", "backend": "docker"}
+        with patch.object(prerequisites, "docker_here", lambda fresh=False: None), patch("shutil.which", lambda p: "/x/" + p), \
+                patch.object(prerequisites.container, "userns_remap", lambda: True):
+            standard = self.post("/new-run/prerequisites", {"recipe": rec}).get_json()
+            harbor = self.post("/new-run/prerequisites", {"recipe": self.harbor()}).get_json()
+        docker = lambda j: {r["name"]: r for r in j["machines"][0]["rows"]}["docker"]
+        self.assertEqual((docker(standard)["state"], docker(standard)["detail"]), ("ok", prerequisites.REMAPPED))
+        self.assertTrue(standard["ready"])                            # a notice, not a refusal
+        self.assertEqual(docker(harbor)["detail"], "the engine answers")
+
     def test_hosts_are_probed_at_once_and_listed_in_order(self):
         import time
         names = [f"bench{i}" for i in range(4)]
@@ -85,7 +97,7 @@ class PrerequisitesRoute(unittest.TestCase):
         rec = {"version": 1, "harness": "standard", "name": "s", "title": "s", "benchmark": "tau3-bench", "datasets": ["airline"],
                "others": ["nop"], "provider": "openai", "model": "", "limit": 1, "concurrency": 1, "where": names}
 
-        def slow(host, needs, setups=None):
+        def slow(host, needs, setups=None, **kw):
             time.sleep(0.4)
             return [prerequisites.row("connect", "ok", host.label, label="Connection")]
         with patch.object(web.execute, "_hosts", lambda: hosts), patch.object(prerequisites, "check_host", slow):
