@@ -15,6 +15,18 @@ def job(job_id, minutes=None, dataset="tau3-bench"):
     return SimpleNamespace(job_id=job_id, dataset=dataset, started_at=None if minutes is None else T0 + timedelta(minutes=minutes))
 
 
+class MergedSources(unittest.TestCase):
+    def test_only_finished_merges_replace_their_explicit_sources(self):
+        merged = SimpleNamespace(job_id="merged", merged_from=["a", "b", "merged"],
+                                 is_running=False, is_preparing=False)
+        self.assertEqual(L.merged_sources([merged]), {"a", "b"})
+        merged.is_running = True
+        self.assertEqual(L.merged_sources([merged]), set())
+        merged.is_running = False
+        merged.is_preparing = True
+        self.assertEqual(L.merged_sources([merged]), set())
+
+
 class Group(unittest.TestCase):
     def test_runs_of_one_dataset_started_within_half_an_hour_are_one_launch(self):
         jobs = [job("x-agent", 24), job("x-nop", 0), job("x-oracle", 11), job("y-agent", 24 * 60 * 10)]

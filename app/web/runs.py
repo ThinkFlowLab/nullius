@@ -43,6 +43,8 @@ def index():
     # The run records are the app's, not the workspace's: only those launched
     # into this workspace's roots, or with a job already written here, belong.
     mine = [e for e in execution.EXECUTIONS.values() if _launched_here(e, have)]
+    merged_sources = launches.merged_sources(jobs)
+    jobs = [j for j in jobs if j.job_id not in merged_sources]
     preparing = [(jid, e) for e in mine if e.state in execution.ALIVE for jid in e.summary()["job_ids"] if jid not in have]
     # a launch whose runs wrote no job yet (or never will: refused, stopped) is still shown
     if not jobs and not mine:
@@ -89,7 +91,8 @@ def index():
     # The page's first view: the runs grouped by the launch that made them
     # (nullius.runs.launches) - the builder's run record, else the same dataset
     # within half an hour - each with its task checks and its agents side by side.
-    records = {e.id: (e.plan.name, [str(x.get("name")) for x in e.plan.jobs], e.started) for e in mine}
+    records = {e.id: (e.plan.name, [str(x.get("name")) for x in e.plan.jobs
+                                  if str(x.get("name")) not in merged_sources], e.started) for e in mine}
     by_id = {j.job_id: j for j in jobs}
     groups = [_launch_view(g, by_id, verdicts, ended) for g in launches.group(jobs, records)]
     view = request.args.get("view") if request.args.get("view") in ("launch", "all") else "launch"
