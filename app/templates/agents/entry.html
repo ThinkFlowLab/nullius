@@ -68,7 +68,7 @@
               <td><b class="std-portname"{% if r.kit %} title="Kit v{{ r.kit.version }} · {{ r.kit.checks }} checks: {{ r.kit.says }}"{% endif %}>{% if r.kit %}<a href="{{ url_for('kit_page', key=r.kit.key) }}">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %}</b> <code class="std-portid">{{ r.port }}</code><small>{{ r.summary }}</small>
                   {% if r.skills %}<small class="std-skills">Skills: {% for s in r.skills %}<span class="std-fidelity {{ 'ok' if s.shown else 'no' }}" title="{{ s.id }}{% if s.passed %} · {{ s.passed }}{% endif %}">{{ s.says }} {{ '✓' if s.shown else '✗' }}</span>{{ ' · ' if not loop.last }}{% endfor %}</small>{% endif %}
                   {% if not r.kit %}<small class="std-kit">No kit yet: nothing can prove it until a benchmark needs it.</small>{% endif %}</td>
-              <td>{% if r.record %}<b title="proven on {{ r.record.on }}{% if r.record.model %} with {{ r.record.model }}{% endif %}, kit v{{ r.proof_kit }}{% if r.record.backend %}, {{ 'docker' if r.record.backend == 'docker' else 'local processes' }}{% endif %}">{{ r.record.passed }}</b>{% if r.older_kit %}<small class="std-kit" title="{{ r.older_kit }}">newer kit: worth running again</small>{% endif %}{% if r.job %}<small><a href="{{ url_for('job', job_id=r.job) }}">its job</a></small>{% endif %}
+              <td>{% if r.record %}<b title="proven on {{ r.record.on }}{% if r.record.model %} with {{ r.record.model }}{% endif %}, kit v{{ r.proof_kit }}{% if r.record.backend %}, {{ 'local processes' if r.record.backend == 'local' else 'container' }}{% endif %}">{{ r.record.passed }}</b>{% if r.older_kit %}<small class="std-kit" title="{{ r.older_kit }}">newer kit: worth running again</small>{% endif %}{% if r.job %}<small><a href="{{ url_for('job', job_id=r.job) }}">its job</a></small>{% endif %}
                   {%- else %}<b>{{ r.state }}</b>{% endif %}</td>
             </tr>
           {% endfor %}
@@ -108,7 +108,7 @@
         <p>Test its ports with the selected model. Results update its proofs.</p>
         {% if providers %}
         <div class="std-form">
-          <label>Run in<select name="backend"><option value="local">Local processes</option><option value="docker">Docker</option></select></label>
+          <label>Run in<select name="backend"><option value="local">Local processes</option><option value="container">Container</option></select></label>
           <label>Provider<select name="provider">{% for p, label in providers %}<option value="{{ p }}">{{ label }}</option>{% endfor %}</select></label>
           <label>Model<input name="model" required autocomplete="off" spellcheck="false" placeholder="gpt-5-mini"></label>
         </div>

@@ -223,7 +223,7 @@ class SetupRun(unittest.TestCase):
     def test_a_setup_runs_on_local_processes_only(self):
         o, _ = definitions.setup(self.b, "original")
         with self.assertRaisesRegex(run.Refused, "local processes"):
-            run.Run(self.b, o, model="paper-1", provider="custom", jobs_root=self.tmp, env=self.env, backend="docker")
+            run.Run(self.b, o, model="paper-1", provider="custom", jobs_root=self.tmp, env=self.env, backend="container")
 
 
 class Recipe(unittest.TestCase):
@@ -312,7 +312,7 @@ class Recipe(unittest.TestCase):
         self.assertTrue(self.compiled(others=["model"], model="vendor/model")["errors"])
 
     def test_a_setup_is_refused_on_the_docker_backend(self):
-        msgs = [e["message"] for e in self.compiled(others=["original"], model="vendor/model", backend="docker")["errors"]]
+        msgs = [e["message"] for e in self.compiled(others=["original"], model="vendor/model", backend="container")["errors"]]
         self.assertTrue(any("choose local processes" in m for m in msgs), msgs)
 
 

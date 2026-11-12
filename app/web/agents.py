@@ -139,18 +139,18 @@ def _check(kind: str, key: str):
     version = request.form.get("version", "")
     back = url_for("agent_page" if kind == "agent" else "feature_page", key=key, **({"v": version} if version else {}))
     provider = request.form.get("provider", "")
-    backend = request.form.get("backend", "local")
+    backend = definitions.names.backend(request.form.get("backend", "local"))
     stamp = time.strftime(conform.STAMP)
     got = standard_recipe.conformance(kind, f"{key}@{version}" if version else key, model=request.form.get("model", "").strip(), provider=provider,
                                       unsandboxed=request.form.get("unsandboxed") == "yes", stamp=stamp, backend=backend)
     problem = " ".join(got["errors"]) or execute.provider_problem(provider)
-    if not problem and backend == "docker":
+    if not problem and backend == "container":
         problem = execute.docker_problem()
     if problem:
         flash(problem, "error")
         return redirect(back)
     word = f"{key}-{version}" if version else key
-    plan = execution.Plan(name=f"check-{word}-{time.strftime('%m%d-%H%M%S')}", script=got["script"], runner=standard_recipe.HARNESS, docker=backend == "docker",
+    plan = execution.Plan(name=f"check-{word}-{time.strftime('%m%d-%H%M%S')}", script=got["script"], runner=standard_recipe.HARNESS, docker=backend == "container",
                           **execute.credentials_for(provider), model=request.form.get("model", "").strip(), jobs=got["jobs"],
                           parts=[{"id": word, "label": got["label"] + "'s kits", "script": got["script"]}])
     problem = plan.check() or (execution.name_taken(plan.name) if os.path.exists(os.path.join(execution.runs_root(), plan.name)) else None)

@@ -25,9 +25,10 @@ list of them: one machine is one run, several split it - one shard per
 machine (``shard.py``), each its own run with its own job
 (``<name>-shard-<I>of<N>``), all under one launch id, the recipe's name, so
 the runs page groups them and ``cli merge`` puts them together. A shard's
-``limit`` is its own. ``backend``: ``local`` processes, or ``docker`` - each
-unit's agent or capability in a container - which a host must have docker for
-(``docker`` in the result: the run checks it before anything is sent).
+``limit`` is its own. ``backend``: ``local`` processes, or ``container`` - each
+unit's agent or capability in a container, ``docker`` its earlier name - which a
+host must have Docker or Podman for (``docker`` in the result: the run checks it
+before anything is sent).
 """
 from __future__ import annotations
 
@@ -45,7 +46,7 @@ HARNESS = "standard"
 RUNNER = {"key": HARNESS, "label": "Nullius", "builtin": True, "standard": True,
           "summary": "Any agent or capability that proved the ports a benchmark needs: ACP, MCP and the relay, on this machine."}
 MAX_CONCURRENT = 32
-BACKENDS = ("local", "docker")
+BACKENDS = definitions.names.BACKENDS
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 _MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$")
 
@@ -303,9 +304,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # A control the benchmark declares (nop, oracle) is a choice beside the agents or capabilities: it runs
     # nothing as you and calls no model - a judged benchmark's judge only - so it asks for neither.
     # Several may be chosen: each is its own job of the one run, one after the other.
-    backend = recipe.get("backend") or "local"
+    backend = definitions.names.backend(recipe.get("backend") or "local")
     if backend not in BACKENDS:
-        add("where", "The backend is local processes or docker.")
+        add("where", "The backend is local processes or a container.")
         backend = "local"
     what = "an agent" if side == "agent" else f"a {_bench_page(b)['kind'] or 'capability'}"
     refs = chosen_of(recipe)
@@ -461,10 +462,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     targets, why_not = where_of(recipe.get("where", "local"))
     if why_not:
         add("where", why_not)
-    elif backend == "docker" and "local" in targets and docker_unusable is not None:
+    elif backend == "container" and "local" in targets and docker_unusable is not None:
         why = docker_unusable()
         if why:
-            add("where", f"The docker backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman.")
+            add("where", f"The container backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman.")
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
     spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"])
     paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])
@@ -525,7 +526,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--simulator-model", sim_model] if sim_model and not p["control"] else []),
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
-                 *(["--backend", "docker"] if backend == "docker" else []),
+                 *(["--backend", "container"] if backend == "container" else []),
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
                  *(["--shard", f"{index}/{of}", "--launch", launch] if of > 1 else []), "--from-run"]
         return " ".join(shlex.quote(w) for w in words) + ' --jobs "${NULLIUS_JOBS:-jobs_standard}"'
@@ -557,7 +558,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["jobs"] = [j for sh in out["shards"] for j in sh["jobs"]]
     # docker where it runs: the docker backend, or a control run in each unit's own image, whatever the backend
     own = any(definitions.own_image(definitions.environment_of(b, None, x)[1]) for x in dss)
-    out["docker"] = backend == "docker" or (own and any(p["control"] for p in picks))
+    out["docker"] = backend == "container" or (own and any(p["control"] for p in picks))
     out["model"] = model
     # Nothing in the run asks a model: no key is handed to it, and none need be set.
     out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"]
@@ -617,7 +618,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     docker_only = [n for n, e in (b.get("environments") or {}).items() if not e.get("local_ok")]
     if docker_only and not only_controls and backend == "local":
         notes.append(f"Units in {b['label']}'s environment{'s' if len(docker_only) > 1 else ''} {', '.join(docker_only)} "
-                     "need the docker backend: on local processes they are recorded as not run.")
+                     "need the container backend: on local processes they are recorded as not run.")
     if any(p["control"] for p in picks) and any(definitions.own_image(e) for e in (b.get("environments") or {}).values()):
         notes.append(f"Each {(b.get('units') or {}).get('noun', 'unit')} of {b['label']} is its own image: the control "
                      "runs in it, so docker is needed where it runs, whatever the backend.")
@@ -665,8 +666,9 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
         errors.append("Choose a provider: OpenRouter, OpenAI or a local or self-hosted OpenAI-compatible endpoint.")
     if not _MODEL.match(model or ""):
         errors.append("Choose a model or enter its ID.")
-    if backend not in ("local", "docker"):
-        errors.append("Choose local processes or Docker for the checks.")
+    backend = definitions.names.backend(backend)
+    if backend not in BACKENDS:
+        errors.append("Choose local processes or a container for the checks.")
     if kind == "agent" and backend == "local" and unsandboxed is not True:
         errors.append(f"{o['label']} runs on this machine as you while its kits run: the local backend is not a sandbox. Say yes to that to check it.")
     if not re.match(r"^\d{4}-\d{2}-\d{2}__\d{2}-\d{2}-\d{2}$", stamp or ""):
@@ -678,7 +680,7 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
     if errors:
         return {"errors": errors, "script": "", "jobs": [], "label": o["label"]}
     words = ["nullius", "standard", "conform", o["_ref"], "--model", model, "--provider", provider,
-             "--stamp", stamp, *(["--backend", "docker"] if backend == "docker" else []),
+             "--stamp", stamp, *(["--backend", "container"] if backend == "container" else []),
              *(["--unsandboxed"] if kind == "agent" and backend == "local" else []), "--from-run"]
     command = " ".join(shlex.quote(w) for w in words) + ' --jobs "${NULLIUS_JOBS:-jobs_standard}"'
     script = ("#!/usr/bin/env bash\n"

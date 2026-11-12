@@ -223,7 +223,7 @@ class LocalRun(unittest.TestCase):
                 with open(p) as f:
                     r = json.load(f)
                 got[r["standard"]["unit"]] = r["exception_info"]
-        self.assertIn("needs the docker backend", got["one"]["exception_message"])
+        self.assertIn("needs the container backend", got["one"]["exception_message"])
         self.assertIn("verify runs in an own image", got["base"]["exception_message"])
         self.assertEqual(classify.from_verdict(got["base"]["exception_type"], None), classify.SETUP_ERROR)
 
@@ -260,7 +260,7 @@ class DockerRun(unittest.TestCase):
             container._fetched.discard(tag)
 
     def test_the_agent_works_in_the_tasks_container_and_is_checked_there(self):
-        where, r = self.trial(worker(), "docker")
+        where, r = self.trial(worker(), "container")
         self.assertEqual(r["verifier_result"]["rewards"]["reward"], 1.0, r.get("exception_info"))
         self.assertRegex(r["standard"]["image"], r"^nullius/own-ownbench-tasks-one-environment:[0-9a-f]{12}$")
         with open(os.path.join(where, "verifier", "test-stdout.txt")) as f:

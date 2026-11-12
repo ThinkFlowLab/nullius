@@ -767,17 +767,18 @@ class RunTest(unittest.TestCase):
         self.assertIn("simulator: {model",
                       " ".join(definitions.problems(dict(b, simulator={"model": "a user"}), "benchmark")))
 
-    def test_the_docker_backend_needs_no_yes_but_a_usable_docker(self):
+    def test_the_container_backend_needs_no_yes_but_a_usable_engine(self):
         from unittest import mock
         from nullius.standard import container
         b = definitions.get("benchmark", "fakebench", ROOT)
         a = definitions.get("agent", "fake", ROOT)
         env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}
         with mock.patch.object(container, "unusable", return_value="docker is not installed on this machine"):
-            with self.assertRaisesRegex(run.Refused, "docker backend cannot run here: docker is not installed"):
-                run.Run(b, a, model="m", provider="custom", env=env, backend="docker")
+            with self.assertRaisesRegex(run.Refused, "container backend cannot run here: docker is not installed"):
+                run.Run(b, a, model="m", provider="custom", env=env, backend="container")
         with mock.patch.object(container, "unusable", return_value=None):
-            self.assertEqual(run.Run(b, a, model="m", provider="custom", env=env, backend="docker").backend, "docker")
+            self.assertEqual(run.Run(b, a, model="m", provider="custom", env=env, backend="container").backend, "container")
+            self.assertEqual(run.Run(b, a, model="m", provider="custom", env=env, backend="docker").backend, "container")
         with self.assertRaisesRegex(run.Refused, "backend 'vm'"):
             run.Run(b, a, model="m", provider="custom", env=env, unsandboxed=True, backend="vm")
 
@@ -790,13 +791,13 @@ class RunTest(unittest.TestCase):
         with mock.patch.object(container, "unusable", return_value=None), \
                 mock.patch.object(container, "present", return_value=True), \
                 mock.patch.object(container, "base_image", return_value="nullius/base:x"):
-            for backend, unsandboxed in (("docker", False), ("local", True)):
+            for backend, unsandboxed in (("container", False), ("local", True)):
                 r = run.Run(b, a, model="m", provider="custom", env=env, backend=backend, unsandboxed=unsandboxed,
                             jobs_root=os.path.join(self.tmp, "jobs"), say=lambda s: None)
                 with self.subTest(backend=backend), mock.patch.object(install, "packages", return_value=self.tmp) as pk:
                     r.ready()
                     kw = pk.call_args.kwargs
-                    if backend == "docker":     # the Linux base image's tools and libc, never this machine's
+                    if backend == "container":     # the Linux base image's tools and libc, never this machine's
                         self.assertEqual(kw["image"], "nullius/base:x")
                         self.assertEqual(kw["run_in"](["uv", "venv"], "/w")[-3:], ["nullius/base:x", "uv", "venv"])
                     else:
@@ -813,7 +814,7 @@ class RunTest(unittest.TestCase):
                 mock.patch.object(container, "base_image", return_value="img"), \
                 mock.patch.object(container.Loopback, "start", side_effect=OSError("cannot bind")):
             with self.assertRaisesRegex(OSError, "cannot bind"):
-                run.run(b, a, model="m", provider="custom", env=env, backend="docker", jobs_root=os.path.join(self.tmp, "jobs"),
+                run.run(b, a, model="m", provider="custom", env=env, backend="container", jobs_root=os.path.join(self.tmp, "jobs"),
                         say=lambda s: None, limit=1)
         (job,) = os.listdir(os.path.join(self.tmp, "jobs"))
         self.assertTrue(os.path.exists(os.path.join(self.tmp, "jobs", job, "result.json")))
