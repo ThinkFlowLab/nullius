@@ -137,6 +137,14 @@ def _slug(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", s).strip("_")[:60] or "unit"
 
 
+def driver_secrets(bench: dict, licences) -> dict:
+    """The set secrets a benchmark's environments send to its driver (``to: driver``)."""
+    out = {}
+    for e in (bench.get("environments") or {}).values():
+        out.update(definitions.secret_values(e, licences, "driver"))
+    return out
+
+
 def option_env(values: dict) -> dict:
     """A benchmark's option values as its driver reads them: ``NULLIUS_OPTION_<NAME>``."""
     return {"NULLIUS_OPTION_" + n.upper(): str(v) for n, v in (values or {}).items()}
@@ -1122,10 +1130,7 @@ class Run:
         """The secrets the benchmark's environments send to its driver
         (``to: driver``) that are set: in its process's environment, never in
         a request, so never in a log."""
-        out = {}
-        for e in (self.bench.get("environments") or {}).values():
-            out.update(definitions.secret_values(e, self.licences, "driver"))
-        return out
+        return driver_secrets(self.bench, self.licences)
 
     # -- the unit's relay, and where its process runs ------------------------
     def agent_licences(self, env_def: Optional[dict], rl) -> dict:
