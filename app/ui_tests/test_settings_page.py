@@ -16,7 +16,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-from nullius import hosts, prices, sandbox, settings
+from nullius import hosts, prices, providers, sandbox, settings
 from .test_routes import web
 
 
@@ -633,6 +633,49 @@ class SettingsPage(unittest.TestCase):
             for kw in ({"headers": {"Origin": "http://localhost"}}, {"headers": headers, "environ_base": {"REMOTE_ADDR": "10.0.0.7"}}):
                 self.assertEqual(self.client.post(f"/settings/prices/{route}", data={"model": "x", "input": "1", "output": "2"}, **kw).status_code, 403)
         self.assertIsNone(self.file())
+
+    def ask(self, provider, csrf=None, **kw):
+        r = self.client.post("/settings/providers/test", data={"csrf": self.token() if csrf is None else csrf, "provider": provider},
+                             headers={"Origin": "http://localhost"}, **kw)
+        self.addCleanup(r.close)
+        return r
+
+    def card(self, html, key):
+        return re.search(r'data-provider-card="%s".*?</h3>(.*?)<div class="st-provider-fields' % re.escape(key), html, re.S).group(1)
+
+    def test_a_provider_card_tests_on_a_click_and_keeps_its_result(self):
+        key = "sk-synthetic-route-key-0123456789"
+        self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_HOME": str(self.tmp)}))
+        asked = []
+        def test(choice, env=None, **kw):
+            asked.append(choice)
+            return {"at": "2026-11-12T10:00:00Z", "ok": False, "reached": True, "key": "refused", "models": None, "ms": 7, "error": ""}
+        self.stack.enter_context(patch.object(providers, "test", test))
+        self.post({"OPENAI_API_KEY": key, "TYPESAFE_API_KEY": "ts-synthetic-0123456789"})
+        html = self.page()
+        self.assertEqual(asked, [])                                         # never on save or on a page load
+        self.assertIn('data-provider-test="openai"', self.card(html, "openai"))
+        self.assertNotIn("data-provider-test=", self.card(html, "typesafe"))
+        self.assertIn("data-provider-test-all", html)
+        with self.assertNoLogs(level="DEBUG"):
+            r = self.ask("openai")
+        self.assertEqual((r.status_code, r.get_json()["said"], r.get_json()["mark"]), (200, "Key refused · 2026-11-12 10:00 UTC", "bad"))
+        self.assertNotIn(key, r.get_data(as_text=True))
+        card = self.card(self.page(), "openai")
+        self.assertIn('data-state="bad"', card); self.assertIn("Key refused · 2026-11-12 10:00 UTC", card)
+        self.assertNotIn(key, Path(self.tmp, "data", "provider-tests.json").read_text())
+        self.post({"OPENAI_API_KEY": key + "x"})                            # a new key: the old result no longer describes it
+        self.assertNotIn("Key refused", self.card(self.page(), "openai"))
+        self.assertEqual(asked, ["openai"])
+
+    def test_typesafe_has_no_test_and_a_test_keeps_the_write_guards(self):
+        self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_HOME": str(self.tmp)}))
+        self.stack.enter_context(patch.object(providers, "_get", lambda *a, **kw: self.fail("must not fetch")))
+        os.environ["TYPESAFE_API_KEY"] = "ts-synthetic-0123456789"
+        self.assertEqual(self.ask("typesafe").status_code, 400)
+        self.assertEqual(self.ask("openai", csrf="invalid").status_code, 403)
+        self.assertEqual(self.ask("openai", environ_base={"REMOTE_ADDR": "10.0.0.7"}).status_code, 403)
+        self.assertEqual(providers.tests(), {})
 
 
 class StartUp(unittest.TestCase):

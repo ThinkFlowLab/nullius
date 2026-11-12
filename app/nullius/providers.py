@@ -8,13 +8,25 @@ MODEL_API_URL, and one per id in Settings (``settings.endpoint_ids``). A
 recipe names one by ``provider: custom`` and its ``endpoint`` id; the builder
 and the judge pickers by a choice, ``custom:<id>`` (``choice``, ``split``). Also the builder's
 step numbers, so an error from a compiled recipe names the step that edits it.
+Settings' Test (``test``) asks a provider with free GETs only, and keeps the last
+result per choice (``tests``, ``remember``) for its card and Review.
 """
 from __future__ import annotations
 
+import http.client
+import json
 import os
+import secrets
+import socket
+import ssl
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import List
 
-from nullius import settings
+from nullius import paths, settings
 
 # The builder's steps (command-builder-core.js, STEP): an error names the step that edits it.
 STEP = {"benchmark": 0, "runner": 1, "dataset": 2, "setup": 3, "agent": 4, "model": 5, "limits": 6, "where": 7, "review": 8}
@@ -130,16 +142,8 @@ def embedding_problem(model: str, provider: str) -> str:
     return ""
 
 
-def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
-    """Read model IDs from the selected provider, or ``custom:<id>``'s endpoint; credentials never leave its endpoint."""
-    import json
-    import urllib.parse
-    import urllib.request
-
-    env = os.environ if env is None else env
-    provider, endpoint = split(provider)
-    if provider not in PROVIDERS:
-        raise ValueError("Choose a model provider.")
+def _where(provider: str, endpoint: str, env) -> tuple:
+    """(base URL, key) a choice is asked at; ValueError, before any request, when it cannot be asked."""
     url_var, key_var = endpoint_vars(endpoint)
     base = PROVIDER_BASE[provider] if provider != "custom" else env.get(url_var, "")
     key = env.get(key_var if provider == "custom" else PROVIDER_KEY[provider], "")
@@ -150,35 +154,182 @@ def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
     parsed = urllib.parse.urlsplit(base)
     if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("The provider endpoint must be an HTTP or HTTPS base URL.")
-    headers = {"Accept": "application/json", "User-Agent": "nullius"}
-    if key:
-        headers["Authorization"] = "Bearer " + key
-    req = urllib.request.Request(base.rstrip("/") + "/models", headers=headers)
+    return base.rstrip("/"), key
 
-    class NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, headers, newurl):
-            return None
 
-    fetch = opener or urllib.request.build_opener(NoRedirect()).open
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_MOST = 8 * 1024 * 1024
+
+
+def _get(url: str, headers: dict, opener=None) -> bytes:
+    """One GET, never another method: no redirect followed, so a key stays at its endpoint; at most 8 MiB read."""
+    req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "nullius", **headers})
+    with (opener or urllib.request.build_opener(_NoRedirect()).open)(req, timeout=12) as response:
+        content = response.read(_MOST + 1)
+    if len(content) > _MOST:
+        raise ValueError("response too large")
+    return content
+
+
+def _models(content: bytes) -> list[dict]:
+    """The model list of a ``{"data": [{"id": ...}]}`` answer, by name; ValueError when there is none."""
+    data = json.loads(content)
+    rows = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        raise ValueError("missing model list")
+    models = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        model = row.get("id")
+        if not isinstance(model, str) or not model or len(model) > 256 or any(c.isspace() or ord(c) < 32 for c in model):
+            continue
+        label = row.get("name") or row.get("display_name") or model
+        models[model] = {"id": model, "name": label[:256] if isinstance(label, str) else model}
+    return sorted(models.values(), key=lambda m: (m["name"].casefold(), m["id"]))
+
+
+def _bearer(key: str) -> dict:
+    return {"Authorization": "Bearer " + key} if key else {}
+
+
+def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
+    """Read model IDs from the selected provider, or ``custom:<id>``'s endpoint; credentials never leave its endpoint."""
+    env = os.environ if env is None else env
+    provider, endpoint = split(provider)
+    if provider not in PROVIDERS:
+        raise ValueError("Choose a model provider.")
+    base, key = _where(provider, endpoint, env)
     try:
-        with fetch(req, timeout=12) as response:
-            content = response.read(8 * 1024 * 1024 + 1)
-        if len(content) > 8 * 1024 * 1024:
-            raise ValueError("model response too large")
-        data = json.loads(content)
-        rows = data.get("data") if isinstance(data, dict) else None
-        if not isinstance(rows, list):
-            raise ValueError("missing model list")
-        models = {}
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            model = row.get("id")
-            if not isinstance(model, str) or not model or len(model) > 256 or any(c.isspace() or ord(c) < 32 for c in model):
-                continue
-            label = row.get("name") or row.get("display_name") or model
-            models[model] = {"id": model, "name": label[:256] if isinstance(label, str) else model}
-        return sorted(models.values(), key=lambda m: (m["name"].casefold(), m["id"]))
-    except (OSError, ValueError, TypeError):
+        return _models(_get(base + "/models", _bearer(key), opener))
+    except (OSError, ValueError, TypeError, http.client.HTTPException):
         # Provider errors can contain keys or private endpoint details; do not echo them.
         raise ValueError("Model list unavailable. Enter a model ID manually.") from None
+
+
+# Settings' Test, per provider: only requests that cost nothing. A model list everywhere; OpenRouter's is
+# public, so its key is asked at its own key-information endpoint. TypeSafe has no free request: no Test.
+TESTED = ("openrouter", "openai", "anthropic", "custom")
+ANTHROPIC = ("https://api.anthropic.com/v1", "ANTHROPIC_API_KEY")
+_TESTS_LOCK = threading.Lock()
+
+
+def _unreached(reason) -> str:
+    """Why a request reached nothing, in a few fixed words: never the error's own text, which may hold the URL."""
+    for kind, said in ((socket.gaierror, "name not resolved"), (ConnectionRefusedError, "connection refused"),
+                       (TimeoutError, "timed out"), (ssl.SSLError, "TLS failed")):
+        if isinstance(reason, kind):
+            return said
+    return "not reached"
+
+
+def test(choice: str, env=None, *, opener=None, clock=time.monotonic) -> dict:
+    """A provider asked with GETs that cost nothing, never a completion: its model list (and, for OpenRouter,
+    its key's information). An OpenAI-compatible endpoint that answers with a key is asked once more with a
+    wrong one: an answer then means it does not check keys. ``{at, ok, reached, key, models, ms, error}``,
+    ``key`` one of accepted, refused, not checked (the server checks none), not tested; never a key.
+    ValueError, before any request, when the provider has no test or its settings are incomplete."""
+    env = os.environ if env is None else env
+    provider, endpoint = split(choice)
+    if provider not in TESTED:
+        raise ValueError("This provider has no test.")
+    if provider == "anthropic":
+        from nullius.standard.relay import ANTHROPIC_VERSION
+        base, key = ANTHROPIC[0], env.get(ANTHROPIC[1], "")
+        auth, models = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION}, base + "/models?limit=1000"
+    else:
+        base, key = _where(provider, endpoint, env)
+        auth, models = _bearer(key), base + "/models"
+    if not key and provider != "custom":
+        raise ValueError("Add the provider key in Settings.")
+    out = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "reached": False, "key": "not tested",
+           "models": None, "ms": 0, "error": ""}
+    start = clock()
+    try:
+        # OpenRouter's model list is public: its key goes to its key endpoint only
+        out["models"] = len(_models(_get(models, {} if provider == "openrouter" else auth, opener)))
+        out["reached"] = True
+        if provider == "openrouter":
+            _get(base + "/key", auth, opener)
+            out["key"] = "accepted"
+        elif provider != "custom":
+            out["key"] = "accepted"
+        elif not key:
+            out["key"] = "not checked"
+        else:
+            try:
+                _get(models, _bearer("nullius-wrong-" + secrets.token_hex(8)), opener)
+                out["key"] = "not checked"
+            except urllib.error.HTTPError as e:
+                e.close()
+                out["key"] = "accepted" if e.code in (401, 403) else "not tested"
+            except (OSError, http.client.HTTPException):
+                pass
+    except urllib.error.HTTPError as e:
+        e.close()
+        out["reached"] = True
+        if e.code in (401, 403):
+            out["key"] = "refused"
+        else:
+            out["error"] = f"HTTP {e.code}"
+    except urllib.error.URLError as e:
+        out["error"] = _unreached(e.reason)
+    except (OSError, http.client.HTTPException) as e:
+        out["error"] = _unreached(e)
+    except ValueError:
+        out.update(reached=True, error="no model list")
+    out["ms"] = round((clock() - start) * 1000)
+    out["ok"] = out["reached"] and not out["error"] and out["key"] != "refused"
+    return out
+
+
+def _tests_file(env=None) -> str:
+    return os.path.join(paths.data_dir(env), "provider-tests.json")
+
+
+def tests(env=None) -> dict:
+    """Each provider's last test by choice; none when the file is missing or unreadable."""
+    try:
+        with open(_tests_file(env), encoding="utf-8") as f:
+            got = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def remember(results: dict, env=None) -> None:
+    """Set (a result) or forget (None) the last test of each choice, the file written whole and renamed."""
+    with _TESTS_LOCK:
+        kept = {k: v for k, v in {**tests(env), **results}.items() if v is not None}
+        out = _tests_file(env)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        part = f"{out}.{os.getpid()}.part"
+        with open(part, "w", encoding="utf-8") as f:
+            json.dump(kept, f, indent=1, sort_keys=True)
+        os.replace(part, out)
+
+
+def mark(result: dict) -> str:
+    """ok, warn (it answers but its key is not known good) or bad: the colour of a test's line."""
+    return "bad" if not result.get("ok") else "ok" if result.get("key") == "accepted" else "warn"
+
+
+_KEY_SAID = {"refused": "key refused", "not checked": "does not check keys", "not tested": "key not tested"}
+
+
+def said(result: dict) -> str:
+    """A test in one line: what failed, or the key, the model count and the time it took; then when."""
+    when = str(result.get("at", "")).replace("T", " ")[:16] + " UTC"
+    if result.get("error"):
+        head = ("" if result.get("reached") else "Not reached: ") + result["error"]
+    elif result.get("key") == "refused":
+        head = "Key refused"
+    else:
+        n = result.get("models")
+        head = " · ".join([("Key accepted" if result.get("key") == "accepted" else "Reached · " + _KEY_SAID.get(result.get("key"), "")),
+                           f"{n} model{'s' * (n != 1)}", f"{result.get('ms', 0)} ms"])
+    return f"{head} · {when}"

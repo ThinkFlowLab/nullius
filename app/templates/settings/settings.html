@@ -103,9 +103,9 @@
   {% if embedded %}<input type="hidden" name="embedded" value="1">{% endif %}
   <input type="hidden" name="csrf" value="{{ csrf }}">{% endif %}
 
-  <section class="st-section" id="providers" aria-labelledby="providers-h">
+  <section class="st-section" id="providers" aria-labelledby="providers-h"{% if writable %} data-test="{{ url_for('settings_provider_test') }}"{% endif %}>
     <div class="st-section-head">
-      <div class="st-provider-heading"><h2 id="providers-h">Model providers</h2><button type="button" class="btn sm ghost st-provider-add" data-provider-add aria-label="Add a provider" hidden><span aria-hidden="true">+</span> Add</button></div>
+      <div class="st-provider-heading"><h2 id="providers-h">Model providers</h2><div class="st-provider-actions">{% if writable %}<button type="button" class="btn sm ghost" data-provider-test-all hidden><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Test all</button>{% endif %}<button type="button" class="btn sm ghost st-provider-add" data-provider-add aria-label="Add a provider" hidden><span aria-hidden="true">+</span> Add</button></div></div>
       <p>Manage the providers available for runs and judges.</p>
     </div>
 
@@ -132,8 +132,13 @@
         {{ provider_logo(key) }}
         {% set ns_env = namespace(held=false) %}{% for name, _ in names %}{% if by.get(name) and by[name].source == 'environment' %}{% set ns_env.held = true %}{% endif %}{% endfor %}
         {% set removable = writable and any_set %}
+        {#- Test asks the saved settings at no cost (providers.test); TypeSafe has no such request -#}
+        {% set choice = key.replace('local', 'custom', 1) %}{% set last = tested.get(choice) %}
+        {% set testable = writable and key != 'typesafe' %}
         <div><h3>{{ title }}</h3><p class="st-about" data-provider-state>{{ ('Endpoint saved' if key.startswith('local') else 'Key saved') if ready else 'Fix the endpoint URL' if refused else ('Endpoint required' if any_set else 'Not configured') }}</p>
+          {% if testable or last %}<p class="st-about st-provider-test" data-provider-test-state{% if last %} data-state="{{ last.mark }}"{% endif %} aria-live="polite">{{ last.said if last }}</p>{% endif %}
           {% if removable and ns_env.held %}<p class="st-note" id="remove-note-{{ loop.index }}">Set in the process environment: remove it there.</p>{% endif %}</div>
+        {% if testable %}<button type="button" class="btn sm ghost" data-provider-test="{{ choice }}" aria-label="Test {{ title }}" hidden><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Test</button>{% endif %}
         <button type="button" class="btn sm ghost" data-provider-edit="{{ key }}" hidden>{{ 'Edit' if writable else 'View' }}</button>
         {#- removing asks first, in place, as a benchmark's Delete does -#}
         {% if removable %}<button type="button" class="btn sm ghost danger" data-provider-remove-ask aria-label="Remove {{ title }}" aria-expanded="false" aria-controls="remove-ask-{{ loop.index }}"{% if ns_env.held %} disabled aria-describedby="remove-note-{{ loop.index }}"{% endif %}>Remove</button>{% endif %}

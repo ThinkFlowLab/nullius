@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
-from nullius import execution, hosts, paths, prices, sandbox, settings
+from nullius import execution, hosts, paths, prices, providers, sandbox, settings
 from nullius.standard import container
 from nullius.judge import client
 
@@ -36,7 +36,27 @@ def settings_page():
                                    for u in settings.unread(shared.ENV_FILE)],
                            prices=prices.state(),
                            ssh_hosts=hosts.scan_ssh_config(), judges=(client.system_one(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), s1_providers=client.SYSTEM_ONE_PROVIDERS, agent_keys=settings.agent_key_names(),
-                           endpoints=[(i, os.environ.get(f"MODEL_{i}_NAME") or i) for i in settings.endpoint_ids()])
+                           endpoints=[(i, os.environ.get(f"MODEL_{i}_NAME") or i) for i in settings.endpoint_ids()],
+                           tested={k: _shown(v) for k, v in providers.tests().items() if isinstance(v, dict)})
+
+
+def _shown(result: dict) -> dict:
+    """A provider's test as its card shows it: the result, its line and its mark."""
+    return dict(result, said=providers.said(result), mark=providers.mark(result))
+
+
+@app.route("/settings/providers/test", methods=["POST"])
+def settings_provider_test():
+    """One provider asked with the saved settings, at no cost (``providers.test``), and its result kept
+    for the card and Review; only when Test is pressed. Same guards as Save."""
+    _sandbox_guard("Providers are tested")
+    choice = request.form.get("provider", "")
+    try:
+        got = providers.test(choice)
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    providers.remember({choice: got})
+    return jsonify(_shown(got))
 
 
 @app.route("/settings/hosts/test", methods=["POST"])
@@ -276,6 +296,11 @@ def settings_save():
         return _saved_response(str(e), False)
     except OSError as e:
         return _saved_response(f"Not written: {e.strerror or e}", False, retryable=True)
+    # a provider whose settings changed is no longer what its last test asked
+    stale = {card.replace("local", "custom", 1): None for card in [*_PROVIDER_SETTINGS, *(f"local:{i}" for i in ids)]
+             if set(_provider_settings(card, ids)) & set(changes)}
+    if stale.keys() & providers.tests().keys():
+        providers.remember(stale)
     later = any(current.get(n, {}).get("source") == "environment" for n in changes)
     notes = ["Environment overrides still apply."] if later else []
     if "HOSTS" in changes and current["HOSTS"]["source"] == "file":   # a list from the environment is not this page's

@@ -8,10 +8,13 @@
   const back = section.querySelector('[data-provider-back]');
   const search = section.querySelector('[data-provider-search]');
   const writable = !!document.getElementById('settings-form');
+  const testAll = section.querySelector('[data-provider-test-all]');
+  const testable = card => card.dataset.ready === 'true' && card.querySelector('[data-provider-test]');
   let mode = 'list', selected = null;
   function render() {
     catalogue.hidden = mode !== 'catalogue';
     add.hidden = !writable || mode !== 'list';
+    if (testAll) testAll.hidden = mode !== 'list' || !cards.some(testable);
     back.hidden = mode === 'list';
     section.querySelector('[data-provider-empty]').hidden = mode !== 'list' || cards.some(c => c.dataset.configured === 'true');
     cards.forEach(card => {
@@ -19,6 +22,8 @@
       card.querySelector('.st-provider-fields').hidden = mode !== 'editor';
       card.querySelector('[data-provider-edit]').hidden = mode !== 'list';
       card.querySelector('[data-provider-done]').hidden = mode !== 'editor';
+      const test = card.querySelector('[data-provider-test]');
+      if (test) test.hidden = mode !== 'list' || !testable(card);
       const remove = card.querySelector('[data-provider-remove-ask]'), ask = card.querySelector('.st-provider-ask');
       if (remove) remove.hidden = mode !== 'list';
       if (ask && mode !== 'list') { ask.hidden = true; remove.setAttribute('aria-expanded', 'false'); }
@@ -38,6 +43,27 @@
     const input = selected.querySelector('input.st-input:not([hidden])');
     (input || selected.querySelector('[data-replace]') || back).focus({preventScroll: true});
   }
+  // Test: the saved settings asked at no cost (/settings/providers/test); only on a click, the result kept for the card.
+  async function test(button) {
+    const out = button.closest('[data-provider-card]').querySelector('[data-provider-test-state]');
+    const busy = document.createElement('span');
+    busy.className = 'sr'; busy.textContent = 'Testing';
+    button.disabled = true; out.classList.add('busy'); out.prepend(busy);
+    let got;
+    try {
+      const response = await fetch(section.dataset.test, {method: 'POST', headers: {'X-CSRF-Token': document.querySelector('#settings-form [name=csrf]').value},
+                                                          body: new URLSearchParams({provider: button.dataset.providerTest})});
+      got = await response.json().catch(() => ({error: 'HTTP ' + response.status}));
+    } catch (error) { got = {error: 'Not tested: ' + error.message}; }
+    out.classList.remove('busy'); button.disabled = false;
+    out.textContent = got.said || got.error || 'Not tested';
+    out.dataset.state = got.mark || 'bad';
+  }
+  if (testAll) testAll.addEventListener('click', async () => {
+    testAll.disabled = true;
+    await Promise.all(cards.filter(card => !card.hidden && testable(card)).map(card => test(card.querySelector('[data-provider-test]'))));
+    testAll.disabled = false;
+  });
   add.addEventListener('click', () => {
     mode = 'catalogue'; render(); search.value = ''; search.dispatchEvent(new Event('input')); search.focus();
   });
@@ -65,6 +91,8 @@
       field.dispatchEvent(new Event('change', {bubbles: true}));
       return;
     }
+    const tester = event.target.closest('[data-provider-test]');
+    if (tester) { void test(tester); return; }
     const pick = event.target.closest('[data-provider-select], [data-provider-edit]');
     if (pick) edit(pick.dataset.providerSelect || pick.dataset.providerEdit);
     if (event.target.closest('[data-provider-done]')) void leave();
@@ -83,6 +111,8 @@
       card.dataset.ready = state.ready;
       const said = card.querySelector('[data-provider-state]');
       if (said) said.textContent = state.label;
+      const tested = card.querySelector('[data-provider-test-state]');
+      if (tested && state.tested !== undefined) { tested.textContent = state.tested; tested.dataset.state = state.mark; }
     }
     if (removedSelectedKey) mode = 'list';
     render();

@@ -16,6 +16,31 @@ The key or endpoint a run's model calls go to.
 2. Configured providers appear in a compact list. **Edit** opens their connection fields; **Done** returns to the list. **Remove**, beside Edit, asks first, then clears the provider's key, or an endpoint's URL and key. A value set in the process environment is removed there.
 3. In the builder's Model step, choose the provider, then search its model list or enter an exact model ID. See [model selection](../builder.md#which-providers).
 
+## Test a provider
+
+**Test** on a provider card asks the provider with its saved settings. **Test
+all**, beside **+ Add**, tests every configured card. A test runs only when you
+press one of these buttons. It sends only `GET` requests that cost nothing,
+never a chat or completion request:
+
+| Provider | Requests |
+| --- | --- |
+| OpenAI | `GET /v1/models` with the key |
+| Anthropic | `GET /v1/models?limit=1000` with `x-api-key` and `anthropic-version` |
+| OpenRouter | `GET /api/v1/models` without the key (the list is public), then `GET /api/v1/key` with the key |
+| OpenAI-compatible | `GET <URL>/models` with the key, then the same request with a wrong key |
+| TypeSafe AI | No test |
+
+The card then shows one line: the key accepted or refused, how many models the
+provider lists, how long the test took and when it ran. If the endpoint is not
+reached, the line says why. If an OpenAI-compatible endpoint also answers the
+wrong key, or has no key, the line says **does not check keys**.
+
+The result stays on the card after a reload. A change to a provider's settings
+clears it. Review shows a notice when the recipe's provider failed its last
+test, and Run still starts. Nullius keeps the results in
+`provider-tests.json` in the data directory, without keys.
+
 ## OpenAI-compatible endpoints
 
 Add as many as you need. **+ Add → OpenAI-compatible** asks for a name, a URL

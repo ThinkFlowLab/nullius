@@ -841,7 +841,7 @@
     if(!force&&prereq.sig===sig)return;
     prereq={sig,busy:true,out:null};drawPrereq();
     let out;
-    try{const res=await fetch('/new-run/prerequisites',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':schema.csrf},body:JSON.stringify({recipe:rec})});
+    try{const res=await fetch('/new-run/prerequisites',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':schema.csrf},body:JSON.stringify({recipe:rec,provider:C.choiceOf(rec)})});
       out=res.ok?await res.json():{machines:[],ready:false,errors:['The machines could not be checked: HTTP '+res.status]};}
     catch(e){out={machines:[],ready:false,errors:['The machines could not be checked: '+e]};}
     if(prereq.sig!==sig)return;   // the recipe changed while it was asked: the newer check stands
@@ -853,7 +853,7 @@
     const rows=m=>m.rows.map(x=>`<li class="nb-prereq-${x.state}"><span class="nb-prereq-mark" aria-hidden="true">${mark[x.state]}</span><span><strong>${esc(x.label)}</strong>${x.detail?` <small>${esc(x.detail)}</small>`:''}${x.state==='missing'&&x.install.length?`<code class="nb-prereq-fix">${x.install.map(esc).join('<br>')}</code>`:''}</span></li>`).join('');
     const head=prereq.busy?'<span class="nb-note">checking…</span>':out&&out.ready?'<span class="nb-note nb-ok">Ready</span>':out?'<span class="nb-note nb-error">Missing something: Run waits</span>':'';
     el.innerHTML=`<div class="nb-prereq-head"><h3>Prerequisites</h3>${head}${button('Check again','id="nb-prereq-again"'+(prereq.busy?' disabled':''),'nb-inlinebutton')}</div>`
-      +(out?(out.errors||[]).map(e=>`<p class="nb-note nb-error">${esc(e)}</p>`).join('')
+      +(out?(out.errors||[]).map(e=>`<p class="nb-note nb-error">${esc(e)}</p>`).join('')+(out.notes||[]).map(n=>`<p class="nb-notice">${esc(n)}</p>`).join('')
         +out.machines.map(m=>`<div class="nb-prereq-machine">${out.machines.length>1?`<small>${esc(m.label)}</small>`:''}<ul>${rows(m)}</ul></div>`).join(''):'');
     const b=$('#nb-run'); if(b&&!b.hasAttribute('data-held'))b.disabled=!(out&&out.ready&&!prereq.busy);
   }

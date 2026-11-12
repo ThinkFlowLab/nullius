@@ -49,6 +49,8 @@ Checked on each machine when Review opens, on *Check again*, and as the run star
 
 For the standard, the Docker row says when the engine has `userns-remap`, which [the standard](standard.md)'s containers run outside of.
 
+If the recipe's provider failed its last [test in Settings](settings/model-providers.md#test-a-provider), Review shows a notice. Run still starts.
+
 ### Which providers
 
 A provider is *set* when Settings holds `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or the URL of an OpenAI-compatible endpoint, for both runners. Each OpenAI-compatible endpoint is a choice of its own, listed by its name.
