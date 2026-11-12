@@ -72,6 +72,8 @@ class Scope(unittest.TestCase):
         self.assertEqual(saved["expansion"], "facts")
         for files in ([], {"BAD-NAME": {}}, {"expansions": {"url": "http://example.org/x", "sha256": "short"}}):
             self.assertTrue(any(p.startswith("files") for p in definitions.problems(dict(b, files=files), "benchmark")))
+        b["options"]["expansion"]["needs"]["facts"]["when"] = {"missing": ["yes"]}
+        self.assertTrue(any("needs.facts.when" in p for p in definitions.problems(b, "benchmark")))
         b["options"]["expansion"]["needs"]["facts"]["files"] = ["absent"]
         self.assertTrue(any("needs.facts.files" in p for p in definitions.problems(b, "benchmark")))
 

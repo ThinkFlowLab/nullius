@@ -277,6 +277,32 @@ class Driver(unittest.TestCase):
                 inactive = dict(vals, retriever="full-history-session")
                 self.assertEqual(definitions.option_needs(BENCH, inactive)["files"], [])
 
+    def test_tokenizer_needs_follow_the_selected_method_join_and_granularity(self):
+        given = {"retriever": "flat-bm25-session", "session_expansion": "session-summ", "expansion_join": "split-merge"}
+        for changes, expected in (({}, ["index_expansions", "punkt_tab"]),
+                                  ({"expansion_join": "merge"}, ["index_expansions"]),
+                                  ({"session_expansion": "session-keyphrase"}, ["index_expansions"]),
+                                  ({"retriever": "flat-bm25-turn", "turn_expansion": "turn-userfact"}, ["index_expansions"]),
+                                  ({"retriever": "full-history-session"}, []), ({}, ["index_expansions", "punkt_tab"])):
+            vals, bad = definitions.bench_options_of(BENCH, "longmemeval_s", dict(given, **changes), "original")
+            self.assertEqual(bad, [])
+            self.assertEqual(definitions.option_needs(BENCH, vals)["files"], expected)
+        self.assertEqual(given["session_expansion"], "session-summ")
+
+    def test_an_expansion_archive_cannot_supply_a_link_instead_of_its_cache(self):
+        import tarfile
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "cache.tar.gz")
+            with tarfile.open(archive, "w:gz") as tar:
+                info = tarfile.TarInfo("merged_cache_session-summ_llama-3.1-8b-instruct_zeroshot.json")
+                info.type = tarfile.SYMTYPE; info.linkname = "/outside/cache.json"
+                tar.addfile(info)
+            got = self.run_driver([{"op": "answer", "unit": "q1", "setup": "model", "model": "gpt-4o",
+                                    "base_url": "u", "key": "k"}],
+                                  {"retriever": "flat-bm25-session", "session_expansion": "session-summ"},
+                                  keep=tmp, files={"index_expansions": archive})
+            self.assertIn("not a regular file", got[0]["error"])
+
     def test_a_dense_retriever_runs_run_retrieval_with_the_repositorys_shared_model_cache(self):
         with tempfile.TemporaryDirectory() as t:
             got = self.run_driver([{"op": "answer", "unit": "q1", "setup": "original", "model": "gpt-4o", "base_url": "u",
