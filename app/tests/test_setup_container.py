@@ -186,3 +186,25 @@ class DockerDriver(unittest.TestCase):
             finally:
                 proc.close()
                 container.sweep(job)
+
+
+class SetupDriverFiles(unittest.TestCase):
+    """A benchmark's downloaded files reach its Docker setup driver as they reach a local one."""
+
+    def test_the_files_are_in_the_drivers_environment_and_mounted(self):
+        from nullius.standard import run
+        tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)
+        got = {}
+
+        class FakeSetup:
+            def start(self, env, cwd, log, *, files=(), servers=(), stopped=None):
+                got.update(env=env, files=list(files))
+                return object()
+        r = run.Run.__new__(run.Run)
+        r.local, r.drivers, r.setup_driver, r.job_dir = run.threading.local(), [], FakeSetup(), tmp
+        r.up, r.data, r.ds, r.bench, r.bench_options, r.licences = "/up", "/data", {"id": "all"}, {"key": "b"}, {}, {}
+        r.bench_relay, r._stopped = None, run.threading.Event()
+        r.file_env = {"NULLIUS_FILE_INDEX": os.path.join(tmp, "index.bin")}
+        r.driver()
+        self.assertEqual(got["env"]["NULLIUS_FILE_INDEX"], r.file_env["NULLIUS_FILE_INDEX"])
+        self.assertIn(r.file_env["NULLIUS_FILE_INDEX"], got["files"])

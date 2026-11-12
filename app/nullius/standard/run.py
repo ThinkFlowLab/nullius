@@ -507,10 +507,10 @@ class Run:
                 os.makedirs(cwd, exist_ok=True)
                 env = {"HOME": home, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                        "NULLIUS_DATASET_ID": self.ds["id"], "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
-                       **option_env(self.bench_options), **self.embeddings_env(), **self.driver_secrets()}
+                       **option_env(self.bench_options), **self.file_env, **self.embeddings_env(), **self.driver_secrets()}
                 files = [h["path"] for s in definitions.secrets_of(self.bench)
                          if s.get("to") == "driver" and s.get("kind") == "file"
-                         for h in [self.licences.get(s["name"])] if h]
+                         for h in [self.licences.get(s["name"])] if h] + list(self.file_env.values())
                 d = self.setup_driver.start(env, cwd, os.path.join(self.job_dir, ".work", f"driver-{threading.get_ident()}.log"),
                                             files=files, stopped=self._stopped,
                                             servers=[s["name"] for s in definitions.secrets_of(self.bench)
