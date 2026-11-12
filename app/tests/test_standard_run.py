@@ -555,9 +555,13 @@ class RunTest(unittest.TestCase):
                 r.ready()
             self.assertEqual(downloaded.call_count, int(active))
             self.assertEqual(r.file_env, {"NULLIUS_FILE_KEYS": "/checked/keys.json"} if active else {})
-            with mock.patch.object(run.jsonl, "Proc") as proc:
+            r.image = "check-image"
+            engine = {run.container.CHECK_ENGINE: '["podman"]'}
+            with mock.patch.object(run.jsonl, "Proc") as proc, mock.patch.object(run.container, "check_env", return_value=engine):
                 r.driver()
                 self.assertEqual(proc.call_args.args[2].get("NULLIUS_FILE_KEYS"), "/checked/keys.json" if active else None)
+                self.assertEqual(proc.call_args.args[2][run.container.CHECK_ENGINE], engine[run.container.CHECK_ENGINE])
+                self.assertEqual(proc.call_args.args[2][run.container.CHECK_IMAGE], "check-image")
             if active:
                 with mock.patch.object(install, "download", side_effect=install.InstallFailed("sha256 differs")):
                     with self.assertRaisesRegex(run.Refused, "sha256"):

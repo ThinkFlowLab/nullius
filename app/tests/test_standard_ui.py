@@ -49,7 +49,7 @@ class Backend(unittest.TestCase):
         why = "docker is installed but not usable by this user: permission denied"
         out = recipe.compile(a_recipe(backend="docker"), defs(), docker_unusable=lambda: why)
         self.assertEqual(out["errors"], [{"step": recipe.STEP["where"],
-                                          "message": f"The docker backend cannot run on this machine: {why}. Choose local processes, or a host with docker."}])
+                                          "message": f"The docker backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman."}])
 
     def test_this_machines_docker_is_not_asked_for_a_host_or_for_local_processes(self):
         asked = []

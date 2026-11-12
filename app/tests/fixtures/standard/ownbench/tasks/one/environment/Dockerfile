@@ -1,3 +1,3 @@
-FROM ubuntu:24.04
+FROM docker.io/library/ubuntu:24.04
 WORKDIR /work
 RUN echo "the task's own" > /work/given.txt

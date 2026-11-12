@@ -7,10 +7,11 @@ can change between the two - docker quit, a program removed.
 
 A need is one of:
 
-- ``docker``: on PATH **and** its engine answering this user - Docker
-  Desktop's placeholder command, there while the engine is quit, is not
-  docker. For the standard, its row also says when the engine has
-  ``userns-remap``, which the standard's containers run outside of;
+- ``engine``: the standard's docker backend's engine (``container.DOCKER``:
+  docker, or podman) on PATH **and** answering this user - Docker Desktop's
+  placeholder command, there while the engine is quit, is not docker. Its row also says when
+  the engine has ``userns-remap``, which the standard's containers run outside of;
+- ``docker``: the same, for Harbor, which runs the docker program;
 - ``uv``: on a host it is installed when missing, here it must be there (a
   pinned Harbor runs through ``uvx``, a runner's install builds with it);
 - ``harbor``: a recipe from before the pin runs the ``harbor`` on PATH;
@@ -19,7 +20,7 @@ A need is one of:
   optional GPU memory minimum, and the commands that install them.
 
 Nothing here installs anything or writes anything: each check is
-``command -v``, ``docker version`` and, when needed, ``nvidia-smi`` here,
+``command -v``, the engine's ``version`` and, when needed, ``nvidia-smi`` here,
 or one ssh probe for a host (``hosts.test``). Remote GPU memory is checked
 by the run as it starts there.
 """
@@ -32,18 +33,19 @@ from typing import Callable, Dict, List, Optional
 from nullius import hosts
 from nullius.standard import container, hostreq
 
-LABEL = {"docker": "Docker", "uv": "uv", "harbor": "Harbor on PATH", "python3": "python3", "git": "git"}
+LABEL = {"engine": "Docker or Podman", "docker": "Docker", "uv": "uv", "harbor": "Harbor on PATH", "python3": "python3", "git": "git"}
 
 # the docker row's detail for the standard on an engine with userns-remap (container.userns_remap)
 REMAPPED = "the engine answers, and Nullius's containers run outside its userns-remap"
 
-# Whether docker answers here, asked at most once a minute: the builder asks on each preview.
+# Whether the engine answers here, asked at most once a minute: the builder asks on each preview.
 _HERE = {"at": 0.0, "why": None}
 
 
 def docker_here(fresh: bool = False) -> Optional[str]:
-    """Why docker cannot run containers on this machine for this user, or
-    None when it can: the engine asked, not only the command looked for.
+    """Why the docker backend's engine (``container.DOCKER``) cannot run
+    containers on this machine for this user, or None when it can: the
+    engine asked, not only the command looked for.
     Kept for a minute unless ``fresh``."""
     if fresh or time.monotonic() - _HERE["at"] > 60:
         _HERE.update(at=time.monotonic(), why=container.unusable())
@@ -68,8 +70,10 @@ def check_here(needs: List[str], setups: Optional[Dict[str, dict]] = None, *, st
     remap = remap or container.userns_remap
     rows = []
     for n in needs:
-        if n == "docker":
+        if n in ("engine", "docker"):
             why = docker()
+            if not why and n == "docker" and not which("docker"):
+                why = "Install Docker on this machine: Harbor runs the docker program"
             rows.append(row(n, "missing", why) if why else
                         row(n, "ok", REMAPPED if standard and remap() else "the engine answers"))
         elif n == "uv":
@@ -97,7 +101,11 @@ def check_host(host: hosts.Host, needs: List[str], setups: Optional[Dict[str, di
     gone = set(got.get("missing") or [])
     rows = [row("connect", "ok", got.get("hostname") or host.label, label="Connection")]
     for n in needs:
-        if n == "docker":
+        if n == "engine" and got["engine"] != "docker":
+            rows.append(row(n, "missing", "neither docker nor podman is on the host") if not got["engine"]
+                        else row(n, "missing", "podman is on the host but this user cannot use it (podman ps failed)")
+                        if got["podman_ok"] is False else row(n, "ok", "the engine answers"))
+        elif n in ("engine", "docker"):
             rows.append(row(n, "missing", "docker is not on the host") if not got["docker"]
                         else row(n, "missing", "docker is on the host but this user cannot use it (docker ps failed): "
                                  "add the user to the docker group there, then log in again") if got["docker_ok"] is False

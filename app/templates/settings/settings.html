@@ -214,11 +214,11 @@
   <div class="st-savebar" role="status" aria-live="polite"><span class="st-changes" data-changes></span><button class="btn" type="submit" data-settings-retry hidden>Retry save</button><noscript><button class="btn" type="submit">Save</button></noscript></div>
   </form>
   {% endif %}
-  {# docker on this machine, outside the form: asked when the section opens (sandbox.js); a login goes to docker, never to the file #}
+  {# the docker backend's engine on this machine, outside the form: asked when the section opens (sandbox.js); a login goes to the engine, never to the file #}
   <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}"{% if writable %} data-csrf="{{ csrf }}" data-login="{{ url_for('settings_sandbox_login') }}" data-logout="{{ url_for('settings_sandbox_logout') }}" data-remove="{{ url_for('settings_sandbox_remove') }}"{% endif %}>
     <div class="st-section-head"><h2 id="sandbox-h">Sandbox</h2><p>Where agents run, apart from this machine.</p></div>
     <div class="st-card">
-      <div class="st-row"><span class="st-row-label">Docker</span><span class="st-row-value" data-docker-state>Checking…</span></div>
+      <div class="st-row"><span class="st-row-label">Engine</span><span class="st-row-value" data-docker-state>Checking…</span></div>
     </div>
     <fieldset class="st-card" data-hub hidden>
       <legend>Docker Hub</legend>
@@ -396,7 +396,7 @@
       const j = await r.json();
       if (!j.ok) return {ok: false, error: j.error || ('HTTP ' + r.status)};
       const has = k => k + (j[k] ? '' : ' missing');
-      return {ok: true, detail: [j.hostname, has('uv'), j.docker ? (j.docker_ok ? 'docker' : 'docker (no access)') : 'docker missing', j.harbor ? 'harbor ' + (j.harbor_version || '') : 'harbor missing', j.latency_ms + ' ms'].filter(Boolean).join(' · ')};
+      return {ok: true, detail: [j.hostname, has('uv'), j.engine ? j.engine + (j[j.engine + '_ok'] ? '' : ' (no access)') : 'docker or podman missing', j.harbor ? 'harbor ' + (j.harbor_version || '') : 'harbor missing', j.latency_ms + ' ms'].filter(Boolean).join(' · ')};
     } catch (err) { return {ok: false, error: String(err)}; }
   };
   // The Add host dialog. Either panel names one host; Test tries it and Add puts it in the list with what Test found.
