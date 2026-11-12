@@ -266,6 +266,31 @@ def save_key(user: str, host: str, data: bytes, key_dir: Optional[str] = None) -
     return path
 
 
+def forget_keys(old: str, new: str, key_dir: Optional[str] = None) -> List[tuple]:
+    """Delete each key file that ``save_key`` wrote for an entry of the host
+    list ``old`` when no entry of the list ``new`` names it. Only the file
+    <config>/ssh/<user@host> of that entry goes: Nullius's own key and a key
+    the user named by path stay. The files not deleted, each as (path, reason)."""
+    key_dir = os.path.realpath(key_dir or KEY_DIR or os.path.join(paths.config_dir(), "ssh"))
+    try:
+        before = parse_list(old)
+    except ValueError:              # a list edited by hand into a wrong one names no file to delete
+        return []
+    kept = {os.path.realpath(os.path.expanduser(h.key)) for h in parse_list(new) if h.key}
+    failed = []
+    for h in before:
+        path = h.key and os.path.realpath(os.path.expanduser(h.key))
+        if not path or path in kept or path != os.path.join(key_dir, _key_name(h.user, h.host)):
+            continue
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            failed.append((path, e.strerror or str(e)))
+    return failed
+
+
 def own_key(path: Optional[str] = None, run: Optional[Callable] = None) -> str:
     """Nullius's own key pair on this machine, made on first use with no
     passphrase. The private key's path; the public key sits beside it."""

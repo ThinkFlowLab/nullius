@@ -63,8 +63,9 @@ def _host_form():
 
 @app.route("/settings/hosts/key", methods=["POST"])
 def settings_host_key():
-    """A key file for a manual host, kept under ~/.ssh/nullius with mode
-    0600; the entry that names it comes back. Same guards as Save."""
+    """A key file for a manual host, kept under <config>/ssh with mode
+    0600 until Save removes its host; the entry that names it comes back.
+    Same guards as Save."""
     shared._require_csrf()
     if not _local_client():
         abort(403, description="Hosts are added from a browser on the application host only.")
@@ -276,4 +277,8 @@ def settings_save():
     except OSError as e:
         return _saved_response(f"Not written: {e.strerror or e}", False, retryable=True)
     later = any(current.get(n, {}).get("source") == "environment" for n in changes)
-    return _saved_response("Saved. Environment overrides still apply." if later else "Saved", reload=cards)
+    notes = ["Environment overrides still apply."] if later else []
+    if "HOSTS" in changes and current["HOSTS"]["source"] == "file":   # a list from the environment is not this page's
+        notes += [f"The key file for {os.path.basename(p)} could not be removed: {why}."
+                  for p, why in hosts.forget_keys(current["HOSTS"]["shown"], changes["HOSTS"] or "")]
+    return _saved_response(" ".join(["Saved."] + notes) if notes else "Saved", reload=cards)
