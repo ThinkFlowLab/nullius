@@ -13,7 +13,7 @@ evidence behind it: what failed, the agent or the benchmark.
 ## Quickstart
 
 Python 3.12+ and [uv](https://docs.astral.sh/uv/); a model key to run
-benchmarks; Docker for the docker backend and for Harbor.
+benchmarks; Docker or Podman for the docker backend; Docker for Harbor.
 
 Install the latest version with `uv`. The PyPI package is `nullius-eval`;
 the application and its command remain `nullius`:

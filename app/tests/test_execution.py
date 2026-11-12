@@ -153,6 +153,7 @@ class DockerHere(Base):
         self.bin = self.tmp / "bin"; self.bin.mkdir()
         path = mock.patch.dict(os.environ, {"PATH": f"{self.bin}{os.pathsep}/usr/bin{os.pathsep}/bin", "HOME": str(self.tmp)})
         path.start(); self.addCleanup(path.stop)
+        self.enterContext(mock.patch.object(execution.container, "DOCKER", "docker"))     # the docker of the test's own, wherever podman is
 
     def docker(self, body):
         (self.bin / "docker").write_text("#!/bin/sh\n" + body + "\n"); (self.bin / "docker").chmod(0o755)
@@ -166,6 +167,13 @@ class DockerHere(Base):
             ex = self.start(execution.Plan(name="r", script='"$NULLIUS_HARBOR" run'))
         self.assertEqual((ex.state, ex.step, ex.error), ("failed", "docker", "docker is not on this machine; a Harbor run needs it"))
         self.assertFalse((self.tmp / "runs" / "r" / "run-run.sh").exists())          # no part written, none started
+
+    def test_the_standards_docker_backend_asks_its_own_engine(self):
+        asked = []
+        sh = lambda cmd, timeout: asked.append(cmd) or (0, "@down\nError: no storage\n")
+        why = execution.docker_here(sh, "this recipe runs its units in containers", "podman")
+        self.assertIn("podman ps", asked[0])
+        self.assertEqual(why, "podman is on this machine but does not answer (podman ps failed): Error: no storage")
 
     def test_a_docker_that_does_not_answer_stops_it_too_and_says_why(self):
         self.docker('echo "The command \'docker\' could not be found in this WSL 2 distro." >&2; exit 1')
@@ -690,7 +698,7 @@ class StandardOnHost(HostBase):
         (self.tmp / "standard-app" / self.COMMIT / "app").mkdir(parents=True)        # unpacked here already, once for this commit
         payload = patch.object(execution.standard_payload, "build", return_value=(self.COMMIT, str(self.tmp / "standard-app" / self.COMMIT)))
         payload.start(); self.addCleanup(payload.stop)
-        self.have_docker, self.missing = True, ""
+        self.have_docker, self.missing, self.podman = True, "", ""
 
     def answer(self, argv, timeout=0, stdin=None):
         if argv[0] == "git":
@@ -698,7 +706,7 @@ class StandardOnHost(HostBase):
             return 0, (self.COMMIT + "\n") if "rev-parse" in argv else ""
         if argv[0] != "rsync" and "printf 'ok" in argv[-1]:
             self.calls.append((argv, stdin))
-            return 0, f"ok\nuv=yes\ndocker={'yes' if self.have_docker else 'no'}\nharbor=no\nhostname=gpu-1\n"
+            return 0, f"ok\nuv=yes\ndocker={'yes' if self.have_docker else 'no'}\n{self.podman}harbor=no\nhostname=gpu-1\n"
         if argv[0] != "rsync" and "@missing" in argv[-1]:
             self.calls.append((argv, stdin))
             return 0, "".join(f"@missing {m}\n" for m in self.missing.split())
@@ -771,6 +779,20 @@ class StandardOnHost(HostBase):
         self.assertEqual(ex.summary()["stages"]["stages"][0]["state"], "failed")                  # the stage it failed at, said so
         self.assertFalse(any(c[0] == "rsync" for c, _ in self.calls))
         self.assertFalse(any("cat > " in c for c in self.ssh_commands()))
+
+    def test_a_docker_recipe_on_a_host_with_podman_alone_runs_when_podman_answers(self):
+        self.plan.docker, self.have_docker, self.podman = True, False, "podman=yes\npodman_ok=no\n"
+        ex = self.run_it()
+        self.assertEqual((ex.state, ex.step, ex.error), ("failed", "connect", "podman is on the host but this user cannot use it (podman ps failed)"))
+        self.calls.clear(); execution.EXECUTIONS.clear(); self.podman = "podman=yes\npodman_ok=yes\n"
+        self.plan.name = "std-podman"
+        self.assertEqual(self.run_it().state, "done")
+
+    def test_a_docker_recipe_here_asks_the_backends_own_engine(self):
+        self.plan.host, self.plan.docker = None, True
+        with patch.object(execution.container, "DOCKER", "podman"), patch.object(execution, "docker_here", return_value=None) as asked:
+            self.assertEqual(self.run_it().state, "done")
+        self.assertEqual(asked.call_args.args[1:], ("this recipe runs its units in containers", "podman"))
 
     def test_a_local_recipe_needs_no_docker_but_python3_and_git(self):
         self.have_docker = False

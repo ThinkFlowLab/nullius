@@ -63,6 +63,15 @@ def available(env=os.environ) -> List[str]:
     return [p for p in PROVIDERS if env.get(PROVIDER_NEEDS[p])]
 
 
+def embedding_problem(model: str, provider: str) -> str:
+    """Bare OpenAI embedding names work on OpenAI or OpenRouter; qualified names require OpenRouter."""
+    allowed = ("openrouter",) if "/" in model else ("openai", "openrouter")
+    if provider not in allowed:
+        names = " or ".join(PROVIDER_LABEL[p] for p in allowed)
+        return f"{model} needs the {names} provider for this search."
+    return ""
+
+
 def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
     """Read model IDs from the selected provider; credentials never leave its endpoint."""
     import json

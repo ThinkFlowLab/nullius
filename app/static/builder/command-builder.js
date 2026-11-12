@@ -452,14 +452,15 @@
       const cur = (rec.bench_options || {})[n] ?? o.default;
       if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(n === 'temperature' && o.default === 'default' ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
       const tileOf = v => { const need = (o.needs || {})[v] || {};
-        const foot = [need.embeddings ? `<span class="nb-tick" title="its embedding calls go through the run's relay, with your OpenAI key">OpenAI key</span>` : '',
+        const foot = [need.embeddings ? `<span class="nb-tick" title="${esc(need.embeddings)} through the run's relay">${need.embeddings.includes('/') ? 'OpenRouter key' : 'OpenAI or OpenRouter key'}</span>` : '',
+          need.reranker ? `<span class="nb-tick">reranker ${esc(need.reranker)}</span>` : '',
           ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(h)}</span>`),
           v === o.default ? '<span class="nb-tag">default</span>' : ''].join('');
         return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: v, mark: '', tip: (o.about || {})[v] || '', foot}); };
       return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}${o.datasets.length ? ' · ' + esc(o.datasets.join(', ')) : ''}</h3></div>`
         // by the data: every value with its line (or a need) - cards of one size, the line whole; plain values - one small
         // card each, all one size, or a select past five of them (a line some have is their tooltip)
-        + (o.values.some(v => ((o.needs || {})[v] || {}).embeddings || (((o.needs || {})[v] || {}).host || []).some(h => local[h]))
+        + (o.values.some(v => ((o.needs || {})[v] || {}).embeddings || ((o.needs || {})[v] || {}).reranker || (((o.needs || {})[v] || {}).host || []).some(h => local[h]))
           ? `<div class="nb-pick-grid std-optgrid" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(tileOf).join('')}</div>`
           : o.values.length > 5
           ? `<label class="nb-field std-optselect"><select data-bench-opt-select="${esc(n)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''} title="${esc((o.about || {})[v] || '')}">${esc(v === 'default' ? 'Default' : v + (v === o.default ? ' (default)' : ''))}</option>`).join('')}</select></label>`
@@ -862,9 +863,10 @@
     const out=$('#nb-hosttest'), st=root.querySelector(`[data-host-state="${CSS.escape(entry)}"]`);
     out.textContent='testing…';
     try{const res=await fetch('/settings/hosts/test',{method:'POST',headers:{'X-CSRF-Token':schema.csrf},body:new URLSearchParams({entry})});const j=await res.json();
-      // only what can stop this recipe there: docker, for a Harbor run or the standard's docker backend (uv is installed when missing)
-      const rec=r(),needsDocker=rec.harness==='harbor'||(C.isStandard(rec)&&rec.backend==='docker'),dockerOk=j.docker&&j.docker_ok;
-      out.textContent=!j.ok?'✕ '+(j.error||('HTTP '+res.status)):needsDocker&&!dockerOk?'✓ Connected · ✕ docker '+(j.docker?'not usable by this user':'missing')+': this run needs it':'✓ Connected';
+      // only what can stop this recipe there: docker for a Harbor run, docker or podman for the standard's docker backend (uv is installed when missing)
+      const rec=r(),harbor=rec.harness==='harbor',needsEngine=harbor||(C.isStandard(rec)&&rec.backend==='docker');
+      const engine=harbor?(j.docker?'docker':null):j.engine,engineOk=engine&&j[engine+'_ok'];
+      out.textContent=!j.ok?'✕ '+(j.error||('HTTP '+res.status)):needsEngine&&!engineOk?'✓ Connected · ✕ '+(engine?engine+' not usable by this user':(harbor?'docker':'docker or podman')+' missing')+': this run needs it':'✓ Connected';
       if(st){st.textContent=j.ok?'connected':'unreachable';st.className='nb-state nb-hoststate '+(j.ok?'':'warn');}
       if(j.ok&&C.isStandard(r())&&optionNeeds(r()).host.length)hostReq(entry,'check');   // and what the chosen search needs of it
     }catch(e){out.textContent='✕ '+e;}

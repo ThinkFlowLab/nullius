@@ -69,7 +69,7 @@ from typing import Callable, Dict, List, Optional
 from nullius import paths, prices as price_list, progress, providers
 from nullius.redact import redact
 from nullius.harbor import feed as live_feed
-from nullius.standard import acp, container, definitions, hostreq, install, job, jsonl, ledger as ledgers, match, mcp_machine, relay, shard as shards
+from nullius.standard import acp, container, definitions, hostreq, install, job, jsonl, ledger as ledgers, match, mcp_machine, pace as pacing, relay, shard as shards
 
 # the totals a unit's end carries onto the live board, from its trial's agent_result
 FEED_TOTALS = ("n_input_tokens", "n_cache_tokens", "n_output_tokens", "cost_usd")
@@ -417,7 +417,12 @@ class Run:
         if bad:
             raise Refused("; ".join(bad))
         needs = definitions.option_needs(bench, self.bench_options)
-        self.embed_model = needs["embeddings"][0] if needs["embeddings"] else None
+        for m in needs["embeddings"]:
+            why = providers.embedding_problem(m, provider)
+            if why:
+                raise Refused(why)
+        self.embed_model = providers.served_as(needs["embeddings"][0], provider) if needs["embeddings"] else None
+        self.rerank_model = providers.served_as(needs["reranker"][0], provider) if needs["reranker"] else None
         # What a call's cost is estimated from when the provider does not say it: the user's price list
         # (nullius.prices), this run's own prices over it. Read once, here: a run never fetches a price.
         self.run_prices = dict(prices or {})
@@ -450,7 +455,7 @@ class Run:
                           + (". Install with: " + " && ".join(lines) if (lines := hostreq.install_lines(bench, list(lacking)))
                              else ". Run it on a machine that has it"))
         self.bench_relay = None
-        keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model
+        keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
         self.limit, self.concurrency = limit, max(1, int(concurrency))
         self.repeat = max(1, int(repeat or 1))
@@ -496,9 +501,7 @@ class Run:
                            {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                             "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                             "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
-                            **({container.CHECK_IMAGE: self.image,
-                                **{k: v for k, v in container.client_env().items() if k.startswith("DOCKER")}}
-                               if self.image else {}),
+                            **({container.CHECK_IMAGE: self.image, **container.check_env()} if self.image else {}),
                             **option_env(getattr(self, "bench_options", {})), **self.embeddings_env(), **self.driver_secrets()})
             os.makedirs(env["HOME"], exist_ok=True)
             # its working directory is the job's, never its catalogue folder: an upstream that writes
@@ -560,15 +563,27 @@ class Run:
         self._cut: List[str] = []                # units the spending cap cut off
         self._over: List[str] = []               # units that reached their own cap: cut off there, the run going on
         self.loopback = None
+        self.pace = pacing.Pace(self._stopped, self._halt)
+        self._running = 0
+        again: Dict[str, dict] = {}              # a rate-limited unit's second attempt, by its trial's name
+
         def work_unit(iur):
+            self.pace.wait()                     # a unit ended rate-limited: the next waits its pause out
             if self._stopped.is_set():
                 return None
+            with self._said:
+                self._running += 1
             try:
-                return self.unit(*iur)
+                res = self.unit(*iur)
             except BaseException:
                 self._stopped.set()
                 self._halt.set()
                 raise
+            finally:
+                with self._said:
+                    self._running -= 1
+            self.paced(res)
+            return res
 
         pool = ThreadPoolExecutor(self.concurrency)
         futures = []
@@ -582,6 +597,7 @@ class Run:
                 res = future.result()
                 if res is not None:              # None: a unit not begun once the endpoint refused the run
                     results.append(res)
+            self.run_again(results, work, work_unit, again)
         except BaseException:
             self._stopped.set()
             self._halt.set()
@@ -592,7 +608,7 @@ class Run:
             # a Stop or Ctrl-C: the units not begun are not begun, those running end with their agents
             pool.shutdown(wait=True, cancel_futures=True)
             begun = [not f.cancelled() and f.exception() is None and f.result() is not None for f in futures]
-            results = [f.result() for f, ran in zip(futures, begun) if ran]
+            results = [again.get(f.result()["trial_name"], f.result()) for f, ran in zip(futures, begun) if ran]
             for d in self.drivers:
                 d.close()
             if self.bench_relay is not None:
@@ -638,6 +654,45 @@ class Run:
             self.say(f"done: {len(results)} {self.bench['units']['nouns']}, {len(scores)} scored"
                      + (f", mean {mean:.3f}" if mean is not None else ""))
         return self.job_dir
+
+    def paced(self, res: Optional[dict]) -> None:
+        """A unit's end, told to the run's pace: one that ended rate-limited
+        holds the next unit back, said with how many units run meanwhile."""
+        if res is None:
+            return
+        pause = self.pace.ended((res.get("exception_info") or {}).get("exception_type"))
+        if pause is not None:
+            self.progress.emit("units", "progress", detail=f"rate limited: no unit starts for {pause:g} s; "
+                                                           f"{self._running} running of {self.concurrency} at once")
+
+    def run_again(self, results: List[dict], work: list, work_unit, done: Dict[str, dict]) -> None:
+        """Each unit that ended rate-limited, run once more after the others,
+        one at a time and paced as the rest: its first attempt moved into the
+        job's ``retried/`` (kept whole, its calls and its cost with it, where
+        no reader takes it for a trial of its own), its second written under
+        the trial's own name and counted (into ``done``, as each ends). Nothing
+        is run again once the run is stopped or halted; the spending cap goes
+        on counting every call."""
+        by_name = {self.trial_name(*iur): iur for iur in work}
+        todo = [by_name[r["trial_name"]] for r in results
+                if (r.get("exception_info") or {}).get("exception_type") == pacing.RATE_LIMITED and r["trial_name"] in by_name]
+        if not todo:
+            return
+        self.progress.emit("units", "start", n=len(todo), detail=f"running {len(todo)} rate-limited again, one at a time")
+        self.say(f"running again, one at a time: {len(todo)} rate-limited")
+        for iur in todo:
+            if self._stopped.is_set() or self._halt.is_set():
+                break
+            name = self.trial_name(*iur)
+            keep = os.path.join(self.job_dir, "retried", name)
+            os.makedirs(os.path.dirname(keep), exist_ok=True)
+            os.replace(os.path.join(self.job_dir, name), keep)
+            self.feed.emit("trial.queued", name, agent=self.other["key"], position=0)
+            res = work_unit(iur)
+            if res is not None:
+                done[name] = res
+            elif not os.path.exists(os.path.join(self.job_dir, name)):
+                os.replace(keep, os.path.join(self.job_dir, name))    # not begun after all: the first attempt stands
 
     def ready(self) -> None:
         """What the run needs before its first unit, each a stage said as it
@@ -689,11 +744,11 @@ class Run:
                     self.runtimes = container.runtime_mounts(self.runtimes_needed())
             except container.Unavailable as e:
                 raise Refused(f"the agent's runtime for an own image: {e}")
-        # An option whose driver embeds (a search over documents): its calls go through a relay of the run's
+        # An option whose driver embeds or reranks: its calls go through a relay of the run's
         # own, recorded in the job's .work/relay-benchmark beside the units', never counted as the agent's.
-        if self.embed_model and self.bench_relay is None:
+        if (self.embed_model or self.rerank_model) and self.bench_relay is None:
             self.bench_relay = relay.Relay(self.base, self.key, os.path.join(self.job_dir, ".work", "relay-benchmark"),
-                                           prices=self.prices, model=self.embed_model, ledger=self.ledger_file(), unit_caps=False,
+                                           prices=self.prices, model=self.rerank_model or self.embed_model, ledger=self.ledger_file(), unit_caps=False,
                                            key_header=PROVIDERS[self.provider].get("key_header", "authorization")).start()
 
     def runtimes_needed(self) -> List[str]:
@@ -1049,8 +1104,10 @@ class Run:
         run's, the judge's, the simulator's, an option's embeddings and the
         agent's side models. Any other name a caller asks for is replaced by
         the run's (``relay``), so these are all a run can be priced for."""
-        return ledgers.models(self.other, *(getattr(self, n, None) for n in ("model", "judge_model", "simulator_model", "embed_model")),
-                              control=self.other.get("_kind") == "control")
+        models = ledgers.models(self.other, *(getattr(self, n, None) for n in ("model", "judge_model", "simulator_model", "embed_model")),
+                                control=self.other.get("_kind") == "control")
+        reranker = getattr(self, "rerank_model", None)
+        return models + ([reranker] if reranker and reranker not in models else [])
 
     def unit_relay(self, tag: str, trial: str, setup: dict, env_def: Optional[dict] = None, own: bool = False):
         """The unit's own relay, started: in this process on the local
@@ -1117,11 +1174,13 @@ class Run:
                                **option_env(getattr(self, "bench_options", {})), **self.embeddings_env()})
 
     def embeddings_env(self) -> dict:
-        """Where the driver's (and its MCP servers') embedding calls go: the run's own relay, the
-        model pinned on its route, as an OpenAI client reads it; nothing without an embedding option."""
+        """The driver's (and its MCP servers') search calls: one OpenAI base URL, with embeddings
+        and reranking pinned separately. Nothing when the selected search calls no model."""
         if getattr(self, "bench_relay", None) is None:
             return {}
-        return {"OPENAI_BASE_URL": self.bench_relay.url(self.embeddings_tag(), model=self.embed_model), "OPENAI_API_KEY": relay.PLACEHOLDER_KEY}
+        return {"OPENAI_BASE_URL": self.bench_relay.url(self.embeddings_tag(), model=self.rerank_model or self.embed_model,
+                                                       embeddings=self.embed_model if self.rerank_model else None),
+                "OPENAI_API_KEY": relay.PLACEHOLDER_KEY}
 
     def embeddings_tag(self) -> str:
         """This thread's route on the benchmark's relay. A driver serves one thread, one unit at a time: what
@@ -1159,7 +1218,7 @@ class Run:
             path = ":".join(([box.env["PATH"]] if "PATH" in box.env else []) + [box.path]
                             + install.bin_dirs(self.inst) + [d + "/bin" for _, d in box.runtimes.values()])
             argv = box.exec_argv(container.in_runtime(cmd, box.runtimes), inside, path, interactive=interactive)
-            return argv, container.client_env({k: v for k, v in inside.items() if k != "PATH"})
+            return argv, container.program_env(inside)
         if self.backend == "local":
             return cmd, env
         ws = os.path.join(os.path.dirname(home), "workspace")

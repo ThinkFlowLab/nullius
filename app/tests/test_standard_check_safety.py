@@ -298,12 +298,14 @@ class AgentInternet(unittest.TestCase):
     def test_an_existing_proxy_is_not_started_twice(self):
         box = container.Box("test", "u0001", "img", workdir="/")
         with mock.patch.object(container, "base_image", return_value="base"), \
+                mock.patch.object(container, "make_bridge") as bridge, \
                 mock.patch.object(container, "_docker") as docker, mock.patch.object(container, "wait_listening") as ready:
             first = box.online()
             started = list(docker.call_args_list)
             self.assertEqual(box.online(), first)
             self.assertEqual(docker.call_args_list, started)
         ready.assert_called_once()
+        bridge.assert_called_once()
 
 
 class Rule(unittest.TestCase):
