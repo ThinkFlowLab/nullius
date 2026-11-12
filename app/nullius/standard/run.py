@@ -1231,13 +1231,13 @@ class Run:
                 ln.stop()
             raise _Ended("EnvironmentSetupError", f"the unit's web services: {e}")
         door = getattr(self, "loopback", None)
+        probe = ((env_def or {}).get("network") or {}).get("probe") if self.other["_kind"] == "agent" else None
         rl = container.Unit(self.name, tag, record, image=self.image, app=APP, base=door.base if door else self.base, key=self.key,
                             model=self.model, routes=routes, side_models=side, key_header=key_header,
                             prices=price_list.given(self.models_called(), getattr(self, "prices", None)),   # a sidecar's argv: its models' rows
                             servers=self.agent_servers(env_def), doors=doors, hosts=door.hosts if door else None,
                             ledger=self.ledger_file(),
-                            network_probe=((env_def or {}).get("network") or {}).get("probe")
-                            if self.other["_kind"] == "agent" else None, probe_now=self.first_probe())
+                            network_probe=probe, probe_now=bool(probe) and self.first_probe())
         rl.mcp_listeners = listeners
         try:
             try:

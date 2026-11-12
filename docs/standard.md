@@ -327,7 +327,7 @@ An environment declares `"network": {"access": "public", "probe": "<an HTTPS URL
 
 ### Docker Original setups
 
-In a container, an Original setup's driver, answerer and scorer run with the packages its chosen options need; an option needing a GPU is refused. It may download data; its declared credentials come as a read-only, owner-only file, never as environment; model keys stay in the relay. No GPU.
+In a container, an Original setup's driver, answerer and scorer run with the packages its chosen options need; an option needing a GPU is refused. It may download data; its declared credentials come as a read-only, owner-only file, never as environment; model keys stay in the relay.
 
 ## Many machines
 

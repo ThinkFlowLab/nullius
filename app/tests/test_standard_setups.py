@@ -378,6 +378,10 @@ class Recipe(unittest.TestCase):
         here = self.compiled(others=["original"], model="vendor/model", bench_options={"retrieval": "dialog"})
         self.assertEqual([n["name"] for n in here["host"]["needs"]], ["cuda_gpu"])
 
+    def test_a_gpu_option_is_refused_for_a_container_setup_beside_another_participant(self):
+        mixed = self.compiled(others=["original", "keyword-memory"], model="vendor/model", backend="container", bench_options={"retrieval": "dialog"})
+        self.assertIn("cuda_gpu cannot be provided in a container: choose local processes.", [e["message"] for e in mixed["errors"]])
+
     def test_a_container_setups_image_installs_what_has_an_install(self):
         tau = definitions.get("benchmark", "tau3-bench")
         self.assertEqual(hostreq.in_image(tau, ["sandbox"]), ["sandbox"])

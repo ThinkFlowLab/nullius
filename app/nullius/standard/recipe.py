@@ -564,13 +564,14 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"]
     # what the machines must have for the chosen options (``host``): the Where step and its test show it, Run checks it
     on_host = needs["host"]
-    if backend == "container" and picks and all(p.get("setup") for p in picks):
+    if backend == "container" and any(p.get("setup") for p in picks):
         # a container setup's image installs what has an install; nothing else reaches its container
         imaged = hostreq.in_image(b, on_host)
         cannot = [n for n in hostreq.requirements(b, on_host) if n not in imaged]
         if cannot:
             add("where", f"{', '.join(cannot)} cannot be provided in a container: choose local processes.")
-        on_host = []
+        if all(p.get("setup") for p in picks):
+            on_host = []                 # an agent's or a check's driver still runs on the machine
     reqs = hostreq.requirements(b, on_host)
     out["host"] = {"benchmark": b["key"], "needs": [{"name": n, "summary": r["summary"], "check": r["check"],
                                                   **({"gpu_memory_mb": r["gpu_memory_mb"]} if "gpu_memory_mb" in r else {})}
