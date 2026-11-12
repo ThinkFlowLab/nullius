@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from nullius.standard import definitions, install, match, recipe, run
+from nullius.standard import definitions, hostreq, install, match, recipe, run
 
 # A paper's benchmark in miniature: two conversations, each answered by the upstream's own code (``answer``) in one
 # call to the model it is asked as, and scored by whether the reply came back.
@@ -370,6 +370,18 @@ class Recipe(unittest.TestCase):
 
     def test_old_model_participant_is_not_a_recipe_choice(self):
         self.assertTrue(self.compiled(others=["model"], model="vendor/model")["errors"])
+
+    def test_a_gpu_option_is_refused_for_a_container_setup_and_asked_of_the_host_locally(self):
+        boxed = self.compiled(others=["original"], model="vendor/model", backend="container", bench_options={"retrieval": "dialog"})
+        self.assertIn("cuda_gpu cannot be provided in a container: choose local processes.", [e["message"] for e in boxed["errors"]])
+        self.assertEqual(boxed["host"]["needs"], [])
+        here = self.compiled(others=["original"], model="vendor/model", bench_options={"retrieval": "dialog"})
+        self.assertEqual([n["name"] for n in here["host"]["needs"]], ["cuda_gpu"])
+
+    def test_a_container_setups_image_installs_what_has_an_install(self):
+        tau = definitions.get("benchmark", "tau3-bench")
+        self.assertEqual(hostreq.in_image(tau, ["sandbox"]), ["sandbox"])
+        self.assertEqual(hostreq.in_image(definitions.get("benchmark", "locomo"), ["cuda_gpu"]), [])
 
     def test_a_setup_compiles_for_a_container_without_local_agent_consent(self):
         out = self.compiled(others=["original"], model="vendor/model", backend="container")

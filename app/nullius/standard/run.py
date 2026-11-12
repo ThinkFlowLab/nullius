@@ -454,7 +454,16 @@ class Run:
                 raise Refused("a spending cap needs a price for every model the run calls, and there is none for "
                               + ", ".join(unpriced) + ": nullius prices update, nullius prices set MODEL INPUT OUTPUT, "
                               "or --price MODEL=INPUT,OUTPUT")
-        lacking = {} if self.upstream and backend == "container" else hostreq.problems(bench, needs["host"], which)
+        on_host = needs["host"]
+        if self.upstream and backend == "container":
+            # its image installs what has an install; nothing else reaches its container
+            imaged = hostreq.in_image(bench, on_host)
+            cannot = [n for n in hostreq.requirements(bench, on_host) if n not in imaged]
+            if cannot:
+                raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs "
+                              f"{', '.join(cannot)}, which a container setup cannot provide: choose local processes")
+            on_host = []
+        lacking = hostreq.problems(bench, on_host, which)
         if lacking:
             raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
                           + "; ".join(f"{n} ({why})" for n, why in lacking.items())
