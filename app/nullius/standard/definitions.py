@@ -111,6 +111,7 @@ _HTTPS = re.compile(r"^https://[A-Za-z0-9.-]+(?:/[A-Za-z0-9_.%@+-]+)+$")
 _RELATIVE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$")
 _NPM = re.compile(r"^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@[0-9][A-Za-z0-9.+-]*$")
 _PIP = re.compile(r"^[A-Za-z0-9_.-]+==[A-Za-z0-9_.+!-]+$")
+_PIP_GIT = re.compile(r"[A-Za-z0-9_.-]+ @ git\+https://[A-Za-z0-9.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+@[0-9a-fA-F]{40}")
 FAMILIES = ("agent", "capability")
 _MODEL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$")
 APIS = ("chat", "responses", "messages")
@@ -335,8 +336,8 @@ def _install_block(d: dict, inst: dict) -> List[str]:
         if not _NPM.match(str(p)):
             bad.append(f"install.npm: {p!r} is not name@version")
     for p in inst.get("pip") or []:
-        if not _PIP.match(str(p)):
-            bad.append(f"install.pip: {p!r} is not name==version")
+        if not (_PIP.fullmatch(str(p)) or _PIP_GIT.fullmatch(str(p))):
+            bad.append(f"install.pip: {p!r} is not name==version or name @ git+https://repository@full-commit")
     if "python" in inst and not _PYTHON.match(str(inst["python"])):
         bad.append("install.python: a version such as 3.12")
     if "project" in inst:

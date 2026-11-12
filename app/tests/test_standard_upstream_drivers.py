@@ -48,7 +48,7 @@ class Schema(unittest.TestCase):
                            "indexes": [{"url": "https://download.pytorch.org/whl/cpu", "packages": ["torch==2.5.1"]}]})
         self.assertEqual(definitions.problems(b, "benchmark"), [])
         bad = definitions.problems(bench(install={"pip": ["openai"]}), "benchmark")
-        self.assertIn("driver.install.pip: 'openai' is not name==version", bad)
+        self.assertIn("driver.install.pip: 'openai' is not name==version or name @ git+https://repository@full-commit", bad)
         bad = definitions.problems(bench(install={"project": "."}), "benchmark")
         self.assertTrue(any(p.startswith("driver.install.project: needs upstream.repository") for p in bad), bad)
 

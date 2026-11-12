@@ -78,6 +78,17 @@ class Problems(unittest.TestCase):
                     dict(wheel, url="https://example.org/r/model.tar.gz"), "model==1.0"):
             self.bad(ok, "capability", lambda d, bad=bad: d["install"].update(wheels=[bad]), "install.wheels[0]")
 
+    def test_a_python_git_dependency_requires_https_and_a_full_commit(self):
+        base = "sdk @ git+https://example.org/team/sdk.git@"
+        pin = base + "a" * 40
+        self.assertEqual(definitions.problems(dict(AGENT, install={"pip": ["agent==1.0", pin]}), "agent"), [])
+        for invalid in (base + "main", base + "v1.0", base + "a" * 7,
+                        pin.replace("https://", "http://"), pin.replace("https://", "ssh://"),
+                        pin.replace("example.org", "user:password@example.org"),
+                        pin + "#subdirectory=other", pin + "\n", "sdk>=1.0"):
+            with self.subTest(pin=invalid):
+                self.bad(AGENT, "agent", lambda d: d.update(install={"pip": [invalid]}), "install.pip")
+
     def test_a_feature_may_call_a_model_through_the_relay(self):
         self.assertEqual(definitions.problems(dict(CAPABILITY, model={"apis": ["chat"], "env": {"API_BASE": "{base_url}"}}), "capability"), [])
         self.bad(CAPABILITY, "capability", lambda d: d.update(model={"apis": ["chat"], "env": {"API_BASE": "{secret}"}}), "is not a slot")

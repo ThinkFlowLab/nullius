@@ -422,7 +422,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 
 | Key | Meaning |
 | --- | --- |
-| `pip` | Pinned (`==`) |
+| `pip` | `name==version` or `name @ git+https://repository@<full 40-character commit>` |
 | `python` | The interpreter version |
 | `indexes` | Packages from another index |
 | `wheels` | A wheel served by URL only (a model package such as spaCy's `en_core_web_sm`), `{url, sha256}`: refused unless the file matches, resolved with `pip` |
