@@ -3,7 +3,7 @@
 Copy the Goose integration as `my-agent`, point it at the relay, validate it, prove its ports.
 
 With [a model provider](../settings/model-providers.md); the copy never
-overwrites. Without Docker, `--unsandboxed` replaces `--backend docker` and
+overwrites. Without Docker, `--unsandboxed` replaces `--backend container` and
 runs the agent as you.
 
 The Python snippet below uses the interpreter from a `uv tool install`. For a
@@ -77,9 +77,9 @@ Keep the whole copied definition, `model.env` and `options` included.
 
 2. Conformance, which installs the pinned agent and calls the model:
 
-    ```bash title="Run conformance · Docker backend"
+    ```bash title="Run conformance · Container backend"
     nullius standard conform my-agent \
-      --provider openai --model gpt-5-mini --backend docker --repeat 3
+      --provider openai --model gpt-5-mini --backend container --repeat 3
     ```
 
 3. Which benchmarks it fits:

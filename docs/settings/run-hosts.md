@@ -12,7 +12,7 @@ The SSH machines a recipe can run on, chosen in the builder's **Where** step.
 | Rule | |
 | --- | --- |
 | Test | One ssh; `uv`, `docker`, `podman`, `harbor` present or not |
-| Key file | Kept under `~/.ssh/nullius` |
+| Uploaded key | Kept under the configuration directory's `ssh/`, mode 0600; removed with its host |
 | Password | Used once to install this machine's key, never stored |
 | Code | `app/nullius/hosts.py` |
 
@@ -39,7 +39,7 @@ ssh -o BatchMode=yes eval-box true
 ```
 
 !!! note "What the host needs"
-    Standard: `python3`, `git`, Docker or Podman for the docker backend. Harbor: Docker answering `docker ps`. Both: `uv`, installed when missing. Review checks each before Run.
+    Standard: `python3`, `git`, Docker or Podman for the container backend. Harbor: Docker answering `docker ps`. Both: `uv`, installed when missing. Review checks each before Run.
 
 <div class="grid cards" markdown>
 

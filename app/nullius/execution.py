@@ -26,7 +26,7 @@ thread of its own and writes what it does to a log the page follows:
   directory synced back with rsync every few seconds while it runs and once
   more at the end, so each trial appears here as it finishes;
 - on this machine: the same, with the local paths, in ``runs/<name>``; a
-  run that needs docker (Harbor's, or the standard's on its docker backend)
+  run that needs docker (Harbor's, or the standard's on its container backend)
   first asks that it answer here (``docker_here``) and starts nothing when
   it does not.
 
@@ -39,7 +39,7 @@ configuration or credentials. Snapshots live in ``standard-app/<content-id>/``
 beside the runs and are sent to ``~/.nullius/app/<content-id>`` the way a task
 folder is. There it needs ``python3`` and ``git``, gets ``uv`` when missing
 (an agent's pip install builds with it), and docker when the plan says so
-(``docker``: a recipe on the docker backend) - checked, like a Harbor run's,
+(``docker``: a recipe on the container backend) - checked, like a Harbor run's,
 before anything is sent. A run split over several machines is one plan per
 machine, each one shard (``standard/shard.py``).
 
@@ -72,8 +72,9 @@ or not its launcher had answered (``_kill_part``).
 The model key and endpoint follow the recipe's provider (``Plan.key_var``,
 ``url_var``, ``base_url``): on OpenRouter the Settings' OPENROUTER_API_KEY
 and OpenRouter's own endpoint; on OpenAI, OPENAI_API_KEY and no endpoint, so
-the clients use OpenAI's; on a local or self-hosted endpoint, MODEL_API_URL
-and MODEL_API_KEY - optional: without it the run is sent
+the clients use OpenAI's; on an OpenAI-compatible endpoint, its URL and its
+key (MODEL_API_URL and MODEL_API_KEY, or a named endpoint's own) - the key
+optional: without it the run is sent
 ``settings.MODEL_KEY_PLACEHOLDER``, for a server that checks no key - and a
 run without that endpoint fails before it starts.
 They are read on this machine and handed to the run as environment
@@ -159,7 +160,7 @@ def app_root(runs: str) -> str:
 def docker_here(sh: Callable, needs: str = "a Harbor run needs it", program: str = "docker") -> Optional[str]:
     """Why a run cannot use ``program`` on this machine, or None when it can
     (``needs`` says why the run asks): ``docker`` for Harbor, the standard's
-    engine (``container.DOCKER``) for its docker backend. The command on the
+    engine (``container.DOCKER``) for its container backend. The command on the
     PATH *and* ``<program> ps`` answered, as a host's probe asks
     (``hosts.PROBE``). The command alone is not enough - Docker Desktop's WSL
     integration leaves ``/usr/bin/docker`` in place while its engine is quit.
@@ -254,7 +255,7 @@ class Plan:
     recipe: dict = field(default_factory=dict)       # the builder's recipe the script was compiled from, so the run can be opened again as one; {} for a plan from before
     runner: str = "harbor"                    # or "standard" (standard/recipe.py): the Nullius standard's own cli
     harbor_pin: dict = field(default_factory=dict)   # the Harbor the recipe pins (harbor/source.py pin_of); {} for a plan from before: the harbor on PATH
-    docker: bool = False                      # a runner that needs docker on its target though it is not Harbor (the standard's docker backend)
+    docker: bool = False                      # a runner that needs docker on its target though it is not Harbor (the standard's container backend)
     keyless: bool = False                     # nothing in it calls a model (the standard's controls): handed no key and no endpoint at all
     licences: dict = field(default_factory=dict)     # the standard's on a host: {"benchmark", "names", "providers"} - what it is sent of that benchmark's licences
 
@@ -336,8 +337,9 @@ def withheld() -> List[str]:
     own licences go by - kept in its own store (``nullius.secrets``), although
     imported saved settings may still hold a value until it is moved in
     Custom keys - and GitHub tokens from saved settings or the
-    shell Nullius was started in. A data provider's token name is not one."""
-    secret = {v.name for v in settings.VARIABLES if v.secret}
+    shell Nullius was started in. Every named endpoint's settings too, so a
+    run gets its own endpoint's key alone. A data provider's token name is not one."""
+    secret = {v.name for v in settings.VARIABLES if v.secret or v.kind == "endpoint"} | set(settings.endpoint_names())
     return sorted(secret | {old for old, new in settings.INSTEAD.items() if new in secret}
                   | set(KEY_NAMES + URL_NAMES) | {"GITHUB_TOKEN", "GH_TOKEN"} | set(settings.agent_key_names())
                   | set(_licence_names()))
@@ -386,7 +388,7 @@ class Execution:
         # the first command cut short.
         self._run_plain = run or subprocess_run
         self._run = run or (lambda argv, timeout=600.0, stdin=None: subprocess_run(argv, timeout, stdin, stop=self._stop))
-        # an endpoint of the run's own (url_var: a local or self-hosted one) may check no key: it is sent the placeholder
+        # an endpoint of the run's own (url_var: an OpenAI-compatible one) may check no key: it is sent the placeholder
         self._key = (key if key is not None else env.get(plan.key_var, "")) or (settings.MODEL_KEY_PLACEHOLDER if plan.url_var else "")
         self._url = url if url is not None else (env.get(plan.url_var, "") if plan.url_var else plan.base_url)
         if plan.keyless:                          # a run that calls no model is given nothing it could leak
@@ -746,7 +748,7 @@ class Execution:
             if not self._key and self.plan.runner != "harbor" and not self.plan.keyless:
                 return self._fail("credentials", f"{self.plan.key_var} is not set in Settings; the producers and the judge would have no model key")
             if not self._url and self.plan.url_var and not self.plan.keyless and (harbor_model or self.plan.runner != "harbor"):
-                return self._fail("credentials", f"{self.plan.url_var} is not set in Settings; a local or self-hosted endpoint has no default, so the run would have nowhere to send its calls")
+                return self._fail("credentials", f"{self.plan.url_var} is not set in Settings; an OpenAI-compatible endpoint has no default, so the run would have nowhere to send its calls")
             broken = self._line_break()
             if broken:
                 return self._fail("credentials", broken)

@@ -28,7 +28,7 @@ Then [read its results](results.md).
 | Agent (*Memory* on a memory benchmark) | Reference agents first, or **No agent · Original** for a direct-model benchmark. Memory benchmarks offer **Original memory** alongside compatible memory capabilities. Controls follow separately; each choice has its own settings tab |
 | Model | **Like the paper** keeps what the paper fixed: the model picker shows only documented paper models when the benchmark lists them (the filter applies to the selected agent or capability too), and the user simulator and judge are their official models. A benchmark that lists no paper models but has an official simulator or judge leaves the model to you. **Like the leaderboard**, on a benchmark that declares its leaderboard's rules, leaves the model to you and fixes what the leaderboard does: its user simulator and judge, the options it sets and at least its attempts per unit. **Any of your choice** opens the provider's full list and lets the simulator and judge be changed. Nothing fixed by the paper: the paper choice is disabled |
 | Limits | Task limit (empty is every task), a task-name glob, concurrency, retries, attempts per unit, timeouts in minutes. On the Nullius runner, a [spending cap](cli/run.md#a-spending-cap) for the run and one per unit |
-| Where | This machine, a Settings host, or several machines, one shard each, merged into one job. The backend: *local processes*, as you, with the explicit yes to running unsandboxed; or *Docker*. A benchmark option's machine setup is installed on a click (`sudo -n`), or its commands are given |
+| Where | This machine, a Settings host, or several machines, one shard each, merged into one job. The backend: *local processes*, as you, with the explicit yes to running unsandboxed; or *Container*, on Docker or Podman. A benchmark option's machine setup is installed on a click (`sudo -n`), or its commands are given |
 | Review | One row per decision and the prerequisites. **Run** |
 
 Original setups run on local processes or in Docker; Docker changes isolation only.
@@ -43,16 +43,18 @@ Checked on each machine when Review opens, on *Check again*, and as the run star
 | --- | --- | --- |
 | `uv` | `command -v` | The standard; a pinned Harbor. On a host, installed by the run |
 | `python3`, `git` | `command -v` on the host | The standard on a host |
-| Docker or Podman, its engine answering | The engine's `version` here, `docker ps` or `podman ps` on a host | The standard's docker backend; a control in a unit's own image |
+| Docker or Podman, its engine answering | The engine's `version` here, `docker ps` or `podman ps` on a host | The standard's container backend; a control in a unit's own image |
 | Docker | `docker version` here, `docker ps` on a host | Harbor |
 | A benchmark option's machine setup | Its programs | The chosen value; the install commands are shown |
 | `harbor` on PATH | `command -v` | A Harbor recipe without a pin |
 
 For the standard, the Docker row says when the engine has `userns-remap`, which [the standard](standard.md)'s containers run outside of.
 
+If the recipe's provider failed its last [test in Settings](settings/model-providers.md#test-a-provider), Review shows a notice. Run still starts.
+
 ### Which providers
 
-A provider is *set* when Settings holds `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or `MODEL_API_URL`, for both runners.
+A provider is *set* when Settings holds `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or the URL of an OpenAI-compatible endpoint, for both runners. Each OpenAI-compatible endpoint is a choice of its own, listed by its name.
 
 | Set in Settings | Model stage | Run |
 | --- | --- | --- |
@@ -67,10 +69,16 @@ A recipe of controls alone needs no key unless the benchmark uses a judge or emb
 | --- | --- | --- |
 | OpenRouter | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1`, fixed |
 | OpenAI | `OPENAI_API_KEY` | api.openai.com |
-| Local or self-hosted | `MODEL_API_KEY`, optional (placeholder `local` without it) | `MODEL_API_URL`, required |
+| OpenAI-compatible | The endpoint's key, optional (placeholder `local` without it) | The endpoint's URL, required |
+
+A recipe on an OpenAI-compatible endpoint records `"provider": "custom"` and
+the endpoint's id, `"endpoint": "GPU_BOX"`. The id does not change when the
+endpoint is renamed. A recipe without an `endpoint` uses the one at
+`MODEL_API_URL`. A recipe on an endpoint that was removed keeps it, marked
+*not set in Settings*, and Run stays disabled until another is chosen.
 
 The Model step searches the selected provider's model catalogue: OpenRouter,
-OpenAI, or the `/models` endpoint of a configured local or self-hosted provider.
+OpenAI, or the `/models` endpoint of the selected OpenAI-compatible endpoint.
 Keys stay on the Nullius host. Choose a result to use its exact model ID, or
 enter an ID manually if the catalogue is unavailable. An Original setup with
 a declared model list keeps those published choices.
@@ -95,7 +103,7 @@ a declared model list keeps those published choices.
 | Key and endpoint | Passed as environment (over stdin to a host), the key to a docker relay as a file; logs redacted. Other secrets withheld |
 | A host | Gets a content-addressed snapshot of the running backend and effective catalogue into `~/.nullius/app/<content-id>`, including source edits and user entries but no configuration stores; a Harbor recipe gets its pin's wheels in `~/.nullius/harbor/<pin>/wheels`, and `uv` if missing |
 | Proofs | Local runs save to the user catalogue. A host uses a writable copy in its run's `catalogue/`, isolated from the host's own entries; that copy and its proofs mirror back alongside `jobs/`, without changing the active user catalogue |
-| Docker or Podman | The engine must answer `ps` (`docker ps`, or `podman ps` for the standard's docker backend), or the run stops before it starts |
+| Docker or Podman | The engine must answer `ps` (`docker ps`, or `podman ps` for the standard's container backend), or the run stops before it starts |
 | Stop | Ends the current part (exit 130), records `stopped`; the next part never starts |
 | Restart of Nullius | `execution.restore` reattaches from `runs/<name>/run.json` |
 | Cannot run from the page | Generated tasks and custom agents are not supported by Run |

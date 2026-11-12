@@ -14,21 +14,28 @@
 {% set providers = [('typesafe', 'TypeSafe AI', 'https://api.typesafe.ai/v1/systemone', [('TYPESAFE_API_KEY', 'Key')]), ('openrouter', 'OpenRouter', 'https://openrouter.ai/api/v1', [('OPENROUTER_API_KEY', 'Key')]),
                     ('openai', 'OpenAI', 'https://api.openai.com/v1', [('OPENAI_API_KEY', 'Key')]),
                     ('anthropic', 'Anthropic', 'https://api.anthropic.com/v1', [('ANTHROPIC_API_KEY', 'Key')]),
-                    ('local', 'Local or self-hosted', '', [('MODEL_API_URL', 'Endpoint'), ('MODEL_API_KEY', 'Key')])] %}
+                    ('local', 'OpenAI-compatible', '', [('MODEL_API_URL', 'Endpoint'), ('MODEL_API_KEY', 'Key')])] %}
+{#- each named OpenAI-compatible endpoint is a card of its own, local:<id>, as the LLM judge's picker names it -#}
+{% set cards = providers + [] %}
+{% for i, name in endpoints %}{% set _ = cards.append(('local:' ~ i, name, '', [('MODEL_' ~ i ~ '_NAME', 'Name'), ('MODEL_' ~ i ~ '_API_URL', 'Endpoint'), ('MODEL_' ~ i ~ '_API_KEY', 'Key')])) %}{% endfor %}
 
-{% macro field(r, label, writable, options=none) %}
+{#- mode, in a provider's editor: 'plain' is edited in place (a name, an endpoint's URL); 'key' is written,
+    never shown, and replaced; 'optional-key' may also be removed. Elsewhere, Replace and Remove. -#}
+{% macro field(r, label, writable, options=none, mode='') %}
+{% set plain = mode == 'plain' %}
 <article class="st-field st-row" id="{{ r.name }}" data-source="{{ r.source }}" data-secret="{{ 'yes' if r.secret else 'no' }}">
   <label class="st-row-label" for="value-{{ r.name }}">{{ label }}</label>
   <div class="st-row-value">
   {% if writable %}
-    {% if r.source != 'unset' %}
+    {% if r.source != 'unset' and not plain %}
     <div class="st-value" data-held>
       <span class="st-shown">{{ r.shown }}</span>
       <button type="button" class="btn sm ghost" data-replace>Replace</button>
-      <input type="hidden" name="clear:{{ r.name }}" value=""><button type="button" class="btn sm ghost st-remove" data-unset="{{ r.name }}">Remove</button>
+      <input type="hidden" name="clear:{{ r.name }}" value="">{% if mode != 'key' %}<button type="button" class="btn sm ghost st-remove" data-unset="{{ r.name }}">{{ 'Remove key' if mode == 'optional-key' else 'Remove' }}</button>{% endif %}
     </div>
     {% endif %}
-    <input class="st-input" id="value-{{ r.name }}" type="{{ 'password' if r.secret else 'text' }}" name="value:{{ r.name }}" aria-label="{{ 'New value for ' if r.source != 'unset' }}{{ r.name }}"{% if r.secret %} autocomplete="off" data-1p-ignore data-lpignore="true"{% endif %} spellcheck="false" {% if not r.secret %}maxlength="4000"{% endif %}{% if r.name == 'MODEL_API_KEY' %} placeholder="(optional)"{% endif %}{% if options is not none %} list="options-{{ r.name }}"{% endif %}{% if r.source != 'unset' %} hidden{% endif %}>
+    <input class="st-input" id="value-{{ r.name }}" type="{{ 'password' if r.secret else 'text' }}" name="value:{{ r.name }}" aria-label="{{ label if plain else ('New value for ' if r.source != 'unset') ~ r.name }}"{% if plain %} value="{{ r.shown }}"{% endif %}{% if r.secret %} autocomplete="off" data-1p-ignore data-lpignore="true"{% endif %} spellcheck="false" {% if not r.secret %}maxlength="4000"{% endif %}{% if r.kind == 'localkey' %} placeholder="(optional)"{% endif %}{% if options is not none %} list="options-{{ r.name }}"{% endif %}{% if r.source != 'unset' and not plain %} hidden{% endif %}{% if r.problem %} aria-invalid="true" aria-describedby="problem-{{ r.name }}"{% endif %}>
+    {% if r.problem %}<p class="st-note st-bad" id="problem-{{ r.name }}">{{ r.problem }}</p>{% endif %}
     {% if options is not none %}<datalist id="options-{{ r.name }}">{% for o in options %}<option value="{{ o }}"></option>{% endfor %}</datalist>{% endif %}
     {% if r.source == 'environment' %}<p class="st-note" title="Held by the process the application runs in; the file cannot override it">Also set in the process environment: the running process keeps that value until it is restarted; the file applies then.</p>{% endif %}
     {% if r.shadowed %}<p class="st-note">The file holds a different value, shadowed by the environment.</p>{% endif %}
@@ -45,8 +52,11 @@
   <h1>Settings</h1>
   <div class="st-ready" role="group" aria-label="What a run can use">
     <span class="st-ready-t">Ready to run</span>
-    {% for label, name in [('OpenRouter', 'OPENROUTER_API_KEY'), ('OpenAI', 'OPENAI_API_KEY'), ('Anthropic', 'ANTHROPIC_API_KEY'), ('Local endpoint', 'MODEL_API_URL')] %}
-    <a href="#{{ name }}" class="st-ready-i{{ ' on' if name in held }}"><span aria-hidden="true">{{ '✓' if name in held else '○' }}</span> {{ label }}<span class="sr">{{ ': set' if name in held else ': not set' }}</span></a>
+    {% set ns = namespace(compatible='MODEL_API_URL' in held) %}
+    {% for i, _ in endpoints %}{% if ('MODEL_' ~ i ~ '_API_URL') in held %}{% set ns.compatible = true %}{% endif %}{% endfor %}
+    {% for label, name in [('OpenRouter', 'OPENROUTER_API_KEY'), ('OpenAI', 'OPENAI_API_KEY'), ('Anthropic', 'ANTHROPIC_API_KEY'), ('OpenAI-compatible', 'MODEL_API_URL')] %}
+    {% set on = ns.compatible if name == 'MODEL_API_URL' else name in held %}
+    <a href="#{{ 'providers' if name == 'MODEL_API_URL' else name }}" class="st-ready-i{{ ' on' if on }}"><span aria-hidden="true">{{ '✓' if on else '○' }}</span> {{ label }}<span class="sr">{{ ': set' if on else ': not set' }}</span></a>
     {% endfor %}
     {% for jj, name in [(judges[0], 'System One'), (judges[1], 'LLM judge')] %}<a href="#judge" class="st-ready-i{{ ' on' if jj }}"><span aria-hidden="true">{{ '✓' if jj else '○' }}</span> {{ name }}<span class="sr">{{ ': set' if jj else ': not set' }}</span></a>{% endfor %}
     {% for item in chosen %}<a href="#HOSTS" class="st-ready-i on"><span aria-hidden="true">✓</span> <span class="mono">{{ item.split('=', 1)[0] if '=' in item.split('@', 1)[0] else item.split(':/')[0].split(':~')[0] }}</span></a>{% else %}<a href="#HOSTS" class="st-ready-i"><span aria-hidden="true">○</span> no run host</a>{% endfor %}
@@ -71,7 +81,7 @@
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Evaluation</div>
-      {{ section_link('providers', 'Model providers', 'capability', 'openrouter openai anthropic local endpoint api key model_api_url') }}
+      {{ section_link('providers', 'Model providers', 'capability', 'openrouter openai anthropic openai-compatible local endpoint ollama vllm api key model_api_url') }}
       {% set access_search = namespace(words='agent keys agent_keys cursor copilot dataset credentials token licence benchmark access') %}
       {% for b in benchmark_access %}{% set access_search.words = access_search.words ~ ' ' ~ b.title %}{% for s in b.needs %}{% set access_search.words = access_search.words ~ ' ' ~ s.name ~ ' ' ~ s.summary %}{% endfor %}{% endfor %}
       {{ section_link('data-providers', 'Data providers', 'ws', 'hugging face huggingface hf_token docker hub login registry token dataset pull limit') }}
@@ -96,13 +106,13 @@
   {% if embedded %}<input type="hidden" name="embedded" value="1">{% endif %}
   <input type="hidden" name="csrf" value="{{ csrf }}">{% endif %}
 
-  <section class="st-section" id="providers" aria-labelledby="providers-h">
+  <section class="st-section" id="providers" aria-labelledby="providers-h"{% if writable %} data-test="{{ url_for('settings_provider_test') }}"{% endif %}>
     <div class="st-section-head">
-      <div class="st-provider-heading"><h2 id="providers-h">Model providers</h2><button type="button" class="btn sm ghost st-provider-add" data-provider-add aria-label="Add a provider" hidden><span aria-hidden="true">+</span> Add</button></div>
+      <div class="st-provider-heading"><h2 id="providers-h">Model providers</h2><div class="st-provider-actions">{% if writable %}<button type="button" class="btn sm ghost" data-provider-test-all hidden><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Test all</button>{% endif %}<button type="button" class="btn sm ghost st-provider-add" data-provider-add aria-label="Add a provider" hidden><span aria-hidden="true">+</span> Add</button></div></div>
       <p>Manage the providers available for runs and judges.</p>
     </div>
 
-    {% macro provider_logo(key) %}{% if key == 'typesafe' %}<img class="st-logo" src="{{ url_for('static', filename='brand/typesafe.png') }}" alt="" width="28" height="28">{% elif key == 'local' %}<svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>{% else %}<svg class="st-logo" aria-hidden="true"><use href="{{ marks }}#{{ key }}"/></svg>{% endif %}{% endmacro %}
+    {% macro provider_logo(key) %}{% if key == 'typesafe' %}<img class="st-logo" src="{{ url_for('static', filename='brand/typesafe.png') }}" alt="" width="28" height="28">{% elif key.startswith('local') %}<svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>{% else %}<svg class="st-logo" aria-hidden="true"><use href="{{ marks }}#{{ key }}"/></svg>{% endif %}{% endmacro %}
     <button type="button" class="btn ghost st-provider-back" data-provider-back hidden>← Model providers</button>
     <p class="st-about" data-provider-empty hidden>No providers added yet.</p>
     <div class="st-provider-catalogue" hidden>
@@ -110,27 +120,60 @@
       <label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-provider-search placeholder="Search providers…" aria-label="Search providers" autocomplete="off"></label>
       <div class="st-provider-grid">
       {% for key, title, endpoint, names in providers %}
-        <button type="button" class="st-provider-choice" data-provider-select="{{ key }}" data-provider-name="{{ title }}">{{ provider_logo(key) }}<span>{{ title }}</span></button>
+        <button type="button" class="st-provider-choice" data-provider-select="{{ 'local:new' if key == 'local' else key }}" data-provider-name="{{ title }}">{{ provider_logo(key) }}<span>{{ title }}</span></button>
       {% endfor %}
       </div>
       <p class="st-about" data-provider-no-results hidden>No providers found.</p>
     </div>
-    {% for key, title, endpoint, names in providers %}
+    {% for key, title, endpoint, names in cards %}
     {% set any_set = names | map(attribute=0) | select('in', held) | list %}
-    {% set ready = (names[0][0] in held) %}
+    {% set need = names[1 if key.startswith('local:') else 0][0] %}
+    {% set refused = need in held and by[need].problem %}
+    {% set ready = need in held and not refused %}
     <div class="st-card st-provider-card" data-provider-card="{{ key }}" data-configured="{{ 'true' if any_set else 'false' }}" data-ready="{{ 'true' if ready else 'false' }}">
       <div class="st-provider-summary">
         {{ provider_logo(key) }}
-        <div><h3>{{ title }}</h3><p class="st-about" data-provider-state>{{ ('Endpoint saved' if key == 'local' else 'Key saved') if ready else ('Endpoint required' if any_set else 'Not configured') }}</p></div>
+        {% set ns_env = namespace(held=false) %}{% for name, _ in names %}{% if by.get(name) and by[name].source == 'environment' %}{% set ns_env.held = true %}{% endif %}{% endfor %}
+        {% set removable = writable and any_set %}
+        {#- Test asks the saved settings at no cost (providers.test); TypeSafe has no such request -#}
+        {% set choice = key.replace('local', 'custom', 1) %}{% set last = tested.get(choice) %}
+        {% set testable = writable and key != 'typesafe' %}
+        <div><h3>{{ title }}</h3><p class="st-about" data-provider-state>{{ ('Endpoint saved' if key.startswith('local') else 'Key saved') if ready else 'Fix the endpoint URL' if refused else ('Endpoint required' if any_set else 'Not configured') }}</p>
+          {% if testable or last %}<p class="st-about st-provider-test" data-provider-test-state{% if last %} data-state="{{ last.mark }}"{% endif %} aria-live="polite">{{ last.said if last }}</p>{% endif %}
+          {% if removable and ns_env.held %}<p class="st-note" id="remove-note-{{ loop.index }}">Set in the process environment: remove it there.</p>{% endif %}</div>
+        {% if testable %}<button type="button" class="btn sm ghost" data-provider-test="{{ choice }}" aria-label="Test {{ title }}" hidden><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Test</button>{% endif %}
         <button type="button" class="btn sm ghost" data-provider-edit="{{ key }}" hidden>{{ 'Edit' if writable else 'View' }}</button>
+        {#- removing asks first, in place, as a benchmark's Delete does -#}
+        {% if removable %}<button type="button" class="btn sm ghost danger" data-provider-remove-ask aria-label="Remove {{ title }}" aria-expanded="false" aria-controls="remove-ask-{{ loop.index }}"{% if ns_env.held %} disabled aria-describedby="remove-note-{{ loop.index }}"{% endif %}>Remove</button>{% endif %}
       </div>
+      {% if removable and not ns_env.held %}
+      <div class="bench-delete-ask st-provider-ask" id="remove-ask-{{ loop.index }}" role="group" aria-label="Remove {{ title }}" hidden>
+        <span>Remove <b>{{ title }}</b> and {{ 'its URL and key' if key.startswith('local') else 'its key' }}?</span>
+        <button type="button" class="btn danger" data-provider-remove-yes="{{ key }}">Yes, remove</button>
+        <button type="button" class="btn ghost" data-provider-remove-keep>Keep it</button>
+      </div>
+      {% endif %}
       <div class="st-provider-fields">
         {% if endpoint %}<div class="st-row"><span class="st-row-label">Endpoint</span><span class="st-row-value mono">{{ endpoint }}</span></div>{% endif %}
-        {% for name, label in names %}{% if by.get(name) %}{{ field(by[name], label, writable) }}{% endif %}{% endfor %}
+        {% for name, label in names %}{% if by.get(name) %}{{ field(by[name], label, writable, mode='plain' if label in ('Name', 'Endpoint') else 'optional-key' if key.startswith('local') else 'key') }}{% endif %}{% endfor %}
       </div>
       <button type="button" class="btn ghost st-provider-done" data-provider-done hidden>Done</button>
     </div>
     {% endfor %}
+    {% if writable %}<input type="hidden" name="remove_provider" value="">{% endif %}
+    {% if writable %}
+    <div class="st-card st-provider-card" data-provider-card="local:new" data-configured="false" data-ready="false">
+      <div class="st-provider-summary">{{ provider_logo('local') }}<div><h3>OpenAI-compatible</h3></div>
+        <button type="button" class="btn sm ghost" data-provider-edit="local:new" hidden>Edit</button></div>
+      <div class="st-provider-fields" id="endpoint-new">
+        {% for part, label, kind in [('name', 'Name', 'text'), ('url', 'Endpoint', 'text'), ('key', 'Key', 'password')] %}
+        <div class="st-row"><label class="st-row-label" for="endpoint-{{ part }}">{{ label }}</label>
+          <div class="st-row-value"><input class="st-input" id="endpoint-{{ part }}" name="endpoint_{{ part }}" type="{{ kind }}" spellcheck="false" autocomplete="off"{% if part == 'key' %} placeholder="(optional)" data-1p-ignore data-lpignore="true"{% endif %}></div></div>
+        {% endfor %}
+      </div>
+      <button type="button" class="btn ghost st-provider-done" data-provider-done hidden>Done</button>
+    </div>
+    {% endif %}
   </section>
 
   <section class="st-section" id="judge" aria-labelledby="judge-h">
@@ -211,7 +254,7 @@
     {% endfor %}{% endfor %}
   </div>{% endif %}
   {% include 'settings/data_providers.html' %}
-  {# docker on this machine, outside the form: asked when the section opens (sandbox.js) #}
+  {# the container backend's engine on this machine, outside the form: asked when the section opens (sandbox.js) #}
   <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}">
     <div class="st-section-head"><h2 id="sandbox-h">Sandbox</h2><p>Where agents run, apart from this machine.</p></div>
     <div class="st-card">

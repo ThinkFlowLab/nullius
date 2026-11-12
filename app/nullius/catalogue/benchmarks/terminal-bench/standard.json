@@ -31,6 +31,12 @@
       "label": "Every task whose reference solution downloads nothing",
       "units": 53,
       "environment": "task"
+    },
+    {
+      "id": "full",
+      "label": "All 89 tasks",
+      "units": 89,
+      "environment": "task"
     }
   ],
   "units": {

@@ -51,6 +51,7 @@
 .st-input:focus { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .st-input[hidden] { display: none; }
 .st-note { margin: 0; font-size: 12px; color: var(--text-dim); }
+.st-note.st-bad { color: var(--bad); }
 
 /* Custom keys: compact summaries; credentials and help appear only while editing. */
 .st-key-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -232,9 +233,21 @@
 /* A catalogue selects a connection; configured providers stay compact. */
 .st-provider-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .st-provider-heading h2 { min-width: 0; }
-.st-provider-add { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; font-size: 13px; }
+#providers .st-provider-add, #providers [data-provider-test-all], #providers [data-provider-test] { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; font-size: 13px; }
 .st-provider-add span { font-size: 18px; font-weight: 400; line-height: 1; }
 .st-provider-back { align-self: flex-start; }
+.st-provider-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+#providers [data-provider-test-all] .ic, #providers [data-provider-test] .ic { width: 15px; height: 15px; }
+.st-provider-test:empty { display: none; }
+/* a phone: the actions take their own row under the name */
+@media (max-width: 560px) { #providers .st-provider-summary { flex-wrap: wrap; justify-content: flex-end; } #providers .st-provider-summary > div { flex-basis: calc(100% - 34px); } }
+.st-provider-test[data-state="ok"] { color: var(--ok); }
+.st-provider-test[data-state="warn"] { color: var(--warn, #b8860b); }
+.st-provider-test[data-state="bad"] { color: var(--bad); }
+/* a test running: the last result pulses; without motion it is dimmed and italic */
+.st-provider-test.busy { display: block; min-height: 1.5em; animation: st-test-pulse 1.4s ease-in-out infinite; }
+@keyframes st-test-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .st-provider-test.busy { animation: none; opacity: .55; font-style: italic; } }
 .st-provider-catalogue, .st-provider-fields { display: flex; flex-direction: column; gap: 18px; }
 .st-provider-catalogue h3, .st-provider-summary h3 { margin: 0; font: 500 15px/1.5 var(--sans); color: var(--text); text-transform: none; letter-spacing: normal; }
 .st-provider-catalogue .st-search { margin: 0; }
@@ -247,6 +260,7 @@
 .st-provider-summary h3 { overflow-wrap: anywhere; }
 .st-provider-summary .st-about { margin-top: 3px; }
 .st-provider-done { align-self: flex-end; }
+.st-provider-ask { position: static; width: 420px; max-width: 100%; box-sizing: border-box; margin: 12px 0 0 auto; }
 .st-judge-single { margin-bottom: 0; }
 .st-judge-single .st-judge { border: 0; padding: 0; background: transparent; }
 .st-judge-single input { display: none; }

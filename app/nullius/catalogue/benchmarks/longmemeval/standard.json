@@ -281,6 +281,152 @@
           "con"
         ]
       }
+    },
+    "session_expansion": {
+      "label": "Session index expansion",
+      "summary": "Expand retrieval keys with the authors' cached summaries, keyphrases or user facts. No expansion by default.",
+      "values": [
+        "none",
+        "session-summ",
+        "session-keyphrase",
+        "session-userfact"
+      ],
+      "default": "none",
+      "setups": [
+        "original",
+        "model"
+      ],
+      "when": {
+        "retriever": [
+          "flat-bm25-session",
+          "flat-contriever-session",
+          "flat-stella-session"
+        ]
+      },
+      "needs": {
+        "session-summ": {
+          "files": [
+            "index_expansions"
+          ]
+        },
+        "session-keyphrase": {
+          "files": [
+            "index_expansions"
+          ]
+        },
+        "session-userfact": {
+          "files": [
+            "index_expansions"
+          ]
+        }
+      }
+    },
+    "turn_expansion": {
+      "label": "Turn index expansion",
+      "summary": "Expand retrieval keys with the authors' cached summaries, keyphrases or user facts. No expansion by default.",
+      "values": [
+        "none",
+        "turn-keyphrase",
+        "turn-userfact"
+      ],
+      "default": "none",
+      "setups": [
+        "original",
+        "model"
+      ],
+      "when": {
+        "retriever": [
+          "flat-bm25-turn",
+          "flat-contriever-turn",
+          "flat-stella-turn"
+        ]
+      },
+      "needs": {
+        "turn-keyphrase": {
+          "files": [
+            "index_expansions"
+          ]
+        },
+        "turn-userfact": {
+          "files": [
+            "index_expansions"
+          ]
+        }
+      }
+    },
+    "expansion_join": {
+      "label": "Join index expansion",
+      "summary": "How cached expansions join retrieval keys when expansion is enabled: separate keys, merged text or replacement text. Split modes separate sentences or phrases first.",
+      "values": [
+        "separate",
+        "split-separate",
+        "merge",
+        "split-merge",
+        "replace",
+        "split-replace"
+      ],
+      "default": "separate",
+      "setups": [
+        "original",
+        "model"
+      ],
+      "when": {
+        "retriever": [
+          "flat-bm25-session",
+          "flat-bm25-turn",
+          "flat-contriever-session",
+          "flat-contriever-turn",
+          "flat-stella-session",
+          "flat-stella-turn"
+        ]
+      },
+      "needs": {
+        "split-separate": {
+          "files": [
+            "punkt_tab"
+          ],
+          "when": {
+            "session_expansion": [
+              "session-summ"
+            ],
+            "retriever": [
+              "flat-bm25-session",
+              "flat-contriever-session",
+              "flat-stella-session"
+            ]
+          }
+        },
+        "split-merge": {
+          "files": [
+            "punkt_tab"
+          ],
+          "when": {
+            "session_expansion": [
+              "session-summ"
+            ],
+            "retriever": [
+              "flat-bm25-session",
+              "flat-contriever-session",
+              "flat-stella-session"
+            ]
+          }
+        },
+        "split-replace": {
+          "files": [
+            "punkt_tab"
+          ],
+          "when": {
+            "session_expansion": [
+              "session-summ"
+            ],
+            "retriever": [
+              "flat-bm25-session",
+              "flat-contriever-session",
+              "flat-stella-session"
+            ]
+          }
+        }
+      }
     }
   },
   "host": {
@@ -572,6 +718,16 @@
         "judge": "gpt-4o-2024-08-06",
         "on": "2026-11-03"
       }
+    }
+  },
+  "files": {
+    "index_expansions": {
+      "url": "https://drive.usercontent.google.com/download?id=1Y6vImnr_WQZXv4bKzpqPdHMbyoat8b_P&export=download&confirm=t",
+      "sha256": "2c87f279962968e86ff5a1b64be8c83c2c21077e0cf5fc76fb9c84db1d8ce7c1"
+    },
+    "punkt_tab": {
+      "url": "https://raw.githubusercontent.com/nltk/nltk_data/550b6625bcef1f2abff2ff770a5a0d272c9c6b2a/packages/tokenizers/punkt_tab.zip",
+      "sha256": "e57f64187974277726a3417ca6f181ec5403676c717672eef6a748a7b20e0106"
     }
   }
 }

@@ -18,6 +18,7 @@ import shutil
 import subprocess
 from typing import Callable, Iterable, Optional
 
+from nullius import providers
 from nullius.standard import container
 
 CONTROLS = ("nop", "oracle")
@@ -64,7 +65,7 @@ SECTIONS = [
 
 
 def docker_answers(timeout: float = 5.0) -> bool:
-    """Whether the docker backend's engine (``container.DOCKER``: docker, or
+    """Whether the container backend's engine (``container.DOCKER``: docker, or
     podman) can run a container here: the command *and* ``<engine> ps``
     answering. The command alone is not enough - Docker Desktop's WSL
     integration leaves ``/usr/bin/docker`` in place while its engine is quit."""
@@ -84,7 +85,7 @@ def facts(env, jobs: Iterable[dict] = (), judged: bool = False, docker: Optional
     agents = [(j.get("agent") or "").lower() for j in jobs]
     found = (docker or docker_answers)()
     return {
-        "provider": any((env.get(k) or "").strip() for k in PROVIDER_KEYS),
+        "provider": any((env.get(k) or "").strip() for k in PROVIDER_KEYS) or bool(providers.endpoints(env)),
         "where": bool((env.get("HOSTS") or "").strip()) or found,
         "judge": bool(client.system_one(env)) or bool(client.llm_judge(env)),
         "control_run": any(a in CONTROLS for a in agents),

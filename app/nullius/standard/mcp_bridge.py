@@ -3,7 +3,7 @@ its stdin and stdout to one TCP address, the unit's door to that server
 (``NULLIUS_MCP_AT``, ``host:port``), and passes the bytes both ways
 unchanged, reading none of them.
 
-Mounted alone into the agent's container on the docker backend and started
+Mounted alone into the agent's container on the container backend and started
 by the agent as any stdio MCP server (``mcp_machine``); it imports nothing
 of this application, only the standard library, so the container needs
 nothing but ``python3``.

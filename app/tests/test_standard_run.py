@@ -10,10 +10,11 @@ import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from datetime import datetime
 from unittest import mock
 
 from nullius.runs import classify, live, parse
-from nullius.standard import acp, container, definitions, install, ledger, relay, run
+from nullius.standard import acp, container, definitions, install, ledger, pace as pacing, relay, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 # A conversation whose user a model plays: it opens, speaks once more, then is done.
@@ -80,13 +81,16 @@ class Echo(BaseHTTPRequestHandler):
     """A model that says back the last message, and counts its tokens."""
     status = 200
     refused = None          # a model that gets the rate limit while every other is answered
+    limited = 0             # how many calls, from now, get the rate limit before the model answers again
 
     def log_message(self, *a):
         pass
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        if Echo.status != 200 or body.get("model") == Echo.refused:
+        limited = Echo.limited > 0
+        Echo.limited -= limited
+        if Echo.status != 200 or body.get("model") == Echo.refused or limited:
             out = json.dumps({"error": {"message": "Rate limit reached for requests"}}).encode()
             self.send_response(Echo.status if Echo.status != 200 else 429)
         else:
@@ -115,7 +119,9 @@ class RunTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self._home = install.HOME
         install.HOME = os.path.join(self.tmp, "home")
-        Echo.status, Echo.refused = 200, None
+        Echo.status, Echo.refused, Echo.limited = 200, None, 0
+        self.addCleanup(setattr, pacing, "FIRST", pacing.FIRST)
+        pacing.FIRST = 0.5                       # a rate-limited unit's pause, short enough for a test
 
     def tearDown(self):
         install.HOME = self._home
@@ -202,6 +208,22 @@ class RunTest(unittest.TestCase):
         self.assertEqual(by_unit["good"].exception_type, "FileNotFoundError")
         self.assertIn("agent-acp", by_unit["good"].exception_message)
         self.assertEqual(by_unit["wrong"].exception_type, "")
+
+    def test_internet_is_a_boolean_task_policy_only_in_an_own_image(self):
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        o = definitions.get("agent", "fake", ROOT)
+        for value, own in ((True, False), (False, False), ("true", True), (1, True), (None, True)):
+            with self.subTest(value=value, own=own), mock.patch.object(run.Run, "unit_environment", return_value=("task", {"image": "own"} if own else {})), \
+                    mock.patch.object(run.Run, "not_run", return_value=None), mock.patch.object(run.Run, "own_box") as box:
+                driver = mock.Mock()
+                driver.request.side_effect = lambda op, **kw: {"units": ["one"]} if op == "units" else {"internet": value}
+                with mock.patch.object(run.Run, "driver", return_value=driver):
+                    path = run.run(b, o, model="m", provider="custom", jobs_root=self.tmp, env=self.env,
+                                   say=lambda s: None, unsandboxed=True, name=f"internet-{own}-{value}")
+                trials, _ = self.outcomes(path)
+                self.assertEqual(trials["one"].exception_type, "EnvironmentSetupError")
+                self.assertIn("internet", trials["one"].exception_message)
+                box.assert_not_called()
 
     def test_a_unit_still_running_when_the_run_is_stopped_ends_cancelled(self):
         """Stop ends a unit's agent and relay under it, and it then failed
@@ -372,6 +394,7 @@ class RunTest(unittest.TestCase):
         """A cap's refusal of a driver's own call (an option's embeddings) is the unit's that driver served, never one beside it."""
         r = run.Run.__new__(run.Run)
         r.embed_model = "embed-1"
+        r.rerank_model = None
         r.bench_relay = relay.Relay("http://127.0.0.1:9/v1", "sk-real", os.path.join(self.tmp, "relay-benchmark")).start()
         self.addCleanup(r.bench_relay.stop)
         route = lambda: (r.embeddings_tag(), r.embeddings_env()["OPENAI_BASE_URL"])
@@ -469,7 +492,7 @@ class RunTest(unittest.TestCase):
                           concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True)
         (t,) = parse.parse_job(job_dir).trials
         self.assertEqual((t.exception_type, t.outcome, t.reward), ("RateLimitError", classify.RATE_LIMITED, None))
-        self.assertEqual([c["status"] for c in self.relay_calls(job_dir)], [429])
+        self.assertEqual([c["status"] for c in self.relay_calls(job_dir)], [429, 429])  # run once more after a rate limit
 
     def test_a_cap_refusal_in_a_passed_unit_is_still_the_caps(self):
         """The run's cap and the unit's own end a unit wherever their refusal falls, its last call included."""
@@ -558,9 +581,48 @@ class RunTest(unittest.TestCase):
             with self.subTest(agent_timeout=agent_timeout), mock.patch.object(acp.Client, "prompt", prompt):
                 got, _ = self.outcomes(self.go("fakebench", "fake", dataset="responding",
                                                name=f"rate-limit-{agent_timeout}"))
-                self.assertEqual(failed_prompts, ["model hi"])
+                self.assertEqual(failed_prompts, ["model hi", "model hi"])    # run once more, after the others
                 self.assertEqual(got["model"].outcome, classify.RATE_LIMITED)
                 self.assertEqual(got["good"].outcome, classify.RESOLVED)     # made no call: its verdict stands
+
+    def test_a_rate_limited_unit_holds_the_next_back_and_is_run_again_once(self):
+        Echo.limited = 1                         # the first call is refused, every later one answered
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
+        job_dir = run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                          concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True, dataset="responding")
+        got, j = self.outcomes(job_dir)
+        self.assertEqual(len(j.trials), 3)       # one trial per unit: the first attempt is not one of them
+        self.assertEqual(got["model"].outcome, classify.FAILED_VERIFICATION)   # its second attempt counts: a verdict, no error
+        (name,) = os.listdir(os.path.join(job_dir, "retried"))
+        self.assertTrue(name.startswith("model__"))
+        with open(os.path.join(job_dir, "retried", name, "result.json")) as f:
+            first = json.load(f)                 # the first attempt, kept whole beside the job's trials
+        self.assertEqual(first["exception_info"]["exception_type"], "RateLimitError")
+        with open(os.path.join(job_dir, name, "result.json")) as f:
+            second = json.load(f)
+        ended, began = (datetime.fromisoformat(x.replace("Z", "+00:00")) for x in (first["finished_at"], second["started_at"]))
+        self.assertGreaterEqual((began - ended).total_seconds(), 0.4)       # the pause, before it starts again
+        with open(os.path.join(job_dir, "progress.jsonl")) as f:
+            said = [json.loads(line) for line in f]
+        self.assertTrue(any("rate limited: no unit starts for 0.5 s" in (e.get("detail") or "") for e in said))
+
+    def test_a_stopped_run_runs_nothing_again(self):
+        Echo.status = 429
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
+        r = run.Run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                    concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True, dataset="responding")
+        real = r.unit
+
+        def unit(*a):
+            res = real(*a)
+            if res and res["trial_name"].startswith("model__"):
+                r._stopped.set()                 # a Stop as the rate-limited unit ends
+            return res
+        r.unit = unit
+        job_dir = r.start()
+        self.assertFalse(os.path.exists(os.path.join(job_dir, "retried")))
+        got, _ = self.outcomes(job_dir)
+        self.assertEqual(got["model"].outcome, classify.RATE_LIMITED)
 
     def test_a_feature_run_drives_the_feature_through_its_port(self):
         job_dir = self.go("fakememo", "fakemem")
@@ -584,6 +646,37 @@ class RunTest(unittest.TestCase):
         a = definitions.get("agent", "fake", ROOT)
         with self.assertRaisesRegex(run.Refused, "not a sandbox"):
             run.Run(b, a, model="m", provider="custom", env={"MODEL_API_URL": "http://127.0.0.1:9/v1"})
+
+    def test_selected_auxiliary_files_are_downloaded_and_given_only_to_the_driver(self):
+        import hashlib
+        from unittest import mock
+        from nullius.standard import install
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        b["files"] = {"keys": {"url": "https://example.org/keys.json", "sha256": hashlib.sha256(b"{}").hexdigest()}}
+        b["options"] = {
+            "retrieve": {"summary": "retrieve", "values": ["off", "on"], "default": "off"},
+            "expand": {"summary": "expand", "values": ["off", "on"], "default": "on", "when": {"retrieve": ["on"]},
+                       "needs": {"on": {"files": ["keys"]}}}}
+        a = definitions.get("agent", "fake", ROOT)
+        for active in (False, True):
+            r = run.Run(b, a, model="m-1", provider="custom", env=self.env, unsandboxed=True,
+                        jobs_root=self.tmp, bench_options={"retrieve": "on" if active else "off"})
+            with mock.patch.object(install, "packages", return_value=""), \
+                    mock.patch.object(install, "download", return_value="/checked/keys.json") as downloaded:
+                r.ready()
+            self.assertEqual(downloaded.call_count, int(active))
+            self.assertEqual(r.file_env, {"NULLIUS_FILE_KEYS": "/checked/keys.json"} if active else {})
+            r.image = "check-image"
+            engine = {run.container.CHECK_ENGINE: '["podman"]'}
+            with mock.patch.object(run.jsonl, "Proc") as proc, mock.patch.object(run.container, "check_env", return_value=engine):
+                r.driver()
+                self.assertEqual(proc.call_args.args[2].get("NULLIUS_FILE_KEYS"), "/checked/keys.json" if active else None)
+                self.assertEqual(proc.call_args.args[2][run.container.CHECK_ENGINE], engine[run.container.CHECK_ENGINE])
+                self.assertEqual(proc.call_args.args[2][run.container.CHECK_IMAGE], "check-image")
+            if active:
+                with mock.patch.object(install, "download", side_effect=install.InstallFailed("sha256 differs")):
+                    with self.assertRaisesRegex(run.Refused, "sha256"):
+                        r.ready()
 
     def test_a_driver_that_ended_is_started_again_for_the_next_unit(self):
         """A request with no reply in its time closes the driver (a reader
@@ -723,17 +816,18 @@ class RunTest(unittest.TestCase):
         self.assertIn("simulator: {model",
                       " ".join(definitions.problems(dict(b, simulator={"model": "a user"}), "benchmark")))
 
-    def test_the_docker_backend_needs_no_yes_but_a_usable_docker(self):
+    def test_the_container_backend_needs_no_yes_but_a_usable_engine(self):
         from unittest import mock
         from nullius.standard import container
         b = definitions.get("benchmark", "fakebench", ROOT)
         a = definitions.get("agent", "fake", ROOT)
         env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}
         with mock.patch.object(container, "unusable", return_value="docker is not installed on this machine"):
-            with self.assertRaisesRegex(run.Refused, "docker backend cannot run here: docker is not installed"):
-                run.Run(b, a, model="m", provider="custom", env=env, backend="docker")
+            with self.assertRaisesRegex(run.Refused, "container backend cannot run here: docker is not installed"):
+                run.Run(b, a, model="m", provider="custom", env=env, backend="container")
         with mock.patch.object(container, "unusable", return_value=None):
-            self.assertEqual(run.Run(b, a, model="m", provider="custom", env=env, backend="docker").backend, "docker")
+            self.assertEqual(run.Run(b, a, model="m", provider="custom", env=env, backend="container").backend, "container")
+            self.assertEqual(run.Run(b, a, model="m", provider="custom", env=env, backend="docker").backend, "container")
         with self.assertRaisesRegex(run.Refused, "backend 'vm'"):
             run.Run(b, a, model="m", provider="custom", env=env, unsandboxed=True, backend="vm")
 
@@ -799,13 +893,13 @@ class RunTest(unittest.TestCase):
         with mock.patch.object(container, "unusable", return_value=None), \
                 mock.patch.object(container, "present", return_value=True), \
                 mock.patch.object(container, "base_image", return_value="nullius/base:x"):
-            for backend, unsandboxed in (("docker", False), ("local", True)):
+            for backend, unsandboxed in (("container", False), ("local", True)):
                 r = run.Run(b, a, model="m", provider="custom", env=env, backend=backend, unsandboxed=unsandboxed,
                             jobs_root=os.path.join(self.tmp, "jobs"), say=lambda s: None)
                 with self.subTest(backend=backend), mock.patch.object(install, "packages", return_value=self.tmp) as pk:
                     r.ready()
                     kw = pk.call_args.kwargs
-                    if backend == "docker":     # the Linux base image's tools and libc, never this machine's
+                    if backend == "container":     # the Linux base image's tools and libc, never this machine's
                         self.assertEqual(kw["image"], "nullius/base:x")
                         self.assertEqual(kw["run_in"](["uv", "venv"], "/w")[-3:], ["nullius/base:x", "uv", "venv"])
                     else:
@@ -822,7 +916,7 @@ class RunTest(unittest.TestCase):
                 mock.patch.object(container, "base_image", return_value="img"), \
                 mock.patch.object(container.Loopback, "start", side_effect=OSError("cannot bind")):
             with self.assertRaisesRegex(OSError, "cannot bind"):
-                run.run(b, a, model="m", provider="custom", env=env, backend="docker", jobs_root=os.path.join(self.tmp, "jobs"),
+                run.run(b, a, model="m", provider="custom", env=env, backend="container", jobs_root=os.path.join(self.tmp, "jobs"),
                         say=lambda s: None, limit=1)
         (job,) = os.listdir(os.path.join(self.tmp, "jobs"))
         self.assertTrue(os.path.exists(os.path.join(self.tmp, "jobs", job, "result.json")))

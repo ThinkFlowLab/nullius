@@ -6,7 +6,7 @@ import os
 import re
 import time
 from flask import abort, jsonify, request, url_for
-from nullius import execution, hosts, prerequisites, prices, providers
+from nullius import execution, hosts, prerequisites, prices, providers, settings
 from nullius.harbor import source as harbor_source
 from nullius.standard import recipe as standard_recipe
 
@@ -43,7 +43,7 @@ def run_start():
         return jsonify(ok=False, error=providers.GONE), 400
     # A Harbor recipe runs its pin (nullius/harbor/source.py), or harbor on the target's PATH when unpinned.
     # One with a model to call needs its provider's key here (controls alone call none).
-    missing = provider_problem(recipe.get("provider") or "openrouter") if body.get("model") else ""
+    missing = provider_problem(recipe.get("provider") or "openrouter", recipe.get("endpoint")) if body.get("model") else ""
     if missing:
         return jsonify(ok=False, error=missing), 400
     pin, problem = harbor_source.pin_of(recipe.get("harbor"))
@@ -53,7 +53,7 @@ def run_start():
     tasks = str(body.get("tasks") or "")
     tasks = os.path.abspath(os.path.expanduser(tasks)) if tasks else ""
     plan = execution.Plan(name=str(body.get("name") or ""), script=str(body.get("script") or ""), host=host, tasks=tasks, harbor_pin=pin or {},
-                          **credentials_for(recipe.get("provider") or "openrouter"),     # none named: OpenRouter, as the builder reads it
+                          **credentials_for(recipe.get("provider") or "openrouter", recipe.get("endpoint")),     # none named: OpenRouter, as the builder reads it
                           model=str(body.get("model") or ""), jobs=[j for j in (body.get("jobs") or []) if isinstance(j, dict)],
                           parts=[{"id": re.sub(r"[^A-Za-z0-9_.-]", "_", str(p.get("id") or "")), "label": str(p.get("label") or ""), "script": str(p.get("script") or "")}
                                  for p in (body.get("parts") or []) if isinstance(p, dict)],
@@ -61,34 +61,40 @@ def run_start():
     return _start(plan)
 
 
-def credentials_for(provider) -> dict:
+def credentials_for(provider, endpoint=None) -> dict:
     """Where a run's key and endpoint come from, as ``Plan`` fields: a recipe
     on OpenAI is sent to OpenAI's own endpoint, fixed, with OPENAI_API_KEY;
     one on OpenRouter to OpenRouter's own, fixed, with OPENROUTER_API_KEY;
-    one on a local or self-hosted endpoint - or a provider this does not
-    know - with the model key and MODEL_API_URL, which such a run cannot go
+    one on an OpenAI-compatible endpoint - or a provider this does not
+    know - with that endpoint's URL and key (``endpoint``, its id: none,
+    MODEL_API_URL and MODEL_API_KEY), which such a run cannot go
     without. Every run is given its endpoint: a Harbor part's script requires
     API_URL, and an OpenAI run left without one exited before Harbor began."""
     if provider == "openai":
         return {"key_var": providers.PROVIDER_KEY["openai"], "url_var": "", "base_url": providers.PROVIDER_BASE["openai"]}
     if provider == "openrouter":
         return {"key_var": providers.PROVIDER_KEY["openrouter"], "url_var": "", "base_url": providers.PROVIDER_BASE["openrouter"]}
-    return {"key_var": providers.PROVIDER_KEY["custom"], "url_var": "MODEL_API_URL", "base_url": ""}
+    url_var, key_var = providers.endpoint_vars(str(endpoint or "") if provider == "custom" else "")
+    return {"key_var": key_var, "url_var": url_var, "base_url": ""}
 
 
-def provider_problem(provider) -> str:
-    """Why a run cannot start here on this provider - its key, or for a local
-    or self-hosted endpoint its URL, is not set in Settings - or "" when it
-    can. The builder says the same before Run (command-builder-core.js,
-    providerBlocker)."""
-    p = provider if provider in providers.PROVIDERS else "custom"         # as credentials_for reads one it does not know
+def provider_problem(provider, endpoint=None) -> str:
+    """Why a run cannot start here on this provider - its key, or for an
+    OpenAI-compatible endpoint its URL, is not set in Settings, or the
+    endpoint is gone - or "" when it can. The builder says the same before
+    Run (command-builder-core.js, providerBlocker)."""
+    if provider == "custom" and endpoint and not settings.ENDPOINT_ID.match(str(endpoint)):
+        return "The recipe's endpoint is not an endpoint id: choose an endpoint on the Model step."
+    p = providers.choice(provider, str(endpoint or "")) if provider in providers.PROVIDERS else "custom"   # as credentials_for reads one it does not know
     have = providers.available(os.environ)
     if p in have:
         return ""
-    why = f"{providers.PROVIDER_LABEL[p]} cannot run here: {providers.PROVIDER_NEEDS[p]} is not set in Settings."
+    why = (f"{providers.label(p)} cannot run here: its URL, {providers.needs(p)}, holds a credential or is not an http(s) URL; "
+           "put the key in the Key field in Settings." if p in providers.broken(os.environ)
+           else f"{providers.label(p)} cannot run here: {providers.needs(p)} is not set in Settings.")
     if not have:
         return why + " Set a model key there to run the recipe."
-    return why + " Choose " + " or ".join(providers.PROVIDER_LABEL[x] for x in have) + " on the Model step, or set it in Settings."
+    return why + " Choose " + " or ".join(providers.label(x) for x in have) + " on the Model step, or set it in Settings."
 
 
 def standard_plans(recipe: dict, out: dict, known) -> tuple:
@@ -104,7 +110,7 @@ def standard_plans(recipe: dict, out: dict, known) -> tuple:
             if host.entry not in known:
                 return [], f"{sh['where']} is not one of the hosts in Settings"
         plans.append(execution.Plan(name=sh["name"], script=sh["script"], host=host, runner=standard_recipe.HARNESS,
-                                    **credentials_for(recipe.get("provider")), model=out["model"], jobs=sh["jobs"],
+                                    **credentials_for(recipe.get("provider"), recipe.get("endpoint")), model=out["model"], jobs=sh["jobs"],
                                     parts=sh["parts"], recipe=recipe, docker=bool(out.get("docker")), keyless=bool(out.get("keyless")),
                                     licences=dict(out.get("licences") or {}) if host else {}))
     return plans, ""
@@ -120,7 +126,7 @@ def _start_standard(recipe: dict):
     if out["errors"]:
         return jsonify(ok=False, error=" ".join(e["message"] for e in out["errors"])), 400
     # a run of controls calls no model: it is handed no key, so none need be set
-    missing = "" if out.get("keyless") else provider_problem(recipe.get("provider"))
+    missing = "" if out.get("keyless") else provider_problem(recipe.get("provider"), recipe.get("endpoint"))
     if missing:
         return jsonify(ok=False, error=missing), 400
     plans, problem = standard_plans(recipe, out, {h.entry for h in _hosts()})

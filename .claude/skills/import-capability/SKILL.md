@@ -182,7 +182,7 @@ See `docs/standard.md`, "Native capabilities and composition".
 ## 3. Prove
 
 1. `cli conform KEY --model <cheap model>` - its port's kit (a capability needs
-   no `--unsandboxed`; `--backend docker` runs it in a container).
+   no `--unsandboxed`; `--backend container` runs it in a container).
 2. When it calls a model: the kit trial's `agent/calls.jsonl` is not empty.
    Empty means it went around the relay: point its own config at the relay,
    never patch the library.

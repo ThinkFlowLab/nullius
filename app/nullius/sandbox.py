@@ -1,5 +1,6 @@
-"""The docker backend's engine in Settings → Sandbox, and its Docker Hub
-login under Data providers.
+"""The Settings page's Sandbox: the container backend's engine on this machine,
+docker or podman (``container.DOCKER``), and its Docker Hub login under Data
+providers.
 
 Two things, each something a user acts on:
 
@@ -19,7 +20,7 @@ import json
 import os
 import re
 import subprocess
-from typing import Optional
+from typing import List, Optional
 
 from nullius.standard import container
 

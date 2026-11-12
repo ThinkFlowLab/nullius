@@ -406,7 +406,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
                 image: str = "", setup_end: Optional[float] = None, checking: tuple = (None, None)) -> dict:
     """Write one unit's trial and return its result. ``environment``: the
     benchmark's environment the unit asked for (none: the base image), and
-    ``image``, the one it ran in on the docker backend - names only.
+    ``image``, the one it ran in on the container backend - names only.
     ``setup_end``: when the unit's environment was ready and the agent began
     (its setup, relay and container from ``t0``); ``checking``: the check's
     start and end (its own step in the container, then the driver's score)."""

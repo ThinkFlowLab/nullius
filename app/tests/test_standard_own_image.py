@@ -99,6 +99,7 @@ class Setup(unittest.TestCase):
         r.inst = ""
         b = container.Box("job", "unit", "image", workdir="/testbed", path="/image/bin",
                           env={"PATH": "/task/bin", "CONDA_DEFAULT_ENV": "testbed", "HOME": "/task/home"})
+        b.agent_proxy = {"HTTPS_PROXY": "http://egress:3128", "NO_PROXY": "localhost,relay"}
         rl = type("Relay", (), {"unit_secrets": {"LICENCE": "run-licence"}})()
         argv, env = r.place(rl, ["sh", "-c", "python -V"],
                             {"PATH": "/host/bin", "HOME": "/run/home", "OPENAI_BASE_URL": "http://relay/v1"},
@@ -108,6 +109,8 @@ class Setup(unittest.TestCase):
         self.assertEqual(env["HOME"], "/run/home")
         self.assertEqual(env["OPENAI_BASE_URL"], "http://relay/v1")
         self.assertEqual(env["LICENCE"], "run-licence")
+        self.assertEqual(env["HTTPS_PROXY"], "http://egress:3128")
+        self.assertEqual(env["NO_PROXY"], "localhost,relay")
         self.assertNotIn("testbed", argv)  # values travel in the process environment, not arguments
 
     def test_a_driver_names_the_tasks_files_and_nothing_else(self):
@@ -220,7 +223,7 @@ class LocalRun(unittest.TestCase):
                 with open(p) as f:
                     r = json.load(f)
                 got[r["standard"]["unit"]] = r["exception_info"]
-        self.assertIn("needs the docker backend", got["one"]["exception_message"])
+        self.assertIn("needs the container backend", got["one"]["exception_message"])
         self.assertIn("verify runs in an own image", got["base"]["exception_message"])
         self.assertEqual(classify.from_verdict(got["base"]["exception_type"], None), classify.SETUP_ERROR)
 
@@ -257,7 +260,7 @@ class DockerRun(unittest.TestCase):
             container._fetched.discard(tag)
 
     def test_the_agent_works_in_the_tasks_container_and_is_checked_there(self):
-        where, r = self.trial(worker(), "docker")
+        where, r = self.trial(worker(), "container")
         self.assertEqual(r["verifier_result"]["rewards"]["reward"], 1.0, r.get("exception_info"))
         self.assertRegex(r["standard"]["image"], r"^nullius/own-ownbench-tasks-one-environment:[0-9a-f]{12}$")
         with open(os.path.join(where, "verifier", "test-stdout.txt")) as f:

@@ -81,9 +81,11 @@ class InstallEnv(unittest.TestCase):
     def test_a_downloaded_dataset_is_kept_only_when_its_digest_matches(self):
         import hashlib, http.server
         body = b"[1, 2]"
+        requests = []
         class One(http.server.BaseHTTPRequestHandler):
             def log_message(self, *a): pass
             def do_GET(self):
+                requests.append(self.path)
                 self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), One)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -92,6 +94,8 @@ class InstallEnv(unittest.TestCase):
         url = f"http://127.0.0.1:{srv.server_address[1]}/d.json"
         got = install.download(url, hashlib.sha256(body).hexdigest(), home)
         self.assertEqual(open(got, "rb").read(), body)
+        self.assertEqual(install.download(url, hashlib.sha256(body).hexdigest(), home), got)
+        self.assertEqual(requests, ["/d.json"])
         with self.assertRaises(install.InstallFailed):
             install.download(url, "0" * 64, home)
         self.assertFalse(os.path.exists(os.path.join(home, "datasets", "0" * 64, "d.json")))
@@ -172,7 +176,7 @@ class PruneTest(unittest.TestCase):
 
 
 class InBaseImageTest(unittest.TestCase):
-    """On the docker backend every npm, uv and Python step runs in the base
+    """On the container backend every npm, uv and Python step runs in the base
     image (``run_in``), git on this machine; a host is asked for neither Node
     nor uv. Without that, a machine with no npm is refused with a sentence,
     not a traceback."""
@@ -186,7 +190,7 @@ class InBaseImageTest(unittest.TestCase):
 
     def test_no_npm_and_no_container_is_refused_said(self):
         with mock.patch.object(install.shutil, "which", return_value=None):
-            with self.assertRaisesRegex(install.InstallFailed, "npm is not on this machine.*docker backend"):
+            with self.assertRaisesRegex(install.InstallFailed, "npm is not on this machine.*container backend"):
                 install.packages(self.agent, self.home)
 
     def test_every_step_but_git_runs_where_run_in_says_and_leaves_no_scratch(self):

@@ -23,7 +23,7 @@ also supports `--only KEY` for a focused benchmark check.
 - **One step, one question; a setting sits with what it changes.** Dataset:
   which tasks. Agent (Memory): who runs it - the benchmark's own setups, the
   agents or capabilities that fit, the checks - and their settings. Where:
-  machines, local or docker, the yes to running unsandboxed.
+  machines, local or container, the yes to running unsandboxed.
 - **Fair by construction**: a setting one agent offers, every agent whose
   upstream has it offers too. Examples are never offered as choices.
 - No em dashes, no invented numbers, no proof dates or models on a page, no

@@ -30,6 +30,8 @@ import os
 import socket
 import sys
 
+from search_relay import route_qwen
+
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")     # no download at import: the server calls no model
 
 with contextlib.redirect_stdout(sys.stderr):                        # stdout carries the protocol, nothing else
@@ -88,6 +90,7 @@ def main():
     domain, at = os.environ["TAU_DOMAIN"], os.environ["TAU_AT"]
     # a knowledge domain's tools follow its retrieval config (the run's retrieval option): the same search the driver's environment has
     retrieval = os.environ.get("TAU_RETRIEVAL")
+    route_qwen(retrieval)
     declared = tools_of(registry.get_env_constructor(domain)(**({"retrieval_variant": retrieval} if retrieval else {})))
     server = Server(domain)
 

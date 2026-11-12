@@ -6,7 +6,7 @@ Launch Nullius, open results and inspect a trial, with no model key.
 | --- | --- |
 | Python 3.12 or later, and [uv](https://docs.astral.sh/uv/) | Running the application |
 | A model provider key | Running a benchmark |
-| Docker or Podman, answering `docker ps` or `podman ps` | The standard's docker backend |
+| Docker or Podman, answering `docker ps` or `podman ps` | The standard's container backend |
 | Docker, answering `docker ps` | Harbor recipes |
 
 ## Install and launch

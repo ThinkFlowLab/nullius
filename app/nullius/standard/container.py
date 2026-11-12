@@ -1566,9 +1566,10 @@ class Box:
     ``egress`` (``egress.py``) and reaches public addresses only - never
     link-local (cloud metadata), private ranges, the shared range some clouds
     keep their metadata in, nor the machine itself through the docker
-    bridge - and the check alone is told of it (``HTTP_PROXY``,
-    ``HTTPS_PROXY``). It needs no root on the machine, so every host runs the
-    check the same way; ``egress.py`` says why that beat firewall rules.
+    bridge. A benchmark may also grant it for the agent's work with
+    ``internet: true``; it is removed before the check. Each phase is told
+    of its proxy through ``HTTP_PROXY`` and ``HTTPS_PROXY``. It needs no root
+    on the machine, so every host runs the check the same way; ``egress.py`` says why that beat firewall rules.
 
     **The agent's mounts stay for the check.** A running container's mounts
     cannot be changed, and taking its home away would mean a second container
@@ -1710,17 +1711,35 @@ class Box:
         ``egress``. The box itself stays on its internal network. The
         variables the check is run with, which name the proxy - and leave
         the box's own services (``localhost``) to be reached directly."""
-        image = base_image()
-        name = self.name + "-egress"
-        self.egress = name
-        make_bridge()
-        _docker(egress_argv(image, name=name, job=self.job)[1:])
-        _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.net, name])
-        wait_listening(name, "the check's proxy")
+        if self.egress is None:
+            image = base_image()
+            name = self.name + "-egress"
+            self.egress = name
+            make_bridge()
+            _docker(egress_argv(image, name=name, job=self.job)[1:])
+            _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.net, name])
+            wait_listening(name, "the task's proxy")
         proxy = f"http://{EGRESS_ALIAS}:{EGRESS_PORT}"
         local = "localhost,127.0.0.1,::1"
         return {"HTTP_PROXY": proxy, "HTTPS_PROXY": proxy, "http_proxy": proxy, "https_proxy": proxy,
                 "NO_PROXY": local, "no_proxy": local}
+
+    def offline(self):
+        """The way out :meth:`online` gave taken away again: its proxy
+        container removed, then shown gone - no container of that name, and
+        none answering to ``egress`` on the box's network. Unavailable when
+        either is still there: the agent is never started beside it."""
+        name = self.egress
+        if not name:
+            return
+        _docker(["rm", "-f", name], check=False, timeout=60)
+        left = _docker(["ps", "-aq", "--filter", f"name=^/{name}$"], check=False, timeout=30)
+        if left.returncode != 0 or left.stdout.strip():
+            raise Unavailable(f"the way out ({name}) could not be removed")
+        on = _docker(["network", "inspect", "-f", "{{range .Containers}}{{.Name}} {{end}}", self.net], check=False, timeout=30)
+        if on.returncode != 0 or name in on.stdout.split():
+            raise Unavailable(f"the way out ({name}) is still on the unit's network")
+        self.egress = None
 
     def egress_said(self) -> str:
         """What the check's proxy let through and refused, a JSON line each."""

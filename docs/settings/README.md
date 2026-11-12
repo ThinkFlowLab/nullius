@@ -20,7 +20,8 @@ changes save automatically; data providers and benchmark credentials use **Save*
 
 | Variable | Used by |
 | --- | --- |
-| `MODEL_API_KEY`, `MODEL_API_URL` | A local or self-hosted endpoint; the URL required, the key optional |
+| `MODEL_API_KEY`, `MODEL_API_URL` | The OpenAI-compatible endpoint recipes use when they name none; the URL required, the key optional |
+| `MODEL_<ID>_NAME`, `MODEL_<ID>_API_URL`, `MODEL_<ID>_API_KEY` | Each further [OpenAI-compatible endpoint](model-providers.md#openai-compatible-endpoints) |
 | `OPENAI_API_KEY` | Runs on OpenAI |
 | `OPENROUTER_API_KEY` | Runs on OpenRouter |
 | `ANTHROPIC_API_KEY` | Standard runs on Anthropic; the relay alone holds it |
@@ -80,6 +81,7 @@ directory and installation:
 | User catalogue | `~/.local/share/nullius/catalogue/` |
 | Workspaces | `~/.local/share/nullius/workspaces/` |
 | Runs started from Review | `~/.local/share/nullius/runs/` |
+| Provider test results | `~/.local/share/nullius/provider-tests.json` |
 | Standard installs and data | `~/.local/share/nullius/standard/` |
 | Caches | `~/.cache/nullius/` |
 

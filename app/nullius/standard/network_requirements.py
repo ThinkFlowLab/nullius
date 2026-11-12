@@ -30,8 +30,8 @@ def required(bench, other):
 
 
 def check(bench, other, backend, opener=urlopen):
-    # Docker probes run inside the unit network, through its public proxy.
-    if backend == "docker":
+    # Container probes run inside the unit network, through its public proxy.
+    if backend in ("container", "docker"):
         return []
     for url in required(bench, other):
         try:

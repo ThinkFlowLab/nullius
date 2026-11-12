@@ -93,6 +93,28 @@ class Here(Base):
         self.assertEqual({k: v for k, v in env.items() if v.startswith("sk-held-")}, {n: held["OPENROUTER_API_KEY"] for n in execution.KEY_NAMES})
         self.assertEqual({n: env.get(n) for n in execution.URL_NAMES}, {n: providers.PROVIDER_BASE["openrouter"] for n in execution.URL_NAMES})
 
+    def test_a_run_on_a_named_endpoint_gets_its_url_and_key_alone(self):
+        """Several OpenAI-compatible endpoints in Settings: a run on one is sent
+        that one's URL and key, never the default's or another endpoint's; a run
+        on one that is gone fails before it starts, and is never sent to another."""
+        held = {"MODEL_API_URL": "http://default/v1", "MODEL_API_KEY": "sk-held-default",
+                "MODEL_GPU_NAME": "GPU box", "MODEL_GPU_API_URL": "http://gpu/v1", "MODEL_GPU_API_KEY": "sk-held-gpu",
+                "MODEL_LAPTOP_API_URL": "http://laptop/v1", "MODEL_LAPTOP_API_KEY": "sk-held-laptop"}
+        url_var, key_var = providers.endpoint_vars("GPU")
+        with mock.patch.dict(os.environ, held):
+            self.assertLessEqual(set(held), set(execution.withheld()))
+            ex = self.wait(execution.Execution(execution.Plan(name="gpu", script="env", model="m", key_var=key_var, url_var=url_var),
+                                               root=str(self.tmp)).start())
+            url_var, key_var = providers.endpoint_vars("GONE")
+            gone = self.wait(execution.Execution(execution.Plan(name="gone", script='"$NULLIUS_HARBOR" run', model="m", key_var=key_var, url_var=url_var),
+                                                 root=str(self.tmp)).start())
+        self.assertEqual((ex.state, ex.error), ("done", None), ex.lines)
+        env = dict(l.split("=", 1) for l in (self.tmp / "gpu" / "run-run.log").read_text().splitlines() if "=" in l)
+        self.assertEqual({k: v for k, v in env.items() if v.startswith("sk-held-")}, {n: "sk-held-gpu" for n in execution.KEY_NAMES})
+        self.assertEqual({k: v for k, v in env.items() if v.startswith("http://")}, {n: "http://gpu/v1" for n in execution.URL_NAMES})
+        self.assertEqual((gone.state, gone.step), ("failed", "credentials"))
+        self.assertIn("MODEL_GONE_API_URL is not set in Settings", gone.error)
+
     def test_a_local_endpoint_without_a_key_is_sent_the_placeholder(self):
         """Many local servers check no key, but an OpenAI-compatible client
         will not start without one: MODEL_API_KEY unset, the run is handed
@@ -120,7 +142,7 @@ class Here(Base):
         self.assertIn("task-1", "\n".join(ex.lines))
 
     def test_a_local_endpoint_without_its_url_is_said_before_anything_runs(self):
-        """A local or self-hosted model has no default endpoint: MODEL_API_URL
+        """An OpenAI-compatible endpoint has no default URL: MODEL_API_URL
         unset fails the credentials check, for Harbor and for the standard alike."""
         env = {"MODEL_API_KEY": "sk-local-0123456789"}
         for plan in (execution.Plan(name="h", script='"$NULLIUS_HARBOR" run', model="m"),
@@ -129,7 +151,7 @@ class Here(Base):
                 self.assertEqual((plan.key_var, plan.url_var), ("MODEL_API_KEY", "MODEL_API_URL"))
                 ex = self.wait(execution.Execution(plan, root=str(self.tmp), env=env).start())
                 self.assertEqual((ex.state, ex.step), ("failed", "credentials"))
-                self.assertIn("MODEL_API_URL is not set in Settings; a local or self-hosted endpoint has no default", ex.error)
+                self.assertIn("MODEL_API_URL is not set in Settings; an OpenAI-compatible endpoint has no default", ex.error)
                 self.assertFalse(any(p.name.startswith("run-") and p.suffix == ".log" for p in (self.tmp / plan.name).iterdir()))
         ex = self.wait(execution.Execution(execution.Plan(name="ok", script='echo "url=$API_URL"', model="m"), root=str(self.tmp),
                                            env=dict(env, MODEL_API_URL="http://127.0.0.1:8000/v1")).start())
@@ -142,7 +164,7 @@ class Here(Base):
 
 class DockerHere(Base):
     """A Harbor run here asks docker first, as a run on a host does - and
-    so does the standard on its docker backend - and starts nothing when it
+    so does the standard on its container backend - and starts nothing when it
     is missing or does not answer: with Docker Desktop quit, /usr/bin/docker
     is still on the PATH. The standard's local backend asks nothing of docker,
     and a restored run is not asked again."""
@@ -607,8 +629,8 @@ class Refused(Base):
         ex = execution.Execution(self.plan(), root=str(self.tmp / "runs"), record={"id": "r", "state": "failed", "launched": "ref",
                                                                                   "ends": {"ref": {"rc": 2, "at": 1.0, "label": "Reference"}}})
         self.assertIsNone(ex.refused("std-r"))                                       # it ran, and its job is not here: not a refusal
-        progress.Reporter(os.path.join(ex.jobs, "std-r")).emit("refused", detail="the docker backend: no Node build pinned")
-        self.assertEqual(ex.refused("std-r"), "the docker backend: no Node build pinned")
+        progress.Reporter(os.path.join(ex.jobs, "std-r")).emit("refused", detail="the container backend: no Node build pinned")
+        self.assertEqual(ex.refused("std-r"), "the container backend: no Node build pinned")
         self.assertEqual(sorted(os.listdir(os.path.join(ex.jobs, "std-r"))), ["progress.jsonl"])   # kept, and nothing reads it as a job
 
     def test_a_run_that_failed_before_any_part_was_refused(self):

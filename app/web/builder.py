@@ -39,13 +39,16 @@ def new_run():
         data["hosts"] = [{"entry": h.entry, "label": h.label} for h in hosts.parse_list(os.environ.get("HOSTS", ""))]
     except ValueError:
         data["hosts"] = []
-    # The providers a run can start on, whose key (a local endpoint: its URL) is set in Settings, in the order
-    # the Model step prefers them; and whether the local endpoint has a key of its own. Presence only.
+    # The providers a run can start on, whose key (an OpenAI-compatible endpoint: its URL) is set in Settings, in the
+    # order the Model step prefers them, a named endpoint as custom:<id>, with its name; and whether the endpoint at
+    # MODEL_API_URL has a key of its own. Presence and names only.
     data["credentials"] = {"available": providers.available(os.environ), "model_key": bool(os.environ.get("MODEL_API_KEY")),
+                           "endpoints": {e["id"]: e["name"] for e in providers.endpoints(os.environ) if e["id"]},
+                           "broken": providers.broken(os.environ),           # a URL that holds a credential: fixed in Settings first
                            # the agent keys Settings holds, by name only: a Harbor agent that needs one it lacks is named on Review
                            "agent_keys": sorted(settings.agent_key_values(os.environ))}
     data["agentNeeds"] = AGENT_NEEDS
-    # The standard's Where step: why its docker backend cannot run on this machine (None: it can); and, per
+    # The standard's Where step: why its container backend cannot run on this machine (None: it can); and, per
     # benchmark, the licences its store holds (nullius.secrets) - set, when, until when; never a value.
     # what this machine lacks of each benchmark's host requirements: {benchmark: {requirement: [reasons]}}
     host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"])).items()}
@@ -98,7 +101,7 @@ def new_run_runner():
 def new_run_prerequisites():
     """What the recipe needs of each machine it runs on, and whether that
     machine has it (``nullius/prerequisites.py``): {machines: [{where,
-    label, rows}], ready}. The Review step asks on opening and on *Check
+    label, rows}], ready, notes}. The Review step asks on opening and on *Check
     again*, and Run waits for ``ready``; the run asks again as it starts.
     A host is asked over ssh, so this is never asked on a page load."""
     shared._require_csrf()
@@ -141,7 +144,11 @@ def new_run_prerequisites():
     # (an unreachable host alone holds a probe 8 to 12 s)
     with ThreadPoolExecutor(max(1, min(8, len(wheres)))) as pool:
         machines = list(pool.map(machine, wheres))
-    return jsonify(machines=machines, ready=prerequisites.ready(machines), errors=[])
+    # a notice, not a refusal: the provider's last test in Settings failed (providers.test)
+    choice = str(body.get("provider") or "")
+    last = providers.tests().get(choice)
+    notes = [f"{providers.label(choice)} failed its last test in Settings: {providers.said(last)}"] if isinstance(last, dict) and not last.get("ok") else []
+    return jsonify(machines=machines, ready=prerequisites.ready(machines), errors=[], notes=notes)
 
 
 # The Harbor a recipe pins (nullius/harbor/source.py): PyPI's releases and a
@@ -391,7 +398,7 @@ def new_run_models():
         abort(403)
     body = request.get_json(silent=True)
     provider = body.get("provider") if isinstance(body, dict) else None
-    if provider not in providers.PROVIDERS:
+    if providers.split(provider)[0] not in providers.PROVIDERS:
         return jsonify(ok=False, models=[], message="Choose a model provider."), 400
     try:
         return jsonify(ok=True, models=providers.list_models(provider))

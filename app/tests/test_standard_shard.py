@@ -61,14 +61,14 @@ class Partition(unittest.TestCase):
 
 
 def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="gpt-5-mini", bench=BENCH, other=AGENT,
-                planned=None, t0=1_760_000_000.0, failed=(), budget=None):
+                planned=None, t0=1_760_000_000.0, failed=(), budget=None, backend="local"):
     """A shard job as a run writes it: its config, a trial per unit (tagged by
     the unit's place in the whole dataset), its result."""
     d = os.path.join(root, name)
     os.makedirs(d)
     planned = list(units) if planned is None else planned
     job.write_config(d, job=name, bench=bench, other=other, model=model, provider="openai", dataset="all", units=planned,
-                     concurrency=2, granted=True, launch=launch, shard=shard.record(index, of, total, planned))
+                     concurrency=2, granted=True, launch=launch, shard=shard.record(index, of, total, planned), backend=backend)
     results = []
     for k, u in enumerate(units):
         place = int(u.split("-")[1])
@@ -169,6 +169,15 @@ class Merge(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(self.tmp, "never")))
         got = merge.merge([a, b], os.path.join(self.tmp, "forced"), force=True)
         self.assertIn("merged_despite", read((os.path.join(got["out"], "config.json")))["standard"])
+
+    def test_a_shard_recorded_with_docker_is_of_one_launch_with_a_container_shard(self):
+        a = write_shard(self.tmp, "a", self.split[1], 1, 3, backend="docker")      # the container backend's earlier name
+        b = write_shard(self.tmp, "b", self.split[2], 2, 3, backend="container")
+        got = merge.merge([a, b], os.path.join(self.tmp, "out", "run"))
+        self.assertEqual(read(os.path.join(got["out"], "config.json"))["standard"]["backend"], "container")
+        c = write_shard(self.tmp, "c", self.split[3], 3, 3)
+        with self.assertRaisesRegex(merge.Refused, "backend"):
+            merge.merge([a, c], os.path.join(self.tmp, "never"))
 
     def test_a_unit_run_twice_is_refused_and_named(self):
         a = write_shard(self.tmp, "a", self.split[1], 1, 3)

@@ -316,20 +316,20 @@
       th.style.left = to.left + 'px'; th.style.width = to.width + 'px'; thumbAt[seg.dataset.seg] = to;
     }
   };
-  // The provider is one whose key (a local endpoint: its URL) is set in Settings. One is said, nothing to choose;
-  // several are a select of those alone; none, every provider. A recipe naming one
-  // whose key is not set keeps it, marked, until another is chosen.
+  // The provider is one whose key (an OpenAI-compatible endpoint: its URL) is set in Settings, each endpoint by its
+  // name. One is said, nothing to choose; several are a select of those alone; none, every provider. A recipe
+  // naming one whose key is not set keeps it, marked, until another is chosen.
   const providerField = (rec, offered) => {
-    const have = C.available().filter(p => offered.some(([x]) => x === p)), current = C.recipeProvider(rec);
+    const have = C.available().filter(p => offered.includes(p.split(':')[0])), current = C.choiceOf(rec);
     if (have.length === 1 && current === have[0])
-      return `<div class="nb-field"><span>Provider</span><span class="nb-fixed">${esc(offered.find(([p]) => p === current)[1])}</span><small>The only one set in Settings.</small></div>`;
-    return select('Provider', 'provider', current, !have.length ? offered
-      : offered.filter(([p]) => have.includes(p) || p === current).map(([p, t]) => [p, have.includes(p) ? t : t + ' · not set in Settings']));
+      return `<div class="nb-field"><span>Provider</span><span class="nb-fixed">${esc(C.labelOf(current))}</span><small>The only one set in Settings.</small></div>`;
+    const shown = !have.length ? offered : [...have, ...(have.includes(current) ? [] : [current])];
+    return select('Provider', 'provider', current, shown.map(p => [p, have.length && !have.includes(p) ? C.labelOf(p) + ' · not set in Settings' : C.labelOf(p)]));
   };
   // Show only a missing-provider blocker; configured credentials need no confirmation line.
   const keyLine = rec => {
-    const p = C.recipeProvider(rec), blocked = C.providerBlocker(rec), at = name => button('Settings', `data-href="/settings#${name}"`, 'nb-inlinebutton');
-    if (blocked) return note('Not set in Settings', esc(blocked) + ' ' + at(C.PROVIDER_NEEDS[p] || 'MODEL_API_URL'));
+    const blocked = C.providerBlocker(rec), at = name => button('Settings', `data-href="/settings#${name}"`, 'nb-inlinebutton');
+    if (blocked) return note('Not set in Settings', esc(blocked) + ' ' + at(C.needsOf(C.choiceOf(rec))));
     return '';
   };
   // The Nullius standard (C.isStandard): a benchmark, then an agent or a capability among every one there is - the
@@ -381,10 +381,10 @@
       + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Run hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
       + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
       + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
-      + how('docker', 'Docker', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
+      + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
         : 'Sandboxed: each unit in a container whose only way out is its relay.', dockerWhy) + '</div>'
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
-      + (dockerOnly.length && backend === 'local' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} docker - on local processes their units are recorded as not run.</p>` : '')
+      + (dockerOnly.length && backend === 'local' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - on local processes their units are recorded as not run.</p>` : '')
       + hostSetup(rec);
   }
   // What the chosen options of the benchmark need: an embedding model, requirements of the machine (standard.json host).
@@ -454,14 +454,15 @@
       const cur = (rec.bench_options || {})[n] ?? o.default;
       if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(n === 'temperature' && o.default === 'default' ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
       const tileOf = v => { const need = (o.needs || {})[v] || {};
-        const foot = [need.embeddings ? `<span class="nb-tick" title="its embedding calls go through the run's relay, with your OpenAI key">OpenAI key</span>` : '',
+        const foot = [need.embeddings ? `<span class="nb-tick" title="${esc(need.embeddings)} through the run's relay">${need.embeddings.includes('/') ? 'OpenRouter key' : 'OpenAI or OpenRouter key'}</span>` : '',
+          need.reranker ? `<span class="nb-tick">reranker ${esc(need.reranker)}</span>` : '',
           ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(h)}</span>`),
           v === o.default ? '<span class="nb-tag">default</span>' : ''].join('');
         return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: v, mark: '', tip: (o.about || {})[v] || '', foot}); };
       return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}${o.datasets.length ? ' · ' + esc(o.datasets.join(', ')) : ''}</h3></div>`
         // by the data: every value with its line (or a need) - cards of one size, the line whole; plain values - one small
         // card each, all one size, or a select past five of them (a line some have is their tooltip)
-        + (o.values.some(v => ((o.needs || {})[v] || {}).embeddings || (((o.needs || {})[v] || {}).host || []).some(h => local[h]))
+        + (o.values.some(v => ((o.needs || {})[v] || {}).embeddings || ((o.needs || {})[v] || {}).reranker || (((o.needs || {})[v] || {}).host || []).some(h => local[h]))
           ? `<div class="nb-pick-grid std-optgrid" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(tileOf).join('')}</div>`
           : o.values.length > 5
           ? `<label class="nb-field std-optselect"><select data-bench-opt-select="${esc(n)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''} title="${esc((o.about || {})[v] || '')}">${esc(v === 'default' ? 'Default' : v + (v === o.default ? ' (default)' : ''))}</option>`).join('')}</select></label>`
@@ -593,7 +594,7 @@
     if (step === S.model) {
       const lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
       return `<div class="nb-sectionhead"><h2>Choose the model.</h2></div>` + modelChoiceCards(rec)
-        + providerField(rec, C.PROVIDERS.map(p => [p, C.PROVIDER_LABEL[p]]))
+        + providerField(rec, C.PROVIDERS)
         + field('Model', 'model', rec.model, {list:'nb-models', placeholder:paper && C.paperListed(rec) ? 'Choose a paper model' : 'Search or enter a model ID'})
         // the benchmark's other models: the user simulator its conversations need, the judge that grades - each its official one
         // unless named; like the paper, the official one; like the leaderboard, its own and the options it fixes
@@ -660,7 +661,7 @@
       if(C.needsCredentials(rec)){
         const controlOnly=!rec.agents.some(id=>!schema.agents.find(a=>a.id===id)?.control);
         const tau3=rec.benchmark==='tau3-bench';
-        html+=providerField(rec,C.PROVIDERS.map(p=>[p,C.PROVIDER_LABEL[p]]));
+        html+=providerField(rec,C.PROVIDERS);
         if(tau3&&controlOnly)html+=`<div class="nb-two">${field('Model · customer','userModel',rec.userModel,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'})}${field('Model · evaluator','evalModel',rec.evalModel,{list:'nb-models',placeholder:'same as the customer'})}</div>`;
         else if(tau3)html+=field('Model · agent','model',rec.model,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'})+`<div class="nb-two">${field('Model · customer','userModel',rec.userModel,{list:'nb-models',placeholder:'same as the agent'})}${field('Model · evaluator','evalModel',rec.evalModel,{list:'nb-models',placeholder:'same as the customer'})}</div>`;
         else html+=field('Model','model',rec.model,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'});
@@ -672,7 +673,7 @@
   }
   function renderForm() {
     preselectRelease();
-    root.dataset.modelProvider = C.recipeProvider(r());
+    root.dataset.modelProvider = C.choiceOf(r());
     root.dataset.paperModels = JSON.stringify(r().model_choice === 'paper' && C.paperListed(r()) ? ((C.paperModels(r()).sent || {})[r().provider] || {}) : null);
     root.dataset.standardModel = String(C.isStandard(r()));
     const rec=r(), d=C.dataset(rec);
@@ -811,7 +812,7 @@
     if(!schema.local)return note('Run from the application host','Runs start from a browser on the machine Nullius runs on.');
     // A provider not set in Settings: Run waits and says why.
     const blocked=C.providerBlocker(rec);
-    if(blocked)return `<div class="nb-runbox" id="nb-runbox"><div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run" disabled data-held title="'+esc(blocked)+'"','nb-button nb-primary')}</div><p class="nb-note nb-error">${esc(blocked)} ${button('Model step','data-step="'+S.model+'"','nb-inlinebutton')} · ${button('Settings','data-href="/settings#'+(C.PROVIDER_NEEDS[C.recipeProvider(rec)]||'MODEL_API_URL')+'"','nb-inlinebutton')}</p></div>`;
+    if(blocked)return `<div class="nb-runbox" id="nb-runbox"><div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run" disabled data-held title="'+esc(blocked)+'"','nb-button nb-primary')}</div><p class="nb-note nb-error">${esc(blocked)} ${button('Model step','data-step="'+S.model+'"','nb-inlinebutton')} · ${button('Settings','data-href="/settings#'+C.needsOf(C.choiceOf(rec))+'"','nb-inlinebutton')}</p></div>`;
     if(C.isStandard(rec)){
       const out=runnerOut||{errors:[{message:'Compiling the recipe…'}]}, noun=C.isStandard(rec)?unitsOf(rec).noun:'item';
       return `<div class="nb-runbox" id="nb-runbox">${(out.errors||[]).length?out.errors.map(e=>`<p class="nb-note">${esc(e.message)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"','nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(out.confirm?`<p class="nb-note nb-nolimit">No ${esc(noun)} limit: ${esc(out.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
@@ -828,7 +829,7 @@
     if(!force&&prereq.sig===sig)return;
     prereq={sig,busy:true,out:null};drawPrereq();
     let out;
-    try{const res=await fetch('/new-run/prerequisites',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':schema.csrf},body:JSON.stringify({recipe:rec})});
+    try{const res=await fetch('/new-run/prerequisites',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':schema.csrf},body:JSON.stringify({recipe:rec,provider:C.choiceOf(rec)})});
       out=res.ok?await res.json():{machines:[],ready:false,errors:['The machines could not be checked: HTTP '+res.status]};}
     catch(e){out={machines:[],ready:false,errors:['The machines could not be checked: '+e]};}
     if(prereq.sig!==sig)return;   // the recipe changed while it was asked: the newer check stands
@@ -840,7 +841,7 @@
     const rows=m=>m.rows.map(x=>`<li class="nb-prereq-${x.state}"><span class="nb-prereq-mark" aria-hidden="true">${mark[x.state]}</span><span><strong>${esc(x.label)}</strong>${x.detail?` <small>${esc(x.detail)}</small>`:''}${x.state==='missing'&&x.install.length?`<code class="nb-prereq-fix">${x.install.map(esc).join('<br>')}</code>`:''}</span></li>`).join('');
     const head=prereq.busy?'<span class="nb-note">checking…</span>':out&&out.ready?'<span class="nb-note nb-ok">Ready</span>':out?'<span class="nb-note nb-error">Missing something: Run waits</span>':'';
     el.innerHTML=`<div class="nb-prereq-head"><h3>Prerequisites</h3>${head}${button('Check again','id="nb-prereq-again"'+(prereq.busy?' disabled':''),'nb-inlinebutton')}</div>`
-      +(out?(out.errors||[]).map(e=>`<p class="nb-note nb-error">${esc(e)}</p>`).join('')
+      +(out?(out.errors||[]).map(e=>`<p class="nb-note nb-error">${esc(e)}</p>`).join('')+(out.notes||[]).map(n=>`<p class="nb-notice">${esc(n)}</p>`).join('')
         +out.machines.map(m=>`<div class="nb-prereq-machine">${out.machines.length>1?`<small>${esc(m.label)}</small>`:''}<ul>${rows(m)}</ul></div>`).join(''):'');
     const b=$('#nb-run'); if(b&&!b.hasAttribute('data-held'))b.disabled=!(out&&out.ready&&!prereq.busy);
   }
@@ -850,8 +851,8 @@
     const out=$('#nb-hosttest'), st=root.querySelector(`[data-host-state="${CSS.escape(entry)}"]`);
     out.textContent='testing…';
     try{const res=await fetch('/settings/hosts/test',{method:'POST',headers:{'X-CSRF-Token':schema.csrf},body:new URLSearchParams({entry})});const j=await res.json();
-      // only what can stop this recipe there: docker for a Harbor run, docker or podman for the standard's docker backend (uv is installed when missing)
-      const rec=r(),harbor=rec.harness==='harbor',needsEngine=harbor||(C.isStandard(rec)&&rec.backend==='docker');
+      // only what can stop this recipe there: docker for a Harbor run, docker or podman for the standard's container backend (uv is installed when missing)
+      const rec=r(),harbor=rec.harness==='harbor',needsEngine=harbor||(C.isStandard(rec)&&rec.backend==='container');
       const engine=harbor?(j.docker?'docker':null):j.engine,engineOk=engine&&j[engine+'_ok'];
       out.textContent=!j.ok?'✕ '+(j.error||('HTTP '+res.status)):needsEngine&&!engineOk?'✓ Connected · ✕ '+(engine?engine+' not usable by this user':(harbor?'docker':'docker or podman')+' missing')+': this run needs it':'✓ Connected';
       if(st){st.textContent=j.ok?'connected':'unreachable';st.className='nb-state nb-hoststate '+(j.ok?'':'warn');}
@@ -950,7 +951,8 @@
       else if(d.field.startsWith('adapterPath:')){const id=d.field.slice(12);if(String(value).trim())rec.adapterPaths[id]=String(value).trim();else delete rec.adapterPaths[id];}
       else if(!d.providerModel&&['model','userModel','evalModel'].includes(d.field)&&/^(openrouter|openai)\//.test(String(value))){rec.provider=C.providerOf(rec,value);rec[d.field]=C.bareModel(value);
         renderForm();refreshPlan();const f=root.querySelector(`[data-field="${d.field}"]`);if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);}return;}   // the provider the prefix named, and whether it is set
-      else{rec[d.field]=value;if(d.field==='provider'){renderForm();refreshPlan();return;}}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
+      else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
+      else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
     }else if(d.minutes){C.setPhaseMinutes(rec,d.minutes,el.value===''?'':Number(el.value));const row=el.closest('tr');if(row){const m=row.querySelector('.nb-mono');const t=C.effectiveTimeouts(rec);const p=t&&t.phases.find(x=>x.key===d.minutes);if(m&&p)m.textContent='×'+p.multiplier;}refreshPlan();return;}
     else if(d.customAgent!==undefined){rec.customAgents[Number(d.customAgent)]=el.value;refreshPlan();return;}

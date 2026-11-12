@@ -4,7 +4,7 @@ Drive an agent over ACP and through its own command: does its model get the same
 
 ```bash title="Fidelity"
 nullius standard fidelity <agent>[@version] --model M --unsandboxed [--passes N] \
-    [--provider P] [--backend docker] [--option NAME=VALUE]... [--jobs DIR] [--from-run]
+    [--provider P] [--backend container] [--option NAME=VALUE]... [--jobs DIR] [--from-run]
 ```
 
 | Item | Detail |

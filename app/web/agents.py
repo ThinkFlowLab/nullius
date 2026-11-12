@@ -104,7 +104,7 @@ def _entry(kind: str, key: str):
     have = providers.available(os.environ)
     return render_template("agents/entry.html", kind=kind, e=e, versions=versions if len(mine) > 1 else [],
                            restore_bundle=storage.can_restore(definitions.KINDS[kind]["dir"], key, definitions.CATALOGUE),
-                           title=definitions.title(e["d"]), providers=[(p, providers.PROVIDER_LABEL[p]) for p in have],
+                           title=definitions.title(e["d"]), providers=[(p, providers.label(p)) for p in have],
                            local=settings_web._local_client(), csrf=shared._csrf_token())
 
 
@@ -138,20 +138,20 @@ def _check(kind: str, key: str):
         abort(403, description="Checks are started from a browser on the application host only.")
     version = request.form.get("version", "")
     back = url_for("agent_page" if kind == "agent" else "feature_page", key=key, **({"v": version} if version else {}))
-    provider = request.form.get("provider", "")
-    backend = request.form.get("backend", "local")
+    provider, endpoint = providers.split(request.form.get("provider", ""))
+    backend = definitions.names.backend(request.form.get("backend", "local"))
     stamp = time.strftime(conform.STAMP)
     got = standard_recipe.conformance(kind, f"{key}@{version}" if version else key, model=request.form.get("model", "").strip(), provider=provider,
                                       unsandboxed=request.form.get("unsandboxed") == "yes", stamp=stamp, backend=backend)
-    problem = " ".join(got["errors"]) or execute.provider_problem(provider)
-    if not problem and backend == "docker":
+    problem = " ".join(got["errors"]) or execute.provider_problem(provider, endpoint)
+    if not problem and backend == "container":
         problem = execute.docker_problem()
     if problem:
         flash(problem, "error")
         return redirect(back)
     word = f"{key}-{version}" if version else key
-    plan = execution.Plan(name=f"check-{word}-{time.strftime('%m%d-%H%M%S')}", script=got["script"], runner=standard_recipe.HARNESS, docker=backend == "docker",
-                          **execute.credentials_for(provider), model=request.form.get("model", "").strip(), jobs=got["jobs"],
+    plan = execution.Plan(name=f"check-{word}-{time.strftime('%m%d-%H%M%S')}", script=got["script"], runner=standard_recipe.HARNESS, docker=backend == "container",
+                          **execute.credentials_for(provider, endpoint), model=request.form.get("model", "").strip(), jobs=got["jobs"],
                           parts=[{"id": word, "label": got["label"] + "'s kits", "script": got["script"]}])
     problem = plan.check() or (execution.name_taken(plan.name) if os.path.exists(os.path.join(execution.runs_root(), plan.name)) else None)
     if problem:

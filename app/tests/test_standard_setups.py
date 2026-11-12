@@ -229,7 +229,7 @@ class SetupRun(unittest.TestCase):
         o, _ = definitions.setup(self.b, "original")
         with patch("nullius.standard.container.unusable", return_value="daemon unavailable"):
             with self.assertRaisesRegex(run.Refused, "daemon unavailable"):
-                run.Run(self.b, o, model="paper-1", provider="custom", jobs_root=self.tmp, env=self.env, backend="docker")
+                run.Run(self.b, o, model="paper-1", provider="custom", jobs_root=self.tmp, env=self.env, backend="container")
 
     def test_docker_setup_runs_driver_and_linux_dependencies_with_scoped_credentials(self):
         from tests import docker_tier
@@ -259,17 +259,17 @@ class SetupRun(unittest.TestCase):
             {"name": "TOOL_LICENSE", "kind": "file", "to": "driver", "env": "TOOL_FILE"}]}}
         held = run.Licences(self.b, {"HF_TOKEN": {"kind": "value", "value": "fixture-gated-token"},
                                     "TOOL_LICENSE": {"kind": "file", "path": credential}})
-        job_dir = self.go("original", "paper-1", backend="docker", licences=held)
+        job_dir = self.go("original", "paper-1", backend="container", licences=held)
         trials = self.trials(job_dir)
         self.assertEqual(set(trials), {"c1", "c2"})
         self.assertTrue(all(t.get("verifier_result", {}).get("rewards", {}).get("score") == 1 for t in trials.values()), trials)
         self.assertEqual({c["model"] for c in self.calls(job_dir)}, {"paper-1"})
         with open(os.path.join(job_dir, "config.json")) as f:
-            self.assertEqual(json.load(f)["standard"]["backend"], "docker")
+            self.assertEqual(json.load(f)["standard"]["backend"], "container")
         left = container._docker(["ps", "-aq", "--filter", "label=nullius.job=" + os.path.basename(job_dir)])
         self.assertFalse(left.stdout.strip())
         Echo.silent = True
-        failed = self.go("model", "thinker", backend="docker", licences=held)
+        failed = self.go("model", "thinker", backend="container", licences=held)
         self.assertTrue(all(t["exception_info"]["exception_type"] == "OutputLengthExceededError"
                             for t in self.trials(failed).values()))
         left = container._docker(["ps", "-aq", "--filter", "label=nullius.job=" + os.path.basename(failed)])
@@ -279,7 +279,7 @@ class SetupRun(unittest.TestCase):
             f.write("raise RuntimeError('fixture startup failure')\n")
         other, _ = definitions.setup(self.b, "original", "paper-1", "custom")
         broken = run.Run(self.b, other, model="paper-1", provider="custom", jobs_root=self.tmp,
-                         env=self.env, backend="docker", licences=held, say=lambda s: None)
+                         env=self.env, backend="container", licences=held, say=lambda s: None)
         with self.assertRaisesRegex(Exception, "fixture startup failure"):
             broken.start()
         left = container._docker(["ps", "-aq", "--filter", "label=nullius.job=" + broken.name])
@@ -371,10 +371,10 @@ class Recipe(unittest.TestCase):
     def test_old_model_participant_is_not_a_recipe_choice(self):
         self.assertTrue(self.compiled(others=["model"], model="vendor/model")["errors"])
 
-    def test_a_setup_compiles_for_docker_without_local_agent_consent(self):
-        out = self.compiled(others=["original"], model="vendor/model", backend="docker")
+    def test_a_setup_compiles_for_a_container_without_local_agent_consent(self):
+        out = self.compiled(others=["original"], model="vendor/model", backend="container")
         self.assertEqual(out["errors"], [])
-        self.assertIn("--backend docker", out["script"])
+        self.assertIn("--backend container", out["script"])
         self.assertNotIn("--unsandboxed", out["script"])
 
 

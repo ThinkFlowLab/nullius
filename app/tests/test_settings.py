@@ -43,13 +43,14 @@ class Table(unittest.TestCase):
     def test_the_page_offers_what_a_person_sets_and_no_more(self):
         self.assertEqual([v.name for v in settings.VARIABLES],
                          ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "SYSTEM_ONE_PROVIDER", "SYSTEM_ONE_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_MODEL", "AGENT_KEYS", "HOSTS"])
-        self.assertEqual(sorted(v.name for v in settings.VARIABLES if v.secret), ["ANTHROPIC_API_KEY", "MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"])
+        self.assertEqual(sorted(v.name for v in settings.VARIABLES if v.secret), ["ANTHROPIC_API_KEY", "MODEL_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"])
+        self.assertEqual(settings.BY_NAME["MODEL_API_URL"].kind, "endpoint")                         # shown, so it may hold no credential
         for name in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"):
             self.assertEqual(settings.BY_NAME[name].example, "")                               # no placeholder on a settings field
         self.assertEqual({settings.BY_NAME[n].group for n in ("MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY")}, {"Model credentials"})
         from nullius import providers
         self.assertIn(providers.PROVIDER_BASE["openrouter"], settings.BY_NAME["OPENROUTER_API_KEY"].purpose)   # the endpoint is fixed, and said
-        self.assertIn("local or self-hosted", settings.BY_NAME["MODEL_API_KEY"].purpose)
+        self.assertIn("OpenAI-compatible", settings.BY_NAME["MODEL_API_KEY"].purpose)
 
     def test_the_servers_address_and_port_are_start_up_options(self):
         """APP_HOST and APP_PORT are read at startup; the running Settings page
@@ -225,6 +226,69 @@ class File(unittest.TestCase):
         self.write("OPENAI_API_KEY=sk-this-0123456789\n")
         settings.refresh(self.path)
         self.assertEqual((os.environ["HOSTS"], os.environ["OPENAI_API_KEY"]), ("bench-other", "sk-this-0123456789"))
+
+    def test_named_endpoints_are_settings_of_their_own_and_the_environment_wins(self):
+        """MODEL_<ID>_NAME, _API_URL and _API_KEY: validated as the default
+        endpoint's are, a key shown by presence, read by nothing else, and a
+        name no agent key may take. The environment still wins over the file."""
+        self.write("MODEL_API_URL=http://default/v1\nMODEL_GPU_NAME=GPU box\nMODEL_GPU_API_URL=http://gpu-file/v1\nMODEL_GPU_API_KEY=sk-gpu-0123456789\n")
+        os.environ["MODEL_GPU_API_URL"] = "http://gpu-env/v1"
+        self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
+        settings.load(self.path)
+        self.assertEqual(settings.endpoint_ids(), ["GPU"])
+        self.assertEqual(os.environ["MODEL_GPU_API_URL"], "http://gpu-env/v1")                    # the process environment wins
+        by = {s["name"]: s for s in settings.states(self.path)}
+        self.assertEqual((by["MODEL_GPU_NAME"]["shown"], by["MODEL_GPU_API_KEY"]["shown"]), ("GPU box", "********"))
+        self.assertEqual(by["MODEL_GPU_API_URL"]["source"], "environment"); self.assertTrue(by["MODEL_GPU_API_URL"]["shadowed"])
+        self.assertEqual(settings.unread(self.path), [])
+        settings.save_many(self.path, {"MODEL_GPU_NAME": "GPU", "MODEL_LAPTOP_API_URL": "http://laptop/v1"})
+        self.assertEqual(settings.endpoint_ids(), ["GPU", "LAPTOP"]); self.assertEqual(os.environ["MODEL_GPU_NAME"], "GPU")
+        for bad in ({"MODEL_GPU_API_KEY": "has space"}, {"MODEL_gpu_API_URL": "http://x/v1"}, {"MODEL_GPU_NAME": "a\x01b"}):
+            with self.assertRaises(ValueError):
+                settings.save_many(self.path, bad)
+        self.assertTrue(settings.reserved_name("MODEL_GPU_API_KEY")); self.assertIsNotNone(settings._agent_key_names("MODEL_X_API_KEY"))
+        self.assertEqual(settings.new_endpoint_id("GPU box #2", {"GPU_BOX_2"}), "GPU_BOX_2_2")
+        self.assertEqual(settings.new_endpoint_id("Ollama", set()), "OLLAMA"); self.assertEqual(settings.new_endpoint_id("éé", set()), "ENDPOINT")
+        self.assertTrue(settings.ENDPOINT_ID.match(settings.new_endpoint_id("x" * 80, set())))
+        settings.save_many(self.path, {"LLM_JUDGE_PROVIDER": "local:GPU"})
+        with self.assertRaises(ValueError):
+            settings.save_many(self.path, {"LLM_JUDGE_PROVIDER": "local:gpu"})
+
+    def test_an_endpoint_url_is_shown_so_it_holds_no_credential(self):
+        """An endpoint's URL is shown on the page: an http(s) URL with a host,
+        without a user, a password or a key-like query parameter. One set
+        before is shown with those parts hidden, said, and not offered."""
+        ok = ("http://127.0.0.1:8000/v1", "https://llm.example/v1/", "http://[::1]:11434/v1", "http://gpu-box:8000/openai/v1",
+              "https://llm.example/v1?api-version=2024-06-01", "https://llm.example/v1?model=qwen&keyboard=1")
+        for url in ok:
+            self.assertIsNone(settings.endpoint_url_problem(url), url)
+            self.assertEqual(settings.endpoint_url_shown(url), url)
+        for url in ("https://user:pw@llm.example/v1", "https://user@llm.example/v1"):
+            self.assertIn("without a user or password in it: put the key in the Key field", settings.endpoint_url_problem(url), url)
+        for name in ("key", "api_key", "apikey", "api-key", "token", "access_token", "access-token", "secret", "password",
+                     "auth", "authorization", "sig", "signature", "API_KEY", "Token", "SIG"):
+            url = f"https://llm.example/v1?model=m&{name}=abc"
+            self.assertIn("without a key in its query: put the key in the Key field", settings.endpoint_url_problem(url), name)
+        for url in ("ftp://llm.example/v1", "file:///etc/passwd", "localhost:8000/v1", "http:///v1", "http://h:99999/v1", "http://h /v1", "llm.example"):
+            self.assertEqual(settings.endpoint_url_problem(url), "an http(s) URL with a host", url)
+        self.assertEqual(settings.endpoint_url_shown("https://u:pw@llm.example/v1?model=m&api_key=abc"),
+                         "https://[REDACTED]@llm.example/v1?model=m&api_key=[REDACTED]")
+        with self.assertRaisesRegex(ValueError, "MODEL_API_URL must be a URL without a key in its query"):
+            settings.save_many(self.path, {"MODEL_API_URL": "https://llm.example/v1?key=abc"})
+        with self.assertRaises(ValueError):
+            settings.save_many(self.path, {"MODEL_GPU_API_URL": "https://u:pw@gpu/v1"})
+        self.assertFalse(os.path.exists(self.path))
+        # one set in the environment before: hidden on the page, said, never offered to a run
+        from nullius import providers
+        self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
+        os.environ["MODEL_GPU_API_URL"] = "https://u:hunter2@gpu/v1?token=abc"
+        os.environ["MODEL_API_URL"] = "http://127.0.0.1:8000/v1"
+        by = {s["name"]: s for s in settings.states(self.path)}
+        self.assertEqual(by["MODEL_GPU_API_URL"]["shown"], "https://[REDACTED]@gpu/v1?token=[REDACTED]")
+        self.assertIn("put the key in the Key field", by["MODEL_GPU_API_URL"]["problem"])
+        self.assertEqual((by["MODEL_API_URL"]["shown"], by["MODEL_API_URL"]["problem"]), ("http://127.0.0.1:8000/v1", ""))
+        self.assertEqual(by["MODEL_API_URL"]["source"], "environment")                                 # the environment still wins
+        self.assertEqual([e["id"] for e in providers.endpoints()], [""]); self.assertEqual(providers.broken(), ["custom:GPU"])
 
     def test_keys_no_setting_reads_are_named_with_the_one_meant(self):
         self.write("API_TOKEN=sk-x\nAPI_URL=https://x/v1\nSOMETHING_ELSE=1\nRUNS_DIR=/tmp/r\nHOSTS=bench\nAPI_KEY_TYPESAFE=ts-x\n")

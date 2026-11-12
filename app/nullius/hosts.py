@@ -179,7 +179,7 @@ _PROGRAM = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,39}$")
 def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, programs: Optional[List[str]] = None) -> dict:
     """What the host answers: reachable or why not, and whether uv, docker,
     podman and harbor are there (``engine``: which of docker and podman the
-    standard's docker backend runs there, or None) - and, given ``programs`` (a benchmark's host
+    standard's container backend runs there, or None) - and, given ``programs`` (a benchmark's host
     requirements), which of them are not on its PATH (``missing``). Nothing
     but the probe command is sent. ``run`` is looked up at call time so a
     test can stand in for ssh."""
@@ -207,7 +207,7 @@ def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, prog
             result["hostname"] = v.strip() or None
         elif k == "missing" and programs and v.strip() in programs:
             result["missing"].append(v.strip())
-    # the standard's docker backend's engine there: docker when the probe finds it, else podman
+    # the standard's container backend's engine there: docker when the probe finds it, else podman
     result["engine"] = "docker" if result["docker"] else "podman" if result["podman"] else None
     result["ok"] = True
     return result
@@ -264,6 +264,31 @@ def save_key(user: str, host: str, data: bytes, key_dir: Optional[str] = None) -
     with os.fdopen(fd, "wb") as fh:
         fh.write(data if data.endswith(b"\n") else data + b"\n")
     return path
+
+
+def forget_keys(old: str, new: str, key_dir: Optional[str] = None) -> List[tuple]:
+    """Delete each key file that ``save_key`` wrote for an entry of the host
+    list ``old`` when no entry of the list ``new`` names it. Only the file
+    <config>/ssh/<user@host> of that entry goes: Nullius's own key and a key
+    the user named by path stay. The files not deleted, each as (path, reason)."""
+    key_dir = os.path.realpath(key_dir or KEY_DIR or os.path.join(paths.config_dir(), "ssh"))
+    try:
+        before = parse_list(old)
+    except ValueError:              # a list edited by hand into a wrong one names no file to delete
+        return []
+    kept = {os.path.realpath(os.path.expanduser(h.key)) for h in parse_list(new) if h.key}
+    failed = []
+    for h in before:
+        path = h.key and os.path.realpath(os.path.expanduser(h.key))
+        if not path or path in kept or path != os.path.join(key_dir, _key_name(h.user, h.host)):
+            continue
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            failed.append((path, e.strerror or str(e)))
+    return failed
 
 
 def own_key(path: Optional[str] = None, run: Optional[Callable] = None) -> str:

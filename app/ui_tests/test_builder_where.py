@@ -30,16 +30,16 @@ class StandardWhere(CompilerCase):
         for name, html in missing.items():
             with self.subTest(name):
                 self.assertTrue(html.startswith("<div"), html)                                   # drawn, not a ReferenceError
-                tile = re.search(r'<button [^>]*data-std-backend="docker"[^>]*>', html).group(0)
+                tile = re.search(r'<button [^>]*data-std-backend="container"[^>]*>', html).group(0)
                 self.assertIn('title="Not on this machine: docker is not installed"', tile)
                 self.assertEqual(html.count("Not on this machine"), 1)
-                self.assertNotIn("disabled", re.search(r'<button [^>]*data-std-backend="docker"[^>]*>', here[name]).group(0))
+                self.assertNotIn("disabled", re.search(r'<button [^>]*data-std-backend="container"[^>]*>', here[name]).group(0))
 
     def test_docker_names_the_public_web_proxy_only_for_an_agent_whose_environment_declares_network(self):
         networked = {b["key"] for b in self.schema["standard"]["benchmarks"]
                      if b["family"] == "agent" and any(e.get("network") for e in b["environments"].values())}
         self.assertIn("gaia", networked)
-        tip = lambda html: re.search(r'<button [^>]*data-std-backend="docker"[^>]*title="([^"]*)"', html).group(1)
+        tip = lambda html: re.search(r'<button [^>]*data-std-backend="container"[^>]*title="([^"]*)"', html).group(1)
         agent, setup = self.draw(None, "r.others=[C.standard().agents[0].key];"), self.draw(None)
         for name, html in agent.items():
             with self.subTest(name):
