@@ -6,7 +6,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend docker]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED] ...] [--max-usd USD] [--max-usd-per-unit USD] [--unsandboxed | --backend docker]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--unsandboxed | --backend docker]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -417,7 +417,7 @@ def options(pairs) -> dict:
 
 
 def prices(given) -> dict:
-    """``--price MODEL=INPUT,OUTPUT[,CACHED]``, repeatable: this run's own prices, over the user's list."""
+    """``--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]``, repeatable: this run's own prices, over the user's list."""
     out = {}
     for p in given or []:
         try:
@@ -624,7 +624,7 @@ def main(argv=None):
             p.add_argument("--launch", help="the launch id every shard records (default: the day, the benchmark, the agent, the model)")
             p.add_argument("--bench-option", action="append", metavar="NAME=VALUE",
                            help="one of the benchmark's own options (repeatable: a search, a mode); the rest keep their defaults")
-            p.add_argument("--price", action="append", metavar="MODEL=INPUT,OUTPUT[,CACHED]",
+            p.add_argument("--price", action="append", metavar="MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]",
                            help="this run's price for a model in USD per million tokens, over your price list (repeatable; nullius prices)")
             p.add_argument("--max-usd", type=float, metavar="USD",
                            help="the run's spending cap: no call goes out once the spend plus the calls in flight would pass it")

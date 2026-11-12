@@ -87,12 +87,10 @@ def _said(status: int, body: bytes) -> str:
 def _usage(u: Optional[dict]) -> Optional[dict]:
     """Chat Completions', Responses' and Messages' usage, in one shape:
     ``input`` counts every prompt token, ``cached`` those of them a cache
-    served. Anthropic counts the tokens read from its cache and those written
-    to it apart from ``input_tokens``; both are put back in, as cached, and
-    those written are said again as ``cache_write``: they cost more than
-    the rest, where those read cost less. Chat Completions counts both in
-    ``prompt_tokens`` and says those written apart from those read
-    (``cache_write_tokens``): they are cached, and ``cache_write``, alike."""
+    served. ``cache_write`` counts writes separately; ``cache_write_1h`` is
+    their one-hour subset when reported. Anthropic's ``input_tokens`` excludes
+    cache reads and writes, so both are added to input, once. Chat Completions
+    already includes both in ``prompt_tokens``."""
     if not isinstance(u, dict):
         return None
     inp = u.get("prompt_tokens", u.get("input_tokens")) or 0
@@ -101,15 +99,17 @@ def _usage(u: Optional[dict]) -> Optional[dict]:
     rdet = u.get("completion_tokens_details") or u.get("output_tokens_details") or {}
     cached = (det or {}).get("cached_tokens") or 0
     written = u.get("cache_creation_input_tokens") or 0
-    cache = (u.get("cache_read_input_tokens") or 0) + written
-    if cache:
-        inp, cached = inp + cache, cache
+    if "cache_read_input_tokens" in u or "cache_creation_input_tokens" in u:
+        cached = u.get("cache_read_input_tokens") or 0
+        inp += cached + written
     else:
         written = (det or {}).get("cache_write_tokens") or 0
-        cached += written
     got = {"input": inp, "output": out, "cached": cached, "reasoning": (rdet or {}).get("reasoning_tokens") or 0}
     if written:
         got["cache_write"] = written
+        hour = (u.get("cache_creation") or {}).get("ephemeral_1h_input_tokens") or 0
+        if hour:
+            got["cache_write_1h"] = min(hour, written)
     if isinstance(u.get("cost"), (int, float)):
         got["cost"] = u["cost"]
     return got
@@ -415,10 +415,13 @@ class Relay:
         p = self.prices.get(model)                # exactly this model: one whose name only starts the same is another
         if not p:
             return None, None
-        fresh = max(0, usage["input"] - usage["cached"])
-        written = min(usage.get("cache_write") or 0, usage["cached"])      # of the cached: written to the cache, not read from it
-        return (fresh * p["input"] + (usage["cached"] - written) * p.get("cached", p["input"])
-                + written * p.get("cache_write", p["input"]) + usage["output"] * p["output"]) / 1e6, "estimate"
+        written = min(usage.get("cache_write") or 0, max(0, usage["input"] - usage["cached"]))
+        hour = min(usage.get("cache_write_1h") or 0, written)
+        fresh = max(0, usage["input"] - usage["cached"] - written)
+        write_rate = p.get("cache_write", p["input"])
+        return (fresh * p["input"] + usage["cached"] * p.get("cached", p["input"])
+                + (written - hour) * write_rate + hour * p.get("cache_write_1h", write_rate)
+                + usage["output"] * p["output"]) / 1e6, "estimate"
 
     def _said(self, e: Exception) -> str:
         """An exception as the agent and the record may see it: http.client

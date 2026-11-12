@@ -276,6 +276,7 @@ class BoundTest(unittest.TestCase):
         req = {"model": "m", "messages": [], "max_tokens": 1}
         tokens = -(-len(json.dumps(req)) // 3)
         self.assertAlmostEqual(self.bound(req, dict(ROW, cache_write=1.25)), (tokens * 1.25 + 10.0) / 1e6)
+        self.assertAlmostEqual(self.bound(req, dict(ROW, cache_write=1.25, cache_write_1h=2.0)), (tokens * 2.0 + 10.0) / 1e6)
 
     def test_an_embeddings_call_has_no_output_and_an_encoded_file_is_not_a_prompt(self):
         req = {"model": "e", "input": ["some text"]}
