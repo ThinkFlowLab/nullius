@@ -11,7 +11,8 @@ separated:
   supplies its display label without changing the SSH target. The key stays a path.
 
 ``test`` asks the host what a run needs: that ssh gets in without a prompt,
-and whether ``uv``, ``docker`` and ``harbor`` answer there. It runs ssh with
+and whether ``uv``, ``docker`` and ``harbor`` answer there, and whether its
+docker has ``userns-remap``. It runs ssh with
 ``BatchMode=yes`` so a password prompt is a refusal, not a hang, and it never
 sends anything but that one command. Nothing is stored beyond the host list.
 """
@@ -31,6 +32,7 @@ _MANUAL = re.compile(r"^(?P<user>[A-Za-z0-9._-]+)@(?P<host>[A-Za-z0-9.-]+|\[[0-9
 PROBE = ("printf 'ok\\n'; for c in uv docker harbor; do command -v \"$c\" >/dev/null 2>&1 && printf '%s=yes\\n' \"$c\" || printf '%s=no\\n' \"$c\"; done; "
          "command -v harbor >/dev/null 2>&1 && printf 'harbor_version=%s\\n' \"$(harbor --version 2>/dev/null | sed -n 1p)\"; "
          "command -v docker >/dev/null 2>&1 && (docker ps >/dev/null 2>&1 && printf 'docker_ok=yes\\n' || printf 'docker_ok=no\\n'); "
+         "docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q name=userns && printf 'docker_userns=yes\\n'; "
          "printf 'hostname=%s\\n' \"$(hostname)\"")
 
 
@@ -187,7 +189,7 @@ def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, prog
     rc, out, err = (run or subprocess_run)(host.argv(probe, timeout=min(timeout, 8.0)), timeout)
     ms = int((time.monotonic() - started) * 1000)
     result: Dict = {"entry": host.entry, "label": host.label, "ok": False, "latency_ms": ms, "uv": None, "docker": None,
-                    "docker_ok": None, "harbor": None, "harbor_version": None, "hostname": None, "error": None,
+                    "docker_ok": None, "docker_userns": False, "harbor": None, "harbor_version": None, "hostname": None, "error": None,
                     **({"missing": []} if programs else {})}
     if rc != 0 or "ok" not in out.split():
         text = (err or out or "").strip().splitlines()
@@ -197,8 +199,8 @@ def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, prog
         k, _, v = line.partition("=")
         if k in ("uv", "docker", "harbor"):
             result[k] = v == "yes"
-        elif k == "docker_ok":
-            result["docker_ok"] = v == "yes"
+        elif k in ("docker_ok", "docker_userns"):
+            result[k] = v == "yes"
         elif k == "harbor_version":
             result["harbor_version"] = v.strip().removeprefix("harbor ").strip() or None
         elif k == "hostname":

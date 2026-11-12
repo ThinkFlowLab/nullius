@@ -160,6 +160,8 @@ The docker backend (`--backend docker`) is the isolation, and needs no such yes.
 
 Rootless podman is reached through its Docker API (`DOCKER_HOST` at `podman system service`'s socket), with `netns = "bridge"`, a DNS-enabled `default_network`, and `userns` at its default: with `keep-id`, a container's root is a sub-uid and cannot write the unit's folders.
 
+A rootful Docker with `userns-remap` maps the uids of each container to sub-uids. There, the containers that use your files (the agent's, the relay, an install, the check, a door and an own image) run with `--userns=host`, as on a default Docker. The licence forwarder and the check's proxy keep the remap.
+
 ### A benchmark's MCP server on the machine
 
 A benchmark whose tools are its upstream's own code declares `mcp_servers`, run from the driver's environment **on this machine**; a unit's `setup` asks for one by name in its `mcp` list.

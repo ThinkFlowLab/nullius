@@ -168,6 +168,16 @@ class Runtime(unittest.TestCase):
         venv_py = "/inst/mini-swe-agent/.venv/bin/python"
         self.assertEqual(container.in_runtime([venv_py, "/x/run.py"], self.RT), [venv_py, "/x/run.py"])
 
+    def test_the_box_runs_in_the_machines_user_namespace_on_a_docker_with_userns_remap_alone(self):
+        for remap in (True, False):
+            calls = []
+            b = container.Box("job", "u0001", "img", workdir="/app", network="net")
+            with self.subTest(remap=remap), mock.patch.object(container, "userns_remap", return_value=remap), \
+                    mock.patch.object(container, "_docker", lambda a, **kw: calls.append(a)), \
+                    mock.patch.object(b, "keeper", return_value="7"):
+                b.start()
+                self.assertEqual("--userns=host" in calls[0], remap)
+
     def test_exec_passes_variables_by_name_and_the_runtimes_read_only(self):
         b = container.Box("job", "u0001", "img", workdir="/app", runtimes=self.RT)
         argv = b.exec_argv(["node", "x"], {"HOME": "/h", "NULLIUS_RELAY_KEY": "placeholder", "PATH": "/p"}, "/usr/bin:/opt/nullius/node/bin")
@@ -300,7 +310,7 @@ class ImagesKept(unittest.TestCase):
             return mock.Mock(returncode=0, stdout="", stderr="")
         self.addCleanup(container._fetched.difference_update, {"theirs@sha256:1", "pulled@sha256:2"})
         self.addCleanup(lambda: [container._built.pop(t, None) for t in ("theirs@sha256:1", "pulled@sha256:2")])
-        with mock.patch.object(container, "_docker", docker), mock.patch.object(container, "_rootless", None):
+        with mock.patch.object(container, "_docker", docker), mock.patch.object(container, "_security", None):
             self.assertEqual(container.own_image({"key": "b"}, {"pull": "theirs@sha256:1"}, "/r"), "theirs@sha256:1")
             self.assertEqual(container.own_image({"key": "b"}, {"pull": "pulled@sha256:2"}, "/r"), "pulled@sha256:2")
             self.assertFalse(container.fetched("theirs@sha256:1"))
