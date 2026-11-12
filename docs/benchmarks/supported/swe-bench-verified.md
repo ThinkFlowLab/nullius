@@ -42,7 +42,7 @@ Software engineering: fix a real GitHub issue so the failing tests pass.
 
 ## Upstream limitations
 
-- django__django-10097 passes with no change: the tests it grades pass without the fix, and the URL tests its fix is for are not among them.
+- django__django-10097's graded tests pass without the fix, and the URL tests its fix is for are not among them. An empty patch is rejected, but these tests cannot distinguish the intended fix from an unrelated patch.
 
 ## Nullius limitations
 
