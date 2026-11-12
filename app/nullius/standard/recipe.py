@@ -38,7 +38,7 @@ import shlex
 from typing import Callable, Dict, List, Optional
 
 from nullius import hosts, providers
-from nullius.providers import PROVIDER_LABEL, PROVIDERS, STEP
+from nullius.providers import PROVIDERS, STEP
 from nullius.standard import hostreq, definitions, ledger, match, ports, prove
 
 HARNESS = "standard"
@@ -412,7 +412,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             add("model", "The paper's models are not listed for this provider.")
     provider = recipe.get("provider")
     if provider not in PROVIDERS:
-        add("model", "Choose a provider: OpenRouter, OpenAI or a local or self-hosted OpenAI-compatible endpoint.")
+        add("model", "Choose a provider: OpenRouter, OpenAI or an OpenAI-compatible endpoint.")
     model = str(recipe.get("model") or "").strip()
     if not _MODEL.match(model) and (needs_model or model):
         add("model", "Choose a model or enter its ID.")
@@ -594,7 +594,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                         ", ".join(f"{k} {v}" + ("" if k in p["given"] else " (its default)") for k, v in p["opts"].items())]
                        for p in picks if p["opts"]],
                      [STEP["model"], "Model", "none: a control calls no model" if out["keyless"]
-                      else f"{PROVIDER_LABEL[provider]} · " + (model if needs_model else ", ".join(p["o"]["sent"] for p in picks if p.get("setup")) or "the judge only")
+                      else f"{providers.label(providers.choice(provider, str(recipe.get('endpoint') or '')))} · " + (model if needs_model else ", ".join(p["o"]["sent"] for p in picks if p.get("setup")) or "the judge only")
                       + (f" · user simulator {sim_model or (b.get('simulator') or {}).get('model')}" + (" (leaderboard)" if lb.get("simulator") else "" if sim_model else " (official)") if b.get("simulator") else "")
                       + (f" · judge {judge_model or b['score']['judge']['model']}" + ("" if judge_model else " (official)") if (b.get("score") or {}).get("judge") else "")],
                      [STEP["limits"], "Scope", f"{'first ' + str(n) if isinstance(limit, int) else 'all ' + str(total or '')} {nouns}"
@@ -663,7 +663,7 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
         return {"errors": [f"no {kind} {key!r}"], "script": "", "jobs": [], "label": key}
     o = dict(o, label=definitions.title(o))
     if provider not in PROVIDERS:
-        errors.append("Choose a provider: OpenRouter, OpenAI or a local or self-hosted OpenAI-compatible endpoint.")
+        errors.append("Choose a provider: OpenRouter, OpenAI or an OpenAI-compatible endpoint.")
     if not _MODEL.match(model or ""):
         errors.append("Choose a model or enter its ID.")
     backend = definitions.names.backend(backend)
@@ -714,7 +714,7 @@ def proving(benchmark: str, *, dataset: str = "", limit=None, provider: str = "o
     if _int(concurrency, 1, MAX_CONCURRENT) is None:
         errors.append(f"Units at a time: a whole number from 1 to {MAX_CONCURRENT}.")
     if judged and provider not in PROVIDERS:
-        errors.append("Choose the judge's provider: OpenRouter, OpenAI or a local or self-hosted OpenAI-compatible endpoint.")
+        errors.append("Choose the judge's provider: OpenRouter, OpenAI or an OpenAI-compatible endpoint.")
     if judge_model and not _MODEL.match(judge_model):
         errors.append("The judge model, as the provider lists it - or empty for the benchmark's own.")
     if not re.match(r"^\d{4}-\d{2}-\d{2}__\d{2}-\d{2}-\d{2}$", stamp or ""):

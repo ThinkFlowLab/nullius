@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "harness": "harbor",
+  "name": "harbor-tau3-named-endpoint",
+  "title": "τ³-bench · registry · a named OpenAI-compatible endpoint",
+  "benchmark": "tau3-bench",
+  "source": "hub",
+  "dataset": "sierra-research/tau3-bench",
+  "path": "",
+  "generatorRoot": "",
+  "agents": [
+    "tau3-llm-agent"
+  ],
+  "customAgents": [],
+  "model": "test-model",
+  "provider": "custom",
+  "endpoint": "GPU_BOX",
+  "userModel": "",
+  "evalModel": "",
+  "keyEnv": "API_TOKEN",
+  "urlEnv": "API_URL",
+  "tasks": "",
+  "concurrency": 1,
+  "retries": 3,
+  "timeoutMultiplier": 1,
+  "agentMinutes": "",
+  "attempts": "",
+  "setupTimeoutMultiplier": "",
+  "verifierTimeoutMultiplier": "",
+  "buildTimeoutMultiplier": "",
+  "harborDev": "",
+  "include": "",
+  "output": "jobs",
+  "where": "local",
+  "params": {
+    "mcp_timeout_s": 300
+  },
+  "custom": [],
+  "harbor": {
+    "kind": "release",
+    "version": "0.24.0",
+    "extras": []
+  }
+}

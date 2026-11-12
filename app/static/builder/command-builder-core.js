@@ -131,6 +131,7 @@
         : Object.fromEntries(Object.entries(raw.options).filter(([k, v]) => r.others.includes(k) && v && typeof v === 'object').map(([k, v]) => [k, words(v)]));
     }
     if (PROVIDERS.includes(raw.provider)) r.provider = raw.provider;
+    keepEndpoint(r, raw);
     if ((Number.isInteger(raw.limit) && raw.limit >= 1) || raw.limit === '') r.limit = raw.limit;
     if ((Number.isInteger(raw.concurrency) && raw.concurrency >= 1) || raw.concurrency === '') r.concurrency = raw.concurrency;
     // attempts per unit and the judge's and user simulator's models: a reopened recipe runs as it was saved
@@ -196,28 +197,41 @@
       r.modelFormat = 'provider-id'; r[key] = m;
     } else r[key] = bareModel(m);
   }
-  // Where a run started here can go: the providers whose key - for a local or self-hosted endpoint, its URL, the key
+  // Where a run started here can go: the providers whose key - for an OpenAI-compatible endpoint, its URL, the key
   // being optional - is set in Settings (schema.credentials, runners.available), in the order the Model step prefers
   // them. With none, every provider stays visible. A schema that does not say (a test's) is
   // checked by the server alone.
-  const PROVIDER_LABEL = {openrouter: 'OpenRouter', openai: 'OpenAI', custom: 'Local or self-hosted OpenAI-compatible endpoint'};
+  const PROVIDER_LABEL = {openrouter: 'OpenRouter', openai: 'OpenAI', custom: 'OpenAI-compatible'};
   const PROVIDER_NEEDS = {openrouter: 'OPENROUTER_API_KEY', openai: 'OPENAI_API_KEY', custom: 'MODEL_API_URL'};
-  const available = () => ((schema.credentials || {}).available || []).filter(p => PROVIDERS.includes(p));
+  // A named OpenAI-compatible endpoint: the recipe keeps provider custom and the endpoint's id, which names its
+  // settings (MODEL_<ID>_API_URL); the Model step offers it as the choice custom:<id> (nullius/providers.py).
+  const ENDPOINT_ID = /^(?=.{1,32}$)[A-Z0-9]+(?:_[A-Z0-9]+)*$/;
+  function keepEndpoint(r, raw) { if (r.provider === 'custom' && ENDPOINT_ID.test(raw.endpoint || '')) r.endpoint = raw.endpoint; else delete r.endpoint; }
+  const kindOf = c => String(c).split(':')[0];
+  const endpointOf = c => String(c).split(':')[1] || '';
+  const labelOf = c => endpointOf(c) ? ((schema.credentials || {}).endpoints || {})[endpointOf(c)] || endpointOf(c) : PROVIDER_LABEL[c] || c;
+  const needsOf = c => endpointOf(c) ? 'MODEL_' + endpointOf(c) + '_API_URL' : PROVIDER_NEEDS[c] || PROVIDER_NEEDS.custom;
+  const available = () => ((schema.credentials || {}).available || []).filter(p => PROVIDERS.includes(kindOf(p)));
   const firstAvailable = (offered, otherwise) => available().find(p => offered.includes(p)) || otherwise;
   const providersOf = () => PROVIDERS;
   const recipeProvider = r => isStandard(r) ? r.provider : providerOf(r, r.model || r.userModel);
+  const choiceOf = r => recipeProvider(r) === 'custom' && r.endpoint ? 'custom:' + r.endpoint : recipeProvider(r);
+  // The Model step's choice into the recipe: its provider, and for a named endpoint its id.
+  function setChoice(r, c) { r.provider = kindOf(c); keepEndpoint(r, {endpoint: endpointOf(c)}); }
   // Why Run cannot start this recipe here, or '': its provider is not one of those. A recipe naming one keeps it,
   // said, until another is chosen - never switched behind the person's back. The server refuses the same
   // (web/execute.py, provider_problem).
   function providerBlocker(r) {
     if (!schema.credentials || (!isStandard(r) && !needsCredentials(r))) return '';
     if (isStandard(r) && standardKeyless(r)) return '';      // a control of an unjudged benchmark is handed no key (execution.Plan.keyless)
-    const offered = providersOf(r), have = available().filter(p => offered.includes(p)), p = recipeProvider(r);
+    const offered = providersOf(r), have = available().filter(p => offered.includes(kindOf(p))), p = choiceOf(r);
     const or = xs => xs.slice(0, -1).join(', ') + (xs.length > 1 ? ' or ' : '') + xs[xs.length - 1];
     if (have.includes(p)) return '';
     if (!have.length) return 'Run needs a model key, and none is set in Settings: set ' + or(offered.map(x => PROVIDER_NEEDS[x])) + ' there.';
-    return 'This recipe runs on ' + (PROVIDER_LABEL[p] || p) + ', and ' + (PROVIDER_NEEDS[p] || PROVIDER_NEEDS.custom) + ' is not set in Settings. Choose '
-      + or(have.map(x => PROVIDER_LABEL[x])) + ' on the Model step to run it, or set it in Settings.';
+    if (((schema.credentials || {}).broken || []).includes(p))
+      return 'This recipe runs on ' + labelOf(p) + ', and its URL in Settings holds a credential or is not an http(s) URL. Put the key in the Key field in Settings.';
+    return 'This recipe runs on ' + labelOf(p) + ', and ' + needsOf(p) + ' is not set in Settings. Choose '
+      + or(have.map(labelOf)) + ' on the Model step to run it, or set it in Settings.';
   }
   // Harbor's registry agents: routed by prefix; an OpenAI-compatible endpoint is spelled openai/.
   const agentModel = (r, m = r.model) => (providerOf(r, m) === 'openrouter' ? 'openrouter' : 'openai') + '/' + (r.modelFormat === 'provider-id' ? String(m || '') : bareModel(m));
@@ -408,7 +422,7 @@
       if (!allowed.includes(r.model)) add(STEP.model, 'Choose one of the paper models on this provider.');
     }
     if (callsModel && !named) add(STEP.model, benchmarkCallsModel(r) ? 'Enter a model for the agent and/or simulated user and evaluator.' : 'Enter a model.');
-    if (callsModel && !PROVIDERS.includes(r.provider)) add(STEP.model, 'Choose a provider: OpenRouter, OpenAI or a local or self-hosted OpenAI-compatible endpoint.');
+    if (callsModel && !PROVIDERS.includes(r.provider)) add(STEP.model, 'Choose a provider: OpenRouter, OpenAI or an OpenAI-compatible endpoint.');
     for (const [key,label] of [['keyEnv','API key source variable'],['urlEnv','Endpoint source variable']]) {
       if (callsModel && (key !== 'urlEnv' || r[key]) && !/^[A-Z_][A-Z0-9_]*$/.test(r[key])) add(STEP.model, label + ' must be an environment variable name.');
     }
@@ -598,6 +612,7 @@
     if (Array.isArray(raw.custom)) r.custom=raw.custom.slice(0,100).map(p=>({scope:String(p.scope||''),key:String(p.key||''),type:String(p.type||'string'),value:String(p.value??''),...(p.agent?{agent:String(p.agent)}:{})}));
     // Infer an omitted provider from the model prefix, then keep the bare model name.
     r.provider = PROVIDERS.includes(raw.provider) ? raw.provider : providerOf({}, raw.model || raw.userModel || '');
+    keepEndpoint(r, raw);
     if(raw.modelFormat === 'provider-id')r.modelFormat='provider-id';
     else { const typed = {model: r.model, userModel: r.userModel, evalModel: r.evalModel};
       for (const key of ['model', 'userModel', 'evalModel']) r[key] = bareModel(typed[key]);
@@ -744,5 +759,5 @@
         at: String(d.at || '')};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  return {STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });

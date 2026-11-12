@@ -102,6 +102,8 @@ class PrefixedNamesAndBareTokens(unittest.TestCase):
         ("GH_TOKEN=abcd1234efgh5678", "GH_TOKEN=[REDACTED]"),
         ("CURSOR_API_KEY=abcd1234efgh", "CURSOR_API_KEY=[REDACTED]"),
         ('{"MODEL_API_KEY": "abcd1234efgh"}', '{"MODEL_API_KEY": "[REDACTED]"}'),
+        ("MODEL_GPU_BOX_API_KEY=abcd1234efgh", "MODEL_GPU_BOX_API_KEY=[REDACTED]"),       # a named endpoint's key
+        ('{"MODEL_GPU_API_KEY": "abcd1234efgh"}', '{"MODEL_GPU_API_KEY": "[REDACTED]"}'),
         ("AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG", "AWS_SECRET_ACCESS_KEY=[REDACTED]"),
         ("pushed with ghp_abcdefghijklmnopqrstuvwxyz0123", "pushed with [REDACTED]"),
         ("hf_abcdefghijklmnopqrstuvwxyz and AKIAIOSFODNN7EXAMPLE", "[REDACTED] and [REDACTED]"),

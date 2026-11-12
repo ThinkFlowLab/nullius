@@ -72,8 +72,9 @@ or not its launcher had answered (``_kill_part``).
 The model key and endpoint follow the recipe's provider (``Plan.key_var``,
 ``url_var``, ``base_url``): on OpenRouter the Settings' OPENROUTER_API_KEY
 and OpenRouter's own endpoint; on OpenAI, OPENAI_API_KEY and no endpoint, so
-the clients use OpenAI's; on a local or self-hosted endpoint, MODEL_API_URL
-and MODEL_API_KEY - optional: without it the run is sent
+the clients use OpenAI's; on an OpenAI-compatible endpoint, its URL and its
+key (MODEL_API_URL and MODEL_API_KEY, or a named endpoint's own) - the key
+optional: without it the run is sent
 ``settings.MODEL_KEY_PLACEHOLDER``, for a server that checks no key - and a
 run without that endpoint fails before it starts.
 They are read on this machine and handed to the run as environment
@@ -327,8 +328,9 @@ def withheld() -> List[str]:
     licences go by - kept in its own store (``nullius.secrets``), although
     imported saved settings may still hold a value until it is moved from
     the benchmark's page - and GitHub tokens from saved settings or the
-    shell Nullius was started in."""
-    secret = {v.name for v in settings.VARIABLES if v.secret}
+    shell Nullius was started in. Every named endpoint's settings too, so a
+    run gets its own endpoint's key alone."""
+    secret = {v.name for v in settings.VARIABLES if v.secret or v.kind == "endpoint"} | set(settings.endpoint_names())
     return sorted(secret | {old for old, new in settings.INSTEAD.items() if new in secret}
                   | set(KEY_NAMES + URL_NAMES) | {"GITHUB_TOKEN", "GH_TOKEN"} | set(settings.agent_key_names())
                   | set(_licence_names()))
@@ -374,7 +376,7 @@ class Execution:
         # the first command cut short.
         self._run_plain = run or subprocess_run
         self._run = run or (lambda argv, timeout=600.0, stdin=None: subprocess_run(argv, timeout, stdin, stop=self._stop))
-        # an endpoint of the run's own (url_var: a local or self-hosted one) may check no key: it is sent the placeholder
+        # an endpoint of the run's own (url_var: an OpenAI-compatible one) may check no key: it is sent the placeholder
         self._key = (key if key is not None else env.get(plan.key_var, "")) or (settings.MODEL_KEY_PLACEHOLDER if plan.url_var else "")
         self._url = url if url is not None else (env.get(plan.url_var, "") if plan.url_var else plan.base_url)
         if plan.keyless:                          # a run that calls no model is given nothing it could leak
@@ -734,7 +736,7 @@ class Execution:
             if not self._key and self.plan.runner != "harbor" and not self.plan.keyless:
                 return self._fail("credentials", f"{self.plan.key_var} is not set in Settings; the producers and the judge would have no model key")
             if not self._url and self.plan.url_var and not self.plan.keyless and (harbor_model or self.plan.runner != "harbor"):
-                return self._fail("credentials", f"{self.plan.url_var} is not set in Settings; a local or self-hosted endpoint has no default, so the run would have nowhere to send its calls")
+                return self._fail("credentials", f"{self.plan.url_var} is not set in Settings; an OpenAI-compatible endpoint has no default, so the run would have nowhere to send its calls")
             broken = self._line_break()
             if broken:
                 return self._fail("credentials", broken)

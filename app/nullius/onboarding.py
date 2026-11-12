@@ -18,6 +18,7 @@ import shutil
 import subprocess
 from typing import Callable, Iterable, Optional
 
+from nullius import providers
 from nullius.standard import container
 
 CONTROLS = ("nop", "oracle")
@@ -84,7 +85,7 @@ def facts(env, jobs: Iterable[dict] = (), judged: bool = False, docker: Optional
     agents = [(j.get("agent") or "").lower() for j in jobs]
     found = (docker or docker_answers)()
     return {
-        "provider": any((env.get(k) or "").strip() for k in PROVIDER_KEYS),
+        "provider": any((env.get(k) or "").strip() for k in PROVIDER_KEYS) or bool(providers.endpoints(env)),
         "where": bool((env.get("HOSTS") or "").strip()) or found,
         "judge": bool(client.system_one(env)) or bool(client.llm_judge(env)),
         "control_run": any(a in CONTROLS for a in agents),

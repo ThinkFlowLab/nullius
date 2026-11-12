@@ -51,7 +51,7 @@ For the standard, the Docker row says when the engine has `userns-remap`, which 
 
 ### Which providers
 
-A provider is *set* when Settings holds `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or `MODEL_API_URL`, for both runners.
+A provider is *set* when Settings holds `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or the URL of an OpenAI-compatible endpoint, for both runners. Each OpenAI-compatible endpoint is a choice of its own, listed by its name.
 
 | Set in Settings | Model stage | Run |
 | --- | --- | --- |
@@ -66,10 +66,16 @@ A recipe of controls alone needs no key unless the benchmark uses a judge or emb
 | --- | --- | --- |
 | OpenRouter | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1`, fixed |
 | OpenAI | `OPENAI_API_KEY` | api.openai.com |
-| Local or self-hosted | `MODEL_API_KEY`, optional (placeholder `local` without it) | `MODEL_API_URL`, required |
+| OpenAI-compatible | The endpoint's key, optional (placeholder `local` without it) | The endpoint's URL, required |
+
+A recipe on an OpenAI-compatible endpoint records `"provider": "custom"` and
+the endpoint's id, `"endpoint": "GPU_BOX"`. The id does not change when the
+endpoint is renamed. A recipe without an `endpoint` uses the one at
+`MODEL_API_URL`. A recipe on an endpoint that was removed keeps it, marked
+*not set in Settings*, and Run stays disabled until another is chosen.
 
 The Model step searches the selected provider's model catalogue: OpenRouter,
-OpenAI, or the `/models` endpoint of a configured local or self-hosted provider.
+OpenAI, or the `/models` endpoint of the selected OpenAI-compatible endpoint.
 Keys stay on the Nullius host. Choose a result to use its exact model ID, or
 enter an ID manually if the catalogue is unavailable. An Original setup with
 a declared model list keeps those published choices.

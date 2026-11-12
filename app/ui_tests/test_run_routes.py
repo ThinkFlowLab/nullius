@@ -113,6 +113,33 @@ class RunRoutes(unittest.TestCase):
         self.assertEqual(later.json["log"], [])
         self.assertEqual(self.client.get("/run/nope").status_code, 404)
 
+    def test_a_run_on_a_named_endpoint_gets_that_endpoint_and_no_other_key(self):
+        """A recipe names its endpoint by id: the run is sent that endpoint's
+        URL and key; ``custom`` alone is the one at MODEL_API_URL; an endpoint
+        that is gone is refused before anything runs, never sent to another."""
+        self.stack.enter_context(patch.dict(os.environ, {"MODEL_API_URL": "http://default:1/v1", "MODEL_GPU_NAME": "GPU box",
+                                                         "MODEL_GPU_API_URL": "http://gpu:2/v1", "MODEL_GPU_API_KEY": "sk-gpu-0123456789abcdef",
+                                                         "MODEL_LAPTOP_API_URL": "http://laptop:3/v1", "MODEL_LAPTOP_API_KEY": "sk-laptop-0123456789"}))
+        script = 'echo "url=$API_URL key=${#API_TOKEN} other=${MODEL_LAPTOP_API_KEY:-none}${MODEL_API_KEY:-none}"'
+        for name, recipe, url, key in (("on-gpu", {"harness": "harbor", "provider": "custom", "endpoint": "GPU"}, "http://gpu:2/v1", 23),
+                                       ("on-default", {"harness": "harbor", "provider": "custom"}, "http://default:1/v1", 21)):
+            r = self.post({"name": name, "script": script, "where": "local", "model": "m", "recipe": recipe})
+            self.assertEqual(r.status_code, 200, r.get_data(as_text=True)); self.wait()
+            s = self.client.get(f"/run/{r.json['id']}?since=0"); self.addCleanup(s.close)
+            self.assertIn(f"url={url} key={key} other=nonenone", "\n".join(s.json["log"]), name)
+        r = self.post({"name": "on-gone", "script": script, "where": "local", "model": "m", "recipe": {"harness": "harbor", "provider": "custom", "endpoint": "GONE"}})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json["error"], "GONE cannot run here: MODEL_GONE_API_URL is not set in Settings. "
+                                          "Choose OpenRouter or OpenAI-compatible or GPU box or LAPTOP on the Model step, or set it in Settings.")
+        self.assertEqual(self.post({"name": "on-odd", "script": script, "where": "local", "model": "m",
+                                    "recipe": {"harness": "harbor", "provider": "custom", "endpoint": "../x"}}).status_code, 400)
+        self.assertFalse((self.tmp / "runs" / "on-gone").exists())
+        with patch.dict(os.environ, {"MODEL_GPU_API_URL": "http://me:pw@gpu:2/v1"}):                         # a credential in its URL: fixed first
+            r = self.post({"name": "on-bad", "script": script, "where": "local", "model": "m", "recipe": {"harness": "harbor", "provider": "custom", "endpoint": "GPU"}})
+        self.assertEqual(r.status_code, 400)
+        self.assertTrue(r.json["error"].startswith("GPU box cannot run here: its URL, MODEL_GPU_API_URL, holds a credential"), r.json["error"])
+        self.assertNotIn("pw@", r.json["error"])
+
     def test_a_run_on_a_host_runs_the_host_s_harbor(self):
         # a version posted by a page from before is not read: nothing names one any more
         r = self.post({"name": "tau3-x3", "script": '"$NULLIUS_HARBOR" run', "where": "bench", "harbor_version": "0.22.1", "model": "openai/x"})

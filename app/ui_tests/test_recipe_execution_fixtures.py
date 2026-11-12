@@ -48,9 +48,11 @@ class ReferenceRecipes(unittest.TestCase):
         return json.loads(result.stdout)
 
     @staticmethod
-    def render(name, out):
+    def render(name, out, recipe=None):
         """One text for one recipe: sections in a fixed order, each headed by
-        what it is, so a diff names the part that changed."""
+        what it is, so a diff names the part that changed. A recipe that names
+        its provider also pins the settings its run's key and endpoint are read
+        from (``web.execute.credentials_for``), never their values."""
         parts = ['# Nullius reference recipe: ' + name, '# Compiled by app/static/builder/command-builder-core.js against the pinned test schema.',
                  '# Regenerate deliberately with NULLIUS_WRITE_EXPECTED=1; every difference is a change of meaning.']
         for a in out['compiled']['artifacts']:
@@ -60,6 +62,10 @@ class ReferenceRecipes(unittest.TestCase):
         else:
             parts.append('\n# ===== runner: what Run posts (parts %s; jobs %s) =====\n%s' % (
                 ', '.join(p['id'] for p in out['runnable']['parts']), ', '.join(j['name'] for j in out['runnable']['jobs']), out['runnable']['script']))
+        if recipe and recipe.get('provider'):
+            from web import execute
+            c = execute.credentials_for(recipe['provider'], recipe.get('endpoint'))
+            parts.append('\n# ===== credentials: the key from %s, the endpoint from %s =====' % (c['key_var'], c['url_var'] or c['base_url'] or "the client's default"))
         return '\n'.join(parts) + '\n'
 
     def test_every_reference_recipe_compiles_to_its_stored_script(self):
@@ -70,7 +76,7 @@ class ReferenceRecipes(unittest.TestCase):
             with self.subTest(recipe=name):
                 out = self.compiled(recipe.read_text(encoding='utf-8'))
                 self.assertEqual(out['compiled']['errors'], [], name)
-                text = self.render(name, out)
+                text = self.render(name, out, json.loads(recipe.read_text(encoding='utf-8')))
                 expected = recipe.with_name(name + '.expected.sh')
                 if os.environ.get('NULLIUS_WRITE_EXPECTED') == '1':
                     expected.write_text(text, encoding='utf-8')

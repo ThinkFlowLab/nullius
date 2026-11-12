@@ -19,6 +19,9 @@
       card.querySelector('.st-provider-fields').hidden = mode !== 'editor';
       card.querySelector('[data-provider-edit]').hidden = mode !== 'list';
       card.querySelector('[data-provider-done]').hidden = mode !== 'editor';
+      const remove = card.querySelector('[data-provider-remove-ask]'), ask = card.querySelector('.st-provider-ask');
+      if (remove) remove.hidden = mode !== 'list';
+      if (ask && mode !== 'list') { ask.hidden = true; remove.setAttribute('aria-expanded', 'false'); }
     });
   }
   async function leave() {
@@ -39,7 +42,29 @@
     mode = 'catalogue'; render(); search.value = ''; search.dispatchEvent(new Event('input')); search.focus();
   });
   back.addEventListener('click', leave);
+  // Remove asks first, in place: Yes saves the removal, Keep it or Escape closes the question.
+  const setAsk = (card, open) => {
+    const button = card.querySelector('[data-provider-remove-ask]');
+    card.querySelector('.st-provider-ask').hidden = !open;
+    button.setAttribute('aria-expanded', String(open));
+    (open ? card.querySelector('[data-provider-remove-keep]') : button).focus({preventScroll: true});
+  };
+  section.addEventListener('keydown', event => {
+    const card = event.target.closest('[data-provider-card]'), ask = card?.querySelector('.st-provider-ask');
+    if (event.key === 'Escape' && ask && !ask.hidden) { event.preventDefault(); event.stopPropagation(); setAsk(card, false); }
+  });
   section.addEventListener('click', event => {
+    const ask = event.target.closest('[data-provider-remove-ask]');
+    if (ask) { setAsk(ask.closest('[data-provider-card]'), ask.getAttribute('aria-expanded') !== 'true'); return; }
+    const keep = event.target.closest('[data-provider-remove-keep]');
+    if (keep) { setAsk(keep.closest('[data-provider-card]'), false); return; }
+    const yes = event.target.closest('[data-provider-remove-yes]');
+    if (yes) {
+      const field = document.querySelector('[name="remove_provider"]');
+      field.value = yes.dataset.providerRemoveYes;
+      field.dispatchEvent(new Event('change', {bubbles: true}));
+      return;
+    }
     const pick = event.target.closest('[data-provider-select], [data-provider-edit]');
     if (pick) edit(pick.dataset.providerSelect || pick.dataset.providerEdit);
     if (event.target.closest('[data-provider-done]')) void leave();
@@ -56,7 +81,8 @@
       if (!card) continue;
       card.dataset.configured = state.configured;
       card.dataset.ready = state.ready;
-      card.querySelector('[data-provider-state]').textContent = state.label;
+      const said = card.querySelector('[data-provider-state]');
+      if (said) said.textContent = state.label;
     }
     if (removedSelectedKey) mode = 'list';
     render();
