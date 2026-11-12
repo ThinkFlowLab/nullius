@@ -9,7 +9,7 @@
   if [ -n "$FAKE_TOOL_LICENSE_PATH" ] && grep -q "^FAKE-LICENCE-FILE" "$FAKE_TOOL_LICENSE_PATH" 2>/dev/null; then echo licfile=yes; else echo licfile=no; fi
   if grep -q "^FAKE-LICENCE-FILE" /opt/licensed-tool/license.lic 2>/dev/null; then echo licpath=yes; else echo licpath=no; fi
   if [ -w /opt/licensed-tool/license.lic ]; then echo licwritable=yes; else echo licwritable=no; fi
-  # the licence server answers its greeting; in a container, a public address must not answer at all
+  # the licence server answers its greeting; in the licensed image, a public address must not answer at all
   python3 - <<'EOF'
 import os, socket
 def reach(addr, want=b""):
@@ -20,7 +20,7 @@ def reach(addr, want=b""):
     except (OSError, ValueError):
         return "no"
 print("server=" + (reach(os.environ["FAKE_LICENSE_SERVER"], b"LICENSE-OK") if os.environ.get("FAKE_LICENSE_SERVER") else "no"))
-print("public=" + (reach("1.1.1.1:443") if os.path.exists("/.dockerenv") else "untested"))
+print("public=" + (reach("1.1.1.1:443") if os.path.exists("/opt/licensed-tool/marker.txt") else "untested"))
 EOF
 } > probe.txt
 cat probe.txt
