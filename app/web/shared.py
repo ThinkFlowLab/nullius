@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import glob
+import hashlib
 import ipaddress
 from itertools import islice
 import secrets
@@ -456,6 +457,32 @@ def _origin_of(url: str) -> str:
 
 # Every page's forms send it: the workspace menu in base.html posts from anywhere.
 app.jinja_env.globals["csrf_token"] = lambda: _csrf_token()
+
+
+def _interface_id() -> str:
+    """A digest of the templates, static files and web routes a page is made of
+    and reads. A page rendered under another digest runs code this process no
+    longer serves."""
+    digest = hashlib.sha256()
+    for root in (os.path.join(app.root_path, app.template_folder), app.static_folder, os.path.join(app.root_path, "web")):
+        for folder, subfolders, names in os.walk(root):
+            subfolders[:] = sorted(d for d in subfolders if d != "__pycache__")   # written at import, not code
+            for name in sorted(names):
+                path = os.path.join(folder, name)
+                digest.update(os.path.relpath(path, root).encode() + b"\0")
+                with open(path, "rb") as f:
+                    digest.update(f.read())
+    return digest.hexdigest()[:16]
+
+
+INTERFACE = _interface_id()
+app.jinja_env.globals["interface_id"] = lambda: INTERFACE
+
+
+@app.after_request
+def _send_interface(response):
+    response.headers["X-Nullius-Interface"] = INTERFACE
+    return response
 
 
 class StaleFormToken(Forbidden):

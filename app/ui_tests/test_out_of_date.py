@@ -1,7 +1,8 @@
-"""A page out of date: the form token a restart forgot. The server says so,
-apart from its other refusals."""
+"""A page out of date: the form token a restart forgot, and the interface an
+upgrade replaced. The server says which, apart from its other refusals."""
 from __future__ import annotations
 
+import os
 import unittest
 from unittest.mock import patch
 
@@ -40,6 +41,21 @@ class OutOfDate(unittest.TestCase):
         for r in (missing, cross, remote):
             self.assertEqual(r.status_code, 403)
             self.assertIsNone(r.headers.get(REASON))
+
+    def test_every_response_names_the_interface_its_page_was_rendered_with(self):
+        page = self.client.get("/settings"); self.addCleanup(page.close)
+        served = page.headers["X-Nullius-Interface"]
+        self.assertIn(f'<meta name="nullius-interface" content="{served}">', page.get_data(as_text=True))
+        with patch.object(web.shared, "INTERFACE", "upgraded"):
+            later = self.client.get("/settings"); self.addCleanup(later.close)
+        self.assertEqual(later.headers["X-Nullius-Interface"], "upgraded")
+
+    def test_the_digest_covers_templates_static_files_and_web_routes(self):
+        walked, walk = [], os.walk
+        with patch.object(web.shared.os, "walk", lambda root: walked.append(root) or walk(root)):
+            first = web.shared._interface_id()
+        self.assertEqual([os.path.basename(root) for root in walked], ["templates", "static", "web"])
+        self.assertEqual(first, web.shared._interface_id())
 
 
 if __name__ == "__main__":
