@@ -415,23 +415,34 @@ def mounts(rw: Iterable[str], ro: Iterable[str], files: Iterable[str] = ()) -> L
     return out
 
 
-_rootless: Optional[bool] = None
+_security: Optional[str] = None
+
+
+def _security_options() -> str:
+    """The engine's security options (``docker info``). The first answer is
+    kept. An engine that does not answer gives none and is asked again."""
+    global _security
+    if _security is None:
+        try:
+            r = _docker(["info", "--format", "{{.SecurityOptions}}"], check=False, timeout=30)
+        except Unavailable:
+            return ""
+        if r.returncode != 0:
+            return ""
+        _security = r.stdout
+    return _security
 
 
 def rootless() -> bool:
     """Whether the engine is rootless (Docker or podman): its uid 0 is this
-    machine's user, every other uid a sub-uid. The first answer is kept. An
-    engine that does not answer counts as rootful and is asked again."""
-    global _rootless
-    if _rootless is None:
-        try:
-            r = _docker(["info", "--format", "{{.SecurityOptions}}"], check=False, timeout=30)
-        except Unavailable:
-            return False
-        if r.returncode != 0:
-            return False
-        _rootless = "name=rootless" in r.stdout
-    return _rootless
+    machine's user, every other uid a sub-uid."""
+    return "name=rootless" in _security_options()
+
+
+def userns_remap() -> bool:
+    """Whether a rootful Docker remaps its containers' users (``userns-remap``):
+    every uid inside, root too, is then a sub-uid of this machine."""
+    return "name=userns" in _security_options()
 
 
 def _user() -> str:

@@ -44,7 +44,7 @@ class ImageTest(unittest.TestCase):
 
 class ArgvTest(unittest.TestCase):
     def setUp(self):
-        self.enterContext(mock.patch.object(container, "_rootless", None))    # a faked docker's answer is not kept
+        self.enterContext(mock.patch.object(container, "_security", None))    # a faked docker's answer is not kept
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))
@@ -372,22 +372,29 @@ class ArgvTest(unittest.TestCase):
             self.assertEqual(self._users(), {f"{os.getuid()}:{os.getgid()}"})
 
     def test_the_engine_is_asked_once_whether_it_is_rootless_and_one_that_cannot_answer_counts_as_rootful(self):
-        self.enterContext(mock.patch.object(container, "_rootless", None))
+        self.enterContext(mock.patch.object(container, "_security", None))
         with mock.patch.object(container, "_docker", side_effect=container.Unavailable("no docker")):
             self.assertFalse(container.rootless())
         down = subprocess.CompletedProcess([], 1, "", "Cannot connect to the Docker daemon")
         with mock.patch.object(container, "_docker", return_value=down):
             self.assertFalse(container.rootless())
-        self.assertIsNone(container._rootless)                             # not an answer: asked again next time
+        self.assertIsNone(container._security)                             # not an answer: asked again next time
         said = subprocess.CompletedProcess([], 0, "[name=seccomp,profile=builtin name=rootless name=cgroupns]\n", "")
         with mock.patch.object(container, "_docker", return_value=said) as ask:
             self.assertTrue(container.rootless())
             self.assertTrue(container.rootless())
         self.assertEqual(ask.call_count, 1)
-        container._rootless = None
+        container._security = None
         said = subprocess.CompletedProcess([], 0, "[name=apparmor name=seccomp,profile=builtin name=cgroupns]\n", "")
         with mock.patch.object(container, "_docker", return_value=said):
             self.assertFalse(container.rootless())
+            self.assertFalse(container.userns_remap())
+        container._security = None
+        said = subprocess.CompletedProcess([], 0, "[name=seccomp,profile=builtin name=userns name=cgroupns]\n", "")
+        with mock.patch.object(container, "_docker", return_value=said) as ask:
+            self.assertTrue(container.userns_remap())
+            self.assertFalse(container.rootless())
+        self.assertEqual(ask.call_count, 1)                                # one question answers both
 
     def test_a_long_job_name_gives_a_short_unique_slug(self):
         a, b = container.slug("x" * 200), container.slug("x" * 199 + "y")

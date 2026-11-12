@@ -300,7 +300,7 @@ class ImagesKept(unittest.TestCase):
             return mock.Mock(returncode=0, stdout="", stderr="")
         self.addCleanup(container._fetched.difference_update, {"theirs@sha256:1", "pulled@sha256:2"})
         self.addCleanup(lambda: [container._built.pop(t, None) for t in ("theirs@sha256:1", "pulled@sha256:2")])
-        with mock.patch.object(container, "_docker", docker), mock.patch.object(container, "_rootless", None):
+        with mock.patch.object(container, "_docker", docker), mock.patch.object(container, "_security", None):
             self.assertEqual(container.own_image({"key": "b"}, {"pull": "theirs@sha256:1"}, "/r"), "theirs@sha256:1")
             self.assertEqual(container.own_image({"key": "b"}, {"pull": "pulled@sha256:2"}, "/r"), "pulled@sha256:2")
             self.assertFalse(container.fetched("theirs@sha256:1"))
