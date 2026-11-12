@@ -18,6 +18,18 @@ class Models(unittest.TestCase):
             self.assertEqual(result, [{'id': 'openai/demo', 'name': 'Demo'}])
             self.assertEqual(seen, [(base + '/models', 'Bearer synthetic-key', 12)])
 
+    def test_a_named_endpoint_is_asked_at_its_url_with_its_key(self):
+        seen = []
+        def fetch(req, timeout):
+            seen.append((req.full_url, req.get_header('Authorization')))
+            return io.BytesIO(json.dumps({'data': [{'id': 'qwen'}]}).encode())
+        env = {'MODEL_API_URL': 'http://default/v1', 'MODEL_API_KEY': 'default-key',
+               'MODEL_GPU_API_URL': 'http://gpu:8000/v1', 'MODEL_GPU_API_KEY': 'gpu-key'}
+        self.assertEqual(providers.list_models('custom:GPU', env, opener=fetch), [{'id': 'qwen', 'name': 'qwen'}])
+        self.assertEqual(seen, [('http://gpu:8000/v1/models', 'Bearer gpu-key')])
+        with self.assertRaises(ValueError):
+            providers.list_models('custom:GONE', env, opener=lambda *a, **kw: self.fail('must not fetch'))
+
     def test_failures_are_redacted_and_manual_entry_is_offered(self):
         def fail(*a, **kw):
             raise OSError('synthetic-private-key at private endpoint')

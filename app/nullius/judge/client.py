@@ -40,12 +40,13 @@ BUDGET_TOKENS = 32_000          # the request budget the docs state, shared by s
 CALIBRATION_MIN_CHARS = 4_000   # a stored call this small says nothing about a large request's ratio: it is kept out of the band
 
 
-# The LLM judge's providers: the chat endpoint and the Settings variables of its key (and, for a local or
-# self-hosted model, of its endpoint) - the keys and endpoints the model providers already use.
+# The LLM judge's providers: the chat endpoint and the Settings variables of its key (and, for an
+# OpenAI-compatible endpoint, of its URL) - the keys and endpoints the model providers already use.
+# A named endpoint is one more, local:<id> (``llm_providers``).
 LLM_PROVIDERS = {
     "openrouter": {"label": "OpenRouter", "url": "https://openrouter.ai/api/v1/chat/completions", "key": "OPENROUTER_API_KEY"},
     "openai": {"label": "OpenAI", "url": "https://api.openai.com/v1/chat/completions", "key": "OPENAI_API_KEY"},
-    "local": {"label": "Local or self-hosted", "url_var": "MODEL_API_URL", "key": "MODEL_API_KEY"},
+    "local": {"label": "OpenAI-compatible", "url_var": "MODEL_API_URL", "key": "MODEL_API_KEY"},
 }
 LANES = ("system-one", "llm")              # the two judgements a trial can have, each with its own records
 # Where System One is asked: TypeSafe's own endpoint, or OpenRouter's, which serves the same /v1/systemone contract
@@ -63,14 +64,14 @@ class Judge:
     """One judge: who answers, with what key, model and endpoint; true when
     it can be asked. Its repr never shows the key."""
 
-    def __init__(self, provider: str, key: str, model: str, url: str = "", lane: str = ""):
-        self.provider, self.key, self.model, self.url = provider, key, model, url
+    def __init__(self, provider: str, key: str, model: str, url: str = "", lane: str = "", name: str = ""):
+        self.provider, self.key, self.model, self.url, self.name = provider, key, model, url, name
         self.lane = lane or ("system-one" if provider == "typesafe" else "llm")
 
     def __bool__(self) -> bool:
         if self.lane == "system-one":
             return bool(self.key) and bool(self.model)
-        return bool(self.model) and bool(self.url) and (bool(self.key) or self.provider == "local")
+        return bool(self.model) and bool(self.url) and (bool(self.key) or self.provider.startswith("local"))
 
     def __repr__(self) -> str:
         return f"Judge({self.provider!r}, model={self.model!r}, key={'set' if self.key else 'unset'})"
@@ -78,7 +79,7 @@ class Judge:
     @property
     def label(self) -> str:
         names = SYSTEM_ONE_PROVIDERS if self.lane == "system-one" else LLM_PROVIDERS
-        return f"{names.get(self.provider, {}).get('label', self.provider)} · {self.model or 'no model chosen'}"
+        return f"{self.name or names.get(self.provider, {}).get('label', self.provider)} · {self.model or 'no model chosen'}"
 
     @property
     def missing(self) -> str:
@@ -89,7 +90,7 @@ class Judge:
         need = []
         if not self.url:
             need.append("an endpoint (MODEL_API_URL)")
-        if not self.key and self.provider != "local":
+        if not self.key and not self.provider.startswith("local"):
             need.append(f"the {LLM_PROVIDERS[self.provider]['label']} key")
         if not self.model:
             need.append("a model")
@@ -108,22 +109,38 @@ def system_one(env=os.environ) -> Judge:
     return Judge(chosen, env.get(d["key"], ""), (env.get("SYSTEM_ONE_MODEL") or "").strip() or d["model"], d["url"], lane="system-one")
 
 
+def llm_providers(env=os.environ) -> dict:
+    """``LLM_PROVIDERS`` and one ``local:<id>`` per named OpenAI-compatible endpoint whose URL is set."""
+    from nullius import providers
+    out = dict(LLM_PROVIDERS)
+    for e in providers.endpoints(env):
+        if e["id"]:
+            url_var, key_var = providers.endpoint_vars(e["id"])
+            out["local:" + e["id"]] = {"label": e["name"], "url_var": url_var, "key": key_var}
+    return out
+
+
 def llm_judge(env=os.environ) -> Judge:
     """The LLM judgement: the model ``LLM_JUDGE_MODEL`` names, on the
-    provider ``LLM_JUDGE_PROVIDER`` names (unset: the first of OpenRouter,
-    OpenAI, local whose key or endpoint is set), with that provider's key
-    and endpoint from the model providers' settings."""
-    chosen = (env.get("LLM_JUDGE_PROVIDER") or "").strip().lower()
-    if chosen not in LLM_PROVIDERS:
-        chosen = next((p for p, d in LLM_PROVIDERS.items() if env.get(d.get("url_var") or d["key"])), "openrouter")
-    d = LLM_PROVIDERS[chosen]
-    url = d.get("url") or ((env.get(d["url_var"]) or "").rstrip("/") + "/chat/completions" if env.get(d["url_var"]) else "")
-    key = env.get(d["key"], "") or (settings_placeholder() if chosen == "local" else "")
-    return Judge(chosen, key, (env.get("LLM_JUDGE_MODEL") or "").strip(), url)
+    provider ``LLM_JUDGE_PROVIDER`` names (unset, or an endpoint that is gone:
+    the first of OpenRouter, OpenAI, the OpenAI-compatible endpoints whose key
+    or endpoint is set), with that provider's key and endpoint from the model
+    providers' settings."""
+    table = llm_providers(env)
+    kind, colon, endpoint = (env.get("LLM_JUDGE_PROVIDER") or "").strip().partition(":")
+    chosen = kind.lower() + colon + endpoint.upper()
+    if chosen not in table:
+        chosen = next((p for p, d in table.items() if env.get(d.get("url_var") or d["key"])), "openrouter")
+    d = table[chosen]
+    from nullius import settings
+    at = env.get(d.get("url_var", "")) or ""
+    url = d.get("url") or (at.rstrip("/") + "/chat/completions" if at and not settings.endpoint_url_problem(at) else "")
+    key = env.get(d["key"], "") or (settings_placeholder() if chosen.startswith("local") else "")
+    return Judge(chosen, key, (env.get("LLM_JUDGE_MODEL") or "").strip(), url, name=d["label"] if ":" in chosen else "")
 
 
 def settings_placeholder() -> str:
-    """The key a local endpoint without one is sent, as a run is."""
+    """The key an OpenAI-compatible endpoint without one is sent, as a run is."""
     from nullius import settings
     return settings.MODEL_KEY_PLACEHOLDER
 
@@ -337,7 +354,7 @@ def ask_chat(state: str, ids, judge: Judge, truncated: bool = False, post: Optio
     record, in the same shape as TypeSafe's. Each answer is checked against
     its question: a probability in 0..1, a choice among its options, a score
     among its levels; one that is not is left out, as an unanswered question is."""
-    who = LLM_PROVIDERS.get(judge.provider, {}).get("label", judge.provider)
+    who = judge.name or LLM_PROVIDERS.get(judge.provider, {}).get("label", judge.provider)
     if not judge:
         raise JudgeError(401 if not judge.key else 400, f"the LLM judge is not ready: it needs {judge.missing} (Settings, Judge)")
     asked = questions if questions is not None else Q.request_questions(ids)

@@ -20,6 +20,25 @@ class Providers(unittest.TestCase):
         self.assertEqual(providers.available(env), ["openrouter", "openai", "custom"])
         self.assertEqual(providers.available({"MODEL_API_KEY": "k"}), [])          # a local endpoint needs its URL, not its key
 
+    def test_each_named_endpoint_is_a_choice_by_its_id_listed_by_its_name(self):
+        env = {"OPENAI_API_KEY": "k", "MODEL_API_URL": "http://127.0.0.1:8000/v1",
+               "MODEL_GPU_NAME": "GPU box", "MODEL_GPU_API_URL": "http://gpu:8000/v1",
+               "MODEL_A_LAPTOP_NAME": "Laptop", "MODEL_A_LAPTOP_API_URL": "http://laptop:11434/v1",
+               "MODEL_KEYONLY_API_KEY": "k"}                                       # no URL: not one a run can be sent to
+        self.assertEqual(providers.endpoints(env), [{"id": "", "name": "OpenAI-compatible"}, {"id": "GPU", "name": "GPU box"},
+                                                    {"id": "A_LAPTOP", "name": "Laptop"}])
+        self.assertEqual(providers.available(env), ["openai", "custom", "custom:GPU", "custom:A_LAPTOP"])
+        self.assertEqual([providers.label(c, env) for c in providers.available(env)], ["OpenAI", "OpenAI-compatible", "GPU box", "Laptop"])
+        self.assertEqual(providers.needs("custom:GPU"), "MODEL_GPU_API_URL"); self.assertEqual(providers.needs("custom"), "MODEL_API_URL")
+        self.assertEqual(providers.endpoint_vars("GPU"), ("MODEL_GPU_API_URL", "MODEL_GPU_API_KEY"))
+        self.assertEqual(providers.endpoint_vars(""), ("MODEL_API_URL", "MODEL_API_KEY"))
+        self.assertEqual((providers.choice("custom", "GPU"), providers.choice("openai", "GPU")), ("custom:GPU", "openai"))
+        self.assertEqual(providers.split("custom:GPU"), ("custom", "GPU"))
+        for odd in ("custom:gpu", "custom:../x", "openai:GPU", "custom:"):
+            self.assertNotIn(providers.split(odd)[0], providers.PROVIDERS, odd)   # no provider at all: refused, never another endpoint
+        self.assertEqual(providers.label("custom:GONE", env), "GONE")             # a removed endpoint: named by its id
+        self.assertEqual(providers.endpoints({"MODEL_GPU_API_URL": "http://gpu/v1"}), [{"id": "GPU", "name": "GPU"}])   # unnamed: its id
+
 
     def test_an_official_model_is_named_as_openrouter_names_it(self):
         """LongMemEval's judge and tau3-bench's simulator are written as OpenAI

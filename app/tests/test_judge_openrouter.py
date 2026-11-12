@@ -39,6 +39,20 @@ class Configured(unittest.TestCase):
         self.assertTrue(local)
         self.assertNotIn("sk-or-1", repr(client.llm_judge({"OPENROUTER_API_KEY": "sk-or-1"})))
 
+    def test_the_llm_judge_on_a_named_endpoint_uses_its_url_and_its_key(self):
+        env = {"MODEL_API_URL": "http://default/v1", "MODEL_API_KEY": "default-key", "MODEL_GPU_NAME": "GPU box",
+               "MODEL_GPU_API_URL": "http://gpu:8000/v1", "MODEL_GPU_API_KEY": "gpu-key", "LLM_JUDGE_MODEL": "qwen"}
+        self.assertEqual(client.llm_providers(env)["local:GPU"], {"label": "GPU box", "url_var": "MODEL_GPU_API_URL", "key": "MODEL_GPU_API_KEY"})
+        j = client.llm_judge(dict(env, LLM_JUDGE_PROVIDER="local:GPU"))
+        self.assertEqual((j.provider, j.url, j.key, j.label), ("local:GPU", "http://gpu:8000/v1/chat/completions", "gpu-key", "GPU box · qwen"))
+        self.assertTrue(j)
+        keyless = client.llm_judge({"MODEL_GPU_API_URL": "http://gpu:8000/v1", "LLM_JUDGE_PROVIDER": "local:GPU", "LLM_JUDGE_MODEL": "qwen"})
+        self.assertEqual(keyless.key, "local"); self.assertTrue(keyless)                                      # no key: the placeholder, as a run
+        bad = client.llm_judge({"MODEL_API_URL": "http://u:pw@box/v1", "LLM_JUDGE_PROVIDER": "local", "LLM_JUDGE_MODEL": "qwen"})
+        self.assertEqual(bad.url, ""); self.assertFalse(bad)                                                  # a credential in its URL: not asked
+        gone = client.llm_judge(dict(env, LLM_JUDGE_PROVIDER="local:GONE"))                                   # removed: the first one set
+        self.assertEqual((gone.provider, gone.key), ("local", "default-key"))
+
 
 class SystemOneOnOpenRouter(unittest.TestCase):
     def test_system_one_is_asked_where_settings_say_with_the_model_named(self):

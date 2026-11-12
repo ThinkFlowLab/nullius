@@ -23,6 +23,7 @@ import os
 import json
 import re
 import tempfile
+import urllib.parse
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -35,7 +36,7 @@ _LOCAL_KEY_OK = re.compile(r"^[!-~]+$")   # the same, any length: a local server
 _TEXT_OK = re.compile(r"^[^\x00-\x1f]{1,400}$")
 _MODEL_OK = re.compile(r"^~?[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,159}$")     # an OpenRouter model id: [~]vendor/model[:variant]
 _S1_OK = re.compile(r"^(typesafe|openrouter)$")
-_LLM_JUDGE_OK = re.compile(r"^(openrouter|openai|local)$")
+_LLM_JUDGE_OK = re.compile(r"^(openrouter|openai|local(:[A-Z0-9]+(_[A-Z0-9]+)*)?)$")
 _ENVNAME_OK = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 _BOOL = {"0", "1", "true", "false", "yes", "no"}
 
@@ -59,7 +60,7 @@ def reserved_name(n: str) -> bool:
     """A name that is already something else's: a setting, a start-up option,
     another spelling of one, the run's own or the shell's. An agent key or a
     benchmark's secret may not take it."""
-    return n in BY_NAME or n in STARTUP or n in INSTEAD or n in _NOT_AGENT_KEYS or n.startswith("NULLIUS_")
+    return n in BY_NAME or n in STARTUP or n in INSTEAD or n in _NOT_AGENT_KEYS or n.startswith("NULLIUS_") or bool(_ENDPOINT_VAR.match(n))
 
 
 def _agent_key_names(v: str) -> Optional[str]:
@@ -72,6 +73,44 @@ def _agent_key_names(v: str) -> Optional[str]:
     if len(set(names)) != len(names):
         return "names, each once"
     return None
+
+
+# Query parameters that carry a credential, whatever the service calls them
+_CREDENTIAL_PARAM = re.compile(r"^(key|api[_-]?key|token|access[_-]?token|secret|password|auth|authorization|sig|signature)$", re.I)
+_PUT_KEY = "put the key in the Key field"
+
+
+def endpoint_url_problem(v: str) -> Optional[str]:
+    """Why ``v`` cannot be an endpoint's URL, or None: an http(s) URL with a host, and no
+    credential in it - no user or password, no query parameter named like a key - since
+    the page shows it."""
+    try:
+        p = urllib.parse.urlsplit(v)
+        p.port
+    except ValueError:
+        return "an http(s) URL with a host"
+    if p.scheme not in ("http", "https") or not p.hostname or any(c.isspace() or ord(c) < 32 for c in v):
+        return "an http(s) URL with a host"
+    if "@" in p.netloc:
+        return f"a URL without a user or password in it: {_PUT_KEY}"
+    if any(_CREDENTIAL_PARAM.match(k) for k, _ in urllib.parse.parse_qsl(p.query, keep_blank_values=True)):
+        return f"a URL without a key in its query: {_PUT_KEY}"
+    return None
+
+
+def endpoint_url_shown(v: str) -> str:
+    """An endpoint's URL as the page shows it: as it is, or, when it holds a credential,
+    with the user, the password and each key-like query value hidden."""
+    if not endpoint_url_problem(v):
+        return v
+    try:
+        p = urllib.parse.urlsplit(v)
+    except ValueError:
+        return SECRET_SHOWN
+    netloc = ("[REDACTED]@" if "@" in p.netloc else "") + p.netloc.rpartition("@")[2]
+    query = "&".join(f"{k}=[REDACTED]" if _CREDENTIAL_PARAM.match(k) else f"{k}={w}"
+                     for k, w in urllib.parse.parse_qsl(p.query, keep_blank_values=True))
+    return urllib.parse.urlunsplit((p.scheme, netloc, p.path, query, p.fragment))
 
 
 def _hosts(v: str) -> Optional[str]:
@@ -88,7 +127,7 @@ class Variable:
     name: str
     group: str
     purpose: str
-    kind: str            # secret | localkey | path | paths | url | repo | name | bool | text | envname | hosts | model | llmprovider | s1provider | envnames
+    kind: str            # secret | localkey | endpoint | path | paths | url | repo | name | bool | text | envname | hosts | model | llmprovider | s1provider | envnames
     example: str = ""    # shown as a placeholder, written to .env.example as a comment
 
     @property
@@ -107,6 +146,7 @@ class Variable:
             "path": _check(_PATH_OK, "a path without control characters"),
             "paths": _paths,
             "url": _check(_URL_OK, "an http(s) URL"),
+            "endpoint": endpoint_url_problem,
             "repo": _check(_REPO_OK, "owner/name"),
             "name": _check(_NAME_OK, "letters, digits, dots, dashes or underscores (64 at most)"),
             "bool": _bool,
@@ -114,31 +154,38 @@ class Variable:
             "envname": _check(_ENVNAME_OK, "an environment variable name (capitals, digits, underscores)"),
             "hosts": _hosts,
             "model": _check(_MODEL_OK, "a model id as OpenRouter lists it, vendor/model"),
-            "llmprovider": _check(_LLM_JUDGE_OK, "openrouter, openai or local"),
+            "llmprovider": _check(_LLM_JUDGE_OK, "openrouter, openai, local or local:<endpoint id>"),
             "s1provider": _check(_S1_OK, "typesafe or openrouter"),
             "envnames": _agent_key_names,
         }[self.kind](value)
 
 
 GROUPS = ["Model credentials", "Run hosts", "Agent keys"]
-# The key a run on a local or self-hosted endpoint is sent with when
-# MODEL_API_KEY is not set: many such servers check none, but an
+# The key a run on an OpenAI-compatible endpoint is sent with when the
+# endpoint has no key: many such servers check none, but an
 # OpenAI-compatible client refuses to start without one.
 MODEL_KEY_PLACEHOLDER = "local"
+# The OpenAI-compatible endpoint MODEL_API_URL and MODEL_API_KEY hold, by this name.
+DEFAULT_ENDPOINT_NAME = "OpenAI-compatible"
+# More OpenAI-compatible endpoints, each by an id: MODEL_<ID>_NAME, MODEL_<ID>_API_URL and
+# MODEL_<ID>_API_KEY. A recipe records the id, not the name, so a rename keeps its recipes.
+ENDPOINT_ID = re.compile(r"^(?=.{1,32}$)[A-Z0-9]+(?:_[A-Z0-9]+)*$")
+_ENDPOINT_VAR = re.compile(r"^MODEL_([A-Z0-9]+(?:_[A-Z0-9]+)*)_(NAME|API_URL|API_KEY)$")
+ENDPOINT_PARTS = ("NAME", "API_URL", "API_KEY")
 
 # What a person sets. Everything else the application reads is a start-up
 # option with a command-line form or a sensible default (STARTUP below) and
 # is not on the page.
 VARIABLES: List[Variable] = [
-    Variable("MODEL_API_KEY", GROUPS[0], "The model API key for a local or self-hosted model: a recipe whose provider is an OpenAI-compatible endpoint of your own is sent there, at MODEL_API_URL, with this key. Optional, for a server that checks none: without it the run is sent the word " + repr(MODEL_KEY_PLACEHOLDER) + " as its key. A run gets it as API_TOKEN, OPENAI_API_KEY and LLM_API_KEY in its environment - over stdin to a host - and never in a recipe or a log.", "localkey", "sk-…"),
-    Variable("MODEL_API_URL", GROUPS[0], "The endpoint of that local or self-hosted model, required for those recipes: there is no default to fall back on, and the builder offers the local provider only once it is set. A run gets it as API_URL, OPENAI_BASE_URL and LLM_BASE_URL.", "secret", "https://…/v1"),
+    Variable("MODEL_API_KEY", GROUPS[0], "The key of the OpenAI-compatible endpoint at MODEL_API_URL: a recipe on that endpoint is sent there with this key. Optional, for a server that checks none: without it the run is sent the word " + repr(MODEL_KEY_PLACEHOLDER) + " as its key. A run gets it as API_TOKEN, OPENAI_API_KEY and LLM_API_KEY in its environment - over stdin to a host - and never in a recipe or a log.", "localkey", "sk-…"),
+    Variable("MODEL_API_URL", GROUPS[0], "The URL of an OpenAI-compatible endpoint, API path included, required for a recipe on it: there is no default to fall back on, and the builder offers the endpoint only once it is set. It is shown on the page, so it holds no credential: no user or password, no key in its query. More endpoints, each with a name, are MODEL_<ID>_NAME, MODEL_<ID>_API_URL and MODEL_<ID>_API_KEY. A run gets it as API_URL, OPENAI_BASE_URL and LLM_BASE_URL.", "endpoint", "https://…/v1"),
     Variable("OPENAI_API_KEY", GROUPS[0], "An OpenAI key, for a recipe whose provider is OpenAI: that run is sent to OpenAI's own endpoint, https://api.openai.com/v1, with this key - never with the model API key or its endpoint. It reaches the run as the model key does, and never a recipe or a log.", "secret"),
     Variable("OPENROUTER_API_KEY", GROUPS[0], "An OpenRouter key, for a recipe whose provider is OpenRouter: that run is sent to OpenRouter's own endpoint, https://openrouter.ai/api/v1, with this key - never with the model API key or its endpoint. It reaches the run as the model key does, and never a recipe or a log.", "secret"),
     Variable("ANTHROPIC_API_KEY", GROUPS[0], "An Anthropic key, for a run of the Nullius standard whose provider is Anthropic: its relay sends the calls to Anthropic's own endpoint, https://api.anthropic.com/v1, with this key. Only the relay holds it - never an agent, a recipe or a log.", "secret"),
     Variable("TYPESAFE_API_KEY", GROUPS[0], "TypeSafe.ai key for the System One judgement on TypeSafe's own endpoint, POST https://api.typesafe.ai/v1/systemone — sent as a bearer header there and nowhere else.", "secret", "ts-…"),
     Variable("SYSTEM_ONE_PROVIDER", GROUPS[0], "Where the System One judgement is asked: typesafe (its own endpoint, with TYPESAFE_API_KEY) or openrouter (https://openrouter.ai/api/v1/systemone, the same contract, with OPENROUTER_API_KEY). Unset: TypeSafe when its key is set, else OpenRouter when its key is.", "s1provider"),
     Variable("SYSTEM_ONE_MODEL", GROUPS[0], "The System One model, as the provider names it: on TypeSafe jev-latest, on OpenRouter ~typesafe/jev-latest, typesafe/jev-router, jaredpalmer/kev-4b... Unset: the provider's Jev.", "model"),
-    Variable("LLM_JUDGE_PROVIDER", GROUPS[0], "The provider of the LLM judgement, the second judgement beside System One: openrouter, openai or local, asked with that provider's own key and endpoint from the model providers above. Unset: the first of them that is set.", "llmprovider"),
+    Variable("LLM_JUDGE_PROVIDER", GROUPS[0], "The provider of the LLM judgement, the second judgement beside System One: openrouter, openai, local (the endpoint at MODEL_API_URL) or local:<ID> (the endpoint MODEL_<ID>_API_URL), asked with that provider's own key and endpoint from the model providers above. Unset: the first of them that is set.", "llmprovider"),
     Variable("LLM_JUDGE_MODEL", GROUPS[0], "The model of the LLM judgement, as its provider names it (on OpenRouter, vendor/model). It is asked the same questions as System One and answers them as JSON; its numbers are what it states, so a choice or a score carries no confidence.", "model"),
     Variable("AGENT_KEYS", GROUPS[2], "The names of the agent keys this file holds, comma-separated: the keys an agent needs of its own vendor, beside the model's (Cursor's CLI agent a CURSOR_API_KEY, Copilot's a GH_TOKEN). Each is a line of its own in this file. A Harbor run gets every one of them in its environment - over stdin to a host - and a Nullius standard run's never; none is ever written into a recipe or a log.", "envnames"),
     Variable("HOSTS", GROUPS[1], "Machines a recipe can run on, over ssh: an alias from ~/.ssh/config, or user@host[:port][:/path/to/key]. Only the name is stored; keys stay where they are.", "hosts", "user@host[:port][:/path/to/key]"),
@@ -289,6 +336,41 @@ def agent_key_values(env=None) -> Dict[str, str]:
     return {n: env[n] for n in agent_key_names(env) if env.get(n)}
 
 
+def endpoint_ids(env=None) -> List[str]:
+    """The ids of the named OpenAI-compatible endpoints: every id one of whose settings is set."""
+    env = os.environ if env is None else env
+    return sorted({m.group(1) for m in map(_ENDPOINT_VAR.match, env) if m and ENDPOINT_ID.match(m.group(1))})
+
+
+def endpoint_settings(i: str) -> List[str]:
+    """The settings of the endpoint ``i``: its name, URL and key."""
+    return [f"MODEL_{i}_{part}" for part in ENDPOINT_PARTS]
+
+
+def endpoint_names(env=None) -> List[str]:
+    """Every setting of a named endpoint that ``env`` holds: what a run never inherits."""
+    return sorted(n for n in (os.environ if env is None else env) if _ENDPOINT_VAR.match(n))
+
+
+def endpoint_variable(name: str) -> Optional[Variable]:
+    """A named endpoint's setting as the page and ``save_many`` treat it, or None for another name."""
+    m = _ENDPOINT_VAR.match(name)
+    if not m or not ENDPOINT_ID.match(m.group(1)):
+        return None
+    what, kind = {"NAME": ("name", "text"), "API_URL": ("URL", "endpoint"), "API_KEY": ("key, optional", "localkey")}[m.group(2)]
+    return Variable(name, GROUPS[0], f"The {what} of the OpenAI-compatible endpoint {m.group(1)}.", kind)
+
+
+def new_endpoint_id(name: str, taken) -> str:
+    """An id for a new endpoint, from its name: capitals, digits and underscores, not one of ``taken``."""
+    base = re.sub(r"[^A-Z0-9]+", "_", name.upper()).strip("_")[:28].strip("_") or "ENDPOINT"
+    n, out = 1, base
+    while out in taken:
+        n += 1
+        out = f"{base}_{n}"
+    return out
+
+
 def agent_variable(name: str) -> Variable:
     """An agent key as the page and ``save_many`` treat it: a secret of its own."""
     return Variable(name, GROUPS[2], f"An agent key, {name}: sent to Harbor runs, to the agent that reads it.", "secret")
@@ -347,14 +429,15 @@ def unread(path: str) -> List[dict]:
     A run inherits those its launcher does not withhold
     (``execution.withheld``: every other spelling of a key among them)."""
     keys = set(agent_key_names()) | set(agent_key_names(in_file(path)))
-    return [{"name": k, "instead": INSTEAD.get(k, "")} for k in in_file(path) if k not in BY_NAME and k not in STARTUP and k not in keys]
+    return [{"name": k, "instead": INSTEAD.get(k, "")} for k in in_file(path)
+            if k not in BY_NAME and k not in STARTUP and k not in keys and not endpoint_variable(k)]
 
 
 # What a page shows of a secret that is set: the same eight stars whatever it is, so not even its length
 # says anything about it.
 SECRET_SHOWN = "********"
 
-# Said beside a local endpoint set without a key: allowed, the user's choice, but advised.
+# Said beside an endpoint set without a key: allowed, the user's choice, but advised.
 LOCAL_KEY_ADVICE = "No key: the run is sent the word " + repr(MODEL_KEY_PLACEHOLDER) + ". Fine for a server that checks none, but a key is advised."
 
 
@@ -362,11 +445,14 @@ def state(var: Variable, file_values: Dict[str, str]) -> dict:
     """What the page shows: where the value comes from, never a secret."""
     value = os.environ.get(var.name)
     source = "unset" if value is None else ("file" if var.name in LOADED_KEYS else "environment")
-    shown = "" if value is None else (SECRET_SHOWN if var.secret else value)
+    shown = "" if value is None else (SECRET_SHOWN if var.secret else endpoint_url_shown(value) if var.kind == "endpoint" else value)
+    # an endpoint's URL saved or set before it was shown: said, and not saved again until fixed
+    problem = endpoint_url_problem(value) if var.kind == "endpoint" and value else None
     return {"name": var.name, "group": var.group, "purpose": var.purpose, "kind": var.kind, "secret": var.secret,
             "example": var.example, "source": source, "shown": shown,
             "shadowed": source == "environment" and var.name in file_values and file_values[var.name] != value,
-            "advice": LOCAL_KEY_ADVICE if var.kind == "localkey" and value is None and os.environ.get("MODEL_API_URL") else ""}
+            "advice": LOCAL_KEY_ADVICE if var.kind == "localkey" and value is None and os.environ.get(var.name[:-3] + "URL") else "",
+            "problem": f"This URL must be {problem}." if problem else ""}
 
 
 def states(path: str) -> List[dict]:
@@ -374,7 +460,8 @@ def states(path: str) -> List[dict]:
     read only to say which values it shadows: a key written by hand after
     start reads as before until ``refresh`` (``sync``, before a request) applies it."""
     fv = in_file(path)
-    return [state(v, fv) for v in VARIABLES] + [state(agent_variable(n), fv) for n in agent_key_names()]
+    return ([state(v, fv) for v in VARIABLES] + [state(agent_variable(n), fv) for n in agent_key_names()]
+            + [state(endpoint_variable(n), fv) for i in endpoint_ids() for n in endpoint_settings(i)])
 
 
 def save(path: str, name: str, value: Optional[str]) -> None:
@@ -394,7 +481,7 @@ def save_many(path: str, changes: Dict[str, Optional[str]]) -> None:
     agents = set() if listed is None or _agent_key_names(listed) else {n.strip() for n in listed.split(",") if n.strip()}
     agents |= set(agent_key_names())                  # a key being removed with its name is still one this file may hold
     for name, value in changes.items():
-        var = BY_NAME.get(name) or (agent_variable(name) if name in agents else None)
+        var = BY_NAME.get(name) or endpoint_variable(name) or (agent_variable(name) if name in agents else None)
         if var is None:
             problems.append(f"{name} is not a setting this application reads.")
         elif value is not None:
