@@ -74,11 +74,11 @@ class Inventory(unittest.TestCase):
         self.assertEqual(bad, [])
         self.assertNotIn("retriever", vals)
 
-    def test_the_dense_retrievers_need_a_gpu_and_gte_and_the_expansions_are_recorded_not_offered(self):
+    def test_the_dense_retrievers_need_a_gpu_and_gte_is_recorded_not_offered(self):
         by = {(r["entry"], r["setting"]): r["nullius"] for r in rows()}
         self.assertEqual(by[("src/retrieval/run_retrieval.sh", "$2 retriever flat-contriever, flat-stella")], "option:retriever")
         self.assertTrue(by[("src/retrieval/run_retrieval.sh", "$2 retriever flat-gte")].startswith("not offered - "))
-        self.assertTrue(by[("src/retrieval/run_retrieval.sh", "$4 index_expansion")].startswith("not offered - "))
+        self.assertEqual(by[("src/retrieval/run_retrieval.sh", "$4 index_expansion session methods")], "option:session_expansion")
         r = BENCH["options"]["retriever"]
         for v in ("flat-contriever-session", "flat-contriever-turn", "flat-stella-session", "flat-stella-turn"):
             self.assertIn(v, r["values"])
@@ -156,7 +156,7 @@ def _fake_upstream(root):
 
 
 class Driver(unittest.TestCase):
-    def run_driver(self, reqs, options, keep=None, questions=None):
+    def run_driver(self, reqs, options, keep=None, questions=None, files=None):
         with tempfile.TemporaryDirectory() as tmp:
             t = keep or tmp
             up, ws = os.path.join(t, "up"), os.path.join(t, "ws")
@@ -168,7 +168,8 @@ class Driver(unittest.TestCase):
                             "haystack_session_ids": [], "haystack_dates": [], "haystack_sessions": []}
                            for q, t in (questions or [("q1", "multi-session")])], f)
             env = dict(os.environ, NULLIUS_UPSTREAM=up, NULLIUS_DATASET=data,
-                       **{"NULLIUS_OPTION_" + k.upper(): v for k, v in options.items()})
+                       **{"NULLIUS_OPTION_" + k.upper(): v for k, v in options.items()},
+                       **{"NULLIUS_FILE_" + k.upper(): v for k, v in (files or {}).items()})
             lines = "".join(json.dumps(r if r["op"] == "units" else dict(r, dir=ws)) + "\n" for r in reqs)
             out = subprocess.run([sys.executable, DRIVER], input=lines, capture_output=True, text=True, env=env, timeout=60)
             return [json.loads(ln) for ln in out.stdout.splitlines()]
@@ -233,6 +234,45 @@ class Driver(unittest.TestCase):
         for setup in ("original", "model", "yours"):
             vals, bad = definitions.bench_options_of(BENCH, "longmemeval_oracle", {"question_type": "knowledge-update"}, setup)
             self.assertEqual((bad, vals["question_type"]), ([], "knowledge-update"))
+
+    def test_expansions_use_the_exact_cache_member_and_pass_all_join_modes(self):
+        import io, tarfile, zipfile
+        methods = {"session-summ": "zeroshot", "session-keyphrase": "zeroshot", "session-userfact": "ICL",
+                   "turn-keyphrase": "zeroshot", "turn-userfact": "ICL"}
+        joins = BENCH["options"]["expansion_join"]["values"]
+        for i, (method, suffix) in enumerate(list(methods.items()) + [("session-summ", "zeroshot")]):
+            with self.subTest(method=method, join=joins[i]), tempfile.TemporaryDirectory() as tmp:
+                member = f"merged_cache_{method}_llama-3.1-8b-instruct_{suffix}.json"
+                archive = os.path.join(tmp, "cache.tar.gz")
+                with tarfile.open(archive, "w:gz") as tar:
+                    for name in ("unrelated.json", member):
+                        info = tarfile.TarInfo(name); info.size = 2
+                        tar.addfile(info, io.BytesIO(b"{}"))
+                tokenizer = os.path.join(tmp, "punkt.zip")
+                with zipfile.ZipFile(tokenizer, "w") as archive_zip:
+                    for name in ("collocations.tab", "sent_starters.txt", "abbrev_types.txt", "ortho_context.tab"):
+                        archive_zip.writestr("punkt_tab/english/" + name, "")
+                granularity = method.split("-")[0]
+                options = {"retriever": "flat-bm25-" + granularity, granularity + "_expansion": method,
+                           "expansion_join": joins[i]}
+                vals, bad = definitions.bench_options_of(BENCH, "longmemeval_oracle", options, "model")
+                self.assertEqual(bad, [])
+                split_summary = method == "session-summ" and joins[i].startswith("split-")
+                self.assertEqual(definitions.option_needs(BENCH, vals)["files"],
+                                 ["index_expansions", "punkt_tab"] if split_summary else ["index_expansions"])
+                got = self.run_driver([{"op": "answer", "unit": "q1", "setup": "model", "model": "gpt-4o",
+                                        "base_url": "u", "key": "k"}], options, keep=tmp, files={"index_expansions": archive, "punkt_tab": tokenizer})
+                self.assertNotIn("error", got[0], got[0])
+                with open(os.path.join(tmp, "ws", "q1.retrieved.json")) as f:
+                    argv = json.load(f)[0]["retrieval"]["argv"]
+                pairs = dict(zip(argv[::2], argv[1::2]))
+                self.assertEqual(pairs["--index_expansion_method"], method)
+                self.assertEqual(pairs["--index_expansion_result_join_mode"], joins[i])
+                self.assertEqual(pairs["--index_expansion_result_cache"], os.path.join(tmp, "ws", member))
+                self.assertFalse(os.path.exists(os.path.join(tmp, "ws", "unrelated.json")))
+                self.assertEqual(os.path.isdir(os.path.join(tmp, "ws", "nltk_data")), split_summary)
+                inactive = dict(vals, retriever="full-history-session")
+                self.assertEqual(definitions.option_needs(BENCH, inactive)["files"], [])
 
     def test_a_dense_retriever_runs_run_retrieval_with_the_repositorys_shared_model_cache(self):
         with tempfile.TemporaryDirectory() as t:

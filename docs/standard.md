@@ -418,13 +418,14 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `summary`, `values` or `pattern`, `default` | What it changes, its allowed choices or input pattern, and its value when unset |
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
-| `needs` | What a value needs: an `embeddings` model, or `host` requirements |
+| `needs` | What a value needs: an `embeddings` model, `host` requirements, or named `files` |
 | `when` | Another option's values that make it apply |
 | `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`) |
 
 - **Temperature** in GSM8K and HumanEval's Original setups accepts a non-negative decimal, such as `0.5`. **Provider default** omits the parameter; the provider/model decides. Some models restrict overrides. In the builder, leave the input empty for provider default; the CLI accepts `--bench-option temperature=0.5` or `temperature=default`. This does not override an agent's own sampling settings.
 - **Read** by the driver as `NULLIUS_OPTION_<NAME>`; set with `cli run --bench-option NAME=VALUE`.
 - **`embeddings`**: the value gets the run's own relay as the driver's `OPENAI_BASE_URL` (and its MCP servers'), the model pinned on its route; it wants the OpenAI provider. A judge route handed to litellm goes in its `api_base`.
+- **`files`**: a benchmark declares `{name: {url: "https://…", sha256: "…"}}`; an option value names them with `needs.files: [name]`. A needs block may add `when: {other_option: [values]}` to require its resources only under those selections. Only active options and needs fetch files, once per digest under `STANDARD_DATA_DIR` (the dataset cache by default), refusing a mismatched download. The driver receives each path as `NULLIUS_FILE_<NAME>` (upper case). Names use lower case letters and underscores.
 - **`host`**: `{summary, check: [programs on PATH], install: {apt, npm}}` (`standard/hostreq.py`), whatever the backend; hardware (a CUDA GPU, by `nvidia-smi`) has no `install`. A run refuses without it and says the commands.
 - **One integration per benchmark.** Add supported behavior as options on that entry, not numbered integration revisions. Record the selected options with each run and revalidate affected proofs.
 

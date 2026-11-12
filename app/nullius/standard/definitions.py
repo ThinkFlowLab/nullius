@@ -142,11 +142,11 @@ _VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,39}$")
 # What a version may say for itself; the rest of the file is shared.
 VERSIONED = ("upstream", "install", "start", "model", "env", "options", "caches", "fidelity", "proven")
 # What a benchmark's version may say for itself: its data, its driver, how it scores, who plays its user, its environments.
-BENCH_VERSIONED = ("upstream", "datasets", "driver", "mcp_servers", "score", "simulator", "limits", "controls", "environments",
+BENCH_VERSIONED = ("upstream", "datasets", "files", "driver", "mcp_servers", "score", "simulator", "limits", "controls", "environments",
                    "options", "host", "setups", "proven", "leaderboard")
 # What a benchmark's option value may need (``options.<name>.needs``): an embedding model its driver calls
-# through the run's relay, and requirements of the machine the driver runs on (``host``).
-NEED_KEYS = ("embeddings", "host")
+# through the run's relay, machine requirements (``host``), and digest-pinned auxiliary ``files``.
+NEED_KEYS = ("embeddings", "host", "files")
 _PROGRAM = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,39}$")
 _PACKAGE = re.compile(r"^[@a-z0-9][a-z0-9@/._+-]{0,99}$")
 HOST_INSTALLERS = ("apt", "npm")
@@ -453,11 +453,20 @@ def _options(d: dict) -> List[str]:
     return bad
 
 
+def _when_valid(name: str, when, opts: dict) -> bool:
+    return isinstance(when, dict) and all(k != name and k in opts and isinstance(vs, list) and vs
+                                          and all(v in opts[k].get("values", []) for v in vs) for k, vs in when.items())
+
+
+def _when_applies(when: dict, opts: dict, values: dict) -> bool:
+    return all(values.get(k, opts[k].get("default")) in vs for k, vs in when.items())
+
+
 def _bench_options(d: dict) -> List[str]:
     """A benchmark's ``options``: a choice its upstream offers a run (a search, a mode), each with a
     ``summary``, its ``values``, a ``default`` a run gets when it chooses none, and optionally the
     ``datasets`` it applies to, a line ``about`` each value, what a value ``needs``: an
-    ``embeddings`` model called through the run's relay, ``host`` requirements by name - and
+    ``embeddings`` model called through the run's relay, ``host`` requirements or ``files`` by name - and
     ``when`` it applies: another option's values (a retriever's, only with a retrieval)."""
     opts = d.get("options")
     if opts is None:
@@ -467,6 +476,7 @@ def _bench_options(d: dict) -> List[str]:
         return bad
     ids = {x.get("id") for x in d.get("datasets") or [] if isinstance(x, dict)}
     hosts = d.get("host") or {}
+    files = d.get("files") if isinstance(d.get("files"), dict) else {}
     for name, o in opts.items():
         w = f"options.{name}"
         ds = o.get("datasets")
@@ -476,24 +486,54 @@ def _bench_options(d: dict) -> List[str]:
         if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours",) for x in on)):
             bad.append(f"{w}.setups: where it applies - some of original, model, yours (an agent or a capability)")
         when = o.get("when") or {}
-        if not isinstance(when, dict) or any(k == name or k not in opts or not isinstance(v, list) or not v
-                                             or any(x not in opts[k].get("values", []) for x in v) for k, v in when.items()):
+        if not _when_valid(name, when, opts):
             bad.append(f"{w}.when: another option -> the values of it this one applies under")
         about = o.get("about") or {}
         if not isinstance(about, dict) or any(option_problem(o, k) is not None or not isinstance(v, str) for k, v in about.items()):
             bad.append(f"{w}.about: a line for some of its values")
         needs = o.get("needs") or {}
         if not isinstance(needs, dict):
-            bad.append(f"{w}.needs: value -> {{embeddings, host}}")
+            bad.append(f"{w}.needs: value -> {{embeddings, host, files}}")
             continue
         for v, n in needs.items():
-            if option_problem(o, v) is not None or not isinstance(n, dict) or any(k not in NEED_KEYS for k in n):
-                bad.append(f"{w}.needs.{v}: one of its values -> {{embeddings: a model, host: [requirements]}}")
+            if option_problem(o, v) is not None or not isinstance(n, dict) or any(k not in NEED_KEYS + ("when",) for k in n):
+                bad.append(f"{w}.needs.{v}: one of its values -> {{embeddings: a model, host: [requirements], files: [names]}}")
                 continue
+            if not _when_valid(name, n.get("when") or {}, opts):
+                bad.append(f"{w}.needs.{v}.when: another option -> the values that need these requirements")
             if "embeddings" in n and not _OPTION_VALUE.match(str(n["embeddings"])):
                 bad.append(f"{w}.needs.{v}.embeddings: the embedding model, as its provider names it")
             if "host" in n and (not isinstance(n["host"], list) or any(h not in hosts for h in n["host"])):
                 bad.append(f"{w}.needs.{v}.host: names of the benchmark's host requirements")
+            if "files" in n and (not isinstance(n["files"], list)
+                                 or any(not isinstance(f, str) or f not in files for f in n["files"])):
+                bad.append(f"{w}.needs.{v}.files: names of the benchmark's files")
+    return bad
+
+
+def _files(d: dict) -> List[str]:
+    """Auxiliary data fetched only when selected options need it, addressed by digest."""
+    files = d.get("files", {})
+    if not isinstance(files, dict):
+        return ["files: name -> {url, sha256}"]
+    bad = []
+    for name, f in files.items():
+        w = f"files.{name}"
+        if not _OPTION.fullmatch(str(name)) or not isinstance(f, dict):
+            bad.append(f"{w}: a lower case name -> {{url, sha256}}")
+            continue
+        from urllib.parse import urlsplit
+        url = f.get("url", "")
+        try:
+            parsed = urlsplit(url) if isinstance(url, str) else None
+            valid = (parsed and parsed.scheme == "https" and parsed.hostname and not parsed.username
+                     and not parsed.password and not parsed.fragment and not any(c.isspace() for c in url))
+        except ValueError:
+            valid = False
+        if not valid:
+            bad.append(f"{w}.url: an https address without credentials or a fragment")
+        if not _SHA256.fullmatch(str(f.get("sha256", ""))):
+            bad.append(f"{w}.sha256: the file's digest")
     return bad
 
 
@@ -540,13 +580,20 @@ def bench_options_of(bench: dict, dataset: str, given: Optional[dict] = None, se
 
 
 def option_needs(bench: dict, values: dict) -> dict:
-    """What the chosen option values need: {"embeddings": [models], "host": [requirement names]}."""
-    out = {"embeddings": [], "host": []}
+    """What the chosen option values need: {"embeddings": [models], "host": [requirement names], "files": [names]}."""
+    out = {k: [] for k in NEED_KEYS}
+    opts = bench.get("options") or {}
     for n, v in values.items():
-        need = ((bench.get("options") or {}).get(n, {}).get("needs") or {}).get(v) or {}
+        option = opts.get(n, {})
+        if not _when_applies(option.get("when") or {}, opts, values):
+            continue
+        need = (option.get("needs") or {}).get(v) or {}
+        if not _when_applies(need.get("when") or {}, opts, values):
+            continue
         if need.get("embeddings") and need["embeddings"] not in out["embeddings"]:
             out["embeddings"].append(need["embeddings"])
-        out["host"] += [h for h in need.get("host") or [] if h not in out["host"]]
+        for kind in ("host", "files"):
+            out[kind] += [x for x in need.get(kind) or [] if x not in out[kind]]
     return out
 
 
@@ -1200,6 +1247,7 @@ def problems(d: dict, kind: str) -> List[str]:
         if isinstance(needs, list) and not needs:
             bad.append("needs: at least one port")
         bad += _host(d)
+        bad += _files(d)
         bad += _bench_options(d)
         drv = d.get("driver") or {}
         bad += _command("driver.command", drv.get("command") if isinstance(drv, dict) else None, {"here", "install"})

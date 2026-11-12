@@ -34,27 +34,38 @@ Long-term chat memory: questions over timestamped chat histories.
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `longmemeval` | Original · Original memory · Like the paper or Any of your choice | `history_format`, `merge_key_expansion`, `question_type`, `reading`, `retriever`, `separate_notes`, `topk`, `useronly` |
+| `longmemeval` | Original · Original memory · Like the paper or Any of your choice | `expansion_join`, `history_format`, `merge_key_expansion`, `question_type`, `reading`, `retriever`, `separate_notes`, `session_expansion`, `topk`, `turn_expansion`, `useronly` |
 
 ## Options
 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
+| `expansion_join` | **`separate`**, `split-separate`, `merge`, `split-merge`, `replace`, `split-replace` | How cached expansions join retrieval keys when expansion is enabled: separate keys, merged text or replacement text. Split modes separate sentences or phrases first. | `original`, `model` |
 | `history_format` | **`json`**, `nl` | Whether conversation history is shown to the model as JSON or as lines of text labelled by speaker. | `original`, `model` |
 | `merge_key_expansion` | **`none`**, `merge`, `replace` | Whether retrieved conversations are shown in full, replaced by their user text, or combined with that text. | `original`, `model` |
 | `question_type` | **`all`**, `knowledge-update`, `temporal-reasoning`, `multi-session`, `single-session-user`, `single-session-assistant`, `single-session-preference` | Which memory ability the run measures: every question, or only the questions of one type. | `original`, `model`, `yours` |
 | `reading` | **`con`**, `direct` | Whether the model answers from recalled memory directly or first identifies relevant facts and reasons through them. | `original`, `model`, `yours` |
 | `retriever` | **`full-history-session`**, `full-history-turn`, `no-retrieval`, `flat-bm25-session`, `flat-bm25-turn`, `flat-contriever-session`, `flat-contriever-turn`, `flat-stella-session`, `flat-stella-turn` | Whether the model receives the full conversation history, no history, or sessions or turns selected by a retrieval method. | `original`, `model` |
 | `separate_notes` | **`false`**, `true` | Write a separate note for each retrieved session or turn before reasoning. Original memory only. | `original`, `model` |
+| `session_expansion` | **`none`**, `session-summ`, `session-keyphrase`, `session-userfact` | Expand retrieval keys with the authors' cached summaries, keyphrases or user facts. No expansion by default. | `original`, `model` |
 | `topk` | `1`, `3`, `5`, `10`, `20`, `30`, `50`, `100`, **`1000`** | The maximum number of conversation sessions or turns the model receives when answering a question. | `original`, `model` |
+| `turn_expansion` | **`none`**, `turn-keyphrase`, `turn-userfact` | Expand retrieval keys with the authors' cached summaries, keyphrases or user facts. No expansion by default. | `original`, `model` |
 | `useronly` | **`false`**, `true` | Whether conversation history includes only user messages or both user and assistant messages. | `original`, `model` |
 
 | Option | Value | Refused without (`host`: the driver's machine; `embeddings`: a model the provider serves) |
 |---|---|---|
+| `expansion_join` | `split-separate` | files: punkt_tab; when: {'session_expansion': ['session-summ'], 'retriever': ['flat-bm25-session', 'flat-contriever-session', 'flat-stella-session']} |
+| `expansion_join` | `split-merge` | files: punkt_tab; when: {'session_expansion': ['session-summ'], 'retriever': ['flat-bm25-session', 'flat-contriever-session', 'flat-stella-session']} |
+| `expansion_join` | `split-replace` | files: punkt_tab; when: {'session_expansion': ['session-summ'], 'retriever': ['flat-bm25-session', 'flat-contriever-session', 'flat-stella-session']} |
 | `retriever` | `flat-contriever-session` | host: cuda_gpu |
 | `retriever` | `flat-contriever-turn` | host: cuda_gpu |
 | `retriever` | `flat-stella-session` | host: cuda_gpu |
 | `retriever` | `flat-stella-turn` | host: cuda_gpu |
+| `session_expansion` | `session-summ` | files: index_expansions |
+| `session_expansion` | `session-keyphrase` | files: index_expansions |
+| `session_expansion` | `session-userfact` | files: index_expansions |
+| `turn_expansion` | `turn-keyphrase` | files: index_expansions |
+| `turn_expansion` | `turn-userfact` | files: index_expansions |
 
 ## Good to know
 
@@ -74,7 +85,7 @@ Long-term chat memory: questions over timestamped chat histories.
 
 ## Nullius limitations
 
-- The GTE retriever, the index and query expansions, and the open-weight readers are not offered.
+- The GTE retriever, time-aware query expansion and open-weight readers are not offered. Index expansion uses the authors' released caches with flat retrievers at the matching session or turn granularity.
 
 ## Cite
 

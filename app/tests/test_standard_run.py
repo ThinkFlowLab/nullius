@@ -536,6 +536,33 @@ class RunTest(unittest.TestCase):
         with self.assertRaisesRegex(run.Refused, "not a sandbox"):
             run.Run(b, a, model="m", provider="custom", env={"MODEL_API_URL": "http://127.0.0.1:9/v1"})
 
+    def test_selected_auxiliary_files_are_downloaded_and_given_only_to_the_driver(self):
+        import hashlib
+        from unittest import mock
+        from nullius.standard import install
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        b["files"] = {"keys": {"url": "https://example.org/keys.json", "sha256": hashlib.sha256(b"{}").hexdigest()}}
+        b["options"] = {
+            "retrieve": {"summary": "retrieve", "values": ["off", "on"], "default": "off"},
+            "expand": {"summary": "expand", "values": ["off", "on"], "default": "on", "when": {"retrieve": ["on"]},
+                       "needs": {"on": {"files": ["keys"]}}}}
+        a = definitions.get("agent", "fake", ROOT)
+        for active in (False, True):
+            r = run.Run(b, a, model="m-1", provider="custom", env=self.env, unsandboxed=True,
+                        jobs_root=self.tmp, bench_options={"retrieve": "on" if active else "off"})
+            with mock.patch.object(install, "packages", return_value=""), \
+                    mock.patch.object(install, "download", return_value="/checked/keys.json") as downloaded:
+                r.ready()
+            self.assertEqual(downloaded.call_count, int(active))
+            self.assertEqual(r.file_env, {"NULLIUS_FILE_KEYS": "/checked/keys.json"} if active else {})
+            with mock.patch.object(run.jsonl, "Proc") as proc:
+                r.driver()
+                self.assertEqual(proc.call_args.args[2].get("NULLIUS_FILE_KEYS"), "/checked/keys.json" if active else None)
+            if active:
+                with mock.patch.object(install, "download", side_effect=install.InstallFailed("sha256 differs")):
+                    with self.assertRaisesRegex(run.Refused, "sha256"):
+                        r.ready()
+
     def test_a_driver_that_ended_is_started_again_for_the_next_unit(self):
         """A request with no reply in its time closes the driver (a reader
         that retries without end): the worker's next unit gets a new one."""
