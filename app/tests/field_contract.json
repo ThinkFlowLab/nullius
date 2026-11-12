@@ -279,6 +279,7 @@
    "launch",
    "launch_id",
    "mean_score",
+   "merged_from",
    "model_name",
    "n_errored_trials",
    "n_infra",

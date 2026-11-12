@@ -279,6 +279,8 @@ class Job:
     # ``standard.launch``): the shards of one launch, run on several machines,
     # are grouped as one on the runs page (launches.group). "" for every other job.
     launch_id: str = ""
+    # Source job names explicitly recorded by standard merge.
+    merged_from: list[str] = field(default_factory=list)
     # How the job was launched, as its config.json recorded it with Harbor's
     # defaults filled in (launch_of): what "New run like this" rebuilds a
     # recipe from when the run kept none. Empty when config.json is absent.
@@ -926,6 +928,8 @@ def parse_job(job_dir: str, reuse=None) -> Job:
     ctl = std.get("control") if isinstance(std.get("control"), dict) else {}
     job.control_source = str(ctl.get("source") or "control") if ctl.get("name") == job.agent_label.lower() else ""
     job.launch_id = str(std.get("launch") or "")
+    merged = std.get("merged_from")
+    job.merged_from = [s["job"] for s in merged if isinstance(s, dict) and isinstance(s.get("job"), str) and s["job"]] if isinstance(merged, list) else []
     job.budget = _budget(res.get("budget"))
     job.standard = bool(std)
     # a runner's job was never a `harbor run`: there is no command to rebuild
