@@ -128,8 +128,8 @@ How the agent worked, not whether it won. Computed over layer 3.
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |
 | `raw_solve_rate` | Resolved ÷ all trials: Harbor's headline, which counts infra failures as misses. | derived | any |
-| `adjusted_solve_rate` | Resolved ÷ non-infrastructure trials. Only rate limits, API errors, setup errors and spending caps leave the denominator; unknowns remain. Read alongside the raw rate and infrastructure count. | derived | any |
-| `n_infra` | Trials removed from the adjusted denominator as infrastructure failures. | derived | any |
+| `adjusted_solve_rate` | Resolved ÷ non-infrastructure trials. Only rate limits, API errors, setup errors, spending caps and stopped runs leave the denominator; unknowns remain. Read alongside the raw rate and infrastructure count. | derived | any |
+| `n_infra` | Trials removed from the adjusted denominator as infrastructure failures or run-imposed interruptions. | derived | any |
 | `mean_score` | The mean graded score, weighted by each trial's number of scored parts when present. When no trial passes or fails, it is the headline and the rates read —. | derived | mixed |
 | `score_by_group · parts_by` | The mean score per value of the field the benchmark breaks it down by (a question's category), from `verifier/parts.json`. | derived | mixed |
 | `n_regressions` | Trials whose patch broke a previously passing test. | derived | swe-bench |
@@ -151,7 +151,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |
-| `outcome` | One of twelve classes: from the exception if there was one, else from the verifier's verdict. Full vocabulary below. | inferred | mixed |
+| `outcome` | One of thirteen classes: from the exception if there was one, else from the verifier's verdict. Full vocabulary below. | inferred | mixed |
 | `score · n_parts` | A graded score the benchmark gave, and how many parts it averages. With no reward and no exception, the outcome is *Scored*. | measured | mixed |
 | `reward` | The verifier's raw reward. Where no report says more, 1.0 or above is a solve. | measured | any |
 | `f2p_pass / f2p_fail` | Checks that had to start passing: SWE-bench's FAIL_TO_PASS, or every test of a Terminal-Bench task. | measured | mixed |
@@ -220,7 +220,7 @@ Computed here over the trajectory's tool calls, when present. They describe cond
 
 ## Outcome vocabulary {#outcomes}
 
-Twelve classes. The four marked **yes** under Infrastructure leave the adjusted solve rate's denominator.
+Thirteen classes. The five marked **yes** under Infrastructure leave the adjusted solve rate's denominator.
 
 | Outcome | Label | Infrastructure | Meaning |
 | --- | --- | --- | --- |
@@ -234,6 +234,7 @@ Twelve classes. The four marked **yes** under Infrastructure leave the adjusted 
 | `rate_limited` | Rate limited | yes | An HTTP 429 ended the trial. |
 | `api_error` | API error | yes | Any other provider failure: overloaded, unreachable, out of quota, key rejected. |
 | `setup_error` | Setup error | yes | The environment or image never came up, or the unit was not run for want of a secret or docker it needs, so the agent never ran. |
+| `cancelled` | Run stopped | yes | The run stopped while this trial was in progress; its interrupted attempt is excluded. |
 | `spending_cap` | Spending cap | yes | The run reached its spending cap and its relay refused a call the unit needed. No attempt was had. |
 | `unknown` | Unknown | no | No verdict, or an exception on neither list. Counted, charged to nobody; the trial page shows the recorded type. |
 
