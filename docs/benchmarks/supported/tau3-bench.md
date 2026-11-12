@@ -39,7 +39,7 @@ Customer service with domain tools and a simulated user: airline, retail, teleco
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
 | `agent_reasoning_effort` | **`default`**, `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | How much reasoning the benchmark's own agent model uses, with `default` keeping the upstream settings. | `original` |
-| `retrieval` | **`bm25`**, `bm25_grep`, `grep_only`, `no_knowledge`, `full_kb`, `golden_retrieval`, `openai_embeddings`, `openai_embeddings_grep`, `alltools`, `terminal_use`, `terminal_use_write`, `bm25_reranker`, `bm25_reranker_grep`, `openai_embeddings_reranker`, `openai_embeddings_reranker_grep` | How the agent searches the bank's documents in banking_knowledge tasks. | `original`, `yours` |
+| `retrieval` | **`bm25`**, `bm25_grep`, `grep_only`, `no_knowledge`, `full_kb`, `golden_retrieval`, `openai_embeddings`, `openai_embeddings_grep`, `alltools`, `terminal_use`, `terminal_use_write`, `bm25_reranker`, `bm25_reranker_grep`, `openai_embeddings_reranker`, `openai_embeddings_reranker_grep`, `qwen_embeddings`, `qwen_embeddings_grep`, `qwen_embeddings_reranker`, `qwen_embeddings_reranker_grep`, `alltools-qwen` | How the agent searches the bank's documents in banking_knowledge tasks. | `original`, `yours` |
 | `task_split` | **`base`**, `train`, `test`, `small`, `full` | Which group of tasks to run within the selected domain. | `original`, `yours` |
 | `upstream_agent` | **`llm_agent`**, `llm_agent_gt`, `llm_agent_solo` | Whether the benchmark's own agent runs normally, receives the reference actions, or works alone with the user's tools. | `original` |
 | `user_reasoning_effort` | **`default`**, `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | How much reasoning the simulated user's model uses, with `default` keeping the upstream settings. | `original`, `yours` |
@@ -55,6 +55,11 @@ Customer service with domain tools and a simulated user: airline, retail, teleco
 | `retrieval` | `bm25_reranker_grep` | reranker: gpt-5.2 |
 | `retrieval` | `openai_embeddings_reranker` | reranker: gpt-5.2; embeddings: text-embedding-3-large |
 | `retrieval` | `openai_embeddings_reranker_grep` | reranker: gpt-5.2; embeddings: text-embedding-3-large |
+| `retrieval` | `qwen_embeddings` | embeddings: qwen/qwen3-embedding-8b |
+| `retrieval` | `qwen_embeddings_grep` | embeddings: qwen/qwen3-embedding-8b |
+| `retrieval` | `qwen_embeddings_reranker` | embeddings: qwen/qwen3-embedding-8b; reranker: gpt-5.2 |
+| `retrieval` | `qwen_embeddings_reranker_grep` | embeddings: qwen/qwen3-embedding-8b; reranker: gpt-5.2 |
+| `retrieval` | `alltools-qwen` | embeddings: qwen/qwen3-embedding-8b; host: sandbox |
 
 ## Good to know
 

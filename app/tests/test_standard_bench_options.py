@@ -28,7 +28,7 @@ class Definition(unittest.TestCase):
         o = TAU["options"]["retrieval"]
         self.assertEqual(o["datasets"], ["banking_knowledge"])
         self.assertEqual(o["default"], "bm25")                       # needs nothing of the machine, no key
-        self.assertNotIn("qwen_embeddings", o["values"])              # its address and key are the upstream's own
+        self.assertIn("qwen_embeddings", o["values"])
         self.assertEqual(TAU["host"]["sandbox"]["check"], ["srt", "rg", "bwrap", "socat"])
 
     def test_a_value_may_only_need_a_declared_requirement_and_a_known_dataset(self):
@@ -50,7 +50,7 @@ class Scope(unittest.TestCase):
         vals, bad = definitions.bench_options_of(TAU, "banking_knowledge", {"retrieval": "alltools"})
         self.assertEqual((vals["retrieval"], "task_split" in vals, bad), ("alltools", False, []))
         self.assertEqual(definitions.bench_options_of(TAU, "banking_knowledge")[0]["retrieval"], "bm25")
-        self.assertTrue(definitions.bench_options_of(TAU, "banking_knowledge", {"retrieval": "qwen_embeddings"})[1])
+        self.assertFalse(definitions.bench_options_of(TAU, "banking_knowledge", {"retrieval": "qwen_embeddings"})[1])
         self.assertTrue(definitions.bench_options_of(TAU, "airline", {"nope": "x"})[1])
 
     def test_what_a_value_needs(self):
@@ -98,7 +98,7 @@ class Host(unittest.TestCase):
                          ["sudo apt-get install -y ripgrep bubblewrap socat", "npm install -g @anthropic-ai/sandbox-runtime@0.0.23"])
         self.assertIn("sudo -n apt-get", hostreq.install_script(TAU, ["sandbox"]))   # never a password prompt
         self.assertIsNone(hostreq.install_script(TAU, []))
-        self.assertEqual(hostreq.all_of(TAU)["sandbox"]["needed_by"], ["retrieval=alltools", "retrieval=terminal_use", "retrieval=terminal_use_write"])
+        self.assertEqual(hostreq.all_of(TAU)["sandbox"]["needed_by"], ["retrieval=alltools", "retrieval=terminal_use", "retrieval=terminal_use_write", "retrieval=alltools-qwen"])
 
     def test_hardware_has_no_install_and_its_refusal_says_where_to_run(self):
         gpu = {"summary": "A CUDA GPU.", "check": ["nvidia-smi"]}
@@ -163,8 +163,8 @@ class Recipe(unittest.TestCase):
         self.assertEqual([n["name"] for n in out["host"]["needs"]], ["sandbox"])
         self.assertEqual(out["host"]["check"], ["srt", "rg", "bwrap", "socat"])
         self.assertTrue(out["host"]["install"])
-        other = recipe.compile(self.a_recipe(bench_options={"retrieval": "openai_embeddings"}, provider="openrouter"))
-        self.assertIn("OpenAI provider", " ".join(e["message"] for e in other["errors"]))
+        other = recipe.compile(self.a_recipe(bench_options={"retrieval": "openai_embeddings"}, provider="custom"))
+        self.assertIn("OpenAI or OpenRouter provider", " ".join(e["message"] for e in other["errors"]))
         bad = recipe.compile(self.a_recipe(bench_options={"retrieval": "nope"}))
         self.assertEqual(bad["errors"][0]["step"], recipe.STEP["dataset"])
 
@@ -179,7 +179,35 @@ class Recipe(unittest.TestCase):
             self.assertEqual("text-embedding-3-large" in called, method.startswith("openai"))
             self.assertTrue(any("price for gpt-5.2" in e["message"] for e in out["errors"]))
             routed = recipe.compile(self.a_recipe(bench_options={"retrieval": method}, provider="openrouter"))
-            self.assertEqual(any("OpenAI provider" in e["message"] for e in routed["errors"]), method.startswith("openai"))
+            self.assertEqual(routed["errors"], [])
+
+    @patch.object(hostreq, "missing", return_value={})
+    def test_qwen_requires_openrouter_and_all_search_prices_use_sent_names(self, _missing):
+        for method in ("qwen_embeddings", "qwen_embeddings_grep", "qwen_embeddings_reranker",
+                       "qwen_embeddings_reranker_grep", "alltools-qwen", "openai_embeddings_reranker"):
+            embed = "text-embedding-3-large" if method.startswith("openai") else "qwen/qwen3-embedding-8b"
+            sent = "openai/" + embed if method.startswith("openai") else embed
+            called = []
+            out = recipe.compile(self.a_recipe(bench_options={"retrieval": method}, provider="openrouter", max_usd=1),
+                                 unpriced=lambda models: called.extend(models) or [])
+            self.assertEqual(out["errors"], [])
+            self.assertIn(sent, called)
+            self.assertEqual("openai/gpt-5.2" in called, "reranker" in method)
+            self.assertEqual(bool(out["host"]["needs"]), method == "alltools-qwen")
+            other = definitions.control(TAU, "nop")
+            r = run.Run(TAU, other, model="", provider="openrouter", dataset="banking_knowledge",
+                        bench_options={"retrieval": method}, env={"OPENROUTER_API_KEY": "fixture"})
+            self.assertEqual(r.embed_model, sent)
+            self.assertIn(sent, r.models_called())
+            with self.assertRaisesRegex(run.Refused, "OPENROUTER_API_KEY"):
+                run.Run(TAU, other, model="", provider="openrouter", dataset="banking_knowledge",
+                        bench_options={"retrieval": method}, env={})
+            for provider in (("custom",) if method.startswith("openai") else ("openai", "custom")):
+                bad = recipe.compile(self.a_recipe(bench_options={"retrieval": method}, provider=provider))
+                self.assertTrue(any("provider for this search" in e["message"] for e in bad["errors"]))
+                with self.assertRaisesRegex(run.Refused, "provider for this search"):
+                    run.Run(TAU, other, model="", provider=provider, dataset="banking_knowledge",
+                            bench_options={"retrieval": method}, env={})
 
 
 class OtherBenchmarks(unittest.TestCase):

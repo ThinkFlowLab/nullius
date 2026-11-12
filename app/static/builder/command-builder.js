@@ -452,7 +452,7 @@
       const cur = (rec.bench_options || {})[n] ?? o.default;
       if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(n === 'temperature' && o.default === 'default' ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
       const tileOf = v => { const need = (o.needs || {})[v] || {};
-        const foot = [need.embeddings ? `<span class="nb-tick" title="its embedding calls go through the run's relay, with your OpenAI key">OpenAI key</span>` : '',
+        const foot = [need.embeddings ? `<span class="nb-tick" title="${esc(need.embeddings)} through the run's relay">${need.embeddings.includes('/') ? 'OpenRouter key' : 'OpenAI or OpenRouter key'}</span>` : '',
           need.reranker ? `<span class="nb-tick">reranker ${esc(need.reranker)}</span>` : '',
           ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(h)}</span>`),
           v === o.default ? '<span class="nb-tag">default</span>' : ''].join('');

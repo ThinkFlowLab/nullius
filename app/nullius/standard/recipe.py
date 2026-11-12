@@ -356,7 +356,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                 add("agent", f"{o['label']}: " + why_not)
         picks.append({"o": o, "control": control, "given": given, "opts": opts})
     # the benchmark's own options (``bench_options``), each on the datasets it applies to; what the chosen
-    # values need: an embedding model (its calls through the run's relay, on the OpenAI provider), the machine's programs
+    # values need: embedding and reranker models through the run's relay, the machine's programs
     chosen_opts = recipe.get("bench_options") or {}
     if not isinstance(chosen_opts, dict) or not all(isinstance(v, str) for v in chosen_opts.values()):
         add("dataset", "The benchmark's options are names with a word each.")
@@ -383,8 +383,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         needs["embeddings"] += [m for m in n["embeddings"] if m not in needs["embeddings"]]
         needs["host"] += [h for h in n["host"] if h not in needs["host"]]
         needs["reranker"] += [m for m in n["reranker"] if m not in needs["reranker"]]
-    if needs["embeddings"] and recipe.get("provider") not in (None, "openai"):
-        add("model", f"{', '.join(needs['embeddings'])} is OpenAI's embedding model: choose the OpenAI provider for this search.")
+    for m in needs["embeddings"]:
+        why = providers.embedding_problem(m, recipe.get("provider") or "openai")
+        if why:
+            add("model", why)
     agents_local = [p["o"]["label"] for p in picks if side == "agent" and not p["control"] and not p.get("setup") and backend == "local"]
     if backend != "local" and any(p.get("setup") for p in picks):
         add("where", "A setup runs the benchmark's own code on the machine, as published: choose local processes.")
@@ -481,7 +483,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             p["o"], None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
             (judge_model or providers.served_as(judge["model"], provider)) if judge else None,
             (sim_model or providers.served_as(sim["model"], provider)) if sim else None,
-            (definitions.option_needs(b, per_ds[x["id"]])["embeddings"] or [None])[0], control=p["control"])]
+            providers.served_as((definitions.option_needs(b, per_ds[x["id"]])["embeddings"] or [""])[0], provider), control=p["control"])]
         called += [providers.served_as(m, provider) for m in needs["reranker"]]
         missing = unpriced([m for m in dict.fromkeys(called) if isinstance(m, str) and m])
         if missing:

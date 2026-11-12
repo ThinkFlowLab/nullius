@@ -416,7 +416,11 @@ class Run:
         if bad:
             raise Refused("; ".join(bad))
         needs = definitions.option_needs(bench, self.bench_options)
-        self.embed_model = needs["embeddings"][0] if needs["embeddings"] else None
+        for m in needs["embeddings"]:
+            why = providers.embedding_problem(m, provider)
+            if why:
+                raise Refused(why)
+        self.embed_model = providers.served_as(needs["embeddings"][0], provider) if needs["embeddings"] else None
         self.rerank_model = providers.served_as(needs["reranker"][0], provider) if needs["reranker"] else None
         # What a call's cost is estimated from when the provider does not say it: the user's price list
         # (nullius.prices), this run's own prices over it. Read once, here: a run never fetches a price.

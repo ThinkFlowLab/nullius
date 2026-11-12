@@ -491,7 +491,7 @@ def _bench_options(d: dict) -> List[str]:
                 bad.append(f"{w}.needs.{v}: one of its values -> {{embeddings: a model, reranker: a model, host: [requirements]}}")
                 continue
             for kind in ("embeddings", "reranker"):
-                if kind in n and not _OPTION_VALUE.match(str(n[kind])):
+                if kind in n and (not isinstance(n[kind], str) or not _MODEL_NAME.fullmatch(n[kind])):
                     bad.append(f"{w}.needs.{v}.{kind}: the model, as its provider names it")
             if "host" in n and (not isinstance(n["host"], list) or any(h not in hosts for h in n["host"])):
                 bad.append(f"{w}.needs.{v}.host: names of the benchmark's host requirements")
