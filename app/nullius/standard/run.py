@@ -764,6 +764,8 @@ class Run:
                 raise _Ended("EnvironmentSetupError", "the unit's setup: env requires an own image")
             if setup.get("verify") is not None and not own:
                 raise _Ended("EnvironmentSetupError", "the unit's setup: verify runs in an own image, and this unit has none")
+            if setup.get("prepare") is not None and not own:
+                raise _Ended("EnvironmentSetupError", "the unit's setup: prepare runs in an own image, and this unit has none")
             try:
                 rl = self.unit_relay(tag, trial, setup, env_def, own)
             except (container.Unavailable, OSError) as e:
@@ -773,6 +775,8 @@ class Run:
             if own:
                 self.phase(name, unit, "env_setup", IMAGE_SECONDS)     # its image, pulled or built when not here yet
                 box = self.own_box(tag, setup, rl, home)
+                if setup.get("prepare") is not None:
+                    self.prepare(setup["prepare"], box, trial)
             p0 = time.time()
             self.phase(name, unit, "agent_run", self.turn_limit(setup) if self.other["_kind"] != "control"
                        else DRIVER_SECONDS if self.other["key"] == "oracle" else None)
@@ -1203,6 +1207,8 @@ class Run:
         bad += container.task_env_problems(setup.get("env", {}), (self.other.get("model") or {}).get("env", {}))
         if setup.get("verify") is not None:
             bad += ["verify." + p for p in container.step_problems(setup["verify"], collect=True)]
+        if setup.get("prepare") is not None:
+            bad += ["prepare." + p for p in container.step_problems(setup["prepare"], collect=False)]
         if setup.get("workdir") is not None and not (isinstance(setup["workdir"], str) and setup["workdir"].startswith("/")):
             bad.append("workdir: an absolute path inside the image")
         if bad:
@@ -1309,6 +1315,48 @@ class Run:
             return box.run(step["run"], float(step.get("seconds") or self.turn_seconds), env=env)
         except (container.Unavailable, ValueError) as e:
             raise _Ended("VerifierError" if collect else "NonZeroAgentExitCodeError", f"{what}: {e}")
+
+    def prepare(self, step: dict, box, trial: str) -> None:
+        """The benchmark's preparation of the unit's container (``prepare``),
+        before the agent or a control starts: what the task's own harness adds
+        to every image (Terminal-Bench's tmux). Its files copied and written
+        in, its command run as root - with a way out, when it asks for the
+        network, through the check's proxy (``container.Box.online``) - then
+        that proxy removed and shown gone (``Box.offline``) and whatever it
+        left running stopped (``Box.settle``): the agent starts with no way
+        out but its model, as it would have without one. Its output and what
+        the proxy let through are kept (``setup/prepare.txt``,
+        ``setup/egress.log``). Any failure, closing the way out included, is
+        the environment's (``EnvironmentSetupError``), never the agent's."""
+        out = os.path.join(trial, "setup")
+        os.makedirs(out, exist_ok=True)
+        root = self.up or self.bench["_here"]
+        done = None
+        try:
+            for src, dest in (step.get("copy") or {}).items():
+                box.copy_in(container.within(root, src), dest)
+            for dest, text in (step.get("write") or {}).items():
+                box.write_in(dest, text)
+            env = box.online() if step.get("network") else None
+            try:
+                done = box.run(step["run"], float(step.get("seconds") or self.turn_seconds), user="0", env=env)
+            finally:
+                said = box.egress_said()
+                if said:
+                    with open(os.path.join(out, "egress.log"), "w") as f:
+                        f.write(said)
+                box.offline()
+            box.settle()
+        except (container.Unavailable, ValueError) as e:
+            raise _Ended("EnvironmentSetupError", f"the benchmark's preparation: {e}")
+        finally:
+            if done is not None:
+                with open(os.path.join(out, "prepare.txt"), "w") as f:
+                    f.write(done["output"])
+        if done["exit"] != 0:
+            raise _Ended("EnvironmentSetupError", "the benchmark's preparation "
+                         + ("did not end in time" if done["timed_out"] else f"ended with exit {done['exit']}")
+                         + ": " + done["output"].strip()[-300:])
 
     def verify(self, step: dict, box, trial: str) -> dict:
         """The benchmark's check, run in the unit's container once the agent

@@ -1,5 +1,5 @@
-"""The own-image bench's driver: unit "one" runs in its own image and is
-checked in it; unit "base" names no image but asks for a check, which only
+"""The own-image bench's driver: unit "one" runs in its own image, prepared
+as root before anyone works in it, and is checked in it; unit "base" names no image but asks for a check, which only
 an own image can give (the run refuses it)."""
 import json
 import os
@@ -16,7 +16,8 @@ def handle(op, **kw):
                   "network": True}
         if kw["unit"] == "base":
             return {"prompt": "work", "environment": "base", "verify": verify}
-        return {"prompt": "work", "environment": "task", "image": {"build": "tasks/one/environment", "memory_mb": 256}, "verify": verify}
+        return {"prompt": "work", "environment": "task", "image": {"build": "tasks/one/environment", "memory_mb": 256},
+                "prepare": {"run": ["sh", "-c", "id -u > /prepared-by"], "seconds": 60}, "verify": verify}
     if op == "score":
         v = kw.get("verified") or {}
         try:

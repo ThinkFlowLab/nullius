@@ -8,9 +8,12 @@ with ``kill`` recorded rather than sent; the order a check's step is taken
 in (stopped, copied in, online, run with the proxy named); the proxy's rule
 (``egress.public``), its parsing, and its refusals, served here; and
 Terminal-Bench's driver keeping processes for the tasks whose tests need a
-service the agent left running. With docker (skipped otherwise): a loop left
-running in a box is gone after ``settle``, and a check's proxy refuses the
-metadata address and a private one while it reaches a public host."""
+service the agent left running, and preparing every task with tmux; a unit's
+preparation (root, its proxy closed and what it left stopped before the
+agent). With docker (skipped otherwise): a loop left running in a box is gone
+after ``settle``, a check's proxy refuses the metadata address and a private
+one while it reaches a public host, and a preparation's proxy, once closed,
+leaves no ``egress`` name and no route out."""
 from __future__ import annotations
 
 import json
@@ -117,8 +120,9 @@ class Scripts(unittest.TestCase):
 
 
 class FakeBox:
-    def __init__(self, fail_settle: bool = False):
+    def __init__(self, fail_settle: bool = False, fail_offline: bool = False, exit: int = 0):
         self.did, self.fail_settle, self.egress = [], fail_settle, None
+        self.fail_offline, self.exit, self.users = fail_offline, exit, []
 
     def settle(self):
         self.did.append("settle")
@@ -133,9 +137,18 @@ class FakeBox:
         self.did.append("online")
         return {"HTTPS_PROXY": "http://egress:3128"}
 
+    def offline(self):
+        self.did.append("offline")
+        if self.fail_offline:
+            raise container.Unavailable("the way out (x-egress) could not be removed")
+
+    def write_in(self, dest, text):
+        self.did.append("write " + dest)
+
     def run(self, cmd, seconds, *, user=None, env=None):
         self.did.append(("run", cmd[0], dict(env or {})))
-        return {"exit": 0, "output": "ok", "timed_out": False}
+        self.users.append(user)
+        return {"exit": self.exit, "output": "ok", "timed_out": False}
 
     def egress_said(self):
         return '{"event": "refused", "host": "169.254.169.254", "port": 80}\n'
@@ -187,6 +200,53 @@ class Order(unittest.TestCase):
     def test_a_reference_solution_is_not_settled(self):
         box = FakeBox()
         self.r.in_box(box, {"copy": {"tests": "/solution"}, "run": ["sh", "/solution/solve.sh"]}, collect=False, what="oracle")
+        self.assertNotIn("settle", box.did)
+
+
+class Prepare(unittest.TestCase):
+    """A unit's preparation: run as root before anyone works in the box, its
+    way out the check's proxy, closed and what it left stopped before the
+    agent starts; any failure is the environment's."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.r = run.Run.__new__(run.Run)
+        self.r.up, self.r.bench, self.r.turn_seconds = self.tmp, {"_here": self.tmp}, 60
+        self.step = {"write": {"/opt/p.sh": "true"}, "run": ["sh", "/opt/p.sh"], "network": True}
+        self.trial = os.path.join(self.tmp, "trial")
+
+    def test_online_then_run_as_root_then_closed_then_settled(self):
+        box = FakeBox()
+        self.r.prepare(self.step, box, self.trial)
+        self.assertEqual(box.did, ["write /opt/p.sh", "online", ("run", "sh", {"HTTPS_PROXY": "http://egress:3128"}),
+                                   "offline", "settle"])
+        self.assertEqual(box.users, ["0"])
+        with open(os.path.join(self.trial, "setup", "prepare.txt")) as f:
+            self.assertEqual(f.read(), "ok")
+        with open(os.path.join(self.trial, "setup", "egress.log")) as f:
+            self.assertIn("refused", f.read())
+
+    def test_without_the_network_it_has_no_proxy(self):
+        box = FakeBox()
+        self.r.prepare(dict(self.step, network=False), box, self.trial)
+        self.assertNotIn("online", box.did)
+        self.assertEqual(box.did[1], ("run", "sh", {}))
+
+    def test_a_failed_preparation_is_a_setup_error(self):
+        box = FakeBox(exit=2)
+        with self.assertRaises(run._Ended) as e:
+            self.r.prepare(self.step, box, self.trial)
+        self.assertEqual(e.exception.kind, "EnvironmentSetupError")
+        self.assertIn("exit 2", e.exception.said)
+        self.assertIn("offline", box.did)                  # the way out is closed all the same
+
+    def test_a_way_out_that_cannot_be_closed_is_a_setup_error(self):
+        box = FakeBox(fail_offline=True)
+        with self.assertRaises(run._Ended) as e:
+            self.r.prepare(self.step, box, self.trial)
+        self.assertEqual(e.exception.kind, "EnvironmentSetupError")
+        self.assertIn("could not be removed", e.exception.said)
         self.assertNotIn("settle", box.did)
 
 
@@ -283,6 +343,26 @@ class TerminalBench(unittest.TestCase):
         self.assertNotIn("keep_processes", plain)
         self.assertEqual(container.step_problems(plain, collect=True), [])
 
+    def test_every_task_is_prepared_with_tmux_through_the_proxy(self):
+        for unit in ("mailman", "regex-log"):
+            prep = self.setup_of(unit)["prepare"]
+            self.assertEqual(container.step_problems(prep, collect=False), [])
+            self.assertIs(prep["network"], True)
+            self.assertIn("tmux", prep["run"][-1])
+
+    def test_the_tmux_script_leaves_an_image_that_has_it_alone(self):
+        script = self.setup_of("regex-log")["prepare"]["run"][-1]
+        bin_ = os.path.join(self.tmp, "bin")
+        os.makedirs(bin_)
+        for name in ("tmux", "apt-get"):                      # tmux here; apt-get would record being called
+            with open(os.path.join(bin_, name), "w") as f:
+                f.write(f"#!/bin/sh\necho {name} called >> {self.tmp}/called\n")
+            os.chmod(os.path.join(bin_, name), 0o755)
+        r = subprocess.run(["sh", "-c", script], env={"PATH": bin_ + ":/usr/bin:/bin"}, stdout=subprocess.PIPE, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("already here", r.stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "called")))
+
 
 def _docker_ready() -> str:
     return docker_tier.why_not()
@@ -326,6 +406,20 @@ class InDocker(unittest.TestCase):
         self.assertNotEqual(curl("http://1.1.1.1/", "--noproxy", "*"), "200")       # no route but the proxy
         if _online():
             self.assertEqual(curl("https://pypi.org/simple/"), "200")
+
+    def test_a_preparations_way_out_is_gone_before_the_agent(self):
+        name = self.box.name + "-egress"
+        env = self.box.online()
+        self.assertEqual(self.box.run(["getent", "hosts", "egress"], 30)["exit"], 0)
+        self.box.offline()
+        self.assertIsNone(self.box.egress)
+        listed = subprocess.run(["docker", "ps", "-aq", "--filter", f"name=^/{name}$"], stdout=subprocess.PIPE, text=True)
+        self.assertEqual(listed.stdout.strip(), "")
+        self.assertNotEqual(self.box.run(["getent", "hosts", "egress"], 30)["exit"], 0)     # no egress name left
+        r = self.box.run(["curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "10",
+                          "https://pypi.org/simple/"], 30, env=env)
+        self.assertNotEqual(r["output"].strip()[-3:], "200")                                 # nor a route out
+        self.assertNotEqual(self.box.run(["curl", "-sS", "--max-time", "10", "--noproxy", "*", "http://1.1.1.1/"], 30)["exit"], 0)
 
 
 if __name__ == "__main__":
