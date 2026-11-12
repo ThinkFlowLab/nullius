@@ -121,6 +121,14 @@ class Runtime(unittest.TestCase):
         # mini-swe-agent, terminus-2: their environment's own interpreter, whatever it links to
         r.other = {"start": {"command": ["{install}/.venv/bin/python", "{here}/run.py", "{prompt}"]}}
         self.assertEqual(r.runtimes_needed(), [])
+        # python3 beside an environment made in the base image: its interpreter is in the install, mounted with it
+        r.inst = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, r.inst, True)
+        os.makedirs(os.path.join(r.inst, ".venv"))
+        with open(os.path.join(r.inst, ".venv", "pyvenv.cfg"), "w") as f:
+            f.write(f"home = {r.inst}/.python/cpython-3.12-linux-x86_64-gnu/bin\n")
+        r.other = {"start": {"acp": ["python3", "{here}/agent.py"]}}
+        self.assertEqual(r.runtimes_needed(), [])
 
     def test_an_environments_interpreter_is_never_swapped_for_the_runtime(self):
         venv_py = "/inst/mini-swe-agent/.venv/bin/python"

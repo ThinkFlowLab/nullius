@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from unittest import mock
 
-from nullius.standard import container
+from nullius.standard import container, install
 from tests import docker_tier
 
 
@@ -27,11 +27,13 @@ class ImageTest(unittest.TestCase):
         self.assertRegex(container.image_tag(a), r"^nullius/base:[0-9a-f]{12}$")
         self.assertNotEqual(container.image_tag(a), container.image_tag(container.dockerfile("aarch64")))
 
-    def test_the_dockerfile_pins_ubuntu_and_node_by_checksum(self):
+    def test_the_dockerfile_pins_ubuntu_node_and_uv_by_checksum(self):
         text = container.dockerfile("x86_64")
         self.assertTrue(text.startswith("FROM ubuntu:24.04\n"))
         self.assertIn(f"node-v{container.NODE_VERSION}-linux-x64.tar.xz", text)
         self.assertIn(container.NODE_SHA256["x64"] + "  /tmp/node.tar.xz\" | sha256sum -c -", text)
+        self.assertRegex(container.UV_DIGEST, r"^sha256:[0-9a-f]{64}$")
+        self.assertIn(f"COPY --from=ghcr.io/astral-sh/uv:{container.UV_VERSION}@{container.UV_DIGEST} /uv /uvx /usr/local/bin/\n", text)
         for pkg in ("git", "python3", "ca-certificates", "curl", "tmux"):
             self.assertIn(f" {pkg} ", text)
 
@@ -55,31 +57,49 @@ class ArgvTest(unittest.TestCase):
         got = container.mounts([ws, home], [here, app, app, os.path.join(self.tmp, "missing"), ""])
         self.assertEqual(got, [(ws, False), (home, False), (app, True)])     # here sits inside app: once
 
-    def test_a_uv_environments_interpreter_is_found_from_pyvenv_cfg(self):
-        py = os.path.join(self.tmp, "uvpython", "cpython-3.12", "bin")
-        os.makedirs(py)
-        os.makedirs(os.path.join(self.tmp, "inst", ".venv"))
-        with open(os.path.join(self.tmp, "inst", ".venv", "pyvenv.cfg"), "w") as f:
-            f.write(f"home = {py}\nversion = 3.12\n")
-        self.assertEqual(container.python_homes(os.path.join(self.tmp, "inst")), [os.path.dirname(py)])
-        self.assertEqual(container.python_homes(self.tmp), [])
-        # uv names the home by a link (cpython-3.12-...) to the release folder: both are mounted, so
-        # the environment's bin/python link, written through the first, resolves in the container
-        link = os.path.join(self.tmp, "uvpython", "cpython-3.12-link")
-        os.symlink(os.path.dirname(py), link)
-        with open(os.path.join(self.tmp, "inst", ".venv", "pyvenv.cfg"), "w") as f:
-            f.write(f"home = {link}/bin\nversion = 3.12\n")
-        self.assertEqual(container.python_homes(os.path.join(self.tmp, "inst")), [link, os.path.dirname(py)])
-
     def test_an_install_in_the_base_image_sees_its_folder_alone_as_this_user(self):
         self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        self.enterContext(mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://u:secret@proxy:3128", "UNRELATED": "x"}))
         a = container.install_argv("img", "/s/agents/x/abc", ["npm", "install", "p@1"])
         self.assertEqual(a[:3], ["docker", "run", "--rm"])
+        self.assertIn(["-e", "HTTPS_PROXY"], [a[i:i + 2] for i in range(len(a))])     # this machine's proxy, by name
+        self.assertNotIn("secret", " ".join(a))
+        self.assertNotIn("UNRELATED", " ".join(a))
         self.assertEqual(a[a.index("--user") + 1], f"{os.getuid()}:{os.getgid()}")
         self.assertEqual([a[i + 1] for i, w in enumerate(a) if w == "-v"], ["/s/agents/x/abc:/s/agents/x/abc:rw"])
         self.assertEqual(a[a.index("img"):], ["img", "npm", "install", "p@1"])
-        self.assertIn("npm_config_cache=/s/agents/x/abc/.npm-cache", a)
+        env = dict(a[i + 1].split("=", 1) for i, w in enumerate(a) if w == "-e" and "=" in a[i + 1])
+        self.assertEqual(env, {"HOME": "/s/agents/x/abc/.home", "npm_config_cache": "/s/agents/x/abc/.npm-cache",
+                               "UV_CACHE_DIR": "/s/agents/x/abc/.uv-cache", "UV_PYTHON_DOWNLOADS": "automatic",
+                               "UV_PYTHON_INSTALL_DIR": "/s/agents/x/abc/.python"})    # inside: the agent's container mounts it
+        self.assertEqual({os.path.basename(env[k]) for k in ("HOME", "npm_config_cache", "UV_CACHE_DIR")},
+                         set(install.SCRATCH))                # what the install removes after
         self.assertNotIn("--network", a)                     # it downloads the packages; no unit, no key
+        a = container.install_argv("img", "/w", ["python", "-c", "x"], {"HF_HUB_CACHE": "/w/hf"})
+        self.assertIn("HF_HUB_CACHE=/w/hf", a)
+
+    def test_the_standalone_python_is_installed_in_the_base_image_and_its_scratch_removed(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        self.enterContext(mock.patch.object(container, "runtimes_dir", return_value=self.tmp))
+        self.enterContext(mock.patch.object(container, "base_image", return_value="nullius/base:x"))
+        self.enterContext(mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://proxy:3128"}))
+        where = os.path.join(self.tmp, f"python-{container.PYTHON_VERSION}")
+
+        def run(argv, **kw):
+            os.makedirs(os.path.join(where, f"cpython-{container.PYTHON_VERSION}-linux-x86_64-gnu"))
+            for scratch in install.SCRATCH:
+                os.makedirs(os.path.join(where, scratch))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        with mock.patch.object(container.subprocess, "run", side_effect=run) as ran:
+            got = container.python_runtime()
+        argv = ran.call_args.args[0]
+        self.assertEqual(argv[:2], ["docker", "run"])
+        self.assertIn(["-e", "HTTPS_PROXY"], [argv[i:i + 2] for i in range(len(argv))])
+        self.assertEqual(ran.call_args.kwargs["env"]["HTTPS_PROXY"], "http://proxy:3128")    # the value -e HTTPS_PROXY passes on
+        self.assertEqual(argv[argv.index("nullius/base:x"):],
+                         ["nullius/base:x", "uv", "python", "install", container.PYTHON_VERSION, "--install-dir", where, "--no-bin"])
+        self.assertEqual(got, os.path.join(where, f"cpython-{container.PYTHON_VERSION}-linux-x86_64-gnu"))
+        self.assertEqual(sorted(os.listdir(where)), sorted([install.MARK, os.path.basename(got)]))
 
     def test_the_agents_container_is_on_the_units_network_with_its_variables_by_name(self):
         self.enterContext(mock.patch.object(container, "rootless", return_value=False))

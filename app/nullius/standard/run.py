@@ -17,10 +17,13 @@ Two backends (``backend``). ``local``: processes on this machine, which are
 not a sandbox - what an agent runs, it runs as the user (``docs/standard.md``,
 "Safety"). ``docker``: the agent or the capability in a container of its own on
 a network whose only way out is the unit's relay, itself a container beside
-it (``container``). The driver stays on this machine either way: it owns the
-answers. So do a benchmark's own MCP servers (``mcp_servers``), in the
-driver's environment: on the local backend the agent starts each from it, on
-docker the run does, behind a door on the unit's network (``mcp_machine``).
+it (``container``). On docker the agent's or capability's packages are
+installed in the base image, on the libc and tools its container runs on.
+The driver, its environment installed here, stays on this machine either
+way: it owns the answers. So do a benchmark's own MCP servers
+(``mcp_servers``), in the driver's environment: on the local backend the
+agent starts each from it, on docker the run does, behind a door on the
+unit's network (``mcp_machine``).
 
 A unit whose environment is an **own image** (``"image": "own"``) runs in
 the task's own container, whatever the backend (a control's too: nothing of
@@ -650,8 +653,9 @@ class Run:
                     self.image = container.base_image(os.path.join(self.job_dir, ".work", "image.log"))
             except container.Unavailable as e:
                 raise Refused(f"the Docker image: {e}")
-        # on docker a machine without npm installs in the base image, which carries the Node the agent will run on
-        npm_in = (lambda cmd, where: container.install_argv(self.image, where, cmd)) if self.backend == "docker" else None
+        # on docker the agent's packages are installed in the base image, with the Node, uv and libc it runs on
+        image = self.image if self.backend == "docker" else None
+        run_in = (lambda cmd, where, env=None: container.install_argv(image, where, cmd, env)) if image else None
         try:
             where = install.upstream_dir(self.bench)
             self.up = None
@@ -671,8 +675,8 @@ class Run:
                     install.driver_packages(self.bench)
             self.inst = ""
             if self.other["_kind"] not in ("control", "upstream"):
-                with p.stage("install", cached=install.ready(install.packages_dir(self.other)), agent=self.other.get("_ref") or self.other["key"]):
-                    self.inst = install.packages(self.other, npm_in=npm_in)
+                with p.stage("install", cached=install.ready(install.packages_dir(self.other, image=image)), agent=self.other.get("_ref") or self.other["key"]):
+                    self.inst = install.packages(self.other, run_in=run_in, image=image)
         except install.InstallFailed as e:
             raise Refused(f"could not install what the run needs: {e}")
         # An own image has none of what the agent runs on: it is mounted in, fetched once on this machine.
@@ -695,11 +699,11 @@ class Run:
         """What the agent needs in an own image that the image may not have:
         Node for an agent npm installs, Python for one started as ``python3``
         with no environment of its own (a uv environment's interpreter is
-        mounted as on the base image, ``container.python_homes``)."""
+        mounted with the install, as on the base image)."""
         a = self.other
         start = (a.get("start") or {}).get("acp") or (a.get("start") or {}).get("command") or [""]
         needs = ["node"] if (a.get("install") or {}).get("npm") else []
-        if container.bare_python(start[0]) and not container.python_homes(self.inst):
+        if container.bare_python(start[0]) and not os.path.isfile(os.path.join(self.inst, ".venv", "pyvenv.cfg")):
             needs.append("python")
         return needs
 
@@ -1152,7 +1156,7 @@ class Run:
         # this application's folder (its .env holds the keys) nor the
         # benchmark's (its data holds the answers).
         mounted = container.mounts([ws, home, *getattr(rl, "unit_rw", [])],
-                                   [self.inst, self.other.get("_here"), *container.python_homes(self.inst)],
+                                   [self.inst, self.other.get("_here")],
                                    getattr(rl, "unit_files", []))
         env = dict(env, PATH=os.pathsep.join(install.bin_dirs(self.inst) + [container.IMAGE_PATH]))
         return rl.wrap(list(cmd), env, workdir, mounted, image=rl.unit_image, interactive=interactive,
@@ -1213,7 +1217,7 @@ class Run:
                 # as on the base: its home, its install and definition, its MCP servers' files -
                 # never this application's folder nor the benchmark's; and what it runs on, under /opt/nullius
                 mounted = container.mounts([home, *getattr(rl, "unit_rw", [])],
-                                           [self.inst, self.other.get("_here"), *container.python_homes(self.inst)],
+                                           [self.inst, self.other.get("_here")],
                                            getattr(rl, "unit_files", []))
                 runtimes = self.runtimes
             box = container.Box(self.name, tag, image, workdir=setup.get("workdir") or cfg["workdir"], path=cfg["path"],
