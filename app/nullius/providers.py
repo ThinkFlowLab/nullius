@@ -11,7 +11,11 @@ step numbers, so an error from a compiled recipe names the step that edits it.
 """
 from __future__ import annotations
 
+import http.client
+import json
 import os
+import urllib.parse
+import urllib.request
 from typing import List
 
 from nullius import settings
@@ -130,16 +134,8 @@ def embedding_problem(model: str, provider: str) -> str:
     return ""
 
 
-def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
-    """Read model IDs from the selected provider, or ``custom:<id>``'s endpoint; credentials never leave its endpoint."""
-    import json
-    import urllib.parse
-    import urllib.request
-
-    env = os.environ if env is None else env
-    provider, endpoint = split(provider)
-    if provider not in PROVIDERS:
-        raise ValueError("Choose a model provider.")
+def _where(provider: str, endpoint: str, env) -> tuple:
+    """(base URL, key) a choice is asked at; ValueError, before any request, when it cannot be asked."""
     url_var, key_var = endpoint_vars(endpoint)
     base = PROVIDER_BASE[provider] if provider != "custom" else env.get(url_var, "")
     key = env.get(key_var if provider == "custom" else PROVIDER_KEY[provider], "")
@@ -150,35 +146,59 @@ def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
     parsed = urllib.parse.urlsplit(base)
     if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("The provider endpoint must be an HTTP or HTTPS base URL.")
-    headers = {"Accept": "application/json", "User-Agent": "nullius"}
-    if key:
-        headers["Authorization"] = "Bearer " + key
-    req = urllib.request.Request(base.rstrip("/") + "/models", headers=headers)
+    return base.rstrip("/"), key
 
-    class NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, headers, newurl):
-            return None
 
-    fetch = opener or urllib.request.build_opener(NoRedirect()).open
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_MOST = 8 * 1024 * 1024
+
+
+def _get(url: str, headers: dict, opener=None) -> bytes:
+    """One GET, never another method: no redirect followed, so a key stays at its endpoint; at most 8 MiB read."""
+    req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "nullius", **headers})
+    with (opener or urllib.request.build_opener(_NoRedirect()).open)(req, timeout=12) as response:
+        content = response.read(_MOST + 1)
+    if len(content) > _MOST:
+        raise ValueError("response too large")
+    return content
+
+
+def _models(content: bytes) -> list[dict]:
+    """The model list of a ``{"data": [{"id": ...}]}`` answer, by name; ValueError when there is none."""
+    data = json.loads(content)
+    rows = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        raise ValueError("missing model list")
+    models = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        model = row.get("id")
+        if not isinstance(model, str) or not model or len(model) > 256 or any(c.isspace() or ord(c) < 32 for c in model):
+            continue
+        label = row.get("name") or row.get("display_name") or model
+        models[model] = {"id": model, "name": label[:256] if isinstance(label, str) else model}
+    return sorted(models.values(), key=lambda m: (m["name"].casefold(), m["id"]))
+
+
+def _bearer(key: str) -> dict:
+    return {"Authorization": "Bearer " + key} if key else {}
+
+
+def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
+    """Read model IDs from the selected provider, or ``custom:<id>``'s endpoint; credentials never leave its endpoint."""
+    env = os.environ if env is None else env
+    provider, endpoint = split(provider)
+    if provider not in PROVIDERS:
+        raise ValueError("Choose a model provider.")
+    base, key = _where(provider, endpoint, env)
     try:
-        with fetch(req, timeout=12) as response:
-            content = response.read(8 * 1024 * 1024 + 1)
-        if len(content) > 8 * 1024 * 1024:
-            raise ValueError("model response too large")
-        data = json.loads(content)
-        rows = data.get("data") if isinstance(data, dict) else None
-        if not isinstance(rows, list):
-            raise ValueError("missing model list")
-        models = {}
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            model = row.get("id")
-            if not isinstance(model, str) or not model or len(model) > 256 or any(c.isspace() or ord(c) < 32 for c in model):
-                continue
-            label = row.get("name") or row.get("display_name") or model
-            models[model] = {"id": model, "name": label[:256] if isinstance(label, str) else model}
-        return sorted(models.values(), key=lambda m: (m["name"].casefold(), m["id"]))
-    except (OSError, ValueError, TypeError):
+        return _models(_get(base + "/models", _bearer(key), opener))
+    except (OSError, ValueError, TypeError, http.client.HTTPException):
         # Provider errors can contain keys or private endpoint details; do not echo them.
         raise ValueError("Model list unavailable. Enter a model ID manually.") from None
+
