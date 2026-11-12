@@ -444,10 +444,10 @@ class Run:
                 raise Refused("a spending cap needs a price for every model the run calls, and there is none for "
                               + ", ".join(unpriced) + ": nullius prices update, nullius prices set MODEL INPUT OUTPUT, "
                               "or --price MODEL=INPUT,OUTPUT")
-        lacking = hostreq.missing(bench, needs["host"], which)
+        lacking = hostreq.problems(bench, needs["host"], which)
         if lacking:
             raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
-                          + "; ".join(f"{n} ({', '.join(gone)} not on PATH)" for n, gone in lacking.items())
+                          + "; ".join(f"{n} ({why})" for n, why in lacking.items())
                           + (". Install with: " + " && ".join(lines) if (lines := hostreq.install_lines(bench, list(lacking)))
                              else ". Run it on a machine that has it"))
         self.bench_relay = None

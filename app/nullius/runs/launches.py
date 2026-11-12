@@ -66,6 +66,16 @@ class Launch:
         return common[:cut + 1] + "*"
 
 
+def merged_sources(jobs) -> set[str]:
+    """Source jobs represented by a finished merge in this workspace.
+
+    Use the recorded names, never a shared launch id: another agent or an
+    unmerged shard may belong to the same launch and must still count.
+    """
+    return {source for j in jobs if not j.is_running and not j.is_preparing
+            for source in getattr(j, "merged_from", []) if source != j.job_id}
+
+
 def group(jobs, records: dict | None = None, window: float = WINDOW_SEC) -> list[Launch]:
     """``jobs``: the parsed jobs (``job_id``, ``dataset``, ``started_at``).
     ``records``: ``{execution id: (name, [job ids], launched at)}``, the builder's

@@ -367,9 +367,16 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             add("dataset", f"Like the leaderboard sets {(b.get('options') or {})[k].get('label') or k.replace('_', ' ')} to {v}: choose Any of your choice for {chosen_opts[k]}.")
     chosen_opts = {**(lb.get("bench_options") or {}), **chosen_opts}
     per_ds, needs = {}, {"embeddings": [], "host": []}
+    scopes = list(dict.fromkeys(p["o"]["key"] if p.get("setup") else "yours" for p in picks)) or ["yours"]
     for x in dss:
-        vals, bad = definitions.bench_options_of(b, x["id"], chosen_opts)
-        for why_not in bad:
+        # Original's retrievers have machine requirements too; collect the
+        # options of every participant that the compiled commands will run.
+        vals, bad = {}, []
+        for scope in scopes:
+            chosen, problems = definitions.bench_options_of(b, x["id"], chosen_opts, scope)
+            vals.update(chosen)
+            bad.extend(problems)
+        for why_not in dict.fromkeys(bad):
             add("dataset", why_not[0].upper() + why_not[1:] + ".")
         per_ds[x["id"]] = vals
         n = definitions.option_needs(b, vals)
@@ -552,7 +559,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"]
     # what the machines must have for the chosen options (``host``): the Where step and its test show it, Run checks it
     reqs = hostreq.requirements(b, needs["host"])
-    out["host"] = {"benchmark": b["key"], "needs": [{"name": n, "summary": r["summary"], "check": r["check"]} for n, r in reqs.items()],
+    out["host"] = {"benchmark": b["key"], "needs": [{"name": n, "summary": r["summary"], "check": r["check"],
+                                                  **({"gpu_memory_mb": r["gpu_memory_mb"]} if "gpu_memory_mb" in r else {})}
+                                                 for n, r in reqs.items()],
                    "check": [p for r in reqs.values() for p in r["check"]], "install": hostreq.install_lines(b, list(reqs))}
     # The licences its environments may need, by name: what a run on a host is sent of the benchmark's store.
     out["licences"] = {"benchmark": b["key"], "names": sorted({s["name"] for s in definitions.secrets_of(b)})}

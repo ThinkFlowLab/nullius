@@ -61,7 +61,6 @@ HARBOR_AGENT = [
 # cancelled, the verifier never answered, the sandbox died. Each stays in the
 # denominator and is charged to nobody — the documented rule for `unknown`.
 HARBOR_NEITHER = [
-    "CancelledError",                 # asyncio's, recorded when a job is stopped
     "VerifierTimeoutError",
     "VerifierOutputParseError",
     "RewardFileNotFoundError",
@@ -211,6 +210,25 @@ class UnknownExceptionInTheRates(unittest.TestCase):
         self.assertAlmostEqual(job.raw_solve_rate, 1 / 3)        # three recorded
         self.assertAlmostEqual(job.adjusted_solve_rate, 1 / 2)   # the 429 leaves; the crash stays
 
+    def test_a_cancelled_trial_is_labelled_and_excluded_from_the_adjusted_rate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            job = self._job(tmp)
+            path = os.path.join(job.dir, "t-crash", "result.json")
+            with open(path) as f:
+                result = json.load(f)
+            for name in ("CancelledError", "asyncio.exceptions.CancelledError"):
+                with self.subTest(name=name):
+                    result["exception_info"]["exception_type"] = name
+                    with open(path, "w") as f:
+                        json.dump(result, f)
+                    parsed = parse.parse_job(job.dir)
+                    cancelled = next(t for t in parsed.trials if t.trial_name == "t-crash")
+                    self.assertEqual(cancelled.outcome, C.CANCELLED)
+                    self.assertEqual(cancelled.outcome_label, "Run stopped")
+                    self.assertEqual(parsed.raw_solve_rate, 1 / 3)
+                    self.assertEqual(parsed.adjusted_solve_rate, 1)
+                    self.assertEqual(parsed.n_infra, 2)
+
 
 class VerifierOutcomes(unittest.TestCase):
     """No exception: the outcome comes from the verifier report."""
@@ -251,7 +269,7 @@ class Presentation(unittest.TestCase):
         """ORDER drives sorting; an outcome missing from it raises on compare."""
         produced = {C.RESOLVED, C.SCORED, C.PATCH_FAILED_TESTS, C.FAILED_VERIFICATION,
                     C.PATCH_NOT_APPLIED, C.NO_PATCH, C.AGENT_ERROR,
-                    C.RATE_LIMITED, C.API_ERROR, C.SETUP_ERROR, C.SPENDING_CAP, C.UNKNOWN}
+                    C.RATE_LIMITED, C.API_ERROR, C.SETUP_ERROR, C.SPENDING_CAP, C.CANCELLED, C.UNKNOWN}
         self.assertEqual(produced, set(C.ORDER))
 
 

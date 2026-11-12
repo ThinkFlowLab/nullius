@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from nullius import execution, prerequisites
+from nullius.standard import hostreq
 from .test_routes import web
 
 STOPPED = "docker is installed but not usable by this user: Cannot connect to the Docker daemon"
@@ -57,6 +58,24 @@ class PrerequisitesRoute(unittest.TestCase):
         with patch.object(prerequisites, "docker_here", lambda fresh=False: self.fail("docker asked")):
             j = self.post("/new-run/prerequisites", {"recipe": rec}).get_json()
         self.assertEqual((j["ready"], j["machines"][0]["rows"]), (True, []))
+
+    def test_stella_memory_reaches_review_and_the_local_machine_check(self):
+        rec = {"version": 1, "harness": "standard", "name": "stella", "title": "Stella", "benchmark": "longmemeval",
+               "datasets": ["longmemeval_s"], "others": ["original"], "provider": "openai", "model": "gpt-4o",
+               "limit": 1, "concurrency": 1, "where": "local", "bench_options": {"retriever": "flat-stella-session"}}
+        why = "needs at least 12000 MiB of GPU memory; largest GPU has 11264 MiB"
+        with patch("shutil.which", return_value="/fixture/program"), patch.object(hostreq, "gpu_memory_mb", return_value=11264):
+            j = self.post("/new-run/prerequisites", {"recipe": rec}).get_json()
+            self.assertEqual(j["errors"], [])
+            self.assertFalse(j["ready"])
+            row = next(r for r in j["machines"][0]["rows"] if r["name"] == "setup:stella_gpu")
+            self.assertEqual((row["state"], row["detail"]), ("missing", why))
+            response = self.client.post("/new-run/host/check", data={"entry": "local", "benchmark": "longmemeval",
+                                        "requirements": "stella_gpu"}, headers=self.headers)
+            self.addCleanup(response.close)
+            self.assertEqual(response.get_json()["missing"], {"stella_gpu": [why]})
+        with patch("shutil.which", return_value="/fixture/program"), patch.object(hostreq, "gpu_memory_mb", return_value=12000):
+            self.assertTrue(self.post("/new-run/prerequisites", {"recipe": rec}).get_json()["ready"])
 
 
     def test_hosts_are_probed_at_once_and_listed_in_order(self):

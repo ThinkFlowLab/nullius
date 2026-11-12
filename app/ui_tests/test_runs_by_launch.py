@@ -8,6 +8,7 @@ and given start times here; nothing is run.
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import tempfile
@@ -19,6 +20,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from nullius import execution, workspace
+from nullius.runs import parse
 from tests.test_feasibility import write_job
 from .test_controls_apart import text_of
 from .test_routes import web
@@ -67,6 +69,39 @@ class RunsByLaunch(unittest.TestCase):
         self.addCleanup(response.close)
         self.assertEqual(response.status_code, 200, path)
         return response.get_data(as_text=True)
+
+    def test_a_merge_replaces_only_its_sources_in_counts_and_launches(self):
+        with tempfile.TemporaryDirectory() as root:
+            jobs = []
+            for name, trials in (("shard-a", {"a": 1}), ("shard-b", {"b": 0}),
+                                 ("merged", {"a": 1, "b": 0}), ("unmerged", {"c": 1})):
+                j = write_job(root, name, "my-agent", trials, n_tasks=len(trials))
+                path = Path(j.dir) / "config.json"
+                cfg = json.loads(path.read_text())
+                cfg["standard"] = {"launch": "one-launch"}
+                if name == "merged":
+                    cfg["standard"]["merged_from"] = [{"job": "shard-a"}, {"job": "shard-b"}]
+                path.write_text(json.dumps(cfg))
+                jobs.append(parse.parse_job(j.dir))
+            self.jobs = jobs
+            self.assertEqual(jobs[2].merged_from, ["shard-a", "shard-b"])
+            # A builder record must not resurrect replaced shards as pending rows.
+            plan = execution.Plan(name="source-run", script="", jobs=[{"name": "shard-a"}, {"name": "shard-b"}])
+            ex = execution.Execution(plan, root=root)
+            execution.EXECUTIONS[ex.id] = ex
+            for view in ("launch", "all"):
+                html = self.get("/runs?view=" + view)
+                self.assertIn('data-runs="2" data-trials="3"', html)
+                self.assertNotIn("shard-a", html)
+                self.assertNotIn("shard-b", html)
+                self.assertIn("merged", html)
+                self.assertIn("unmerged", html)
+                self.assertEqual(len(blocks(html)), 1)
+                self.assertIn('class="dataset-count">2 runs<span class="dot">·</span>3 trials', html)
+                self.assertIn("Compare these 2", html)
+            # Removing the merge makes both source jobs count again.
+            self.jobs = [j for j in jobs if j.job_id != "merged"]
+            self.assertIn('data-runs="3" data-trials="3"', self.get("/runs"))
 
     def test_a_launch_is_one_block_checks_first_then_its_agents_best_first(self):
         html = self.get("/runs")

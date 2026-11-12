@@ -105,6 +105,11 @@ run.run(b,o,model='m',provider='custom',jobs_root={tmp!r},name='stopped',env={{'
                 self.assertTrue(all(r['exception_info']['exception_type'] == 'CancelledError' for r in results))
                 self.assertTrue(all('verifier_result' not in r for r in results))
                 self.assertTrue((root / 'stopped/result.json').is_file())
+                stopped = parse.parse_job(str(root / 'stopped'))
+                self.assertTrue(all(t.outcome == 'cancelled' for t in stopped.trials))
+                self.assertTrue(all(t.outcome_label == 'Run stopped' for t in stopped.trials))
+                self.assertIsNone(stopped.adjusted_solve_rate)
+                self.assertEqual(stopped.n_infra, len(stopped.trials))
             finally:
                 if process.poll() is None: process.kill()
                 process.communicate()

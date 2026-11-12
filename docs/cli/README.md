@@ -17,7 +17,7 @@ also works.
 | [Launch](../getting-started.md) | `nullius serve [roots...]` |
 | [Read jobs](read-jobs.md) | `nullius runs`, `nullius compare`, `nullius workspace`, `nullius standard traces` |
 | [Import a run](import.md) | `nullius import` |
-| [Definitions](definitions.md) | `nullius standard list`, `check`, `fit`, `new` |
+| [Definitions](definitions.md) | `nullius standard list`, `check`, `fit`, `pins`, `new` |
 | [Run a benchmark](run.md) | `nullius standard run` |
 | [Prove a benchmark](prove.md) | `nullius standard prove` |
 | [Conform an agent or a capability](conform.md) | `nullius standard conform` |

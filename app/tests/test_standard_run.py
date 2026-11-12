@@ -217,7 +217,7 @@ class RunTest(unittest.TestCase):
             info = json.load(f)["exception_info"]
         self.assertEqual(info["exception_type"], "CancelledError")
         self.assertIn("stopped before this unit ended", info["exception_message"])
-        self.assertEqual(classify.from_verdict(info["exception_type"], None), classify.UNKNOWN)   # charged to no one
+        self.assertEqual(classify.from_verdict(info["exception_type"], None), classify.CANCELLED)   # charged to no one
         with open(os.path.join(self.tmp, "stopped", run.live_feed.FEED)) as f:
             ends = [e for e in map(json.loads, f) if e.get("event") == "trial.end" and e.get("task") == "good"]
         self.assertEqual([e.get("outcome") for e in ends], ["cancelled"])         # the live board's word for it

@@ -24,6 +24,9 @@
       const name = document.createElement('span'); name.className = 'st-row-label mono'; name.textContent = model;
       const value = document.createElement('span'); value.className = 'st-row-value st-value';
       value.append(`input ${rate(r.input)} · output ${rate(r.output)}` + (r.cached === undefined ? '' : ` · cached ${rate(r.cached)}`));
+      for (const [key, label] of [['cache_write', 'cache write'], ['cache_write_1h', 'cache write 1h']]) {
+        if (r[key] !== undefined) value.append(` · ${label} ${rate(r[key])}`);
+      }
       if (csrf) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'btn sm ghost'; button.textContent = 'Remove';
         button.setAttribute('aria-label', `Remove the price of ${model}`);
@@ -55,7 +58,8 @@
     e.preventDefault();
     const f = new FormData(form), button = form.querySelector('[type=submit]');
     button.disabled = true;
-    const got = await post(section.dataset.set, {model: f.get('model'), input: f.get('input'), output: f.get('output'), cached: f.get('cached')});
+    const got = await post(section.dataset.set, {model: f.get('model'), input: f.get('input'), output: f.get('output'), cached: f.get('cached'),
+      cache_write: f.get('cache_write'), cache_write_1h: f.get('cache_write_1h')});
     button.disabled = false;
     if (got.ok) { form.reset(); show(got); } else tell(got.error, true);
   });
