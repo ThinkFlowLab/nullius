@@ -13,7 +13,9 @@ setup  - the task's instruction as the prompt; its own image (``image``:
          pulled by digest, or its environment folder built as published - a
          task whose build no longer works is pulled either way - with the
          memory and CPUs it asks for), its own agent timeout
-         (``agent_seconds``, task.toml's agent.timeout_sec) and its check (``verify``: tests/ copied to
+         (``agent_seconds``, task.toml's agent.timeout_sec), its preparation
+         (``prepare``: tmux installed when the image has none, as Terminal-Bench's
+         own harness gives every task) and its check (``verify``: tests/ copied to
          /tests and test.sh run in the task's container once the agent has
          ended and what it left running is stopped - kept, for the few tasks
          whose tests talk to a service it was asked to leave running - with
@@ -123,6 +125,28 @@ LOGS = "/logs/verifier"
 KEEP_PROCESSES = {"git-multibranch", "mailman", "qemu-alpine-ssh", "qemu-startup"}
 
 
+# Terminal-Bench's own harness gives every task's container tmux (its reference agent works in a tmux
+# session, and git-multibranch's solution starts one). Most images have none: the unit's container is
+# prepared with it, as root, through the check's proxy, before anyone works in it; an image that has it
+# is left alone.
+TMUX = r"""
+command -v tmux >/dev/null 2>&1 && { echo "tmux is already here: $(command -v tmux)"; exit 0; }
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq && apt-get install -y -qq --no-install-recommends tmux
+elif command -v apk >/dev/null 2>&1; then apk add --no-cache tmux
+elif command -v dnf >/dev/null 2>&1; then dnf install -y tmux
+elif command -v microdnf >/dev/null 2>&1; then microdnf install -y tmux
+elif command -v yum >/dev/null 2>&1; then yum install -y tmux
+elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install tmux
+elif command -v pacman >/dev/null 2>&1; then pacman -Sy --noconfirm tmux
+else echo "no package manager to install tmux with"; exit 1
+fi
+command -v tmux || { echo "tmux was not installed"; exit 1; }
+"""
+PREPARE = {"run": ["sh", "-c", TMUX], "seconds": 600, "network": True}
+
+
 def task(unit):
     if unit not in OFFLINE:
         raise ValueError(f"{unit} is not a task of this benchmark's datasets")
@@ -149,6 +173,7 @@ def setup(unit, dir):
     agent = (t.get("agent") or {}).get("timeout_sec") if os.environ.get("NULLIUS_VERSION", "1") != "1" else None
     return {"prompt": prompt, "environment": "task", "image": image,
             **({"agent_seconds": agent} if agent else {}),                # the task's own agent timeout, not the run's
+            "prepare": PREPARE,
             "verify": {"copy": {f"{unit}/tests": "/tests"}, "run": ["bash", "/tests/test.sh"], "collect": LOGS,
                        "seconds": (t.get("verifier") or {}).get("timeout_sec") or 900, "network": True,
                        **({"keep_processes": True} if unit in KEEP_PROCESSES else {})}}

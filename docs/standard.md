@@ -137,6 +137,7 @@ record); verifier/reward.txt and score.json
 | Backends (`--backend`) | `local`: processes on this machine. `docker`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. The driver stays on the machine either way; on docker a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image |
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
 | Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate; a turn past its limit is the agent's timeout. `"kind": "score"` leaves a score and no pass |
+| Rate limits | After a unit ends `rate_limited`, no unit starts for 5 s, doubling while units keep ending so (up to 300 s) and reset by any other end; `stage=units state=progress` says the pause and how many run. Each `rate_limited` unit is run once more after the others, one at a time: its first attempt moves whole to `retried/<trial>/`, the second is the trial and counts. Not after a Stop, a refused key or the spending cap, which counts both attempts |
 | The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. Provider `anthropic` speaks Anthropic's Messages (`ANTHROPIC_API_KEY` as `x-api-key`) |
 | A spending cap (`--max-usd`, `--max-usd-per-unit`) | Each relay books a call in the job's ledger (`.work/ledger`, `standard/ledger.py`) before sending it, and refuses the one that does not fit the run's cap or its unit's ([Run a benchmark](cli/run.md#a-spending-cap)) |
 
@@ -264,10 +265,12 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 }
 ```
 
-```json title="setup reply · image and verify"
+```json title="setup reply · image, prepare and verify"
 {"prompt": "...", "environment": "task",
  "image": {"build": "<task>/environment", "memory_mb": 2048, "cpus": 1},
  "workdir": "/app",
+ "prepare": {"run": ["sh", "-c", "command -v tmux || apt-get install -y tmux"],
+             "seconds": 600, "network": true},
  "verify": {"copy": {"<task>/tests": "/tests"}, "run": ["bash", "/tests/test.sh"],
             "collect": "/logs/verifier", "seconds": 900, "network": true,
             "keep_processes": false}}
@@ -279,6 +282,7 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 | `image.pull` | A reference pinned by its digest (`name@sha256:...`) |
 | `image.memory_mb`, `image.cpus` | The task's limits |
 | `workdir` | The session's `cwd` when not the image's working directory |
+| `prepare` | A step (`copy`, `write`, `run`, `seconds`, `network`) run as root in the unit's container before the agent or a control starts: what the task's own harness adds to every image |
 | `env` | Task variables for the agent: uppercase names and string values, no model settings or credentials. The run's variables take precedence; `PATH` contains absolute folders prepended to the image's path. SWE-bench uses this for its `testbed` conda environment |
 | `verify.copy` | Folders of the upstream copied in only after the agent ends |
 | `verify.write` | `{absolute path inside: text}`, written in only after the agent ends |
@@ -293,6 +297,7 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 | The agent is added at run time | The container runs the image for the whole unit (`container.Box`), as the image's own user, default capabilities and no way to gain more, on the unit's internal network. On Podman with `--userns=host`, so its root is you on rootless Podman whatever `containers.conf` sets. The agent is started with `docker exec`; ACP's `fs` is off. Home, install, definition and MCP files are mounted as on the base |
 | Runtimes | Read-only under `/opt/nullius`: the base's Node for an agent from npm, a pinned standalone Python (`uv python install` in the base image) for one started as `python3` with no uv environment. A uv environment's interpreter is in its install. The start command names it; `PATH` keeps the image's own `python3` and `node` first. The home written as root is given back to you |
 | A runtime the image cannot start | Tried once before the agent; a failure (glibc in a musl image) is a setup error: "not run: the agent's runtime (node) needs glibc; this task's image is musl-based" |
+| A preparation leaves no way out | Its `network: true` is the check's proxy; the proxy container is removed and shown gone, and what the step left running is stopped, before the agent starts. `setup/prepare.txt` and `setup/egress.log` keep its output. A failure, or a way out that cannot be closed, is an `EnvironmentSetupError` |
 | The check runs where the work is | `score` is sent `verified: {exit, timed_out, output, dir, collected}`; the driver never runs docker. What changed in the container is `agent/container-changes.txt` |
 | Nothing of the agent runs during the check | Every process but init and the keep-alive is stopped, then killed; `verifier/stopped.txt` names each, one that cannot be stopped is a `VerifierError`. `keep_processes: true` lets them run on, free to alter the tests |
 | The check's way out is a proxy | `network: true` adds a proxy container (`standard/egress.py`) as `egress`, told to the check's command alone (`HTTP_PROXY`, `HTTPS_PROXY`); it connects only to global addresses, never `169.254.0.0/16`, `100.64.0.0/10`, private ranges, loopback or the docker bridge. `verifier/egress.log` keeps what it let through and refused. A download has to honour the proxy variables |
@@ -374,7 +379,7 @@ use the source folders and repository checks.
 | Op | Sent | Replies |
 | --- | --- | --- |
 | `units` | `dataset`, `setup` | Every unit id |
-| `setup` | `unit`, `dir` | `{prompt}`, any `mcp` servers, `environment`, an own image's `image` and `verify`, and `agent_seconds`, the unit's own agent timeout (up to 6 hours, instead of `limits.turn_seconds`) |
+| `setup` | `unit`, `dir` | `{prompt}`, any `mcp` servers, `environment`, an own image's `image`, `prepare` and `verify`, and `agent_seconds`, the unit's own agent timeout (up to 6 hours, instead of `limits.turn_seconds`) |
 | `turn` | The transcript so far; `simulator: {model, base_url, key}` when there is one; `judge` for an upstream that grades as the conversation ends; `attempt` with `limits.attempts` | The next message, `{done: true}`, or `restart` |
 | `produce` | A capability benchmark's recall, `base_url` and `key` | The reading, through the relay |
 | `answer` | `unit, dir, setup, model, base_url, key` | `{answer}`: the upstream's own answerer, for a [setup](#setups-as-published-your-model-your-agent-or-capability) |
@@ -420,13 +425,14 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `summary`, `values` or `pattern`, `default` | What it changes, its allowed choices or input pattern, and its value when unset |
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
-| `needs` | What a value needs: an `embeddings` model, `host` requirements, or named `files` |
+| `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, or named `files` |
 | `when` | Another option's values that make it apply |
 | `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`) |
 
 - **Temperature** in GSM8K and HumanEval's Original setups accepts a non-negative decimal, such as `0.5`. **Provider default** omits the parameter; the provider/model decides. Some models restrict overrides. In the builder, leave the input empty for provider default; the CLI accepts `--bench-option temperature=0.5` or `temperature=default`. This does not override an agent's own sampling settings.
 - **Read** by the driver as `NULLIUS_OPTION_<NAME>`; set with `cli run --bench-option NAME=VALUE`.
-- **`embeddings`**: the value gets the run's own relay as the driver's `OPENAI_BASE_URL` (and its MCP servers'), the model pinned on its route; it wants the OpenAI provider. A judge route handed to litellm goes in its `api_base`.
+- **`embeddings`**: the value gets the run's own relay as the driver's `OPENAI_BASE_URL` (and its MCP servers'), the model pinned on its route. Bare OpenAI model names work on OpenAI or OpenRouter; qualified names such as `qwen/qwen3-embedding-8b` require OpenRouter. On OpenRouter, bare names acquire their maker's prefix in both the price inventory and the sent request. A judge route handed to litellm goes in its `api_base`.
+- **`reranker`**: the chat model used by the upstream search. The driver receives one `OPENAI_BASE_URL`: embeddings requests use the embedding pin when present, while chat and Responses requests use the reranker pin. A BM25 reranker needs no embedding model. Both models count toward the run's price requirements and spending cap.
 - **`files`**: a benchmark declares `{name: {url: "https://…", sha256: "…"}}`; an option value names them with `needs.files: [name]`. A needs block may add `when: {other_option: [values]}` to require its resources only under those selections. Only active options and needs fetch files, once per digest under `STANDARD_DATA_DIR` (the dataset cache by default), refusing a mismatched download. The driver receives each path as `NULLIUS_FILE_<NAME>` (upper case). Names use lower case letters and underscores.
 - **`host`**: `{summary, check: [programs on PATH], install: {apt, npm}}` (`standard/hostreq.py`), whatever the backend; hardware (a CUDA GPU, by `nvidia-smi`) has no `install`. Optional `gpu_memory_mb` is a positive whole number of MiB required on the largest GPU, read with `nvidia-smi` (total memory, not free memory or the sum across cards). The local builder and run startup refuse insufficient memory with the required and available amounts; an unavailable query names `nvidia-smi` instead. Remote GPU memory is checked when the run starts on the host. A run refuses missing programs and says the install commands when supplied.
 - **One integration per benchmark.** Add supported behavior as options on that entry, not numbered integration revisions. Record the selected options with each run and revalidate affected proofs.
