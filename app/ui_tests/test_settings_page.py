@@ -440,6 +440,8 @@ class SettingsPage(unittest.TestCase):
         self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_PRICES": str(self.tmp / "prices.json")}))
         page = self.page()
         section = page[page.index('id="prices"'):page.index('id="general"')]
+        self.assertIn('name="cache_write"', section)
+        self.assertIn('name="cache_write_1h"', section)
         self.assertNotIn('name="value:', section)                                       # outside Save: nothing of it lands in the file
         state = json.loads(html_text.unescape(re.search(r"data-state='([^']*)'", section).group(1)))
         self.assertEqual(state, {"n": 0, "from": "", "on": "", "own": {}})               # nothing ships with Nullius
@@ -456,6 +458,9 @@ class SettingsPage(unittest.TestCase):
         r = self.client.post("/settings/prices/set", data={"model": "model-a", "input": "1", "output": "2", "cached": ""}, headers=headers); self.addCleanup(r.close)
         self.assertEqual(r.json["own"], {"model-a": {"input": 1.0, "output": 2.0}})
         self.assertEqual(prices.table()["model-a"]["input"], 1.0)                       # the user's own, over the list
+        r = self.client.post("/settings/prices/set", data={"model": "model-a", "input": "1", "output": "2",
+                             "cache_write": "1.25", "cache_write_1h": "2"}, headers=headers); self.addCleanup(r.close)
+        self.assertEqual(r.json["own"]["model-a"], {"input": 1.0, "output": 2.0, "cache_write": 1.25, "cache_write_1h": 2.0})
         for bad in ({"model": "m", "input": "free", "output": "2"}, {"model": "m", "input": "1"}, {"model": "", "input": "1", "output": "2"}):
             r = self.client.post("/settings/prices/set", data=bad, headers=headers); self.addCleanup(r.close)
             self.assertEqual((r.status_code, r.json["ok"]), (400, False), bad)

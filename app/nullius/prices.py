@@ -13,7 +13,7 @@ host is sent), in two parts:
             negotiated one, a model served under a name of one's own
 
 A row is USD per million tokens: ``input`` and ``output``, optionally
-``cached`` (input a cache served) and ``cache_write``, and ``max_output``,
+``cached`` (input a cache served), ``cache_write``, ``cache_write_1h``, and ``max_output``,
 the model's output limit in tokens. A model is priced by exactly its name or
 not at all: a name that only starts like another's is another model.
 
@@ -22,7 +22,7 @@ Nothing here runs during a run: a run reads the file, never the network.
     nullius prices                     # where the list came from, how many models, the user's own rows
     nullius prices list MODEL ...      # those models' rows
     nullius prices update [--from URL-or-file]
-    nullius prices set MODEL INPUT OUTPUT [--cached X] [--cache-write X] [--max-output N]
+    nullius prices set MODEL INPUT OUTPUT [--cached X] [--cache-write X] [--cache-write-1h X] [--max-output N]
     nullius prices remove MODEL
 """
 from __future__ import annotations
@@ -37,9 +37,10 @@ from typing import Callable, Dict, Iterable, Optional, Tuple
 from nullius import paths
 
 SOURCE = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
-RATES = ("input", "output", "cached", "cache_write")            # USD per million tokens
+RATES = ("input", "output", "cached", "cache_write", "cache_write_1h")   # USD per million tokens
 _LISTED = {"input": "input_cost_per_token", "output": "output_cost_per_token",
-           "cached": "cache_read_input_token_cost", "cache_write": "cache_creation_input_token_cost"}
+           "cached": "cache_read_input_token_cost", "cache_write": "cache_creation_input_token_cost",
+           "cache_write_1h": "cache_creation_input_token_cost_above_1hr"}
 _MOST = 64 * 1024 * 1024                                        # a list larger than this is not a price list
 
 
@@ -98,10 +99,10 @@ def given(names: Iterable[Optional[str]], prices: Optional[Dict[str, dict]]) -> 
     return {n: prices[n] for n in dict.fromkeys(n for n in names if n) if n in prices}
 
 
-def row(input, output, cached=None, cache_write=None, max_output=None) -> dict:
+def row(input, output, cached=None, cache_write=None, max_output=None, *, cache_write_1h=None) -> dict:
     """One row, checked: rates are numbers not below zero, the limit a whole number above it."""
     out = {}
-    for name, v in (("input", input), ("output", output), ("cached", cached), ("cache_write", cache_write)):
+    for name, v in (("input", input), ("output", output), ("cached", cached), ("cache_write", cache_write), ("cache_write_1h", cache_write_1h)):
         if v is None:
             continue
         try:
@@ -123,13 +124,14 @@ def row(input, output, cached=None, cache_write=None, max_output=None) -> dict:
 
 
 def parse(text: str) -> Tuple[str, dict]:
-    """``MODEL=INPUT,OUTPUT[,CACHED]``, a run's ``--price``."""
+    """``MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]``, a run's ``--price``.
+    Optional rates may be left empty; existing two/three-rate rows keep their meaning."""
     name, eq, rest = str(text).partition("=")
     bits = [b.strip() for b in rest.split(",")] if eq else []
-    if not name.strip() or not 2 <= len(bits) <= 3 or not all(bits):
-        raise ValueError(f"--price {text!r}: MODEL=INPUT,OUTPUT[,CACHED], in USD per million tokens")
+    if not name.strip() or not 2 <= len(bits) <= 5 or not all(bits[:2]):
+        raise ValueError(f"--price {text!r}: MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H], in USD per million tokens")
     try:
-        return name.strip(), row(*bits)
+        return name.strip(), row(**{k: v or None for k, v in zip(RATES, bits)})
     except ValueError as e:
         raise ValueError(f"--price {text!r}: {e}")
 
@@ -146,7 +148,7 @@ def convert(listing) -> Dict[str, dict]:
             continue
         r = {"input": round(e[_LISTED["input"]] * 1e6, 6),
              "output": round(e[_LISTED["output"]] * 1e6, 6) if _number(e.get(_LISTED["output"])) else 0.0}
-        for k in ("cached", "cache_write"):
+        for k in ("cached", "cache_write", "cache_write_1h"):
             if _number(e.get(_LISTED[k])):
                 r[k] = round(e[_LISTED[k]] * 1e6, 6)
         limit = e.get("max_output_tokens")
@@ -218,7 +220,8 @@ def state(env=None) -> dict:
 
 def said(name: str, r: dict) -> str:
     bits = [f"input {r['input']:g}", f"output {r['output']:g}"]
-    bits += [f"{label} {r[k]:g}" for k, label in (("cached", "cached"), ("cache_write", "cache write")) if k in r]
+    bits += [f"{label} {r[k]:g}" for k, label in (("cached", "cached"), ("cache_write", "cache write"),
+                                               ("cache_write_1h", "cache write 1h")) if k in r]
     if "max_output" in r:
         bits.append(f"output limit {r['max_output']}")
     return f"{name}: " + ", ".join(bits)
@@ -239,6 +242,7 @@ def main(argv=None) -> int:
     st.add_argument("output")
     st.add_argument("--cached")
     st.add_argument("--cache-write")
+    st.add_argument("--cache-write-1h")
     st.add_argument("--max-output")
     rm = sub.add_parser("remove", help="remove one of the user's own prices")
     rm.add_argument("model")
@@ -249,7 +253,7 @@ def main(argv=None) -> int:
             print(f"{got['n']} models priced, from {got['from']}")
             return 0
         if a.cmd == "set":
-            r = row(a.input, a.output, a.cached, a.cache_write, a.max_output)
+            r = row(a.input, a.output, a.cached, a.cache_write, a.max_output, cache_write_1h=a.cache_write_1h)
             set_own(a.model, r)
             print(said(a.model.strip(), r))
             return 0

@@ -264,7 +264,7 @@ def _call_span(n: int, c: dict) -> Optional[dict]:
     reply = c.get("reply") or {}
     usage = reply.get("usage") or {}
     tokens = {name: usage[k] for k, name in (("input", "input_tokens"), ("output", "output_tokens"), ("cached", "cache_read_tokens"),
-                                             ("reasoning", "reasoning_tokens")) if usage.get(k)}
+                                             ("cache_write", "cache_write_tokens"), ("reasoning", "reasoning_tokens")) if usage.get(k)}
     attributes = {k: c[k] for k in ("model", "model_asked", "path", "status", "error", "cost_usd", "cost_from") if c.get(k) not in (None, "")}
     named = [str(x.get("name")) for x in reply.get("tool_calls") or [] if isinstance(x, dict) and x.get("name")]
     if named:

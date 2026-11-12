@@ -20,7 +20,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from nullius.runs import classify
-from nullius.standard import jsonl, ledger, relay
+from nullius.standard import job, jsonl, ledger, relay
 
 CHAT = {"choices": [{"message": {"role": "assistant", "content": "hello"}}],
         "usage": {"prompt_tokens": 10, "completion_tokens": 2, "prompt_tokens_details": {"cached_tokens": 4}}}
@@ -692,10 +692,10 @@ class PassThroughTest(unittest.TestCase):
         rec = r.calls("u")[-1]["reply"]
         self.assertEqual(rec["text"], "hello")
         self.assertEqual(rec["tool_calls"], [{"name": "bash", "arguments": '{"cmd": "ls"}'}])
-        self.assertEqual(rec["usage"], {"input": 132, "output": 3, "cached": 120, "reasoning": 0, "cache_write": 20})
+        self.assertEqual(rec["usage"], {"input": 132, "output": 3, "cached": 100, "reasoning": 0, "cache_write": 20})
 
     def test_tokens_written_to_a_cache_are_priced_apart_from_those_read_from_it(self):
-        """Of its 120 cached tokens the reply read 100 and wrote 20: a write costs more than a fresh token, a read less."""
+        """The reply read 100 tokens and wrote 20: a write costs more than a fresh token, a read less."""
         row = {"input": 3.0, "cached": 0.3, "cache_write": 3.75, "output": 15.0}
         for prices, cost in ((row, 12 * 3.0 + 100 * 0.3 + 20 * 3.75 + 3 * 15.0),
                              ({k: v for k, v in row.items() if k != "cache_write"}, 12 * 3.0 + 100 * 0.3 + 20 * 3.0 + 3 * 15.0)):   # no price for a write: the input's
@@ -709,11 +709,42 @@ class PassThroughTest(unittest.TestCase):
         """The usage of a real call that wrote 7,081 tokens, then of one that read them: charged 0.000889025 and 0.00007471 USD."""
         r = self.relay(prices={"m": {"input": 0.10, "output": 0.50, "cached": 0.01, "cache_write": 0.125}})
         wrote = relay._usage({"prompt_tokens": 7105, "completion_tokens": 3, "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 7081}})
-        self.assertEqual(wrote, {"input": 7105, "output": 3, "cached": 7081, "reasoning": 0, "cache_write": 7081})
+        self.assertEqual(wrote, {"input": 7105, "output": 3, "cached": 0, "reasoning": 0, "cache_write": 7081})
         self.assertAlmostEqual(r._cost("m", wrote)[0], 0.000889025)                  # 0.000712 at the input rate
         read = relay._usage({"prompt_tokens": 7105, "completion_tokens": 3, "prompt_tokens_details": {"cached_tokens": 7081, "cache_write_tokens": 0}})
         self.assertEqual(read, {"input": 7105, "output": 3, "cached": 7081, "reasoning": 0})
         self.assertAlmostEqual(r._cost("m", read)[0], 0.00007471)
+
+    def test_mixed_cache_lifetimes_reach_cost_ledger_totals_and_spans(self):
+        usage = {"input_tokens": 2048, "cache_read_input_tokens": 1800, "cache_creation_input_tokens": 248,
+                 "output_tokens": 503, "cache_creation": {"ephemeral_5m_input_tokens": 148, "ephemeral_1h_input_tokens": 100}}
+        row = {"input": 3.0, "output": 15.0, "cached": 0.3, "cache_write": 3.75, "cache_write_1h": 6.0}
+        expected = (2048 * 3 + 1800 * 0.3 + 148 * 3.75 + 100 * 6 + 503 * 15) / 1e6
+        with tempfile.TemporaryDirectory() as folder:
+            led = ledger.Ledger.create(os.path.join(folder, "ledger.json"), 1.0)
+            r = self.relay(model="m", prices={"m": row}, ledger=led.path)
+            # Two real local HTTP exchanges: the same provider usage as JSON and SSE.
+            for stream in (False, True):
+                sse = ('data: ' + json.dumps({"type": "message_start", "message": {"usage": usage}}) + '\n\n'
+                       + 'data: {"type":"message_delta","usage":{"output_tokens":503}}\n\n').encode()
+                with mock.patch.dict(MSG, usage=usage), mock.patch(__name__ + ".MSG_SSE", sse):
+                    status, _, body = self.post(r, "u", "/messages", {"model": "m", "max_tokens": 600, "messages": [], "stream": stream})
+                self.assertEqual(status, 200)
+                if stream:
+                    self.assertEqual(body, sse)
+                call = r.calls("u")[-1]
+                self.assertEqual(call["reply"]["usage"], {"input": 4096, "output": 503, "cached": 1800,
+                                                         "reasoning": 0, "cache_write": 248, "cache_write_1h": 100})
+                self.assertAlmostEqual(call["cost_usd"], expected)
+                tokens = job._call_span(0, call)["tokens"]
+                self.assertEqual((tokens["input_tokens"], tokens["cache_read_tokens"], tokens["cache_write_tokens"]), (4096, 1800, 248))
+            self.assertAlmostEqual(led.state()["spent_usd"], 2 * expected)
+            self.assertEqual(job._usage_total(r.calls("u"))["cached"], 3600)
+            self.assertEqual(job._usage_total(r.calls("u"))["input"], 8192)
+            r.prices["m"] = {k: v for k, v in row.items() if k != "cache_write_1h"}
+            normalized = relay._usage(usage)
+            self.assertAlmostEqual(r._cost("m", normalized)[0], (2048 * 3 + 1800 * 0.3 + 248 * 3.75 + 503 * 15) / 1e6)
+            self.assertEqual(r._cost("m", dict(normalized, cost=0.02)), (0.02, "provider"))
 
     def test_anthropic_messages_streamed(self):
         r = self.relay(model="claude-x", key_header="x-api-key")
