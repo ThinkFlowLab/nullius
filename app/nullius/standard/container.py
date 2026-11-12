@@ -25,7 +25,9 @@ inside unchanged. A uv environment's interpreter is in the install
 The container runs as this machine's user, with no capabilities and no way to gain
 privileges, so what it writes in the workspace is the user's to read and
 remove. That is ``--user uid:gid``, or ``--user 0:0`` on a rootless engine,
-where a container's root is this machine's user.
+where a container's root is this machine's user. On a Docker with
+``userns-remap``, a container that uses this machine's user's files also
+runs in this machine's user namespace (:func:`_userns`).
 
 **The relay is a sidecar, and the agent's only way out.** Per unit, an
 internal network (``docker network create --internal``: no route off it); a
@@ -415,23 +417,40 @@ def mounts(rw: Iterable[str], ro: Iterable[str], files: Iterable[str] = ()) -> L
     return out
 
 
-_rootless: Optional[bool] = None
+_security: Optional[str] = None
+
+
+def _security_options() -> str:
+    """The engine's security options (``docker info``). The first answer is
+    kept. An engine that does not answer gives none and is asked again."""
+    global _security
+    if _security is None:
+        try:
+            r = _docker(["info", "--format", "{{.SecurityOptions}}"], check=False, timeout=30)
+        except Unavailable:
+            return ""
+        if r.returncode != 0:
+            return ""
+        _security = r.stdout
+    return _security
 
 
 def rootless() -> bool:
     """Whether the engine is rootless (Docker or podman): its uid 0 is this
-    machine's user, every other uid a sub-uid. The first answer is kept. An
-    engine that does not answer counts as rootful and is asked again."""
-    global _rootless
-    if _rootless is None:
-        try:
-            r = _docker(["info", "--format", "{{.SecurityOptions}}"], check=False, timeout=30)
-        except Unavailable:
-            return False
-        if r.returncode != 0:
-            return False
-        _rootless = "name=rootless" in r.stdout
-    return _rootless
+    machine's user, every other uid a sub-uid."""
+    return "name=rootless" in _security_options()
+
+
+def userns_remap() -> bool:
+    """Whether a rootful Docker remaps its containers' users (``userns-remap``):
+    every uid inside, root too, is then a sub-uid of this machine."""
+    return "name=userns" in _security_options()
+
+
+def _userns() -> List[str]:
+    """``--userns=host`` on a Docker with ``userns-remap``, where a container's
+    uids are otherwise sub-uids that cannot use this machine's user's files."""
+    return ["--userns=host"] if userns_remap() else []
 
 
 def _user() -> str:
@@ -449,7 +468,7 @@ def run_argv(image: str, cmd: List[str], *, name: str, network: str, job: str, w
     ``binds``: (a file on this machine, its path inside), each read-only - a
     licence file where its environment says the software looks for it."""
     a = [DOCKER, "run", "--rm", "--name", name, "--network", network, "--label", f"{LABEL}={job}",
-         "--user", _user(), "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
+         *_userns(), "--user", _user(), "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
          "-w", workdir, "-e", "PATH=" + path]
     if interactive:
         a.insert(2, "-i")
@@ -491,7 +510,7 @@ def check_argv(workdir: str, here: List[str], inside: List[str]) -> List[str]:
     image = os.environ.get(CHECK_IMAGE)
     if not image:
         return list(here)
-    return [DOCKER, "run", "--rm", "--network", "none", "--user", _user(), "--cap-drop", "ALL",
+    return [DOCKER, "run", "--rm", "--network", "none", *_userns(), "--user", _user(), "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "-v", f"{workdir}:{workdir}:rw", "-w", workdir, image, *inside]
 
 
@@ -514,7 +533,7 @@ def install_argv(image: str, where: str, cmd: List[str], env: Optional[dict] = N
     home, npm, uv = (f"{where}/{s}" for s in install.SCRATCH)
     env = {"HOME": home, "npm_config_cache": npm, "UV_CACHE_DIR": uv,
            "UV_PYTHON_INSTALL_DIR": f"{where}/.python", "UV_PYTHON_DOWNLOADS": "automatic", **(env or {})}
-    return [DOCKER, "run", "--rm", "--label", "nullius.install=1", "--user", _user(), "--cap-drop", "ALL",
+    return [DOCKER, "run", "--rm", "--label", "nullius.install=1", *_userns(), "--user", _user(), "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "-v", f"{where}:{where}:rw", "-w", where,
             *[w for k, v in env.items() for w in ("-e", f"{k}={v}")],
             *[w for k in INSTALL_KEEP if k in os.environ for w in ("-e", k)], image] + list(cmd)
@@ -532,7 +551,7 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
     (``--add-host``), the machine's own for an endpoint on its loopback.
     ``ledger``: the file of the run's spending cap, its folder mounted so
     this relay books its calls where every other relay of the job does."""
-    a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
+    a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *_userns(), "--user", _user(),
          "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
          *[w for n, ip in sorted((hosts or {}).items()) for w in ("--add-host", f"{n}:{ip}")],
          "-p", f"127.0.0.1::{RELAY_PORT}", "-v", f"{app}:{app}:ro", "-v", f"{record}:{record}:rw",
@@ -754,7 +773,7 @@ def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
     file and the server's socket mounted, each alone and read-only. Where it
     forwards is named, never given: ``-e NULLIUS_FORWARD_TO``
     (``unix:<socket>``)."""
-    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", "--user", _user(),
+    return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *_userns(), "--user", _user(),
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init",
             *(["--network", network, "--network-alias", alias] if network else []),
             "-v", f"{FORWARD}:{FORWARD_IN}:ro", "-v", f"{socket_path}:{socket_path}:ro",
@@ -1400,7 +1419,7 @@ class Box:
             if self.own_net:
                 _docker(["network", "create", "--internal", "--label", f"{LABEL}={self.job}", self.net])
             a = ["run", "-d", "--name", self.name, "--label", f"{LABEL}={self.job}", "--network", self.net, "--init",
-                 "--security-opt", "no-new-privileges", "-w", self.workdir]
+                 "--security-opt", "no-new-privileges", "-w", self.workdir, *_userns()]
             if self.memory_mb:
                 a += ["--memory", f"{int(self.memory_mb)}m"]
             if self.cpus:

@@ -44,7 +44,7 @@ class ImageTest(unittest.TestCase):
 
 class ArgvTest(unittest.TestCase):
     def setUp(self):
-        self.enterContext(mock.patch.object(container, "_rootless", None))    # a faked docker's answer is not kept
+        self.enterContext(mock.patch.object(container, "_security", ""))      # a default rootful docker, never asked
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))
@@ -355,15 +355,17 @@ class ArgvTest(unittest.TestCase):
         self.start()[0].stop()
         self.assertEqual((os.path.exists(old), os.path.exists(fresh)), (False, True))
 
-    def _users(self) -> set:
+    def _argvs(self) -> dict:
         self.enterContext(mock.patch.dict(os.environ, {container.CHECK_IMAGE: "img"}))
-        argvs = [container.run_argv("img", ["a"], name="n", network="n", job="j", workdir="/w", mounted=[], env_names=[], path="/p"),
-                 container.check_argv("/w", [], []), container.install_argv("img", "/w", ["a"]),
-                 container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="b", model="m", routes={}),
-                 container.forward_argv("img", name="f", job="j", port=1),
-                 container.door_argv("img", name="d", job="j", network="n", alias="a", port=1, socket_path="/s"),
-                 container.egress_argv("img", name="e", job="j")]
-        return {a[a.index("--user") + 1] for a in argvs}
+        return {"agent": container.run_argv("img", ["a"], name="n", network="n", job="j", workdir="/w", mounted=[], env_names=[], path="/p"),
+                "check": container.check_argv("/w", [], []), "install": container.install_argv("img", "/w", ["a"]),
+                "relay": container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="b", model="m", routes={}),
+                "forward": container.forward_argv("img", name="f", job="j", port=1),
+                "door": container.door_argv("img", name="d", job="j", network="n", alias="a", port=1, socket_path="/s"),
+                "egress": container.egress_argv("img", name="e", job="j")}
+
+    def _users(self) -> set:
+        return {a[a.index("--user") + 1] for a in self._argvs().values()}
 
     def test_a_rootless_engine_runs_every_container_as_its_root_which_is_this_user(self):
         with mock.patch.object(container, "rootless", return_value=True):
@@ -371,23 +373,39 @@ class ArgvTest(unittest.TestCase):
         with mock.patch.object(container, "rootless", return_value=False):
             self.assertEqual(self._users(), {f"{os.getuid()}:{os.getgid()}"})
 
+    def test_a_docker_with_userns_remap_runs_what_uses_this_users_files_in_the_machines_user_namespace(self):
+        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
+        with mock.patch.object(container, "userns_remap", return_value=True):
+            on = {k for k, a in self._argvs().items() if "--userns=host" in a}
+            self.assertEqual(on, {"agent", "check", "install", "relay", "door"})   # the forwarder and the proxy read one public file
+            self.assertEqual(self._users(), {f"{os.getuid()}:{os.getgid()}"})
+        with mock.patch.object(container, "userns_remap", return_value=False):
+            self.assertFalse([k for k, a in self._argvs().items() if "--userns=host" in a])
+
     def test_the_engine_is_asked_once_whether_it_is_rootless_and_one_that_cannot_answer_counts_as_rootful(self):
-        self.enterContext(mock.patch.object(container, "_rootless", None))
+        self.enterContext(mock.patch.object(container, "_security", None))
         with mock.patch.object(container, "_docker", side_effect=container.Unavailable("no docker")):
             self.assertFalse(container.rootless())
         down = subprocess.CompletedProcess([], 1, "", "Cannot connect to the Docker daemon")
         with mock.patch.object(container, "_docker", return_value=down):
             self.assertFalse(container.rootless())
-        self.assertIsNone(container._rootless)                             # not an answer: asked again next time
+        self.assertIsNone(container._security)                             # not an answer: asked again next time
         said = subprocess.CompletedProcess([], 0, "[name=seccomp,profile=builtin name=rootless name=cgroupns]\n", "")
         with mock.patch.object(container, "_docker", return_value=said) as ask:
             self.assertTrue(container.rootless())
             self.assertTrue(container.rootless())
         self.assertEqual(ask.call_count, 1)
-        container._rootless = None
+        container._security = None
         said = subprocess.CompletedProcess([], 0, "[name=apparmor name=seccomp,profile=builtin name=cgroupns]\n", "")
         with mock.patch.object(container, "_docker", return_value=said):
             self.assertFalse(container.rootless())
+            self.assertFalse(container.userns_remap())
+        container._security = None
+        said = subprocess.CompletedProcess([], 0, "[name=seccomp,profile=builtin name=userns name=cgroupns]\n", "")
+        with mock.patch.object(container, "_docker", return_value=said) as ask:
+            self.assertTrue(container.userns_remap())
+            self.assertFalse(container.rootless())
+        self.assertEqual(ask.call_count, 1)                                # one question answers both
 
     def test_a_long_job_name_gives_a_short_unique_slug(self):
         a, b = container.slug("x" * 200), container.slug("x" * 199 + "y")
