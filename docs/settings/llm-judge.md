@@ -4,9 +4,9 @@ The same questions as System One, answered as JSON by a regular model endpoint.
 
 | Setting | Value |
 | --- | --- |
-| `LLM_JUDGE_PROVIDER` | `openrouter`, `openai` or `local`; unset: the first one set |
+| `LLM_JUDGE_PROVIDER` | `openrouter`, `openai`, `local` (the endpoint at `MODEL_API_URL`) or `local:<ID>` (a named endpoint); unset or removed: the first one set |
 | `LLM_JUDGE_MODEL` | As the provider spells it |
-| Credential | [Model providers](model-providers.md); `local` needs `MODEL_API_URL` |
+| Credential | [Model providers](model-providers.md); `local` needs `MODEL_API_URL`, `local:<ID>` needs `MODEL_<ID>_API_URL` |
 
 | Differs from System One | |
 | --- | --- |
