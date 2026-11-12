@@ -10,10 +10,11 @@ import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from datetime import datetime
 from unittest import mock
 
 from nullius.runs import classify, live, parse
-from nullius.standard import acp, container, definitions, install, ledger, relay, run
+from nullius.standard import acp, container, definitions, install, ledger, pace as pacing, relay, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 # A conversation whose user a model plays: it opens, speaks once more, then is done.
@@ -75,13 +76,16 @@ class Echo(BaseHTTPRequestHandler):
     """A model that says back the last message, and counts its tokens."""
     status = 200
     refused = None          # a model that gets the rate limit while every other is answered
+    limited = 0             # how many calls, from now, get the rate limit before the model answers again
 
     def log_message(self, *a):
         pass
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        if Echo.status != 200 or body.get("model") == Echo.refused:
+        limited = Echo.limited > 0
+        Echo.limited -= limited
+        if Echo.status != 200 or body.get("model") == Echo.refused or limited:
             out = json.dumps({"error": {"message": "Rate limit reached for requests"}}).encode()
             self.send_response(Echo.status if Echo.status != 200 else 429)
         else:
@@ -110,7 +114,9 @@ class RunTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self._home = install.HOME
         install.HOME = os.path.join(self.tmp, "home")
-        Echo.status, Echo.refused = 200, None
+        Echo.status, Echo.refused, Echo.limited = 200, None, 0
+        self.addCleanup(setattr, pacing, "FIRST", pacing.FIRST)
+        pacing.FIRST = 0.5                       # a rate-limited unit's pause, short enough for a test
 
     def tearDown(self):
         install.HOME = self._home
@@ -509,9 +515,48 @@ class RunTest(unittest.TestCase):
             with self.subTest(agent_timeout=agent_timeout), mock.patch.object(acp.Client, "prompt", prompt):
                 got, _ = self.outcomes(self.go("fakebench", "fake", dataset="responding",
                                                name=f"rate-limit-{agent_timeout}"))
-                self.assertEqual(failed_prompts, ["model hi"])
+                self.assertEqual(failed_prompts, ["model hi", "model hi"])    # run once more, after the others
                 self.assertEqual(got["model"].outcome, classify.RATE_LIMITED)
                 self.assertEqual(got["good"].outcome, classify.RESOLVED)     # made no call: its verdict stands
+
+    def test_a_rate_limited_unit_holds_the_next_back_and_is_run_again_once(self):
+        Echo.limited = 1                         # the first call is refused, every later one answered
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
+        job_dir = run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                          concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True, dataset="responding")
+        got, j = self.outcomes(job_dir)
+        self.assertEqual(len(j.trials), 3)       # one trial per unit: the first attempt is not one of them
+        self.assertEqual(got["model"].outcome, classify.FAILED_VERIFICATION)   # its second attempt counts: a verdict, no error
+        (name,) = os.listdir(os.path.join(job_dir, "retried"))
+        self.assertTrue(name.startswith("model__"))
+        with open(os.path.join(job_dir, "retried", name, "result.json")) as f:
+            first = json.load(f)                 # the first attempt, kept whole beside the job's trials
+        self.assertEqual(first["exception_info"]["exception_type"], "RateLimitError")
+        with open(os.path.join(job_dir, name, "result.json")) as f:
+            second = json.load(f)
+        ended, began = (datetime.fromisoformat(x.replace("Z", "+00:00")) for x in (first["finished_at"], second["started_at"]))
+        self.assertGreaterEqual((began - ended).total_seconds(), 0.4)       # the pause, before it starts again
+        with open(os.path.join(job_dir, "progress.jsonl")) as f:
+            said = [json.loads(line) for line in f]
+        self.assertTrue(any("rate limited: no unit starts for 0.5 s" in (e.get("detail") or "") for e in said))
+
+    def test_a_stopped_run_runs_nothing_again(self):
+        Echo.status = 429
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
+        r = run.Run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                    concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True, dataset="responding")
+        real = r.unit
+
+        def unit(*a):
+            res = real(*a)
+            if res and res["trial_name"].startswith("model__"):
+                r._stopped.set()                 # a Stop as the rate-limited unit ends
+            return res
+        r.unit = unit
+        job_dir = r.start()
+        self.assertFalse(os.path.exists(os.path.join(job_dir, "retried")))
+        got, _ = self.outcomes(job_dir)
+        self.assertEqual(got["model"].outcome, classify.RATE_LIMITED)
 
     def test_a_feature_run_drives_the_feature_through_its_port(self):
         job_dir = self.go("fakememo", "fakemem")
