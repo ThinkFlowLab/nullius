@@ -29,10 +29,9 @@ def required(bench, other):
                    if e.get("network")})
 
 
-def check(bench, other, backend, opener=urlopen):
-    # Container probes run inside the unit network, through its public proxy.
-    if backend in ("container", "docker"):
-        return []
+def check(bench, other, opener=urlopen):
+    # The same check on every backend: once, before any task. In a container the
+    # run's first unit also checks the route through its public proxy.
     for url in required(bench, other):
         try:
             # Do not send provider credentials or benchmark access tokens.

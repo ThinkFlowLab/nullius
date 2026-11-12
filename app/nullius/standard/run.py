@@ -745,7 +745,7 @@ class Run:
         when it declares one (``driver.install``), the agent's or capability's
         packages. Refused when one cannot be had."""
         from . import network_requirements
-        why = network_requirements.check(self.bench, self.other, self.backend)
+        why = network_requirements.check(self.bench, self.other)
         if why:
             raise Refused("; ".join(why))
         p = self.progress
@@ -1109,6 +1109,14 @@ class Run:
             return ("EnvironmentSecretMissingError", "not run: needs " + ", ".join(missing))
         return None
 
+    def first_probe(self) -> bool:
+        """True once a run: its first unit checks the public web proxy's route,
+        the check before the run having found the public web reachable."""
+        with self._said:
+            first = not getattr(self, "_probed", False)
+            self._probed = True
+        return first
+
     def driver_secrets(self) -> dict:
         """The secrets the benchmark's environments send to its driver
         (``to: driver``) that are set: in its process's environment, never in
@@ -1223,7 +1231,7 @@ class Run:
                             servers=self.agent_servers(env_def), doors=doors, hosts=door.hosts if door else None,
                             ledger=self.ledger_file(),
                             network_probe=((env_def or {}).get("network") or {}).get("probe")
-                            if self.other["_kind"] == "agent" else None)
+                            if self.other["_kind"] == "agent" else None, probe_now=self.first_probe())
         rl.mcp_listeners = listeners
         try:
             try:

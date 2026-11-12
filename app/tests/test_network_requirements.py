@@ -25,24 +25,23 @@ class NetworkRequirements(unittest.TestCase):
                       {'access': 'public', 'probe': 'https://example.org/?token=secret'}):
             self.assertTrue(net.problems(value), value)
 
-    def test_docker_defers_probe_to_unit_network(self):
-        opener = Mock()
-        self.assertEqual(net.check(self.bench, self.agent, 'docker', opener), [])
-        opener.assert_not_called()
+    def test_a_container_run_is_refused_before_any_task_when_the_public_web_is_unreachable(self):
+        opener = Mock(side_effect=OSError('offline'))
+        self.assertIn('No tasks were started', net.check(self.bench, self.agent, opener)[0])
 
     def test_baselines_and_controls_are_not_agent_evaluations(self):
         opener = Mock()
         for kind in ('upstream', 'control', 'capability'):
-            self.assertEqual(net.check(self.bench, {'_kind': kind}, 'docker', opener), [])
+            self.assertEqual(net.check(self.bench, {'_kind': kind}, opener), [])
         opener.assert_not_called()
 
     def test_local_connectivity_failure_refuses_and_success_has_no_credentials(self):
         opener = Mock(side_effect=OSError('offline'))
-        self.assertIn('No tasks were started', net.check(self.bench, self.agent, 'local', opener)[0])
+        self.assertIn('No tasks were started', net.check(self.bench, self.agent, opener)[0])
         response = Mock();response.__enter__ = Mock(return_value=SimpleNamespace(status=200))
         response.__exit__ = Mock(return_value=False)
         opener = Mock(return_value=response)
-        self.assertEqual(net.check(self.bench, self.agent, 'local', opener), [])
+        self.assertEqual(net.check(self.bench, self.agent, opener), [])
         request = opener.call_args.args[0]
         self.assertEqual(request.full_url, 'https://example.org/')
         self.assertEqual(set(k.lower() for k in request.headers), {'user-agent'})
@@ -77,6 +76,19 @@ class NetworkRequirements(unittest.TestCase):
             offline = container.Unit('j', 'v', tmp, image='base', app='/app', base='https://provider', key='')
             argv, env = offline.wrap(['agent'], {}, '/workspace', [])
             self.assertNotIn('HTTPS_PROXY', env)
+
+    def test_only_the_runs_first_unit_probes_the_proxy_route(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            unit = container.Unit('j', 'u', tmp, image='base', app='/app', base='https://provider',
+                                  key='fixture', network_probe='https://example.org/', probe_now=False)
+            with patch.object(container, '_docker', return_value=SimpleNamespace(stdout='0', stderr='')) as docker, patch.object(unit, '_wait'):
+                unit._online()
+            self.assertEqual(unit.network_env['HTTPS_PROXY'], 'http://egress:3128')         # its proxy, still
+            self.assertNotIn(unit.names['agent'] + '-network-check', str(docker.call_args_list))
+        from nullius.standard import run
+        r = run.Run.__new__(run.Run)
+        r._said = run.threading.Lock()
+        self.assertEqual([r.first_probe() for _ in range(3)], [True, False, False])
 
     def test_probe_start_timeout_names_the_check_and_removes_its_container(self):
         with tempfile.TemporaryDirectory() as tmp, \

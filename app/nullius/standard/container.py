@@ -966,7 +966,7 @@ class Unit:
                  model: Optional[str] = None, routes: Optional[Dict[str, str]] = None, prices: Optional[dict] = None,
                  side_models=(), key_header: str = "authorization", servers: Iterable[str] = (),
                  doors: Iterable[Tuple[str, int, str]] = (), hosts: Optional[Dict[str, str]] = None,
-                 ledger: Optional[str] = None, network_probe: Optional[str] = None):
+                 ledger: Optional[str] = None, network_probe: Optional[str] = None, probe_now: bool = True):
         self.job, self.tag, self.dir, self.image, self.app = job, tag, record_dir, image, app
         self.ledger = ledger                     # the file of the run's spending cap, when it has one
         self.servers = list(servers)             # licence servers, host:port each: a forwarder apiece
@@ -981,6 +981,7 @@ class Unit:
         self.network = False
         self.key_dir: Optional[str] = None     # its secret files' folder, until what reads them listens
         self.network_probe = network_probe
+        self.probe_now = probe_now               # the run's first unit checks the proxy route; the rest trust it
         self.network_env = {}
         self.socket_doors: List[SocketDoor] = []
         os.makedirs(record_dir, exist_ok=True)
@@ -1040,6 +1041,8 @@ class Unit:
         self.network_env = {"HTTP_PROXY": proxy, "HTTPS_PROXY": proxy,
                             "http_proxy": proxy, "https_proxy": proxy,
                             "NO_PROXY": local, "no_proxy": local}
+        if not self.probe_now:
+            return
         # Check the actual network path, without mounts or credentials.
         code = ("import sys,urllib.request; "
                 "r=urllib.request.urlopen(urllib.request.Request(sys.argv[1], headers={'User-Agent': 'Nullius-connectivity-check'}), timeout=10); "
