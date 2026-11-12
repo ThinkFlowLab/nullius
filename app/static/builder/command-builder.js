@@ -379,9 +379,9 @@
       + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Run hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
       + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
       + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
-      + how('docker', 'Docker', 'Sandboxed: each unit in a container whose only way out is its relay.', dockerWhy ? 'Not on this machine: ' + dockerWhy : '') + '</div>'
+      + how('container', 'Container', 'Sandboxed: each unit in a container whose only way out is its relay.', dockerWhy ? 'Not on this machine: ' + dockerWhy : '') + '</div>'
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
-      + (dockerOnly.length && backend === 'local' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} docker - on local processes their units are recorded as not run.</p>` : '')
+      + (dockerOnly.length && backend === 'local' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - on local processes their units are recorded as not run.</p>` : '')
       + hostSetup(rec)
       + (b ? environmentsOf(b) : '');
   }
@@ -863,8 +863,8 @@
     const out=$('#nb-hosttest'), st=root.querySelector(`[data-host-state="${CSS.escape(entry)}"]`);
     out.textContent='testing…';
     try{const res=await fetch('/settings/hosts/test',{method:'POST',headers:{'X-CSRF-Token':schema.csrf},body:new URLSearchParams({entry})});const j=await res.json();
-      // only what can stop this recipe there: docker for a Harbor run, docker or podman for the standard's docker backend (uv is installed when missing)
-      const rec=r(),harbor=rec.harness==='harbor',needsEngine=harbor||(C.isStandard(rec)&&rec.backend==='docker');
+      // only what can stop this recipe there: docker for a Harbor run, docker or podman for the standard's container backend (uv is installed when missing)
+      const rec=r(),harbor=rec.harness==='harbor',needsEngine=harbor||(C.isStandard(rec)&&rec.backend==='container');
       const engine=harbor?(j.docker?'docker':null):j.engine,engineOk=engine&&j[engine+'_ok'];
       out.textContent=!j.ok?'✕ '+(j.error||('HTTP '+res.status)):needsEngine&&!engineOk?'✓ Connected · ✕ '+(engine?engine+' not usable by this user':(harbor?'docker':'docker or podman')+' missing')+': this run needs it':'✓ Connected';
       if(st){st.textContent=j.ok?'connected':'unreachable';st.className='nb-state nb-hoststate '+(j.ok?'':'warn');}

@@ -518,7 +518,7 @@ class StandardPieces(unittest.TestCase):
                    "process.stdout.write(JSON.stringify({where:C.whereList(r),label:C.whereLabel(r),backend:r.backend,options:r.options,others:r.others,many:m.others,manyOptions:m.options,mixedKeyless:C.standardKeyless(m),"
                    "keyless:C.standardKeyless(c),agentKeyless:C.standardKeyless(r),controls:C.standardOthers(c).filter(o=>o.control).map(o=>o.source)}));")
         out = json.loads(subprocess.run([node, "-e", program], check=True, capture_output=True, text=True).stdout)
-        self.assertEqual(out, {"where": ["local", "me@bench"], "label": "This machine + me@bench", "backend": "docker", "options": {"fake": {"effort": "high"}},
+        self.assertEqual(out, {"where": ["local", "me@bench"], "label": "This machine + me@bench", "backend": "container", "options": {"fake": {"effort": "high"}},
                                "others": ["fake"], "many": ["fake", "nop"], "manyOptions": {"fake": {"effort": "low"}}, "mixedKeyless": False,   # a recipe from before: its one agent's options
                                "keyless": True, "agentKeyless": False, "controls": ["nullius", "adapter"]})
 
