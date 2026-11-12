@@ -10,7 +10,7 @@ from nullius.runs import classify
 APP = Path(__file__).resolve().parent.parent
 GUIDE_PATH = APP.parent / "docs" / "field-guide.md"
 GUIDE = GUIDE_PATH.read_text(encoding="utf-8")
-NUMBERS = {"eleven": 11, "twelve": 12, "ten": 10}
+NUMBERS = {"eleven": 11, "twelve": 12, "thirteen": 13, "ten": 10}
 
 
 def sections():

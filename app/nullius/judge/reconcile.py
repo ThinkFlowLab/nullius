@@ -68,6 +68,7 @@ COMPATIBLE = {
     # The relay's own refusal at the run's spending cap: recorded, never read
     # from a transcript, so nothing agrees or disagrees with it and no cause suggests it.
     classify.SPENDING_CAP: (),
+    classify.CANCELLED: (),       # the run recorded its stop; never inferred from a transcript
     # No claim made: not comparable. The judge's pick becomes a suggestion.
     classify.UNKNOWN: (),
 }

@@ -28,11 +28,13 @@ SETUP_ERROR = "setup_error"
 # standard's relay, ``standard.ledger``): the unit was cut off. Nothing
 # failed, and no attempt was had: the money ran out, by the user's own word.
 SPENDING_CAP = "spending_cap"
+CANCELLED = "cancelled"
 AGENT_ERROR = "agent_error"
 UNKNOWN = "unknown"
 
-# Outcomes that reflect harness/infra problems, not the agent's ability.
-INFRA_OUTCOMES = {RATE_LIMITED, API_ERROR, SETUP_ERROR, SPENDING_CAP}
+# Outcomes excluded from the adjusted rate: infrastructure failures or
+# interruptions imposed by the run, not the agent's ability.
+INFRA_OUTCOMES = {RATE_LIMITED, API_ERROR, SETUP_ERROR, SPENDING_CAP, CANCELLED}
 
 ORDER = [
     RESOLVED,
@@ -45,6 +47,7 @@ ORDER = [
     RATE_LIMITED,
     API_ERROR,
     SETUP_ERROR,
+    CANCELLED,
     SPENDING_CAP,
     UNKNOWN,
 ]
@@ -102,6 +105,7 @@ LABELS = {
     API_ERROR: "API error",
     SETUP_ERROR: "Setup error",
     SPENDING_CAP: "Spending cap",
+    CANCELLED: "Run stopped",
     UNKNOWN: "Unknown",
 }
 
@@ -153,6 +157,10 @@ DESCRIPTIONS = {
         "trial needed, so the trial was cut off. Nothing failed and no attempt "
         "was had, so it is excluded from the adjusted rate."
     ),
+    CANCELLED: (
+        "The run was stopped while this trial was in progress. Its attempt was interrupted, "
+        "so it is excluded from the adjusted rate."
+    ),
     UNKNOWN: (
         "No verifier report and no exception, or an exception this reader does not "
         "recognise — a crash in the harness, the verifier or the reader itself. The "
@@ -177,6 +185,8 @@ def from_verdict(exception_type, verdict):
     """
     if exception_type:
         et = exception_type.lower().rpartition(".")[2]  # tolerate dotted paths
+        if et == "cancellederror":
+            return CANCELLED
         if et == _CAP_EXCEPTION:
             return SPENDING_CAP
         # Rate limiting first: it is an Api* class too, but common enough to be
