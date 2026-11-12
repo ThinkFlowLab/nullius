@@ -190,6 +190,7 @@
         <ul class="bench-list">{% for note in b.good_to_know %}<li>{{ note }}</li>{% endfor %}</ul>
       </section>
       {% endif %}
+      {% if b.upstream_limitations or b.limitations %}
       <div class="bench-cols one">
         {% if b.upstream_limitations %}
         <section class="bench-section" aria-labelledby="upstream-limitations">
@@ -197,11 +198,14 @@
           <ul class="bench-list">{% for l in b.upstream_limitations %}<li>{{ l }}</li>{% endfor %}</ul>
         </section>
         {% endif %}
+        {% if b.limitations %}
         <section class="bench-section" aria-labelledby="limitations">
           <h2 id="limitations">Nullius limitations</h2>
-          <ul class="bench-list">{% for l in b.limitations %}<li>{{ l }}</li>{% else %}<li class="faint">none recorded</li>{% endfor %}</ul>
+          <ul class="bench-list">{% for l in b.limitations %}<li>{{ l }}</li>{% endfor %}</ul>
         </section>
+        {% endif %}
       </div>
+      {% endif %}
 
       {% if b.citation %}
       <section class="bench-section cat-citation" id="citation" aria-labelledby="citation-title">

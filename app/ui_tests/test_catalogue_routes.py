@@ -272,6 +272,10 @@ class DatasetsOnTheirPage(PageCase):
         self.assertEqual(text.count("Nullius Hugging Face gaia-benchmark/GAIA 682dd72"), 4)   # data-source.json, not the leaderboard Space
         self.assertNotIn("Repository https://huggingface.co/spaces/", text)
 
+    def test_an_empty_limitations_list_shows_no_section(self):
+        self.assertNotIn("Nullius limitations", self.page("gaia"))
+        self.assertNotIn("none recorded", self.page("gaia"))
+
     def test_environments_add_no_section_to_a_benchmark_page(self):
         for key in ("gaia", "terminal-bench"):
             with self.subTest(key):
