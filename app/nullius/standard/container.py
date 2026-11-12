@@ -1042,6 +1042,25 @@ def spec_problems(spec) -> List[str]:
     return bad
 
 
+def task_env_problems(env, reserved: Iterable[str] = ()) -> List[str]:
+    """Task variables for an agent in its own image, never its model configuration."""
+    if not isinstance(env, dict):
+        return ["env: an object of variable names and string values"]
+    bad = []
+    for name, value in env.items():
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Z_][A-Z0-9_]*", name):
+            bad.append("env: variable names use capitals, digits and underscores")
+            continue
+        if (name in reserved or name.startswith(("NULLIUS_", "DOCKER_"))
+                or re.search(r"(^|_)(API|AUTH|KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?|BASE_URL|ENDPOINT|MODEL)(_|$)", name)):
+            bad.append(f"env.{name}: model settings and credentials belong to the run")
+        if not isinstance(value, str) or "\0" in value:
+            bad.append(f"env.{name}: a string without NUL")
+        elif name == "PATH" and any(not part.startswith("/") for part in value.split(":")):
+            bad.append("env.PATH: absolute folders separated by ':'")
+    return bad
+
+
 def step_problems(step, *, collect: bool) -> List[str]:
     """What is wrong with a step run in a unit's box (``verify``, ``solve``):
     ``copy`` {relative path in the upstream: absolute path inside}, ``write``
@@ -1358,9 +1377,10 @@ class Box:
     def __init__(self, job: str, tag: str, image: str, *, workdir: str, path: str = IMAGE_PATH,
                  network: Optional[str] = None, mounted: Iterable[Tuple[str, bool]] = (),
                  runtimes: Optional[Dict[str, Tuple[str, str]]] = None, memory_mb=None, cpus=None,
-                 app: Optional[str] = None):
+                 app: Optional[str] = None, env: Optional[dict] = None):
         n = names(job, tag)
         self.job, self.image, self.workdir, self.path = job, image, workdir, path
+        self.env = dict(env or {})
         self.name = n["agent"]
         self.net = network or n["network"]
         self.own_net = network is None
