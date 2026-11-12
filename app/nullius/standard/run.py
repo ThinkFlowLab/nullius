@@ -495,9 +495,7 @@ class Run:
                            {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                             "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                             "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
-                            **({container.CHECK_IMAGE: self.image,
-                                **{k: v for k, v in container.client_env().items() if k.startswith("DOCKER")}}
-                               if self.image else {}),
+                            **({container.CHECK_IMAGE: self.image, **container.check_env()} if self.image else {}),
                             **option_env(getattr(self, "bench_options", {})), **self.embeddings_env(), **self.driver_secrets()})
             os.makedirs(env["HOME"], exist_ok=True)
             # its working directory is the job's, never its catalogue folder: an upstream that writes
@@ -1150,7 +1148,7 @@ class Run:
             path = ":".join(([box.env["PATH"]] if "PATH" in box.env else []) + [box.path]
                             + install.bin_dirs(self.inst) + [d + "/bin" for _, d in box.runtimes.values()])
             argv = box.exec_argv(container.in_runtime(cmd, box.runtimes), inside, path, interactive=interactive)
-            return argv, container.client_env({k: v for k, v in inside.items() if k != "PATH"})
+            return argv, container.program_env(inside)
         if self.backend == "local":
             return cmd, env
         ws = os.path.join(os.path.dirname(home), "workspace")

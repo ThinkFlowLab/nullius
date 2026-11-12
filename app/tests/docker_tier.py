@@ -26,6 +26,6 @@ def why_not(*images: str) -> str:
     except container.Unavailable as e:
         return str(e)
     for tag in tags:
-        if subprocess.run(["docker", "image", "inspect", tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+        if subprocess.run([container.DOCKER, "image", "inspect", tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
             return f"{tag} is not here (a docker run builds it)"
     return ""

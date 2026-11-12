@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 from nullius import onboarding
+from nullius.standard import container
 
 NO_DOCKER = lambda: False
 
@@ -37,7 +38,7 @@ class Facts(unittest.TestCase):
         while its engine is quit: the command alone is not a place to run."""
         with tempfile.TemporaryDirectory() as d:
             docker = os.path.join(d, "docker")
-            with mock.patch.dict(os.environ, {"PATH": d}):
+            with mock.patch.dict(os.environ, {"PATH": d}), mock.patch.object(container, "DOCKER", "docker"):
                 self.assertFalse(onboarding.docker_answers())                                   # no command at all
                 for code, answers in ((1, False), (0, True)):
                     with open(docker, "w") as f:

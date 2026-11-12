@@ -1,14 +1,16 @@
-"""The Settings page's Sandbox: docker on this machine.
+"""The Settings page's Sandbox: the docker backend's engine on this machine,
+docker or podman (``container.DOCKER``).
 
 Three things, each something a user acts on:
 
-- **Docker**: whether it answers, and its version (``container.unusable``).
+- **Engine**: whether it answers, and its name and version (``container.unusable``).
 - **Registry login**: Docker Hub limits anonymous pulls, which stops a
   benchmark with an image per unit part-way. The username and an access token
-  go to ``docker login --password-stdin`` once; docker keeps them in its own
-  store (``~/.docker/config.json`` or the credential helper it names), the
-  same as a login typed in a terminal. Nullius stores neither, and reads back
-  only the username.
+  go to ``docker login --password-stdin`` (``podman login ... docker.io``)
+  once; the engine keeps them in its own store (``~/.docker/config.json`` or
+  the credential helper it names; podman's ``auth.json``), the same as a
+  login typed in a terminal. Nullius stores neither, and reads back only the
+  username.
 - **Images**: what Nullius pulled or built for each benchmark's units
   (``container.fetched_images``), kept for the next run, and removed only
   from here. An image that was on the machine before Nullius fetched it is
@@ -26,17 +28,19 @@ from typing import Dict, List, Optional
 from nullius.standard import container, definitions
 
 REGISTRY = "https://index.docker.io/v1/"            # Docker Hub, as docker names it in its config
+HUB = "docker.io"                                   # as podman names it: without it, podman logs in to its first search registry
 _USER = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 _TOKEN_MAX = 4096
 
 
 def docker_state() -> dict:
-    """{ok, version} when docker answers, else {ok: False, error}."""
+    """{ok, version} when the engine answers - its name and version, ``podman
+    6.1.4`` - else {ok: False, error}."""
     why = container.unusable()
     if why:
         return {"ok": False, "error": why}
     r = container._docker(["version", "--format", "{{.Server.Version}}"], timeout=30, check=False)
-    return {"ok": True, "version": r.stdout.strip()}
+    return {"ok": True, "version": f"{container.DOCKER} {r.stdout.strip()}"}
 
 
 def _config_dir() -> str:
@@ -44,9 +48,16 @@ def _config_dir() -> str:
 
 
 def login_user(registry: str = REGISTRY) -> Optional[str]:
-    """The username docker holds a login for, or None. Read from docker's
-    config, or asked of the credential helper it names; the secret that comes
-    with it is dropped here, never kept or returned."""
+    """The username the engine holds a Docker Hub login for, or None. Read from
+    docker's config, or asked of the credential helper it names; the secret
+    that comes with it is dropped here, never kept or returned. Podman says the
+    username itself."""
+    if container.podman():
+        try:
+            r = container._docker(["login", "--get-login", HUB], timeout=30, check=False)
+        except container.Unavailable:
+            return None
+        return (r.stdout.strip() or None) if r.returncode == 0 else None
     try:
         with open(os.path.join(_config_dir(), "config.json")) as f:
             config = json.load(f)
@@ -70,7 +81,7 @@ def login_user(registry: str = REGISTRY) -> Optional[str]:
 
 
 def login(username: str, token: str) -> dict:
-    """``docker login`` to Docker Hub, the token over stdin: {ok, user} or
+    """``docker login`` (``podman login ... docker.io``) to Docker Hub, the token over stdin: {ok, user} or
     {ok: False, error}. Neither value is stored or logged here."""
     username = (username or "").strip().lower()
     if not _USER.match(username):
@@ -78,19 +89,23 @@ def login(username: str, token: str) -> dict:
     if not token or len(token) > _TOKEN_MAX or "\n" in token.strip():
         return {"ok": False, "error": "Enter an access token."}
     try:
-        r = container._docker(["login", "--username", username, "--password-stdin"], input=token.strip() + "\n",
+        r = container._docker(["login", "--username", username, "--password-stdin", *_hub()], input=token.strip() + "\n",
                               timeout=60, check=False)
     except container.Unavailable as e:
         return {"ok": False, "error": str(e)}
     if r.returncode != 0:
         said = [ln for ln in (r.stderr or r.stdout).strip().splitlines() if ln.strip()]
-        return {"ok": False, "error": (said[-1] if said else f"docker login: exit {r.returncode}")[:300]}
+        return {"ok": False, "error": (said[-1] if said else f"{container.DOCKER} login: exit {r.returncode}")[:300]}
     return {"ok": True, "user": login_user() or username}
+
+
+def _hub() -> List[str]:
+    return [HUB] if container.podman() else []
 
 
 def logout() -> dict:
     try:
-        r = container._docker(["logout"], timeout=30, check=False)
+        r = container._docker(["logout", *_hub()], timeout=30, check=False)
     except container.Unavailable as e:
         return {"ok": False, "error": str(e)}
     return {"ok": r.returncode == 0} if r.returncode == 0 else {"ok": False, "error": (r.stderr or r.stdout).strip()[-300:]}

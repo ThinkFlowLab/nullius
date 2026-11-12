@@ -122,7 +122,7 @@ from typing import Callable, Dict, List, Optional
 
 from nullius import hosts, paths, prices as price_list, progress, redact, secrets, settings
 from nullius.harbor import source as harbor_source
-from nullius.standard import payload as standard_payload
+from nullius.standard import container, payload as standard_payload
 
 REMOTE_HOME = "~/.nullius"                    # on a host: tasks/, runs/, app/, harbor/ (a pinned Harbor's wheels)
 # The names the launcher gives a run's key and its endpoint (_launch), read
@@ -155,20 +155,23 @@ def app_root(runs: str) -> str:
     return os.path.join(os.path.dirname(os.path.abspath(runs)), "standard-app")
 
 
-def docker_here(sh: Callable, needs: str = "a Harbor run needs it") -> Optional[str]:
-    """Why a run cannot use docker on this machine, or None when it
-    can (``needs`` says why the run asks): the command on the PATH *and* ``docker ps`` answered, as a host's
-    probe asks (``hosts.PROBE``). The command alone is not enough - Docker
-    Desktop's WSL integration leaves ``/usr/bin/docker`` in place while its
-    engine is quit. ``sh`` is the run's own (returncode, output) runner;
-    this is looked up at call time, so the suite can stand in for docker."""
-    rc, out = sh("command -v docker >/dev/null 2>&1 || { echo @missing; exit 0; }; docker ps 2>&1 >/dev/null || echo @down", 60)
+def docker_here(sh: Callable, needs: str = "a Harbor run needs it", program: str = "docker") -> Optional[str]:
+    """Why a run cannot use ``program`` on this machine, or None when it can
+    (``needs`` says why the run asks): ``docker`` for Harbor, the standard's
+    engine (``container.DOCKER``) for its docker backend. The command on the
+    PATH *and* ``<program> ps`` answered, as a host's probe asks
+    (``hosts.PROBE``). The command alone is not enough - Docker Desktop's WSL
+    integration leaves ``/usr/bin/docker`` in place while its engine is quit.
+    ``sh`` is the run's own (returncode, output) runner; this is looked up at
+    call time, so the suite can stand in for docker."""
+    rc, out = sh(f"command -v {program} >/dev/null 2>&1 || {{ echo @missing; exit 0; }}; {program} ps 2>&1 >/dev/null || echo @down", 60)
     words = out.split()
     if rc != 0 or "@missing" in words:
-        return "docker is not on this machine; " + needs
+        return f"{program} is not on this machine; " + needs
     if "@down" in words:
         said = [l for l in out.strip().splitlines() if l.strip() and l.strip() != "@down"]
-        return ("docker is on this machine but does not answer (docker ps failed) - is Docker Desktop or the docker daemon running?"
+        return (f"{program} is on this machine but does not answer ({program} ps failed)"
+                + (" - is Docker Desktop or the docker daemon running?" if program == "docker" else "")
                 + (": " + said[-1].strip()[-300:] if said else ""))
     return None
 
@@ -974,8 +977,8 @@ class Execution:
         self.harbor = "harbor"
         if fresh and not self.on_host and (self.plan.runner == "harbor" or self.plan.docker):
             # before a pin is built: a run here without docker would start, and every trial fail at its container
-            why = docker_here(self._sh, "a Harbor run needs it" if self.plan.runner == "harbor"
-                              else "this recipe runs its units in containers")
+            why = (docker_here(self._sh) if self.plan.runner == "harbor"
+                   else docker_here(self._sh, "this recipe runs its units in containers", container.DOCKER))
             if why:
                 self._fail("docker", why)
                 return False
@@ -1039,13 +1042,14 @@ class Execution:
                 self._fail("connect", "harbor is not on the host's PATH (~/.local/bin included); install the Harbor this recipe needs there")
                 return False
         elif self.plan.runner == STANDARD:
-            # the standard's own cli: python3 and git there, docker when its units run in containers
-            self.log(f"  {probe['hostname'] or host.label}: uv {'yes' if probe['uv'] else 'no'} · docker {'yes' if probe['docker'] else 'no'}")
-            if self.plan.docker and not probe["docker"]:
-                self._fail("connect", "docker is not on the host; this recipe runs its units in containers")
+            # the standard's own cli: python3 and git there, docker or podman when its units run in containers
+            engine = probe["engine"]
+            self.log(f"  {probe['hostname'] or host.label}: uv {'yes' if probe['uv'] else 'no'} · {engine or 'docker'} {'yes' if engine else 'no'}")
+            if self.plan.docker and not engine:
+                self._fail("connect", "neither docker nor podman is on the host: this recipe runs its units in containers")
                 return False
-            if self.plan.docker and probe["docker_ok"] is False:
-                self._fail("connect", "docker is on the host but this user cannot use it (docker ps failed)")
+            if self.plan.docker and probe[engine + "_ok"] is False:
+                self._fail("connect", f"{engine} is on the host but this user cannot use it ({engine} ps failed)")
                 return False
             rc, out = self._sh("for c in python3 git; do command -v $c >/dev/null 2>&1 || echo @missing $c; done; true", 30)
             gone = [l.split()[1] for l in out.splitlines() if l.startswith("@missing ")]
