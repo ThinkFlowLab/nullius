@@ -39,9 +39,12 @@ def new_run():
         data["hosts"] = [{"entry": h.entry, "label": h.label} for h in hosts.parse_list(os.environ.get("HOSTS", ""))]
     except ValueError:
         data["hosts"] = []
-    # The providers a run can start on, whose key (a local endpoint: its URL) is set in Settings, in the order
-    # the Model step prefers them; and whether the local endpoint has a key of its own. Presence only.
+    # The providers a run can start on, whose key (an OpenAI-compatible endpoint: its URL) is set in Settings, in the
+    # order the Model step prefers them, a named endpoint as custom:<id>, with its name; and whether the endpoint at
+    # MODEL_API_URL has a key of its own. Presence and names only.
     data["credentials"] = {"available": providers.available(os.environ), "model_key": bool(os.environ.get("MODEL_API_KEY")),
+                           "endpoints": {e["id"]: e["name"] for e in providers.endpoints(os.environ) if e["id"]},
+                           "broken": providers.broken(os.environ),           # a URL that holds a credential: fixed in Settings first
                            # the agent keys Settings holds, by name only: a Harbor agent that needs one it lacks is named on Review
                            "agent_keys": sorted(settings.agent_key_values(os.environ))}
     data["agentNeeds"] = AGENT_NEEDS
@@ -387,7 +390,7 @@ def new_run_models():
         abort(403)
     body = request.get_json(silent=True)
     provider = body.get("provider") if isinstance(body, dict) else None
-    if provider not in providers.PROVIDERS:
+    if providers.split(provider)[0] not in providers.PROVIDERS:
         return jsonify(ok=False, models=[], message="Choose a model provider."), 400
     try:
         return jsonify(ok=True, models=providers.list_models(provider))

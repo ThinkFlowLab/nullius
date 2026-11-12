@@ -33,7 +33,7 @@
   async function offerCatalogue(card, model) {
     const on = card.querySelector('[data-picker] input:checked');
     if (!on || on.dataset.models || !model.list) return;
-    const provider = on.value === 'local' ? 'custom' : on.value;
+    const provider = on.value.replace(/^local(?=$|:)/, 'custom');   // local:<id>, a named endpoint, is the builder's custom:<id>
     if (!catalogues.has(provider)) {
       catalogues.set(provider, fetch('/new-run/models', {method: 'POST', headers: {'Content-Type': 'application/json',
         'X-CSRF-Token': document.querySelector('#settings-form [name=csrf]').value}, body: JSON.stringify({provider})})

@@ -55,7 +55,7 @@ def benchmark_page(key):
                            deletable=os.path.isfile(os.path.join(paths.catalogue_dir(), catalog.BENCHMARKS, key, catalog.ENTRY)),
                            restore_bundle=storage.can_restore("benchmarks", key, catalog.ROOT),
                            licences=licences, movable=movable, local=settings_web._local_client(),
-                           providers=[(p, providers.PROVIDER_LABEL[p]) for p in providers.available(os.environ)])
+                           providers=[(p, providers.label(p)) for p in providers.available(os.environ)])
 
 
 @app.route("/catalogue/<group>/<key>/use-bundled", methods=["POST"])
@@ -87,16 +87,16 @@ def benchmark_prove(key):
         abort(403, description="Proofs are started from a browser on the application host only.")
     back = url_for("benchmark_page", key=key) + "#standard"
     limit = request.form.get("limit", "").strip()
-    provider = request.form.get("provider", "openai")
+    provider, endpoint = providers.split(request.form.get("provider", "openai"))
     stamp = time.strftime(prove.STAMP)
     got = standard_recipe.proving(key, dataset=request.form.get("dataset", ""), limit=int(limit) if limit.isdigit() else (limit or None),
                                   provider=provider, judge_model=request.form.get("judge_model", "").strip(), stamp=stamp)
-    problem = " ".join(got["errors"]) or ("" if got["keyless"] else execute.provider_problem(provider))
+    problem = " ".join(got["errors"]) or ("" if got["keyless"] else execute.provider_problem(provider, endpoint))
     if problem:
         flash(problem, "error")
         return redirect(back)
     plan = execution.Plan(name=f"prove-{key}-{time.strftime('%m%d-%H%M%S')}", script=got["script"], runner=standard_recipe.HARNESS,
-                          **execute.credentials_for(provider), keyless=got["keyless"], jobs=got["jobs"],
+                          **execute.credentials_for(provider, endpoint), keyless=got["keyless"], jobs=got["jobs"],
                           parts=[{"id": key, "label": got["label"] + "'s proofs", "script": got["script"]}])
     problem = plan.check() or (execution.name_taken(plan.name) if os.path.exists(os.path.join(execution.runs_root(), plan.name)) else None)
     if problem:

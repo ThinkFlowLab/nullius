@@ -124,7 +124,8 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('name="value:HOSTS" value="bench"', html)                                     # a plain value is editable
         self.assertIn('type="password"', html); self.assertNotIn('autocomplete="new-password"', html)
         self.assertIn("the running process keeps that value until it is restarted", html)         # environment: editable, applies next start
-        self.assertEqual(html.count("data-unset="), 3)                                            # × on every set variable but the list (its chips have their own), none on an unset one
+        self.assertEqual(html.count("data-unset="), 1)                                            # a provider's key is replaced, not removed (the card's Remove does that); the optional key of an endpoint is removed
+        self.assertIn('>Remove key</button>', html)
 
     def test_each_judge_card_starts_on_its_provider_and_holds_each_provider_s_key_row(self):
         Path(self.env_file).write_text("OPENROUTER_API_KEY=sk-or-fromthefile\n")
@@ -176,7 +177,7 @@ class SettingsPage(unittest.TestCase):
             return re.search(r'<article[^>]*id="%s".*?</article>' % name, html, re.S).group(0)
         hosts_row, key = row("HOSTS"), row("MODEL_API_KEY")
         self.assertNotIn(">not set<", hosts_row); self.assertNotIn('class="chip st-watch host-pill"', hosts_row); self.assertIn("+ Add host", hosts_row)
-        self.assertEqual(re.findall(r'placeholder="([^"]*)"', html.split('<dialog id="add-host"')[0]), ["Search settings", "Search providers…", "(optional)"])                           # no field suggests anything
+        self.assertEqual(re.findall(r'placeholder="([^"]*)"', html.split('<dialog id="add-host"')[0]), ["Search settings", "Search providers…", "(optional)", "(optional)"])                           # no field suggests anything
         self.assertNotIn("agtai", html); self.assertNotIn("10.0.0.4", html)                      # (ssh aliases offered come from this machine's own config)
         self.assertIn('data-source="unset"', key); self.assertIn('data-provider-card="local" data-configured="false" data-ready="false"', html)
 
@@ -296,6 +297,125 @@ class SettingsPage(unittest.TestCase):
         self.assertEqual(forwarded.status_code, 403); self.assertIsNone(self.file())
         html = self.page(environ_base={"REMOTE_ADDR": "10.0.0.7"})
         self.assertIn("Read-only from here", html); self.assertNotIn('id="settings-form"', html); self.assertNotIn('name="value:HOSTS"', html)
+
+    def test_endpoints_are_added_named_edited_and_removed_each_a_card(self):
+        """OpenAI-compatible endpoints: one added by name and URL (its key
+        optional) gets an id from its name and a card of its own; a rename
+        keeps the id; Remove on its card removes it whole. The default one, at
+        MODEL_API_URL, stays as it was. Never a key on the page."""
+        self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
+        def save(data):
+            r = self.client.post("/settings/save", data={"csrf": self.token(), **data}, headers={"Origin": "http://localhost", "Accept": "application/json"})
+            self.addCleanup(r.close)
+            return r.status_code, r.get_json()
+        self.assertEqual(save({"value:MODEL_API_URL": "http://default/v1"})[1]["reload"], False)
+        status, body = save({"endpoint_name": "GPU box", "endpoint_url": "http://gpu:8000/v1", "endpoint_key": "sk-gpu-0123456789"})
+        self.assertEqual((status, body["ok"], body["reload"]), (200, True, True))
+        self.assertEqual(self.file(), "MODEL_API_URL=http://default/v1\nMODEL_GPU_BOX_NAME=GPU box\n"
+                                      "MODEL_GPU_BOX_API_URL=http://gpu:8000/v1\nMODEL_GPU_BOX_API_KEY=sk-gpu-0123456789\n")
+        save({"endpoint_name": "GPU box", "endpoint_url": "http://gpu2:8000/v1"})                          # the same name: an id of its own
+        self.assertEqual(settings.endpoint_ids(), ["GPU_BOX", "GPU_BOX_2"]); self.assertNotIn("MODEL_GPU_BOX_2_API_KEY", self.file())
+        html = self.page()
+        for key, name in (("local", "OpenAI-compatible"), ("local:GPU_BOX", "GPU box"), ("local:GPU_BOX_2", "GPU box")):
+            card = re.search(r'<div class="st-card st-provider-card" data-provider-card="%s".*?<h3>([^<]*)</h3>' % re.escape(key), html, re.S)
+            self.assertEqual(card.group(1), name, key)
+        self.assertIn('id="MODEL_GPU_BOX_API_URL"', html); self.assertNotIn("sk-gpu-0123456789", html)
+        self.assertIn('name="value:LLM_JUDGE_PROVIDER" value="local:GPU_BOX"', html)                    # a judge choice too
+        self.assertNotIn("Local or self-hosted", html)
+        # a rename keeps the id, so a recipe on it keeps running; an empty key field keeps the key
+        self.assertEqual(save({"value:MODEL_GPU_BOX_NAME": "Big GPU", "value:MODEL_GPU_BOX_API_KEY": ""})[1]["reload"], True)
+        self.assertEqual(os.environ["MODEL_GPU_BOX_NAME"], "Big GPU"); self.assertEqual(os.environ["MODEL_GPU_BOX_API_KEY"], "sk-gpu-0123456789")
+        save({"remove_provider": "local:GPU_BOX"})                                                      # removed from its card: the endpoint goes whole
+        self.assertEqual(settings.endpoint_ids(), ["GPU_BOX_2"]); self.assertNotIn("GPU_BOX_API_KEY", self.file())
+        self.assertIn("MODEL_API_URL=http://default/v1\n", self.file())
+        status, body = save({"endpoint_name": "No URL"})
+        self.assertEqual((status, body["ok"], body["message"]), (400, False, "An endpoint needs its name and its URL."))
+        self.assertEqual(save({"endpoint_name": "Bad", "endpoint_url": "has space"})[0], 400)
+        self.assertEqual(settings.endpoint_ids(), ["GPU_BOX_2"])
+        before = self.file()
+        r = self.client.post("/settings/save", data={"endpoint_name": "X", "endpoint_url": "http://x/v1"}, headers={"Origin": "http://localhost"})   # no form token
+        self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 403); self.assertEqual(self.file(), before)
+
+    def test_the_editor_shows_an_endpoint_url_and_hides_every_key(self):
+        """A name and an endpoint's URL are edited in place; a key is written,
+        never shown, and replaced; only an endpoint's optional key is removed
+        from its row. A URL with a credential is hidden, said, and refused."""
+        self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
+        Path(self.env_file).write_text("OPENAI_API_KEY=sk-oa-0123456789\nMODEL_GPU_NAME=GPU box\nMODEL_GPU_API_URL=http://[::1]:8000/v1\n"
+                                        "MODEL_GPU_API_KEY=sk-gpu-0123456789\nMODEL_OLD_API_URL=https://me:hunter2@old.example/v1\n")
+        settings.load(self.env_file)
+        html = self.page()
+        def fields(card):
+            return re.search(r'data-provider-card="%s".*?<div class="st-provider-fields">(.*?)<button type="button" class="btn ghost st-provider-done"' % re.escape(card), html, re.S).group(1)
+        def row(text, name):
+            return re.search(r'<article[^>]*id="%s".*?</article>' % name, text, re.S).group(0)
+        gpu = fields("local:GPU")
+        for name, value in (("MODEL_GPU_NAME", "GPU box"), ("MODEL_GPU_API_URL", "http://[::1]:8000/v1")):
+            r = row(gpu, name)
+            self.assertIn(f'name="value:{name}" aria-label="{"Name" if name.endswith("NAME") else "Endpoint"}" value="{value}"', r)
+            self.assertNotIn("data-replace", r); self.assertNotIn("data-unset", r)
+        key = row(gpu, "MODEL_GPU_API_KEY")
+        self.assertIn("data-replace>Replace", key); self.assertIn(">Remove key</button>", key); self.assertNotIn("sk-gpu", html)
+        openai = row(fields("openai"), "OPENAI_API_KEY")
+        self.assertIn("data-replace>Replace", openai); self.assertNotIn("data-unset", openai); self.assertNotIn("sk-oa", html)
+        old = row(fields("local:OLD"), "MODEL_OLD_API_URL")
+        self.assertIn('value="https://[REDACTED]@old.example/v1"', old); self.assertNotIn("hunter2", html)
+        self.assertIn('aria-invalid="true"', old)
+        self.assertIn("This URL must be a URL without a user or password in it: put the key in the Key field.", old)
+        self.assertNotIn('value="local:OLD"', html)                                                      # not a judge choice either
+        self.assertIn('data-provider-card="local:OLD" data-configured="true" data-ready="false"', html)
+        self.assertRegex(html, r'(?s)data-provider-card="local:OLD".*?data-provider-state>Fix the endpoint URL<')
+        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:MODEL_GPU_API_URL": "http://gpu/v1?api_key=abc"},
+                             headers={"Origin": "http://localhost", "Accept": "application/json"})
+        self.addCleanup(r.close)
+        self.assertEqual((r.status_code, r.get_json()["message"]),
+                         (400, "MODEL_GPU_API_URL must be a URL without a key in its query: put the key in the Key field."))
+        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:MODEL_GPU_API_URL": "http://gpu:9000/v2"},
+                             headers={"Origin": "http://localhost", "Accept": "application/json"})
+        self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 200); self.assertEqual(os.environ["MODEL_GPU_API_URL"], "http://gpu:9000/v2")
+
+    def test_a_provider_card_removes_what_it_holds_unless_the_environment_holds_it(self):
+        """Remove on a card: a named endpoint goes whole, a built-in provider's
+        key is cleared, a value the process environment holds is refused, and
+        nothing is written without the form token."""
+        self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
+        Path(self.env_file).write_text("OPENAI_API_KEY=sk-oa-0123456789\nMODEL_API_URL=http://default/v1\nMODEL_API_KEY=sk-def-0123456789\n"
+                                        "MODEL_GPU_NAME=GPU box\nMODEL_GPU_API_URL=http://gpu/v1\nMODEL_GPU_API_KEY=sk-gpu-0123456789\n")
+        settings.load(self.env_file)
+        def remove(card, csrf=None):
+            r = self.client.post("/settings/save", data={"csrf": self.token() if csrf is None else csrf, "remove_provider": card},
+                                 headers={"Origin": "http://localhost", "Accept": "application/json"})
+            self.addCleanup(r.close)
+            return r.status_code, r.get_json(silent=True)
+        html = self.page()
+        self.assertEqual(html.count("data-provider-remove-yes="), 3)                                      # OpenAI, the default endpoint, GPU box
+        self.assertIn('Remove <b>GPU box</b> and its URL and key?', html); self.assertIn('Remove <b>OpenAI</b> and its key?', html)
+        card = re.search(r'data-provider-card="local:GPU".*?<div class="st-provider-fields">(.*?)</div>\s*<button type="button" class="btn ghost st-provider-done"', html, re.S)
+        summary = card.group(0)[:card.group(0).index('<div class="st-provider-fields">')]
+        self.assertIn('data-provider-edit="local:GPU"', summary)                                          # Remove sits beside Edit, in the summary
+        self.assertRegex(summary, r'data-provider-edit="local:GPU"[^>]*>Edit</button>\s*<button [^>]*data-provider-remove-ask aria-label="Remove GPU box"')
+        self.assertNotIn("data-provider-remove", card.group(1))                                         # and not in the editor
+        before = self.file()
+        self.assertEqual(remove("local:GPU", csrf="stale")[0], 403); self.assertEqual(self.file(), before)
+        status, body = remove("local:GPU")
+        self.assertEqual((status, body["ok"], body["reload"]), (200, True, True))
+        self.assertEqual(settings.endpoint_ids(), []); self.assertNotIn("MODEL_GPU", self.file())
+        remove("openai")
+        self.assertNotIn("OPENAI_API_KEY", self.file()); self.assertNotIn("OPENAI_API_KEY", os.environ)
+        card = re.search(r'data-provider-card="openai" data-configured="(\w+)".*?data-provider-state>([^<]*)<', self.page(), re.S)
+        self.assertEqual(card.groups(), ("false", "Not configured"))
+        remove("local")
+        self.assertEqual(self.file(), "")
+        self.assertEqual(remove("nothing")[0], 400)
+        os.environ["OPENROUTER_API_KEY"] = "sk-or-fromtheenvironment"                                       # held by the process: refused
+        html = self.page()
+        self.assertIn("Set in the process environment: remove it there.", html)
+        self.assertRegex(html, r'aria-label="Remove OpenRouter" aria-expanded="false" aria-controls="[^"]*" disabled')
+        status, body = remove("openrouter")
+        self.assertEqual((status, body["message"]), (400, "OPENROUTER_API_KEY is set in the process environment; remove it there."))
+        self.assertEqual(os.environ["OPENROUTER_API_KEY"], "sk-or-fromtheenvironment")
 
     def test_an_environment_variable_is_written_for_the_next_start(self):
         os.environ["HOSTS"] = "bench-env"
