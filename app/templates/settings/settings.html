@@ -82,7 +82,7 @@
     <div class="st-nav-group">
       <div class="st-nav-label">Execution</div>
       {{ section_link('hosts', 'Run hosts', 'runs', 'ssh remote machines server hosts') }}
-      {{ section_link('sandbox', 'Sandbox', 'kit', 'docker images disk pull container') }}
+      {{ section_link('sandbox', 'Sandbox', 'kit', 'docker container') }}
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Application</div>
@@ -212,16 +212,11 @@
   </div>{% endif %}
   {% include 'settings/data_providers.html' %}
   {# docker on this machine, outside the form: asked when the section opens (sandbox.js) #}
-  <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}"{% if writable %} data-csrf="{{ csrf }}" data-remove="{{ url_for('settings_sandbox_remove') }}"{% endif %}>
+  <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}">
     <div class="st-section-head"><h2 id="sandbox-h">Sandbox</h2><p>Where agents run, apart from this machine.</p></div>
     <div class="st-card">
       <div class="st-row"><span class="st-row-label">Docker</span><span class="st-row-value" data-docker-state>Checking…</span></div>
     </div>
-    <fieldset class="st-card" data-images hidden>
-      <legend>Images</legend>
-      <div class="st-sandbox-rows" data-image-rows></div>
-      <p class="st-about" data-images-none hidden>No images yet.</p>
-    </fieldset>
   </section>
 
   {# the user's price list (nullius.prices), outside the form: prices.js draws the state and answers the buttons #}

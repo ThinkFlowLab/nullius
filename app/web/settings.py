@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from nullius import execution, hosts, paths, prices, sandbox, secrets, settings
-from nullius.standard import container
 from nullius.standard import recipe as standard_recipe
 from nullius.judge import client
 
@@ -117,16 +116,8 @@ def settings_host_enrol():
 
 @app.route("/settings/sandbox")
 def settings_sandbox():
-    """The Sandbox section's state, asked when the section opens: docker and
-    the images Nullius fetched."""
-    state = sandbox.docker_state()
-    if not state["ok"]:
-        return jsonify(docker=state, images=[])
-    try:
-        held = sandbox.images()
-    except container.Unavailable as e:
-        held, state = [], {"ok": False, "error": str(e)}
-    return jsonify(docker=state, images=held)
+    """The Sandbox section's state, asked when the section opens: docker's."""
+    return jsonify(docker=sandbox.docker_state())
 
 
 @app.route("/settings/data-providers")
@@ -174,21 +165,6 @@ def settings_sandbox_logout():
     _sandbox_guard("Docker logs out")
     got = sandbox.logout()
     return jsonify(got), (200 if got["ok"] else 502)
-
-
-@app.route("/settings/sandbox/images/remove", methods=["POST"])
-def settings_sandbox_remove():
-    """Every image Nullius fetched for one benchmark, removed: the one way
-    they go, since runs keep them. Same guards as Save."""
-    _sandbox_guard("Images are removed")
-    bench = request.form.get("benchmark", "").strip()
-    if not bench:
-        return jsonify(ok=False, error="no benchmark"), 400
-    try:
-        got = sandbox.remove(bench)
-    except container.Unavailable as e:
-        return jsonify(ok=False, error=str(e)), 502
-    return jsonify(got), (200 if got["ok"] else 409)
 
 
 @app.route("/settings/prices/update", methods=["POST"])

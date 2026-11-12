@@ -402,6 +402,7 @@ class SettingsPage(unittest.TestCase):
         html = self.page()
         section = html[html.index('id="sandbox"'):html.index('id="general"')]
         self.assertIn('data-sandbox="/settings/sandbox"', section)
+        self.assertNotIn("data-images", section)                                         # no Images card
         self.assertNotIn('name="value:', section)                                       # outside Save: nothing of it lands in the file
         for login in ("Docker Hub", 'type="password"', "data-login", "data-logout"):      # signed in once, under Data providers
             self.assertNotIn(login, section)
@@ -412,15 +413,9 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('<h3>Hugging Face</h3>', providers)
         self.assertIn('name="token" type="password"', providers)
         with patch.object(sandbox, "docker_state", lambda: {"ok": True, "version": "29.0"}), \
-                patch.object(sandbox, "login_user", lambda: self.fail("asked")), \
-                patch.object(sandbox, "images", lambda: [{"key": "swe", "label": "SWE", "images": 2, "bytes": 8}]):
+                patch.object(sandbox, "login_user", lambda: self.fail("asked")):
             r = self.client.get("/settings/sandbox"); self.addCleanup(r.close)
-        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"},
-                                  "images": [{"key": "swe", "label": "SWE", "images": 2, "bytes": 8}]})
-        with patch.object(sandbox, "docker_state", lambda: {"ok": False, "error": "docker is not installed on this machine"}), \
-                patch.object(sandbox, "images", lambda: self.fail("asked")):
-            r = self.client.get("/settings/sandbox"); self.addCleanup(r.close)
-        self.assertEqual(r.json["images"], [])
+        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"}})
         seen = []
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
         with patch.object(sandbox, "login", lambda u, t: seen.append((u, t)) or {"ok": True, "user": u}):
@@ -455,16 +450,6 @@ class SettingsPage(unittest.TestCase):
             response = self.client.post(url, data={"action": "remove"}, headers=headers)
             self.assertTrue(response.json["ok"])
             self.assertIsNone(gaia.get("HF_TOKEN"))
-
-    def test_images_are_removed_per_benchmark_only_from_this_machines_browser(self):
-        headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
-        with patch.object(sandbox, "remove", lambda b: {"ok": False, "removed": 1, "failed": ["a2"]}):
-            r = self.client.post("/settings/sandbox/images/remove", data={"benchmark": "swe"}, headers=headers); self.addCleanup(r.close)
-            self.assertEqual((r.status_code, r.json["removed"]), (409, 1))
-            self.assertEqual(self.client.post("/settings/sandbox/images/remove", data={"benchmark": ""}, headers=headers).status_code, 400)
-            self.assertEqual(self.client.post("/settings/sandbox/images/remove", data={"benchmark": "swe"}, headers=headers,
-                                              environ_base={"REMOTE_ADDR": "10.0.0.7"}).status_code, 403)
-
 
     def test_the_price_list_is_updated_and_priced_only_from_this_machines_browser(self):
         self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_PRICES": str(self.tmp / "prices.json")}))

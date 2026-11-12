@@ -1066,7 +1066,6 @@ def own_image(bench: dict, spec: dict, root: str, log_dir: Optional[str] = None)
                 raise Unavailable(f"pulling {ref}: {(r.stderr or r.stdout).strip()[-300:]}")
             _built[ref] = True
             _fetched.add(ref)
-            remember(ref, bench["key"])
         return ref
     path = within(root, spec["build"])
     if not os.path.isfile(os.path.join(path, "Dockerfile")):
@@ -1087,56 +1086,7 @@ def own_image(bench: dict, spec: dict, root: str, log_dir: Optional[str] = None)
             raise Unavailable(f"building {spec['build']} ({tag}): {(r.stderr or r.stdout).strip()[-300:]}")
         _built[tag] = True
         _fetched.add(tag)
-        remember(tag, bench["key"])
         return tag
-
-
-IMAGES = "images.json"          # under install.HOME: {image: the benchmark it was fetched for}
-_ledger_lock = threading.Lock()
-
-
-def _ledger_path() -> str:
-    return os.path.join(install.HOME, IMAGES)
-
-
-def fetched_images() -> Dict[str, str]:
-    """Every image Nullius pulled or built for a benchmark's units, and that
-    benchmark: what the Settings page counts and may remove. An image that was
-    on the machine before is not here, so it is never offered for removal."""
-    try:
-        with open(_ledger_path()) as f:
-            got = json.load(f)
-    except (OSError, ValueError):
-        return {}
-    return {str(k): str(v) for k, v in got.items()} if isinstance(got, dict) else {}
-
-
-def _write_ledger(got: Dict[str, str]) -> None:
-    os.makedirs(install.HOME, exist_ok=True)
-    part = _ledger_path() + f".{os.getpid()}.part"
-    with open(part, "w") as f:
-        json.dump(got, f, indent=1, sort_keys=True)
-    os.replace(part, _ledger_path())
-
-
-def remember(image: str, bench: str) -> None:
-    with _ledger_lock:
-        got = fetched_images()
-        if got.get(image) == bench:
-            return
-        got[image] = bench
-        _write_ledger(got)
-
-
-def forget(images: Iterable[str]) -> None:
-    with _ledger_lock:
-        got = fetched_images()
-        gone = [i for i in images if i in got]
-        if not gone:
-            return
-        for i in gone:
-            got.pop(i)
-        _write_ledger(got)
 
 
 def fetched(image: str) -> bool:
@@ -1153,8 +1103,7 @@ def drop_image(image: str) -> None:
     if image in _fetched:
         _fetched.discard(image)
         _built.pop(image, None)
-        if _docker(["rmi", image], timeout=600, check=False).returncode == 0:
-            forget([image])
+        _docker(["rmi", image], timeout=600, check=False)
 
 
 def image_config(image: str) -> dict:

@@ -72,7 +72,7 @@ and its resources. The source layout stays under `app/`.
   `cli` and `__main__` (the unified `nullius` and `python -m nullius` commands),
   `paths` (user config, data and cache locations), `prices` (the user's model price list: fetched on request, never by a run; what a cost is estimated from), `migrate` (explicit copying of legacy checkout storage), `settings`, `hosts`, `execution`, `progress` (what a run is doing, one line per stage), `prerequisites` (what a recipe needs of each machine it runs on, asked before Run and again as it starts), `onboarding` (the Getting started checklist: what this machine
   says is done, and where each step is done), `gitrefs` (a repository's branches and tags,
-  by `git ls-remote`), `secrets` (a benchmark's licences, kept per benchmark outside the repository, and the Hugging Face token of Data providers), `sandbox` (Docker's state: the images runs keep, and the Docker Hub login Data providers uses) and `redact` at the top.
+  by `git ls-remote`), `secrets` (a benchmark's licences, kept per benchmark outside the repository, and the Hugging Face token of Data providers), `sandbox` (Docker's state, and the Docker Hub login Data providers uses) and `redact` at the top.
 - `app/templates/`, `app/static/` — the interface, grouped by the same capability
   names (`runs/`, `traces/`, `builder/`, …; `base.html`, `style.css` and the fonts at the top), including the command
   builder's JavaScript, which owns the generated recipes.

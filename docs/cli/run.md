@@ -30,7 +30,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--price MODEL=INPUT,OUTPUT[,CACHED]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
 | `--max-usd USD`, `--max-usd-per-unit USD` | A spending cap for the run, for each unit: [below](#a-spending-cap) |
 | `--repeat K` | Each unit K times; `result.json` carries `pass_hat_k` |
-| `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--repeat`); by default they stay for the next run, listed and removed in Settings, [Sandbox](../settings/sandbox.md) |
+| `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--repeat`); by default they stay for the next run |
 | `--judge-model` | Instead of the official judge |
 | `--simulator-model` | Instead of the official simulated user |
 | `--name` | The job's name |

@@ -13,7 +13,7 @@ changes save automatically; data providers and benchmark credentials use **Save*
 | [Model prices](model-prices.md) | What a run's cost is estimated from |
 | [Run hosts](run-hosts.md) | SSH machines |
 | [Data providers](data-providers.md) | Hugging Face and Docker Hub connections |
-| [Sandbox](sandbox.md) | Docker and the images runs keep |
+| [Sandbox](sandbox.md) | Docker on this machine |
 | [General](other.md) | Tour and checklist; start-up options remain in the environment |
 
 ## Variables
