@@ -98,7 +98,7 @@ def bound(req: dict, raw: bytes, row: dict, path: str = "", seen: Optional[int] 
     limit the call names or the row's own. An embeddings call has none.
     ``output`` False: the request alone, which is no guess."""
     tokens = math.ceil(max(0, len(raw) - _blobs(req)) / 3)
-    rate = max(row["input"], row.get("cache_write") or 0)
+    rate = max(row["input"], row.get("cache_write") or 0, row.get("cache_write_1h") or 0)
     out = 0
     if output and not path.split("?")[0].endswith("/embeddings"):
         named = [req.get(k) for k in _LIMITS if isinstance(req.get(k), int) and not isinstance(req.get(k), bool) and req.get(k) > 0]

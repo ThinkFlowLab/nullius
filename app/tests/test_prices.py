@@ -20,7 +20,7 @@ LISTING = {
     "model-a": {"input_cost_per_token": 2.5e-06, "output_cost_per_token": 1e-05, "cache_read_input_token_cost": 1.25e-06,
                 "max_output_tokens": 16384, "litellm_provider": "one"},
     "model-b": {"input_cost_per_token": 3e-06, "output_cost_per_token": 1.5e-05, "cache_read_input_token_cost": 3e-07,
-                "cache_creation_input_token_cost": 3.75e-06, "max_output_tokens": 128000},
+                "cache_creation_input_token_cost": 3.75e-06, "cache_creation_input_token_cost_above_1hr": 6e-06, "max_output_tokens": 128000},
     "embedder": {"input_cost_per_token": 2e-08, "output_cost_per_token": 0.0},
     "picture-model": {"output_cost_per_image": 0.04},
 }
@@ -69,7 +69,7 @@ class Update(Profile):
         self.assertEqual(got, {"n": 3, "from": prices.SOURCE, "on": "2026-11-10"})
         self.assertEqual(prices.table(), {
             "model-a": {"input": 2.5, "output": 10.0, "cached": 1.25, "max_output": 16384},
-            "model-b": {"input": 3.0, "output": 15.0, "cached": 0.3, "cache_write": 3.75, "max_output": 128000},
+            "model-b": {"input": 3.0, "output": 15.0, "cached": 0.3, "cache_write": 3.75, "cache_write_1h": 6.0, "max_output": 128000},
             "embedder": {"input": 0.02, "output": 0.0}})
         self.assertEqual(prices.path(), os.path.join(self.tmp, "config", "prices.json"))
 
@@ -142,7 +142,10 @@ class Own(Profile):
     def test_a_runs_price_is_model_input_output_and_optionally_cached(self):
         self.assertEqual(prices.parse("m=1,2"), ("m", {"input": 1.0, "output": 2.0}))
         self.assertEqual(prices.parse("org/m:free = 0.5, 1.5, 0.05"), ("org/m:free", {"input": 0.5, "output": 1.5, "cached": 0.05}))
-        for bad in ("m", "m=1", "=1,2", "m=1,2,3,4", "m=1,x", "m=1,", "m=-1,2"):
+        self.assertEqual(prices.parse("m=1,2,0.1,1.25,2"),
+                         ("m", {"input": 1.0, "output": 2.0, "cached": 0.1, "cache_write": 1.25, "cache_write_1h": 2.0}))
+        self.assertEqual(prices.parse("m=1,2,,1.25")[1], {"input": 1.0, "output": 2.0, "cache_write": 1.25})
+        for bad in ("m", "m=1", "=1,2", "m=1,2,3,4,5,6", "m=1,x", "m=1,", "m=-1,2", "m=1,2,,1,-2"):
             with self.assertRaises(ValueError, msg=bad):
                 prices.parse(bad)
 
@@ -186,6 +189,13 @@ class Cli(Profile):
         self.assertEqual((got["n"], got["models"]), (0, {"m": {"input": 1.0, "output": 2.0, "cached": 0.1}}))
         self.assertEqual(self.say("remove", "m")[0], 0)
         self.assertEqual(prices.table(), {})
+
+    def test_cache_write_rates_can_be_set_without_changing_old_rows(self):
+        prices.set_own("old", prices.row(1, 2))
+        self.say("set", "m", "1", "2", "--cache-write", "1.25", "--cache-write-1h", "2")
+        self.assertEqual(prices.table()["m"], {"input": 1.0, "output": 2.0, "cache_write": 1.25, "cache_write_1h": 2.0})
+        self.assertEqual(prices.table()["old"], {"input": 1.0, "output": 2.0})
+        self.assertIn("cache write 1h 2", self.say("list", "m")[1])
 
     def test_an_update_from_a_file_says_how_many(self):
         listing = os.path.join(self.tmp, "listing.json")

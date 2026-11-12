@@ -170,7 +170,8 @@ def settings_prices_set():
     _sandbox_guard("Prices are set")
     f = request.form
     try:
-        prices.set_own(f.get("model", ""), prices.row(f.get("input") or None, f.get("output") or None, f.get("cached") or None))
+        prices.set_own(f.get("model", ""), prices.row(f.get("input") or None, f.get("output") or None, f.get("cached") or None,
+                                                   f.get("cache_write") or None, cache_write_1h=f.get("cache_write_1h") or None))
     except (ValueError, TypeError) as e:
         return jsonify(ok=False, error=str(e)), 400
     return jsonify(ok=True, **prices.state())

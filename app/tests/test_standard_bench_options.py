@@ -6,9 +6,11 @@ that install them."""
 from __future__ import annotations
 
 import copy
+import subprocess
 import unittest
+from unittest.mock import patch
 
-from nullius import hosts
+from nullius import hosts, prerequisites
 from nullius.standard import definitions, hostreq, recipe, run
 
 TAU = definitions.get("benchmark", "tau3-bench")
@@ -181,6 +183,88 @@ class TurnLimit(unittest.TestCase):
         self.assertEqual(r.turn_limit({}), 900)
         for bad in (0, -5, True, "3600", run.MAX_AGENT_SECONDS + 1):
             self.assertEqual(r.turn_limit({"agent_seconds": bad}), 900, bad)
+
+
+GPU = {"summary": "A CUDA GPU with enough memory.", "check": ["nvidia-smi"], "gpu_memory_mb": 12000}
+BENCH = {"host": {"gpu": GPU}}
+TOO_SMALL = "needs at least 12000 MiB of GPU memory; largest GPU has 11264 MiB"
+
+
+class GPURequirements(unittest.TestCase):
+    def test_only_positive_integer_memory_is_valid(self):
+        for value in (None, True, False, 0, -1, 12000.0, "12000", [], {}):
+            with self.subTest(value=value):
+                self.assertIn("host.gpu.gpu_memory_mb: a positive whole number of MiB",
+                              definitions._host({"host": {"gpu": dict(GPU, gpu_memory_mb=value)}}))
+        for value in (1, 12000):
+            self.assertEqual(definitions._host({"host": {"gpu": dict(GPU, gpu_memory_mb=value)}}), [])
+
+    def test_largest_card_is_used_not_the_sum_and_boundary_is_inclusive(self):
+        for output, expected in (("8192\n11264\n", TOO_SMALL), ("8192\n12000\n", None),
+                                 ("24576\n8192\n", None)):
+            with self.subTest(output=output), patch.object(hostreq.subprocess, "run", return_value=
+                    subprocess.CompletedProcess([], 0, output, "")) as query:
+                got = hostreq.problems(BENCH, ["gpu"], which=lambda p: True)
+                self.assertEqual(got, {"gpu": expected} if expected else {})
+                query.assert_called_once_with(
+                    ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=5)
+
+    def test_unreadable_memory_is_not_reported_as_too_small(self):
+        for output, code in (("", 0), ("[N/A]\n", 0), ("8192\nN/A\n", 0), ("0\n", 0),
+                             ("-1\n", 0), ("12000 MiB\n", 0), ("24576\n", 1)):
+            with self.subTest(output=output, code=code), patch.object(hostreq.subprocess, "run",
+                    return_value=subprocess.CompletedProcess([], code, output, "driver unavailable")):
+                self.assertEqual(hostreq.problems(BENCH, ["gpu"], which=lambda p: True),
+                                 {"gpu": "nvidia-smi could not report GPU memory"})
+        for error in (OSError("unavailable"), subprocess.TimeoutExpired("nvidia-smi", 5)):
+            with self.subTest(error=error), patch.object(hostreq.subprocess, "run", side_effect=error):
+                self.assertIsNone(hostreq.gpu_memory_mb())
+
+    def test_absent_program_is_reported_without_querying_memory(self):
+        with patch.object(hostreq, "gpu_memory_mb") as query:
+            self.assertEqual(hostreq.problems(BENCH, ["gpu"], which=lambda p: False),
+                             {"gpu": "nvidia-smi not on PATH"})
+            query.assert_not_called()
+
+    def test_only_selected_memory_requirements_query_the_gpu_once(self):
+        bench = {"host": {**BENCH["host"], "larger": dict(GPU, gpu_memory_mb=24000),
+                          "program_only": {"check": ["nvidia-smi"]}}}
+        with patch.object(hostreq, "gpu_memory_mb", return_value=12000) as query:
+            self.assertEqual(hostreq.problems(bench, ["program_only"], which=lambda p: True), {})
+            self.assertEqual(hostreq.problems(bench, [], which=lambda p: True), {})
+            query.assert_not_called()
+            self.assertEqual(hostreq.problems(bench, ["gpu", "larger"], which=lambda p: True),
+                             {"larger": "needs at least 24000 MiB of GPU memory; largest GPU has 12000 MiB"})
+            query.assert_called_once_with()
+
+    def test_builder_and_run_refuse_stella_with_the_same_explanation(self):
+        bench = definitions.get("benchmark", "longmemeval")
+        other, why = definitions.setup(bench, "original", "gpt-4o", "openai")
+        self.assertFalse(why)
+        with patch.object(hostreq, "gpu_memory_mb", return_value=11264):
+            for retriever in ("flat-stella-session", "flat-stella-turn"):
+                with self.subTest(retriever=retriever), self.assertRaises(run.Refused) as raised:
+                    run.Run(bench, other, model="gpt-4o", provider="openai", dataset="longmemeval_s",
+                            bench_options={"retriever": retriever}, env={}, which=lambda p: True,
+                            jobs_root="/nonexistent-never-written")
+                rows = prerequisites.check_here([], {"stella_gpu": bench["host"]["stella_gpu"]}, which=lambda p: True)
+                self.assertEqual(rows[0]["detail"], TOO_SMALL)
+                self.assertEqual(rows[0]["state"], "missing")
+                self.assertIn(rows[0]["detail"], str(raised.exception))
+                self.assertFalse(prerequisites.ready([{"rows": rows}]))
+
+    def test_stella_can_start_at_the_minimum_and_contriever_does_not_probe_memory(self):
+        bench = definitions.get("benchmark", "longmemeval")
+        other, _ = definitions.setup(bench, "original", "gpt-4o", "openai")
+        with patch.object(hostreq, "gpu_memory_mb", return_value=12000) as query:
+            for retriever in ("flat-contriever-session", "flat-contriever-turn", "flat-stella-session"):
+                run.Run(bench, other, model="gpt-4o", provider="openai", dataset="longmemeval_s",
+                        bench_options={"retriever": retriever}, env={"OPENAI_API_KEY": "fixture"}, which=lambda p: True,
+                        jobs_root="/nonexistent-never-written")
+            query.assert_called_once_with()
+            rows = prerequisites.check_here([], {"gpu": GPU}, which=lambda p: True)
+            self.assertTrue(prerequisites.ready([{"rows": rows}]))
 
 
 if __name__ == "__main__":

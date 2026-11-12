@@ -10,10 +10,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from urllib.error import HTTPError, URLError
 from unittest.mock import patch
 
 from nullius import cli
-from nullius.standard import cli as standard_cli, definitions
+from nullius.standard import cli as standard_cli, definitions, pins
 
 APP = Path(__file__).resolve().parents[1]
 
@@ -171,6 +172,99 @@ class CatalogueCommands(unittest.TestCase):
         self.assertFalse((self.bundled / "agents" / "fresh").exists())
         with self.assertRaisesRegex(SystemExit, "no agent, capability or benchmark"):
             standard_cli.new_version("missing", "2")
+
+
+class ImagePins(unittest.TestCase):
+    OLD, NEW = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+    REF = "docker.io/example/image@" + OLD
+
+    def test_both_pin_sources_are_read_without_executing_or_writing(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            driver = root / "driver.py"
+            driver.write_text(f'raise RuntimeError("must not execute")\nIMAGES = {{"task": "{self.REF}"}}\n')
+            self.assertEqual(pins.references(folder), [(self.REF, self.REF)])
+            (root / "images.json").write_text(json.dumps({"task": self.REF}))
+            self.assertEqual(pins.references(folder), [("task", self.REF)])
+            before = {p.name: p.read_bytes() for p in root.iterdir()}
+            with patch.object(definitions, "get", return_value={"_here": folder}), \
+                    patch.object(pins, "current", return_value=self.OLD), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(standard_cli.main(["pins", "fixture", "--limit", "1"]), 0)
+            self.assertEqual({p.name: p.read_bytes() for p in root.iterdir()}, before)
+
+    def test_tags_registry_ports_and_docker_hub_shorthand(self):
+        for reference, override, expected in (
+                ("ubuntu@" + self.OLD, None, ("registry-1.docker.io", "library/ubuntu", "latest", self.OLD)),
+                ("registry.example:5443/team/image:stable@" + self.OLD, None,
+                 ("registry.example:5443", "team/image", "stable", self.OLD)),
+                (self.REF, "v2", ("registry-1.docker.io", "example/image", "v2", self.OLD))):
+            self.assertEqual(pins.target(reference, override), expected)
+        for ref in ("not-pinned", "https://example/image@" + self.OLD, "user:password@host/image@" + self.OLD):
+            with self.assertRaises(ValueError):
+                pins.target(ref)
+
+    @staticmethod
+    def response(body=b"", **headers):
+        response = io.BytesIO(body)
+        response.headers = headers
+        return response
+
+    def test_registry_head_and_anonymous_bearer_challenge(self):
+        challenge = HTTPError("https://registry.example/v2/example/image/manifests/latest", 401, "auth", {
+            "WWW-Authenticate": 'Bearer realm="https://auth.example/token",service="registry.example",scope="repository:other:push"'}, None)
+        with patch.object(pins, "build_opener") as opener:
+            open_ = opener.return_value.open
+            open_.side_effect = [challenge, self.response(b'{"token":"fixture-token"}'),
+                                 self.response(**{"Docker-Content-Digest": self.OLD})]
+            self.assertEqual(pins.current("registry.example", "example/image", "latest"), self.OLD)
+            requests = [call.args[0] for call in open_.call_args_list]
+            self.assertEqual([r.get_method() for r in requests], ["HEAD", "GET", "HEAD"])
+            self.assertIn("scope=repository%3Aexample%2Fimage%3Apull", requests[1].full_url)
+            self.assertEqual(requests[2].get_header("Authorization"), "Bearer fixture-token")
+            self.assertIn("application/vnd.oci.image.index.v1+json", requests[0].get_header("Accept"))
+
+    def test_missing_manifest_is_distinct_from_auth_rate_limits_and_connection_failures(self):
+        for failure, state in ((HTTPError("https://registry.example", 404, "gone", {}, None), "gone"),
+                               (HTTPError("https://registry.example", 429, "limited", {}, None), "not checked"),
+                               (HTTPError("https://registry.example", 403, "denied", {}, None), "not checked"),
+                               (URLError("unreachable"), "not checked"), (TimeoutError(), "not checked")):
+            with self.subTest(failure=failure), patch.object(pins, "current", side_effect=failure):
+                self.assertEqual(pins.check(self.REF)[0], state)
+        challenge = 'Bearer realm="https://auth.example/token"'
+        with patch.object(pins, "build_opener") as opener:
+            opener.return_value.open.side_effect = [HTTPError("https://registry.example", 401, "auth", {"WWW-Authenticate": challenge}, None),
+                                                    HTTPError("https://auth.example/token", 404, "gone", {}, None)]
+            state, detail = pins.check(self.REF)
+            self.assertEqual(state, "not checked")
+            self.assertIn("token service returned HTTP 404", detail)
+
+    def test_missing_digest_and_unsafe_auth_are_not_used(self):
+        with self.assertRaisesRegex(ValueError, "no valid sha256"):
+            pins.current("registry.example", "example/image", "latest", open_=lambda *a, **k: self.response())
+        for challenge in ('Basic realm="private"', 'Bearer realm="http://auth.example/token"'):
+            with self.assertRaisesRegex(ValueError, "unsupported authentication"):
+                pins._token(challenge, "example/image", lambda *a, **k: self.fail("must not request"))
+
+    def test_cli_limits_and_exit_precedence(self):
+        refs = [("first", self.REF), ("second", self.REF)]
+        with patch.object(definitions, "get", return_value={"_here": "unused"}), patch.object(pins, "references", return_value=refs), \
+                patch.object(pins, "current") as current:
+            for results, expected in (([self.OLD, self.OLD], 0), ([self.OLD, self.NEW], 1),
+                                       ([self.NEW, URLError("down")], 2)):
+                current.side_effect = results
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    self.assertEqual(standard_cli.main(["pins", "fixture"]), expected)
+                if expected == 1:
+                    self.assertIn(f"{self.OLD} -> {self.NEW}", out.getvalue())
+            current.reset_mock(side_effect=True)
+            current.return_value = self.OLD
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(standard_cli.main(["pins", "fixture", "--tag", "stable", "--limit", "1"]), 0)
+            current.assert_called_once_with("registry-1.docker.io", "example/image", "stable")
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(standard_cli.main(["pins", "fixture", "--limit", "0"]), 2)
+                self.assertEqual(standard_cli.main(["pins", "fixture", "--tag", "bad/tag"]), 2)
 
 
 if __name__ == "__main__":
