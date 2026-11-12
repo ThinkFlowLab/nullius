@@ -3,6 +3,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli list
     PYTHONPATH=app python3 -m nullius.standard.cli check [PATH]
     PYTHONPATH=app python3 -m nullius.standard.cli fit BENCHMARK[@VERSION]
+    PYTHONPATH=app python3 -m nullius.standard.cli pins BENCHMARK[@VERSION] [--tag TAG] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend docker]
@@ -69,7 +70,7 @@ from nullius import paths, prices as price_list, progress, secrets, settings
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
     settings.load(paths.settings_file())
 
-from nullius.standard import conform, definitions, fidelity, job, match, merge, ports, prove, run, shard
+from nullius.standard import conform, definitions, fidelity, job, match, merge, pins, ports, prove, run, shard
 
 ENV_FILE = paths.settings_file()
 
@@ -136,6 +137,33 @@ def skills(d: dict, ports_=None) -> list:
         if got:
             out.append(f"{p} skills: " + " · ".join(f"{s['id']} {'✓' if s['shown'] else '✗'}" for s in got))
     return out
+
+
+def cmd_pins(a):
+    if a.limit is not None and a.limit < 1:
+        print("--limit must be a positive whole number", file=sys.stderr)
+        return 2
+    if a.tag is not None and not pins.TAG.fullmatch(a.tag):
+        print("invalid image tag", file=sys.stderr)
+        return 2
+    bench = definitions.get("benchmark", a.benchmark)
+    if bench is None:
+        print("no such benchmark", file=sys.stderr)
+        return 2
+    try:
+        refs = pins.references(bench["_here"])
+    except (OSError, ValueError, SyntaxError):
+        print("not checked: cannot read image pins from images.json or driver.py", file=sys.stderr)
+        return 2
+    if not refs:
+        print("not checked: no image pins found", file=sys.stderr)
+        return 2
+    code = 0
+    for name, ref in refs[:a.limit]:
+        state, detail = pins.check(ref, a.tag)
+        print(f"{name}: {state}: {detail}", flush=True)
+        code = max(code, 2 if state == "not checked" else 0 if state == "same" else 1)
+    return code
 
 
 def cmd_list(a):
@@ -576,6 +604,10 @@ def main(argv=None):
     c.add_argument("path", nargs="?")
     f = sub.add_parser("fit", help="what can run a benchmark, and why the rest cannot")
     f.add_argument("benchmark")
+    p = sub.add_parser("pins", help="compare image pins with registry tags without changing them")
+    p.add_argument("benchmark")
+    p.add_argument("--tag", help="tag to compare (default: embedded tag, or latest)")
+    p.add_argument("--limit", type=int, help="check only the first N pins")
     n = sub.add_parser("new", help="a definition to fill in, in its catalogue folder")
     n.add_argument("kind", type=definitions.names.kind, choices=[*definitions.KINDS, "version"])
     n.add_argument("key")
@@ -662,7 +694,7 @@ def main(argv=None):
         progress.ECHO = sys.stderr           # each stage as a line (nullius/progress.py): stdout stays the job and its units
     if not getattr(a, "from_run", False):
         settings.load(ENV_FILE)
-    return {"list": cmd_list, "check": cmd_check, "fit": cmd_fit, "new": cmd_new, "conform": cmd_conform, "run": cmd_run,
+    return {"list": cmd_list, "check": cmd_check, "fit": cmd_fit, "pins": cmd_pins, "new": cmd_new, "conform": cmd_conform, "run": cmd_run,
             "fidelity": cmd_fidelity, "prove": cmd_prove, "merge": cmd_merge, "traces": cmd_traces}[a.cmd](a)
 
 
