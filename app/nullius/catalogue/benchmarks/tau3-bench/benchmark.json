@@ -23,7 +23,7 @@
   ],
   "limitations": [
     "Voice mode is not offered.",
-    "banking_knowledge's search method is an option, bm25 by default. Scores compare only between runs with the same search. Reranker methods use gpt-5.2 through the relay. The qwen methods are not offered.",
+    "banking_knowledge's search method is an option, bm25 by default. Scores compare only between runs with the same search. Reranker methods use gpt-5.2 through the relay. Qwen methods require OpenRouter.",
     "Another agent replaces the upstream's agent. It gets the upstream's instructions and policy, plus two lines from Nullius: where its tools are, and that its last message in a turn goes to the user."
   ],
   "datasets": [
