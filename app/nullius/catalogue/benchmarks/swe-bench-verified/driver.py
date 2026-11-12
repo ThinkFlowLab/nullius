@@ -74,6 +74,11 @@ def setup(unit, dir):
                f"git diff --cached --binary --no-ext-diff --no-textconv {shlex.quote(r['base_commit'])} -- "
                f"> {RESULTS}/model.patch && exec /bin/bash /eval.sh")
     return {"prompt": r["problem_statement"], "environment": "task", "image": {"pull": IMAGES[unit]}, "workdir": WORKDIR,
+            "env": {"PATH": "/opt/miniconda3/envs/testbed/bin:/opt/miniconda3/condabin",
+                    "CONDA_DEFAULT_ENV": "testbed", "CONDA_PREFIX": "/opt/miniconda3/envs/testbed",
+                    "CONDA_SHLVL": "1", "CONDA_EXE": "/opt/miniconda3/bin/conda",
+                    "CONDA_PYTHON_EXE": "/opt/miniconda3/bin/python", "_CE_CONDA": "", "_CE_M": "",
+                    "CONDA_PROMPT_MODIFIER": "(testbed) "},
             "verify": {"write": {"/eval.sh": make_test_spec(r).eval_script}, "run": ["/bin/bash", "-c", capture],
                        "collect": RESULTS, "seconds": EVAL_SECONDS, "network": True}}
 

@@ -762,6 +762,8 @@ class Run:
                                                                 self.machine_env(trial)))
                 except mcp_machine.Unknown as e:
                     raise _Ended("EnvironmentSetupError", f"the unit's setup: {e}")
+            if "env" in setup and not own:
+                raise _Ended("EnvironmentSetupError", "the unit's setup: env requires an own image")
             if setup.get("verify") is not None and not own:
                 raise _Ended("EnvironmentSetupError", "the unit's setup: verify runs in an own image, and this unit has none")
             try:
@@ -1144,8 +1146,9 @@ class Run:
         task's programs are the task's - then the install's and the runtimes'."""
         env = dict(env, **(getattr(rl, "unit_secrets", None) or {}))
         if box is not None:
-            inside = {k: v for k, v in env.items() if k not in container.HOST_ONLY}
-            path = os.pathsep.join([box.path] + install.bin_dirs(self.inst) + [d + "/bin" for _, d in box.runtimes.values()])
+            inside = {**box.env, **{k: v for k, v in env.items() if k not in container.HOST_ONLY}}
+            path = ":".join(([box.env["PATH"]] if "PATH" in box.env else []) + [box.path]
+                            + install.bin_dirs(self.inst) + [d + "/bin" for _, d in box.runtimes.values()])
             argv = box.exec_argv(container.in_runtime(cmd, box.runtimes), inside, path, interactive=interactive)
             return argv, container.client_env({k: v for k, v in inside.items() if k != "PATH"})
         if self.backend == "local":
@@ -1199,6 +1202,7 @@ class Run:
         glibc runtime in a musl image) is not run, which is no one's result."""
         spec = setup.get("image")
         bad = container.spec_problems(spec)
+        bad += container.task_env_problems(setup.get("env", {}), (self.other.get("model") or {}).get("env", {}))
         if setup.get("verify") is not None:
             bad += ["verify." + p for p in container.step_problems(setup["verify"], collect=True)]
         if setup.get("workdir") is not None and not (isinstance(setup["workdir"], str) and setup["workdir"].startswith("/")):
@@ -1223,7 +1227,7 @@ class Run:
             box = container.Box(self.name, tag, image, workdir=setup.get("workdir") or cfg["workdir"], path=cfg["path"],
                                 network=rl.names["network"] if isinstance(rl, container.Unit) else None,
                                 mounted=mounted, runtimes=runtimes, memory_mb=spec.get("memory_mb"), cpus=spec.get("cpus"),
-                                app=APP).start()
+                                app=APP, env=setup.get("env")).start()
             for name in runtimes:
                 why = box.runtime_problem(name)
                 if why:
