@@ -63,7 +63,7 @@
   async function models(provider) {
     let entry = cache.get(provider);
     if (!entry || Date.now() - entry.at > 300000) {
-      entry = {at: Date.now(), promise: fetch('/new-run/models', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({provider})})
+      entry = {at: Date.now(), promise: nulliusFetch('/new-run/models', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({provider})})
         .then(r => r.json()).then(r => ({...r, models: Array.isArray(r.models) ? r.models : []}))
         .catch(() => ({ok: false, models: [], message: 'Model list unavailable. Enter a model ID manually.'}))};
       cache.set(provider, entry);

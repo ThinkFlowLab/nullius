@@ -415,7 +415,7 @@
   // One ssh from the application host, nothing stored: whether the host answers, and what it has.
   const testHost = async entry => {
     try {
-      const r = await fetch({{ url_for('settings_host_test')|tojson }}, {method: 'POST', headers: {'X-CSRF-Token': csrf}, body: new URLSearchParams({entry})});
+      const r = await nulliusFetch({{ url_for('settings_host_test')|tojson }}, {method: 'POST', headers: {'X-CSRF-Token': csrf}, body: new URLSearchParams({entry})});
       const j = await r.json();
       if (!j.ok) return {ok: false, error: j.error || ('HTTP ' + r.status)};
       const has = k => k + (j[k] ? '' : ' missing');
@@ -514,7 +514,7 @@
     else { if (!f.get('password')) { say('type the password', 'bad'); return null; } body.set('password', f.get('password')); url = {{ url_for('settings_host_enrol')|tojson }}; }
     say(auth === 'file' ? 'saving the key…' : 'putting this machine\'s key on the host…');
     try {
-      const r = await fetch(url, {method: 'POST', headers: {'X-CSRF-Token': csrf}, body});
+      const r = await nulliusFetch(url, {method: 'POST', headers: {'X-CSRF-Token': csrf}, body});
       const j = await r.json();
       if (!j.ok) { say('✕ ' + (j.error || ('HTTP ' + r.status)), 'bad'); return null; }
       resolved = {target, auth, entry: j.entry}; return named(j.entry);

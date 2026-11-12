@@ -242,8 +242,8 @@
     let got;
     try {
       const res = build
-        ? await fetch('/new-run/harbor/agents', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({harbor: pin})})
-        : await fetch('/new-run/harbor/agents?' + new URLSearchParams({kind: pin.kind, version: pin.version || '', repo: pin.repo || '', revisionKind: pin.revisionKind || '', revision: pin.revision || '', commit: pin.commit || ''}));
+        ? await nulliusFetch('/new-run/harbor/agents', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({harbor: pin})})
+        : await nulliusFetch('/new-run/harbor/agents?' + new URLSearchParams({kind: pin.kind, version: pin.version || '', repo: pin.repo || '', revisionKind: pin.revisionKind || '', revision: pin.revision || '', commit: pin.commit || ''}));
       got = await res.json().catch(() => ({}));
       if (!got.state) got = {state: build ? 'failed' : 'absent', error: got.error || 'HTTP ' + res.status};
       if (!build && got.state === 'failed') got = {state: 'absent'};
@@ -256,7 +256,7 @@
     if (harbor.releases) return;
     harbor.releases = {loading: true};
     let got;
-    try { const res = await fetch('/new-run/harbor/releases'); got = await res.json(); } catch { got = {versions: [], error: 'PyPI could not be read'}; }
+    try { const res = await nulliusFetch('/new-run/harbor/releases'); got = await res.json(); } catch { got = {versions: [], error: 'PyPI could not be read'}; }
     harbor.releases = got;
     if (step === S.runner) { renderForm(); refreshPlan(); }
   }
@@ -266,7 +266,7 @@
     if (step === S.runner) renderForm();
     let got;
     try {
-      const res = await fetch('/new-run/harbor/refs?' + new URLSearchParams({repo: url, ...(fresh ? {fresh: '1'} : {})}));
+      const res = await nulliusFetch('/new-run/harbor/refs?' + new URLSearchParams({repo: url, ...(fresh ? {fresh: '1'} : {})}));
       got = await res.json();
     } catch { got = {error: 'the branches and tags could not be read'}; }
     harbor.refs[url] = got;
@@ -429,7 +429,7 @@
     hostState[entry] = {...(hostState[entry] || {}), said: what === 'install' ? 'installing…' : 'checking…', error: ''};
     renderForm();
     try {
-      const res = await fetch('/new-run/host/' + what, {method: 'POST', headers: {'X-CSRF-Token': schema.csrf},
+      const res = await nulliusFetch('/new-run/host/' + what, {method: 'POST', headers: {'X-CSRF-Token': schema.csrf},
         body: new URLSearchParams({entry, benchmark: b.key, requirements: optionNeeds(rec).host.join(',')})});
       const j = await res.json();
       if (what === 'install' && j.ok) return hostReq(entry, 'check');
@@ -630,7 +630,7 @@
     runnerTimer = setTimeout(async () => {
       let out;
       try {
-        const res = await fetch('/new-run/runner', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({recipe: rec})});
+        const res = await nulliusFetch('/new-run/runner', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({recipe: rec})});
         out = await res.json();
       } catch (e) { out = {errors: [{step: REVIEW, message: 'The recipe could not be compiled here: ' + e}], notes: [], review: []}; }
       if (key !== runnerKey) return;
@@ -832,7 +832,7 @@
     if(!force&&prereq.sig===sig)return;
     prereq={sig,busy:true,out:null};drawPrereq();
     let out;
-    try{const res=await fetch('/new-run/prerequisites',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':schema.csrf},body:JSON.stringify({recipe:rec,provider:C.choiceOf(rec)})});
+    try{const res=await nulliusFetch('/new-run/prerequisites',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':schema.csrf},body:JSON.stringify({recipe:rec,provider:C.choiceOf(rec)})});
       out=res.ok?await res.json():{machines:[],ready:false,errors:['The machines could not be checked: HTTP '+res.status]};}
     catch(e){out={machines:[],ready:false,errors:['The machines could not be checked: '+e]};}
     if(prereq.sig!==sig)return;   // the recipe changed while it was asked: the newer check stands
@@ -853,7 +853,7 @@
     if(entry==='local')return;
     const out=$('#nb-hosttest'), st=root.querySelector(`[data-host-state="${CSS.escape(entry)}"]`);
     out.textContent='testing…';
-    try{const res=await fetch('/settings/hosts/test',{method:'POST',headers:{'X-CSRF-Token':schema.csrf},body:new URLSearchParams({entry})});const j=await res.json();
+    try{const res=await nulliusFetch('/settings/hosts/test',{method:'POST',headers:{'X-CSRF-Token':schema.csrf},body:new URLSearchParams({entry})});const j=await res.json();
       // only what can stop this recipe there: docker for a Harbor run, docker or podman for the standard's container backend (uv is installed when missing)
       const rec=r(),harbor=rec.harness==='harbor',needsEngine=harbor||(C.isStandard(rec)&&rec.backend==='container');
       const engine=harbor?(j.docker?'docker':null):j.engine,engineOk=engine&&j[engine+'_ok'];
@@ -875,14 +875,14 @@
     if(ask&&!window.confirm(ask)){say('Not started.');return;}   // the whole dataset is a decision, not a default
     const b=$('#nb-run'); b.disabled=true; say('starting…');
     try{
-      const res=await fetch('/run',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':schema.csrf},body:JSON.stringify(body)});
+      const res=await nulliusFetch('/run',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':schema.csrf},body:JSON.stringify(body)});
       const j=await res.json(); if(!j.ok){say('✕ '+(j.error||('HTTP '+res.status)),'nb-error');b.disabled=false;return;}
       location.href=j.open||'/runs?view=launch';   // the Runs page, by launch: this launch's runs, each opening its job
     }catch(e){say('✕ '+e,'nb-error');b.disabled=false;}
   }
   // The button says it is reading until the answer's toast replaces it: a toast alone would be gone before a slow answer.
-  async function refreshRegistry(){const b=$('#nb-refresh'),label=b.textContent;b.disabled=true;b.classList.add('nb-loading');b.setAttribute('aria-busy','true');b.textContent='Reading Harbor’s catalogue…';status('');try{const response=await fetch('/new-run/registry');if(!response.ok)throw Error();const data=await response.json(),names=[...new Set([...schema.datasets.map(d=>d.registry),...schema.seenRegistry,...(data.names||[]),...(data.hub||[])])].filter(Boolean);$('#nb-registry').innerHTML=names.map(n=>`<option value="${esc(n)}"></option>`).join('');status(names.length+' catalogue references available. You can also enter one directly.');}catch{status('Catalogue refresh unavailable. Existing references and custom entry still work.');}finally{if(b.isConnected){b.disabled=false;b.classList.remove('nb-loading');b.removeAttribute('aria-busy');b.textContent=label;}}}
-  function completeDirectory(value){clearTimeout(pendingDirs);const seq=++dirsSequence;pendingDirs=setTimeout(async()=>{try{const response=await fetch('/new-run/dirs?path='+encodeURIComponent(value));if(!response.ok)return;const data=await response.json();if(seq===dirsSequence)$('#nb-paths').innerHTML=(data.dirs||[]).map(p=>`<option value="${esc(p)}"></option>`).join('');}catch{}},180);}
+  async function refreshRegistry(){const b=$('#nb-refresh'),label=b.textContent;b.disabled=true;b.classList.add('nb-loading');b.setAttribute('aria-busy','true');b.textContent='Reading Harbor’s catalogue…';status('');try{const response=await nulliusFetch('/new-run/registry');if(!response.ok)throw Error();const data=await response.json(),names=[...new Set([...schema.datasets.map(d=>d.registry),...schema.seenRegistry,...(data.names||[]),...(data.hub||[])])].filter(Boolean);$('#nb-registry').innerHTML=names.map(n=>`<option value="${esc(n)}"></option>`).join('');status(names.length+' catalogue references available. You can also enter one directly.');}catch{status('Catalogue refresh unavailable. Existing references and custom entry still work.');}finally{if(b.isConnected){b.disabled=false;b.classList.remove('nb-loading');b.removeAttribute('aria-busy');b.textContent=label;}}}
+  function completeDirectory(value){clearTimeout(pendingDirs);const seq=++dirsSequence;pendingDirs=setTimeout(async()=>{try{const response=await nulliusFetch('/new-run/dirs?path='+encodeURIComponent(value));if(!response.ok)return;const data=await response.json();if(seq===dirsSequence)$('#nb-paths').innerHTML=(data.dirs||[]).map(p=>`<option value="${esc(p)}"></option>`).join('');}catch{}},180);}
   // Saved recipes: a dialog that a click on its backdrop closes, as Esc does (a button's click, by key too, is not one)
   $('#nb-saved').addEventListener('click',event=>{if(event.target!==event.currentTarget)return;const box=event.currentTarget.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)event.currentTarget.close();});
   root.addEventListener('click',async event=>{

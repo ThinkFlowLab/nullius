@@ -263,7 +263,7 @@
     fd.append('csrf', '{{ csrf_token() }}');
     parseBtn.disabled = true;
     status.textContent = `Uploading ${total} files…`;
-    const res = await fetch('{{ url_for("upload") }}', { method: 'POST', body: fd });
+    const res = await nulliusFetch('{{ url_for("upload") }}', { method: 'POST', body: fd });
     if (res.redirected) location.href = res.url;
     else document.open(), document.write(await res.text()), document.close();
   });

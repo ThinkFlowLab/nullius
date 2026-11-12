@@ -35,6 +35,7 @@
   {% block head %}{% endblock %}
 </head>
 <body{% if embedded %} class="settings-embedded"{% endif %}>
+<script src="{{ url_for('static', filename='notifications.js') }}"></script>
 <a class="skip-link" href="#main-content">Skip to content</a>
 {# ---- icons: one symbol each, referenced by <use>. Hand-drawn on a 24-grid,
      stroke only, so they take the item's colour and weight. ---- #}
@@ -463,7 +464,6 @@ document.querySelectorAll('.toast').forEach(t => {
 });
 </script>
 {% endif %}
-<script src="{{ url_for('static', filename='notifications.js') }}"></script>
 <script src="{{ url_for('static', filename='controls.js') }}"></script>
 {% if not embedded %}
 <dialog id="settings-modal" class="settings-modal" aria-labelledby="settings-modal-title">

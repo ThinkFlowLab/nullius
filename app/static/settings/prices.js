@@ -8,7 +8,7 @@
   const tell = (message, error = false) => window.nulliusNotify ? window.nulliusNotify(message, {error}) : null;
   const post = async (url, fields) => {
     try {
-      const r = await fetch(url, {method: 'POST', headers: {'X-CSRF-Token': csrf}, body: new URLSearchParams(fields)});
+      const r = await nulliusFetch(url, {method: 'POST', headers: {'X-CSRF-Token': csrf}, body: new URLSearchParams(fields)});
       const j = await r.json();
       return j.ok ? j : {ok: false, error: j.error || 'HTTP ' + r.status};
     } catch (err) { return {ok: false, error: String(err)}; }

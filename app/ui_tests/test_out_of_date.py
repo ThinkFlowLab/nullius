@@ -1,13 +1,17 @@
 """A page out of date: the form token a restart forgot, and the interface an
-upgrade replaced. The server says which, apart from its other refusals."""
+upgrade replaced. The server says which, and every request of a page goes
+through the one helper that reads it."""
 from __future__ import annotations
 
 import os
+import re
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from .test_routes import web
 
+APP = Path(__file__).resolve().parents[1]
 REASON = "X-Nullius-Reason"
 
 
@@ -56,6 +60,12 @@ class OutOfDate(unittest.TestCase):
             first = web.shared._interface_id()
         self.assertEqual([os.path.basename(root) for root in walked], ["templates", "static", "web"])
         self.assertEqual(first, web.shared._interface_id())
+
+    def test_every_request_of_a_page_goes_through_the_helper(self):
+        bare = [f"{path.relative_to(APP)}:{n}" for path in [*APP.glob("static/**/*.js"), *APP.glob("templates/**/*.html")]
+                if path.name != "notifications.js"
+                for n, line in enumerate(path.read_text().splitlines(), 1) if re.search(r"(?<![\w.$])fetch\(", line)]
+        self.assertEqual(bare, [])
 
 
 if __name__ == "__main__":

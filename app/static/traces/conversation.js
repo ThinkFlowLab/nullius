@@ -15,7 +15,7 @@
   };
   const number = value => Number(value).toLocaleString();
   const readJSON = async (url, signal) => {
-    const response = await fetch(url, {signal, headers: {'Accept': 'application/json'}, cache: 'no-store'});
+    const response = await nulliusFetch(url, {signal, headers: {'Accept': 'application/json'}, cache: 'no-store'});
     if (!response.ok) throw new Error(response.status === 404 ? 'This evidence is no longer in the current workspace or trace view.' : 'Could not load this evidence. Try again.');
     return response.json();
   };

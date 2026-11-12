@@ -469,7 +469,7 @@ const source = JSON.parse(process.argv[1]);
         document: {getElementById:element, createElement:element},
         location: {pathname:'/job/test', reload(){}},
         setTimeout: (fn, delay) => timers.push(delay),
-        fetch: async (url, options) => {
+        nulliusFetch: async (url, options) => {
           requests.push(options.method || 'GET');
           if (options.method === 'HEAD') {
             if (headFails) throw Error('network');
