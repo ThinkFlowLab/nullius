@@ -442,15 +442,12 @@ def plain_only(root: str) -> List[str]:
     return gone
 
 
-CHECK_IMAGE = "NULLIUS_CHECK_IMAGE"     # set in a driver's environment on the docker backend: the unit's image
+CHECK_IMAGE = "NULLIUS_CHECK_IMAGE"     # driver checks: the unit's image, or the base image for a local setup
 
 
 def check_argv(workdir: str, here: List[str], inside: List[str]) -> List[str]:
-    """How a driver's check runs code the agent left in ``workdir``. On the
-    docker backend (``CHECK_IMAGE`` set) in a throwaway container of the
-    unit's image - no network, no capabilities, only the workspace mounted -
-    because the driver itself runs on this machine and the agent's code must
-    not; otherwise ``here``, as the agent itself ran here, with the user's yes."""
+    """With CHECK_IMAGE, run in a throwaway container with no network or
+    capabilities and only the workspace mounted. Otherwise return ``here``."""
     image = os.environ.get(CHECK_IMAGE)
     if not image:
         return list(here)

@@ -50,7 +50,6 @@ Python functions written from their signature and docstring, each checked by its
 
 ## Nullius limitations
 
-- The tests run the agent's code. On the docker backend they run in a throwaway container with no network. On local processes they run on this machine, as you, for 3 seconds at most.
 - Only solution.py is tested. Other files the agent writes are ignored.
 - The task given to agents, completing the function in solution.py, is Nullius's wording.
 

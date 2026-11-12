@@ -1252,6 +1252,8 @@ def problems(d: dict, kind: str) -> List[str]:
         s = d.get("score") or {}
         if s.get("kind") not in SCORES or not s.get("says"):
             bad.append(f"score: {{kind: one of {SCORES}, says}}")
+        if "runs_code" in s and not isinstance(s["runs_code"], bool):
+            bad.append("score.runs_code: true or false")
         if "kit_version" in d and (isinstance(d["kit_version"], bool) or not isinstance(d["kit_version"], int) or d["kit_version"] < 1):
             bad.append("kit_version: a kit's version, a whole number from 1")
         bad += _skills(d)

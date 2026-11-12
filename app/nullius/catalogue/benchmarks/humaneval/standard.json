@@ -44,6 +44,7 @@
   },
   "score": {
     "kind": "pass",
+    "runs_code": true,
     "says": "the upstream's own check_correctness (human_eval/execution.py) passes: the problem's prompt, the completion (the agent's solution.py after the prompt, or the whole file when the agent changed the prompt's part) and the problem's test run as one program, in a process of its own under the upstream's reliability_guard, 3 s at most (its evaluate_functional_correctness default)"
   },
   "setups": {

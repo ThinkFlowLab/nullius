@@ -24,6 +24,7 @@ import tempfile
 import threading
 import unittest
 from unittest import mock
+from pathlib import Path
 
 from nullius.standard import container, definitions, install, jsonl, run
 from tests import docker_tier
@@ -195,6 +196,7 @@ class HumanEvalNotTested(unittest.TestCase):
         with open(data, "w") as f:
             f.write(json.dumps({"task_id": "T/0", "prompt": "def f():\n", "entry_point": "f", "canonical_solution": "    return 1\n",
                                 "test": ""}) + "\n")
+        self.up, self.data = up, data
         self.p = _driver(self, definitions.get("benchmark", "humaneval"), up, data)
         self.ws = os.path.join(self.tmp, "workspace")
         os.makedirs(os.path.join(self.ws, "pkg"))
@@ -213,6 +215,24 @@ class HumanEvalNotTested(unittest.TestCase):
         self.assertEqual(got["detail"]["not_tested"], ["helpers.py", "pkg/", "rel.py"])           # the standard library is no file here
         self.assertNotIn("not_tested", self.score("import math\ndef f():\n    return 1\n")["detail"])   # the standard library only
         self.assertNotIn("not_tested", self.score("import helpers\ndef f(:\n")["detail"])         # no syntax, no names
+
+    def test_check_location_and_container_failure(self):
+        self.assertEqual(self.score("def f():\n    return 1\n")["detail"]["check"], "this machine")
+        bin_dir = os.path.join(self.tmp, "bin")
+        os.makedirs(bin_dir)
+        executable = os.path.join(bin_dir, "docker")
+        with open(executable, "w") as f:
+            f.write(f"#!{sys.executable}\nimport json\n"
+                    "print(json.dumps({'passed': True, 'result': 'passed'}))\n")
+        os.chmod(executable, 0o755)
+        self.p = _driver(self, definitions.get("benchmark", "humaneval"), self.up, self.data,
+                         **{container.CHECK_IMAGE: "nullius/base:test",
+                            "PATH": bin_dir + os.pathsep + os.environ["PATH"]})
+        self.assertEqual(self.score("def f():\n    return 1\n")["detail"]["check"], "container")
+        with open(executable, "w") as f:
+            f.write(f"#!{sys.executable}\nraise SystemExit(1)\n")
+        with self.assertRaisesRegex(jsonl.Failed, "check's container"):
+            self.score("def f():\n    return 1\n")
 
     def test_the_names_never_change_the_verdict(self):
         guarded = "try:\n    import helpers\nexcept ImportError:\n    pass\ndef f():\n    return 1\n"
@@ -336,6 +356,67 @@ class HumanEval(unittest.TestCase):
                     f.write(body)
             said.append(p.request("score", unit=t, dir=ws, transcript=[], answer="", timeout=300)["passed"])
         self.assertEqual(said, [True, False])
+
+    @unittest.skipIf(docker_tier.why_not(), docker_tier.why_not() or "")
+    def test_original_setup_in_real_containers(self):
+        with gzip.open(self.data, "rt") as f:
+            problem = json.loads(next(f))
+        marker = os.path.join(self.tmp, "host-only", "marker")
+        os.makedirs(os.path.dirname(marker))
+        with open(marker, "w") as f:
+            f.write("unchanged")
+        probe = (f"import os, socket\nassert not os.path.exists({marker!r})\n"
+                 f"try:\n    open({marker!r}, 'w').write('escaped')\n"
+                 "except OSError:\n    pass\nelse:\n    raise AssertionError('host path writable')\n"
+                 "assert {name for _, name in socket.if_nameindex()} == {'lo'}\n")
+        correct = problem["prompt"] + problem["canonical_solution"]
+
+        class Model(http.server.BaseHTTPRequestHandler):
+            code = ""
+            calls = 0
+
+            def log_message(self, *_):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                Model.calls += 1
+                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": Model.code}}],
+                                   "usage": {"prompt_tokens": 10, "completion_tokens": 10}}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Model)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            other, why = definitions.setup(self.b, "original", "test-model", "custom")
+            self.assertFalse(why)
+            for name, code, expected in (("correct", correct, True),
+                                         ("wrong", problem["prompt"] + "    return None\n", False),
+                                         ("isolation", probe + correct, True)):
+                with self.subTest(case=name):
+                    Model.code = code
+                    job_dir = run.run(self.b, other, model="test-model", provider="custom", backend="local",
+                                      limit=1, concurrency=1, jobs_root=self.tmp, name=name, say=lambda _: None,
+                                      env={"MODEL_API_URL": f"http://127.0.0.1:{server.server_port}/v1"})
+                    scores = list(Path(job_dir).glob("*/verifier/score.json"))
+                    self.assertEqual(len(scores), 1, list(Path(job_dir).glob("*/result.json")))
+                    score = json.loads(scores[0].read_text())
+                    self.assertEqual(score["passed"], expected, score)
+                    self.assertEqual(score["detail"]["check"], "container")
+                    config = json.loads(Path(job_dir, "config.json").read_text())
+                    self.assertEqual(config["standard"]["backend"], "local")
+                    self.assertEqual(config["standard"]["image"], container.base_tag())
+                    self.assertEqual(Path(marker).read_text(), "unchanged")
+            self.assertEqual(Model.calls, 3)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
     def test_the_controls(self):
         p = _driver(self, self.b, self.up, self.data)

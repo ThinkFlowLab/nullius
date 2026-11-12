@@ -145,6 +145,8 @@ record); verifier/reward.txt and score.json
 !!! warning "The local backend is not a sandbox"
     An agent runs as you, in the unit's workspace, with its own `HOME`, `PATH` and locale. An agent run or conformance check is refused there without `--unsandboxed`; the job's config records it, and that the agent's permission requests were granted. Capabilities are not asked.
 
+A benchmark whose check executes submitted code declares `score.runs_code: true` (optional boolean, default false). Its Original setup uses the base image through `NULLIUS_CHECK_IMAGE` when Docker is usable; otherwise it requires `--unsandboxed`. Container failures never fall back to local execution. HumanEval's trial detail records `check: container` or `check: this machine`.
+
 The docker backend (`--backend docker`) is the isolation, and needs no such yes. Per unit:
 
 | Piece | Rule |
