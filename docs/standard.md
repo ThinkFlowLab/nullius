@@ -276,6 +276,7 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 | `image.pull` | A reference pinned by its digest (`name@sha256:...`) |
 | `image.memory_mb`, `image.cpus` | The task's limits |
 | `workdir` | The session's `cwd` when not the image's working directory |
+| `env` | Task variables for the agent: uppercase names and string values, no model settings or credentials. The run's variables take precedence; `PATH` contains absolute folders prepended to the image's path. SWE-bench uses this for its `testbed` conda environment |
 | `verify.copy` | Folders of the upstream copied in only after the agent ends |
 | `verify.write` | `{absolute path inside: text}`, written in only after the agent ends |
 | `verify.run` | In the working directory, same container |

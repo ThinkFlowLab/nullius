@@ -75,6 +75,40 @@ class Setup(unittest.TestCase):
         self.assertTrue(any("write:" in p for p in container.step_problems(dict(step, write={"eval.sh": "x"}), collect=True)))
         self.assertTrue(any("write:" in p for p in container.step_problems(dict(step, write={"/eval.sh": 3}), collect=True)))
 
+    def test_task_variables_are_validated_before_starting_a_container(self):
+        self.assertEqual(container.task_env_problems({"PATH": "/opt/test/bin:/usr/bin",
+                                                      "CONDA_DEFAULT_ENV": "testbed", "_CE_M": ""}), [])
+        for env in (None, [], {"a-b": "x"}, {"lower": "x"}, {"X": 1}, {"X": "a\0b"},
+                    {"PATH": ""}, {"PATH": "relative"}, {"PATH": "/bin:"},
+                    {"OPENAI_BASE_URL": "x"}, {"ANTHROPIC_API_KEY": "x"}, {"API_TOKEN": "x"},
+                    {"AWS_SECRET_ACCESS_KEY": "x"}, {"NULLIUS_RELAY_KEY": "x"}, {"DOCKER_HOST": "x"}):
+            with self.subTest(env=env):
+                self.assertTrue(container.task_env_problems(env))
+        self.assertTrue(container.task_env_problems({"CUSTOM_ADDRESS": "x"}, ["CUSTOM_ADDRESS"]))
+        r = run.Run.__new__(run.Run)
+        r.other = {}
+        with mock.patch.object(container, "unusable") as probe:
+            with self.assertRaisesRegex(run._Ended, "env.PATH"):
+                r.own_box("unit", {"image": {"pull": "x/y@sha256:" + "a" * 64},
+                                   "env": {"PATH": "relative"}}, None, "/home")
+        probe.assert_not_called()
+
+    def test_task_environment_reaches_agent_and_runner_variables_win(self):
+        r = run.Run.__new__(run.Run)
+        r.inst = ""
+        b = container.Box("job", "unit", "image", workdir="/testbed", path="/image/bin",
+                          env={"PATH": "/task/bin", "CONDA_DEFAULT_ENV": "testbed", "HOME": "/task/home"})
+        rl = type("Relay", (), {"unit_secrets": {"LICENCE": "run-licence"}})()
+        argv, env = r.place(rl, ["sh", "-c", "python -V"],
+                            {"PATH": "/host/bin", "HOME": "/run/home", "OPENAI_BASE_URL": "http://relay/v1"},
+                            "/testbed", "/run/home", box=b)
+        self.assertIn("PATH=/task/bin:/image/bin", argv)
+        self.assertEqual(env["CONDA_DEFAULT_ENV"], "testbed")
+        self.assertEqual(env["HOME"], "/run/home")
+        self.assertEqual(env["OPENAI_BASE_URL"], "http://relay/v1")
+        self.assertEqual(env["LICENCE"], "run-licence")
+        self.assertNotIn("testbed", argv)  # values travel in the process environment, not arguments
+
     def test_a_driver_names_the_tasks_files_and_nothing_else(self):
         self.assertTrue(container.within(HERE, "tasks/one/tests").endswith("tasks/one/tests"))
         for bad in ("../ownbench/../../..", "/etc", "tasks/../../envbench", "tasks/none"):
