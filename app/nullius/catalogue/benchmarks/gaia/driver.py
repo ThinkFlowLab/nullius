@@ -66,8 +66,8 @@ def load():
         from datasets import load_dataset
         definition = SOURCE["datasets"][dataset_id()]
         file = cached_file(definition["file"])
-        expected = definition.get("sha256")
-        if expected and hashlib.sha256(file.read_bytes()).hexdigest() != expected:
+        expected = definition["sha256"]
+        if hashlib.sha256(file.read_bytes()).hexdigest() != expected:
             raise ValueError("The GAIA metadata checksum differs from the verified pin")
         with contextlib.redirect_stdout(sys.stderr):
             data = load_dataset("parquet", data_files=str(file), split="train", cache_dir=str(CACHE / "datasets"))
@@ -162,7 +162,7 @@ def answer(unit, dir, setup, model, base_url, key, **_):
         body["temperature"] = float(temperature)
     request = urllib.request.Request(base_url.rstrip("/") + "/chat/completions",
         data=json.dumps(body).encode(), headers={"Content-Type": "application/json", "Authorization": "Bearer " + key})
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, timeout=600) as response:
         reply = json.load(response)
     value = ((reply.get("choices") or [{}])[0].get("message") or {}).get("content")
     if not isinstance(value, str) or not value.strip():
