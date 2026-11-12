@@ -305,9 +305,10 @@ class SshWarnsAtEveryConnection(LocalHost):
         self.assertTrue(looked.wait(20), ex.lines)
         gate.write_text("")
         for _ in range(500):                               # a ends by itself, before the run looks again
-            if (self.on_host() / "run-a.exit").exists():
+            if (self.on_host() / "run-a.exit").exists() and (self.on_host() / "run-a.exit").read_text().strip():
                 break
             time.sleep(0.02)
+        self.assertEqual((self.on_host() / "run-a.exit").read_text().strip(), "0")
         ex.stop(); self.wait(ex, 20)
         self.assertEqual((ex.state, ex.exit_code), ("stopped", 0), ex.lines)
         self.assertEqual(self.part_lines(ex), self.LINES)
