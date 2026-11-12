@@ -23,7 +23,7 @@
     "Time-aware query expansion fails as published."
   ],
   "limitations": [
-    "The GTE retriever, the index and query expansions, and the open-weight readers are not offered."
+    "The GTE retriever, time-aware query expansion and open-weight readers are not offered. Index expansion uses the authors' released caches with flat retrievers at the matching session or turn granularity."
   ],
   "datasets": [
     {

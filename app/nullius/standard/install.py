@@ -13,7 +13,7 @@ Everything goes under ``STANDARD_DIR`` (``standard/`` in the persistent user dat
   same commit, rather than fetched a second time;
 - ``upstreams/<key>/<commit>/``: a benchmark's upstream repository at its
   tested commit;
-- ``datasets/<sha256>/<file>``: a dataset served outside its upstream, under
+- ``datasets/<sha256>/<file>``: a dataset or auxiliary file served outside its upstream, under
   ``STANDARD_DATA_DIR`` instead when that is set - datasets can be gigabytes
   where installs are not, so they may sit on a bigger disk than the installs.
 
