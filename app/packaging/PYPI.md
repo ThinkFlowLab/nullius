@@ -3,7 +3,9 @@
 Bring anything. Run it. Prove it.
 
 Nullius runs AI evaluations on your machines and opens each score into the
-evidence behind it: what failed, the agent or the benchmark.
+evidence behind it, so you know whether the agent failed or the benchmark did.\
+Add your own benchmark, agent or capability with a single prompt and iterate
+faster.
 
 ## Install and launch
 

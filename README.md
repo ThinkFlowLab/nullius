@@ -8,29 +8,31 @@
 </p>
 
 Nullius runs AI evaluations on your machines and opens every score into the
-evidence behind it: what failed, the agent or the benchmark.
+evidence behind it, so you know whether the agent failed or the benchmark did.\
+Add your own benchmark, agent or capability with a single prompt and iterate
+faster.
 
 ## Quickstart
 
 Python 3.12+ and [uv](https://docs.astral.sh/uv/); a model key to run
 benchmarks; Docker or Podman for the container backend; Docker for Harbor.
 
-Install the latest version with `uv`. The PyPI package is `nullius-eval`;
-the application and its command remain `nullius`:
-
 ```bash
 uv tool install nullius-eval
 nullius serve
 ```
 
-To select a specific version, use `uv tool install nullius-eval==0.1.0rc2`.
-The [Quickstart guide](docs/getting-started.md) covers upgrades, wheel and
-source installation, and migration from a checkout.
+A specific version: `uv tool install nullius-eval==0.1.0rc2`.\
+The main branch, from source:
 
-Open **[127.0.0.1:5057](http://127.0.0.1:5057)** to go straight to **Runs**. A first open offers a tour
-and a *First steps* checklist; Settings, *General*, replays it. The
-[Quickstart guide](docs/getting-started.md): open results, a first run, the app
-on another machine.
+```bash
+git clone https://github.com/thinkflowlab/nullius.git
+cd nullius
+uv run --no-project --with-requirements app/requirements.txt app/app.py
+```
+
+Open **[127.0.0.1:5057](http://127.0.0.1:5057)** to go straight to **Runs**.\
+The [Quickstart guide](docs/getting-started.md) covers open results, a first run, the app on another machine, upgrades, wheel installation and migration from a checkout.
 
 ```bash
 # open job folders from the command line
@@ -48,9 +50,9 @@ profile. Provider keys can be saved in Settings without creating an `.env` file.
 
 ### Bring anything
 
-*+ Add* on Benchmarks, Agents or Capabilities writes a prompt for your coding assistant. Its import skill pins the upstream, wraps the upstream's own code, proves it and reports what fits; it asks before any code of ours. Additions go in your user catalogue and survive application upgrades.
+*+ Add* on Benchmarks, Agents or Capabilities writes a prompt for your coding assistant. Its import skill pins the upstream, wraps the upstream's own code, proves it and reports what fits; it asks before adding any code of its own. Additions go in your user catalogue and survive application upgrades.
 
-The import skills: `/import-benchmark` (asks how it runs, Nullius or Harbor),
+The import skills: `/import-benchmark`,
 `/import-standard`, `/import-agent`, `/import-capability`.
 
 <img src="docs/assets/nullius/readme/bring.svg" alt="Benchmarks, agents and capabilities come into one catalogue." width="800">
@@ -173,10 +175,10 @@ Built by the Nullius contributors. To cite it:
 
 ```bibtex
 @software{Nullius,
-author = {{Nullius contributors}},
-title = {{Nullius: the run behind a benchmark score}},
-year = {2026},
-url = {https://github.com/thinkflowlab/nullius}
+  author = {{Nullius contributors}},
+  title = {{Nullius: the run behind a benchmark score}},
+  year = {2026},
+  url = {https://github.com/thinkflowlab/nullius}
 }
 ```
 
