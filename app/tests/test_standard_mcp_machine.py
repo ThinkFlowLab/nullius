@@ -112,7 +112,12 @@ class Locked(unittest.TestCase):
 
     def test_the_lock_is_exported_then_installed_with_pip_then_the_project_without_its_dependencies(self):
         ran = []
-        with mock.patch.object(install, "_run", side_effect=lambda cmd, cwd, log, env=None: ran.append(cmd)):
+
+        def run(cmd, cwd, log, env=None):
+            ran.append(cmd)
+            if cmd[:2] == ["uv", "export"]:                                          # the export writes its lock
+                open(cmd[cmd.index("-o") + 1], "w").close()
+        with mock.patch.object(install, "_run", side_effect=run):
             install._packages({"python": "3.12", "project": ".", "locked": True, "pip": ["mcp==1.30.0"], "extras": ["x"]},
                               os.path.join(self.tmp, "w"), {"repository": "r", "tested": "c"}, src="/up/clone")
         export = next(c for c in ran if c[:2] == ["uv", "export"])
@@ -123,6 +128,65 @@ class Locked(unittest.TestCase):
         self.assertEqual(req[-1], "mcp==1.30.0")                                    # beside the lock's pins, in one resolution
         self.assertEqual(ran[-1][-3:], ["--no-deps", "-e", "/up/clone[x]"])
         self.assertFalse(any(c[:2] == ["git", "fetch"] for c in ran))               # the clone that was there, not a second one
+
+    def _install_with_lock(self, lines, made=()):
+        proj = os.path.join(self.tmp, "clone")
+        for d in ("sub/empty", "sub/held"):
+            os.makedirs(os.path.join(proj, d))
+        for d in made:
+            open(os.path.join(proj, d, "pyproject.toml"), "w").close()
+        ran = []
+
+        def run(cmd, cwd, log, env=None):
+            ran.append((cmd, cwd))
+            if cmd[:2] == ["uv", "export"]:
+                with open(cmd[cmd.index("-o") + 1], "w") as f:
+                    f.write("\n".join(lines) + "\n")
+        with mock.patch.object(install, "_run", side_effect=run):
+            install._packages({"python": "3.12", "project": ".", "locked": True}, os.path.join(self.tmp, "w"),
+                              {"repository": "r", "tested": "c"}, src=proj)
+        return proj, ran
+
+    def test_the_lock_is_installed_from_the_project_so_its_local_paths_are_the_projects(self):
+        proj, ran = self._install_with_lock(["-e ./sub/held", "numpy==1.26.4"], made=["sub/held"])
+        self.assertEqual(next(c for c, _ in ran if "-r" in c)[:3], ["uv", "--directory", proj])
+        self.assertFalse(any("submodule" in c for c, _ in ran))                     # a local package the clone holds
+
+    def test_a_local_package_the_clone_leaves_empty_is_its_submodule_fetched_at_its_pin(self):
+        proj, ran = self._install_with_lock(["-e ./sub/empty", "./sub/held", "numpy==1.26.4"], made=["sub/held"])
+        sub = [(c, cwd) for c, cwd in ran if "submodule" in c]
+        self.assertEqual(len(sub), 1)
+        self.assertEqual(sub[0][0][-6:], ["update", "--init", "--depth", "1", "--", "./sub/empty"])
+        self.assertIn("url.https://github.com/.insteadOf=git@github.com:", sub[0][0])
+        self.assertEqual(sub[0][1], proj)
+        self.assertLess(ran.index(sub[0]), next(i for i, (c, _) in enumerate(ran) if "-r" in c))   # before the lock's install
+
+    def test_in_the_base_image_the_submodule_is_fetched_here_and_the_lock_installed_from_the_clone_in_the_install(self):
+        where, boxed, ran = os.path.join(self.tmp, "w"), [], []
+
+        def run_in(cmd, at, env=None):
+            boxed.append((cmd, at))
+            return ["in-image"] + cmd
+
+        def run(cmd, cwd, log, env=None, shown=None):
+            ran.append((cmd, cwd))
+            if cmd[:2] == ["git", "checkout"]:                                       # a clone at one commit: its submodule empty
+                os.makedirs(os.path.join(cwd, "sub", "empty"))
+            if cmd[1:3] == ["uv", "export"]:
+                with open(cmd[cmd.index("-o") + 1], "w") as f:
+                    f.write("-e ./sub/empty\nnumpy==1.26.4\n")
+        with mock.patch.object(install, "_run", side_effect=run):
+            install._packages({"python": "3.12", "project": ".", "locked": True}, where,
+                              {"repository": "r", "tested": "c"}, run_in=run_in)
+        proj = os.path.join(where, install.SRC)                                      # cloned inside the install folder
+        sub = [i for i, (c, _) in enumerate(ran) if "submodule" in c]
+        self.assertEqual(len(sub), 1)
+        self.assertEqual(ran[sub[0]][0][0], "git")                                   # on this machine, with its credentials
+        self.assertEqual((ran[sub[0]][0][-1], ran[sub[0]][1]), ("./sub/empty", proj))
+        req = next(i for i, (c, _) in enumerate(ran) if "-r" in c)
+        self.assertLess(sub[0], req)                                                 # before the lock's install
+        self.assertEqual(ran[req][0][:4], ["in-image", "uv", "--directory", proj])  # in the base image, from the project
+        self.assertIn((ran[req][0][1:], where), boxed)                               # which mounts the install folder, the project in it
 
     def test_a_drivers_project_is_installed_from_its_benchmarks_upstream_clone(self):
         b = dict(bench("/d"), upstream={"repository": "https://example.org/r", "tested": "a" * 40},

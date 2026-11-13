@@ -31,6 +31,7 @@ A pair is an **agent benchmark** × an **agent**, or a **capability benchmark** 
 | `agent.conversation/v1` | Several prompts in one session, the earlier turns remembered | Turn 2 asks for what turn 1 said |
 | `agent.search/v1` | Search an HTTP collection with the agent's own tools, retrieve a source and answer with evidence | Find a source, choose the current one, follow a reference (3 checks) |
 | `agent.browser/v1` | A browser, through an MCP server Nullius starts | Defined; its kit comes with the first browser benchmark |
+| `agent.computer/v1` | A desktop seen in screenshots and driven by mouse and keyboard actions | Defined; its kit comes with the first agent that drives a desktop |
 | `cap.memory/v1` | `add {session}` then `recall {question}` → `{memory}`; a session is `{id, date, turns: [{role, text}], text}` | Recall a place and an exact name among distractors (2 checks); nothing it stores is a credential |
 
 - **The last message** follows ACP `messageId` boundaries and other events (a tool call, a notice). Without IDs, session metadata parts messages but never erases the final answer.
@@ -441,7 +442,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `python` | The interpreter version |
 | `indexes` | Packages from another index |
 | `wheels` | A wheel served by URL only (a model package such as spaCy's `en_core_web_sm`), `{url, sha256}`: refused unless the file matches, resolved with `pip` |
-| `project` | The upstream itself, from its clone; `locked: true` installs it at its own lock file's pins (`uv export --frozen`), `pip` resolved beside them |
+| `project` | The upstream itself, from its clone; `locked: true` installs it at its own lock file's pins (`uv export --frozen`) from the project's folder, `pip` resolved beside them; a git submodule the lock names as a local package is fetched first, at its pinned commit |
 | `extras`, `prefetch` | The project's extras; what to download ahead |
 
 #### Benchmark options

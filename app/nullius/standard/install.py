@@ -10,7 +10,8 @@ Everything goes under ``STANDARD_DIR`` (``standard/`` in the persistent user dat
   the environment its upstream's own code needs, which its driver imports
   (``driver_argv``), never this application's and never an agent's. Its
   ``project`` is installed from the benchmark's upstream clone (below), the
-  same commit, rather than fetched a second time;
+  same commit, rather than fetched a second time - a locked one with the git
+  submodules its lock names as local packages, each at its pinned commit;
 - ``upstreams/<key>/<commit>/``: a benchmark's upstream repository at its
   tested commit;
 - ``datasets/<sha256>/<file>``: a dataset or auxiliary file served outside its upstream, under
@@ -161,6 +162,20 @@ HF = "hf"         # inside an install: the models prefetched from the hub (HF_HU
 WHEELS = "wheels"  # inside an install: the wheels it names by URL, as downloaded
 SRC = "src"       # inside an install: the definition's upstream, at its tested commit, for install.project
 SCRATCH = (".home", ".npm-cache", ".uv-cache")     # what an install in the base image keeps of its own (container.install_argv)
+# A GitHub submodule named by its ssh address is read over https: a public one needs no key on the machine.
+_GITHUB_HTTPS = ["-c", "url.https://github.com/.insteadOf=git@github.com:"]
+
+
+def _submodules(proj: str, lock: str, log: str):
+    """The local packages a project's exported lock names (``-e ./sub``) that its clone does not hold:
+    git submodules, which a clone at one commit leaves empty, each fetched at the commit the project
+    pins it at."""
+    with open(lock) as f:
+        local = [ln.split()[1] if ln.startswith("-e ") else ln.split()[0] for ln in f if ln.startswith(("-e ./", "./"))]
+    for path in local:
+        where = os.path.join(proj, path)
+        if not os.path.isdir(where) or not os.listdir(where):
+            _run(["git", *_GITHUB_HTTPS, "submodule", "update", "--init", "--depth", "1", "--", path], proj, log, env=git_env())
 
 
 def remove_scratch(where: str) -> None:
@@ -222,11 +237,14 @@ def _steps(inst: dict, where: str, up: Optional[dict], src: Optional[str], log: 
             extras = "[" + ",".join(inst["extras"]) + "]" if inst.get("extras") else ""
             if locked:
                 # the project's own lock file, its pins as published, and pip's packages
-                # resolved beside them in one go: a conflict fails the install, said
+                # resolved beside them in one go: a conflict fails the install, said. Installed
+                # from the project's folder: a path the lock names (a local package, -e ./sub) is the project's
                 lock = os.path.join(where, "requirements.lock")
                 step(["uv", "export", "--frozen", "--no-dev", "--no-emit-project", "--no-hashes", "--quiet",
                       "--project", proj, "-o", lock] + [w for x in inst.get("extras") or [] for w in ("--extra", x)])
-                step(["uv", "pip", "install", "--quiet", "--python", py, "-r", lock] + list(inst.get("pip") or []) + wheels)
+                _submodules(proj, lock, log)
+                step(["uv", "--directory", proj, "pip", "install", "--quiet", "--python", py, "-r", lock]
+                     + list(inst.get("pip") or []) + wheels)
                 step(["uv", "pip", "install", "--quiet", "--python", py, "--no-deps", "-e", proj + extras])
             else:
                 step(["uv", "pip", "install", "--quiet", "--python", py, "-e", proj + extras])
