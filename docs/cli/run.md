@@ -3,7 +3,7 @@
 One benchmark and one agent, capability, control or setup, into a job.
 
 ```bash title="Run"
-nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--limit N] [-j N] \
+nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE] [--limit N] [-j N] \
     [--unsandboxed | --backend container] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
     [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] \
     [--repeat K] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
@@ -12,6 +12,7 @@ nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--
 ```bash title="Examples"
 nullius standard run humaneval reference --model gpt-5-mini --limit 2 --unsandboxed
 nullius standard run humaneval oracle --limit 6
+nullius standard run humaneval oracle --units tasks.txt
 nullius standard run locomo original --model gpt-3.5-turbo-4k
 nullius standard run locomo model --model gpt-4o-mini
 ```
@@ -23,6 +24,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--model` | None for a control; `original` defaults to the paper's first |
 | `--provider` | `anthropic`, `custom`, `openai` or `openrouter` |
 | `--dataset`, `--limit`, `-j` | One dataset, the first N units, N at a time |
+| `--units FILE` | Only the units the file lists: [below](#a-list-of-units) |
 | `--unsandboxed` | An agent runs as you; else `--backend container` |
 | `--backend` | `local` (default) or `container`, each unit in a container with its relay |
 | `--option NAME=VALUE` | An agent's or capability's option (repeatable) |
@@ -63,6 +65,27 @@ nullius standard run locomo model --model gpt-4o-mini
 | The result | `result.json` carries `budget`, and the job page shows it |
 | From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit |
 | Shards | A shard's cap is its own: [Shard and merge](shard-and-merge.md) |
+
+## A list of units
+
+`--units tasks.txt` runs only the units the file lists.
+
+```text title="tasks.txt"
+# one unit id a line, as the benchmark names it
+HumanEval/0
+HumanEval/12
+```
+
+| Rule | Detail |
+| --- | --- |
+| The file | One id a line, the spaces around it dropped; blank lines and lines that start with `#` are skipped |
+| Refused before any unit starts | An id the dataset does not hold, the ids named; an id listed twice; a file that lists none |
+| Order | The dataset's, whatever the file's; each unit keeps its place in the whole dataset (`HumanEval/12` is `u0012`) |
+| With `--limit N` | The first N of the listed units, in the dataset's order |
+| With `--shard I/N` | The listed units of that shard; `standard.shard.units_total` counts the listed units; `merge` refuses shards of different lists |
+| The record | `config.json`: `standard.units_file`, the file's name, its sha256 and its units |
+| Where it is read | On the machine the command runs on, from the directory it starts in, with `--from-run` or without |
+| The builder | A recipe holds no list: a run of listed units starts from the command line |
 
 <div class="grid cards" markdown>
 
