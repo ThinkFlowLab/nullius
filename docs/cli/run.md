@@ -6,6 +6,7 @@ One benchmark and one agent, capability, control or setup, into a job.
 nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE] [--limit N] [-j N] \
     [--unsandboxed | --backend container] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
     [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE]... \
+    [--served-by [MODEL=]SLUG[,SLUG...]]... \
     [--repeat K] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
 ```
 
@@ -32,6 +33,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
 | `--max-usd USD`, `--max-usd-per-unit USD` | A spending cap for the run, for each unit: [below](#a-spending-cap) |
 | `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). Containers take them as flags, the run's processes on the machine as a systemd scope. A recipe passes each machine's own |
+| `--served-by [MODEL=]SLUG[,SLUG...]` | On OpenRouter, the serving providers that may answer a model (repeatable): [below](#serving-providers) |
 | `--repeat K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--repeat`); by default they stay for the next run |
 | `--judge-model` | Instead of the official judge |
@@ -87,6 +89,27 @@ HumanEval/12
 | The record | `config.json`: `standard.units_file`, the file's name, its sha256 and its units |
 | Where it is read | On the machine the command runs on, from the directory it starts in, with `--from-run` or without |
 | The builder | A recipe has no field for a list |
+
+## Serving providers
+
+On OpenRouter one model is served by several providers. They may differ in precision, speed and price. `--served-by deepinfra` lets only DeepInfra answer the run's model; `--served-by m=deepinfra/fp8,together` lets DeepInfra's fp8 endpoint answer the model `m`, then Together when it cannot.
+
+```bash title="One provider for the run's model"
+nullius standard run humaneval reference --provider openrouter --model meta-llama/llama-3.3-70b-instruct --served-by deepinfra --unsandboxed
+```
+
+| Rule | Detail |
+| --- | --- |
+| A slug | As the model's page on OpenRouter names its provider: `deepinfra`, or a provider and its variant, a quantisation (`deepinfra/fp8`), a speed (`deepinfra/turbo`) or a region (`google-vertex/us-central1`). Several are tried in their order, and no other provider answers |
+| Without `MODEL=` | The run's model. With it, any model the run calls: its judge, its simulated user, an option's embeddings |
+| What is sent | `provider: {"order": [...], "allow_fallbacks": false}` on every request sent as that model, on every route, in place of the agent's own routing field. A pinned Chat Completions or Responses request to OpenRouter also asks for its routing facts (`X-OpenRouter-Metadata: enabled`). A Responses reply names the provider that served it there alone. A Messages request is sent without the header, since its reply names its provider. A model with no pin is sent as before |
+| Refused before any unit | A provider other than `openrouter`; a model the run does not call (a control calls only its judge's or an option's, never a simulated user's); a slug that is empty, malformed or given twice; a model named twice. The run, the command line and the relay's own command make the same check |
+| No provider can serve it | OpenRouter answers 404 (no endpoint found) and nothing else is tried; the call fails as any refused call does |
+| The record | `config.json`: `standard.served_by`, the slugs by model. Each call in `agent/calls.jsonl`: `request.routing` and, when the agent sent its own, `request.routing_asked`; `reply.served_by`, the provider the reply names (for a Responses reply, the endpoint its routing facts mark as selected), `reply.end` (one per choice, by index, when a reply has several) and `reply.error`, an error a reply holds under a 200: the top-level one, else that of the first choice that has one, its code, type and message alone. These are read apart from the rest of the record and cleaned of credentials. The call keeps its status, and the unit's verdict reads it as before |
+| Who served the run | Each trial's `result.json`, `standard.served`, and the job's `result.json`, `served`: the answered calls of every route (the agent's, the judge's, the simulated user's, the benchmark's own relay's) by serving provider, those that named none, and for each pinned model `held`: `true` when every answered call names a provider that reads as a pinned slug, `unknown` when one names none or another name, `null` with no answered call. A name reads as a slug lowercased with its spaces as dashes (`DeepInfra` is `deepinfra`, the first part of `deepinfra/turbo`), and nothing else is folded. The tokens and the cost stay the agent's own calls' |
+| What `held` reads | The provider's name alone: a reply names no endpoint variant, and `held` for `deepinfra/fp8` is true for any endpoint of `deepinfra`. A reply gives the provider's display name. Where that name is not the slug once lowercased, `held` reads `unknown` though the provider served the call (`Google` for `google-vertex`, `SambaNova` for `sambanova-turbo`) |
+| Shards | `merge` refuses shards whose pins differ, unless `--force`; a model pinned differently in the merged shards reads `held: unknown` |
+| The builder | *Model* step, **Served by** under each model field, on OpenRouter alone: the recipe's `served_by`, by field (`model`, `simulator`, `judge`), compiled into `--served-by` for each job that calls that model. Its list of a model's providers comes from OpenRouter (`/models/{maker}/{model}/endpoints`), asked as the model list is; when it cannot be had, a slug typed by hand is taken |
 
 <div class="grid cards" markdown>
 

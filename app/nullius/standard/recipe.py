@@ -40,7 +40,7 @@ from typing import Callable, Dict, List, Optional
 
 from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
-from nullius.standard import hostreq, definitions, ledger, match, ports, prove
+from nullius.standard import hostreq, definitions, ledger, match, ports, prove, relay
 
 HARNESS = "standard"
 # The builder's runner card (command-builder-core.js, runners()): not a definition file, so builtin like Harbor's.
@@ -49,6 +49,8 @@ RUNNER = {"key": HARNESS, "label": "Nullius", "builtin": True, "standard": True,
 MAX_CONCURRENT = 32
 BACKENDS = definitions.names.BACKENDS
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
+# A pin's field, as the Review's Model row names it (served_by, --served-by)
+SERVED_LABEL = {"model": "model", "simulator": "user simulator", "judge": "judge"}
 _MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$")
 
 
@@ -281,11 +283,17 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     whole to every job that calls a model: a unit is a unit wherever it runs.
     ``unpriced``: asked, for a recipe with a cap, which of the models it
     names have no price in the user's list (``nullius.prices``): a run
-    with a cap is refused without one, and the Limits step says so first."""
+    with a cap is refused without one, and the Limits step says so first.
+
+    ``served_by``: on OpenRouter, the serving providers each model field
+    pins, ``{model|simulator|judge: [slug, ...]}``, checked as ``--served-by``
+    is and compiled into it for each job that calls that model, by the name
+    the run sends it as."""
     d = defs or _all()
     errors, notes = [], []
     add = lambda step, message: errors.append({"step": STEP[step], "message": message})
-    out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": ""}
+    out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
+           "served_models": {}}
     name = str(recipe.get("name") or "")
     if not _NAME.match(name):
         add("limits", "The recipe's name may hold letters, digits, dots, dashes and underscores.")
@@ -437,6 +445,20 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # the leaderboard's own models, as the run's provider spells them; the official ones stay the run's default
     sim_model = providers.served_as(lb["simulator"], provider_) if lb.get("simulator") else sim_model
     judge_model = providers.served_as(lb["judge"], provider_) if lb.get("judge") else judge_model
+    # the serving providers each model field pins, on OpenRouter (served_by: {model|simulator|judge: [slug, ...]}),
+    # checked as --served-by is (relay.serving_problems); an empty list pins nothing
+    roles = {"model": "the model", "simulator": "the user simulator's model", "judge": "the judge's model"}
+    pins = recipe.get("served_by")
+    served: Dict[str, List[str]] = {}
+    if pins not in (None, {}):
+        if not isinstance(pins, dict) or any(k not in roles for k in pins):
+            add("model", "Served by names the serving providers of the model, the user simulator's or the judge's.")
+        else:
+            served = {k: v for k, v in pins.items() if v not in (None, [], "")}
+            for problem in relay.serving_problems({roles[k]: v for k, v in served.items()}):
+                add("model", "Served by " + problem + ".")
+            if served and provider_ != "openrouter":
+                add("model", "Served by needs OpenRouter, the provider that routes a model to several: choose it, or leave Served by empty.")
     # the run's spending cap: an amount in USD, or none
     cap = recipe.get("max_usd")
     if cap in ("", None):
@@ -495,6 +517,42 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             limits.of(t)
     except ValueError as e:
         add("where", f"{e}: fix it in Settings.")
+    judge_def, sim_def = (b.get("score") or {}).get("judge"), b.get("simulator")
+
+    def sent_of(p: dict) -> Dict[str, Optional[str]]:
+        """Each model field's model as job ``p`` sends it; None where it has none (a control has no model of its own)."""
+        return {"model": None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
+                "judge": (judge_model or providers.served_as(judge_def["model"], provider)) if judge_def else None,
+                "simulator": (sim_model or providers.served_as(sim_def["model"], provider)) if sim_def else None}
+
+    def called_of(p: dict) -> List[str]:
+        s = sent_of(p)
+        return ledger.models(p["o"], s["model"], s["judge"], s["simulator"], None, control=p["control"])
+
+    # the pins by model, as the run sends each: a field's pin is its model's, on every job that calls that model
+    # (a control's judge job too, when the judge's model is the one the model field pinned)
+    by_model: Dict[str, List[str]] = {}
+    for p in picks:
+        for role, slugs in served.items():
+            m = sent_of(p).get(role)
+            if not m:
+                continue
+            if m in by_model and by_model[m] != list(slugs):
+                add("model", f"Served by pins {m} twice, with different providers: give its fields the same ones.")
+            by_model[m] = list(slugs)
+    # each field's model as the run sends it, for the builder to ask its providers under that name
+    out["served_models"] = {role: next((sent_of(p)[role] for p in sorted(picks, key=lambda q: q["control"]) if sent_of(p)[role]), None)
+                            for role in roles}
+
+    def pinned(p: dict) -> Dict[str, List[str]]:
+        """The --served-by of one job: the pins of the models it calls."""
+        called = called_of(p)
+        return {m: s for m, s in by_model.items() if m in called}
+    if served and not errors:
+        everything = {m for p in picks for m in called_of(p)}
+        for role in served:
+            if not {sent_of(p)[role] for p in picks} & everything:
+                add("model", f"Served by: no job of this recipe calls {roles[role]}; leave it empty.")
     if errors:
         return out
     nouns = (b.get("units") or {}).get("nouns", "units")
@@ -535,7 +593,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--backend", "container"] if backend == "container" else []),
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
                  *(["--shard", f"{index}/{of}", "--launch", launch] if of > 1 else []),
-                 *limits.cli_words(limits.of(targets[index - 1])), "--from-run"]
+                 *limits.cli_words(limits.of(targets[index - 1])),
+                 *[w for m_, slugs in pinned(p).items() for w in ("--served-by", f"{m_}={','.join(slugs)}")], "--from-run"]
         return " ".join(shlex.quote(w) for w in words) + ' --jobs "${NULLIUS_JOBS:-jobs_standard}"'
 
     def script_for(d: dict, p: dict, command: str, index: int) -> str:
@@ -615,7 +674,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                      [STEP["model"], "Model", "none: a control calls no model" if out["keyless"]
                       else f"{providers.label(providers.choice(provider, str(recipe.get('endpoint') or '')))} · " + (model if needs_model else ", ".join(p["o"]["sent"] for p in picks if p.get("setup")) or "the judge only")
                       + (f" · user simulator {sim_model or (b.get('simulator') or {}).get('model')}" + (" (leaderboard)" if lb.get("simulator") else "" if sim_model else " (official)") if b.get("simulator") else "")
-                      + (f" · judge {judge_model or b['score']['judge']['model']}" + ("" if judge_model else " (official)") if (b.get("score") or {}).get("judge") else "")],
+                      + (f" · judge {judge_model or b['score']['judge']['model']}" + ("" if judge_model else " (official)") if (b.get("score") or {}).get("judge") else "")
+                      + "".join(f" · {SERVED_LABEL[r_]} served by {', '.join(s)}" for r_, s in served.items())],
                      [STEP["limits"], "Scope", f"{'first ' + str(n) if isinstance(limit, int) else 'all ' + str(total or '')} {nouns}"
                       + (" of each shard" if of > 1 and isinstance(limit, int) else "") + f" · {conc} at a time".replace("  ", " ")
                       + (" of each dataset" if many and isinstance(limit, int) else "")

@@ -9,7 +9,11 @@ A reply is passed through as it arrives - a streamed one (server-sent events)
 byte for byte - and recorded once it is complete, one line per call in
 ``<record_dir>/<tag>.jsonl``: when it started and ended, the model, the status,
 the tokens, and an abridged request and reply. Three API shapes are read,
-Chat Completions, Responses and Anthropic's Messages, streamed or not. The
+Chat Completions, Responses and Anthropic's Messages, streamed or not. Read
+apart from the rest (:func:`reply_facts`), the reply also says, when it does,
+the serving provider that answered (``served_by``), how it ended (``end``)
+and an error it holds though its status was a success (``error``); reading
+them never changes what the caller receives, nor the rest of the record. The
 cost is the provider's when it says it (OpenRouter's ``usage.cost``), else an
 estimate from ``prices`` when one is given for exactly that model (the
 user's price list, ``nullius.prices``), marked as an estimate.
@@ -23,6 +27,12 @@ which the relay replaces with its own key, and the headers of the hop itself;
 the provider's headers come back the same way (its request id, its rate
 limits). It never answers for the provider: a 429 reaches the caller and the
 record as it was sent, which is what makes rate limits measurable.
+
+A run may pin, for a model, the serving providers that may answer it
+(``serving``, OpenRouter's routing): the relay then puts
+``provider: {order, allow_fallbacks: false}`` on every request it sends as
+that model, in place of the caller's own, and records both, cleaned of
+credentials. Without a pin a request's body goes on as it did.
 
 One answer is the relay's own: a run with a spending cap (``ledger``) books
 each call before it goes out, and a call that does not fit is not sent. Its
@@ -211,6 +221,202 @@ def read_reply(path: str, body: bytes, streamed: bool) -> dict:
             "usage": _usage(told) if told is not None else usage}
 
 
+# -- serving providers: the pin a run sets, and what a reply says of who served it --
+SLUG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*")
+
+
+def routing(slugs) -> dict:
+    """OpenRouter's routing field for a strict pin: these serving providers,
+    tried in this order, and no other."""
+    return {"order": list(slugs), "allow_fallbacks": False}
+
+
+def serving_problems(serving) -> List[str]:
+    """What is wrong with a pin by model (``{model: [slug, ...]}``): the one
+    check the run, its command line and the relay's own command share."""
+    if not isinstance(serving, dict):
+        return ["the serving providers are given by model: {MODEL: [SLUG, ...]}"]
+    bad = []
+    for model, slugs in serving.items():
+        if not isinstance(model, str) or not model.strip():
+            bad.append("a pin names no model")
+            continue
+        if not isinstance(slugs, (list, tuple)) or not slugs:
+            bad.append(f"{model}: no serving provider")
+            continue
+        wrong = [s for s in slugs if not isinstance(s, str) or not SLUG.fullmatch(s)]
+        if wrong:
+            bad.append(f"{model}: {', '.join(repr(s) for s in wrong)} is not a serving provider's slug "
+                       "(as a model's page names it: deepinfra, deepinfra/fp8)")
+        elif len(set(slugs)) != len(slugs):
+            bad.append(f"{model}: a serving provider is named twice")
+    return bad
+
+
+def parse_served_by(given, model: str) -> tuple:
+    """``--served-by [MODEL=]SLUG[,SLUG...]``, repeatable, as ``({model: [slug, ...]}, problems)``. Without
+    ``MODEL=`` it is ``model``, the run's. A model named twice is a problem; so is each of :func:`serving_problems`."""
+    out: Dict[str, List[str]] = {}
+    bad = []
+    for g in given or []:
+        name, eq, listed = str(g).rpartition("=")
+        name = name.strip() if eq else (model or "")
+        if not name:
+            bad.append(f"--served-by {g!r}: MODEL=SLUG[,SLUG...], or SLUG[,SLUG...] for the run's model")
+            continue
+        if name in out:
+            bad.append(f"--served-by names {name} twice: list its serving providers once, in the order they are tried")
+            continue
+        out[name] = [s.strip() for s in listed.split(",")]
+    return out, bad + serving_problems(out)
+
+
+def _clean(value, secrets=()):
+    """A recorded copy, never what is sent: a value under a credential's name
+    replaced, the relay's own key cut out of every string - a key of a
+    mapping as much as a value - then ``redact``."""
+    if isinstance(value, dict):
+        return {_clean(k, secrets): "[REDACTED]" if isinstance(k, str) and _CREDENTIAL.search(k) else _clean(v, secrets)
+                for k, v in value.items()}
+    if isinstance(value, list):
+        return [_clean(v, secrets) for v in value]
+    if isinstance(value, str):
+        for s in secrets:
+            if s:
+                value = value.replace(s, "[REDACTED]")
+        return redact(value)
+    return value
+
+
+def _name(v) -> Optional[str]:
+    return v if isinstance(v, str) and v else None
+
+
+def _an_error(e) -> Optional[dict]:
+    """An error object, in one shape: its code (a word or a number), type and
+    message (words), as given; None when it has none of them of that kind.
+    Nothing else of the object is kept."""
+    if not isinstance(e, dict) or not e:
+        return None
+    got = {k: e[k] for k in ("code", "type") if isinstance(e.get(k), (str, int)) and not isinstance(e.get(k), bool)}
+    if isinstance(e.get("message"), str):
+        got["message"] = _cut(e["message"], 500)
+    return got or None
+
+
+def _routing_facts(obj) -> Optional[list]:
+    """The serving endpoints OpenRouter's routing facts (``openrouter_metadata``)
+    list as available, in an object of a reply, its ``message`` or its
+    ``response``; None when none of them holds such a list."""
+    if not isinstance(obj, dict):
+        return None
+    for o in (obj, obj.get("message"), obj.get("response")):
+        meta = o.get("openrouter_metadata") if isinstance(o, dict) else None
+        endpoints = meta.get("endpoints") if isinstance(meta, dict) else None
+        available = endpoints.get("available") if isinstance(endpoints, dict) else None
+        if isinstance(available, list):
+            return available
+    return None
+
+
+def _provider(obj) -> Optional[str]:
+    """The serving provider an object of a reply names: its own ``provider``,
+    its ``message``'s or its ``response``'s, else the one endpoint OpenRouter's
+    routing facts mark ``selected`` among the available ones (asked for with
+    ``X-OpenRouter-Metadata``; a Responses reply names its provider there
+    alone). Facts that mark no single named endpoint give none."""
+    if not isinstance(obj, dict):
+        return None
+    for o in [obj] + [o for o in (obj.get("message"), obj.get("response")) if isinstance(o, dict)]:
+        if _name(o.get("provider")):
+            return o["provider"]
+    chosen = [a for a in _routing_facts(obj) or () if isinstance(a, dict) and a.get("selected") is True]
+    return _name(chosen[0].get("provider")) if len(chosen) == 1 else None
+
+
+def _choices(choices, ends: dict, errors: dict) -> None:
+    """Each choice's end and error, by its index."""
+    if not isinstance(choices, list):
+        return
+    for n, ch in enumerate(choices):
+        if not isinstance(ch, dict):
+            continue
+        i = ch.get("index") if isinstance(ch.get("index"), int) and not isinstance(ch.get("index"), bool) else n
+        if _name(ch.get("finish_reason")):
+            ends[i] = ch["finish_reason"]
+        e = _an_error(ch.get("error"))
+        if e and i not in errors:
+            errors[i] = e
+
+
+def _status(resp) -> Optional[str]:
+    """A Responses object's end: its status, and why when it is incomplete."""
+    if not isinstance(resp, dict) or not _name(resp.get("status")):
+        return None
+    why = resp.get("incomplete_details")
+    why = _name(why.get("reason")) if isinstance(why, dict) else None
+    return f"{resp['status']}: {why}" if why else resp["status"]
+
+
+def _facts(path: str, body: bytes, streamed: bool) -> dict:
+    served, end, error, ends, errors = None, None, None, {}, {}
+    if not streamed:
+        got = json.loads(body)
+        if not isinstance(got, dict):
+            return {}
+        served, error = _provider(got), _an_error(got.get("error"))
+        _choices(got.get("choices"), ends, errors)
+        if got.get("type") == "message":
+            end = _name(got.get("stop_reason"))
+        elif got.get("object") == "response" or "output" in got:
+            end = _status(got)
+    else:
+        for line in body.decode("utf-8", "replace").splitlines():
+            if not line.startswith("data:"):
+                continue
+            try:
+                ev = json.loads(line[5:].strip())
+            except ValueError:
+                continue
+            if not isinstance(ev, dict):
+                continue
+            # the latest event that names one; routing facts that mark no single named endpoint leave none
+            served = _provider(ev) if _routing_facts(ev) is not None else (_provider(ev) or served)
+            kind = ev.get("type")
+            if kind == "error":                  # Messages' error event, or a Responses one
+                error = error or _an_error(ev.get("error")) or _an_error({k: v for k, v in ev.items() if k != "type"})
+            elif isinstance(ev.get("error"), dict):     # an error chunk under a 200
+                error = error or _an_error(ev["error"])
+            if kind == "message_delta" and isinstance(ev.get("delta"), dict):
+                end = _name(ev["delta"].get("stop_reason")) or end
+            if kind in ("response.completed", "response.done", "response.incomplete", "response.failed"):
+                resp = ev.get("response")
+                end = _status(resp) or end
+                error = error or _an_error(resp.get("error") if isinstance(resp, dict) else None)
+            _choices(ev.get("choices"), ends, errors)
+    if ends:
+        end = ends[min(ends)] if len(ends) == 1 else {str(i): ends[i] for i in sorted(ends)}
+    if error is None and errors:
+        i = min(errors)
+        error = dict(errors[i], choice=i)
+    return {k: v for k, v in (("served_by", served), ("end", end), ("error", error)) if v is not None}
+
+
+def reply_facts(path: str, body: bytes, streamed: bool) -> dict:
+    """What a reply says besides what :func:`read_reply` reads, read apart from
+    it: the serving provider that answered (``served_by``), how it ended
+    (``end``: ``finish_reason``, ``stop_reason`` or a Responses status; one per
+    choice, by index, when there are several) and an error it holds though its
+    status was a success (``error``: code, type and message; a top-level one
+    whatever else the reply holds, else a choice's). A fact of the wrong type
+    is left out, and a reply that cannot be read gives none: nothing here can
+    stop a reply reaching its caller."""
+    try:
+        return _facts(path, body, streamed)
+    except Exception:
+        return {}
+
+
 def _request_tail(req: dict) -> dict:
     """The part of a request a reader needs: the model, how many messages,
     the last two, abridged, and the reasoning effort it asked for (chat's
@@ -355,7 +561,8 @@ class _Pool:
 class Relay:
     def __init__(self, base: str, key: str, record_dir: str, prices: Optional[Dict[str, dict]] = None,
                  model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False,
-                 ledger: Optional[str] = None, unit_caps: bool = True):
+                 ledger: Optional[str] = None, unit_caps: bool = True, serving: Optional[Dict[str, List[str]]] = None,
+                 facts: Optional[bool] = None):
         """``base``: the provider's endpoint (``https://api.openai.com/v1``).
         ``model``: when given, every call is sent as this model, whatever the
         caller named - the run's model is the recipe's, not the agent's. A
@@ -373,8 +580,16 @@ class Relay:
         (:func:`request_fields`) - ``fidelity``'s, never a normal run's.
         ``ledger``: the file of the run's spending cap (``ledger``), shared
         by every relay of the job: a call is booked there before it is sent,
-        and not sent when it does not fit."""
+        and not sent when it does not fit. ``serving``: by model, the serving
+        providers that may answer a request sent as that model (:func:`routing`),
+        put on every such request in place of the caller's own. ``facts``: a
+        pinned Chat Completions or Responses request asks OpenRouter for its
+        routing facts, where its reply names who served it; by default when
+        ``base`` is OpenRouter's."""
         self.fields = fields
+        self.serving = {m: list(s) for m, s in (serving or {}).items()}
+        host = (urllib.parse.urlsplit(base).hostname or "").lower()
+        self.facts = (host == "openrouter.ai" or host.endswith(".openrouter.ai")) if facts is None else bool(facts)
         self.ledger = ledgers.Ledger(ledger) if ledger else None
         # False for the benchmark's own relay: its calls (an option's embeddings) are no one unit's, so only the run's cap holds them
         self.unit_caps = unit_caps
@@ -437,8 +652,14 @@ class Relay:
             text = text.replace(k, "[REDACTED]")
         return redact(text)[:200]
 
-    def _headers(self, caller) -> Dict[str, str]:
+    def _headers(self, caller, facts: bool = False) -> Dict[str, str]:
+        """``facts``: a pinned Chat Completions or Responses request to
+        OpenRouter, sent asking for its routing facts whatever the caller
+        said of them."""
         out = forwarded(caller)
+        if facts:
+            out = {k: v for k, v in out.items() if k.lower() != "x-openrouter-metadata"}
+            out["X-OpenRouter-Metadata"] = "enabled"
         has = {k.lower() for k in out}           # a name in any case is the same header: never send it twice
         for name, value in (("Content-Type", "application/json"), ("Accept", "*/*")) + \
                 (("anthropic-version", ANTHROPIC_VERSION),) * (self.key_header == "x-api-key"):
@@ -465,6 +686,7 @@ class Relay:
             req = {}
         asked = req.get("model") if isinstance(req, dict) else None
         side = False
+        routing_asked, pinned = None, None
         if isinstance(req, dict) and req:
             if rest.split("?")[0] == "/embeddings" and self.embedding_models.get(tag):
                 req["model"] = self.embedding_models[tag]
@@ -477,6 +699,10 @@ class Relay:
                 req["model"] = self.model
             if req.get("stream") and rest.split("?")[0].endswith("/chat/completions"):
                 req.setdefault("stream_options", {})["include_usage"] = True
+            pinned = self.serving.get(req["model"]) if isinstance(req.get("model"), str) else None
+            if pinned:
+                routing_asked = req.get("provider")
+                req["provider"] = routing(pinned)
             raw = json.dumps(req).encode()
         booking = booked = None
         # a call that names its model is booked, whatever its route, but a token count, which costs nothing and
@@ -499,7 +725,9 @@ class Relay:
         conn, r, back, body = None, None, [], b""
         cut = False                              # the reply was cut off: the call may have been billed
         try:
-            conn, r = self.pool.send(h.command, rest, raw if h.command == "POST" else None, self._headers(h.headers))
+            # a Responses reply names its provider in the routing facts alone; a Messages reply names it of itself
+            facts = bool(pinned) and self.facts and rest.split("?")[0].endswith(("/chat/completions", "/responses"))
+            conn, r = self.pool.send(h.command, rest, raw if h.command == "POST" else None, self._headers(h.headers, facts))
             status, kind, back = r.status, r.getheader("Content-Type") or "application/json", returned(r.headers)
         except Exception as e:
             status, kind = 502, "application/json"
@@ -523,11 +751,22 @@ class Relay:
                    "headers": sorted(k.lower() for k in forwarded(h.headers))}        # the names sent on, never a value
             if side:
                 rec["side"] = True
+            if isinstance(req, dict) and req.get("provider") is not None:
+                # the routing as sent, and the caller's own the pin replaced: recorded copies, cleaned
+                rec["request"]["routing"] = _clean(req["provider"], (self.key, self.key.strip()))
+                if pinned and routing_asked is not None:
+                    rec["request"]["routing_asked"] = _clean(routing_asked, (self.key, self.key.strip()))
             if self.fields and isinstance(req, dict) and req:
                 rec["fields"] = request_fields(req)
             cost = None
             if status == 200:
                 rec["reply"] = read_reply(rest, body, streamed)
+                # who served it, how it ended, an error under the 200: beside what was read, never in its place
+                try:
+                    rec["reply"].update({k: v for k, v in _clean(reply_facts(rest, body, streamed), (self.key, self.key.strip())).items()
+                                         if k not in rec["reply"]})
+                except Exception:
+                    pass
                 cost, how = self._cost(rec["model"], rec["reply"].get("usage"))
                 if cost is not None:
                     rec["cost_usd"], rec["cost_from"] = cost, how
@@ -725,7 +964,7 @@ def failure(calls: List[dict]) -> Optional[tuple]:
 def serve(argv=None) -> int:
     """``python3 -m nullius.standard.relay serve --listen HOST:PORT --base URL
     --record DIR --key-file PATH [--model M] [--route TAG=MODEL ...] [--side-model M ...] [--key-header NAME]
-    [--public URL] [--prices JSON] [--ledger FILE]``.
+    [--public URL] [--prices JSON] [--ledger FILE] [--served-by MODEL=SLUG[,SLUG...] ...]``.
 
     ``--base`` is the provider's endpoint, ``--route`` a route sent as another
     model (a benchmark's judge), ``--public`` the address ``url`` hands out.
@@ -747,7 +986,25 @@ def serve(argv=None) -> int:
     ap.add_argument("--public", help="the address url() hands out, when not the listening one")
     ap.add_argument("--prices", help="a JSON object: model -> USD per million tokens, for a cost estimate")
     ap.add_argument("--ledger", help="the file of the run's spending cap: a call is booked there before it is sent")
+    ap.add_argument("--served-by", action="append", default=[], metavar="MODEL=SLUG[,SLUG...]",
+                    help="the serving providers that may answer a request sent as MODEL, in order, and no other; "
+                         "MODEL one this relay sends (--model, a --route's, a --side-model's), and --base OpenRouter's "
+                         "or --routing given")
+    ap.add_argument("--routing", action="store_true",
+                    help="the endpoint at --base routes a model to several serving providers, as OpenRouter does")
     a = ap.parse_args(argv)
+    serving, bad = parse_served_by(a.served_by, "")
+    if serving and not bad:
+        host = (urllib.parse.urlsplit(a.base).hostname or "").lower()
+        if not (a.routing or host == "openrouter.ai" or host.endswith(".openrouter.ai")):
+            bad.append(f"{a.base} routes no model to several serving providers (OpenRouter's does; --routing says another does)")
+        sent = {a.model} | {r.partition("=")[2] for r in a.route} | {(s.partition("=")[2] or s) for s in a.side_model}
+        stray = [m for m in serving if a.model and m not in sent]
+        if stray:
+            bad.append(f"{', '.join(stray)}: a model this relay does not send (it sends {', '.join(sorted(x for x in sent if x))})")
+    if bad:
+        print(json.dumps({"error": "--served-by: " + "; ".join(bad)}), flush=True)
+        return 2
     try:
         with open(a.key_file) as f:
             key = f.read().strip()
@@ -759,7 +1016,7 @@ def serve(argv=None) -> int:
         return 2
     host, _, port = a.listen.rpartition(":")
     r = Relay(a.base, key, a.record, prices=json.loads(a.prices) if a.prices else None, model=a.model,
-              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger)
+              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger, serving=serving)
     for route in a.route:
         tag, _, model = route.partition("=")
         if not _TAG.match(tag) or not model:

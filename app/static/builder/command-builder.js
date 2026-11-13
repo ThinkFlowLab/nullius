@@ -114,7 +114,9 @@
   };
   // The standard's recipe as the server compiles it from the definitions (POST
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
-  let runnerOut = null, runnerKey = '', runnerTimer;
+  let runnerOut = null, runnerKey = '', runnerTimer, runnerOutKey = '';
+  // the server's compile of the recipe as it is now, or null while a newer one is asked
+  const compiledNow = () => runnerOutKey === JSON.stringify(r()) ? runnerOut : null;
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -602,12 +604,13 @@
       return `<div class="nb-sectionhead"><h2>Choose the model.</h2></div>` + modelChoiceCards(rec)
         + providerField(rec, C.PROVIDERS)
         + field('Model', 'model', rec.model, {list:'nb-models', placeholder:paper && C.paperListed(rec) ? 'Choose a paper model' : 'Search or enter a model ID'})
+        + servedField(rec, 'model', rec.model)
         // the benchmark's other models: the user simulator its conversations need, the judge that grades - each its official one
         // unless named; like the paper, the official one; like the leaderboard, its own and the options it fixes
         + (b.simulator ? (paper ? fixed('Model for the user simulator', lb && lb.simulator || b.simulator, lb && lb.simulator ? 'leaderboard' : 'official') : field('Model for the user simulator', 'simulator_model', rec.simulator_model || '', {list: 'nb-models', placeholder: b.simulator + ' (official)',
-            hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) : '')
+            hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator', (!paper && rec.simulator_model) || lb && lb.simulator || b.simulator) : '')
         + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)',
-            hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) : '')
+            hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge', (!paper && rec.judge_model) || lb && lb.judge || b.judge) : '')
         + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, v, 'leaderboard')).join('') : '')
         + keyLine(rec);
     }
@@ -637,7 +640,8 @@
         out = await res.json();
       } catch (e) { out = {errors: [{step: REVIEW, message: 'The recipe could not be compiled here: ' + e}], notes: [], review: []}; }
       if (key !== runnerKey) return;
-      runnerOut = out;
+      runnerOut = out; runnerOutKey = key;
+      if (step === S.model) fillServed();
       if (step === REVIEW) renderForm();
       refreshPlan();
     }, 120);
@@ -646,6 +650,41 @@
   const select = (label,key,value,options) => `<label class="nb-field">${label}<select data-field="${key}">${options.map(([v,t])=>`<option value="${esc(v)}" ${v===value?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
   const fixed = (label,value,whose='official') => `<label class="nb-field ui-field-row"><span class="ui-field-copy">${esc(label)}</span><span class="nb-fixed">${esc(value)} (${whose})</span></label>`;
   const note = (title,text) => `<div class="nb-notice"><strong>${title}</strong>${text}</div>`;
+  // Served by: under a model field, on OpenRouter alone, the serving providers that may answer it, in order (recipe.py,
+  // served_by); typed as slugs, or added from the model's providers (POST /new-run/endpoints)
+  const SERVED_NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
+  // its list: the providers of the model the run sends (the server's served_models), not of the name shown
+  const servedField = (rec, role, model) => !C.servedRoles(rec).includes(role) ? '' :
+    `<div class="nb-field std-served"><label title="Tried in this order, and no other provider. Empty: any.">Served by<input aria-label="Served by, ${SERVED_NAME[role]}" data-served-by="${role}" value="${esc(((rec.served_by || {})[role] || []).join(', '))}" placeholder="any provider" autocomplete="off" spellcheck="false"></label>`
+    + `<select aria-label="Add a provider for the ${SERVED_NAME[role]}" data-served-add="${role}" data-served-model="${esc(C.servedModelOf(role, model, compiledNow()))}" data-served-shown="${esc(model || '')}"><option value="">${model ? 'Add a provider…' : 'Choose the model first'}</option></select></div>`;
+  const servedCache = new Map();
+  function servedList(model) {
+    let entry = servedCache.get(model);
+    if (!entry || Date.now() - entry.at > 300000) {
+      entry = {at: Date.now(), promise: nulliusFetch('/new-run/endpoints', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({provider: 'openrouter', model})})
+        .then(x => x.json()).then(x => ({...x, endpoints: Array.isArray(x.endpoints) ? x.endpoints : []}))
+        .catch(() => ({ok: false, endpoints: [], message: "Provider list unavailable. Enter a provider's slug by hand."}))};
+      servedCache.set(model, entry);
+    }
+    return entry.promise.then(x => { if (!x.ok) servedCache.delete(model); return x; });
+  }
+  function fillServed() {
+    root.querySelectorAll('select[data-served-add]').forEach(async select => {
+      // the model the run sends, once the server has compiled it: a list asked under another name is asked again
+      const sent = C.servedModelOf(select.dataset.servedAdd, select.dataset.servedShown, compiledNow());
+      if (sent !== select.dataset.servedModel) { select.dataset.servedModel = sent; select.length = 1; delete select.dataset.servedFilled; }
+      if (select.dataset.servedFilled) return;
+      select.dataset.servedFilled = 'true';
+      const model = select.dataset.servedModel;
+      if (!model) return;
+      const got = await servedList(model);
+      if (!select.isConnected || select.dataset.servedModel !== model) return;
+      const first = select.options[0];
+      if (!got.ok || !got.endpoints.length) { first.textContent = got.ok ? 'No provider listed: type a slug' : got.message; return; }
+      first.textContent = 'Add a provider…';
+      for (const e of got.endpoints) { const o = document.createElement('option'); o.value = e.slug; o.textContent = e.name + ' · ' + e.slug + (e.quantization ? ' · ' + e.quantization : ''); select.append(o); }
+    });
+  }
 
   function customRows(agent = '') {
     // '' lists the shared entries (every agent, and the other owners); an id lists that agent's own --ak.
@@ -731,7 +770,7 @@
       const rows=own?[...((runnerOut&&runnerOut.review)||[]),...(C.isStandard(rec)?[]:[[S.where,'Where',C.whereLabel(rec)]])]:C.review(rec);
       html='<div class="nb-sectionhead"><h2>Review the experiment.</h2></div>'+rows.map(([i,t,v])=>`<div class="nb-reviewrow"><div><small>${t}</small><strong>${esc(v)}</strong></div>${button('Edit',`data-step="${i}"`)}</div>`).join('')+'<div id="nb-errors" class="nb-errorlist" hidden></div><div id="nb-reviewnotes"></div>'+(schema.local?'<section id="nb-prereq" class="nb-prereq" aria-live="polite"></section>':'')+runPanel();
     }
-    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';applyPick();
+    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';applyPick();fillServed();
     if(step===REVIEW&&schema.local){drawPrereq();checkPrereq();}
     $('#nb-back').hidden=step===S.benchmark;
     $('#nb-next').textContent=step===REVIEW?'Export recipe JSON':stepName(steps[nextShown(step,1)],nextShown(step,1))+' →';
@@ -949,6 +988,7 @@
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
     if(d.pickFind!==undefined){pickOf().q=el.value;applyPick();return;}
+    if(d.servedBy!==undefined){C.setServed(rec,d.servedBy,el.value);refreshPlan();return;}
     if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
       const value=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;
@@ -958,6 +998,7 @@
       else if(!d.providerModel&&['model','userModel','evalModel'].includes(d.field)&&/^(openrouter|openai)\//.test(String(value))){rec.provider=C.providerOf(rec,value);rec[d.field]=C.bareModel(value);
         renderForm();refreshPlan();const f=root.querySelector(`[data-field="${d.field}"]`);if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);}return;}   // the provider the prefix named, and whether it is set
       else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
+      else if(['model','simulator_model','judge_model'].includes(d.field))C.setModelOf(rec,d.field,value);   // the field's pin goes with its model
       else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
     }else if(d.minutes){C.setPhaseMinutes(rec,d.minutes,el.value===''?'':Number(el.value));const row=el.closest('tr');if(row){const m=row.querySelector('.nb-mono');const t=C.effectiveTimeouts(rec);const p=t&&t.phases.find(x=>x.key===d.minutes);if(m&&p)m.textContent='×'+p.multiplier;}refreshPlan();return;}
@@ -979,6 +1020,11 @@
     const el=event.target,d=el.dataset;
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
+    // a provider added to a Served by, after the ones already there; the field shows the list, in its order
+    else if(d.servedAdd!==undefined){const rec=r(),role=d.servedAdd,now=(rec.served_by||{})[role]||[];if(el.value&&!now.includes(el.value))C.setServed(rec,role,[...now,el.value]);el.value='';const f=root.querySelector(`[data-served-by="${role}"]`);if(f)f.value=((r().served_by||{})[role]||[]).join(', ');refreshPlan();}
+    // a model chosen: its Served by lists that model's providers; the keyboard stays on the field the new form holds
+    else if(['model','simulator_model','judge_model'].includes(d.field)&&C.servedRoles(r()).length){renderForm();refreshPlan();
+      requestAnimationFrame(()=>{const f=root.querySelector(`[data-field="${d.field}"]`);if(f&&document.activeElement!==f)f.focus();});}
     else if(d.stdVersion!==undefined){C.setStandardBenchmark(r(),el.value);render();}
     // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
     // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the

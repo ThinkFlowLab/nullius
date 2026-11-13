@@ -9,8 +9,9 @@ verdicts, the earliest start and the latest end - and its ``config.json``
 the shards' with ``shard`` taken out and ``merged_from`` put in.
 
 What is merged must be one launch: the same launch id, benchmark and
-version, dataset, agent or capability and model, and the same number of shards
-- else it is refused, naming what differs, unless ``force``. Two trials of
+version, dataset, agent or capability and model, the same serving providers
+pinned for each model (``served_by``) and the same number of shards - else it
+is refused, naming what differs, unless ``force``. Two trials of
 one unit are always refused, with the units named: one of them would be
 counted twice. So are shards whose lists of units (``run.units_file``) hold
 different units, or a shard of a list and one of none: the merged job
@@ -40,7 +41,8 @@ from nullius.standard.names import backend as backend_name
 SAME = (("launch", ("standard", "launch")), ("benchmark", ("standard", "benchmark")),
         ("benchmark version", ("standard", "benchmark_version")), ("dataset", ("datasets", 0, "name")),
         ("agent or capability", ("standard", "plugged")), ("model", ("agents", 0, "model_name")),
-        ("backend", ("standard", "backend")), ("number of shards", ("standard", "shard", "of")))
+        ("backend", ("standard", "backend")), ("serving providers", ("standard", "served_by")),
+        ("number of shards", ("standard", "shard", "of")))
 
 
 class Refused(Exception):
@@ -71,6 +73,28 @@ def _listed(cfg: dict) -> Optional[tuple]:
     """The units a shard's list holds (``standard.units_file``), sorted; None for a shard of no list."""
     units = _at(cfg, ("standard", "units_file", "units"))
     return tuple(sorted(str(u) for u in units)) if isinstance(units, list) else None
+
+
+def _served(shards: List[dict], results: List[dict]) -> Optional[dict]:
+    """The merged job's ``served`` (``job.served_total``), made of each shard's whole one - its trials' and its
+    benchmark relay's calls, an ``unknown`` kept - else, for a shard that has none, of its trials'. A model the
+    shards pinned differently - merged with ``force`` - reads ``unknown``: the merged config keeps the first
+    shard's pin, which the others' calls were never held to."""
+    parts = []
+    for s in shards:
+        whole = (s.get("result") or {}).get("served")
+        if isinstance(whole, dict):
+            parts.append(whole)
+        else:
+            parts.append(job.served_total([r for r in results if (r.get("standard") or {}).get("shard_job") == s.get("name")]))
+    who = job.served_total([{"standard": {"served": p}} for p in parts if p])
+    pins = [_at(s["config"], ("standard", "served_by")) or {} for s in shards]
+    pins = [p if isinstance(p, dict) else {} for p in pins]
+    differ = sorted(m for m in {m for p in pins for m in p} if len({json.dumps(p.get(m)) for p in pins}) > 1)
+    if differ:
+        who = who or {"calls": {}, "unnamed": 0}
+        who["held"] = dict(who.get("held") or {}, **{m: "unknown" for m in differ})
+    return who
 
 
 def _trials(job_dir: str) -> List[str]:
@@ -123,7 +147,7 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
                       + " (--force does not merge them)")
     differ = []
     for label, path in SAME:
-        seen = {json.dumps(_at(s["config"], path)) for s in shards}
+        seen = {json.dumps(_at(s["config"], path), sort_keys=True) for s in shards}      # a mapping by its content
         if len(seen) > 1:
             differ.append(f"{label}: " + ", ".join(f"{s['name']} {_at(s['config'], path)!r}" for s in shards))
     if differ and not force:
@@ -241,7 +265,8 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
                              "n_cancelled_trials": max(0, planned - len(results)), "n_running_trials": 0, "n_pending_trials": 0},
                    "standard": {"passed": sum(1 for w in rewards if w.get("reward") == 1.0),
                                 "scored": len(scores), "mean_score": job.mean_score(results)},
-                   **({"budget": budget} if budget else {})}, f, indent=1)
+                   **({"budget": budget} if budget else {}),
+                   **({"served": who} if (who := _served(shards, results)) else {})}, f, indent=1)
     cfg = json.loads(json.dumps(shards[0]["config"]))
     cfg["job_name"] = name
     std = cfg.setdefault("standard", {})
