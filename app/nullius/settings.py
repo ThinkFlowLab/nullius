@@ -118,6 +118,11 @@ def _hosts(v: str) -> Optional[str]:
     return hosts.validate_list(v)
 
 
+def _constraints(v: str) -> Optional[str]:
+    from nullius import constraints
+    return constraints.validate_setting(v)
+
+
 def _bool(v: str) -> Optional[str]:
     return None if v.lower() in _BOOL else "0, 1, true, false, yes or no"
 
@@ -127,7 +132,7 @@ class Variable:
     name: str
     group: str
     purpose: str
-    kind: str            # secret | localkey | endpoint | path | paths | url | repo | name | bool | text | envname | hosts | model | llmprovider | s1provider | envnames
+    kind: str            # secret | localkey | endpoint | path | paths | url | repo | name | bool | text | envname | hosts | constraints | model | llmprovider | s1provider | envnames
     example: str = ""    # shown as a placeholder, written to .env.example as a comment
 
     @property
@@ -153,6 +158,7 @@ class Variable:
             "text": _check(_TEXT_OK, "a single line without control characters"),
             "envname": _check(_ENVNAME_OK, "an environment variable name (capitals, digits, underscores)"),
             "hosts": _hosts,
+            "constraints": _constraints,
             "model": _check(_MODEL_OK, "a model id as OpenRouter lists it, vendor/model"),
             "llmprovider": _check(_LLM_JUDGE_OK, "openrouter, openai, local or local:<endpoint id>"),
             "s1provider": _check(_S1_OK, "typesafe or openrouter"),
@@ -189,6 +195,7 @@ VARIABLES: List[Variable] = [
     Variable("LLM_JUDGE_MODEL", GROUPS[0], "The model of the LLM judgement, as its provider names it (on OpenRouter, vendor/model). It is asked the same questions as System One and answers them as JSON; its numbers are what it states, so a choice or a score carries no confidence.", "model"),
     Variable("AGENT_KEYS", GROUPS[2], "The names of the agent keys this file holds, comma-separated: the keys an agent needs of its own vendor, beside the model's (Cursor's CLI agent a CURSOR_API_KEY, Copilot's a GH_TOKEN). Each is a line of its own in this file. A Harbor run gets every one of them in its environment - over stdin to a host - and a Nullius standard run's never; none is ever written into a recipe or a log.", "envnames"),
     Variable("HOSTS", GROUPS[1], "Machines a recipe can run on, over ssh: an alias from ~/.ssh/config, or user@host[:port][:/path/to/key]. Only the name is stored; keys stay where they are.", "hosts", "user@host[:port][:/path/to/key]"),
+    Variable("HOST_CONSTRAINTS", GROUPS[1], "What Nullius may use on a machine: a JSON object from local (this machine) or a host's entry to its constraints (cpus, memory_mb, processes, concurrency, cpu_set, gpu_ids). A constraint not set is no constraint.", "constraints", '{"local": {"cpus": 4, "memory_mb": 8192}}'),
 ]
 # Read by the application but not offered on the page: each has a
 # command-line form, a test-only use, or a default nobody changes. The
