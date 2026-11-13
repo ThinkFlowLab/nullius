@@ -13,7 +13,9 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import patch
 
+from nullius import workspace
 from nullius.runs import launches, parse
 from nullius.standard import job, merge, shard
 
@@ -61,7 +63,7 @@ class Partition(unittest.TestCase):
 
 
 def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="gpt-5-mini", bench=BENCH, other=AGENT,
-                planned=None, t0=1_760_000_000.0, failed=(), budget=None, backend="local"):
+                planned=None, t0=1_760_000_000.0, failed=(), budget=None, backend="local", reward=lambda place: float(place % 2)):
     """A shard job as a run writes it: its config, a trial per unit (tagged by
     the unit's place in the whole dataset), its result."""
     d = os.path.join(root, name)
@@ -78,7 +80,7 @@ def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="g
             f.write("print(1)\n")
         exc = ("AgentTimeoutError", "slow") if u in failed else None
         results.append(job.write_trial(trial, job=name, bench=bench, other=other, model=model, unit=u, t0=t0 + k, t1=t0 + k + 5,
-                                       produce=(t0 + k, t0 + k + 4), score=None if exc else {"reward": 1.0 if place % 2 else 0.0},
+                                       produce=(t0 + k, t0 + k + 4), score=None if exc else {"reward": reward(place)},
                                        exception=exc, calls=[], trajectory=None))
     job.write_result(d, name, t0, t0 + 10 * (index + 1), results, len(planned), budget=budget)
     return d
@@ -210,6 +212,54 @@ class Merge(unittest.TestCase):
         with self.assertRaises(merge.Refused) as e:
             merge.merge(dirs + [plain], os.path.join(self.tmp, "out"))
         self.assertIn("not a shard", str(e.exception))
+
+
+class Fold(unittest.TestCase):
+    """The runs page folds one participant's shards into one row: what it shows is the job ``cli merge`` makes."""
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="nullius-fold-"); self.addCleanup(shutil.rmtree, self.tmp, True)
+        units = [f"t-{i}" for i in range(10)]
+        self.split = {i: [u for _, u in shard.select(units, i, 3)] for i in (1, 2, 3)}
+
+    def test_a_fold_reads_as_the_merged_job(self):
+        planned = self.split[2]
+        dirs = [write_shard(self.tmp, "s1", self.split[1], 1, 3, failed=(self.split[1][0],), reward=lambda place: 1.0),
+                write_shard(self.tmp, "s2", planned[:-1], 2, 3, planned=planned)]       # shard 3 never ran; nor did a unit of shard 2
+        folded, check = launches.fold([parse.parse_job(d) for d in dirs])
+        made = merge.merge(dirs, os.path.join(self.tmp, "out", "run"))
+        merged = parse.parse_job(made["out"])
+        for name in ("n_resolved", "adjusted_solve_rate", "raw_solve_rate", "counts", "n_planned", "n_errored_trials", "started_at",
+                     "finished_at", "duration_min", "total_input_tokens", "total_output_tokens", "total_cost_usd", "mean_score", "budget"):
+            self.assertEqual(getattr(folded, name), getattr(merged, name), name)
+        self.assertEqual(sorted(t.trial_name for t in folded.trials), sorted(t.trial_name for t in merged.trials))
+        # the rate is over every trial with a verdict across the shards, never the mean of the shards' rates
+        rates = [parse.parse_job(d).adjusted_solve_rate for d in dirs]
+        self.assertNotAlmostEqual(folded.adjusted_solve_rate, sum(rates) / len(rates))
+        # the units no shard ran are merge's own: counted apart, never as misses
+        self.assertEqual(check["notes"], made["notes"])
+        self.assertEqual(check["units_total"] - len(check["by_unit"]), 10 - len(folded.trials))
+        self.assertEqual(sum(folded.counts.values()), len(check["by_unit"]))
+
+    def test_a_fold_is_read_again_only_when_the_workspace_parses_a_shard_again(self):
+        dirs = [write_shard(self.tmp, f"c{i}", self.split[i], i, 3) for i in (1, 2)]
+        ws = workspace.Workspace("w", "W", [self.tmp], "2026-01-01", "2026-01-01", os.path.join(self.tmp, "ws"), [self.tmp])
+        with patch.object(merge, "check", wraps=merge.check) as check:
+            first = launches.fold([workspace.load_job(ws, d)[0] for d in dirs])
+            self.assertEqual(launches.fold([workspace.load_job(ws, d)[0] for d in dirs]), first)
+            self.assertEqual(check.call_count, 1)
+            trial = os.path.join(dirs[1], sorted(n for n in os.listdir(dirs[1]) if n.startswith("t-"))[0], "result.json")
+            with open(trial, "a") as f:
+                f.write("\n")
+            launches.fold([workspace.load_job(ws, d)[0] for d in dirs])
+            self.assertEqual(check.call_count, 2)
+        # a shard more replaces the fold without it: one entry per dir, however long the app runs
+        dirs.append(write_shard(self.tmp, "c3", self.split[3], 3, 3))
+        launches.fold([workspace.load_job(ws, d)[0] for d in dirs])
+        self.assertEqual([k for k in launches._FOLDED if dirs[0] in k], [tuple(dirs)])
+
+    def test_shards_merge_refuses_are_not_folded(self):
+        dirs = [write_shard(self.tmp, "a", self.split[1], 1, 3, launch="L1"), write_shard(self.tmp, "b", self.split[2], 2, 3, launch="L2")]
+        self.assertIsNone(launches.fold([parse.parse_job(d) for d in dirs]))
 
 
 T0 = datetime(2026, 10, 12, 9, 0, tzinfo=timezone.utc)

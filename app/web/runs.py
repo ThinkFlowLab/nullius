@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 from dataclasses import replace
 from flask import (
@@ -176,6 +177,63 @@ def _cut_short(r) -> str:
     return ""
 
 
+# A shard's job as a recipe names it (standard/recipe.py): ``<launch>-shard-<I>of<N>``.
+_SHARD = re.compile(r"-shard-(\d+)of\d+$")
+# A participant's state is its shards' most telling: one still working, else the one that ended worst.
+_TELLING = ("running", "preparing", "stopping", "paused", "queued", "failed", "refused", "stopped", execution.NOT_RUN,
+            "not in this workspace", "finished")
+
+
+def _host_of(job_id) -> str:
+    ex = execution.for_job(job_id)
+    return "" if ex is None else ex.plan.host.label if ex.plan.host else "this machine"
+
+
+def _fold(rows, ended, control=False) -> list:
+    """A participant's shards as one row, ``shards`` its shards' own rows, when
+    it has two or more and ``cli merge`` would put them together: their numbers
+    are the merged job's (``launches.fold``). Missing evidence is not a zero:
+    ``not_run`` is the units no shard ran, beside the count, never in it."""
+    def key(r):
+        # a written shard by the launch id its config records; one not written yet by the name its record gives it
+        if r["job"] is not None:
+            return (r.get("control"), r["job"].launch_id) if r["job"].launch_id else id(r)
+        return (r.get("control"), _SHARD.sub("", r["job_id"])) if _SHARD.search(r["job_id"]) else id(r)
+    by = {}
+    for r in rows:
+        by.setdefault(key(r), []).append(r)
+    out = []
+    for k, group in by.items():
+        written = [r["job"] for r in group if r["job"] is not None]
+        got = launches.fold(written) if len(group) > 1 and written else None
+        if len(group) < 2 or (written and got is None):
+            out += group
+            continue
+        job, check = got or (None, None)
+        index = {s["name"]: s["shard"].get("index") for s in check["shards"]} if check else {}
+        for r in group:
+            m = _SHARD.search(r["job_id"])
+            r["shard"] = index.get(r["job_id"]) or (int(m.group(1)) if m else None)
+            r["host"] = _host_of(r["job_id"])
+        group.sort(key=lambda r: (r["shard"] is None, r["shard"] or 0, r["job_id"]))
+        states = [r["state"] for r in group]
+        state = min(states, key=lambda s: _TELLING.index(s) if s in _TELLING else len(_TELLING))
+        bad = [s for s in dict.fromkeys(states) if s in _ENDED_SHORT]
+        fold = {"job": job, "job_id": k[1], "state": state, "shards": group, "control": k[0],
+                "note": ", ".join(f"{states.count(s)} of {len(group)} shards {s}" for s in bad),
+                "notes": check["notes"] if check else []}
+        if job is not None:
+            total = check["units_total"] or job.n_planned
+            fold["total"] = total
+            # while a shard still works, its units are to come, not missing
+            fold["not_run"] = max(0, total - len(check["by_unit"])) if state in _ENDED_SHORT + ("finished",) else 0
+        if control:
+            v = feasibility.summary_of(job) if job is not None else None
+            fold["verdict"] = v and replace(v, running=any(r["verdict"] and r["verdict"].running for r in group))
+        out.append(fold)
+    return out
+
+
 def _launch_view(g, by_id, verdicts, ended) -> dict:
     """One launch as its block draws it: the task checks, the agents ranked on
     one scale, the runs its record named that Harbor has not written yet."""
@@ -187,15 +245,20 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
     for r in rows:
         if r["state"] == "refused":
             r["why"] = execution.for_job(r["job_id"]).refused(r["job_id"])
+    rows = _fold(rows, ended)
     rate = lambda r: r["job"].adjusted_solve_rate if r["job"] is not None and r["job"].adjusted_solve_rate is not None else -1.0
     rows.sort(key=lambda r: (_STATE_ORDER.get(r["state"], 9), -rate(r), r["job_id"]))
-    ok = {v.control for _, v in checks if v.state == "ok"}
     # The controls are rows of their own at the top of the table, written or still to come, nop before oracle:
     # a check on the tasks, never ranked with the agents nor offered to Compare, and kept once they end.
     controls = [{"job": j, "job_id": j.job_id, "state": _state_of(j.job_id, j, ended), "control": v.control, "verdict": v} for j, v in checks]
     controls += [{"job": None, "job_id": i, "state": _state_of(i, None, ended), "control": c, "verdict": None} for i, c in waiting]
+    controls = _fold(controls, ended, control=True)
     controls.sort(key=lambda r: (feasibility.CONTROLS.index(r["control"]) if r["control"] in feasibility.CONTROLS else 9, r["job_id"]))
-    short = list(dict.fromkeys(filter(None, map(_cut_short, controls))))
+    # judged over every shard: a folded control's verdict is over all its trials, and what one shard lacks is said of that shard
+    checks = [(r["job"], r["verdict"]) for r in controls if r["verdict"] is not None]
+    ok = {v.control for _, v in checks if v.state == "ok"}
+    lacks = lambda r: [f"{c} on shard {s['shard']}" for s in r["shards"] for c in [_cut_short(s)] if c] if "shards" in r else [_cut_short(r)]
+    short = list(dict.fromkeys(filter(None, (x for r in controls for x in lacks(r)))))
     if any(r["state"] != "finished" and r["state"] not in _ENDED_SHORT for r in controls):
         verdict, checked = "Not checked yet: a control has not finished.", False
     elif not checks and not short:
@@ -212,10 +275,12 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
         verdict, checked = "An empty answer fails every task; no oracle ran to show each can pass.", True
     else:
         verdict, checked = "The reference passes every task; no nop ran to show an empty answer fails.", True
-    n_tasks = max([j.n_planned or len(j.trials) for j in jobs] + [0]) or None
-    finished = [r["job_id"] for r in rows if r["state"] == "finished" and r["job"] is not None and r["job"].has_verdict]
+    n_tasks = max([r.get("total") or r["job"].n_planned or len(r["job"].trials) for r in controls + rows if r["job"] is not None] + [0]) or None
+    # each shard is a run of its own: it is counted, offered to Compare and opened as one
+    leaves = lambda rs: [s for r in rs for s in r.get("shards", [r])]
+    finished = [r["job_id"] for r in leaves(rows) if r["state"] == "finished" and r["job"] is not None and r["job"].has_verdict]
     counts = {}
-    for r in controls + rows:
+    for r in leaves(controls + rows):
         counts[r["state"]] = counts.get(r["state"], 0) + 1
     ex = execution.for_job((g.job_ids + g.pending)[0])
     return {"launch": g, "checks": checks, "verdict": verdict,

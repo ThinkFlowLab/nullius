@@ -20,14 +20,20 @@ of its own, perhaps by a run record of its own, perhaps hours apart - are one
 launch: a shard joins the launch that holds another shard of its id before
 any other rule is asked.
 
-Nothing here reads a file: it takes the parsed jobs and the records' job lists,
-and groups. Newest launch first.
+``group`` reads no file: it takes the parsed jobs and the records' job lists,
+and groups. Newest launch first. ``fold`` reads one participant's shards as
+``cli merge`` would put them together, again only when the workspace parsed one of
+them again, and writes nothing.
 """
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+import threading
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+
+from nullius.runs.parse import _budget, _iso
+from nullius.standard import merge
 
 WINDOW_SEC = 30 * 60
 
@@ -74,6 +80,51 @@ def merged_sources(jobs) -> set[str]:
     """
     return {source for j in jobs if not j.is_running and not j.is_preparing
             for source in getattr(j, "merged_from", []) if source != j.job_id}
+
+
+# Folds already read in this process, by their shards' dirs: (the shard jobs, (check, record)). The workspace
+# hands out the same Job until its signature moves (``workspace.load_job``), so the same jobs read the same:
+# a page renders again without reading every trial record, nor stating every file, while no shard moved.
+# A dir is in one entry at most: a new set of shards replaces each fold it shares a dir with.
+_FOLDED: dict = {}
+_FOLDED_LOCK = threading.Lock()
+
+
+def _merged(dirs):
+    """``merge.check`` of ``dirs`` without the trial records, and the job's record; (None, None) when merge refuses them."""
+    try:
+        got = merge.check(list(dirs))
+    except merge.Refused:
+        return None, None
+    res = merge.result_of(got["shards"], [r for s in got["shards"] for r in s["results"]])
+    return {**got, "shards": [{k: v for k, v in s.items() if k != "results"} for s in got["shards"]]}, res
+
+
+def fold(shards):
+    """One participant's shard jobs as the one job ``cli merge`` would make of
+    them, in memory: their trials together, the job's record ``merge.result_of``,
+    and what ``merge.check`` says no shard ran. ``(job, check)``; None when
+    merge refuses them, so they stay apart."""
+    dirs = tuple(j.dir for j in shards)
+    with _FOLDED_LOCK:
+        known = _FOLDED.get(dirs)
+    if known is not None and all(a is b for a, b in zip(known[0], shards)):
+        got, res = known[1]
+    else:
+        got, res = _merged(dirs)
+        with _FOLDED_LOCK:
+            for stale in [k for k in _FOLDED if k != dirs and not set(k).isdisjoint(dirs)]:
+                del _FOLDED[stale]
+            _FOLDED[dirs] = (tuple(shards), (got, res))
+    if got is None:
+        return None
+    return replace(shards[0], trials=[t for j in shards for t in j.trials], n_tasks=res["n_total_trials"],
+                   n_total_trials=res["n_total_trials"], started_at=_iso(res["started_at"]), finished_at=_iso(res["finished_at"]),
+                   n_errored_trials=res["stats"]["n_errored_trials"], budget=_budget(res.get("budget")),
+                   # still going: what a merge, made of ended shards, never sees
+                   n_running_trials=sum(j.n_running_trials for j in shards),
+                   n_pending_trials=sum(j.n_pending_trials for j in shards),
+                   preparing=all(j.preparing for j in shards)), got
 
 
 def group(jobs, records: dict | None = None, window: float = WINDOW_SEC) -> list[Launch]:

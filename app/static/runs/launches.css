@@ -29,8 +29,8 @@
 .launch-agents { width: 100%; border-collapse: collapse; }
 .launch-agents th { text-align: left; font: 400 11.5px var(--sans); color: var(--text-dim); padding: 8px 12px 6px; border-top: 1px solid var(--border-soft);
   border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
-.launch-agents td { padding: 10px 12px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; font-size: 13px; }
-.launch-agents tbody tr:last-child td { border-bottom: 0; }
+/* rules above each row, not below: a table of several bodies, some hidden, ends without one */
+.launch-agents td { padding: 10px 12px; border-top: 1px solid var(--border-soft); vertical-align: middle; font-size: 13px; }
 .launch-agents th:first-child, .launch-agents td:first-child { padding-left: 18px; }
 .launch-agents th:last-child, .launch-agents td:last-child { padding-right: 18px; }
 .launch-agents .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -79,10 +79,27 @@
 
 /* a task check's row: above the agents, set apart by a rule, its verdict where an agent has its rate */
 .launch-agents tr.la-control td { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
-.launch-agents tr.la-control + tr:not(.la-control) td { border-top: 2px solid var(--border); }
+.launch-agents tr.la-first td { border-top: 2px solid var(--border); }
 .la-kind { font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint); margin-left: 6px; }
 .la-verdict { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .la-verdict b { font-weight: 500; }
 .la-verdict.ok .lc-mark { color: var(--ok); }
 .la-verdict.warn .lc-mark { color: var(--bad); }
 .la-verdict.pending .lc-mark { color: var(--text-faint); }
+
+/* a participant run as several shards: one row, its chevron the shared one, unfolding into a row per shard */
+.launch-agents tr.la-fold { cursor: pointer; }
+/* the chevron is a column of its own, so the name and its "N shards" line, and the shard rows below, start at one edge */
+.launch-agents { --la-fold-w: 14px; --la-fold-gap: 6px; }
+.la-fold-who { display: flex; align-items: flex-start; gap: var(--la-fold-gap); min-width: 0; }
+.la-fold-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--la-fold-w); padding: 2px 0; border: 0; background: none; color: var(--text-dim); cursor: pointer; }
+.la-fold-btn:hover { color: var(--text); }
+.la-fold-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.la-fold-btn::before { margin-left: 0; }
+.launch-agents tr.la-fold .la-name { font-weight: 500; }
+.launch-agents tr.la-shard td:first-child .la-who { margin-left: calc(var(--la-fold-w) + var(--la-fold-gap)); }
+.launch-agents tr.la-shard td:has(> .la-cell) { padding-top: 0; padding-bottom: 0; }
+.la-cell::before, .la-cell::after { content: ''; display: block; height: 10px; }   /* the row's padding, inside what slides */
+.launch-agents tr.la-shard .la-who a { font-weight: 400; color: var(--text-dim); }
+.la-note { color: var(--patch_failed_tests); }
+.la-gap { display: block; margin-top: 2px; font: 11.5px var(--sans); color: var(--patch_failed_tests); }
