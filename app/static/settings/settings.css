@@ -120,7 +120,7 @@
 .host-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .host-act:disabled { opacity: .4; cursor: not-allowed; }
 .host-panel { padding: 4px 4px 16px 24px; }
-.host-delete { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.st-provider-ask.host-delete { width: auto; margin: 0; }   /* in the row's panel, at its start, as wide as the table lets it */
 
 .st-savebar[hidden] { display: none; }
 .st-savebar { position: sticky; bottom: 12px; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); box-shadow: 0 10px 30px var(--shadow, rgba(0, 0, 0, .25)); }

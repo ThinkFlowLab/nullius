@@ -333,9 +333,9 @@
         {% if writable %}<div class="st-row"><span class="st-row-label"></span><span class="st-row-value st-value"><button type="button" class="btn sm ghost st-remove" data-clear-machine{% if not m.shown %} hidden{% endif %}>Remove all</button></span></div>{% endif %}
         </div></div></td></tr>
         {% if m.host and writable and not ro %}
-        <tr class="host-panel-row"><td colspan="5"><div class="host-panel" id="hp-{{ mi }}-delete" data-panel="delete" hidden><div class="host-delete">
+        <tr class="host-panel-row"><td colspan="5"><div class="host-panel" id="hp-{{ mi }}-delete" data-panel="delete" hidden><div class="bench-delete-ask st-provider-ask host-delete">{#- asks as a provider's Remove does #}
           <span>Delete <b>{{ m.label }}</b> and its constraints?</span>
-          <button type="button" class="btn sm danger" data-host-delete>Yes, delete</button><button type="button" class="btn sm ghost" data-close>Keep it</button><span class="settings-test" data-host-said></span>
+          <button type="button" class="btn danger" data-host-delete>Yes, delete</button><button type="button" class="btn ghost" data-close>Keep it</button><span class="settings-test" data-host-said></span>
         </div></div></td></tr>
         {% endif %}
       </tbody>
