@@ -85,7 +85,7 @@ HumanEval/12
 | With `--shard I/N` | The listed units of that shard; `standard.shard.units_total` counts the listed units; `merge` refuses shards of different lists |
 | The record | `config.json`: `standard.units_file`, the file's name, its sha256 and its units |
 | Where it is read | On the machine the command runs on, from the directory it starts in, with `--from-run` or without |
-| The builder | A recipe holds no list: a run of listed units starts from the command line |
+| The builder | A recipe has no field for a list |
 
 <div class="grid cards" markdown>
 
