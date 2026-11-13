@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import tempfile
+from dataclasses import replace
 from flask import (
     abort,
     flash,
@@ -50,15 +51,16 @@ def index():
     if not jobs and not mine:
         return render_template("runs/setup.html", scanned=True, mode="add",
                                workspaces=workspace.list_all(shared.WS_HOME))
+    # A Harbor killed by a Stop (or dead with the run) leaves its result
+    # record saying trials are running; the runner's record says otherwise.
+    ended = {j.job_id: execution.ended_for(j.job_id) for j in jobs}
     # The header, the chips and the mix bar describe the agents' trials. A
     # control (nop, oracle) is a check on the tasks, not a competitor: it is
     # listed on its own line as behaved or not (`feasibility.summary_of`),
     # and its trials never enter the totals — a nop rejected on every task
     # is the expected result, not five failed verifications.
     verdicts = {j.job_id: feasibility.summary_of(j) for j in jobs}
-    # A Harbor killed by a Stop (or dead with the run) leaves its result
-    # record saying trials are running; the runner's record says otherwise.
-    ended = {j.job_id: execution.ended_for(j.job_id) for j in jobs}
+    verdicts = {i: replace(v, running=False) if v and ended[i] else v for i, v in verdicts.items()}
     agents = [j for j in jobs if verdicts[j.job_id] is None]
     controls = [(j, verdicts[j.job_id]) for j in jobs if verdicts[j.job_id] is not None]
     totals = {k: 0 for k in classify.ORDER}
@@ -149,13 +151,29 @@ def _state_of(job_id, j, ended):
 
 
 def _control_planned(job_id) -> str:
-    """``nop`` or ``oracle`` when a job Harbor has not written yet is one of
-    its controls by the run's plan, else ''. A runner's arm is never one."""
+    """``nop`` or ``oracle`` when a job not written yet is one of the run's
+    controls by its plan, else ''. A standard plan names a declared control
+    by that word; its setups are ``original`` or ``model``, never one."""
     ex = execution.for_job(job_id)
-    if ex is None or ex.plan.runner != "harbor":
+    if ex is None:
         return ""
     agent = next((str(j.get("agent") or "") for j in ex.plan.jobs if str(j.get("name")) == job_id), "").lower()
     return agent if agent in parse.CONTROL_AGENTS else ""
+
+
+# A control in one of these states ended before it checked every task.
+_ENDED_SHORT = ("failed", "refused", "stopped", execution.NOT_RUN, "not in this workspace")
+
+
+def _cut_short(r) -> str:
+    """What a control row lacks to check every task, in the words of the
+    task-check line: ``nop stopped``, ``oracle ran 2 of 4``; '' when complete."""
+    if r["state"] in _ENDED_SHORT:
+        return f"{r['control']} {r['state']}"
+    j = r["job"]
+    if r["state"] == "finished" and j is not None and j.n_planned and len(j.trials) < j.n_planned:
+        return f"{r['control']} ran {len(j.trials)} of {j.n_planned}"
+    return ""
 
 
 def _launch_view(g, by_id, verdicts, ended) -> dict:
@@ -172,12 +190,20 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
     rate = lambda r: r["job"].adjusted_solve_rate if r["job"] is not None and r["job"].adjusted_solve_rate is not None else -1.0
     rows.sort(key=lambda r: (_STATE_ORDER.get(r["state"], 9), -rate(r), r["job_id"]))
     ok = {v.control for _, v in checks if v.state == "ok"}
-    if waiting:
+    # The controls are rows of their own at the top of the table, written or still to come, nop before oracle:
+    # a check on the tasks, never ranked with the agents nor offered to Compare, and kept once they end.
+    controls = [{"job": j, "job_id": j.job_id, "state": _state_of(j.job_id, j, ended), "control": v.control, "verdict": v} for j, v in checks]
+    controls += [{"job": None, "job_id": i, "state": _state_of(i, None, ended), "control": c, "verdict": None} for i, c in waiting]
+    controls.sort(key=lambda r: (feasibility.CONTROLS.index(r["control"]) if r["control"] in feasibility.CONTROLS else 9, r["job_id"]))
+    short = list(dict.fromkeys(filter(None, map(_cut_short, controls))))
+    if any(r["state"] != "finished" and r["state"] not in _ENDED_SHORT for r in controls):
         verdict, checked = "Not checked yet: a control has not finished.", False
-    elif not checks:
+    elif not checks and not short:
         verdict, checked = None, False
     elif any(v.state == "warn" for _, v in checks):
         verdict, checked = "A control did not behave: some tasks may be broken. See Feasibility.", False
+    elif short:
+        verdict, checked = f"Task checks incomplete: {', '.join(short)}.", False
     elif any(v.state == "pending" for _, v in checks):
         verdict, checked = "Not checked yet: a control has not finished.", False
     elif {"nop", "oracle"} <= ok:
@@ -188,11 +214,6 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
         verdict, checked = "The reference passes every task; no nop ran to show an empty answer fails.", True
     n_tasks = max([j.n_planned or len(j.trials) for j in jobs] + [0]) or None
     finished = [r["job_id"] for r in rows if r["state"] == "finished" and r["job"] is not None and r["job"].has_verdict]
-    # The controls are rows of their own at the top of the table, written or still to come, nop before oracle:
-    # a check on the tasks, never ranked with the agents nor offered to Compare, and kept once they end.
-    controls = [{"job": j, "job_id": j.job_id, "state": _state_of(j.job_id, j, ended), "control": v.control, "verdict": v} for j, v in checks]
-    controls += [{"job": None, "job_id": i, "state": _state_of(i, None, ended), "control": c, "verdict": None} for i, c in waiting]
-    controls.sort(key=lambda r: (feasibility.CONTROLS.index(r["control"]) if r["control"] in feasibility.CONTROLS else 9, r["job_id"]))
     counts = {}
     for r in controls + rows:
         counts[r["state"]] = counts.get(r["state"], 0) + 1
