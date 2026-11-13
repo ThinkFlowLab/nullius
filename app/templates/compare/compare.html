@@ -288,7 +288,7 @@
       const body = row.querySelector('[data-detail-url]');
       if (open && body && !body.dataset.loaded) {
         body.dataset.loaded = '1';
-        fetch(body.dataset.detailUrl).then(r => r.ok ? r.text() : Promise.reject(r.status))
+        nulliusFetch(body.dataset.detailUrl).then(r => r.ok ? r.text() : Promise.reject(r.status))
           .then(html => { body.innerHTML = html; })
           .catch(() => { body.dataset.loaded = ''; body.innerHTML = '<p class="faint small">The detail could not be read; open the row again.</p>'; });
       }

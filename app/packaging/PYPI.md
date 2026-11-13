@@ -3,7 +3,9 @@
 Bring anything. Run it. Prove it.
 
 Nullius runs AI evaluations on your machines and opens each score into the
-evidence behind it: what failed, the agent or the benchmark.
+evidence behind it, so you know whether the agent failed or the benchmark did.\
+Add your own benchmark, agent or capability with a single prompt and iterate
+faster.
 
 ## Install and launch
 
@@ -21,8 +23,7 @@ Python 3.12 or later is required. Reading existing results needs no model key.
 Running benchmarks requires the appropriate provider credentials and benchmark
 prerequisites; Docker is needed for Harbor and the standard's container backend.
 
-This is a release candidate for testing before version `0.1.0`. Release
-validation targets Linux with Python 3.12. The wheel is a Python package with
+Release validation targets Linux with Python 3.12. The wheel is a Python package with
 a local web UI, not a standalone desktop installer.
 
 ## What it does
@@ -48,7 +49,7 @@ Update to the latest version with:
 uv tool upgrade nullius-eval
 ```
 
-To select a specific version, use `uv tool install nullius-eval==0.1.0rc2`.
+To select a specific version, use `uv tool install nullius-eval==0.1.0`.
 Add `--force` when replacing an existing installation. Explicit version pins
 are retained by `uv tool upgrade`; use `uv tool install --force nullius-eval`
 to return to the latest version without a pin.

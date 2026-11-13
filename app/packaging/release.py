@@ -1,4 +1,4 @@
-"""Build and verify a release candidate's downloads; never upload or publish.
+"""Build and verify a release's downloads; never upload or publish.
 
     python3 app/packaging/release.py build --tag v0.1.0rc1 --out-dir /tmp/nullius-release
     python3 app/packaging/release.py verify --tag v0.1.0rc1 --dist-dir /tmp/nullius-release
@@ -27,10 +27,20 @@ NAME = 'nullius-eval'
 ARCHIVE_NAME = 'nullius_eval'
 
 
+TAG_RE = r"v\d+\.\d+\.\d+(rc[1-9]\d*)?"
+
+
+def prerelease(tag: str) -> bool:
+    """A release candidate is a GitHub prerelease; a final version is not."""
+    match = re.fullmatch(TAG_RE, tag)
+    if not match:
+        raise ValueError("Expected a release tag such as v0.1.0 or v0.1.0rc1")
+    return match.group(1) is not None
+
+
 def candidate(tag: str, root: Path = ROOT) -> str:
-    """Require an explicit RC tag, matching project metadata and authored notes."""
-    if not re.fullmatch(r"v\d+\.\d+\.\d+rc[1-9]\d*", tag):
-        raise ValueError("Expected a release-candidate tag such as v0.1.0rc1")
+    """Require an explicit release tag, matching project metadata and authored notes."""
+    prerelease(tag)
     project = tomllib.loads((root / 'pyproject.toml').read_text())['project']
     if project['name'] != NAME or tag != 'v' + project['version']:
         raise ValueError("Release tag must match the Nullius version in pyproject.toml")

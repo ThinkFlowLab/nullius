@@ -338,7 +338,7 @@
     }
     async function tick() {
       try {
-        const r = await fetch(endpoint, {headers: {'Accept': 'application/json'}, cache: 'no-store'});
+        const r = await nulliusFetch(endpoint, {headers: {'Accept': 'application/json'}, cache: 'no-store'});
         if (!r.ok) throw new Error('HTTP ' + r.status);
         misses = 0; snap = await r.json();
       } catch (e) { misses += 1; }

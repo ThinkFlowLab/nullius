@@ -1,4 +1,4 @@
-"""Download and check a published GitHub prerelease; never upload to PyPI.
+"""Download and check a published GitHub release; never upload to PyPI.
 
 The publishing workflow uses these verified asset IDs and hashes to retrieve
 the same bytes again in its separate, credentialed publishing job.
@@ -23,10 +23,12 @@ SPEC.loader.exec_module(release)
 
 
 def assets_for(data: dict, tag: str, version: str) -> dict[str, int]:
-    """Accept only a published RC and exactly its three expected downloads."""
+    """Accept only the published release, a prerelease exactly when the tag is an
+    RC, and exactly its three expected downloads."""
     if (data.get('tag_name') != tag or data.get('draft') is not False
-            or data.get('prerelease') is not True):
-        raise ValueError('Expected the published GitHub prerelease for the exact tag')
+            or data.get('prerelease') is not release.prerelease(tag)):
+        raise ValueError('Expected the published GitHub release for the exact tag, '
+                         'a prerelease only for a release candidate')
     expected = {f'nullius_eval-{version}-py3-none-any.whl',
                 f'nullius_eval-{version}.tar.gz', 'SHA256SUMS'}
     assets = data.get('assets')

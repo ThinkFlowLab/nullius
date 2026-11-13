@@ -589,10 +589,10 @@
     if (asking || document.hidden || !getSelection().isCollapsed) return;
     asking = true;
     try {
-      const pulse = await fetch({{ url_for('runs_pulse') | tojson }}, {cache: 'no-store'});
+      const pulse = await nulliusFetch({{ url_for('runs_pulse') | tojson }}, {cache: 'no-store'});
       const {signature} = pulse.ok ? await pulse.json() : {signature: seen};
       if (signature !== seen) {
-        const page = await fetch(location.href, {cache: 'no-store'});
+        const page = await nulliusFetch(location.href, {cache: 'no-store'});
         const fresh = new DOMParser().parseFromString(await page.text(), 'text/html');
         if (!page.ok || !fresh.getElementById('view-launch')) return location.reload();   // no longer the list: the workspace emptied
         refreshLaunches(fresh);

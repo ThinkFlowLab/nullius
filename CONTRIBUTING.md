@@ -88,10 +88,10 @@ keys, every choice a card, and no em dashes.
 A change to what a metric means updates the field guide,
 `docs/field-guide.md`, in the same change.
 
-## Release candidates
+## Releases
 
 The [release guide](app/packaging/README.md) covers building verified downloads
-and preparing a draft prerelease. The manual workflow runs the tests and
+and preparing a draft release. The manual workflow runs the tests and
 attaches the wheel, source archive and checksums; publication is a separate
 decision by the repository owner.
 

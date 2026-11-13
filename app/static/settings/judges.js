@@ -35,7 +35,7 @@
     if (!on || on.dataset.models || !model.list) return;
     const provider = on.value.replace(/^local(?=$|:)/, 'custom');   // local:<id>, a named endpoint, is the builder's custom:<id>
     if (!catalogues.has(provider)) {
-      catalogues.set(provider, fetch('/new-run/models', {method: 'POST', headers: {'Content-Type': 'application/json',
+      catalogues.set(provider, nulliusFetch('/new-run/models', {method: 'POST', headers: {'Content-Type': 'application/json',
         'X-CSRF-Token': document.querySelector('#settings-form [name=csrf]').value}, body: JSON.stringify({provider})})
         .then(r => { if (!r.ok) throw new Error("Model catalogue unavailable"); return r.json(); }).then(j => { if (j.error) throw new Error(j.error); return j.models || []; }).catch(() => { catalogues.delete(provider); return []; }));
     }

@@ -19,7 +19,7 @@
   button.addEventListener('click', async () => {
     button.disabled = true; said.className = 'nb-said'; said.textContent = 'Asking Harbor…';
     try {
-      const r = await fetch(form.dataset.read, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': field('csrf').value},
+      const r = await nulliusFetch(form.dataset.read, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': field('csrf').value},
                                                 body: JSON.stringify({source: source(), ref: ref.value})});
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || 'HTTP ' + r.status);
