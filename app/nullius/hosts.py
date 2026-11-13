@@ -112,6 +112,25 @@ def parse_list(text: str) -> List[Host]:
     return out
 
 
+def replace(text: str, old: str, new: Optional[str]) -> Tuple[str, Optional[Host]]:
+    """The list with ``old`` changed to ``new`` in its place, or taken out when
+    ``new`` is None, and the new Host; ValueError when ``old`` is not in it,
+    ``new`` is not an entry or is one already."""
+    listed = parse_list(text)
+    entries = [h.entry for h in listed]
+    if old not in entries:
+        raise ValueError(f"{old!r} is not one of the hosts")
+    host = parse(new) if new is not None else None
+    if host and host.entry != old and host.entry in entries:
+        raise ValueError(f"{host.label} is a host already")
+    return ", ".join(host.entry if e == old else e for e in entries if host or e != old), host
+
+
+def same_machine(a: Host, b: Host) -> bool:
+    """Whether two entries reach the same machine: the same alias, or user, address and port."""
+    return (a.kind, a.alias, a.user, a.host, a.port) == (b.kind, b.alias, b.user, b.host, b.port)
+
+
 def validate_list(text: str) -> Optional[str]:
     """None when every entry parses, else what was wrong."""
     try:

@@ -455,11 +455,13 @@ def state(var: Variable, file_values: Dict[str, str]) -> dict:
     shown = "" if value is None else (SECRET_SHOWN if var.secret else endpoint_url_shown(value) if var.kind == "endpoint" else value)
     # an endpoint's URL saved or set before it was shown: said, and not saved again until fixed
     problem = endpoint_url_problem(value) if var.kind == "endpoint" and value else None
+    # constraints set in the environment or the file by hand: said, and every run refused until fixed
+    invalid = _constraints(value) if var.kind == "constraints" and value else None
     return {"name": var.name, "group": var.group, "purpose": var.purpose, "kind": var.kind, "secret": var.secret,
             "example": var.example, "source": source, "shown": shown,
             "shadowed": source == "environment" and var.name in file_values and file_values[var.name] != value,
             "advice": LOCAL_KEY_ADVICE if var.kind == "localkey" and value is None and os.environ.get(var.name[:-3] + "URL") else "",
-            "problem": f"This URL must be {problem}." if problem else ""}
+            "problem": f"This URL must be {problem}." if problem else f"{var.name} must be {invalid}." if invalid else ""}
 
 
 def states(path: str) -> List[dict]:
