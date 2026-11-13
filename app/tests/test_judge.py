@@ -276,7 +276,7 @@ class Batch(unittest.TestCase):
             asked = [q for q in ("task_completed",) if f'"{q}"' in body["messages"][1]["content"]]
             return 200, {"model": "vendor/m", "choices": [{"message": {"content": _json.dumps({"answers": {q: {"noul": 0.3} for q in asked}})}}],
                          "usage": {"prompt_tokens": 10, "completion_tokens": 2}}
-        llm = client.Judge("openrouter", "sk-or-1", "vendor/m", client.LLM_PROVIDERS["openrouter"]["url"])
+        llm = client.Judge("openrouter", "sk-or-1", "vendor/m", "https://openrouter.ai/api/v1/chat/completions")
         rec = batch.ask_and_store(str(self.tmp), "job", "t", {"trial": (["task_completed"], "the trial state", False)}, llm, post=chat)
         self.assertEqual(rec["judge"], {"provider": "openrouter", "model": "vendor/m"})
         self.assertEqual(store.load(str(self.tmp), "job", "t", lane="llm")["answers"], {"task_completed": {"noul": 0.3}})

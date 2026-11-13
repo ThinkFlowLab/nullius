@@ -84,14 +84,14 @@ class Here(Base):
         self.assertLessEqual({"API_KEY_TYPESAFE", "API_TOKEN"}, set(execution.withheld()))     # old spellings of a secret
         self.assertEqual({"HOST", "PORT"} & set(execution.withheld()), set())                 # old names of start-up options are no secret
         held = {n: "sk-held-" + n.lower() for n in execution.withheld()}
-        plan = execution.Plan(name="own", script="env", model="m", key_var="OPENROUTER_API_KEY", url_var="", base_url=providers.PROVIDER_BASE["openrouter"])
+        plan = execution.Plan(name="own", script="env", model="m", key_var="OPENROUTER_API_KEY", url_var="", base_url=providers.PRESETS["openrouter"]["base"])
         with mock.patch.dict(os.environ, held):
             self.assertEqual([k for k in execution._clean_env() if k in held], [])
             ex = self.wait(execution.Execution(plan, root=str(self.tmp)).start())
         self.assertEqual((ex.state, ex.error), ("done", None), ex.lines)
         env = dict(l.split("=", 1) for l in (self.tmp / "own" / "run-run.log").read_text().splitlines() if "=" in l)
         self.assertEqual({k: v for k, v in env.items() if v.startswith("sk-held-")}, {n: held["OPENROUTER_API_KEY"] for n in execution.KEY_NAMES})
-        self.assertEqual({n: env.get(n) for n in execution.URL_NAMES}, {n: providers.PROVIDER_BASE["openrouter"] for n in execution.URL_NAMES})
+        self.assertEqual({n: env.get(n) for n in execution.URL_NAMES}, {n: providers.PRESETS["openrouter"]["base"] for n in execution.URL_NAMES})
 
     def test_a_run_on_a_named_endpoint_gets_its_url_and_key_alone(self):
         """Several OpenAI-compatible endpoints in Settings: a run on one is sent
