@@ -304,33 +304,34 @@ def _an_error(e) -> Optional[dict]:
     return got or None
 
 
-def _provider(obj) -> Optional[str]:
-    """The serving provider an object of a reply names: its own ``provider``,
-    its ``message``'s or its ``response``'s, else the last attempt of
-    OpenRouter's routing facts (``openrouter_metadata``) there - the one that
-    answered; an earlier, failed attempt is never taken for it, and a last
-    attempt that names none gives none."""
+def _routing_facts(obj) -> Optional[list]:
+    """The serving endpoints OpenRouter's routing facts (``openrouter_metadata``)
+    list as available, in an object of a reply, its ``message`` or its
+    ``response``; None when none of them holds such a list."""
     if not isinstance(obj, dict):
         return None
-    inner = [obj] + [o for o in (obj.get("message"), obj.get("response")) if isinstance(o, dict)]
-    for o in inner:
-        if _name(o.get("provider")):
-            return o["provider"]
-    for o in inner:
-        meta = o.get("openrouter_metadata")
-        attempts = meta.get("attempts") if isinstance(meta, dict) else None
-        if isinstance(attempts, list) and attempts:
-            last = attempts[-1]
-            return _name(last.get("provider")) if isinstance(last, dict) else None
+    for o in (obj, obj.get("message"), obj.get("response")):
+        meta = o.get("openrouter_metadata") if isinstance(o, dict) else None
+        endpoints = meta.get("endpoints") if isinstance(meta, dict) else None
+        available = endpoints.get("available") if isinstance(endpoints, dict) else None
+        if isinstance(available, list):
+            return available
     return None
 
 
-def _attempts_in(obj) -> bool:
-    """Whether an object of a reply holds OpenRouter's routing facts, with at least one attempt."""
-    return isinstance(obj, dict) and any(
-        isinstance(o, dict) and isinstance(o.get("openrouter_metadata"), dict)
-        and isinstance(o["openrouter_metadata"].get("attempts"), list) and bool(o["openrouter_metadata"]["attempts"])
-        for o in (obj, obj.get("message"), obj.get("response")))
+def _provider(obj) -> Optional[str]:
+    """The serving provider an object of a reply names: its own ``provider``,
+    its ``message``'s or its ``response``'s, else the one endpoint OpenRouter's
+    routing facts mark ``selected`` among the available ones (asked for with
+    ``X-OpenRouter-Metadata``; a Responses reply names its provider there
+    alone). Facts that mark no single named endpoint give none."""
+    if not isinstance(obj, dict):
+        return None
+    for o in [obj] + [o for o in (obj.get("message"), obj.get("response")) if isinstance(o, dict)]:
+        if _name(o.get("provider")):
+            return o["provider"]
+    chosen = [a for a in _routing_facts(obj) or () if isinstance(a, dict) and a.get("selected") is True]
+    return _name(chosen[0].get("provider")) if len(chosen) == 1 else None
 
 
 def _choices(choices, ends: dict, errors: dict) -> None:
@@ -379,9 +380,8 @@ def _facts(path: str, body: bytes, streamed: bool) -> dict:
                 continue
             if not isinstance(ev, dict):
                 continue
-            # the latest event that names one: the end's over an earlier attempt's; routing facts whose last
-            # attempt names none leave none
-            served = _provider(ev) if _attempts_in(ev) else (_provider(ev) or served)
+            # the latest event that names one; routing facts that mark no single named endpoint leave none
+            served = _provider(ev) if _routing_facts(ev) is not None else (_provider(ev) or served)
             kind = ev.get("type")
             if kind == "error":                  # Messages' error event, or a Responses one
                 error = error or _an_error(ev.get("error")) or _an_error({k: v for k, v in ev.items() if k != "type"})
@@ -583,9 +583,9 @@ class Relay:
         and not sent when it does not fit. ``serving``: by model, the serving
         providers that may answer a request sent as that model (:func:`routing`),
         put on every such request in place of the caller's own. ``facts``: a
-        pinned Chat Completions request asks OpenRouter for its routing facts,
-        where its reply names who served it; by default when ``base`` is
-        OpenRouter's."""
+        pinned Chat Completions or Responses request asks OpenRouter for its
+        routing facts, where its reply names who served it; by default when
+        ``base`` is OpenRouter's."""
         self.fields = fields
         self.serving = {m: list(s) for m, s in (serving or {}).items()}
         host = (urllib.parse.urlsplit(base).hostname or "").lower()
@@ -653,8 +653,9 @@ class Relay:
         return redact(text)[:200]
 
     def _headers(self, caller, facts: bool = False) -> Dict[str, str]:
-        """``facts``: a pinned Chat Completions request to OpenRouter, sent
-        asking for its routing facts whatever the caller said of them."""
+        """``facts``: a pinned Chat Completions or Responses request to
+        OpenRouter, sent asking for its routing facts whatever the caller
+        said of them."""
         out = forwarded(caller)
         if facts:
             out = {k: v for k, v in out.items() if k.lower() != "x-openrouter-metadata"}
@@ -724,7 +725,8 @@ class Relay:
         conn, r, back, body = None, None, [], b""
         cut = False                              # the reply was cut off: the call may have been billed
         try:
-            facts = bool(pinned) and self.facts and rest.split("?")[0].endswith("/chat/completions")
+            # a Responses reply names its provider in the routing facts alone; a Messages reply names it of itself
+            facts = bool(pinned) and self.facts and rest.split("?")[0].endswith(("/chat/completions", "/responses"))
             conn, r = self.pool.send(h.command, rest, raw if h.command == "POST" else None, self._headers(h.headers, facts))
             status, kind, back = r.status, r.getheader("Content-Type") or "application/json", returned(r.headers)
         except Exception as e:

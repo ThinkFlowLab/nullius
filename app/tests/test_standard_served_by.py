@@ -40,7 +40,18 @@ def sse(*events) -> bytes:
     return b"".join(b"data: " + json.dumps(e).encode() + b"\n\n" for e in events) + b"data: [DONE]\n\n"
 
 
-# Each reply names its serving provider and how it ended, as OpenRouter's do: Chat Completions, Messages, Responses.
+def routing_facts(selected, *others) -> dict:
+    """OpenRouter's routing facts (``openrouter_metadata``) as a reply holds them when asked: the endpoint that
+    served it is the one marked ``selected`` among the available ones."""
+    available = [{"provider": o, "model": "asked", "selected": False} for o in others]
+    if selected is not None:
+        available.insert(len(available) // 2, {"provider": selected, "model": "asked", "selected": True})
+    return {"requested": "asked", "attempt": 1, "summary": f"available={len(available)}, selected={selected}",
+            "endpoints": {"total": len(available) + 2, "available": available}}
+
+
+# Each reply names its serving provider and how it ended, as OpenRouter's do: Chat Completions and Messages of
+# themselves; Responses in the routing facts alone, given when the request asks for them (``ASKED``).
 CHAT = {"id": "c1", "provider": "Prov A", "choices": [{"message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
         "usage": {"prompt_tokens": 3, "completion_tokens": 1}}
 CHAT_SSE = sse({"id": "c1", "provider": "Prov A", "choices": [{"index": 0, "delta": {"content": "h"}, "finish_reason": None}]},
@@ -52,17 +63,22 @@ MESSAGES_SSE = sse({"type": "message_start", "message": {"type": "message", "pro
                    {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hi"}},
                    {"type": "message_delta", "delta": {"stop_reason": "max_tokens"}, "usage": {"output_tokens": 1}},
                    {"type": "message_stop"})
-RESPONSES = {"object": "response", "provider": "Prov C", "status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
+RESPONSES = {"object": "response", "status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
              "output": [{"type": "message", "content": [{"type": "output_text", "text": "hi"}]}],
              "usage": {"input_tokens": 3, "output_tokens": 1}}
-RESPONSES_SSE = sse({"type": "response.created", "response": {"provider": "Prov C", "status": "in_progress"}},
+COMPLETED = {"object": "response", "status": "completed", "output": [], "usage": {"input_tokens": 3, "output_tokens": 1}}
+RESPONSES_SSE = sse({"type": "response.created", "response": {"object": "response", "status": "in_progress"}},
                     {"type": "response.output_text.delta", "delta": "hi"},
-                    {"type": "response.completed", "response": {"provider": "Prov C", "status": "completed", "output": [],
-                                                                "usage": {"input_tokens": 3, "output_tokens": 1}}})
+                    {"type": "response.completed", "response": COMPLETED})
+RESPONSES_ASKED = dict(RESPONSES, openrouter_metadata=routing_facts("Prov C", "Prov D", "Prov E"))
+RESPONSES_SSE_ASKED = sse({"type": "response.created", "response": {"object": "response", "status": "in_progress"}},
+                          {"type": "response.output_text.delta", "delta": "hi"},
+                          {"type": "response.completed", "response": dict(COMPLETED, openrouter_metadata=routing_facts("Prov C", "Prov D"))})
+UNASKED = {False: RESPONSES, True: RESPONSES_SSE}
 SHAPES = {("/chat/completions", False): (CHAT, "Prov A", "stop"), ("/chat/completions", True): (CHAT_SSE, "Prov A", "length"),
           ("/messages", False): (MESSAGES, "Prov B", "end_turn"), ("/messages", True): (MESSAGES_SSE, "Prov B", "max_tokens"),
-          ("/responses", False): (RESPONSES, "Prov C", "incomplete: max_output_tokens"),
-          ("/responses", True): (RESPONSES_SSE, "Prov C", "completed")}
+          ("/responses", False): (RESPONSES_ASKED, "Prov C", "incomplete: max_output_tokens"),
+          ("/responses", True): (RESPONSES_SSE_ASKED, "Prov C", "completed")}
 
 
 def body_for(path: str, stream: bool) -> dict:
@@ -95,6 +111,8 @@ class Upstream(BaseHTTPRequestHandler):
         else:
             path = "/" + self.path.split("/v1/", 1)[-1]
             reply = SHAPES.get((path, bool(req.get("stream"))), (CHAT,))[0]
+            if path == "/responses" and self.headers.get("X-OpenRouter-Metadata") != "enabled":
+                reply = UNASKED[bool(req.get("stream"))]
             status, kind, body = 200, "text/event-stream" if req.get("stream") else "application/json", \
                 reply if isinstance(reply, bytes) else json.dumps(reply).encode()
         self.send_response(status)
@@ -189,7 +207,7 @@ class TheRelay(WithUpstream):
                     self.assertEqual(c["request"]["routing_asked"]["token"], "[REDACTED]")
 
     def test_each_shape_streamed_or_not_says_who_served_it_and_how_it_ended(self):
-        r = self.relay(model="m-run", serving={"m-run": ["prov-a"]})
+        r = self.relay(model="m-run", serving={"m-run": ["prov-a"]}, facts=True)
         for (path, stream), (_, who, end) in SHAPES.items():
             with self.subTest(path=path, stream=stream):
                 post(r.url("u0") + path, body_for(path, stream))
@@ -219,14 +237,18 @@ class TheRelay(WithUpstream):
                 self.assertEqual(relay.reply_facts(path, json.dumps(body).encode(), False)["error"], error)
 
     def test_a_completed_responses_events_routing_facts_name_who_served_it(self):
-        body = sse({"type": "response.completed", "response": {"object": "response", "status": "completed", "output": [],
-                    "openrouter_metadata": {"attempts": [{"provider": "Prov A", "status": 200}]}}})
+        body = sse({"type": "response.completed", "response": dict(COMPLETED, openrouter_metadata=routing_facts("Prov A", "Prov X"))})
         self.assertEqual(relay.reply_facts("/responses", body, True), {"served_by": "Prov A", "end": "completed"})
+        whole = json.dumps(dict(RESPONSES, openrouter_metadata=routing_facts("Prov A", "Prov X", "Prov Y"))).encode()
+        self.assertEqual(relay.reply_facts("/responses", whole, False)["served_by"], "Prov A")
 
     def test_facts_of_the_wrong_type_are_left_out_and_never_stop_a_reply(self):
-        odd = [{"choices": [{"message": {"content": "ok"}}], "openrouter_metadata": {"attempts": 1}},
+        odd = [{"choices": [{"message": {"content": "ok"}}], "openrouter_metadata": {"endpoints": {"available": 1}}},
                {"type": "message", "content": [], "provider": 7, "error": "a string", "stop_reason": ["x"]},
-               {"choices": [{"index": "0", "finish_reason": 3, "error": []}], "openrouter_metadata": [1]}]
+               {"choices": [{"index": "0", "finish_reason": 3, "error": []}], "openrouter_metadata": [1]},
+               {"choices": [], "openrouter_metadata": {"endpoints": [1]}},
+               {"choices": [], "openrouter_metadata": {"endpoints": {"available": [7, {"provider": 7, "selected": True},
+                                                                                   {"provider": "Prov A", "selected": "true"}]}}}]
         r = self.relay(model="m-run", serving={"m-run": ["prov-a"]})
         for body in odd:
             with self.subTest(body=body):
@@ -275,15 +297,17 @@ class TheRelay(WithUpstream):
 
     def test_the_routing_facts_are_asked_of_openrouter_alone_and_always_as_enabled(self):
         meta = json.dumps(dict({k: v for k, v in CHAT.items() if k != "provider"},
-                               openrouter_metadata={"attempts": [{"provider": "Prov X", "status": 503},
-                                                                 {"provider": "Prov A", "status": 200}]})).encode()
+                               openrouter_metadata=routing_facts("Prov A", "Prov X"))).encode()
         r = self.relay(model="m-run", serving={"m-run": ["prov-a"]}, facts=True)
         Upstream.next = (200, "application/json", meta)
         post(r.url("u0") + "/chat/completions", body_for("/chat/completions", False), {"X-OpenRouter-Metadata": "disabled"})
         got = [v for k, v in Upstream.seen[-1][1].items() if k == "x-openrouter-metadata"]
         self.assertEqual(got, ["enabled"])
         self.assertEqual(r.calls("u0")[-1]["reply"]["served_by"], "Prov A")
-        post(r.url("u0") + "/messages", body_for("/messages", False))       # not a Chat request: nothing asked
+        for stream in (False, True):                                        # a Responses request: asked too
+            post(r.url("u0") + "/responses", body_for("/responses", stream), {"X-OpenRouter-Metadata": "disabled"})
+            self.assertEqual([v for k, v in Upstream.seen[-1][1].items() if k == "x-openrouter-metadata"], ["enabled"])
+        post(r.url("u0") + "/messages", body_for("/messages", False))       # a Messages reply names its provider: nothing asked
         self.assertNotIn("x-openrouter-metadata", Upstream.seen[-1][1])
         for kw in ({"serving": {"m-run": ["prov-a"]}}, {"facts": True}):     # another provider's address; no pin
             with self.subTest(kw=kw):
@@ -590,22 +614,49 @@ class TheReview(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
-    def test_the_provider_of_the_replys_end_is_recorded_never_an_earlier_attempts(self):
-        events = [{"type": "response.created", "response": {"status": "in_progress", "openrouter_metadata": {
-                      "attempts": [{"provider": "Prov A", "status": 503}]}}},
-                  {"type": "response.completed", "response": {"status": "completed", "output": [], "provider": "Prov B"}}]
+    def test_the_selected_endpoint_of_the_replys_end_is_recorded_never_another(self):
+        """The routing facts list the endpoints available: the one marked selected served the reply, never the
+        first listed nor one an earlier event's facts marked."""
+        events = [{"type": "response.created", "response": {"status": "in_progress", "openrouter_metadata": routing_facts("Prov A")}},
+                  {"type": "response.completed", "response": dict(COMPLETED, openrouter_metadata=routing_facts("Prov B", "Prov A", "Prov C"))}]
         facts = relay.reply_facts("/responses", sse(*events), True)
         held = job.served([{"status": 200, "model": "m", "reply": facts}], {"m": ["prov-a"]})["held"]["m"]
         self.assertEqual((facts["served_by"], held), ("Prov B", "unknown"))
+        body = dict(RESPONSES, openrouter_metadata=routing_facts("Prov B", "Prov A"))
+        self.assertEqual(relay.reply_facts("/responses", json.dumps(body).encode(), False)["served_by"], "Prov B")
 
-    def test_a_last_attempt_that_names_no_provider_takes_no_earlier_name(self):
-        body = {"choices": [{"message": {"content": "ok"}}], "openrouter_metadata": {"attempts": [
-            {"provider": "Prov A", "status": 503}, {"provider": 7, "status": 200}]}}
-        self.assertNotIn("served_by", relay.reply_facts("/chat/completions", json.dumps(body).encode(), False))
-        stream = sse({"provider": "Prov A", "choices": [{"index": 0, "delta": {"content": "o"}}]},
-                     {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-                      "openrouter_metadata": {"attempts": [{"provider": "Prov A", "status": 503}, {"status": 200}]}})
-        self.assertNotIn("served_by", relay.reply_facts("/chat/completions", stream, True))
+    def test_facts_that_mark_no_single_named_endpoint_take_no_earlier_name(self):
+        both = routing_facts("Prov A", "Prov X")
+        for e in both["endpoints"]["available"]:
+            e["selected"] = True
+        for meta in (routing_facts(None, "Prov A", "Prov X"), routing_facts(7, "Prov A"), both):
+            with self.subTest(meta=meta):
+                body = {"choices": [{"message": {"content": "ok"}}], "openrouter_metadata": meta}
+                self.assertNotIn("served_by", relay.reply_facts("/chat/completions", json.dumps(body).encode(), False))
+                stream = sse({"type": "response.created", "response": {"status": "in_progress", "openrouter_metadata": routing_facts("Prov A")}},
+                             {"type": "response.completed", "response": dict(COMPLETED, openrouter_metadata=meta)})
+                self.assertNotIn("served_by", relay.reply_facts("/responses", stream, True))
+
+    def test_a_pinned_responses_call_is_recorded_with_its_provider_and_the_pin_holds(self):
+        """A Responses reply names its provider in the routing facts alone: the relay asks for them on a pinned
+        request to OpenRouter, records the endpoint they mark, and the pin reads held, streamed or not. Without
+        them the reply names no provider and the pin reads unknown."""
+        up = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+        threading.Thread(target=up.serve_forever, daemon=True).start()
+        self.addCleanup(up.server_close)
+        self.addCleanup(up.shutdown)
+        Upstream.seen, Upstream.next, Upstream.always = [], None, None
+        base, pin = f"http://127.0.0.1:{up.server_address[1]}/v1", {"m-run": ["prov-c"]}
+        for facts, who, held in ((True, "Prov C", True), (False, None, "unknown")):
+            r = relay.Relay(base, "or-test", os.path.join(self.tmp, f"rec-{facts}"), model="m-run", serving=pin, facts=facts).start()
+            self.addCleanup(r.stop)
+            for stream in (False, True):
+                with self.subTest(facts=facts, stream=stream):
+                    post(r.url("u0") + "/responses", body_for("/responses", stream))
+                    self.assertEqual(Upstream.seen[-1][1].get("x-openrouter-metadata"), "enabled" if facts else None)
+                    self.assertEqual(json.loads(Upstream.seen[-1][2])["provider"], {"order": ["prov-c"], "allow_fallbacks": False})
+                    self.assertEqual(r.calls("u0")[-1]["reply"].get("served_by"), who)
+            self.assertEqual(job.served(r.calls("u0"), pin)["held"], {"m-run": held})
 
     def test_an_error_keeps_its_stated_fields_alone(self):
         nested = relay.reply_facts("/chat/completions", json.dumps({"error": {"api_key": ["review-only-credential"]}}).encode(), False)
