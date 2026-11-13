@@ -5,7 +5,8 @@ One benchmark and one agent, capability, control or setup, into a job.
 ```bash title="Run"
 nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--limit N] [-j N] \
     [--unsandboxed | --backend container] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
-    [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] \
+    [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--served-by [MODEL=]SLUG[,SLUG...]]... \
+    [--max-usd USD] [--max-usd-per-unit USD] \
     [--repeat K] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
 ```
 
@@ -28,6 +29,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--option NAME=VALUE` | An agent's or capability's option (repeatable) |
 | `--bench-option NAME=VALUE` | A benchmark's option (repeatable), read as `NULLIUS_OPTION_<NAME>` |
 | `--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
+| `--served-by [MODEL=]SLUG[,SLUG...]` | On OpenRouter, the serving providers that may answer a model (repeatable): [below](#serving-providers) |
 | `--max-usd USD`, `--max-usd-per-unit USD` | A spending cap for the run, for each unit: [below](#a-spending-cap) |
 | `--repeat K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--repeat`); by default they stay for the next run |
@@ -63,6 +65,26 @@ nullius standard run locomo model --model gpt-4o-mini
 | The result | `result.json` carries `budget`, and the job page shows it |
 | From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit |
 | Shards | A shard's cap is its own: [Shard and merge](shard-and-merge.md) |
+
+## Serving providers
+
+On OpenRouter one model is served by several providers, which may differ in precision, speed and price. `--served-by deepinfra` lets only DeepInfra answer the run's model; `--served-by m=deepinfra/fp8,together` lets DeepInfra's fp8 endpoint answer the model `m`, then Together when it cannot.
+
+```bash title="One provider for the run's model"
+nullius standard run humaneval reference --provider openrouter --model meta-llama/llama-3.3-70b-instruct --served-by deepinfra --unsandboxed
+```
+
+| Rule | Detail |
+| --- | --- |
+| A slug | As the model's page on OpenRouter names its provider: `deepinfra`, `deepinfra/fp8`. Several are tried in their order, and no other provider answers |
+| Without `MODEL=` | The run's model. With it, any model the run calls: its judge, its simulated user, an option's embeddings |
+| What is sent | `provider: {"order": [...], "allow_fallbacks": false}` on every request sent as that model, on every route, in place of the agent's own routing field. A Chat Completions request also asks for OpenRouter's routing facts (`X-OpenRouter-Metadata: enabled`), where its reply names the provider that served it. A model with no pin is sent as before |
+| Refused before any unit | A provider other than `openrouter`; a model the run does not call; a slug that is empty, malformed or given twice; a model named twice |
+| No provider can serve it | OpenRouter answers with an error and nothing else is tried; the call fails as any refused call does |
+| The record | `config.json`: `standard.served_by`, the slugs by model. Each call in `agent/calls.jsonl`: `request.routing` and, when the agent sent its own, `request.routing_asked`; `reply.served_by`, `reply.end` and `reply.error` |
+| Who served the run | Each trial's `result.json`, `standard.served`, and the job's `result.json`, `served`: the answered calls by serving provider, those that named none, and for each pinned model `held`: `true` when every answered call names a provider that reads as a pinned slug (lowercased, its words joined by dashes: `Google AI Studio` is `google-ai-studio`), `unknown` when one names none or another name, `null` with no answered call |
+| Shards | `merge` refuses shards whose pins differ, unless `--force` |
+| The builder | A recipe has no field for it yet: a pinned run starts from the command line |
 
 <div class="grid cards" markdown>
 

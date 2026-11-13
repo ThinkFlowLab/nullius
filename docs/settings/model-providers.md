@@ -6,7 +6,7 @@ The key or endpoint a run's model calls go to.
 | --- | --- | --- |
 | TypeSafe AI | `TYPESAFE_API_KEY` | System One judgement only |
 | OpenAI | `OPENAI_API_KEY` | api.openai.com |
-| OpenRouter | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1`, fixed |
+| OpenRouter | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1`, fixed; a run may choose the serving providers of a model ([`--served-by`](../cli/run.md#serving-providers)) |
 | Anthropic | `ANTHROPIC_API_KEY` | Standard runs only, through the relay |
 | OpenAI-compatible | A name, a URL, an optional key, per endpoint | Ollama, vLLM, LM Studio or a hosted service, API path included |
 
