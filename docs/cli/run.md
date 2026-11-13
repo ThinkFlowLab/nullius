@@ -82,7 +82,7 @@ HumanEval/12
 | Refused before any unit starts | An id the dataset does not hold, the ids named; an id listed twice; a file that lists none |
 | Order | The dataset's, whatever the file's; each unit keeps its place in the whole dataset (`HumanEval/12` is `u0012`) |
 | With `--limit N` | The first N of the listed units, in the dataset's order |
-| With `--shard I/N` | The listed units of that shard; `standard.shard.units_total` counts the listed units; `merge` refuses shards of different lists |
+| With `--shard I/N` | The listed units of that shard; `standard.shard.units_total` counts the listed units; `merge` compares the units each list holds and refuses shards whose lists differ, even with `--force` |
 | The record | `config.json`: `standard.units_file`, the file's name, its sha256 and its units |
 | Where it is read | On the machine the command runs on, from the directory it starts in, with `--from-run` or without |
 | The builder | A recipe has no field for a list |
