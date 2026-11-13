@@ -68,7 +68,7 @@ nullius standard run locomo model --model gpt-4o-mini
 
 ## Serving providers
 
-On OpenRouter one model is served by several providers, which may differ in precision, speed and price. `--served-by deepinfra` lets only DeepInfra answer the run's model; `--served-by m=deepinfra/fp8,together` lets DeepInfra's fp8 endpoint answer the model `m`, then Together when it cannot.
+On OpenRouter one model is served by several providers. They may differ in precision, speed and price. `--served-by deepinfra` lets only DeepInfra answer the run's model; `--served-by m=deepinfra/fp8,together` lets DeepInfra's fp8 endpoint answer the model `m`, then Together when it cannot.
 
 ```bash title="One provider for the run's model"
 nullius standard run humaneval reference --provider openrouter --model meta-llama/llama-3.3-70b-instruct --served-by deepinfra --unsandboxed
