@@ -247,7 +247,7 @@
 #nullius-builder .std-backends .nb-tile-note { font-size: 11px; white-space: nowrap; }
 @media (max-width: 560px) { #nullius-builder .std-backends { grid-template-columns: minmax(0, 320px); } }
 /* Served by: under its model field, set in from it: the typed list, then the providers to add from */
-#nullius-builder .std-served { margin: -10px 0 22px 18px; padding-left: 14px; border-left: 2px solid var(--nb-line); font-size: 14px; gap: 8px; }
+#nullius-builder .std-served { margin: 10px 0 22px 18px; padding: 2px 0 2px 14px; border-left: 2px solid var(--nb-line); font-size: 14px; gap: 8px; }
 #nullius-builder .std-served label { display: grid; gap: 6px; }
 #nullius-builder .std-served select { max-width: 420px; }
 @media(max-width:520px) { #nullius-builder .std-served { margin-left: 6px; padding-left: 10px; } }
