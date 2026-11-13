@@ -13,9 +13,13 @@ version, dataset, agent or capability and model, the same serving providers
 pinned for each model (``served_by``) and the same number of shards - else it
 is refused, naming what differs, unless ``force``. Two trials of
 one unit are always refused, with the units named: one of them would be
-counted twice. Units no shard ran are not a refusal - a shard may be
-missing, or stopped early - and are said: the shards absent, and the units a
-shard planned and has no trial for.
+counted twice. So are shards whose lists of units (``run.units_file``) hold
+different units, or a shard of a list and one of none: the merged job
+records one list. The units are compared in any order; a list's name,
+comments, line endings and sha256 may differ from shard to shard, and the
+merged job records the first shard's list. Units no shard ran
+are not a refusal - a shard may be missing, or stopped early - and are said:
+the shards absent, and the units a shard planned and has no trial for.
 
 Files are hard-linked into the merged job where the file system allows (a
 copy where it does not), so a merge of a thousand trials costs no second
@@ -63,6 +67,12 @@ def _at(d, path):
         else:
             return None
     return d
+
+
+def _listed(cfg: dict) -> Optional[tuple]:
+    """The units a shard's list holds (``standard.units_file``), sorted; None for a shard of no list."""
+    units = _at(cfg, ("standard", "units_file", "units"))
+    return tuple(sorted(str(u) for u in units)) if isinstance(units, list) else None
 
 
 def _served(shards: List[dict], results: List[dict]) -> Optional[dict]:
@@ -127,6 +137,14 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
         shards.append({"dir": d, "name": os.path.basename(d), "config": cfg, "result": res, "shard": sh or {}})
     if len({s["dir"] for s in shards}) != len(shards):
         raise Refused("a job is named twice")
+    # one list of units, force or not: the merged job records one
+    lists = [_listed(s["config"]) for s in shards]
+    if len(set(lists)) > 1:
+        odd = sorted({u for got in lists for u in got or ()} - set.intersection(*(set(got or ()) for got in lists)))
+        raise Refused("the shards' units files hold different units - "
+                      + "; ".join(f"{s['name']} {f'{len(got)} units' if got is not None else 'no list'}" for s, got in zip(shards, lists))
+                      + (f"; not in every list: {', '.join(odd[:10])}" + (" and more" if len(odd) > 10 else "") if odd else "")
+                      + " (--force does not merge them)")
     differ = []
     for label, path in SAME:
         seen = {json.dumps(_at(s["config"], path), sort_keys=True) for s in shards}      # a mapping by its content
@@ -177,7 +195,10 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
     if isinstance(total, int):
         short = total - len(by_unit)
         if short > 0:
-            notes.append(f"{short} of the dataset's {total} units are not in the merge")
+            # a shard of a list of units counts the listed ones as its whole (run.units_file)
+            listed = any(_at(s["config"], ("standard", "units_file")) for s in shards)
+            whole = f"{total} listed units" if listed else f"dataset's {total} units"
+            notes.append(f"{short} of the {whole} are not in the merge")
     return {"shards": shards, "by_unit": by_unit, "notes": notes, "missing": missing, "units_total": total, "differ": differ}
 
 

@@ -116,7 +116,7 @@ A driver serves such a site with `setup.web_services: [{name, port, socket}]`: a
 ## A run
 
 ```text title="One run"
-benchmark[@version] × agent|capability × model × dataset × its options × limit
+benchmark[@version] × agent|capability × model × dataset × its options × listed units × limit
    │ the pair must fit; an agent run needs --unsandboxed on the local
    │ backend, or --backend container (see Safety); an option that needs the
    │ machine's programs is refused without them, one that embeds gets
@@ -339,10 +339,10 @@ N machines are N runs of the same command, each with `--shard I/N`, and one merg
 | Rule | Detail |
 | --- | --- |
 | No central relay | Each unit's relay runs on its own machine with the key it was handed; split a launch over keys of their own if one cannot carry it. A spending cap is each shard's own |
-| Shards by the unit's id | `sha256(unit id) mod N` (`standard/shard.py`); changing N moves most units. Order: the driver's `units`, the shard, then `--limit` (`--shard 1/2 --limit 6` is the first six units of shard 1) |
+| Shards by the unit's id | `sha256(unit id) mod N` (`standard/shard.py`); changing N moves most units. Order: the driver's `units`, the units `--units FILE` lists, the shard, then `--limit` (`--shard 1/2 --limit 6` is the first six units of shard 1) |
 | A unit keeps its place | `u0042` is the 43rd unit of the whole dataset in every shard |
-| One launch | Each shard's `config.json` records `standard.shard` (`index`, `of`, `units_total`, `partition`, `planned`, `limit`) and `standard.launch` (`--launch`, else the UTC day, benchmark, agent or capability and model) |
-| `cli merge JOB_DIR... -o OUT` | One job (`standard/merge.py`): trials hard-linked, `result.json` recomputed, `config.json` with `merged_from`. Shards that differ in launch, version, dataset, agent, model, serving providers, backend or N are refused unless `--force`; two trials of one unit always |
+| One launch | Each shard's `config.json` records `standard.shard` (`index`, `of`, `units_total`, `partition`, `planned`, `limit`) and `standard.launch` (`--launch`, else the UTC day, benchmark, agent or capability and model). With `--units`, `units_total` counts the listed units. The shards' lists hold the same units; a list's file name, comments and sha256 may differ from shard to shard |
+| `cli merge JOB_DIR... -o OUT` | One job (`standard/merge.py`): trials hard-linked, `result.json` recomputed, `config.json` with `merged_from`. Shards that differ in launch, version, dataset, agent, model, serving providers, backend or N are refused unless `--force`. Shards whose lists hold different units, and two trials of one unit, are refused always. `merge` compares the units each list holds, in any order; the sha256 is kept in the record only |
 | `cli prove --shard I/N` | The controls and the leak check on that shard's units; each record says `shard` |
 
 ```bash title="Two machines, one merge"

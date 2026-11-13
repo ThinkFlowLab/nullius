@@ -263,6 +263,37 @@ class OtherBenchmarks(unittest.TestCase):
                 self.assertNotIn("versions", data)
 
 
+class MachineDocker(unittest.TestCase):
+    """OSWorld1's VMs run in Docker on the machine its driver runs on: whoever runs its tasks, a setup or the
+    null control, that machine is asked for Docker before Run and again as the run starts."""
+
+    def a_recipe(self, others, **kw):
+        r = {"version": 1, "harness": "standard", "name": "osw", "title": "t", "benchmark": "osworld1", "datasets": ["test_small"],
+             "others": others, "model_choice": "paper", "provider": "openrouter", "model": "MiniMax-M3", "limit": 1,
+             "concurrency": 1, "where": "local"}
+        r.update(kw)
+        return r
+
+    def test_review_asks_for_docker_for_every_setup_and_the_null_control(self):
+        for others, kw in ((["nop"], {}), (["original"], {}), (["original"], {"model_choice": "any", "model": "vendor/their-model"}),
+                           (["original", "nop"], {})):
+            with self.subTest(others=others, **kw):
+                out = recipe.compile(self.a_recipe(others, **kw))
+                self.assertEqual(out["errors"], [])
+                self.assertEqual([n["name"] for n in out["host"]["needs"]], ["docker"])
+                setups = {n["name"]: n for n in out["host"]["needs"]}
+                rows = prerequisites.check_here([], setups, which=lambda p: None)
+                self.assertEqual([(x["name"], x["state"]) for x in rows], [("setup:docker", "missing")])
+                self.assertFalse(prerequisites.ready([{"rows": rows}]))
+                self.assertTrue(prerequisites.ready([{"rows": prerequisites.check_here([], setups, which=lambda p: "/usr/bin/" + p)}]))
+
+    def test_the_null_control_is_refused_as_it_starts_on_a_machine_without_docker(self):
+        b = definitions.get("benchmark", "osworld1")
+        with self.assertRaises(run.Refused) as e:
+            run.Run(b, definitions.control(b, "nop"), model="", provider="openrouter", dataset="test_small", env={},
+                    which=lambda p: None, jobs_root="/nonexistent-never-written")
+        self.assertIn("vm_provider=docker needs on this machine docker (docker not on PATH)", str(e.exception))
+
 
 class TurnLimit(unittest.TestCase):
     def test_a_units_own_agent_limit_wins_within_bounds(self):

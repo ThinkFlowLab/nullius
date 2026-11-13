@@ -373,6 +373,9 @@
     const backend = rec.backend || 'local';
     const selected = C.standardOthers(rec).filter(o => C.chosenOf(rec).includes(o.key));
     const dockerWhy = list.includes('local') && here.docker ? 'Not on this machine: ' + here.docker : '';
+    // Review's rule (nullius/standard/recipe.py): a setup's image installs what has an install; nothing else reaches its container
+    const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
+    const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));
     const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? '$' : '▣', title: t, tip: sub});
@@ -384,7 +387,7 @@
       + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
       + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
       + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
-        : 'Sandboxed: each unit in a container whose only way out is its relay.', dockerWhy) + '</div>'
+        : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>'
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
       + (dockerOnly.length && backend === 'local' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - on local processes their units are recorded as not run.</p>` : '')
       + hostSetup(rec);
@@ -421,7 +424,7 @@
         : gone.length ? `<span class="nb-tick no">${esc(gone.map(([, ps]) => ps.join(', ')).join(', '))}</span>` : '<span class="nb-tick ok">ready ✓</span>';
       return `<li><b>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</b> ${state} ${button('Check', `data-hostreq-check="${esc(w)}"`, 'nb-inlinebutton')}${lines.length && (gone.length || (st && st.error)) ? ' ' + button('Install for me', `data-hostreq-install="${esc(w)}"`, 'nb-inlinebutton') : ''}${st && st.said ? ` <small>${esc(st.said)}</small>` : ''}</li>`;
     };
-    return `<div class="nb-sectionhead std-wherehead"><h3>Machine setup</h3><small>Needed by the search you chose, on each machine it runs on</small></div>`
+    return `<div class="nb-sectionhead std-wherehead"><h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small></div>`
       + reqs.map(([n, r]) => `<p class="nb-note"><b>${esc(n)}</b>: ${esc(r.summary)}</p>`).join('')
       + `<ul class="nb-hostreq">${C.whereList(rec).map(line).join('')}</ul>`
       + (lines.length ? `<div class="std-code"><div class="std-code-head"><span>or run it yourself, on each machine</span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div>` : '');
@@ -1023,8 +1026,11 @@
     else if(['model','simulator_model','judge_model'].includes(d.field)&&C.servedRoles(r()).length){renderForm();refreshPlan();
       requestAnimationFrame(()=>{const f=root.querySelector(`[data-field="${d.field}"]`);if(f&&document.activeElement!==f)f.focus();});}
     else if(d.stdVersion!==undefined){C.setStandardBenchmark(r(),el.value);render();}
-    // an option at its default is left out: the recipe names only what was changed
-    else if(d.benchOptSelect!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOptSelect]||{};rec.bench_options={...(rec.bench_options||{})};const v=el.value.trim();if(!v||v===o.default)delete rec.bench_options[d.benchOptSelect];else rec.bench_options[d.benchOptSelect]=v;refreshPlan();}
+    // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
+    // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the
+    // menu button controls.js puts after it once this change is handled; a typed value is left as it is
+    else if(d.benchOptSelect!==undefined){const rec=r(),n=d.benchOptSelect,o=((C.standardBench(rec)||{}).options||{})[n]||{};rec.bench_options={...(rec.bench_options||{})};const v=el.value.trim();if(!v||v===o.default)delete rec.bench_options[n];else rec.bench_options[n]=v;
+      if(el.tagName==='SELECT'){renderForm();queueMicrotask(()=>{const s=root.querySelector(`select[data-bench-opt-select="${CSS.escape(n)}"]`),m=s&&s.nextElementSibling;(m&&m.matches('.ui-select-trigger')?m:s)?.focus();});}refreshPlan();}
     else if(d.stdOption!==undefined){const rec=r(),k=d.stdOptionOf,o=(C.standardOthers(rec).find(x=>x.key===k)||{}).options||{},x=o[d.stdOption]||{},v=el.value.trim();rec.options={...(rec.options||{})};const mine={...(rec.options[k]||{})};if(v===''||v===x.default)delete mine[d.stdOption];else mine[d.stdOption]=v;if(Object.keys(mine).length)rec.options[k]=mine;else delete rec.options[k];refreshPlan();}
     // a release or a ref picked, a commit typed: an explicit choice, so its agents are asked for (built here the first time)
     else if(d.harborVersion!==undefined){r().harbor.version=el.value.trim();applyScan();renderForm();refreshPlan();askScan(true);}

@@ -528,12 +528,15 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                  concurrency: int, granted: bool, judge: str = "", backend: str = "local", image: str = "",
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
                  bench_options: Optional[dict] = None,
-                 simulator: str = "", prices: Optional[dict] = None, served_by: Optional[Dict[str, List[str]]] = None):
+                 simulator: str = "", prices: Optional[dict] = None, units_file: Optional[dict] = None,
+                 served_by: Optional[Dict[str, List[str]]] = None):
     """``unsandboxed`` is true for an agent on the local backend only: in a
     container (``backend``, ``image``) it is not. ``standard.options`` holds
     every option's value, the defaults included, so two runs read side by side
     say what differed. ``launch`` and ``shard``: a shard of a launch run over
-    several machines (``shard``), which ``merge`` reads back. ``repeat``: how
+    several machines (``shard``), which ``merge`` reads back. ``units_file``:
+    the file a run's units were listed in (``run.units_file``), its name, its
+    sha256 and its units, said only for such a run. ``repeat``: how
     many times each unit was run, said only when more than once. ``judge`` and
     ``simulator``: the models that graded and that played the user, when the
     benchmark has them. ``prices``: the rows its models' costs are
@@ -548,6 +551,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"image": image} if image else {}), **({"judge": judge} if judge else {}),
                                 **({"simulator": simulator} if simulator else {}), **({"options": options} if options else {}), **({"benchmark_options": bench_options} if bench_options else {}), **_control(other), **_setup(other),
                                 **({"launch": launch} if launch else {}), **({"shard": shard} if shard else {}),
+                                **({"units_file": units_file} if units_file else {}),
                                 **({"repeat": repeat} if repeat > 1 else {}), **({"prices": prices} if prices else {}),
                                 **({"served_by": dict(sorted(served_by.items()))} if served_by else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],

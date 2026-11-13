@@ -129,7 +129,7 @@ class BenchmarksList(PageCase):
         cat = catalog.load()
         keys = re.findall(r'<a class="bench-card" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
-        self.assertEqual(len(keys), 8)
+        self.assertEqual(len(keys), 9)
         # two shelves, the official benchmarks then the community benchmarks; a shelf with nothing on it is not shown
         official = self.html[self.html.index('data-shelf="official"'):].split('</section>', 1)[0]
         for b in cat.listed_benchmarks:
@@ -200,6 +200,13 @@ class BenchmarkPage(PageCase):
         self.assertIn("benchmarks/longmemeval/ ├─ benchmark.json ├─ driver.py ├─ standard.json └─ upstream-settings.json", self.page("longmemeval"))
         self.assertIn("benchmarks/swe-bench-verified/ ├─ benchmark.json ├─ driver.py ├─ images.json ├─ standard.json └─ upstream-settings.json", self.page("swe-bench-verified"))
         self.assertIn("benchmarks/terminal-bench/ ├─ benchmark.json ├─ driver.py ├─ standard.json └─ upstream-settings.json", self.page("terminal-bench"))
+
+    def test_a_machine_setup_says_what_checks_it_and_what_installs_it(self):
+        osworld = self.page("osworld1")
+        self.assertIn("Setup: docker", osworld)
+        self.assertIn("Checked by docker on PATH, on each machine a run uses; the builder's Where step checks it.", osworld)
+        self.assertNotIn("nothing installs it", osworld)
+        self.assertIn("the builder's Where step checks it and can install it.", self.page("tau3-bench"))
 
 
 class DatasetsOnTheirPage(PageCase):

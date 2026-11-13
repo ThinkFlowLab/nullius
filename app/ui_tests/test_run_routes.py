@@ -47,7 +47,7 @@ def core(schema, code):
     if not node:
         raise unittest.SkipTest("Node is required for recipe compilation")
     program = ("const schema=" + json.dumps(schema) + ";const C=require(" + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ")(schema);\n" + code)
-    return json.loads(subprocess.run([node, "-e", program], check=True, capture_output=True, text=True).stdout)
+    return json.loads(subprocess.run([node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
 
 
 class RunRoutes(unittest.TestCase):
