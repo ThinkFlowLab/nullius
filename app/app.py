@@ -86,7 +86,7 @@ def main(argv=None) -> None:
     back = execution.restore()
     for ex in back:
         print(f"Run {ex.plan.name} picked up again on {ex.plan.host.label if ex.plan.host else 'this machine'} ({ex.state})")
-        shared.adopt_roots([ex.jobs])            # its job root back in a workspace, as when it started
+        shared.adopt_roots([ex.jobs], into=ex.workspace)   # its job root back in the workspace it started in
     app.config["SERVED_HOST"] = args.host                 # a name the Host header may carry (shared._served_name)
     print(f"Serving on http://{args.host}:{args.port}")
     app.run(host=args.host, port=args.port, debug=args.debug)

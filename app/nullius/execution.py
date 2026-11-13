@@ -436,6 +436,7 @@ class Execution:
         self.tasks_on_target = rec.get("tasks_on_target", "")
         self.app_on_target = rec.get("app_on_target", "")   # the standard's source tree or runner snapshot on the target
         self.catalogue_on_target = rec.get("catalogue_on_target", "")   # writable definitions, separate from the immutable runner
+        self.workspace = rec.get("workspace", "")   # the workspace its job was added to, the one a restart adds it back to
         # the trials the log has said already, (job, trial), so a restart says each once; none in a record from before
         self._seen_trials: set = {(k[0], k[1]) for k in rec.get("seen_trials") or ()}
         if record:
@@ -480,7 +481,7 @@ class Execution:
             data = {"id": self.id, "plan": self.plan.to_dict(), "state": self.state, "step": self.step, "part": self.part, "pid": self.pid,
                     "log_offset": self.log_offset, "exit_code": self.exit_code, "error": self.error, "question": self.question, "ends": self.ends,
                     "started": self.started, "finished": self.finished, "harbor": self.harbor, "tasks_on_target": self.tasks_on_target, "app_on_target": self.app_on_target,
-                    "catalogue_on_target": self.catalogue_on_target,
+                    "catalogue_on_target": self.catalogue_on_target, "workspace": self.workspace,
                     "launched": self.launched, "seen_trials": [list(k) for k in sorted(self._seen_trials, key=str)]}
             try:
                 os.makedirs(self.dir, exist_ok=True)
@@ -635,6 +636,11 @@ class Execution:
         self.thread = threading.Thread(target=self._main, name=f"run-{self.plan.name}", daemon=True)
         self.thread.start()
         return self
+
+    def file_under(self, workspace: str) -> None:
+        """Record the workspace the run's job went into."""
+        self.workspace = workspace
+        self._save()
 
     def resume(self) -> "Execution":
         """Pick a recorded run up where it was: the part that was running is

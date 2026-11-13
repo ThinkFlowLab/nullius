@@ -143,7 +143,7 @@ def _start_standard(recipe: dict):
         if os.path.exists(os.path.join(execution.runs_root(), plan.name)):
             return jsonify(ok=False, error=execution.name_taken(plan.name)), 409
     started = [execution.start(plan) for plan in plans]
-    shared.adopt_roots([ex.jobs for ex in started])
+    shared.adopt_runs(started)
     return jsonify(ok=True, open=url_for("index", view="launch"), runs=[ex.summary() for ex in started],
                    **started[0].summary())
 
@@ -177,7 +177,7 @@ def _start(plan: execution.Plan):
     # The job lands (or is mirrored) under runs/<name>/jobs: the workspace
     # reads it from now on. The Runs page, by launch, shows it from the first
     # second: its runs queued, preparing, then running, each opening its job.
-    shared.adopt_roots([ex.jobs])
+    shared.adopt_runs([ex])
     return jsonify(ok=True, open=url_for("index", view="launch"), **ex.summary())
 
 

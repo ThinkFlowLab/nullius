@@ -158,7 +158,7 @@ def _check(kind: str, key: str):
         flash(problem, "error")
         return redirect(back)
     ex = execution.start(plan)
-    shared.adopt_roots([ex.jobs])
+    shared.adopt_runs([ex])
     n = len(got["jobs"])
     flash(f"Checking {got['label']}'s ports: " + (f"{n} kits, one after the other." if n > 1 else "its one kit."), "ok")
     return redirect(url_for("job", job_id=got["jobs"][0]["name"]))
