@@ -1,0 +1,239 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "osworld1",
+  "label": "OSWorld1",
+  "summary": "Each task is a unit: a real Ubuntu desktop in its own VM, set up by the task's config, one of OSWorld's own agents acting on it from its observations, and OSWorld's own evaluator reading the VM's final state.",
+  "family": "agent",
+  "needs": [
+    "agent.computer/v1"
+  ],
+  "upstream": {
+    "repository": "https://github.com/xlang-ai/OSWorld",
+    "tested": "044bc33901cb893808e3f91ebc9a17ed8e54b44c",
+    "tested_date": "2026-10-29",
+    "license": "Apache-2.0"
+  },
+  "driver": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/driver.py",
+      "{here}/agents.json",
+      "{here}/nop.py"
+    ],
+    "install": {
+      "python": "3.12",
+      "project": ".",
+      "locked": true
+    }
+  },
+  "datasets": [
+    {
+      "id": "test_nogdrive",
+      "label": "Without Google Drive",
+      "summary": "The upstream's test_nogdrive.json: every task but the 8 that need a Google account's credentials.",
+      "path": "evaluation_examples/test_nogdrive.json",
+      "sha256": "fcb9497e93a8986407345d3012c872c9c2fed253420730fbea64ccfcace67dbb",
+      "units": 361
+    },
+    {
+      "id": "test_all",
+      "label": "All tasks",
+      "summary": "The upstream's test_all.json, its runners' default: the 8 Google Drive tasks need credentials under evaluation_examples/settings, which the upstream does not ship.",
+      "path": "evaluation_examples/test_all.json",
+      "sha256": "9ebc5187cbd727ef26c24626820076b102fff812863c640a67c467fea9542ab5",
+      "units": 369
+    },
+    {
+      "id": "test_small",
+      "label": "Small",
+      "summary": "The upstream's test_small.json: a few tasks of each domain.",
+      "path": "evaluation_examples/test_small.json",
+      "sha256": "bb29275171b78728d71825b125af311d74e66bb2a6d693c45c497d380b1fc640",
+      "units": 39
+    },
+    {
+      "id": "test_infeasible",
+      "label": "Infeasible",
+      "summary": "The upstream's test_infeasible.json: tasks that cannot be done, passed by answering FAIL.",
+      "path": "evaluation_examples/test_infeasible.json",
+      "sha256": "1b447d0462b1bdac4b660e0dd6e6add6d01c17a9e684702c701abcffda409abb",
+      "units": 25
+    }
+  ],
+  "units": {
+    "noun": "task",
+    "nouns": "tasks"
+  },
+  "score": {
+    "kind": "score",
+    "says": "OSWorld's own evaluator (DesktopEnv.evaluate, the task's evaluator functions on the VM's final state), as run_single_example writes it to result.txt: 1 when the task is done, 0 when not, a fraction for a few checks; the upstream's success rate is the mean"
+  },
+  "setups": {
+    "original": {
+      "summary": "OSWorld's own agents as published: the agent option's script (scripts/python/run_*.py) on the task, with its own prompts, parser, history and step limit, asking one of the models it is published with, on the docker provider's VM, scored by DesktopEnv.evaluate.",
+      "models": [
+        "MiniMax-M3",
+        "gpt-4o",
+        "claude-sonnet-4-5-20250929",
+        "claude-opus-4-5",
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "gpt-5.4",
+        "computer-use-preview",
+        "qwen3.7-plus",
+        "gpt-5",
+        "EvoCUA-S2",
+        "EvoCUA-S1",
+        "autoglm-os",
+        "mano",
+        "muse-spark-1.1"
+      ],
+      "default": "MiniMax-M3",
+      "served_as": {
+        "MiniMax-M3": "minimax/minimax-m3",
+        "gpt-4o": "openai/gpt-4o",
+        "claude-sonnet-4-5-20250929": "anthropic/claude-sonnet-4.5",
+        "claude-opus-4-5": "anthropic/claude-opus-4.5",
+        "claude-opus-4-6": "anthropic/claude-opus-4.6",
+        "claude-opus-4-7": "anthropic/claude-opus-4.7",
+        "gpt-5.4": "openai/gpt-5.4",
+        "qwen3.7-plus": "qwen/qwen3.7-plus",
+        "gpt-5": "openai/gpt-5",
+        "UI-TARS-1.5-7B": "bytedance/ui-tars-1.5-7b"
+      },
+      "providers": {
+        "openrouter": "",
+        "openai": "",
+        "custom": ""
+      },
+      "turn_seconds": 7200,
+      "side_models": [
+        "UI-TARS-1.5-7B"
+      ]
+    },
+    "model": {
+      "summary": "The same agent with any model in its own model's place: the upstream's code asks for the agent's first published model, with its prompt and action format, and the relay sends the model chosen, every side call included. Its scores compare with other runs of this setup.",
+      "runs_as": "MiniMax-M3"
+    }
+  },
+  "options": {
+    "agent": {
+      "label": "Agent",
+      "summary": "Which of OSWorld's own agents runs: each its script as published, with its own prompts, action format and step limit.",
+      "values": [
+        "m3",
+        "prompt",
+        "claude",
+        "gpt54",
+        "openai_cua",
+        "qwen",
+        "os_symphony",
+        "evocua",
+        "autoglm",
+        "autoglm_v",
+        "mano",
+        "muse_spark"
+      ],
+      "default": "m3",
+      "setups": [
+        "original",
+        "model"
+      ],
+      "about": {
+        "m3": "MiniMax's M3Agent: run_multienv_m3.py, MiniMax-M3 over Anthropic's Messages API, 100 steps",
+        "prompt": "OSWorld's PromptAgent: run_multienv.py, GPT-4o on screenshots over Chat Completions, 15 steps",
+        "claude": "Anthropic's computer-use agent: run_multienv_claude.py, Claude with the computer-use beta tool, 50 steps",
+        "gpt54": "OpenAI's GPT-5.4 computer use: run_multienv_gpt54.py, the Responses API's computer tool, 50 steps",
+        "openai_cua": "OpenAI's CUA: run_multienv_openaicua.py, computer-use-preview over the Responses API, 50 steps",
+        "qwen": "Qwen-CUA: run_multienv_qwen.py, qwen3.7-plus over Chat Completions, 50 steps",
+        "os_symphony": "OS-Symphony: run_multienv_os_symphony.py, GPT-5 roles with a UI-TARS-1.5-7B grounder and a search VM, 50 steps",
+        "evocua": "EvoCUA: run_multienv_evocua.py, the EvoCUA-S2 or S1 checkpoint on a model server, 50 steps",
+        "autoglm": "AutoGLM-OS: run_autoglm.py, autoglm-os on the accessibility tree, on a model server, 50 steps",
+        "autoglm_v": "AutoGLM-OS with vision: run_autoglm_v.py, autoglm-os on screenshots, on a model server, 50 steps",
+        "mano": "Mano: run_multienv_mano.py, the mano model on a model server, 15 steps",
+        "muse_spark": "Meta's Muse Spark: run_multienv_muse_spark.py, muse-spark-1.1 over the Responses API, 100 steps"
+      }
+    },
+    "thinking": {
+      "summary": "M3_THINKING_MODE: adaptive, as run_multienv_m3.py's own documented invocation exports it (the model decides whether to think; temperature 1, no top_p), or off, the agent's code default when the variable is unset.",
+      "values": [
+        "adaptive",
+        "off"
+      ],
+      "default": "adaptive",
+      "setups": [
+        "original",
+        "model"
+      ],
+      "about": {
+        "adaptive": "thinking={'type': 'adaptive'} on every request",
+        "off": "no thinking, temperature 0.6"
+      },
+      "when": {
+        "agent": [
+          "m3"
+        ]
+      }
+    },
+    "vm_provider": {
+      "label": "VM provider",
+      "summary": "--provider_name: where the task's VM runs. docker only: the upstream's aws, azure, pyromind, vmware and virtualbox providers need cloud accounts or a hypervisor of their own.",
+      "values": [
+        "docker"
+      ],
+      "default": "docker",
+      "setups": [
+        "original",
+        "model"
+      ],
+      "about": {
+        "docker": "the upstream's happysixd/osworld-docker image running its Ubuntu qcow2 under QEMU, KVM when /dev/kvm is there"
+      },
+      "needs": {
+        "docker": {
+          "host": [
+            "docker"
+          ]
+        }
+      }
+    }
+  },
+  "host": {
+    "docker": {
+      "summary": "Docker on the machine the driver runs on, usable without sudo, for the upstream's docker provider; /dev/kvm makes the VMs fast, and the upstream runs them without it, slowly.",
+      "check": [
+        "docker"
+      ]
+    }
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "Nullius: the upstream's run_single_example with an agent whose one action is DONE, then the upstream's evaluator on the untouched VM.",
+      "expect": {
+        "at_most": 0.0
+      }
+    }
+  },
+  "proven": {
+    "test_nogdrive": {
+      "units": {
+        "units": 361,
+        "passed": "361 ids, the same twice, unique",
+        "on": "2026-10-29"
+      },
+      "nop": {
+        "passed": "0/8",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 8,
+        "job": "2026-10-29__18-38-14__osworld1__test_nogdrive__prove-nop",
+        "source": "nullius",
+        "on": "2026-10-29",
+        "limit": 8
+      }
+    }
+  }
+}

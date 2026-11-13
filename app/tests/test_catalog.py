@@ -44,7 +44,7 @@ class Shipped(unittest.TestCase):
         self.assertEqual(titles, sorted(titles, key=catalog.sort_key))
         # what has a usable route is listed, whoever made it and whether or not it has run
         listed = {x.key for x in cat.listed_benchmarks}
-        self.assertEqual(sorted(listed), ["gaia", "gsm8k", "humaneval", "locomo", "longmemeval", "swe-bench-verified", "tau3-bench", "terminal-bench"])
+        self.assertEqual(sorted(listed), ["gaia", "gsm8k", "humaneval", "locomo", "longmemeval", "osworld1", "swe-bench-verified", "tau3-bench", "terminal-bench"])
         self.assertEqual((cat.benchmark("longmemeval").origin, cat.benchmark("longmemeval").label), ("official", "Official"))
         self.assertEqual(cat.benchmark("tau3-bench").label, "Official")
         # τ³ files as "t3…", before "te…": a reader looking under T finds it

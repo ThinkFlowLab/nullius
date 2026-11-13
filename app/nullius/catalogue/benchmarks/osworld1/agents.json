@@ -1,0 +1,393 @@
+{
+  "about": "The upstream's agents the driver runs, one per value of the agent option: each its own script at the tested commit, as published, on one task. argv is what the script's own documented invocation passes (its README, docstring or scripts/bash wrapper), less what Nullius sets for every unit (common: the docker provider, the VM image, one environment, the task's meta file, the unit's results); env points the script's model client at the unit's relay. {model} is the model asked, {base_url} the unit's relay (ending /v1), {base} the same without /v1, {key} the relay's placeholder, {vm} the VM image, {up} the upstream, {meta} the unit's task file, {results} the unit's results folder, {examples} the upstream's evaluation_examples. models are the ones each agent is published with, by the names its code knows; model_argv adds what its documented invocation passes for one of them. aws: the script imports the upstream's AWS manager whatever the provider, which needs these variables set; no AWS call is made on docker.",
+  "common": [
+    "--provider_name",
+    "docker",
+    "--path_to_vm",
+    "{vm}",
+    "--headless",
+    "--num_envs",
+    "1",
+    "--test_config_base_dir",
+    "{examples}",
+    "--test_all_meta_path",
+    "{meta}",
+    "--result_dir",
+    "{results}"
+  ],
+  "aws": {
+    "AWS_REGION": "us-east-1",
+    "AWS_SUBNET_ID": "nullius-unused",
+    "AWS_SECURITY_GROUP_ID": "nullius-unused"
+  },
+  "agents": {
+    "m3": {
+      "script": "scripts/python/run_multienv_m3.py",
+      "models": [
+        "MiniMax-M3"
+      ],
+      "argv": [
+        "--observation_type",
+        "screenshot",
+        "--max_steps",
+        "100",
+        "--model",
+        "{model}"
+      ],
+      "env": {
+        "ANTHROPIC_BASE_URL": "{base}",
+        "ANTHROPIC_API_KEY": "{key}"
+      }
+    },
+    "prompt": {
+      "script": "scripts/python/run_multienv.py",
+      "models": [
+        "gpt-4o"
+      ],
+      "argv": [
+        "--observation_type",
+        "screenshot",
+        "--model",
+        "{model}",
+        "--sleep_after_execution",
+        "3",
+        "--max_steps",
+        "15",
+        "--client_password",
+        "password"
+      ],
+      "env": {
+        "OPENAI_BASE_URL": "{base_url}",
+        "OPENAI_API_KEY": "{key}"
+      }
+    },
+    "claude": {
+      "script": "scripts/python/run_multienv_claude.py",
+      "models": [
+        "claude-sonnet-4-5-20250929",
+        "claude-opus-4-5",
+        "claude-opus-4-6",
+        "claude-opus-4-7"
+      ],
+      "argv": [
+        "--observation_type",
+        "screenshot",
+        "--action_space",
+        "claude_computer_use",
+        "--model",
+        "{model}",
+        "--max_steps",
+        "50",
+        "--client_password",
+        "password"
+      ],
+      "env": {
+        "ANTHROPIC_BASE_URL": "{base}",
+        "ANTHROPIC_API_KEY": "{key}"
+      },
+      "aws": true
+    },
+    "gpt54": {
+      "script": "scripts/python/run_multienv_gpt54.py",
+      "models": [
+        "gpt-5.4"
+      ],
+      "argv": [
+        "--observation_type",
+        "screenshot",
+        "--model",
+        "{model}",
+        "--max_steps",
+        "50",
+        "--client_password",
+        "password",
+        "--sleep_after_execution",
+        "3",
+        "--log_level",
+        "DEBUG"
+      ],
+      "env": {
+        "OPENAI_BASE_URL": "{base_url}",
+        "OPENAI_API_KEY": "{key}"
+      }
+    },
+    "openai_cua": {
+      "script": "scripts/python/run_multienv_openaicua.py",
+      "models": [
+        "computer-use-preview"
+      ],
+      "argv": [
+        "--observation_type",
+        "screenshot",
+        "--model",
+        "{model}",
+        "--max_steps",
+        "50",
+        "--client_password",
+        "password"
+      ],
+      "env": {
+        "OPENAI_BASE_URL": "{base_url}",
+        "OPENAI_API_KEY_CUA": "{key}"
+      },
+      "aws": true
+    },
+    "qwen": {
+      "script": "scripts/python/run_multienv_qwen.py",
+      "models": [
+        "qwen3.7-plus"
+      ],
+      "argv": [
+        "--model",
+        "{model}",
+        "--base_url",
+        "{base_url}",
+        "--api_key",
+        "{key}",
+        "--no-enable_proxy"
+      ],
+      "env": {}
+    },
+    "os_symphony": {
+      "script": "scripts/python/run_multienv_os_symphony.py",
+      "models": [
+        "gpt-5"
+      ],
+      "argv": [
+        "--client_password",
+        "password",
+        "--max_steps",
+        "50",
+        "--benchmark",
+        "osworld",
+        "--domain",
+        "all",
+        "--tool_config",
+        "{up}/mm_agents/os_symphony/tool/all_tool_config.yaml",
+        "--orchestrator_provider",
+        "openai",
+        "--orchestrator_model",
+        "{model}",
+        "--orchestrator_url",
+        "{base_url}",
+        "--orchestrator_api_key",
+        "{key}",
+        "--orchestrator_temperature",
+        "0.1",
+        "--orchestrator_keep_first_image",
+        "--max_trajectory_length",
+        "8",
+        "--grounder_provider",
+        "vllm",
+        "--grounder_model",
+        "UI-TARS-1.5-7B",
+        "--grounder_api_key",
+        "{key}",
+        "--grounder_url",
+        "{base_url}",
+        "--grounding_smart_resize",
+        "--grounding_width",
+        "1920",
+        "--grounding_height",
+        "1080",
+        "--coder_provider",
+        "openai",
+        "--coder_model",
+        "{model}",
+        "--coder_url",
+        "{base_url}",
+        "--coder_api_key",
+        "{key}",
+        "--coder_temperature",
+        "0.1",
+        "--coder_budget",
+        "20",
+        "--memoryer_provider",
+        "openai",
+        "--memoryer_model",
+        "{model}",
+        "--memoryer_url",
+        "{base_url}",
+        "--memoryer_api_key",
+        "{key}",
+        "--memoryer_temperature",
+        "0.1",
+        "--memoryer_max_images",
+        "8",
+        "--searcher_provider",
+        "openai",
+        "--searcher_model",
+        "{model}",
+        "--searcher_url",
+        "{base_url}",
+        "--searcher_api_key",
+        "{key}",
+        "--searcher_temperature",
+        "0.1",
+        "--searcher_type",
+        "vlm",
+        "--searcher_engine",
+        "google",
+        "--searcher_budget",
+        "20",
+        "--searcher_screen_width",
+        "1920",
+        "--searcher_screen_height",
+        "1080",
+        "--sleep_after_execution",
+        "3",
+        "--exp_name",
+        "nullius",
+        "--enable_reflection"
+      ],
+      "env": {}
+    },
+    "evocua": {
+      "script": "scripts/python/run_multienv_evocua.py",
+      "models": [
+        "EvoCUA-S2",
+        "EvoCUA-S1"
+      ],
+      "argv": [
+        "--observation_type",
+        "screenshot",
+        "--model",
+        "{model}",
+        "--max_steps",
+        "50"
+      ],
+      "model_argv": {
+        "EvoCUA-S2": [
+          "--temperature",
+          "0.01",
+          "--max_history_turns",
+          "4",
+          "--coordinate_type",
+          "relative",
+          "--resize_factor",
+          "32",
+          "--prompt_style",
+          "S2"
+        ],
+        "EvoCUA-S1": [
+          "--max_history_turns",
+          "3",
+          "--coordinate_type",
+          "qwen25",
+          "--max_tokens",
+          "10240",
+          "--resize_factor",
+          "28",
+          "--prompt_style",
+          "S1"
+        ]
+      },
+      "env": {
+        "OPENAI_BASE_URL": "{base_url}",
+        "OPENAI_API_KEY": "{key}"
+      }
+    },
+    "autoglm": {
+      "script": "scripts/python/run_autoglm.py",
+      "models": [
+        "autoglm-os"
+      ],
+      "drop": [
+        "--num_envs",
+        "--headless"
+      ],
+      "argv": [
+        "--model",
+        "{model}"
+      ],
+      "env": {
+        "OPENAI_BASE_URL": "{base_url}",
+        "OPENAI_API_KEY": "{key}"
+      }
+    },
+    "autoglm_v": {
+      "script": "scripts/python/run_autoglm_v.py",
+      "models": [
+        "autoglm-os"
+      ],
+      "drop": [
+        "--num_envs",
+        "--headless",
+        "--test_config_base_dir"
+      ],
+      "argv": [
+        "--test_config_base_dir",
+        "{examples}/examples",
+        "--model",
+        "{model}"
+      ],
+      "env": {
+        "OPENAI_BASE_URL": "{base_url}",
+        "OPENAI_API_KEY": "{key}"
+      }
+    },
+    "mano": {
+      "script": "scripts/python/run_multienv_mano.py",
+      "models": [
+        "mano"
+      ],
+      "argv": [
+        "--model",
+        "{model}"
+      ],
+      "env": {
+        "MANO_API_URL": "{base_url}",
+        "MANO_API_KEY": "{key}"
+      }
+    },
+    "muse_spark": {
+      "script": "scripts/python/run_multienv_muse_spark.py",
+      "models": [
+        "muse-spark-1.1"
+      ],
+      "argv": [
+        "--observation_type",
+        "screenshot",
+        "--model",
+        "{model}",
+        "--base_url",
+        "{base_url}",
+        "--max_steps",
+        "100",
+        "--client_password",
+        "password",
+        "--sleep_after_execution",
+        "3",
+        "--reasoning_effort",
+        "high",
+        "--max_tokens",
+        "131072",
+        "--request_timeout",
+        "3200",
+        "--max_retries",
+        "6",
+        "--max_seq_len",
+        "131072",
+        "--output_clamp_margin",
+        "2048",
+        "--min_output_tokens",
+        "512",
+        "--max_recent_media",
+        "10",
+        "--min_media_removal_threshold",
+        "20",
+        "--max_batched_actions",
+        "20",
+        "--tool_name",
+        "computer.computer",
+        "--stop_tool_name",
+        "computer.stop",
+        "--log_level",
+        "INFO"
+      ],
+      "env": {
+        "MUSE_SPARK_API_KEY": "{key}"
+      }
+    }
+  }
+}
