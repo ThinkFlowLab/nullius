@@ -17,6 +17,8 @@ The minimum is one task at a time:
 | Network | GitHub, PyPI, Hugging Face and Docker Hub for the installs; 264 of the 369 tasks download files as they are set up, most from Hugging Face |
 | KVM | Recommended: `/dev/kvm`; without it the upstream runs the VM unaccelerated, slower |
 
+The command line runs 4 tasks at once unless told otherwise: four VMs, 16 cores and 16 GB of memory. One at a time is enough: add `-j 1` to the command. The builder runs one at a time unless **Concurrent tasks** on its Limits step says more.
+
 More at once is optional: `-j N` runs N tasks side by side, each with a VM of its own, so N times its cores and memory; how many fit depends on the machine. Their VMs start one after another, each once the one before has its container running.
 
 !!! warning "The machine's speed can change a task's outcome"
@@ -88,7 +90,7 @@ More at once is optional: `-j N` runs N tasks side by side, each with a VM of it
     stat -c %s Ubuntu.qcow2              # the same size
     ```
 
-    Fetch it before the first run: a task that finds no image downloads it within its own limit (600 s for the null control's score, 2 hours for a setup), and a stop during the unzip leaves a partial `Ubuntu.qcow2` that the upstream takes as present. If the sizes differ, `rm Ubuntu.qcow2 && unzip Ubuntu.qcow2.zip`. Once both checks pass, the zip can go (`rm Ubuntu.qcow2.zip`): the upstream looks only for `Ubuntu.qcow2`. Where Hugging Face is out of reach, `HF_ENDPOINT=https://hf-mirror.com` sends the upstream to its mirror.
+    Fetch it before the first run: a task that finds no image downloads it within its own limit (600 s for the null control's score, 2 hours for a setup), and a stop during the unzip leaves a partial `Ubuntu.qcow2` that the upstream takes as present. If the sizes differ, `rm Ubuntu.qcow2 && unzip Ubuntu.qcow2.zip`. Once both checks pass, the zip can go (`rm Ubuntu.qcow2.zip`): the upstream looks only for `Ubuntu.qcow2`. Where Hugging Face is out of reach, run `export HF_ENDPOINT=https://hf-mirror.com` before the download command above, and the upstream's downloader uses its mirror. This holds for this step only: a run does not pass `HF_ENDPOINT` on to the driver.
 
 5. **Pull the VM's Docker image.** The upstream's provider pulls it when it is missing; pulled now, it is not part of the first task.
 
