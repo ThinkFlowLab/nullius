@@ -636,6 +636,9 @@ class TheReview(unittest.TestCase):
                 stream = sse({"type": "response.created", "response": {"status": "in_progress", "openrouter_metadata": routing_facts("Prov A")}},
                              {"type": "response.completed", "response": dict(COMPLETED, openrouter_metadata=meta)})
                 self.assertNotIn("served_by", relay.reply_facts("/responses", stream, True))
+                chunks = sse({"provider": "Prov A", "choices": [{"index": 0, "delta": {"content": "o"}}]},
+                             {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "openrouter_metadata": meta})
+                self.assertNotIn("served_by", relay.reply_facts("/chat/completions", chunks, True))
 
     def test_a_pinned_responses_call_is_recorded_with_its_provider_and_the_pin_holds(self):
         """A Responses reply names its provider in the routing facts alone: the relay asks for them on a pinned
