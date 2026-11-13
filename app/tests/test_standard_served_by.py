@@ -354,12 +354,13 @@ class TheSidecar(WithUpstream):
             f.write("or-test")
         for given in (["m=bad slug"], ["m=prov-a,prov-a"], ["m="], ["m=prov-a", "m=prov-b"], ["prov-a"]):
             with self.subTest(given=given):
-                out = io.StringIO()
-                with redirect_stdout(out):
-                    code = relay.serve(["--base", self.base, "--record", os.path.join(self.tmp, "rec"), "--key-file", key,
-                                        *[w for g in given for w in ("--served-by", g)]])
-                self.assertEqual(code, 2)
-                self.assertIn("error", json.loads(out.getvalue()))
+                # a process of its own, bounded: a relay that took the pin would serve until stopped
+                got = subprocess.run([sys.executable, "-m", "nullius.standard.relay", "serve", "--listen", "127.0.0.1:0",
+                                      "--base", self.base, "--record", os.path.join(self.tmp, "rec"), "--key-file", key,
+                                      *[w for g in given for w in ("--served-by", g)]],
+                                     cwd=APP, env=dict(os.environ, PYTHONPATH=APP), capture_output=True, text=True, timeout=20)
+                self.assertEqual(got.returncode, 2, got.stdout)
+                self.assertIn("error", json.loads(got.stdout.splitlines()[0]))
 
     def test_the_relay_as_a_process_of_its_own_puts_the_pin_on_its_requests(self):
         key = os.path.join(self.tmp, "key")
