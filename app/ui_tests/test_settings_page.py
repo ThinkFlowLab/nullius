@@ -10,9 +10,11 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import unittest
 from contextlib import ExitStack
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
 
@@ -416,6 +418,122 @@ class SettingsPage(unittest.TestCase):
         status, body = remove("openrouter")
         self.assertEqual((status, body["message"]), (400, "OPENROUTER_API_KEY is set in the process environment; remove it there."))
         self.assertEqual(os.environ["OPENROUTER_API_KEY"], "sk-or-fromtheenvironment")
+
+    def test_a_save_brings_remove_to_a_card_and_takes_it_away(self):
+        """providers.js on the rendered cards: a first key saved brings Remove
+        and its question from the page the save returns, a cleared key takes
+        them away, and Remove still asks before Yes removes."""
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node is required for the provider cards' script")
+        void = ("input", "img", "br", "hr")
+        def section(html):
+            class Tree(HTMLParser):           # the providers section as {t, a, c} nodes, text as strings
+                root, open = None, []
+                def handle_starttag(self, tag, attrs):
+                    if not self.open and dict(attrs).get("id") != "providers":
+                        return
+                    el = {"t": tag, "a": {k: v or "" for k, v in attrs}, "c": []}
+                    if self.open: self.open[-1]["c"].append(el)
+                    else: self.root = el
+                    if tag not in void: self.open.append(el)
+                def handle_startendtag(self, tag, attrs):
+                    if self.open: self.open[-1]["c"].append({"t": tag, "a": {k: v or "" for k, v in attrs}, "c": []})
+                def handle_endtag(self, tag):
+                    if self.open and tag not in void: self.open.pop()
+                def handle_data(self, data):
+                    if self.open: self.open[-1]["c"].append(data)
+            tree = Tree(); tree.open = []; tree.feed(html)
+            return tree.root
+        empty = section(self.page())
+        self.post({"OPENAI_API_KEY": "sk-synthetic-remove-0123456789"}); saved = section(self.page())
+        self.post(clear=["OPENAI_API_KEY"]); cleared = section(self.page())
+        program = r'''
+            const fs = require('fs'), input = JSON.parse(fs.readFileSync(0, 'utf8'));
+            const match = (el, selectors) => selectors.split(',').some(one => {
+              const [, tag, classes, attrs, notHidden] = one.trim().match(/^([a-z0-9]*)((?:\.[\w-]+)*)((?:\[[^\]]+\])*)(:not\(\[hidden\]\))?$/) || [];
+              if (classes === undefined) return false;
+              return (!tag || el.t === tag) && (!notHidden || !el.hidden)
+                && classes.split('.').filter(Boolean).every(c => (el.a.class || '').split(' ').includes(c))
+                && [...attrs.matchAll(/\[([\w-]+)(?:="?([^"\]]*)"?)?\]/g)].every(([, k, v]) => k in el.a && (v === undefined || el.a[k] === v));
+            });
+            const listen = el => Object.assign(el, {listeners: {}, addEventListener(type, f) { (this.listeners[type] ||= []).push(f); }});
+            const data = k => 'data-' + k.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+            class Element {        // just enough of the DOM for providers.js
+              constructor(n, parent) {
+                Object.assign(this, {t: n.t, a: n.a, parent, hidden: 'hidden' in n.a, value: n.a.value});
+                this.c = n.c.map(x => typeof x === 'string' ? x : new Element(x, this));
+                this.dataset = new Proxy({}, {get: (_, k) => this.a[data(k)], set: (_, k, v) => (this.a[data(k)] = String(v), true)});
+                listen(this);
+              }
+              get id() { return this.a.id; }
+              get textContent() { return this.c.map(x => typeof x === 'string' ? x : x.textContent).join(''); }
+              set textContent(v) { this.c = [String(v)]; }
+              getAttribute(k) { return this.a[k] ?? null; }
+              setAttribute(k, v) { this.a[k] = String(v); }
+              *all() { for (const x of this.c) if (typeof x !== 'string') { yield x; yield* x.all(); } }
+              querySelectorAll(s) { return [...this.all()].filter(el => match(el, s)); }
+              querySelector(s) { return this.querySelectorAll(s)[0] || null; }
+              closest(s) { for (let el = this; el; el = el.parent) if (match(el, s)) return el; return null; }
+              contains(o) { for (let el = o; el; el = el.parent) if (el === this) return true; return false; }
+              remove() { this.parent.c.splice(this.parent.c.indexOf(this), 1); this.parent = null; }
+              append(x) { this.c.push(x); x.parent = this; }
+              after(x) { this.parent.c.splice(this.parent.c.indexOf(this) + 1, 0, x); x.parent = this.parent; }
+              focus() { global.focused = this; }
+              scrollIntoView() {}
+              dispatchEvent(event) { event.target ||= this; for (let el = this; el; el = el.parent) (el.listeners[event.type] || []).forEach(f => f(event)); }
+            }
+            global.Event = class { constructor(type) { this.type = type; } preventDefault() {} stopPropagation() {} };
+            global.CustomEvent = class extends Event { constructor(type, o) { super(type); this.detail = o.detail; } };
+            const page = new Element(input.empty, null);
+            global.document = listen({
+              getElementById: id => id === 'settings-form' ? {} : id === 'providers' ? page : page.querySelector('[id="' + id + '"]'),
+              querySelector: s => page.querySelector(s),
+              dispatchEvent(event) { (this.listeners[event.type] || []).forEach(f => f(event)); }});
+            global.window = listen({}); global.location = {hash: ''};
+            require(input.script);
+            // what autosave.js sends after a save, from the page the save returned
+            const saved = tree => document.dispatchEvent(new CustomEvent('nullius-settings-saved', {detail: {removedKeys: [],
+              providers: new Element(tree, null).querySelectorAll('[data-provider-card]').map(card => ({
+                key: card.dataset.providerCard, configured: card.dataset.configured, ready: card.dataset.ready,
+                label: card.querySelector('[data-provider-state]')?.textContent ?? '',
+                remove: card.querySelector('[data-provider-remove-ask]'), ask: card.querySelector('.st-provider-ask')}))}}));
+            const card = () => page.querySelector('[data-provider-card="openai"]');
+            const click = el => page.dispatchEvent(Object.assign(new Event('click'), {target: el}));
+            const state = () => {
+              const remove = card().querySelector('[data-provider-remove-ask]'), ask = card().querySelector('.st-provider-ask');
+              return {shown: !card().hidden, remove: remove && !remove.hidden, ask: ask && !ask.hidden,
+                      controls: remove && ask && remove.getAttribute('aria-controls') === ask.id,
+                      field: document.querySelector('[name="remove_provider"]').value};
+            };
+            (async () => {
+              const out = {before: state()};
+              click(page.querySelector('[data-provider-select="openai"]'));     // Add a provider, OpenAI, then the key is saved
+              saved(input.saved); out.editing = state();
+              click(card().querySelector('[data-provider-done]')); await new Promise(r => setTimeout(r));
+              out.listed = state();
+              click(card().querySelector('[data-provider-remove-ask]')); out.asked = state();
+              out.focus = global.focused === card().querySelector('[data-provider-remove-keep]');
+              click(card().querySelector('[data-provider-remove-keep]')); out.kept = state();
+              click(card().querySelector('[data-provider-remove-ask]'));
+              let changed = false;
+              document.querySelector('[name="remove_provider"]').addEventListener('change', () => changed = true);
+              click(card().querySelector('[data-provider-remove-yes]')); out.yes = changed;
+              saved(input.cleared); out.cleared = state();
+              process.stdout.write(JSON.stringify(out));
+            })();
+        '''
+        script = Path(__file__).resolve().parents[1] / "static" / "settings" / "providers.js"
+        result = subprocess.run([node, "-e", program], input=json.dumps({"script": str(script), "empty": empty, "saved": saved, "cleared": cleared}),
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        out = json.loads(result.stdout)
+        self.assertEqual(out["before"], {"shown": False, "remove": None, "ask": None, "controls": None, "field": ""})
+        self.assertEqual(out["editing"], {"shown": True, "remove": False, "ask": False, "controls": True, "field": ""})   # in the editor: hidden
+        self.assertEqual(out["listed"], {"shown": True, "remove": True, "ask": False, "controls": True, "field": ""})    # in the list, no reload
+        self.assertEqual((out["asked"]["ask"], out["focus"], out["asked"]["field"]), (True, True, ""))               # asks first, writes nothing
+        self.assertEqual((out["kept"]["ask"], out["yes"]), (False, True))
+        self.assertEqual(out["cleared"], {"shown": False, "remove": None, "ask": None, "controls": None, "field": "openai"})
 
     def test_an_environment_variable_is_written_for_the_next_start(self):
         os.environ["HOSTS"] = "bench-env"
