@@ -115,7 +115,8 @@
         providers: [...fresh.querySelectorAll('[data-provider-card]')].map(card => ({
           key: card.dataset.providerCard, configured: card.dataset.configured, ready: card.dataset.ready,
           label: card.querySelector('[data-provider-state]')?.textContent ?? '',   // the new-endpoint form has no state line
-          tested: card.querySelector('[data-provider-test-state]')?.textContent, mark: card.querySelector('[data-provider-test-state]')?.dataset.state ?? ''
+          tested: card.querySelector('[data-provider-test-state]')?.textContent, mark: card.querySelector('[data-provider-test-state]')?.dataset.state ?? '',
+          remove: card.querySelector('[data-provider-remove-ask]'), ask: card.querySelector('.st-provider-ask')
         }))
       }}));
       return true;
