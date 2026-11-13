@@ -94,9 +94,20 @@ class PublishDownloads(unittest.TestCase):
                         {'prerelease': None}, {'tag_name': 'v0.1.0rc2'}):
             with self.subTest(changes=changes):
                 self.data = {**original, **changes}
-                with self.assertRaisesRegex(ValueError, 'published GitHub prerelease'):
+                with self.assertRaisesRegex(ValueError, 'published GitHub release'):
                     publish.prepare(REPOSITORY, TAG, self.output)
         self.download_request.assert_not_called()
+
+    def test_a_final_version_must_not_be_a_prerelease(self):
+        version, tag = '0.1.0', 'v0.1.0'
+        assets = [{'id': identifier, 'name': name, 'state': 'uploaded'}
+                  for identifier, name in enumerate((f'nullius_eval-{version}-py3-none-any.whl',
+                                                     f'nullius_eval-{version}.tar.gz',
+                                                     'SHA256SUMS'), 10)]
+        stable = {'tag_name': tag, 'draft': False, 'prerelease': False, 'assets': assets}
+        self.assertEqual(len(publish.assets_for(stable, tag, version)), 3)
+        with self.assertRaisesRegex(ValueError, 'published GitHub release'):
+            publish.assets_for({**stable, 'prerelease': True}, tag, version)
 
     def test_missing_extra_and_duplicate_assets_are_rejected(self):
         assets = self.data['assets']

@@ -6,12 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Published prerelease tag matching pyproject.toml
+        description: Published release tag matching pyproject.toml
         required: true
-        default: v0.1.0rc2
+        default: v0.1.0
         type: string
       confirm:
-        description: Upload this reviewed prerelease to PyPI
+        description: Upload this reviewed release to PyPI
         required: true
         default: false
         type: boolean
@@ -45,7 +45,7 @@ jobs:
           python-version: '3.12'
       - name: Install validation tool
         run: python -m pip install --quiet uv==0.13.1
-      - name: Download and check published prerelease
+      - name: Download and check published release
         id: assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -90,7 +90,7 @@ jobs:
           SOURCE_SHA256: ${{ needs.validate.outputs.source_sha256 }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+rc[1-9][0-9]*$ ]]
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(rc[1-9][0-9]*)?$ ]]
           [[ "$WHEEL_ID" =~ ^[1-9][0-9]*$ && "$SOURCE_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$WHEEL_SHA256" =~ ^[0-9a-f]{64}$ && "$SOURCE_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$WHEEL_NAME" == "nullius_eval-$RELEASE_VERSION-py3-none-any.whl" ]]
@@ -131,7 +131,7 @@ jobs:
         # succeeds, and never rewind a newer release during an older rerun.
         run: |
           set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+rc[1-9][0-9]*$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(rc[1-9][0-9]*)?$ ]]
           release_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha')
           [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
           gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/docs-release" \
