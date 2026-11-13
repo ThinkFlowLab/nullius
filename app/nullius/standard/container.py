@@ -686,7 +686,7 @@ def install_argv(image: str, where: str, cmd: List[str], env: Optional[dict] = N
 def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_file: str, base: str,
                model: Optional[str], routes: Dict[str, str], prices: Optional[dict] = None, side_models=(),
                key_header: str = "authorization", hosts: Optional[Dict[str, str]] = None,
-               ledger: Optional[str] = None) -> List[str]:
+               ledger: Optional[str] = None, serving: Optional[Dict[str, List[str]]] = None) -> List[str]:
     """``docker run`` for a unit's relay: on the default bridge (its way to the
     provider), its port published on 127.0.0.1 only. The key is never given:
     ``key_file``, its file, is mounted read-only at ``RELAY_KEY_IN`` with
@@ -694,7 +694,9 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
     an empty folder). ``hosts``: names it resolves
     (``--add-host``), the machine's own for an endpoint on its loopback.
     ``ledger``: the file of the run's spending cap, its folder mounted so
-    this relay books its calls where every other relay of the job does."""
+    this relay books its calls where every other relay of the job does.
+    ``serving``: by model, the serving providers that may answer it, as the
+    unit's own relay is given them (``relay.Relay``)."""
     a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_userns(), "--user", _user(),
          "--cap-drop", "ALL", *_security_opt(), "--init",
          *[w for n, ip in sorted((hosts or {}).items()) for w in ("--add-host", f"{n}:{ip}")],
@@ -714,6 +716,8 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
         a += ["--ledger", ledger]
     for m in side_models:
         a += ["--side-model", m]
+    for m, slugs in sorted((serving or {}).items()):
+        a += ["--served-by", f"{m}={','.join(slugs)}"]
     if key_header != "authorization":
         a += ["--key-header", key_header]
     return a
@@ -976,9 +980,11 @@ class Unit:
                  model: Optional[str] = None, routes: Optional[Dict[str, str]] = None, prices: Optional[dict] = None,
                  side_models=(), key_header: str = "authorization", servers: Iterable[str] = (),
                  doors: Iterable[Tuple[str, int, str]] = (), hosts: Optional[Dict[str, str]] = None,
-                 ledger: Optional[str] = None, network_probe: Optional[str] = None, probe_now: bool = True):
+                 ledger: Optional[str] = None, network_probe: Optional[str] = None, probe_now: bool = True,
+                 serving: Optional[Dict[str, List[str]]] = None):
         self.job, self.tag, self.dir, self.image, self.app = job, tag, record_dir, image, app
         self.ledger = ledger                     # the file of the run's spending cap, when it has one
+        self.serving = dict(serving or {})       # by model, the serving providers that may answer it
         self.servers = list(servers)             # licence servers, host:port each: a forwarder apiece
         self.doors = list(doors)                 # servers on this machine: (alias, port, socket), a door apiece
         self.side_models, self.key_header = tuple(side_models), key_header
@@ -1004,7 +1010,7 @@ class Unit:
             argv = relay_argv(self.image, name=self.names["relay"], job=self.job, app=self.app, record=self.dir,
                               key_file=self._key_file(), base=self.base, model=self.model, routes=self.routes,
                               prices=self.prices, side_models=self.side_models, key_header=self.key_header,
-                              hosts=self.hosts, ledger=self.ledger)
+                              hosts=self.hosts, ledger=self.ledger, serving=self.serving)
             self.started.append(self.names["relay"])
             _docker(argv[1:])
             _docker(["network", "connect", "--alias", RELAY_ALIAS, self.names["network"], self.names["relay"]])

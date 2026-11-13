@@ -7,7 +7,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--unsandboxed | --backend container]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--max-usd USD] [--max-usd-per-unit USD] [--unsandboxed | --backend container]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -41,6 +41,9 @@ shard of the dataset's units (``standard/shard.py``: by the unit id's hash, then
 puts a launch's shard jobs together into one job (``standard/merge.py``). ``--option``
 sets one of the agent's or capability's options (``options`` in its definition);
 the rest keep the vendor's defaults, and the job's config records them all.
+``--served-by [MODEL=]SLUG[,SLUG...]`` lets only those serving providers answer
+a model on OpenRouter, in that order (``run.served_by``); each call's record
+names the provider that served it.
 A run says each stage before its first unit, and each unit's end, as one
 ``[nullius] stage=...`` line on stderr and in the job's ``progress.jsonl``
 (``nullius/progress.py``): what the run's page shows while it goes.
@@ -498,6 +501,7 @@ def cmd_run(a):
                       simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
                       licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
                       prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit,
+                      **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
         print("refused:", e)
@@ -659,6 +663,9 @@ def main(argv=None):
                            help="one of the benchmark's own options (repeatable: a search, a mode); the rest keep their defaults")
             p.add_argument("--price", action="append", metavar="MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]",
                            help="this run's price for a model in USD per million tokens, over your price list (repeatable; nullius prices)")
+            p.add_argument("--served-by", action="append", metavar="[MODEL=]SLUG[,SLUG...]",
+                           help="on OpenRouter, the serving providers that may answer a model, tried in this order and no "
+                                "other (repeatable; without MODEL=, the run's model); each call records which one did")
             p.add_argument("--max-usd", type=float, metavar="USD",
                            help="the run's spending cap: no call goes out once the spend plus the calls in flight would pass it")
             p.add_argument("--max-usd-per-unit", type=float, metavar="USD",

@@ -9,8 +9,9 @@ verdicts, the earliest start and the latest end - and its ``config.json``
 the shards' with ``shard`` taken out and ``merged_from`` put in.
 
 What is merged must be one launch: the same launch id, benchmark and
-version, dataset, agent or capability and model, and the same number of shards
-- else it is refused, naming what differs, unless ``force``. Two trials of
+version, dataset, agent or capability and model, the same serving providers
+pinned for each model (``served_by``) and the same number of shards - else it
+is refused, naming what differs, unless ``force``. Two trials of
 one unit are always refused, with the units named: one of them would be
 counted twice. Units no shard ran are not a refusal - a shard may be
 missing, or stopped early - and are said: the shards absent, and the units a
@@ -36,7 +37,8 @@ from nullius.standard.names import backend as backend_name
 SAME = (("launch", ("standard", "launch")), ("benchmark", ("standard", "benchmark")),
         ("benchmark version", ("standard", "benchmark_version")), ("dataset", ("datasets", 0, "name")),
         ("agent or capability", ("standard", "plugged")), ("model", ("agents", 0, "model_name")),
-        ("backend", ("standard", "backend")), ("number of shards", ("standard", "shard", "of")))
+        ("backend", ("standard", "backend")), ("serving providers", ("standard", "served_by")),
+        ("number of shards", ("standard", "shard", "of")))
 
 
 class Refused(Exception):
@@ -220,7 +222,8 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
                              "n_cancelled_trials": max(0, planned - len(results)), "n_running_trials": 0, "n_pending_trials": 0},
                    "standard": {"passed": sum(1 for w in rewards if w.get("reward") == 1.0),
                                 "scored": len(scores), "mean_score": job.mean_score(results)},
-                   **({"budget": budget} if budget else {})}, f, indent=1)
+                   **({"budget": budget} if budget else {}),
+                   **({"served": who} if (who := job.served_total(results)) else {})}, f, indent=1)
     cfg = json.loads(json.dumps(shards[0]["config"]))
     cfg["job_name"] = name
     std = cfg.setdefault("standard", {})

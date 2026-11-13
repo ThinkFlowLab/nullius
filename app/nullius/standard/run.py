@@ -99,7 +99,8 @@ def driver_path() -> str:
 
 PROVIDERS = {
     "openai": {"base": "https://api.openai.com/v1", "key": "OPENAI_API_KEY"},
-    "openrouter": {"base": "https://openrouter.ai/api/v1", "key": "OPENROUTER_API_KEY"},
+    # routing: one model is served by several providers, and a request may say which may answer (--served-by)
+    "openrouter": {"base": "https://openrouter.ai/api/v1", "key": "OPENROUTER_API_KEY", "routing": True},
     "anthropic": {"base": "https://api.anthropic.com/v1", "key": "ANTHROPIC_API_KEY", "key_header": "x-api-key"},
     "custom": {"base_var": "MODEL_API_URL", "key": "MODEL_API_KEY"},
 }
@@ -131,6 +132,34 @@ def provider_endpoint(provider: str, env=os.environ) -> tuple:
         raise Refused(f"{p['key']} holds a character a request header cannot carry (a line break, a space or a "
                       "byte-order mark around it, or one outside Latin-1): set it again in Settings")
     return base, key
+
+
+_SERVER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*")
+
+
+def served_by(given, model: str) -> Dict[str, List[str]]:
+    """``--served-by [MODEL=]SLUG[,SLUG...]``, repeatable: by model, the
+    serving providers that may answer it, in the order they are tried, and no
+    other (OpenRouter's slugs, as a model's page gives them: ``deepinfra``,
+    ``deepinfra/fp8``). Without ``MODEL=`` it is the run's model. Refused when
+    a slug is empty, malformed or given twice, or a model is named twice."""
+    out: Dict[str, List[str]] = {}
+    for g in given or []:
+        name, eq, listed = str(g).rpartition("=")
+        name = name.strip() if eq else model
+        slugs = [s.strip() for s in listed.split(",")]
+        if not name:
+            raise Refused(f"--served-by {g!r}: MODEL=SLUG[,SLUG...], or SLUG[,SLUG...] for the run's model")
+        bad = [s for s in slugs if not _SERVER.fullmatch(s)]
+        if bad:
+            raise Refused(f"--served-by {g!r}: {', '.join(repr(s) for s in bad)} is not a serving provider's slug "
+                          "(as a model's page names it: deepinfra, deepinfra/fp8)")
+        if len(set(slugs)) != len(slugs):
+            raise Refused(f"--served-by {g!r} names a serving provider twice")
+        if name in out:
+            raise Refused(f"--served-by names {name} twice: list its serving providers once, in the order they are tried")
+        out[name] = slugs
+    return out
 
 
 def _slug(s: str) -> str:
@@ -327,7 +356,7 @@ class Run:
                  launch: Optional[str] = None, repeat: int = 1, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
-                 max_usd_per_unit: Optional[float] = None):
+                 max_usd_per_unit: Optional[float] = None, served_by: Optional[Dict[str, List[str]]] = None):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
@@ -361,7 +390,12 @@ class Run:
         (``options`` in its definition: a search, a mode), the rest at their
         defaults; a value that needs an embedding model gets a relay of the
         run's own for it, one that needs something of this machine
-        (``host``) is refused without it."""
+        (``host``) is refused without it.
+        ``served_by``: by model, the serving providers that may answer it
+        (:func:`served_by`), put on every request sent as that model by the
+        run's relays (``relay.routing``) and recorded in the job's config.
+        Refused when the provider routes no model to several (only
+        ``openrouter`` does), or when it names a model the run does not call."""
         backend = definitions.names.backend(backend)
         if backend not in BACKENDS:
             raise Refused(f"backend {backend!r} is not one of {list(BACKENDS)}")
@@ -478,6 +512,16 @@ class Run:
                           + "; ".join(f"{n} ({why})" for n, why in lacking.items())
                           + (". Install with: " + " && ".join(lines) if (lines := hostreq.install_lines(bench, list(lacking)))
                              else ". Run it on a machine that has it"))
+        self.serving = {m: list(s) for m, s in (served_by or {}).items()}
+        if self.serving:
+            if not PROVIDERS.get(provider, {}).get("routing"):
+                raise Refused(f"--served-by: {provider} serves each model itself, with no serving providers to choose "
+                              "among; the option needs a provider that routes a model to several (openrouter)")
+            called = self.models_called()
+            stray = [m for m in self.serving if m not in called]
+            if stray:
+                raise Refused(f"--served-by names {', '.join(stray)}, which this run does not call: it calls "
+                              + (", ".join(called) or "no model"))
         self.bench_relay = None
         keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
@@ -599,7 +643,7 @@ class Run:
                          image=self.setup_driver.image if self.setup_driver else self.image,
                          options=self.options, launch=self.launch or "", bench_options=self.bench_options,
                          shard=shards.record(*self.shard, len(everything), units, self.limit) if self.shard else None,
-                         repeat=self.repeat, prices=self.prices_record(),
+                         repeat=self.repeat, prices=self.prices_record(), served_by=self.serving,
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
         # every unit once, then every unit again: a repeat cut short still has each unit's first run
         work = [(i, u, r) for r in range(1, self.repeat + 1) for i, u in mine]
@@ -822,6 +866,7 @@ class Run:
         if (self.embed_model or self.rerank_model) and self.bench_relay is None:
             self.bench_relay = relay.Relay(self.base, self.key, os.path.join(self.job_dir, ".work", "relay-benchmark"),
                                            prices=self.prices, model=self.rerank_model or self.embed_model, ledger=self.ledger_file(), unit_caps=False,
+                                           serving=self.serving,
                                            key_header=PROVIDERS[self.provider].get("key_header", "authorization")).start()
 
     def runtimes_needed(self) -> List[str]:
@@ -998,7 +1043,7 @@ class Run:
                               t0=t0, t1=time.time(), produce=produce, score=score, exception=exc, calls=calls,
                               setup_end=p0 or time.time(), checking=checking,
                               trajectory=traj, extra_logs=dict(logs or {}, **({"container-changes.txt": changes} if changes else {})),
-                              environment=environment or "",
+                              environment=environment or "", serving=getattr(self, "serving", None),
                               image=(box.image if box is not None else getattr(rl, "unit_image", "")) or "")
         install.prune(self.other, home)          # its declared caches: the trial is written, no one reads them now
         verdict = "error " + exc[0] if exc else f"reward {score.get('reward')}"
@@ -1207,7 +1252,7 @@ class Run:
         key_header = PROVIDERS[self.provider].get("key_header", "authorization")
         if self.backend == "local":
             rl = relay.Relay(self.base, self.key, record, prices=getattr(self, "prices", None), model=self.model, side_models=side,
-                             key_header=key_header, ledger=self.ledger_file()).start()
+                             key_header=key_header, ledger=self.ledger_file(), serving=getattr(self, "serving", None)).start()
             rl.unit_url = rl.url(tag)
             return rl
         routes = {tag + "-judge": self.judge_model} if self.judge_model else {}
@@ -1236,7 +1281,7 @@ class Run:
                             model=self.model, routes=routes, side_models=side, key_header=key_header,
                             prices=price_list.given(self.models_called(), getattr(self, "prices", None)),   # a sidecar's argv: its models' rows
                             servers=self.agent_servers(env_def), doors=doors, hosts=door.hosts if door else None,
-                            ledger=self.ledger_file(),
+                            ledger=self.ledger_file(), serving=getattr(self, "serving", None),
                             network_probe=probe, probe_now=bool(probe) and self.first_probe())
         rl.mcp_listeners = listeners
         try:
