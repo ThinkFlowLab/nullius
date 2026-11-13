@@ -14,7 +14,7 @@ The minimum is one task at a time:
 | Programs | `git`, `python3`, `uv` |
 | CPU and memory | One VM, which the upstream's docker provider sets to 4 cores and 4 GB of memory (`CPU_CORES`, `RAM_SIZE`), beside the driver and the agent's script |
 | Disk | 7.5 GB for the driver's environment, 24.5 GB for the VM image, 0.4 GB for the Docker image, the task's output (often hundreds of MB); and the image's 12.3 GB zip until the image is checked (step 4) |
-| Network | GitHub, PyPI, Hugging Face and Docker Hub for the installs; 264 of the 369 tasks download files as they are set up, most from Hugging Face |
+| Network | GitHub, PyPI, Hugging Face and Docker Hub for the installs; 260 of the 369 tasks download files from Hugging Face as they are set up |
 | KVM | Recommended: `/dev/kvm`; without it the upstream runs the VM unaccelerated, slower |
 
 The command line runs 4 tasks at once unless told otherwise: four VMs, 16 cores and 16 GB of memory. One at a time is enough: add `-j 1` to the command. The builder runs one at a time unless **Concurrent tasks** on its Limits step says more.
@@ -22,7 +22,7 @@ The command line runs 4 tasks at once unless told otherwise: four VMs, 16 cores 
 More at once is optional: `-j N` runs N tasks side by side, each with a VM of its own, so N times its cores and memory; how many fit depends on the machine. Their VMs start one after another, each once the one before has its container running.
 
 !!! warning "The machine's speed can change a task's outcome"
-    OSWorld's runners wait fixed times, not for the desktop: 60 s after a task is set up, then a fixed pause after each action before the next screenshot (from none to 10 s, by agent). A slower VM (no KVM, a loaded machine, more tasks at once than it holds) can show the agent a desktop that has not caught up, or run out of the task's time limit. Compare scores from machines of similar speed and load.
+    OSWorld's runners wait fixed times, not for the desktop: 60 s after a task is set up, then a fixed pause after each action before the next screenshot (from none to 5 s, by agent). A slower VM (no KVM, a loaded machine, more tasks at once than it holds) can show the agent a desktop that has not caught up, or run out of the task's time limit. Compare scores from machines of similar speed and load.
 
 ## Set it up
 

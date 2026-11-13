@@ -10,15 +10,15 @@
   "origin": "official",
   "good_to_know": [
     "Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.",
-    "Each agent needs the provider that serves its model: OpenAI for OpenAI CUA, your own model server for EvoCUA, both AutoGLM-OS agents, Mano and Muse Spark, and OpenRouter for the other six.",
+    "Each agent needs the provider that serves its model: OpenAI for OpenAI CUA; an OpenAI-compatible endpoint, at Meta's API for Muse Spark and at your own model server for EvoCUA, both AutoGLM-OS agents and Mano; OpenRouter for the other six.",
     "Only M3, PromptAgent and Qwen-CUA have been run on tasks here. The other agents were checked up to their first model call.",
-    "Each task runs in a VM of its own with 4 CPU cores and 4 GB of memory. Run only as many tasks at once as the machine holds.",
-    "Prepare the machine before the first run (Docker, KVM, five system libraries, a VM image of about 25 GB): see the OSWorld1 machine setup page.",
+    "Each task runs in a VM of its own with 4 CPU cores and 4 GB of memory. OS-Symphony can start a second one. Run only as many tasks at once as the machine holds.",
+    "Prepare the machine before the first run (Docker, KVM, five system libraries, a VM image of about 25 GB): see OSWorld1 machine setup under Benchmarks in the documentation.",
     "Scores depend on the machine's speed, because OSWorld waits a fixed time after each action. Compare runs made on similar machines."
   ],
   "upstream_limitations": [
     "OSWorld publishes no solutions: no reference run shows that each task can be solved.",
-    "The 8 Google Drive tasks need a Google account's credentials, which OSWorld does not ship. They are in All tasks only.",
+    "The 8 Google Drive tasks need a Google account's credentials, which OSWorld does not ship. They are in All tasks, and 3 of them in Small.",
     "49 tasks ask for a proxy whose credentials OSWorld does not ship. PromptAgent, GPT-5.4, OpenAI CUA, OS-Symphony, EvoCUA and Muse Spark always use it: for them those tasks fail or run without a network.",
     "The VM image is not pinned: a later download can differ from the one a score was made with.",
     "OSWorld's docker provider opens each VM's ports on every network interface of the machine. One of them runs any command in the VM. Bind Docker's ports to 127.0.0.1, or keep the machine off untrusted networks."
