@@ -24,9 +24,187 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import List
+from typing import List, Optional
 
 from nullius import paths, settings
+
+# --- the registry: protocols, presets and each provider's record ------------------------------------
+#
+# A protocol is a wire format, defined once here: its default path below a provider's base, how the key is
+# sent (``auth``: a bearer ``authorization`` header, or ``x-api-key`` with ``anthropic-version``) and what
+# it is called. The consumer picks the protocol it speaks; a provider never enforces one.
+PROTOCOLS = {
+    "chat": {"label": "OpenAI Chat Completions", "path": "/chat/completions", "auth": "authorization"},
+    "responses": {"label": "OpenAI Responses", "path": "/responses", "auth": "authorization"},
+    "messages": {"label": "Anthropic Messages", "path": "/messages", "auth": "x-api-key"},
+    "systemone": {"label": "TypeSafe System One", "path": "/systemone", "auth": "authorization"},
+    "decisions": {"label": "OpenRouter Decisions", "path": "/decisions", "auth": "authorization"},
+    "openai-decisions": {"label": "OpenAI Decisions", "path": "/decisions", "auth": "authorization"},
+}
+# A preset is a provider record whose name, base, key and known endpoints are fixed here. The user adds
+# only endpoints of other protocols, in the setting ``setting`` (``settings.is_record``); its key is
+# the secret setting ``key``. Its ``endpoints`` are also the protocols it serves.
+PRESETS = {
+    "openrouter": {"name": "OpenRouter", "base": "https://openrouter.ai/api/v1", "key": "OPENROUTER_API_KEY",
+                   "endpoints": {"chat": "/chat/completions", "responses": "/responses", "systemone": "/systemone",
+                                 "decisions": "https://openrouter.ai/api/alpha/decisions"}},
+    "openai": {"name": "OpenAI", "base": "https://api.openai.com/v1", "key": "OPENAI_API_KEY",
+               "endpoints": {"chat": "/chat/completions", "responses": "/responses", "openai-decisions": "/decisions"}},
+    "anthropic": {"name": "Anthropic", "base": "https://api.anthropic.com/v1", "key": "ANTHROPIC_API_KEY",
+                  "endpoints": {"messages": "/messages"}},
+    "typesafe": {"name": "TypeSafe", "base": "https://api.typesafe.ai/v1", "key": "TYPESAFE_API_KEY",
+                 "endpoints": {"systemone": "/systemone"}},
+}
+FIELDS = ("name", "base", "key", "endpoints")
+
+
+def setting_of(choice: str) -> str:
+    """The setting that holds a provider's record: a preset's name in capitals, ``MODEL_<ID>`` for a custom
+    provider, "" for the OpenAI-compatible endpoint at MODEL_API_URL, which has its old settings only."""
+    p, e = split(choice)
+    return p.upper() if p in PRESETS else f"MODEL_{e}" if p == "custom" and e else ""
+
+
+def key_setting(choice: str) -> str:
+    """The secret setting a provider's key is read from. Never the key."""
+    p, e = split(choice)
+    return PRESETS[p]["key"] if p in PRESETS else endpoint_vars(e)[1]
+
+
+def _entry_problem(entry, host: str = "") -> Optional[str]:
+    """Why ``entry`` cannot be an endpoint: a path starting with one slash, without a ``..`` segment, or a
+    full URL that passes the checks a base gets; on ``host`` only, when one is given (a preset's own)."""
+    if not isinstance(entry, str):
+        return "a path or a URL"
+    if entry.startswith(("http://", "https://")):
+        if host and urllib.parse.urlsplit(entry).hostname != host:
+            return f"a path, or a URL on {host}: the preset's key is sent there"
+        return settings.endpoint_url_problem(entry)
+    if not entry.startswith("/") or entry.startswith("//") or any(c.isspace() or ord(c) < 32 for c in entry):
+        return "a path that starts with / or an http(s) URL"
+    if ".." in entry.split("/"):
+        return "a path without a .. segment"
+    return settings.endpoint_url_problem("http://x" + entry)
+
+
+def record_problem(name: str, value: str) -> Optional[str]:
+    """Why ``value`` cannot be the record setting ``name``, or None. A JSON object of ``FIELDS``: a name, a
+    base the checks of an endpoint's URL pass, the key's setting name (only its own: never a key), and
+    endpoints by protocol, each a path, a full URL or null. A preset's fields and known endpoints are fixed;
+    a full URL it adds is on its own host, the one its key is for."""
+    rec = settings.json_object(value)
+    if rec is None:
+        return 'a JSON object, such as {"base": "https://…/v1"}'
+    preset = next((p for p in PRESETS if p.upper() == name), "")
+    if set(rec) - set(FIELDS):
+        return "an object of " + ", ".join(FIELDS)
+    fixed = [k for k in ("name", "base", "key") if preset and k in rec]
+    if fixed:
+        return f"a record without {', '.join(fixed)}: they are fixed for {PRESETS[preset]['name']}"
+    if rec.get("name") is not None and (not isinstance(rec["name"], str) or not 0 < len(rec["name"]) <= 400    # as MODEL_<ID>_NAME was
+                                        or any(ord(c) < 32 for c in rec["name"])):
+        return "a record whose name is one line of 400 characters at most"
+    if rec.get("base") is not None and (not isinstance(rec["base"], str) or settings.endpoint_url_problem(rec["base"])):
+        return f"a record whose base is {settings.endpoint_url_problem(str(rec['base']))}"
+    if rec.get("key") is not None and rec["key"] != f"{name}_API_KEY":
+        return f"a record whose key is the name of its key setting, {name}_API_KEY, or none"
+    ends = rec.get("endpoints")
+    if ends is None:
+        return None
+    if not isinstance(ends, dict):
+        return "a record whose endpoints are an object by protocol"
+    for proto, entry in ends.items():
+        if proto not in PROTOCOLS:
+            return f"a record whose endpoints are some of {', '.join(PROTOCOLS)}"
+        if preset and proto in PRESETS[preset]["endpoints"]:
+            return f"a record without the {proto} endpoint: it is fixed for {PRESETS[preset]['name']}"
+        why = entry is not None and _entry_problem(entry, urllib.parse.urlsplit(PRESETS[preset]["base"]).hostname if preset else "")
+        if why:
+            return f"a record whose {proto} endpoint is {why}"
+    return None
+
+
+def join(base: str, entry: str) -> str:
+    """An endpoint's URL: a full URL as it is, a path appended to ``base`` with exactly one slash between
+    them (never resolved as a relative URL, which would drop the base's own path)."""
+    if entry.startswith(("http://", "https://")):
+        return entry
+    return base.rstrip("/") + "/" + entry.lstrip("/") if base else ""
+
+
+def record(choice: str, env=None) -> dict:
+    """A provider's record, the three layers merged field by field (the later wins): the preset in code,
+    the file's and then the environment's record setting (``settings.load`` merged those two). A custom
+    provider reads its old settings where its record says nothing (a null says: none): MODEL_<ID>_NAME as ``name``,
+    MODEL_<ID>_API_URL (MODEL_API_URL, unnamed) as ``base``; ``ignored`` names an old setting the record
+    overrides. ``{id, name, base, key, endpoints, preset, ignored}``, where ``key`` is a setting name only."""
+    env = os.environ if env is None else env
+    p, e = split(choice)
+    preset = PRESETS.get(p)
+    own = settings.json_object(env.get(setting_of(choice))) if setting_of(choice) else None
+    if own is not None and record_problem(setting_of(choice), json.dumps(own)):
+        own = None                            # a record that does not validate is no record: Settings says why
+    rec = settings.merge_patch({k: v for k, v in (preset or {}).items()}, own or {})
+    if preset:
+        rec.update({k: preset[k] for k in ("name", "base", "key")},
+                   endpoints={**(rec.get("endpoints") or {}), **preset["endpoints"]})
+    ignored = []
+    if not preset:
+        old_name, old_url = (f"MODEL_{e}_NAME" if e else ""), endpoint_vars(e)[0]
+        for field, old in (("name", old_name), ("base", old_url)):
+            if old and env.get(old):
+                if field in (own or {}):          # the record sets the field, or removes it with null
+                    ignored.append(old)
+                else:
+                    rec[field] = env[old]
+        rec.setdefault("name", e or settings.DEFAULT_ENDPOINT_NAME)
+        rec["key"] = key_setting(choice)
+    return {"id": choice if preset or e else "custom", "name": rec.get("name") or "", "base": rec.get("base") or "",
+            "key": rec["key"], "endpoints": {k: v for k, v in (rec.get("endpoints") or {}).items() if v},
+            "preset": bool(preset), "ignored": ignored}
+
+
+def records(env=None) -> List[dict]:
+    """Every provider: the presets, then the OpenAI-compatible endpoint at MODEL_API_URL when it is set, then
+    each custom provider by name."""
+    env = os.environ if env is None else env
+    custom = sorted((record(choice("custom", i), env) for i in settings.endpoint_ids(env)), key=lambda r: r["name"].casefold())
+    return [record(p, env) for p in PRESETS] + ([record("custom", env)] if env.get("MODEL_API_URL") else []) + custom
+
+
+def url(rec: dict, protocol: str) -> str:
+    """Where ``rec`` is asked in ``protocol``: its endpoint for it, else its base and the protocol's default path."""
+    return join(rec["base"], rec["endpoints"].get(protocol) or PROTOCOLS[protocol]["path"])
+
+
+def serves(rec: dict, protocol: str) -> Optional[bool]:
+    """True when ``rec`` lists the protocol, False when a preset does not, None (not known) for a custom
+    provider that does not say: a hint for pickers to sort and warn by."""
+    return True if protocol in rec["endpoints"] else False if rec["preset"] else None
+
+
+def ready(rec: dict, env=None) -> bool:
+    """Whether a provider can be asked here: a preset whose key is set, a custom provider whose base is a
+    URL that holds no credential (its key is optional)."""
+    env = os.environ if env is None else env
+    return bool(env.get(rec["key"])) if rec["preset"] else bool(rec["base"]) and not settings.endpoint_url_problem(rec["base"])
+
+
+def protocol_for(choice: str, apis, env=None) -> str:
+    """The protocol a consumer speaking ``apis`` (in its order of preference) uses on a provider: the first
+    the provider lists, else the first it may serve, else the first."""
+    rec = record(choice, env)
+    apis = list(apis) or ["chat"]
+    return next((a for a in apis if serves(rec, a)), next((a for a in apis if serves(rec, a) is not False), apis[0]))
+
+
+def auth(protocol: str, key: str) -> dict:
+    """The headers that carry ``key`` in ``protocol``: a bearer header, or Anthropic's ``x-api-key``."""
+    if PROTOCOLS[protocol]["auth"] == "x-api-key":
+        from nullius.standard.relay import ANTHROPIC_VERSION
+        return {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION}
+    return {"Authorization": "Bearer " + key} if key else {}
+
 
 # The builder's steps (command-builder-core.js, STEP): an error names the step that edits it.
 STEP = {"benchmark": 0, "runner": 1, "dataset": 2, "setup": 3, "agent": 4, "model": 5, "limits": 6, "where": 7, "review": 8}

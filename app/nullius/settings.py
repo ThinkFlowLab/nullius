@@ -14,6 +14,11 @@ the file is written whole, to a temporary name first, with mode 0600; a
 variable the process environment holds is shown read-only, because the file
 could not override it anyway.
 
+A model provider's record (``nullius.providers``) is one JSON-valued setting of the
+``provider`` kind, without its key. There the environment does not replace the file:
+its value is a partial JSON object merged over the file's (``merge_patch``), and the
+page holds read-only only the fields the environment sets (``state``, ``locked``).
+
 ``example`` renders ``app/.env.example`` from the same table, so the two
 cannot drift (a test compares them).
 """
@@ -35,8 +40,11 @@ _SECRET_OK = re.compile(r"^[!-~]+$")   # printable ASCII, no spaces
 _LOCAL_KEY_OK = re.compile(r"^[!-~]+$")   # the same, any length: a local server's key is often a word ("ollama", "EMPTY")
 _TEXT_OK = re.compile(r"^[^\x00-\x1f]{1,400}$")
 _MODEL_OK = re.compile(r"^~?[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,159}$")     # an OpenRouter model id: [~]vendor/model[:variant]
-_S1_OK = re.compile(r"^(typesafe|openrouter)$")
-_LLM_JUDGE_OK = re.compile(r"^(openrouter|openai|local(:[A-Z0-9]+(_[A-Z0-9]+)*)?)$")
+# a provider choice each judge can use: a preset that serves its protocols, or custom (local, its old name);
+# System One's custom provider is a named one, the only kind whose record lists a decision protocol
+_ID = r"[A-Z0-9]+(_[A-Z0-9]+)*"
+_S1_OK = re.compile(rf"^(typesafe|openrouter|openai|(custom|local):{_ID})$")
+_LLM_JUDGE_OK = re.compile(rf"^(openrouter|openai|anthropic|(custom|local)(:{_ID})?)$")
 _ENVNAME_OK = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 _BOOL = {"0", "1", "true", "false", "yes", "no"}
 
@@ -56,11 +64,17 @@ _NOT_AGENT_KEYS = {"API_TOKEN", "OPENAI_API_KEY", "LLM_API_KEY", "API_URL", "OPE
                    "LD_PRELOAD", "LD_LIBRARY_PATH", "SSH_AUTH_SOCK"}
 
 
-def reserved_name(n: str) -> bool:
+def reserved_name(n: str, records: bool = True) -> bool:
     """A name that is already something else's: a setting, a start-up option,
     another spelling of one, the run's own or the shell's. An agent key or a
-    benchmark's secret may not take it."""
-    return n in BY_NAME or n in STARTUP or n in INSTEAD or n in _NOT_AGENT_KEYS or n.startswith("NULLIUS_") or bool(_ENDPOINT_VAR.match(n))
+    benchmark's secret may not take it. ``records``: a provider record's name
+    too (a preset's, ``MODEL_<ID>``), which an agent key beside it in the
+    settings file may not take; a benchmark's licence, kept apart and never in
+    this environment (``secrets``), may."""
+    if bool(_PROVIDER_VAR.match(n)) or getattr(BY_NAME.get(n), "kind", "") == "provider":
+        return records
+    return (n in BY_NAME or n in STARTUP or n in INSTEAD or n in _NOT_AGENT_KEYS or n.startswith("NULLIUS_")
+            or bool(_ENDPOINT_VAR.match(n)))
 
 
 def _agent_key_names(v: str) -> Optional[str]:
@@ -132,7 +146,7 @@ class Variable:
     name: str
     group: str
     purpose: str
-    kind: str            # secret | localkey | endpoint | mirror | path | paths | url | repo | name | bool | text | envname | hosts | constraints | model | llmprovider | s1provider | envnames
+    kind: str            # secret | localkey | endpoint | mirror | provider | path | paths | url | repo | name | bool | text | envname | hosts | constraints | model | llmprovider | s1provider | envnames
     example: str = ""    # shown as a placeholder, written to .env.example as a comment
 
     @property
@@ -145,6 +159,9 @@ class Variable:
             return "a single line"
         if value != value.strip():
             return "no leading or trailing whitespace"
+        if self.kind == "provider":
+            from nullius import providers
+            return providers.record_problem(self.name, value)
         return {
             "secret": _check(_SECRET_OK, "a nonempty single-line value without spaces"),
             "localkey": _check(_LOCAL_KEY_OK, "a nonempty single-line value without spaces"),
@@ -161,8 +178,8 @@ class Variable:
             "hosts": _hosts,
             "constraints": _constraints,
             "model": _check(_MODEL_OK, "a model id as OpenRouter lists it, vendor/model"),
-            "llmprovider": _check(_LLM_JUDGE_OK, "openrouter, openai, local or local:<endpoint id>"),
-            "s1provider": _check(_S1_OK, "typesafe or openrouter"),
+            "llmprovider": _check(_LLM_JUDGE_OK, "a provider: openrouter, openai, anthropic, custom or custom:<endpoint id>"),
+            "s1provider": _check(_S1_OK, "a provider: typesafe, openrouter, openai or custom:<endpoint id>"),
             "envnames": _agent_key_names,
         }[self.kind](value)
 
@@ -179,6 +196,8 @@ DEFAULT_ENDPOINT_NAME = "OpenAI-compatible"
 ENDPOINT_ID = re.compile(r"^(?=.{1,32}$)[A-Z0-9]+(?:_[A-Z0-9]+)*$")
 _ENDPOINT_VAR = re.compile(r"^MODEL_([A-Z0-9]+(?:_[A-Z0-9]+)*)_(NAME|API_URL|API_KEY)$")
 ENDPOINT_PARTS = ("NAME", "API_URL", "API_KEY")
+# A custom provider's record, MODEL_<ID>: the id may not end like one of the old settings above
+_PROVIDER_VAR = re.compile(r"^MODEL_(?!(?:.*_)?(?:NAME|API_URL|API_KEY)$)([A-Z0-9]+(?:_[A-Z0-9]+)*)$")
 
 # What a person sets. Everything else the application reads is a start-up
 # option with a command-line form or a sensible default (STARTUP below) and
@@ -194,6 +213,9 @@ VARIABLES: List[Variable] = [
     Variable("SYSTEM_ONE_MODEL", GROUPS[0], "The System One model, as the provider names it: on TypeSafe jev-latest, on OpenRouter ~typesafe/jev-latest, typesafe/jev-router, jaredpalmer/kev-4b... Unset: the provider's Jev.", "model"),
     Variable("LLM_JUDGE_PROVIDER", GROUPS[0], "The provider of the LLM judgement, the second judgement beside System One: openrouter, openai, local (the endpoint at MODEL_API_URL) or local:<ID> (the endpoint MODEL_<ID>_API_URL), asked with that provider's own key and endpoint from the model providers above. Unset: the first of them that is set.", "llmprovider"),
     Variable("LLM_JUDGE_MODEL", GROUPS[0], "The model of the LLM judgement, as its provider names it (on OpenRouter, vendor/model). It is asked the same questions as System One and answers them as JSON; its numbers are what it states, so a choice or a score carries no confidence.", "model"),
+    *(Variable(name, GROUPS[0], f"Additions to the {title} provider, as a JSON object without the key: endpoints of protocols the preset does not list, "
+               '{"endpoints": {"<protocol>": "/path" or "https://full/url"}}. In the environment, a partial object merged over this one.', "provider")
+      for name, title in (("OPENROUTER", "OpenRouter"), ("OPENAI", "OpenAI"), ("ANTHROPIC", "Anthropic"), ("TYPESAFE", "TypeSafe"))),
     Variable("AGENT_KEYS", GROUPS[2], "The names of the agent keys this file holds, comma-separated: the keys an agent needs of its own vendor, beside the model's (Cursor's CLI agent a CURSOR_API_KEY, Copilot's a GH_TOKEN). Each is a line of its own in this file. A Harbor run gets every one of them in its environment - over stdin to a host - and a Nullius standard run's never; none is ever written into a recipe or a log.", "envnames"),
     Variable("HOSTS", GROUPS[1], "Machines a recipe can run on, over ssh: an alias from ~/.ssh/config, or user@host[:port][:/path/to/key]. Only the name is stored; keys stay where they are.", "hosts", "user@host[:port][:/path/to/key]"),
     Variable("HF_ENDPOINT", GROUPS[3], "Where Hugging Face downloads go: https://huggingface.co when unset, or a mirror's address. A run's dataset downloads, installs and drivers get it as HF_ENDPOINT before they load huggingface_hub; the environment wins over this file, a run on a host is sent it.", "mirror", "https://hf-mirror.com"),
@@ -222,6 +244,9 @@ STARTUP: Dict[str, str] = {
 }
 BY_NAME: Dict[str, Variable] = {v.name: v for v in VARIABLES}
 LOADED_KEYS: set = set()   # variables ``load`` set from the file (so: not held by the process environment)
+# A provider record both the process environment and the file hold: the environment's own partial value,
+# merged over the file's into the process environment (``merge_patch``)
+ENV_PART: Dict[str, str] = {}
 _FROM: Dict[str, str] = {}  # which file each of them came from, so a refresh of one file never drops another's
 # Names other tools give the model settings, and names this application
 # used before: a file written with one is read by nobody here, and the page
@@ -263,6 +288,62 @@ def parse(path: str) -> List[Tuple[str, Optional[str], Optional[str]]]:
     return out
 
 
+def json_object(text: Optional[str]) -> Optional[dict]:
+    """``text`` as a JSON object, or None when it is not one."""
+    try:
+        got = json.loads(text or "")
+    except ValueError:
+        return None
+    return got if isinstance(got, dict) else None
+
+
+def merge_patch(target, patch):
+    """``patch`` applied to ``target`` as RFC 7396 says: objects merge key by
+    key, ``null`` removes a key, anything else replaces."""
+    if not isinstance(patch, dict):
+        return patch
+    out = dict(target) if isinstance(target, dict) else {}
+    for k, v in patch.items():
+        if v is None:
+            out.pop(k, None)
+        else:
+            out[k] = merge_patch(out.get(k), v)
+    return out
+
+
+def compose(first: dict, then: dict) -> dict:
+    """One patch that does ``first`` and then ``then``, its nulls kept, so a
+    preset below them still loses a field either removes."""
+    out = dict(first)
+    for k, v in then.items():
+        out[k] = compose(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def is_record(name: str) -> bool:
+    """Whether ``name`` is a provider record: a preset's additions or a custom provider's ``MODEL_<ID>``."""
+    var = BY_NAME.get(name)
+    return var.kind == "provider" if var else bool(_PROVIDER_VAR.match(name)) and bool(ENDPOINT_ID.match(name[6:]))
+
+
+def _merge_env(name: str, file_value: str) -> None:
+    """The process environment's value of a record: the environment's own
+    partial object (kept in ``ENV_PART``) merged over the file's. A value
+    that is not an object wins whole, as any other setting does."""
+    part = ENV_PART.setdefault(name, os.environ.get(name, ""))
+    first, then = json_object(file_value) or {}, json_object(part)
+    os.environ[name] = json.dumps(compose(first, then)) if then is not None else part
+
+
+def locked(name: str) -> List[str]:
+    """The fields of a record the process environment sets: ``base``, ``endpoints.chat``. The page holds only these read-only."""
+    part = json_object(ENV_PART.get(name, os.environ.get(name) if name not in LOADED_KEYS else None))
+    if part is None:
+        return []
+    return sorted(f"{k}.{p}" if isinstance(v, dict) else k
+                  for k, v in part.items() for p in (v if isinstance(v, dict) else [None]))
+
+
 def load(path: str) -> set:
     """Apply the file to the process environment: existing variables win.
     Returns the names the file supplied."""
@@ -271,6 +352,9 @@ def load(path: str) -> set:
         if key and key not in os.environ:
             os.environ[key] = value or ""
             applied.add(key)
+        elif key and key not in LOADED_KEYS and is_record(key):
+            _merge_env(key, value or "")
+            _FROM[key] = os.path.abspath(path)
     LOADED_KEYS.update(applied)
     _FROM.update((k, os.path.abspath(path)) for k in applied)
     return applied
@@ -292,7 +376,14 @@ def refresh(path: str) -> Dict[str, List[str]]:
         if os.environ.pop(key, None) is not None:
             done["removed"].append(key)
         LOADED_KEYS.discard(key)
+    for key in [k for k in ENV_PART if _FROM.get(k) == here]:
+        before = os.environ.get(key)
+        _merge_env(key, values.get(key, ""))
+        if os.environ.get(key) != before:
+            done["updated"].append(key)
     for key, value in values.items():
+        if key in ENV_PART:
+            continue
         if key in LOADED_KEYS:
             if key in os.environ and os.environ[key] != value:
                 os.environ[key] = value
@@ -302,6 +393,10 @@ def refresh(path: str) -> Dict[str, List[str]]:
             LOADED_KEYS.add(key)
             _FROM[key] = here
             done["loaded"].append(key)
+        elif is_record(key):
+            _merge_env(key, value)
+            _FROM[key] = here
+            done["updated"].append(key)
     return {k: sorted(v) for k, v in done.items()}
 
 
@@ -342,12 +437,20 @@ def in_file(path: str) -> Dict[str, str]:
 
 
 def agent_key_names(env=None) -> List[str]:
-    """The agent keys' names, as AGENT_KEYS lists them; a list that would
-    not validate names none."""
-    raw = (os.environ if env is None else env).get("AGENT_KEYS", "")
-    if _agent_key_names(raw):
-        return []
-    return [n.strip() for n in raw.split(",") if n.strip()]
+    """The agent keys' names, as AGENT_KEYS lists them, each once: a name that
+    is not one, or is already something else's (``reserved_agent_keys``), is
+    left out, never the whole list."""
+    out: List[str] = []
+    for n in (n.strip() for n in (os.environ if env is None else env).get("AGENT_KEYS", "").split(",")):
+        if _ENVNAME_OK.match(n) and not reserved_name(n) and n not in out:
+            out.append(n)
+    return out
+
+
+def reserved_agent_keys(env=None) -> List[str]:
+    """The names AGENT_KEYS lists that are now something else's (a provider record's): Settings says so."""
+    return [n for n in dict.fromkeys(n.strip() for n in (os.environ if env is None else env).get("AGENT_KEYS", "").split(","))
+            if _ENVNAME_OK.match(n) and reserved_name(n)]
 
 
 def agent_key_values(env=None) -> Dict[str, str]:
@@ -356,24 +459,35 @@ def agent_key_values(env=None) -> Dict[str, str]:
     return {n: env[n] for n in agent_key_names(env) if env.get(n)}
 
 
+def _custom_record(name: str, env) -> bool:
+    """A custom provider's record that ``env`` holds: ``MODEL_<ID>`` whose value is a JSON object. Another
+    value under such a name (a shell's MODEL_PATH) is not one."""
+    return is_record(name) and name not in BY_NAME and json_object(env.get(name)) is not None
+
+
 def endpoint_ids(env=None) -> List[str]:
-    """The ids of the named OpenAI-compatible endpoints: every id one of whose settings is set."""
+    """The ids of the custom providers (the named OpenAI-compatible endpoints): every id whose record,
+    ``MODEL_<ID>``, or one of whose old settings is set."""
     env = os.environ if env is None else env
-    return sorted({m.group(1) for m in map(_ENDPOINT_VAR.match, env) if m and ENDPOINT_ID.match(m.group(1))})
+    return sorted({m.group(1) for m in map(_ENDPOINT_VAR.match, env) if m and ENDPOINT_ID.match(m.group(1))}
+                  | {n[6:] for n in env if _custom_record(n, env)})
 
 
 def endpoint_settings(i: str) -> List[str]:
-    """The settings of the endpoint ``i``: its name, URL and key."""
-    return [f"MODEL_{i}_{part}" for part in ENDPOINT_PARTS]
+    """The settings of the custom provider ``i``: its record, then its old name and URL, and its key."""
+    return [f"MODEL_{i}"] + [f"MODEL_{i}_{part}" for part in ENDPOINT_PARTS]
 
 
 def endpoint_names(env=None) -> List[str]:
-    """Every setting of a named endpoint that ``env`` holds: what a run never inherits."""
-    return sorted(n for n in (os.environ if env is None else env) if _ENDPOINT_VAR.match(n))
+    """Every setting of a custom provider that ``env`` holds: what a run never inherits."""
+    env = os.environ if env is None else env
+    return sorted(n for n in env if _ENDPOINT_VAR.match(n) or _custom_record(n, env))
 
 
 def endpoint_variable(name: str) -> Optional[Variable]:
-    """A named endpoint's setting as the page and ``save_many`` treat it, or None for another name."""
+    """A custom provider's setting as the page and ``save_many`` treat it, or None for another name."""
+    if is_record(name) and name not in BY_NAME:
+        return Variable(name, GROUPS[0], f"The record of the custom provider {name[6:]}, as a JSON object without the key.", "provider")
     m = _ENDPOINT_VAR.match(name)
     if not m or not ENDPOINT_ID.match(m.group(1)):
         return None
@@ -385,7 +499,7 @@ def new_endpoint_id(name: str, taken) -> str:
     """An id for a new endpoint, from its name: capitals, digits and underscores, not one of ``taken``."""
     base = re.sub(r"[^A-Z0-9]+", "_", name.upper()).strip("_")[:28].strip("_") or "ENDPOINT"
     n, out = 1, base
-    while out in taken:
+    while out in taken or not _PROVIDER_VAR.match("MODEL_" + out):     # never an id whose record reads as an old setting
         n += 1
         out = f"{base}_{n}"
     return out
@@ -470,11 +584,19 @@ def state(var: Variable, file_values: Dict[str, str]) -> dict:
     problem = endpoint_url_problem(value) if var.kind == "endpoint" and value else None
     # constraints set in the environment or the file by hand: said, and every run refused until fixed
     invalid = _constraints(value) if var.kind == "constraints" and value else None
+    record = var.kind == "provider"
+    if record and value:
+        why = var.validate(value)
+        problem = why and f"a provider record: {why}"
     return {"name": var.name, "group": var.group, "purpose": var.purpose, "kind": var.kind, "secret": var.secret,
             "example": var.example, "source": source, "shown": shown,
-            "shadowed": source == "environment" and var.name in file_values and file_values[var.name] != value,
-            "advice": LOCAL_KEY_ADVICE if var.kind == "localkey" and value is None and os.environ.get(var.name[:-3] + "URL") else "",
-            "problem": f"This URL must be {problem}." if problem else f"{var.name} must be {invalid}." if invalid else ""}
+            # a record's environment fields are merged over the file's, never a whole value shadowing it
+            "shadowed": not record and source == "environment" and var.name in file_values and file_values[var.name] != value,
+            "locked": locked(var.name) if record else [],
+            "advice": LOCAL_KEY_ADVICE if var.kind == "localkey" and value is None and (
+                os.environ.get(var.name[:-3] + "URL") or (json_object(os.environ.get(var.name[:-8])) or {}).get("base")) else "",
+            "problem": (f"This must be {problem}." if record else f"This URL must be {problem}.") if problem
+                       else f"{var.name} must be {invalid}." if invalid else ""}
 
 
 def states(path: str) -> List[dict]:
@@ -528,6 +650,10 @@ def save_many(path: str, changes: Dict[str, Optional[str]]) -> None:
         lines.pop()
     _write_lines(path, lines)
     for name, value in changes.items():
+        if is_record(name) and name in os.environ and name not in LOADED_KEYS:
+            _merge_env(name, value or "")     # a record: the environment's fields stay over the file's
+            _FROM[name] = os.path.abspath(path)
+            continue
         if name in os.environ and name not in LOADED_KEYS:
             continue        # the process environment holds it; the file is for the next start
         if value is None:
