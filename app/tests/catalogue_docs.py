@@ -275,9 +275,9 @@ def render_agents_index() -> str:
              *_port_row(a, kitted, skills, "agent.tools/v1")] for a in agents]
     untested = [port["label"] for _, port in agent_ports if not port.get("kit")]
     out += [_grouped(groups, rows), "", LEGEND + " An agent that misses a skill still has the port."
-            + ((f" {untested[0]} has no kit yet, so no agent is tested on it; it comes with the first benchmark that needs it."
+            + ((f" {untested[0]} has no kit yet, so no agent is tested on it."
                 if len(untested) == 1 else
-                f" {', '.join(untested[:-1])} and {untested[-1]} have no kit yet, so no agent is tested on them; each comes with the first benchmark that needs it.")
+                f" {', '.join(untested[:-1])} and {untested[-1]} have no kit yet, so no agent is tested on them.")
                if untested else ""), ""]
     out += ["### Benchmarks each agent fits", ""]
     benches = [b for b in _load("benchmark", every=False) if b.get("family") == "agent"]

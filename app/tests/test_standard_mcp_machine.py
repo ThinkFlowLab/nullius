@@ -198,6 +198,69 @@ class Locked(unittest.TestCase):
         self.assertEqual(pk.call_args.kwargs["src"], "/up/clone")
 
 
+# git fetches a file:// submodule only when told; no name here reads as a secret, so git_env passes them on
+LOCAL_GIT = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "protocol.file.allow", "GIT_CONFIG_VALUE_0": "always",
+             "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+             "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+
+
+class Submodule(unittest.TestCase):
+    """The fetch with real git, on local repositories: a project that pins its submodule at a commit
+    other than its branch's tip, cloned at one commit as an upstream is."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.enterContext(mock.patch.dict(os.environ, LOCAL_GIT))
+        self.sub = self.repo("agp", {"pyproject.toml": '[project]\nname = "agp"\nversion = "1"\n'})
+        self.pinned = self.git("rev-parse", "HEAD", cwd=self.sub)
+        self.commit(self.sub, {"later": "x"})                                        # the pin is not the tip
+        sup = self.repo("project", {"README": "p"})
+        self.git("submodule", "add", "-q", "file://" + self.sub, "pkg/agp", cwd=sup)
+        self.git("checkout", "-q", self.pinned, cwd=os.path.join(sup, "pkg", "agp"))
+        self.commit(sup, {})
+        self.proj = os.path.join(self.tmp, "clone")
+        os.makedirs(self.proj)
+        for cmd in (["init", "-q"], ["fetch", "-q", "--depth", "1", "file://" + sup, "HEAD"], ["checkout", "-q", "FETCH_HEAD"]):
+            self.git(*cmd, cwd=self.proj)
+        self.lock = os.path.join(self.tmp, "requirements.lock")
+        with open(self.lock, "w") as f:
+            f.write("-e ./pkg/agp\nnumpy==1.26.4\n")
+
+    def git(self, *a, cwd):
+        return subprocess.run(["git", *a], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+
+    def commit(self, where, files):
+        for name, text in files.items():
+            with open(os.path.join(where, name), "w") as f:
+                f.write(text)
+        self.git("add", ".", cwd=where)
+        self.git("commit", "-qm", "c", cwd=where)
+
+    def repo(self, name, files):
+        where = os.path.join(self.tmp, name)
+        os.makedirs(where)
+        self.git("init", "-q", "-b", "main", cwd=where)
+        self.commit(where, files)
+        return where
+
+    def test_a_fetch_that_broke_halfway_is_fetched_again(self):
+        log, agp = os.path.join(self.tmp, "install.log"), os.path.join(self.proj, "pkg", "agp")
+        os.rename(self.sub, self.sub + ".away")                                      # the pinned commit out of reach
+        self.repo("agp", {"other": "y"})
+        with self.assertRaises(install.InstallFailed):
+            install._submodules(self.proj, self.lock, log)
+        self.assertEqual(os.listdir(agp), [".git"])                                  # cloned, never checked out
+        shutil.rmtree(self.sub)
+        os.rename(self.sub + ".away", self.sub)                                      # in reach again
+        install._submodules(self.proj, self.lock, log)                               # the next install
+        self.assertEqual(self.git("rev-parse", "HEAD", cwd=agp), self.pinned)
+        self.assertTrue(os.path.isfile(os.path.join(agp, "pyproject.toml")))
+        with mock.patch.object(install, "_run") as again:
+            install._submodules(self.proj, self.lock, log)
+        self.assertFalse(again.called)                                               # at its pin: held
+
+
 class Entries(unittest.TestCase):
     def test_the_local_entry_is_the_servers_own_command_in_the_drivers_environment(self):
         b = bench("/defs/b")

@@ -169,13 +169,26 @@ _GITHUB_HTTPS = ["-c", "url.https://github.com/.insteadOf=git@github.com:"]
 def _submodules(proj: str, lock: str, log: str):
     """The local packages a project's exported lock names (``-e ./sub``) that its clone does not hold:
     git submodules, which a clone at one commit leaves empty, each fetched at the commit the project
-    pins it at."""
+    pins it at. A folder that holds something is fetched when git records it as a submodule not
+    initialised or not at that commit: a fetch that broke halfway leaves its ``.git`` link alone, and
+    the next install fetches it again. A folder git does not record as a submodule is the project's
+    own; a missing one is fetched, and fails, said."""
     with open(lock) as f:
         local = [ln.split()[1] if ln.startswith("-e ") else ln.split()[0] for ln in f if ln.startswith(("-e ./", "./"))]
     for path in local:
         where = os.path.join(proj, path)
-        if not os.path.isdir(where) or not os.listdir(where):
+        if not os.path.isdir(where) or not os.listdir(where) or _unfetched(proj, path):
             _run(["git", *_GITHUB_HTTPS, "submodule", "update", "--init", "--depth", "1", "--", path], proj, log, env=git_env())
+
+
+def _unfetched(proj: str, path: str) -> bool:
+    """Whether ``git submodule status`` reads ``path`` as not initialised (``-``) or not at the
+    commit the project pins (``+``)."""
+    try:
+        r = subprocess.run(["git", "submodule", "status", "--", path], cwd=proj, env=git_env(), capture_output=True, text=True)
+    except FileNotFoundError:
+        raise InstallFailed("git is not on this machine")
+    return r.returncode == 0 and r.stdout[:1] in ("-", "+")
 
 
 def remove_scratch(where: str) -> None:

@@ -44,7 +44,7 @@ Every agent in the catalogue, the ports each version has proven, and the benchma
 <tr><td><a href="terminus-2.md"><code>terminus-2</code></a></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td></tr>
 </tbody></table>
 
-- ✓ proven by `cli conform`, – not proven. An agent that misses a skill still has the port. Browser and Computer use have no kit yet, so no agent is tested on them; each comes with the first benchmark that needs it.
+- ✓ proven by `cli conform`, – not proven. An agent that misses a skill still has the port. Browser and Computer use have no kit yet, so no agent is tested on them.
 
 ### Benchmarks each agent fits
 
