@@ -112,7 +112,12 @@ class Locked(unittest.TestCase):
 
     def test_the_lock_is_exported_then_installed_with_pip_then_the_project_without_its_dependencies(self):
         ran = []
-        with mock.patch.object(install, "_run", side_effect=lambda cmd, cwd, log, env=None: ran.append(cmd)):
+
+        def run(cmd, cwd, log, env=None):
+            ran.append(cmd)
+            if cmd[:2] == ["uv", "export"]:                                          # the export writes its lock
+                open(cmd[cmd.index("-o") + 1], "w").close()
+        with mock.patch.object(install, "_run", side_effect=run):
             install._packages({"python": "3.12", "project": ".", "locked": True, "pip": ["mcp==1.30.0"], "extras": ["x"]},
                               os.path.join(self.tmp, "w"), {"repository": "r", "tested": "c"}, src="/up/clone")
         export = next(c for c in ran if c[:2] == ["uv", "export"])
@@ -124,6 +129,65 @@ class Locked(unittest.TestCase):
         self.assertEqual(ran[-1][-3:], ["--no-deps", "-e", "/up/clone[x]"])
         self.assertFalse(any(c[:2] == ["git", "fetch"] for c in ran))               # the clone that was there, not a second one
 
+    def _install_with_lock(self, lines, made=()):
+        proj = os.path.join(self.tmp, "clone")
+        for d in ("sub/empty", "sub/held"):
+            os.makedirs(os.path.join(proj, d))
+        for d in made:
+            open(os.path.join(proj, d, "pyproject.toml"), "w").close()
+        ran = []
+
+        def run(cmd, cwd, log, env=None):
+            ran.append((cmd, cwd))
+            if cmd[:2] == ["uv", "export"]:
+                with open(cmd[cmd.index("-o") + 1], "w") as f:
+                    f.write("\n".join(lines) + "\n")
+        with mock.patch.object(install, "_run", side_effect=run):
+            install._packages({"python": "3.12", "project": ".", "locked": True}, os.path.join(self.tmp, "w"),
+                              {"repository": "r", "tested": "c"}, src=proj)
+        return proj, ran
+
+    def test_the_lock_is_installed_from_the_project_so_its_local_paths_are_the_projects(self):
+        proj, ran = self._install_with_lock(["-e ./sub/held", "numpy==1.26.4"], made=["sub/held"])
+        self.assertEqual(next(c for c, _ in ran if "-r" in c)[:3], ["uv", "--directory", proj])
+        self.assertFalse(any("submodule" in c for c, _ in ran))                     # a local package the clone holds
+
+    def test_a_local_package_the_clone_leaves_empty_is_its_submodule_fetched_at_its_pin(self):
+        proj, ran = self._install_with_lock(["-e ./sub/empty", "./sub/held", "numpy==1.26.4"], made=["sub/held"])
+        sub = [(c, cwd) for c, cwd in ran if "submodule" in c]
+        self.assertEqual(len(sub), 1)
+        self.assertEqual(sub[0][0][-6:], ["update", "--init", "--depth", "1", "--", "./sub/empty"])
+        self.assertIn("url.https://github.com/.insteadOf=git@github.com:", sub[0][0])
+        self.assertEqual(sub[0][1], proj)
+        self.assertLess(ran.index(sub[0]), next(i for i, (c, _) in enumerate(ran) if "-r" in c))   # before the lock's install
+
+    def test_in_the_base_image_the_submodule_is_fetched_here_and_the_lock_installed_from_the_clone_in_the_install(self):
+        where, boxed, ran = os.path.join(self.tmp, "w"), [], []
+
+        def run_in(cmd, at, env=None):
+            boxed.append((cmd, at))
+            return ["in-image"] + cmd
+
+        def run(cmd, cwd, log, env=None, shown=None):
+            ran.append((cmd, cwd))
+            if cmd[:2] == ["git", "checkout"]:                                       # a clone at one commit: its submodule empty
+                os.makedirs(os.path.join(cwd, "sub", "empty"))
+            if cmd[1:3] == ["uv", "export"]:
+                with open(cmd[cmd.index("-o") + 1], "w") as f:
+                    f.write("-e ./sub/empty\nnumpy==1.26.4\n")
+        with mock.patch.object(install, "_run", side_effect=run):
+            install._packages({"python": "3.12", "project": ".", "locked": True}, where,
+                              {"repository": "r", "tested": "c"}, run_in=run_in)
+        proj = os.path.join(where, install.SRC)                                      # cloned inside the install folder
+        sub = [i for i, (c, _) in enumerate(ran) if "submodule" in c]
+        self.assertEqual(len(sub), 1)
+        self.assertEqual(ran[sub[0]][0][0], "git")                                   # on this machine, with its credentials
+        self.assertEqual((ran[sub[0]][0][-1], ran[sub[0]][1]), ("./sub/empty", proj))
+        req = next(i for i, (c, _) in enumerate(ran) if "-r" in c)
+        self.assertLess(sub[0], req)                                                 # before the lock's install
+        self.assertEqual(ran[req][0][:4], ["in-image", "uv", "--directory", proj])  # in the base image, from the project
+        self.assertIn((ran[req][0][1:], where), boxed)                               # which mounts the install folder, the project in it
+
     def test_a_drivers_project_is_installed_from_its_benchmarks_upstream_clone(self):
         b = dict(bench("/d"), upstream={"repository": "https://example.org/r", "tested": "a" * 40},
                  driver={"command": ["{install}/.venv/bin/python"], "install": {"project": "."}})
@@ -132,6 +196,69 @@ class Locked(unittest.TestCase):
             self.assertEqual(install.driver_packages(b, self.tmp), "/inst")
         up.assert_called_once()
         self.assertEqual(pk.call_args.kwargs["src"], "/up/clone")
+
+
+# git fetches a file:// submodule only when told; no name here reads as a secret, so git_env passes them on
+LOCAL_GIT = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "protocol.file.allow", "GIT_CONFIG_VALUE_0": "always",
+             "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+             "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+
+
+class Submodule(unittest.TestCase):
+    """The fetch with real git, on local repositories: a project that pins its submodule at a commit
+    other than its branch's tip, cloned at one commit as an upstream is."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.enterContext(mock.patch.dict(os.environ, LOCAL_GIT))
+        self.sub = self.repo("agp", {"pyproject.toml": '[project]\nname = "agp"\nversion = "1"\n'})
+        self.pinned = self.git("rev-parse", "HEAD", cwd=self.sub)
+        self.commit(self.sub, {"later": "x"})                                        # the pin is not the tip
+        sup = self.repo("project", {"README": "p"})
+        self.git("submodule", "add", "-q", "file://" + self.sub, "pkg/agp", cwd=sup)
+        self.git("checkout", "-q", self.pinned, cwd=os.path.join(sup, "pkg", "agp"))
+        self.commit(sup, {})
+        self.proj = os.path.join(self.tmp, "clone")
+        os.makedirs(self.proj)
+        for cmd in (["init", "-q"], ["fetch", "-q", "--depth", "1", "file://" + sup, "HEAD"], ["checkout", "-q", "FETCH_HEAD"]):
+            self.git(*cmd, cwd=self.proj)
+        self.lock = os.path.join(self.tmp, "requirements.lock")
+        with open(self.lock, "w") as f:
+            f.write("-e ./pkg/agp\nnumpy==1.26.4\n")
+
+    def git(self, *a, cwd):
+        return subprocess.run(["git", *a], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+
+    def commit(self, where, files):
+        for name, text in files.items():
+            with open(os.path.join(where, name), "w") as f:
+                f.write(text)
+        self.git("add", ".", cwd=where)
+        self.git("commit", "-qm", "c", cwd=where)
+
+    def repo(self, name, files):
+        where = os.path.join(self.tmp, name)
+        os.makedirs(where)
+        self.git("init", "-q", "-b", "main", cwd=where)
+        self.commit(where, files)
+        return where
+
+    def test_a_fetch_that_broke_halfway_is_fetched_again(self):
+        log, agp = os.path.join(self.tmp, "install.log"), os.path.join(self.proj, "pkg", "agp")
+        os.rename(self.sub, self.sub + ".away")                                      # the pinned commit out of reach
+        self.repo("agp", {"other": "y"})
+        with self.assertRaises(install.InstallFailed):
+            install._submodules(self.proj, self.lock, log)
+        self.assertEqual(os.listdir(agp), [".git"])                                  # cloned, never checked out
+        shutil.rmtree(self.sub)
+        os.rename(self.sub + ".away", self.sub)                                      # in reach again
+        install._submodules(self.proj, self.lock, log)                               # the next install
+        self.assertEqual(self.git("rev-parse", "HEAD", cwd=agp), self.pinned)
+        self.assertTrue(os.path.isfile(os.path.join(agp, "pyproject.toml")))
+        with mock.patch.object(install, "_run") as again:
+            install._submodules(self.proj, self.lock, log)
+        self.assertFalse(again.called)                                               # at its pin: held
 
 
 class Entries(unittest.TestCase):

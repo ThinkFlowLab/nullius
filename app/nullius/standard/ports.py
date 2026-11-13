@@ -52,6 +52,12 @@ PORTS = {
         "summary": "A browser reached through an MCP server Nullius starts.",
         "kit": None,
     },
+    "agent.computer/v1": {
+        "label": "Computer use",
+        "family": "agent",
+        "summary": "A desktop the agent sees in screenshots and drives with mouse and keyboard actions.",
+        "kit": None,
+    },
     "cap.memory/v1": {
         "label": "Memory",
         "family": "capability",

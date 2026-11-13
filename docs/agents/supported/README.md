@@ -28,6 +28,7 @@ Every agent in the catalogue, the ports each version has proven, and the benchma
 | `agent.conversation/v1` | Conversation | Several prompts in one session, each answered in its own turn, the earlier ones remembered. |
 | `agent.search/v1` | Search | Search an HTTP collection, retrieve a source and answer with its evidence using the agent's available tools. |
 | `agent.browser/v1` | Browser | A browser reached through an MCP server Nullius starts. |
+| `agent.computer/v1` | Computer use | A desktop the agent sees in screenshots and drives with mouse and keyboard actions. |
 
 <table>
 <thead><tr><th rowspan="2">Agent</th><th colspan="5" class="group">Ports</th><th colspan="3" class="group">Tools, the skills of <code>agent.tools/v1</code></th></tr><tr><th>One task</th><th>Workspace files</th><th>MCP tools</th><th>Conversation</th><th>Search</th><th>decoys</th><th>chain</th><th>retry</th></tr></thead>
@@ -43,7 +44,7 @@ Every agent in the catalogue, the ports each version has proven, and the benchma
 <tr><td><a href="terminus-2.md"><code>terminus-2</code></a></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td></tr>
 </tbody></table>
 
-- ✓ proven by `cli conform`, – not proven. An agent that misses a skill still has the port. Browser has no kit yet, so no agent is tested on it; it comes with the first benchmark that needs it.
+- ✓ proven by `cli conform`, – not proven. An agent that misses a skill still has the port. Browser and Computer use have no kit yet, so no agent is tested on them.
 
 ### Benchmarks each agent fits
 
