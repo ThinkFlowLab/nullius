@@ -8,11 +8,12 @@ known by the unit that made it without reading its content.
 A reply is passed through as it arrives - a streamed one (server-sent events)
 byte for byte - and recorded once it is complete, one line per call in
 ``<record_dir>/<tag>.jsonl``: when it started and ended, the model, the status,
-the tokens, and an abridged request and reply: the reply's serving provider
-when it names one (``served_by``), how it ended (``end``) and an error it
-holds inside a success (``error``), which makes the call a failed one. Three
-API shapes are read, Chat Completions, Responses and Anthropic's Messages,
-streamed or not. The
+the tokens, and an abridged request and reply. Three API shapes are read,
+Chat Completions, Responses and Anthropic's Messages, streamed or not. Read
+apart from the rest (:func:`reply_facts`), the reply also says, when it does,
+the serving provider that answered (``served_by``), how it ended (``end``)
+and an error it holds though its status was a success (``error``); reading
+them never changes what the caller receives, nor the rest of the record. The
 cost is the provider's when it says it (OpenRouter's ``usage.cost``), else an
 estimate from ``prices`` when one is given for exactly that model (the
 user's price list, ``nullius.prices``), marked as an estimate.
@@ -30,8 +31,8 @@ record as it was sent, which is what makes rate limits measurable.
 A run may pin, for a model, the serving providers that may answer it
 (``serving``, OpenRouter's routing): the relay then puts
 ``provider: {order, allow_fallbacks: false}`` on every request it sends as
-that model, in place of the caller's own, and records both. Without a pin a
-request's body goes on as it did.
+that model, in place of the caller's own, and records both, cleaned of
+credentials. Without a pin a request's body goes on as it did.
 
 One answer is the relay's own: a run with a spending cap (``ledger``) books
 each call before it goes out, and a call that does not fit is not sent. Its
@@ -147,85 +148,28 @@ def _text_of_messages(msg: dict) -> (str, List[dict]):
     return "".join(text), calls
 
 
-def routing(slugs) -> dict:
-    """OpenRouter's routing field for a strict pin: these serving providers,
-    tried in this order, and no other."""
-    return {"order": list(slugs), "allow_fallbacks": False}
-
-
-def _error(e) -> Optional[dict]:
-    """An error object a reply holds, in one shape: its code, type and message, as given."""
-    if not isinstance(e, dict):
-        return None
-    got = {k: e[k] for k in ("code", "type") if isinstance(e.get(k), (str, int)) and not isinstance(e.get(k), bool)}
-    if e.get("message") is not None:
-        got["message"] = _cut(str(e["message"]), 500)
-    return got or {"message": _cut(json.dumps(e), 500)}
-
-
-def _provider(got: dict) -> Optional[str]:
-    """The serving provider a reply (or a stream's event) names: its own
-    ``provider``, a Messages' or a Responses' object's, else the last attempt
-    of OpenRouter's routing facts (``openrouter_metadata``)."""
-    for obj in (got, got.get("message"), got.get("response")):
-        if isinstance(obj, dict) and isinstance(obj.get("provider"), str) and obj["provider"]:
-            return obj["provider"]
-    meta = got.get("openrouter_metadata")
-    attempts = meta.get("attempts") if isinstance(meta, dict) else None
-    named = [a.get("provider") for a in attempts or [] if isinstance(a, dict) and isinstance(a.get("provider"), str)]
-    return named[-1] if named else None
-
-
-def _ending(fields: dict, served, end, error) -> dict:
-    for k, v in (("served_by", served), ("end", end), ("error", error)):
-        if v is not None:
-            fields[k] = v
-    return fields
-
-
-def _whole(got: dict) -> tuple:
-    """(served_by, end, error) of a reply read whole."""
-    served = _provider(got)
-    if "choices" in got:
-        first = (got.get("choices") or [{}])[0] or {}
-        return served, first.get("finish_reason"), _error(first.get("error")) or _error(got.get("error"))
-    if got.get("type") == "message":
-        return served, got.get("stop_reason"), None
-    if got.get("object") == "response" or "output" in got:
-        why = (got.get("incomplete_details") or {}).get("reason") if isinstance(got.get("incomplete_details"), dict) else None
-        status = got.get("status")
-        return served, f"{status}: {why}" if status and why else status, _error(got.get("error"))
-    return served, None, _error(got.get("error"))      # an error alone: OpenRouter's, a Messages' {"type": "error"}
-
-
 def read_reply(path: str, body: bytes, streamed: bool) -> dict:
-    """What a reply said: its text, its tool calls, its usage; and, when it
-    says them, the serving provider that answered (``served_by``), how it
-    ended (``end``: ``finish_reason``, ``stop_reason`` or a Responses status)
-    and an error it holds though its status was a success (``error``)."""
+    """What a reply said: its text, its tool calls, its usage."""
     if not streamed:
         try:
             got = json.loads(body)
         except ValueError:
             return {}
-        if not isinstance(got, dict):
-            return {}
         if "choices" in got:
             m = ((got.get("choices") or [{}])[0].get("message")) or {}
             calls = [{"name": (c.get("function") or {}).get("name"), "arguments": _cut((c.get("function") or {}).get("arguments"), 2000)}
                      for c in m.get("tool_calls") or []]
-            return _ending({"text": m.get("content"), "tool_calls": calls, "usage": _usage(got.get("usage"))}, *_whole(got))
+            return {"text": m.get("content"), "tool_calls": calls, "usage": _usage(got.get("usage"))}
         if got.get("type") == "message" and isinstance(got.get("content"), list):
             text, calls = _text_of_messages(got)
-            return _ending({"text": text, "tool_calls": calls, "usage": _usage(got.get("usage"))}, *_whole(got))
+            return {"text": text, "tool_calls": calls, "usage": _usage(got.get("usage"))}
         if got.get("object") == "response" or "output" in got:
             text, calls = _text_of_responses(got)
-            return _ending({"text": text, "tool_calls": calls, "usage": _usage(got.get("usage"))}, *_whole(got))
+            return {"text": text, "tool_calls": calls, "usage": _usage(got.get("usage"))}
         if got.get("object") == "list" and path.split("?")[0].endswith("/embeddings"):     # how many inputs, and the usage: never the vectors
-            return _ending({"embeddings": len(got.get("data") or []), "usage": _usage(got.get("usage"))}, _provider(got), None, None)
-        return _ending({}, *_whole(got))
+            return {"embeddings": len(got.get("data") or []), "usage": _usage(got.get("usage"))}
+        return {}
     text, calls, usage, args = [], {}, None, {}
-    served = end = error = None
     told = None                                  # Messages: the usage of message_start, then message_delta's on it
     for line in body.decode("utf-8", "replace").splitlines():
         if not line.startswith("data:"):
@@ -237,21 +181,12 @@ def read_reply(path: str, body: bytes, streamed: bool) -> dict:
             ev = json.loads(data)
         except ValueError:
             continue
-        if not isinstance(ev, dict):
-            continue
         kind = ev.get("type")
-        served = served or _provider(ev)
-        if kind == "error":                      # Messages' error event, or a Responses one
-            error = _error(ev.get("error")) or _error(ev)
-            continue
-        if kind is None and isinstance(ev.get("error"), dict):     # OpenRouter's error chunk inside a 200
-            error = _error(ev["error"])
         if kind == "message_start":
             told = dict(((ev.get("message") or {}).get("usage")) or {})
             continue
         if kind == "message_delta":
             told = {**(told or {}), **{k: v for k, v in (ev.get("usage") or {}).items() if v is not None}}
-            end = (ev.get("delta") or {}).get("stop_reason") or end
             continue
         if kind == "content_block_start":
             b, i = ev.get("content_block") or {}, ev.get("index", 0)
@@ -267,14 +202,10 @@ def read_reply(path: str, body: bytes, streamed: bool) -> dict:
             elif d.get("type") == "input_json_delta":
                 args[i] = args.get(i, "") + (d.get("partial_json") or "")
             continue
-        if kind in ("response.completed", "response.done", "response.incomplete", "response.failed"):
-            resp = ev.get("response") or {}
-            t, c = _text_of_responses(resp)
-            _, end, failed = _whole(resp)
-            return _ending({"text": t, "tool_calls": c, "usage": _usage(resp.get("usage"))}, served, end, failed or error)
+        if kind in ("response.completed", "response.done", "response.incomplete"):
+            t, c = _text_of_responses(ev.get("response") or {})
+            return {"text": t, "tool_calls": c, "usage": _usage((ev.get("response") or {}).get("usage"))}
         for ch in ev.get("choices") or []:
-            end = ch.get("finish_reason") or end
-            error = _error(ch.get("error")) or error
             d = ch.get("delta") or {}
             if d.get("content"):
                 text.append(d["content"])
@@ -286,8 +217,188 @@ def read_reply(path: str, body: bytes, streamed: bool) -> dict:
                 args[i] = args.get(i, "") + (f.get("arguments") or "")
         if ev.get("usage"):
             usage = _usage(ev["usage"])
-    return _ending({"text": "".join(text), "tool_calls": [{"name": calls[i], "arguments": _cut(args.get(i, ""), 2000)} for i in sorted(calls)],
-                    "usage": _usage(told) if told is not None else usage}, served, end, error)
+    return {"text": "".join(text), "tool_calls": [{"name": calls[i], "arguments": _cut(args.get(i, ""), 2000)} for i in sorted(calls)],
+            "usage": _usage(told) if told is not None else usage}
+
+
+# -- serving providers: the pin a run sets, and what a reply says of who served it --
+SLUG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*")
+
+
+def routing(slugs) -> dict:
+    """OpenRouter's routing field for a strict pin: these serving providers,
+    tried in this order, and no other."""
+    return {"order": list(slugs), "allow_fallbacks": False}
+
+
+def serving_problems(serving) -> List[str]:
+    """What is wrong with a pin by model (``{model: [slug, ...]}``): the one
+    check the run, its command line and the relay's own command share."""
+    if not isinstance(serving, dict):
+        return ["the serving providers are given by model: {MODEL: [SLUG, ...]}"]
+    bad = []
+    for model, slugs in serving.items():
+        if not isinstance(model, str) or not model.strip():
+            bad.append("a pin names no model")
+            continue
+        if not isinstance(slugs, (list, tuple)) or not slugs:
+            bad.append(f"{model}: no serving provider")
+            continue
+        wrong = [s for s in slugs if not isinstance(s, str) or not SLUG.fullmatch(s)]
+        if wrong:
+            bad.append(f"{model}: {', '.join(repr(s) for s in wrong)} is not a serving provider's slug "
+                       "(as a model's page names it: deepinfra, deepinfra/fp8)")
+        elif len(set(slugs)) != len(slugs):
+            bad.append(f"{model}: a serving provider is named twice")
+    return bad
+
+
+def parse_served_by(given, model: str) -> tuple:
+    """``--served-by [MODEL=]SLUG[,SLUG...]``, repeatable, as ``({model: [slug, ...]}, problems)``. Without
+    ``MODEL=`` it is ``model``, the run's. A model named twice is a problem; so is each of :func:`serving_problems`."""
+    out: Dict[str, List[str]] = {}
+    bad = []
+    for g in given or []:
+        name, eq, listed = str(g).rpartition("=")
+        name = name.strip() if eq else (model or "")
+        if not name:
+            bad.append(f"--served-by {g!r}: MODEL=SLUG[,SLUG...], or SLUG[,SLUG...] for the run's model")
+            continue
+        if name in out:
+            bad.append(f"--served-by names {name} twice: list its serving providers once, in the order they are tried")
+            continue
+        out[name] = [s.strip() for s in listed.split(",")]
+    return out, bad + serving_problems(out)
+
+
+def _clean(value, secrets=()):
+    """A recorded copy, never what is sent: a value under a credential's name
+    replaced, the relay's own key cut out of every string, then ``redact``."""
+    if isinstance(value, dict):
+        return {k: "[REDACTED]" if isinstance(k, str) and _CREDENTIAL.search(k) else _clean(v, secrets) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_clean(v, secrets) for v in value]
+    if isinstance(value, str):
+        for s in secrets:
+            if s:
+                value = value.replace(s, "[REDACTED]")
+        return redact(value)
+    return value
+
+
+def _name(v) -> Optional[str]:
+    return v if isinstance(v, str) and v else None
+
+
+def _an_error(e) -> Optional[dict]:
+    """An error object, in one shape: its code, type and message, as given."""
+    if not isinstance(e, dict) or not e:
+        return None
+    got = {k: e[k] for k in ("code", "type") if isinstance(e.get(k), (str, int)) and not isinstance(e.get(k), bool)}
+    if isinstance(e.get("message"), str):
+        got["message"] = _cut(e["message"], 500)
+    return got or {"message": _cut(json.dumps(e), 500)}
+
+
+def _provider(obj) -> Optional[str]:
+    """The serving provider an object of a reply names: its own ``provider``,
+    its ``message``'s or its ``response``'s, else the last attempt of
+    OpenRouter's routing facts (``openrouter_metadata``) there."""
+    if not isinstance(obj, dict):
+        return None
+    inner = [obj] + [o for o in (obj.get("message"), obj.get("response")) if isinstance(o, dict)]
+    for o in inner:
+        if _name(o.get("provider")):
+            return o["provider"]
+    for o in inner:
+        meta = o.get("openrouter_metadata")
+        attempts = meta.get("attempts") if isinstance(meta, dict) else None
+        named = [a["provider"] for a in attempts if isinstance(a, dict) and _name(a.get("provider"))] if isinstance(attempts, list) else []
+        if named:
+            return named[-1]
+    return None
+
+
+def _choices(choices, ends: dict, errors: dict) -> None:
+    """Each choice's end and error, by its index."""
+    if not isinstance(choices, list):
+        return
+    for n, ch in enumerate(choices):
+        if not isinstance(ch, dict):
+            continue
+        i = ch.get("index") if isinstance(ch.get("index"), int) and not isinstance(ch.get("index"), bool) else n
+        if _name(ch.get("finish_reason")):
+            ends[i] = ch["finish_reason"]
+        e = _an_error(ch.get("error"))
+        if e and i not in errors:
+            errors[i] = e
+
+
+def _status(resp) -> Optional[str]:
+    """A Responses object's end: its status, and why when it is incomplete."""
+    if not isinstance(resp, dict) or not _name(resp.get("status")):
+        return None
+    why = resp.get("incomplete_details")
+    why = _name(why.get("reason")) if isinstance(why, dict) else None
+    return f"{resp['status']}: {why}" if why else resp["status"]
+
+
+def _facts(path: str, body: bytes, streamed: bool) -> dict:
+    served, end, error, ends, errors = None, None, None, {}, {}
+    if not streamed:
+        got = json.loads(body)
+        if not isinstance(got, dict):
+            return {}
+        served, error = _provider(got), _an_error(got.get("error"))
+        _choices(got.get("choices"), ends, errors)
+        if got.get("type") == "message":
+            end = _name(got.get("stop_reason"))
+        elif got.get("object") == "response" or "output" in got:
+            end = _status(got)
+    else:
+        for line in body.decode("utf-8", "replace").splitlines():
+            if not line.startswith("data:"):
+                continue
+            try:
+                ev = json.loads(line[5:].strip())
+            except ValueError:
+                continue
+            if not isinstance(ev, dict):
+                continue
+            served = served or _provider(ev)
+            kind = ev.get("type")
+            if kind == "error":                  # Messages' error event, or a Responses one
+                error = error or _an_error(ev.get("error")) or _an_error({k: v for k, v in ev.items() if k != "type"})
+            elif isinstance(ev.get("error"), dict):     # an error chunk under a 200
+                error = error or _an_error(ev["error"])
+            if kind == "message_delta" and isinstance(ev.get("delta"), dict):
+                end = _name(ev["delta"].get("stop_reason")) or end
+            if kind in ("response.completed", "response.done", "response.incomplete", "response.failed"):
+                resp = ev.get("response")
+                end = _status(resp) or end
+                error = error or _an_error(resp.get("error") if isinstance(resp, dict) else None)
+            _choices(ev.get("choices"), ends, errors)
+    if ends:
+        end = ends[min(ends)] if len(ends) == 1 else {str(i): ends[i] for i in sorted(ends)}
+    if error is None and errors:
+        i = min(errors)
+        error = dict(errors[i], choice=i)
+    return {k: v for k, v in (("served_by", served), ("end", end), ("error", error)) if v is not None}
+
+
+def reply_facts(path: str, body: bytes, streamed: bool) -> dict:
+    """What a reply says besides what :func:`read_reply` reads, read apart from
+    it: the serving provider that answered (``served_by``), how it ended
+    (``end``: ``finish_reason``, ``stop_reason`` or a Responses status; one per
+    choice, by index, when there are several) and an error it holds though its
+    status was a success (``error``: code, type and message; a top-level one
+    whatever else the reply holds, else a choice's). A fact of the wrong type
+    is left out, and a reply that cannot be read gives none: nothing here can
+    stop a reply reaching its caller."""
+    try:
+        return _facts(path, body, streamed)
+    except Exception:
+        return {}
 
 
 def _request_tail(req: dict) -> dict:
@@ -434,7 +545,8 @@ class _Pool:
 class Relay:
     def __init__(self, base: str, key: str, record_dir: str, prices: Optional[Dict[str, dict]] = None,
                  model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False,
-                 ledger: Optional[str] = None, unit_caps: bool = True, serving: Optional[Dict[str, List[str]]] = None):
+                 ledger: Optional[str] = None, unit_caps: bool = True, serving: Optional[Dict[str, List[str]]] = None,
+                 facts: Optional[bool] = None):
         """``base``: the provider's endpoint (``https://api.openai.com/v1``).
         ``model``: when given, every call is sent as this model, whatever the
         caller named - the run's model is the recipe's, not the agent's. A
@@ -454,9 +566,14 @@ class Relay:
         by every relay of the job: a call is booked there before it is sent,
         and not sent when it does not fit. ``serving``: by model, the serving
         providers that may answer a request sent as that model (:func:`routing`),
-        put on every such request in place of the caller's own."""
+        put on every such request in place of the caller's own. ``facts``: a
+        pinned Chat Completions request asks OpenRouter for its routing facts,
+        where its reply names who served it; by default when ``base`` is
+        OpenRouter's."""
         self.fields = fields
         self.serving = {m: list(s) for m, s in (serving or {}).items()}
+        host = (urllib.parse.urlsplit(base).hostname or "").lower()
+        self.facts = (host == "openrouter.ai" or host.endswith(".openrouter.ai")) if facts is None else bool(facts)
         self.ledger = ledgers.Ledger(ledger) if ledger else None
         # False for the benchmark's own relay: its calls (an option's embeddings) are no one unit's, so only the run's cap holds them
         self.unit_caps = unit_caps
@@ -520,13 +637,15 @@ class Relay:
         return redact(text)[:200]
 
     def _headers(self, caller, facts: bool = False) -> Dict[str, str]:
-        """``facts``: a pinned Chat Completions request, whose reply names no
-        serving provider unless OpenRouter is asked for its routing facts."""
+        """``facts``: a pinned Chat Completions request to OpenRouter, sent
+        asking for its routing facts whatever the caller said of them."""
         out = forwarded(caller)
+        if facts:
+            out = {k: v for k, v in out.items() if k.lower() != "x-openrouter-metadata"}
+            out["X-OpenRouter-Metadata"] = "enabled"
         has = {k.lower() for k in out}           # a name in any case is the same header: never send it twice
         for name, value in (("Content-Type", "application/json"), ("Accept", "*/*")) + \
-                (("anthropic-version", ANTHROPIC_VERSION),) * (self.key_header == "x-api-key") + \
-                (("X-OpenRouter-Metadata", "enabled"),) * facts:
+                (("anthropic-version", ANTHROPIC_VERSION),) * (self.key_header == "x-api-key"):
             if name.lower() not in has:
                 out[name] = value
         if self.key_header == "x-api-key":
@@ -589,7 +708,7 @@ class Relay:
         conn, r, back, body = None, None, [], b""
         cut = False                              # the reply was cut off: the call may have been billed
         try:
-            facts = bool(pinned) and rest.split("?")[0].endswith("/chat/completions")
+            facts = bool(pinned) and self.facts and rest.split("?")[0].endswith("/chat/completions")
             conn, r = self.pool.send(h.command, rest, raw if h.command == "POST" else None, self._headers(h.headers, facts))
             status, kind, back = r.status, r.getheader("Content-Type") or "application/json", returned(r.headers)
         except Exception as e:
@@ -615,21 +734,24 @@ class Relay:
             if side:
                 rec["side"] = True
             if isinstance(req, dict) and req.get("provider") is not None:
-                rec["request"]["routing"] = req["provider"]          # as sent: the pin's, or the caller's own
+                # the routing as sent, and the caller's own the pin replaced: recorded copies, cleaned
+                rec["request"]["routing"] = _clean(req["provider"], (self.key, self.key.strip()))
                 if pinned and routing_asked is not None:
-                    rec["request"]["routing_asked"] = routing_asked
+                    rec["request"]["routing_asked"] = _clean(routing_asked, (self.key, self.key.strip()))
             if self.fields and isinstance(req, dict) and req:
                 rec["fields"] = request_fields(req)
             cost = None
             if status == 200:
                 rec["reply"] = read_reply(rest, body, streamed)
+                # who served it, how it ended, an error under the 200: beside what was read, never in its place
+                try:
+                    rec["reply"].update({k: v for k, v in _clean(reply_facts(rest, body, streamed), (self.key, self.key.strip())).items()
+                                         if k not in rec["reply"]})
+                except Exception:
+                    pass
                 cost, how = self._cost(rec["model"], rec["reply"].get("usage"))
                 if cost is not None:
                     rec["cost_usd"], rec["cost_from"] = cost, how
-                e = rec["reply"].get("error")
-                if e:                            # a success that holds an error: a failed call (failure)
-                    rec["error"] = (f"HTTP 200 with an error{' ' + str(e['code']) if 'code' in e else ''}: "
-                                    + str(e.get("message") or e.get("type") or ""))[:300]
             else:
                 rec["error"] = _said(status, body)
             if booking is not None:
@@ -805,12 +927,10 @@ def failure(calls: List[dict]) -> Optional[tuple]:
     over = next((c for c in calls if c.get("refused") == "unit"), None)
     if over:                                     # its own cap: the unit's doing, and the run goes on
         return ledgers.UNIT_ERROR, over.get("error") or ""
-    if not calls or (calls[-1].get("status") == 200 and not (calls[-1].get("reply") or {}).get("error")):
+    if not calls or calls[-1].get("status") == 200:
         return None
     last = calls[-1]
     s, said = last.get("status"), last.get("error") or ""
-    if s == 200:                                 # an error inside a success: a rate limit when its code says so
-        s = 429 if last["reply"]["error"].get("code") in (429, "429") else None
     if s == 429:
         return "RateLimitError", said
     if s in (401, 403):
@@ -849,15 +969,12 @@ def serve(argv=None) -> int:
     ap.add_argument("--prices", help="a JSON object: model -> USD per million tokens, for a cost estimate")
     ap.add_argument("--ledger", help="the file of the run's spending cap: a call is booked there before it is sent")
     ap.add_argument("--served-by", action="append", default=[], metavar="MODEL=SLUG[,SLUG...]",
-                    help="the serving providers that may answer a request sent as MODEL, in order")
+                    help="the serving providers that may answer a request sent as MODEL, in order, and no other")
     a = ap.parse_args(argv)
-    serving = {}
-    for given in a.served_by:
-        model, _, slugs = given.rpartition("=")
-        if not model or not slugs:
-            print(json.dumps({"error": f"--served-by {given!r}: MODEL=SLUG[,SLUG...]"}), flush=True)
-            return 2
-        serving[model] = slugs.split(",")
+    serving, bad = parse_served_by(a.served_by, "")
+    if bad:
+        print(json.dumps({"error": "; ".join(bad)}), flush=True)
+        return 2
     try:
         with open(a.key_file) as f:
             key = f.read().strip()

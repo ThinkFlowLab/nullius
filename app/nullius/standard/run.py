@@ -134,31 +134,16 @@ def provider_endpoint(provider: str, env=os.environ) -> tuple:
     return base, key
 
 
-_SERVER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*")
-
-
 def served_by(given, model: str) -> Dict[str, List[str]]:
     """``--served-by [MODEL=]SLUG[,SLUG...]``, repeatable: by model, the
     serving providers that may answer it, in the order they are tried, and no
     other (OpenRouter's slugs, as a model's page gives them: ``deepinfra``,
-    ``deepinfra/fp8``). Without ``MODEL=`` it is the run's model. Refused when
-    a slug is empty, malformed or given twice, or a model is named twice."""
-    out: Dict[str, List[str]] = {}
-    for g in given or []:
-        name, eq, listed = str(g).rpartition("=")
-        name = name.strip() if eq else model
-        slugs = [s.strip() for s in listed.split(",")]
-        if not name:
-            raise Refused(f"--served-by {g!r}: MODEL=SLUG[,SLUG...], or SLUG[,SLUG...] for the run's model")
-        bad = [s for s in slugs if not _SERVER.fullmatch(s)]
-        if bad:
-            raise Refused(f"--served-by {g!r}: {', '.join(repr(s) for s in bad)} is not a serving provider's slug "
-                          "(as a model's page names it: deepinfra, deepinfra/fp8)")
-        if len(set(slugs)) != len(slugs):
-            raise Refused(f"--served-by {g!r} names a serving provider twice")
-        if name in out:
-            raise Refused(f"--served-by names {name} twice: list its serving providers once, in the order they are tried")
-        out[name] = slugs
+    ``deepinfra/fp8``). Without ``MODEL=`` it is the run's model. Refused as
+    ``relay.parse_served_by`` finds it wrong: the check the run and the
+    relay's own command make too."""
+    out, bad = relay.parse_served_by(given, model)
+    if bad:
+        raise Refused("--served-by: " + "; ".join(bad))
     return out
 
 
@@ -512,12 +497,18 @@ class Run:
                           + "; ".join(f"{n} ({why})" for n, why in lacking.items())
                           + (". Install with: " + " && ".join(lines) if (lines := hostreq.install_lines(bench, list(lacking)))
                              else ". Run it on a machine that has it"))
-        self.serving = {m: list(s) for m, s in (served_by or {}).items()}
+        self.serving = dict(served_by or {})
         if self.serving:
+            bad = relay.serving_problems(self.serving)
+            if bad:
+                raise Refused("--served-by: " + "; ".join(bad))
+            self.serving = {m: list(s) for m, s in self.serving.items()}
             if not PROVIDERS.get(provider, {}).get("routing"):
                 raise Refused(f"--served-by: {provider} serves each model itself, with no serving providers to choose "
                               "among; the option needs a provider that routes a model to several (openrouter)")
-            called = self.models_called()
+            # a control calls no model of its own: only its judge, simulated user or an option's models
+            called = [m for m in self.models_called()
+                      if other.get("_kind") != "control" or m in (self.judge_model, self.simulator_model, self.embed_model, self.rerank_model)]
             stray = [m for m in self.serving if m not in called]
             if stray:
                 raise Refused(f"--served-by names {', '.join(stray)}, which this run does not call: it calls "
@@ -716,7 +707,8 @@ class Run:
                 self.loopback.stop()
             budget = self.budget([self.attempt_name(u, r) for n, (_, u, r) in enumerate(work) if n >= len(begun) or not begun[n]])
             self.capped = bool(budget and budget["stopped"])
-            job.write_result(self.job_dir, self.name, t0, time.time(), results, len(work), budget=budget)
+            job.write_result(self.job_dir, self.name, t0, time.time(), results, len(work), budget=budget,
+                             served=job.served(self.benchmark_calls(), getattr(self, "serving", None)))
             errored = sum(1 for x in results if x.get("exception_info"))
             self.feed.emit("job.end", n_completed=len(results) - errored, n_errored=errored, n_cancelled=len(work) - len(results))
         # the units' stage says why it ended early: a line of its own would be a stage that never starts
@@ -1044,6 +1036,9 @@ class Run:
                               setup_end=p0 or time.time(), checking=checking,
                               trajectory=traj, extra_logs=dict(logs or {}, **({"container-changes.txt": changes} if changes else {})),
                               environment=environment or "", serving=getattr(self, "serving", None),
+                              # who served the unit: its agent's calls and its judge's and simulated user's routes
+                              served_calls=calls + ([c for side in ("judge", "simulator") for c in rl.calls(f"{tag}-{side}")]
+                                                    if rl is not None else []),
                               image=(box.image if box is not None else getattr(rl, "unit_image", "")) or "")
         install.prune(self.other, home)          # its declared caches: the trial is written, no one reads them now
         verdict = "error " + exc[0] if exc else f"reward {score.get('reward')}"
@@ -1227,6 +1222,16 @@ class Run:
         """The file of the run's spending cap, for a relay; None without a cap."""
         led = getattr(self, "ledger", None)
         return led.path if led is not None else None
+
+    def benchmark_calls(self) -> List[dict]:
+        """The calls of the benchmark's own relay (an option's embeddings or reranking), every route of it."""
+        folder = os.path.join(self.job_dir, ".work", "relay-benchmark")
+        calls = []
+        for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+            if name.endswith(".jsonl"):
+                with open(os.path.join(folder, name)) as f:
+                    calls += [json.loads(line) for line in f if line.strip()]
+        return calls
 
     def models_called(self) -> List[str]:
         """Every model this run's relays may send a call to, as sent: the

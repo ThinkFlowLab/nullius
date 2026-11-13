@@ -65,6 +65,20 @@ def _at(d, path):
     return d
 
 
+def _served(shards: List[dict], results: List[dict]) -> Optional[dict]:
+    """The merged job's ``served`` (``job.served_total``). A model the shards pinned differently - merged
+    with ``force`` - reads ``unknown``: the merged config keeps the first shard's pin, which the others' calls
+    were never held to."""
+    who = job.served_total(results)
+    pins = [_at(s["config"], ("standard", "served_by")) or {} for s in shards]
+    pins = [p if isinstance(p, dict) else {} for p in pins]
+    differ = sorted(m for m in {m for p in pins for m in p} if len({json.dumps(p.get(m)) for p in pins}) > 1)
+    if differ:
+        who = who or {"calls": {}, "unnamed": 0}
+        who["held"] = dict(who.get("held") or {}, **{m: "unknown" for m in differ})
+    return who
+
+
 def _trials(job_dir: str) -> List[str]:
     return sorted(n for n in os.listdir(job_dir)
                   if not n.startswith(".") and os.path.isfile(os.path.join(job_dir, n, "result.json")))
@@ -107,7 +121,7 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
         raise Refused("a job is named twice")
     differ = []
     for label, path in SAME:
-        seen = {json.dumps(_at(s["config"], path)) for s in shards}
+        seen = {json.dumps(_at(s["config"], path), sort_keys=True) for s in shards}      # a mapping by its content
         if len(seen) > 1:
             differ.append(f"{label}: " + ", ".join(f"{s['name']} {_at(s['config'], path)!r}" for s in shards))
     if differ and not force:
@@ -223,7 +237,7 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
                    "standard": {"passed": sum(1 for w in rewards if w.get("reward") == 1.0),
                                 "scored": len(scores), "mean_score": job.mean_score(results)},
                    **({"budget": budget} if budget else {}),
-                   **({"served": who} if (who := job.served_total(results)) else {})}, f, indent=1)
+                   **({"served": who} if (who := _served(shards, results)) else {})}, f, indent=1)
     cfg = json.loads(json.dumps(shards[0]["config"]))
     cfg["job_name"] = name
     std = cfg.setdefault("standard", {})

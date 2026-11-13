@@ -402,8 +402,9 @@ def backfill_trace(trial_dir: str, write: bool = False) -> str:
 
 def _named(name: str) -> str:
     """A serving provider's name as its slug reads: lowercased, its words joined by dashes (``Google AI Studio``
-    reads ``google-ai-studio``). A run fetches no list of providers, so this is all a name is matched by."""
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    reads ``google-ai-studio``) and nothing else folded: ``Prov/A`` is not ``prov-a``. A run fetches no list of
+    providers, and this is all a name is matched by."""
+    return re.sub(r"\s+", "-", name.strip().lower())
 
 
 def served(calls: List[dict], serving: Optional[Dict[str, List[str]]] = None) -> Optional[dict]:
@@ -411,7 +412,8 @@ def served(calls: List[dict], serving: Optional[Dict[str, List[str]]] = None) ->
     those that named none; and, for each model the run pinned (``serving``), whether the pin held - true when
     every answered call sent as that model names a provider that reads as one of its pinned slugs (``_named``,
     a slug's first part), ``unknown`` when one names none or another name, None when it has no answered call.
-    None for a unit whose calls name no provider in a run with no pin."""
+    A slug's endpoint variant (``/fp8``) is not in a reply's name: ``held`` says which provider answered, and
+    cannot tell one of its endpoints from another. None for a unit with no answered call in a run with no pin."""
     answered = [c for c in calls if c.get("status") == 200 and not (c.get("reply") or {}).get("error")]
     by: Dict[str, int] = {}
     unnamed = 0
@@ -421,7 +423,7 @@ def served(calls: List[dict], serving: Optional[Dict[str, List[str]]] = None) ->
             by[name] = by.get(name, 0) + 1
         else:
             unnamed += 1
-    if not by and not serving:
+    if not answered and not serving:
         return None
     out = {"calls": dict(sorted(by.items())), "unnamed": unnamed}
     if serving:
@@ -435,9 +437,10 @@ def served(calls: List[dict], serving: Optional[Dict[str, List[str]]] = None) ->
     return out
 
 
-def served_total(results: List[dict]) -> Optional[dict]:
-    """The job's ``served``: its trials' added up, a pin held where it held in every trial that called its model."""
-    parts = [p for p in ((r.get("standard") or {}).get("served") for r in results) if p]
+def served_total(results: List[dict], also: Optional[dict] = None) -> Optional[dict]:
+    """The job's ``served``: its trials' added up with ``also`` (the benchmark's own relay's, :func:`served`), a
+    pin held where it held in every one that called its model."""
+    parts = [p for p in [(r.get("standard") or {}).get("served") for r in results] + [also] if p]
     if not parts:
         return None
     calls: Dict[str, int] = {}
@@ -458,10 +461,12 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
                 produce: tuple, score: Optional[dict], exception: Optional[tuple], calls: List[dict],
                 trajectory: Optional[dict], extra_logs: Optional[dict] = None, environment: str = "",
                 image: str = "", setup_end: Optional[float] = None, checking: tuple = (None, None),
-                serving: Optional[Dict[str, List[str]]] = None) -> dict:
+                serving: Optional[Dict[str, List[str]]] = None, served_calls: Optional[List[dict]] = None) -> dict:
     """Write one unit's trial and return its result. ``serving``: the run's
     pin of serving providers by model; ``standard.served`` says who served
-    the unit's calls and whether the pin held (:func:`served`). ``environment``: the
+    ``served_calls`` (the unit's calls on every route of its relay: its
+    agent's, its judge's, its simulated user's; ``calls`` when not given) and
+    whether the pin held (:func:`served`). ``environment``: the
     benchmark's environment the unit asked for (none: the base image), and
     ``image``, the one it ran in on the container backend - names only.
     ``setup_end``: when the unit's environment was ready and the agent began
@@ -484,7 +489,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
            "standard": {"benchmark": bench["key"], "family": bench["family"], "needs": bench["needs"], "unit": unit,
                         "plugged": other.get("_ref") or other["key"], "job": job, **_version(bench), **_control(other), **_setup(other),
                         **({"environment": environment} if environment else {}), **({"image": image} if image else {}),
-                        **({"served": who} if (who := served(calls, serving)) else {})}}
+                        **({"served": who} if (who := served(calls if served_calls is None else served_calls, serving)) else {})}}
     if score is not None:
         value = float(score.get("reward") or 0.0)
         # a pass benchmark leaves a reward, as a verifier does; a score
@@ -599,14 +604,15 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
             "at": {str(k): round(sum(1 - comb(n - sum(v[:n]), k) / comb(n, k) for v in whole.values()) / len(whole), 4) for k in range(1, n + 1)}}
 
 
-def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int, budget: Optional[dict] = None):
+def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int, budget: Optional[dict] = None,
+                 served: Optional[dict] = None):
     """``budget``: a run with a spending cap (``run.Run.budget``): the cap,
     what was spent, whether it stopped the run, the units it cut off and
-    those never begun. ``served``: who served its trials' calls, when a
-    trial says it (:func:`served`)."""
+    those never begun. ``served``: who served the benchmark's own relay's
+    calls (:func:`served`); the job's ``served`` adds its trials' to them."""
     errored = sum(1 for r in results if r.get("exception_info"))
     hat = pass_hat(results)
-    who = served_total(results)
+    who = served_total(results, served)
     with open(os.path.join(job_dir, "result.json"), "w") as f:
         json.dump({"id": job, "started_at": iso(t0), "finished_at": iso(t1), "n_total_trials": planned,
                    "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
