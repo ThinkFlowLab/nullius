@@ -390,6 +390,24 @@ def new_run_registry():
     return _REGISTRY_SCAN
 
 
+@app.route("/new-run/endpoints", methods=["POST"])
+def new_run_endpoints():
+    """The serving providers OpenRouter lists for one model, for the Model step's Served by; asked as the
+    model list is, with the key kept on this machine."""
+    shared._require_csrf()
+    if not shared_local_client():
+        abort(403)
+    body = request.get_json(silent=True)
+    provider = body.get("provider") if isinstance(body, dict) else None
+    model = body.get("model") if isinstance(body, dict) else None
+    if providers.split(provider)[0] != "openrouter" or not isinstance(model, str) or not model.strip():
+        return jsonify(ok=False, endpoints=[], message="Only OpenRouter routes a model to several providers: choose it and a model."), 400
+    try:
+        return jsonify(ok=True, endpoints=providers.list_endpoints(provider, model))
+    except ValueError as error:
+        return jsonify(ok=False, endpoints=[], message=str(error)), 502
+
+
 @app.route("/new-run/models", methods=["POST"])
 def new_run_models():
     """Return the selected provider's catalogue, keeping its key on this machine."""

@@ -16,6 +16,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import re
 import secrets
 import socket
 import ssl
@@ -209,6 +210,53 @@ def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
     except (OSError, ValueError, TypeError, http.client.HTTPException):
         # Provider errors can contain keys or private endpoint details; do not echo them.
         raise ValueError("Model list unavailable. Enter a model ID manually.") from None
+
+
+# A model OpenRouter serves: its maker, a slash, its name (a variant after a colon: ``:free``).
+_ROUTED = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._:-]*")
+# A serving provider's slug, as ``--served-by`` takes it (``standard.relay.SLUG``).
+_SLUG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*")
+
+
+def _endpoints(content: bytes) -> list[dict]:
+    """The serving providers of OpenRouter's endpoint list (``{"data": {"endpoints": [...]}}``), each
+    ``{slug, name, quantization}``: the slug its ``tag`` (a provider and its variant, ``deepinfra/fp8``),
+    else the provider's name lowercased with its spaces as dashes. ValueError when there is no list."""
+    data = json.loads(content)
+    rows = ((data.get("data") or {}).get("endpoints") if isinstance(data, dict) and isinstance(data.get("data"), dict) else None)
+    if not isinstance(rows, list):
+        raise ValueError("missing endpoint list")
+    out = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("provider_name") if isinstance(row.get("provider_name"), str) else ""
+        tag = row.get("tag") if isinstance(row.get("tag"), str) else ""
+        slug = tag or re.sub(r"\s+", "-", name.strip().lower())
+        if not slug or len(slug) > 128 or not _SLUG.fullmatch(slug) or slug in out:
+            continue
+        quant = row.get("quantization") if isinstance(row.get("quantization"), str) else ""
+        out[slug] = {"slug": slug, "name": (name or slug)[:128], "quantization": quant[:32]}
+    return sorted(out.values(), key=lambda e: (e["name"].casefold(), e["slug"]))
+
+
+def list_endpoints(provider: str, model: str, env=None, *, opener=None) -> list[dict]:
+    """The serving providers OpenRouter lists for ``model`` (``GET /models/{author}/{slug}/endpoints``), for the
+    builder's Served by: asked as the model list is (its key when set, no redirect, nothing of the error echoed)."""
+    env = os.environ if env is None else env
+    provider, endpoint = split(provider)
+    if provider != "openrouter":
+        raise ValueError("Only OpenRouter routes a model to several providers.")
+    model = served_as(str(model or "").strip(), provider)
+    if not _ROUTED.fullmatch(model):
+        raise ValueError("Choose a model as OpenRouter names it, its maker first: maker/model.")
+    base, key = _where(provider, endpoint, env)
+    author, _, name = model.partition("/")
+    url = f"{base}/models/{urllib.parse.quote(author, safe='')}/{urllib.parse.quote(name, safe=':')}/endpoints"
+    try:
+        return _endpoints(_get(url, _bearer(key), opener))
+    except (OSError, ValueError, TypeError, AttributeError, http.client.HTTPException):
+        raise ValueError("Provider list unavailable. Enter a provider's slug by hand.") from None
 
 
 # Settings' Test, per provider: only requests that cost nothing. A model list everywhere; OpenRouter's is
