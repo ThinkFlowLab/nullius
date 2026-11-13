@@ -141,7 +141,7 @@ class RouteCases(CompilerCase):
         program = ('const C=require(' + json.dumps(str(APP/'static/builder/command-builder-core.js')) + ')(' + json.dumps(schema) + ');'
                    'const r=C.create();C.setBenchmark(r,"elsewhere");const c=C.compile(r);'
                    'process.stdout.write(JSON.stringify({offered:C.benchmarks().map(b=>b.key).includes("elsewhere"),blocker:C.routeBlocker("elsewhere"),errors:c.errors.map(e=>e.message),n:c.artifacts.length}));')
-        out = json.loads(subprocess.run([self.node, '-e', program], check=True, capture_output=True, text=True).stdout)
+        out = json.loads(subprocess.run([self.node, '-'], input=program, check=True, capture_output=True, text=True).stdout)
         self.assertFalse(out['offered'])
         self.assertEqual(out['blocker'], 'Elsewhere has no Harbor route; the harness it runs on is not available here.')
         self.assertEqual(out['errors'][0], out['blocker']); self.assertEqual(out['n'], 0)

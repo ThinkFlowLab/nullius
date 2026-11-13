@@ -32,7 +32,7 @@ class CompilerCase(unittest.TestCase):
 
     def js(self, code, schema=None):
         program = 'const C=require('+json.dumps(str(APP/'static/builder/command-builder-core.js'))+')('+json.dumps(schema or self.schema)+');\n'+code
-        result = subprocess.run([self.node,'-e',program],check=True,capture_output=True,text=True)
+        result = subprocess.run([self.node,'-'],input=program,check=True,capture_output=True,text=True)
         return json.loads(result.stdout)
 
     def compile(self,h='harbor',edit=''):

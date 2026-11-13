@@ -22,7 +22,7 @@ class StandardWhere(CompilerCase):
                    + "const r=C.createStandard(b.key);r.backend=backend;" + edit
                    + "try{out[b.key+' '+backend]=standardWhere(r);}catch(e){out[b.key+' '+backend]=String(e);}}"
                    + "process.stdout.write(JSON.stringify(out));")
-        return json.loads(subprocess.run([self.node, "-e", program], check=True, capture_output=True, text=True).stdout)
+        return json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
 
     def test_every_standard_benchmark_draws_its_where_step_and_says_why_docker_is_not_offered_once(self):
         missing, here = self.draw("docker is not installed"), self.draw(None)
