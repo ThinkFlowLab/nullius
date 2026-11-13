@@ -520,7 +520,7 @@ class Run:
                 raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs "
                               f"{', '.join(cannot)}, which a container setup cannot provide: choose local processes")
             on_host = []
-        lacking = hostreq.problems(bench, on_host, which)
+        lacking = hostreq.problems(bench, on_host, which, self.constraints.get("gpu_ids"))
         if lacking:
             raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
                           + "; ".join(f"{n} ({why})" for n, why in lacking.items())

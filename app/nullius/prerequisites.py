@@ -30,7 +30,7 @@ import shutil
 import time
 from typing import Callable, Dict, List, Optional
 
-from nullius import hosts
+from nullius import constraints, hosts
 from nullius.standard import container, hostreq
 
 LABEL = {"engine": "Docker or Podman", "docker": "Docker", "uv": "uv", "harbor": "Harbor on PATH", "python3": "python3", "git": "git"}
@@ -82,7 +82,7 @@ def check_here(needs: List[str], setups: Optional[Dict[str, dict]] = None, *, st
             rows.append(row(n, "ok") if which("harbor") else row(n, "missing", "a recipe from before the pin runs the harbor on PATH: pin a Harbor on the Harbor step"))
         else:
             rows.append(row(n, "ok") if which(n) else row(n, "missing", f"{n} is not on this machine's PATH"))
-    lacking = hostreq.problems({"host": setups or {}}, list(setups or {}), which)
+    lacking = hostreq.problems({"host": setups or {}}, list(setups or {}), which, constraints.of(constraints.LOCAL, strict=False).get("gpu_ids"))
     for name, s in (setups or {}).items():
         rows.append(row("setup:" + name, "missing", lacking[name], s.get("install"), label=name)
                     if name in lacking else row("setup:" + name, "ok", s.get("summary", ""), label=name))

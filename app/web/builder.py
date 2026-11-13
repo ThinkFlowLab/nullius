@@ -9,7 +9,7 @@ import subprocess
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from flask import abort, jsonify, render_template, request
-from nullius import settings, execution, gitrefs, hosts, prerequisites, providers
+from nullius import constraints, settings, execution, gitrefs, hosts, prerequisites, providers
 from nullius.harbor import source as harbor_source
 from nullius.catalogue import catalog
 from nullius.recipes import launch as command_builder
@@ -51,7 +51,8 @@ def new_run():
     # The standard's Where step: why its container backend cannot run on this machine (None: it can); and, per
     # benchmark, the licences its store holds (nullius.secrets) - set, when, until when; never a value.
     # what this machine lacks of each benchmark's host requirements: {benchmark: {requirement: [reasons]}}
-    host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"])).items()}
+    gpus = constraints.of(constraints.LOCAL, strict=False).get("gpu_ids")
+    host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"]), gpu_ids=gpus).items()}
             for b in definitions.load("benchmark", every=True)[0] if b.get("host")}
     data["standardHere"] = {"docker": execute.docker_problem(), "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
@@ -258,7 +259,7 @@ def new_run_host_check():
     Remote GPU memory is checked by the run on its host, not by the SSH probe."""
     b, names, host = _host_target()
     if host is None:
-        gone = {n: [why] for n, why in hostreq.problems(b, names).items()}
+        gone = {n: [why] for n, why in hostreq.problems(b, names, gpu_ids=constraints.of(constraints.LOCAL, strict=False).get("gpu_ids")).items()}
     else:
         programs = [p for r in hostreq.requirements(b, names).values() for p in r["check"]]
         got = hosts.test(host, programs=programs)
