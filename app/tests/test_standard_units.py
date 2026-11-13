@@ -93,6 +93,28 @@ class Listed(unittest.TestCase):
         self.assertIn("nope, not-either", progress.refusal(events))
         self.assertTrue(r.drivers and all(d.p.poll() is not None for d in r.drivers))    # its driver is not left running
 
+    def test_an_unknown_id_leaves_the_record_a_refusal_in_the_runs_preparation_leaves(self):
+        """A run refused while it gets ready (``Run.ready``) keeps its job's folder with ``progress.jsonl``
+        alone, which the runs list reads the refusal from (``execution.Execution.refused``); a run refused
+        for an id its dataset does not hold leaves that same record, its driver's files removed."""
+        def tree(job_dir):
+            return sorted(os.path.relpath(os.path.join(root, n), job_dir) for root, dirs, files in os.walk(job_dir) for n in dirs + files)
+
+        unknown = run.Run(self.b, definitions.control(self.b, "nop"), model="", provider="openai", jobs_root=self.jobs, env={},
+                          say=lambda s: None, name="unknown", units_file=run.units_file(self.file("good\nnope\n")))
+        with self.assertRaises(run.Refused):
+            unknown.start()
+        b = dict(self.b, upstream={"repository": "/nowhere", "tested": "a" * 40})
+        preparing = run.Run(b, definitions.control(b, "nop"), model="", provider="openai", jobs_root=self.jobs, env={},
+                            say=lambda s: None, name="preparing", units_file=run.units_file(self.file("good\n")))
+        with mock.patch.object(install, "upstream_dir", lambda b, home=None: os.path.join(self.tmp, "up")), \
+                mock.patch.object(install, "upstream", side_effect=install.InstallFailed("git fetch: exit 128")), \
+                self.assertRaises(run.Refused):
+            preparing.start()
+        self.assertEqual(tree(preparing.job_dir), [".work", "progress.jsonl"])
+        self.assertEqual(tree(unknown.job_dir), tree(preparing.job_dir))
+        self.assertIn("nope", progress.refusal(progress.read(unknown.job_dir)))
+
     def test_an_id_given_twice_is_refused_and_named(self):
         with self.assertRaises(run.Refused) as e:
             run.units_file(self.file("good\nwrong\n good\nmodel\nwrong\n"))

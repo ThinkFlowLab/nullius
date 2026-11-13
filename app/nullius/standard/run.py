@@ -630,6 +630,15 @@ class Run:
                     d.close()
                 if self.bench_relay is not None:
                     self.bench_relay.stop()
+                # the record a refusal in ready() leaves, which the runs list reads (execution's refused):
+                # the job's folder with its progress.jsonl, the driver's working folders and logs taken out
+                work = os.path.join(self.job_dir, ".work")
+                for name in os.listdir(work):
+                    path = os.path.join(work, name)
+                    if name in ("driver", "driver-home"):
+                        shutil.rmtree(path, ignore_errors=True)
+                    elif name.startswith("driver-") and name.endswith(".log"):
+                        os.remove(path)
                 words = self.bench["units"]
                 why = (f"{self.units_file['name']} lists {len(unknown)} {words['noun'] if len(unknown) == 1 else words['nouns']} "
                        f"that {self.bench['label']}'s dataset {self.ds['id']} does not hold: " + ", ".join(unknown))
