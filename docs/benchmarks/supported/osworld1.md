@@ -53,6 +53,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 - Each task's VM takes 4 cores and 4 GB of memory; OS-Symphony can start a second. Run no more tasks at once than the machine holds.
 - Prepare the machine before the first run (Docker, KVM, five system libraries, a VM image of about 25 GB): see OSWorld1 machine setup under Benchmarks in the documentation.
 - Scores depend on the machine's speed, because OSWorld waits a fixed time after each action. Compare runs made on similar machines.
+- OSWorld's infeasible tasks are listed publicly, and its scorer checks only the last action. An agent that looks a task up online and answers FAIL scores it.
 
 ## Upstream limitations
 
