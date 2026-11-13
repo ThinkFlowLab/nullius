@@ -162,6 +162,29 @@ class Listed(unittest.TestCase):
         self.assertEqual(self.trials(job), ["good__u0000", "wrong__u0001"])
         self.assertEqual(self.started(job), ["good", "wrong"])
 
+    def test_the_list_with_a_repeat_runs_each_listed_unit_that_many_times(self):
+        job = self.go("model\ngood\n", repeat=2)
+        # each run of a unit a trial of its own, tagged with the unit's place in the whole dataset and the run's number
+        self.assertEqual(self.trials(job), ["good__u0000r1", "good__u0000r2", "model__u0003r1", "model__u0003r2"])
+        self.assertEqual(self.started(job), ["good", "model"])
+        self.assertEqual(read(os.path.join(job, "result.json"))["n_total_trials"], 4)
+        cfg = read(os.path.join(job, "config.json"))["standard"]
+        self.assertEqual((cfg["repeat"], cfg["units_file"]["units"]), (2, ["model", "good"]))
+
+    def test_the_list_with_a_shard_and_a_limit_takes_the_listed_units_then_the_shard_then_the_limit(self):
+        """The driver's units, then the listed ones, then the shard, then the limit. Shard 1 of 2 holds good,
+        wrong and model. The list leaves good out, and the shard's first listed unit is wrong. The other
+        shard holds slow alone."""
+        jobs = [self.go("model\nwrong\nslow\n", shard=(i, 2), limit=1, name=f"run-shard-{i}of2", launch="L") for i in (1, 2)]
+        self.assertEqual([shard.of(u, 2) for u in DATASET], [1, 1, 2, 1])
+        self.assertEqual([self.trials(j) for j in jobs], [["wrong__u0001"], ["slow__u0002"]])
+        for job, planned in zip(jobs, (["wrong"], ["slow"])):
+            rec = read(os.path.join(job, "config.json"))["standard"]["shard"]
+            self.assertEqual((rec["units_total"], rec["planned"], rec["limit"]), (3, planned, 1))   # the listed units are its whole
+        got = merge.merge(jobs, os.path.join(self.jobs, "run"))
+        self.assertEqual(got["trials"], 2)
+        self.assertIn("1 of the 3 listed units are not in the merge", got["notes"])
+
     def test_the_config_records_the_files_name_its_sha256_and_its_units(self):
         text = "# two of them\nmodel\nwrong\n"
         job = self.go(text)
