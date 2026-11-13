@@ -11,7 +11,7 @@ Existing agent keys save automatically when edited.
 | Setting | Holds |
 | --- | --- |
 | `AGENT_KEYS` | The variable **names**, comma-separated: `CURSOR_API_KEY,GH_TOKEN`; each its own variable with the credential |
-| Not allowed | A setting's or start-up option's name |
+| Not allowed | A setting's or start-up option's name, such as `OPENAI` or `MODEL_<ID>`; Settings names it, and the other keys still reach runs |
 
 Use the Settings page to save these values, or merge the shown properties into
 your existing `settings.json` ([location and precedence](README.md#save)).
