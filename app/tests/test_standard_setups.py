@@ -306,6 +306,11 @@ class Recipe(unittest.TestCase):
         self.assertIn("run locomo original --model gpt-3.5-turbo-16k --provider openrouter", paper["script"])
         self.assertIn("run locomo model --model vendor/their-model", custom["script"])
 
+    def test_the_upstream_agents_a_setup_runs_name_its_participant(self):
+        out = self.compiled(benchmark="osworld1", datasets=["test_small"], others=["original"], model_choice="paper", model="MiniMax-M3")
+        self.assertEqual(out["errors"], [])
+        self.assertIn([recipe.STEP["agent"], "Participant", "OSWorld's agents"], out["review"])
+
     def test_paper_filter_also_applies_to_a_memory_capability(self):
         out = self.compiled(others=["mem0"], model_choice="paper", model="gpt-3.5-turbo-16k")
         self.assertEqual(out["errors"], [])

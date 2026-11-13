@@ -31,7 +31,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `osworld1` | Original · No agent · Like the paper or Any of your choice | `agent`, `thinking`, `vm_provider` |
+| `osworld1` | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `thinking`, `vm_provider` |
 
 ## Options
 

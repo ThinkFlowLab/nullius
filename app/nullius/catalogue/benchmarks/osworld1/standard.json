@@ -109,7 +109,8 @@
       "turn_seconds": 7200,
       "side_models": [
         "UI-TARS-1.5-7B"
-      ]
+      ],
+      "reference_agent": "OSWorld's agents"
     },
     "model": {
       "summary": "The same agent with any model in its own model's place: the upstream's code asks for the agent's first published model, with its prompt and action format, and the relay sends the model chosen, every side call included. Its scores compare with other runs of this setup.",
