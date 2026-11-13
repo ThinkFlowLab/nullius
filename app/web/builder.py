@@ -9,7 +9,7 @@ import subprocess
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from flask import abort, jsonify, render_template, request
-from nullius import settings, execution, gitrefs, hosts, prerequisites, providers
+from nullius import constraints, settings, execution, gitrefs, hosts, prerequisites, providers
 from nullius.harbor import source as harbor_source
 from nullius.catalogue import catalog
 from nullius.recipes import launch as command_builder
@@ -51,7 +51,8 @@ def new_run():
     # The standard's Where step: why its container backend cannot run on this machine (None: it can); and, per
     # benchmark, the licences its store holds (nullius.secrets) - set, when, until when; never a value.
     # what this machine lacks of each benchmark's host requirements: {benchmark: {requirement: [reasons]}}
-    host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"])).items()}
+    gpus = constraints.of(constraints.LOCAL, strict=False).get("gpu_ids")
+    host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"]), gpu_ids=gpus).items()}
             for b in definitions.load("benchmark", every=True)[0] if b.get("host")}
     data["standardHere"] = {"docker": execute.docker_problem(), "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
@@ -134,12 +135,17 @@ def new_run_prerequisites():
         host_needs = needs
     known = {h.entry: h for h in execute._hosts()}
 
+    runner = "standard" if recipe.get("harness") == standard_recipe.HARNESS else "harbor"
+    backend = definitions.names.backend(recipe.get("backend"))   # docker: the container backend's earlier name
+    own = runner == "standard" and bool(out["docker"])      # its containers, own images on the local backend included
+
     def machine(w):
+        limits = prerequisites.constraint_rows(w, runner, backend, setups, own=own)
         if w == "local":
-            return {"where": w, "label": "this machine", "rows": prerequisites.check_here(needs, setups, standard=standard)}
+            return {"where": w, "label": "this machine", "rows": prerequisites.check_here(needs, setups, standard=standard) + limits}
         if w not in known:
             return {"where": w, "label": w, "rows": [prerequisites.row("connect", "missing", f"{w} is not one of the hosts in Settings", label="Connection")]}
-        return {"where": w, "label": known[w].label, "rows": prerequisites.check_host(known[w], host_needs, setups, standard=standard)}
+        return {"where": w, "label": known[w].label, "rows": prerequisites.check_host(known[w], host_needs, setups, standard=standard) + limits}
     # one ssh probe per host, all at once: one after another, Review waited for their sum
     # (an unreachable host alone holds a probe 8 to 12 s)
     with ThreadPoolExecutor(max(1, min(8, len(wheres)))) as pool:
@@ -258,7 +264,7 @@ def new_run_host_check():
     Remote GPU memory is checked by the run on its host, not by the SSH probe."""
     b, names, host = _host_target()
     if host is None:
-        gone = {n: [why] for n, why in hostreq.problems(b, names).items()}
+        gone = {n: [why] for n, why in hostreq.problems(b, names, gpu_ids=constraints.of(constraints.LOCAL, strict=False).get("gpu_ids")).items()}
     else:
         programs = [p for r in hostreq.requirements(b, names).values() for p in r["check"]]
         got = hosts.test(host, programs=programs)

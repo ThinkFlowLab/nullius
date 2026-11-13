@@ -16,7 +16,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-from nullius import hosts, prices, providers, sandbox, settings
+from nullius import constraints, hosts, prices, providers, sandbox, settings
 from .test_routes import web
 
 
@@ -162,7 +162,7 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('data-provider-card="openrouter" data-configured="true" data-ready="true"', html)
         self.assertIn('data-provider-select="openai"', html)
         self.assertIn('data-provider-add aria-label="Add a provider"', html)
-        self.assertNotIn("<details", html.split('<dialog id="add-host"')[0])
+        self.assertNotIn("<details", html.split('<div id="add-host"')[0])
         for section in ("general", "appearance", "providers", "data-providers", "custom-keys", "judge", "hosts", "storage"):
             self.assertIn(f'href="#{section}" data-section="{section}"', html)                      # the menu: a link per section, one shown at a time
 
@@ -176,8 +176,8 @@ class SettingsPage(unittest.TestCase):
         def row(name):
             return re.search(r'<article[^>]*id="%s".*?</article>' % name, html, re.S).group(0)
         hosts_row, key = row("HOSTS"), row("MODEL_API_KEY")
-        self.assertNotIn(">not set<", hosts_row); self.assertNotIn('class="chip st-watch host-pill"', hosts_row); self.assertIn("+ Add host", hosts_row)
-        self.assertEqual(re.findall(r'placeholder="([^"]*)"', html.split('<dialog id="add-host"')[0]), ["Search settings", "Search providers…", "(optional)", "(optional)", "Search data providers…"])                           # no field suggests anything
+        self.assertNotIn(">not set<", hosts_row); self.assertNotIn('data-entry=', hosts_row); self.assertIn('data-add-host aria-label="Add a host"', html)
+        self.assertEqual(re.findall(r'placeholder="([^"]*)"', html.split('<div id="add-host"')[0]), ["Search settings", "Search providers…", "(optional)", "(optional)"])                           # no field suggests anything
         self.assertNotIn("agtai", html); self.assertNotIn("10.0.0.4", html)                      # (ssh aliases offered come from this machine's own config)
         self.assertIn('data-source="unset"', key); self.assertIn('data-provider-card="local" data-configured="false" data-ready="false"', html)
 
@@ -428,11 +428,11 @@ class SettingsPage(unittest.TestCase):
         scanned = [{"alias": "bench", "hostname": "10.0.0.4", "user": "ubuntu", "port": "22"}, {"alias": "lab", "hostname": None, "user": None, "port": None}]
         with patch.object(hosts, "scan_ssh_config", return_value=scanned):
             html = self.page()
-        self.assertIn('data-list="HOSTS"', html); self.assertIn('data-entry="ubuntu@10.0.0.4:22"', html); self.assertIn('data-entry="bench"', html)
-        self.assertEqual(html.count('class="chip st-watch host-pill"'), 2); self.assertIn('class="host-name" data-test-host', html)   # the hosts chosen, chips; the name tests
+        self.assertIn('data-entry="ubuntu@10.0.0.4:22"', html); self.assertIn('data-entry="bench"', html)
+        self.assertEqual(re.findall(r'<th scope="row" class="host-name">([^<]*)<', html), ["This machine", "bench", "ubuntu@10.0.0.4:22"])   # one list, this machine first
         self.assertIn('data-host-chip="bench"', html); self.assertIn('data-host-chip="lab"', html)   # the config's aliases, in the Add host dialog
         self.assertIn('data-tab="config"', html); self.assertIn('data-tab="manual"', html); self.assertIn("data-dialog-test", html); self.assertIn("data-dialog-add", html); self.assertIn("data-test-all>", html)
-        self.assertNotIn('value="bench"', html)                                                    # an alias is not a field
+        self.assertEqual(html.count('data-field="alias" value="bench"'), 1)                        # an alias is edited in its row alone
         self.assertNotIn("IdentityFile", html); self.assertNotIn("id_bench", html)
         self.post({"HOSTS": "bench, lab"})
         self.assertEqual(self.file(), "HOSTS=bench, lab\n"); self.assertEqual(os.environ["HOSTS"], "bench, lab")
@@ -444,7 +444,7 @@ class SettingsPage(unittest.TestCase):
         self.post({"HOSTS": entry})
         self.assertEqual(os.environ["HOSTS"], entry)
         html = self.page()
-        self.assertIn('data-test-host>GPU lab</button>', html)
+        self.assertIn('<th scope="row" class="host-name">GPU lab<', html)
         self.assertEqual(hosts.parse_list(os.environ["HOSTS"])[0].to_dict()["label"], "GPU lab")
         for field in ('name="display_name"', 'name="host"', 'name="user"', 'name="port"'):
             self.assertIn(field, html)
@@ -459,38 +459,311 @@ class SettingsPage(unittest.TestCase):
         the config."""
         with patch.object(hosts, "scan_ssh_config", return_value=[]):
             html = self.page()
-        dialog = re.search(r'<dialog id="add-host".*?</dialog>', html, re.S)
+        panel = r'<div id="add-host".*?(?=\s*<article class="st-field st-hosts)'
+        dialog = re.search(panel, html, re.S)
         self.assertIsNotNone(dialog); dialog = dialog.group(0)
         self.assertEqual(dialog.count('<div class="dialog-panels">'), 1)      # opened, and inside the dialog
         for needed in ('data-panel="manual"', 'class="dialog-foot"', 'data-cancel', 'data-dialog-test', 'data-dialog-add', 'class="settings-test dialog-status"'):
             self.assertIn(needed, dialog, needed)
         self.assertNotIn('data-tab="config"', dialog); self.assertNotIn('data-panel="config"', dialog)
-        self.assertNotIn(' hidden>', dialog.split('<form')[1].split('>')[0] + '>')   # the only panel is not hidden
+        self.assertNotIn(' hidden>', dialog.split('data-panel="manual"')[1].split('>')[0] + '>')   # the only panel is not hidden
         self.assertEqual(dialog.count('</div>'), dialog.count('<div '))              # balanced, so nothing above is closed
         scanned = [{"alias": "bench", "hostname": "10.0.0.4", "user": "ubuntu", "port": "22"}]
         with patch.object(hosts, "scan_ssh_config", return_value=scanned):
-            with_config = re.search(r'<dialog id="add-host".*?</dialog>', self.page(), re.S).group(0)
+            with_config = re.search(panel, self.page(), re.S).group(0)
         self.assertEqual(with_config.count('<div class="dialog-panels">'), 1)
         self.assertIn('data-panel="config"', with_config); self.assertIn('data-cancel', with_config)
         self.assertEqual(with_config.count('</div>'), with_config.count('<div '))
+        # in the page below the heading, as the providers' Add is; its fields belong to a form of their own,
+        # outside the settings form, so autosave never reads them (a password above all)
+        page = self.page()
+        head = re.search(r'<h2 id="hosts-h">Run hosts</h2>.*?</div>', page, re.S).group(0)
+        self.assertIn('data-test-all>Test all</button>', head); self.assertIn('class="btn sm ghost st-provider-add" data-add-host aria-label="Add a host"', head)
+        for name in ("display_name", "host", "port", "user", "auth", "key_path", "key_file", "password"):
+            self.assertIn(f'form="add-host-form"', re.search(rf'<input [^>]*name="{name}"', with_config).group(0), name)
+        self.assertGreater(page.index('<form id="add-host-form"'), page.index('</form>', page.index('id="settings-form"')))
 
-    def test_a_host_test_sends_one_probe_and_stores_nothing(self):
+    def test_a_host_test_sends_its_probe_then_measures_and_keeps_only_what_it_found(self):
         seen = []
-        def run(argv, timeout):
-            seen.append(argv); return 0, "ok\nuv=yes\ndocker=yes\nharbor=no\ndocker_ok=yes\nhostname=lab\n", ""
+        measured = "ncpu=8\nmemtotal_kb=8388608\nengine=29.9.3|Engine,|[name=seccomp]\ncpus=1000 100000 \nmemory_mb=67108864 0 \nprocesses=1 \ncpu_set=0 \n"
+        def run(argv, timeout, env=None):
+            seen.append(argv)
+            return (0, "ok\nuv=yes\ndocker=yes\nharbor=no\ndocker_ok=yes\nhostname=lab\n", "") if argv[-1] == hosts.PROBE else (0, measured, "")
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        os.environ[constraints.SETTING] = '{"ubuntu@10.0.0.4:2222": {"cpus": 16}}'
         with patch.object(hosts, "subprocess_run", run):
             r = self.client.post("/settings/hosts/test", data={"entry": "ubuntu@10.0.0.4:2222"}, headers=headers); self.addCleanup(r.close)
         self.assertEqual(r.status_code, 200)
         self.assertEqual((r.json["ok"], r.json["uv"], r.json["harbor"], r.json["hostname"]), (True, True, False, "lab"))
         self.assertEqual(seen[0][-2:], ["ubuntu@10.0.0.4", hosts.PROBE]); self.assertIn("BatchMode=yes", seen[0])
-        self.assertIsNone(self.file())
+        self.assertIn("docker run --rm --network none", seen[1][-1]); self.assertIn("BatchMode=yes", seen[1])   # the measure, over the same ssh
+        self.assertEqual(r.json["constraints"]["capacity"], {"cpus": 8, "memory_mb": 8192, "gpus": []})
+        self.assertEqual(r.json["constraints"]["warnings"], {"cpus": "More than the machine has."})
+        self.assertIn("8 CPUs, 8 GB", r.json["info"]); self.assertEqual(r.json["cells"], {"engine": "Docker", "capacity": "8 CPUs · 8 GB"}); self.assertIn("lab", r.json["info"])          # its Info, drawn again
+        self.assertEqual(constraints.load()["ubuntu@10.0.0.4:2222"]["enforced"], ["cpus", "memory_mb", "processes", "cpu_set"])
+        self.assertIsNone(self.file())                                                     # nothing in the settings file
         bad = self.client.post("/settings/hosts/test", data={"entry": "not a host"}, headers=headers); self.addCleanup(bad.close)
         self.assertEqual(bad.status_code, 400); self.assertIn("not a host", bad.json["error"])
         # the same guards as Save: token, origin, loopback
         self.assertEqual(self.client.post("/settings/hosts/test", data={"entry": "bench"}, headers={"Origin": "http://localhost"}).status_code, 403)
         self.assertEqual(self.client.post("/settings/hosts/test", data={"entry": "bench"}, headers=headers, environ_base={"REMOTE_ADDR": "10.0.0.7"}).status_code, 403)
-        self.assertEqual(len(seen), 1)
+        self.assertEqual(len(seen), 2)
+        # this machine: no ssh, docker asked here, the same measure here
+        which = lambda p: "/usr/bin/" + p if p in ("uvx", "docker") else None                      # uv and docker here, no harbor
+        with patch.object(hosts, "subprocess_run", run), patch.object(web.settings.prerequisites, "docker_here", lambda fresh=False: None), \
+                patch.object(web.settings.container, "DOCKER", "docker"), patch("shutil.which", which):
+            here = self.client.post("/settings/hosts/test", data={"entry": "local"}, headers=headers); self.addCleanup(here.close)
+        self.assertEqual(seen[2][:2], ["sh", "-c"]); self.assertTrue(here.json["ok"]); self.assertIn("local", constraints.load())
+        # This machine's Info: the rows a host's has, but Reached, from the checks the Review step makes here
+        import socket
+        info = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", here.json["info"]))
+        for said in ("Host name " + socket.gethostname(), "Programs uv, docker · missing Harbor", "Engine Docker 29.9.3", "Capacity 8 CPUs, 8 GB", "Reached This machine"):
+            self.assertIn(said, info)
+        self.assertNotIn(" ms", info)
+        # no engine here: still reached and measured, the engine said absent
+        with patch.object(hosts, "subprocess_run", lambda argv, timeout, env=None: (seen.append(argv), (0, "ncpu=4\nmemtotal_kb=2048000\n", ""))[1]), \
+                patch.object(web.settings.prerequisites, "docker_here", lambda fresh=False: "docker is not installed on this machine"):
+            down = self.client.post("/settings/hosts/test", data={"entry": "local"}, headers=headers); self.addCleanup(down.close)
+        self.assertEqual((down.json["ok"], down.json["docker_ok"], down.json["error"]), (True, False, "docker is not installed on this machine"))
+        self.assertEqual((down.json["constraints"]["capacity"]["cpus"], down.json["constraints"]["engine"]), (4, {}))
+        self.assertIn("docker is not installed on this machine", down.json["info"]); self.assertEqual(len(seen), 4)
+
+    def test_constraints_are_a_panel_per_machine_saved_as_one_setting(self):
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        constraints.save("bench", {"capacity": {"cpus": 4, "gpus": [{"index": 0, "name": "g", "memory_mb": 1}]},
+                                   "enforced": ["cpus"], "refused": {"processes": "max"}})
+        value = '{"local": {"cpus": 2}, "bench": {"cpus": 8, "processes": 64, "gpu_ids": []}}'
+        r = self.post({"HOSTS": "bench", "HOST_CONSTRAINTS": value})
+        self.assertEqual(json.loads(settings.in_file(self.env_file)[constraints.SETTING]), json.loads(value))
+        html = self.page()
+        card = re.search(r'<article[^>]*id="HOSTS".*?</article>', html, re.S).group(0)
+        self.assertEqual(re.findall(r'data-machine="([^"]*)"', card), ["local", "bench"])          # a row per machine
+        for c in constraints.TABLE:
+            self.assertEqual(card.count(f">{html_text.escape(c.label)}</label>"), 2, c.key)   # each machine has each field
+        bench = card.split('data-machine="bench"')[1]
+        self.assertIn('data-key="gpu_ids" data-type="list" value="none"', bench)
+        self.assertIn("More than the machine has.", bench); self.assertIn("Containers here do not enforce it: see Info, or remove it.", bench)
+        said = "1 constraint is not enforced here: see Constraints."                               # processes: the mark by its name
+        self.assertIn(f'<svg class="ic host-warn" role="img" aria-label="{said}"><title>{said}</title>', bench)
+        self.assertNotIn("host-warn", card.split('data-machine="bench"')[0])                         # this machine: never tested
+        self.assertIn('title="The time of this many logical CPUs, on any allowed core. This machine has 4."', bench)
+        self.assertNotIn("st-warn", card.split('data-machine="bench"')[0])               # this machine: never tested
+        # a slider where the capacity is known: CPUs up to the 4 tested, none for memory without a capacity
+        self.assertIn('<input type="range" min="0" step="1" data-range-for="c-2-cpus" data-step="0.1" aria-label="CPUs">', bench)
+        self.assertIn('<span class="ui-range-at-mark" data-range-max></span><span title="No limit">∞</span>', bench)
+        self.assertEqual(card.count('type="range"'), 1)                                  # never tested: number fields only
+        self.post({"HOST_CONSTRAINTS": '{"local": {"disk_gb": 1}}'})
+        self.assertIn("not a constraint", self.page())
+        self.assertEqual(json.loads(settings.in_file(self.env_file)[constraints.SETTING]), json.loads(value))
+        with patch.dict(os.environ, {constraints.SETTING: '{"local": {"cpus": Infinity}}'}):     # set in the environment: said, never read as none
+            card = re.search(r'<article[^>]*id="HOSTS".*?</article>', self.page(), re.S).group(0)
+        self.assertIn('<p class="st-note st-bad">HOST_CONSTRAINTS must be valid constraints (local: CPUs: a number of at least 0.01).</p>', card)
+
+    def change_host(self, old, new=None, csrf=None):
+        data = {"csrf": self.token() if csrf is None else csrf, "host_from": old, **({"host_to": new} if new is not None else {})}
+        r = self.client.post("/settings/save", data=data, headers={"Origin": "http://localhost", "Accept": "application/json"})
+        self.addCleanup(r.close)
+        return r
+
+    def test_each_machine_is_a_row_with_its_actions_and_what_its_last_test_found(self):
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        self.post({"HOSTS": "bench, GPU lab=ubuntu@192.0.2.10:22"})
+        constraints.save("bench", {"test": {"ok": True, "latency_ms": 42, "hostname": "ecs-1", "uv": True, "docker": True, "docker_ok": True,
+                                            "harbor": False}, "engine": {"kind": "podman", "version": "5.8.9", "rootless": True},
+                                   "capacity": {"cpus": 16, "memory_mb": 31789, "gpus": [{"index": 0, "name": "RTX", "memory_mb": 4096}]},
+                                   "enforced": ["cpus", "memory_mb"], "refused": {"cpu_set": "cpuset is not available"},
+                                   "systemd": {"why": "", "enforced": ["cpus", "memory_mb", "processes"],
+                                               "refused": {"cpu_set": "cat: cpuset.cpus.effective: No such file or directory"}}})
+        html = self.page()
+        table = re.search(r'<table class="host-table">.*?</table>', html, re.S).group(0)
+        head = re.search(r"<thead>.*?</thead>", table, re.S).group(0)
+        self.assertEqual(re.findall(r'<th scope="col"[^>]*>(.*?)</th>', head),                   # a status and actions header for screen readers alone
+                         ['<span class="sr">Status</span>', "Host", "Engine", "Capacity", '<span class="sr">Actions</span>'])
+        rows = {m.group(1): m.group(0) for m in re.finditer(r'<tbody class="host-row" data-machine="([^"]*)".*?</tbody>', table, re.S)}
+        self.assertEqual(list(rows), ["local", "bench", "GPU lab=ubuntu@192.0.2.10:22"])
+        acts = lambda row: re.findall(r'aria-label="(\w+): [^"]*" title="\w+"><svg class="ic" aria-hidden="true"><use href="#i-', row)
+        self.assertEqual(acts(rows["local"]), ["Test", "Info", "Constraints"])                   # this machine: no connection, no delete
+        self.assertEqual(acts(rows["bench"]), ["Test", "Info", "Connection", "Constraints", "Delete"])
+        for row in rows.values():                                                                   # Test is the row's, Info only reads
+            self.assertEqual(row.count("data-test-machine"), 1); self.assertNotIn("data-test-machine", row.split('data-panel="info"')[1].split('data-panel="')[0])
+        self.assertIn('class="host-dot st-runs"', rows["bench"]); self.assertIn('class="host-dot st-watch"', rows["local"])
+        cells = lambda row: re.findall(r'<td class="host-(?:engine|capacity)" data-cell="\w+">([^<]*)</td>', row)
+        self.assertEqual(cells(rows["bench"]), ["Podman", "16 CPUs · 31 GB · 1 GPU, 4 GB"])      # whole GB here; Info keeps 31789 MB
+        self.assertEqual(cells(rows["local"]), ["Not tested", "Not tested"])
+        self.assertIn('<span class="sr" data-status>Reached</span>', rows["bench"]); self.assertIn('<span class="sr" data-status>Not tested</span>', rows["local"])
+        for why in ("Connection: not for this machine", "Delete: this machine cannot be removed"):   # in their places, off, saying why
+            self.assertIn(f'<button type="button" class="host-act" disabled aria-label="{why}" title="{why}">', rows["local"])
+        self.assertNotIn("host-act-gap", rows["local"])
+        self.assertEqual(len(re.findall(r'<tr class="host-panel-row"><td colspan="5">', rows["bench"])), 4)   # a full-width row per panel
+        info = lambda row: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", row.split('data-panel="info"')[1].split('data-panel="')[0]))
+        labels = lambda text: re.findall(r"(Reached|Host name|Programs|Engine|Capacity|Containers|Local processes|Drivers|Tested) ", text)
+        for row in rows.values():                                                                   # the same rows, in the same order
+            self.assertEqual(labels(info(row))[:9], ["Reached", "Host name", "Programs", "Engine", "Capacity", "Containers", "Local processes", "Drivers", "Tested"])
+        self.assertIn("Reached This machine", info(rows["local"]))
+        never = info(rows["GPU lab=ubuntu@192.0.2.10:22"])
+        for said in ("Reached Not tested", "Host name Not tested", "Programs Not tested", "Engine Not tested", "Capacity Not tested",
+                     "Containers Not tested", "Local processes Not tested", "Drivers Not tested", "Tested Never"):
+            self.assertIn(said, never)
+        for said in ("In 42 ms", "ecs-1", "uv, docker", "missing Harbor", "Podman 5.8.9, rootless", "16 CPUs, 31789 MB", "GPU 0: RTX, 4096 MB",
+                     'title="Asked CPUs 0: the engine did not apply it (cpuset is not available)">CPUs Nullius may use',
+                     'title="Asked CPUs 0: systemd did not apply it (cat: cpuset.cpus.effective: No such file or directory); '
+                     'applied instead: the process can widen it">CPUs Nullius may use'):
+            self.assertIn(said, rows["bench"])
+        for said in ("Containers CPUs, Memory · not CPUs Nullius may use", "Local processes CPUs, Memory, Processes and threads · not CPUs Nullius may use",
+                     "Drivers Limited"):
+            self.assertIn(said, info(rows["bench"]))
+        # a list in Info is one line: its items in one inline element, never a line each in the row's column
+        held = re.search(r'Containers</span><span class="st-row-value">(.*?)</span></div>', rows["bench"], re.S).group(1)
+        self.assertTrue(held.startswith("<span>CPUs, Memory<span class=\"faint\"> · not <span title=") and held.endswith("</span></span></span>"), held)
+        programs = re.search(r'Programs</span><span class="st-row-value">(.*?)</div>', rows["bench"], re.S).group(1)
+        self.assertTrue(programs.startswith("<span>"), programs)
+        self.assertIn('data-field="display_name" value="GPU lab"', rows["GPU lab=ubuntu@192.0.2.10:22"])   # Connection, filled in
+        self.assertIn("Delete <b>GPU lab</b> and its constraints?", html)
+
+    def test_a_rootless_engine_without_a_cgroup_says_so_in_info(self):
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        self.post({"HOSTS": "pod"})
+        constraints.save("pod", {"test": {"ok": True, "podman": True, "engine": "podman"}, "capacity": {"cpus": 2},
+                                 "engine": {"kind": "podman", "version": "5.8.9", "rootless": True}, "enforced": [],
+                                 "refused": {"cpus": "max 100000", "memory_mb": "max max", "processes": "max", "cpu_set": "cat: no cgroup"}})
+        constraints.save("local", {"test": {"ok": True}, "capacity": {"cpus": 2}, "engine": {"kind": "podman", "version": "5.8.9", "rootless": True},
+                                   "enforced": ["cpus", "memory_mb", "processes"], "refused": {"cpu_set": "controller cpuset is not available"}})
+        html = self.page()
+        line = "The engine has no cgroup delegated to this user: limits cannot apply here."
+        self.assertEqual(html.count(line), 1); self.assertIn(line, html.split('data-machine="pod"')[1])
+
+    def test_a_podman_only_host_reads_as_podman(self):
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        self.post({"HOSTS": "pod, gone"})
+        constraints.save("pod", {"test": {"ok": True, "uv": True, "docker": False, "podman": True, "podman_ok": True, "engine": "podman", "harbor": False},
+                                 "engine": {"kind": "podman", "version": "5.8.9", "rootless": True}, "capacity": {"cpus": 4}, "enforced": ["cpus"]})
+        constraints.save("gone", {"test": {"ok": True, "uv": True, "docker": False, "podman": True, "podman_ok": False, "engine": "podman"},
+                                  "capacity": {"cpus": 4}, "engine": {}})
+        html = self.page()
+        pod, gone = html.split('data-machine="pod"')[1].split('data-machine="gone"')
+        self.assertIn("uv, podman", pod); self.assertIn("missing Harbor", pod); self.assertIn("Podman 5.8.9, rootless", pod)
+        self.assertNotIn("missing Docker", pod)
+        self.assertIn("Podman does not answer", gone)
+
+    def test_info_shows_the_local_capacity_only_where_it_differs(self):
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        self.post({"HOSTS": "split"})
+        constraints.save("split", {"test": {"ok": True, "latency_ms": 9}, "engine": {"kind": "docker", "version": "29.9.3"},
+                                   "capacity": {"cpus": 16, "memory_mb": 32768, "local": {"cpus": 1.5, "memory_mb": 4096}, "gpus": []}})
+        text = lambda: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", self.page().split('data-machine="split"')[1]))
+        self.assertIn("Container capacity 16 CPUs, 32 GB", text()); self.assertIn("Local capacity 1.5 CPUs, 4 GB", text())
+        self.assertIn('data-capacity="16"', self.page().split('data-machine="split"')[1])          # the slider: where the runs land
+        constraints.save("split", {"capacity": {"cpus": 4, "memory_mb": 4096, "gpus": []}})
+        self.assertIn("Capacity 4 CPUs, 4 GB", text()); self.assertNotIn("Local capacity", text())
+
+    def test_a_machine_without_an_engine_keeps_its_caps_visible_but_off(self):
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        self.post({"HOSTS": "bare", "HOST_CONSTRAINTS": '{"bare": {"cpus": 2, "gpu_ids": [0]}}'})
+        constraints.save("bare", {"test": {"ok": True, "latency_ms": 9, "uv": True, "docker": False, "harbor": False},
+                                  "capacity": {"cpus": 4, "memory_mb": 2000, "cpu_ids": "0-3", "gpus": []}, "engine": {}, "enforced": [], "refused": {}})
+        row = self.page().split('data-machine="bare"')[1]
+        self.assertEqual(row.count("Needs Docker or Podman, or systemd."), 1)
+        field = lambda key: re.search(rf'<input class="st-input" id="c-2-{key}"[^>]*>', row).group(0)
+        for key in ("cpus", "memory_mb", "processes"):
+            self.assertIn(" disabled", field(key), key)                                         # shown, but off
+        for key in ("concurrency", "cpu_set", "gpu_ids"):
+            self.assertNotIn(" disabled", field(key), key)                                      # these apply without an engine
+        self.assertIn('value="2"', field("cpus")); self.assertIn('class="st-clear" data-clear-constraint aria-label="Remove CPUs"', row)   # still removable
+        self.assertIn('data-range-for="c-2-cpus" data-step="0.1" aria-label="CPUs" disabled', row)
+        self.assertIn("Engine None", re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", row))); self.assertIn("4 CPUs, 2000 MB", row)       # Info: the capacity, without an engine
+        self.assertNotIn("does not enforce", row); self.assertIn("More than the machine has.", row)   # gpu 0: none there
+        # systemd holds the caps for local runs: on, and Info says which way each holds
+        constraints.save("bare", {"systemd": {"why": "", "enforced": ["cpus", "memory_mb", "processes"], "refused": {}}})
+        row = self.page().split('data-machine="bare"')[1]
+        self.assertNotIn("data-engine-less", row); self.assertNotIn(" disabled", field("cpus"))
+        text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", row))
+        self.assertIn("Containers No engine", text); self.assertIn("Local processes CPUs, Memory, Processes and threads", text)
+        constraints.save("bare", {"systemd": {"why": "lingering is off: limits would end with the SSH session", "enforced": [], "refused": {}}})
+        row = self.page().split('data-machine="bare"')[1]
+        self.assertIn("Needs Docker or Podman, or systemd (lingering is off: limits would end with the SSH session).", row)
+        self.assertIn("Local processes Lingering is off", re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", row)))
+        self.assertIn("Drivers Not limited", re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", row)))
+
+    def test_a_host_is_edited_its_constraints_follow_and_a_duplicate_is_refused(self):
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        self.post({"HOSTS": "bench, ubuntu@10.0.0.4:22", "HOST_CONSTRAINTS": '{"local": {"cpus": 1}, "ubuntu@10.0.0.4:22": {"cpus": 2}}'})
+        constraints.save("ubuntu@10.0.0.4:22", {"capacity": {"cpus": 8}})
+        file = lambda: settings.in_file(self.env_file)
+        r = self.change_host("ubuntu@10.0.0.4:22", "Lab=ubuntu@10.0.0.4:22:~/.ssh/lab")             # a name and a key: the same machine
+        self.assertEqual((r.status_code, r.json["message"]), (200, "Host saved"))
+        self.assertEqual(file()["HOSTS"], "bench, Lab=ubuntu@10.0.0.4:22:~/.ssh/lab")
+        self.assertEqual(json.loads(file()[constraints.SETTING]), {"local": {"cpus": 1}, "Lab=ubuntu@10.0.0.4:22:~/.ssh/lab": {"cpus": 2}})
+        self.assertEqual(constraints.load(), {"Lab=ubuntu@10.0.0.4:22:~/.ssh/lab": {"capacity": {"cpus": 8}, "at": constraints.load()["Lab=ubuntu@10.0.0.4:22:~/.ssh/lab"]["at"]}})
+        self.change_host("Lab=ubuntu@10.0.0.4:22:~/.ssh/lab", "Lab=ubuntu@10.0.0.9:22")             # another address: its test is stale
+        self.assertTrue(constraints.load()["Lab=ubuntu@10.0.0.9:22"]["stale"])
+        self.assertIn("Tested before the last edit.", self.page())
+        for bad, why in (("bench", "is a host already"), ("not a host", "not a host")):
+            r = self.change_host("Lab=ubuntu@10.0.0.9:22", bad)
+            self.assertEqual(r.status_code, 400); self.assertIn(why, r.json["message"])
+        self.assertEqual(file()["HOSTS"], "bench, Lab=ubuntu@10.0.0.9:22")
+        self.assertNotEqual(self.change_host("bench", "lab", csrf="not-the-token").status_code, 200)
+        self.assertEqual(file()["HOSTS"], "bench, Lab=ubuntu@10.0.0.9:22")                        # no form token: nothing written
+
+    def test_a_deleted_host_takes_its_constraints_and_its_test_with_it(self):
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        self.post({"HOSTS": "bench, lab", "HOST_CONSTRAINTS": '{"lab": {"cpus": 2}, "bench": {"cpus": 4}}'})
+        constraints.save("lab", {"capacity": {"cpus": 8}}); constraints.save("bench", {"capacity": {"cpus": 8}})
+        r = self.change_host("lab")
+        self.assertEqual((r.status_code, r.json["message"]), (200, "Host deleted"))
+        self.assertEqual(settings.in_file(self.env_file)["HOSTS"], "bench")
+        self.assertEqual(json.loads(settings.in_file(self.env_file)[constraints.SETTING]), {"bench": {"cpus": 4}})
+        self.assertEqual(list(constraints.load()), ["bench"])
+        self.change_host("bench")                                                                  # the last: the setting goes too
+        self.assertNotIn("HOSTS", settings.in_file(self.env_file)); self.assertNotIn(constraints.SETTING, settings.in_file(self.env_file))
+
+    def test_hosts_set_in_the_environment_are_read_only(self):
+        os.environ["HOSTS"] = "bench"
+        html = self.page()
+        self.assertIn('aria-label="Connection: bench" title="Set in the environment" disabled', html)
+        self.assertIn('aria-label="Delete: bench" title="Set in the environment" disabled', html)
+        self.assertRegex(html, r'data-add-host [^>]* disabled title="Set in the environment"'); self.assertIn("HOSTS is set in the process environment", html)
+        self.assertNotIn('data-panel="edit"', html)
+        r = self.change_host("bench")
+        self.assertEqual(r.status_code, 400); self.assertIn("set in the environment", r.json["message"]); self.assertEqual(os.environ["HOSTS"], "bench")
+
+    def test_memory_entered_in_gb_is_kept_in_whole_mb_beside_its_slider(self):
+        """1.5 GB as the page sends it (1536 MB) on a host with a capacity: saved
+        as is, and drawn again as MB for the page to show in the unit chosen. The
+        number box carries the key, never the slider before it, which once took
+        the unit and left a GB value to be read as MB."""
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        constraints.save("host3", {"capacity": {"cpus": 3, "memory_mb": 31789, "gpus": []}, "engine": {"kind": "podman", "version": "5.8.9"},
+                                   "enforced": ["cpus", "memory_mb", "processes"]})
+        self.post({"HOSTS": "host3", "HOST_CONSTRAINTS": '{"host3": {"memory_mb": 1536}}'})
+        self.assertEqual(json.loads(settings.in_file(self.env_file)[constraints.SETTING]), {"host3": {"memory_mb": 1536}})
+        field = re.search(r'<div class="st-constraint">(?:(?!<div class="st-constraint">).)*?data-key="memory_mb".*?</div>\s*</div>',
+                          self.page().split('data-machine="host3"')[1], re.S).group(0)
+        self.assertLess(field.index('type="range"'), field.index('data-key="memory_mb"'))          # the slider comes first
+        self.assertEqual(field.count("data-key="), 1); self.assertNotIn("data-key", field.split('type="range"')[1].split(">")[0])
+        self.assertIn('value="1536"', field); self.assertIn('data-unit="MB"', field); self.assertIn('data-unit-choice="GB"', field)
+        self.post({"HOST_CONSTRAINTS": '{"host3": {"memory_mb": 2}}'})                                # 2 read as MB: refused
+        self.assertEqual(json.loads(settings.in_file(self.env_file)[constraints.SETTING]), {"host3": {"memory_mb": 1536}})
+
+    def test_a_constraint_and_a_machine_s_constraints_are_removed_through_save(self):
+        saved = lambda: json.loads(settings.in_file(self.env_file)[constraints.SETTING])
+        self.post({"HOSTS": "bench", "HOST_CONSTRAINTS": '{"local": {"cpus": 2, "memory_mb": 2048}, "bench": {"processes": 64}}'})
+        card = re.search(r'<article[^>]*id="HOSTS".*?</article>', self.page(), re.S).group(0)
+        here, bench = card.split('data-machine="bench"')
+        self.assertEqual(here.count('class="st-clear" data-clear-constraint aria-label="Remove CPUs"'), 1)     # set: its × shows
+        self.assertEqual(here.count('class="st-clear off" data-clear-constraint aria-label="Remove Processes and threads"'), 1)   # not set: none
+        self.assertEqual(card.count("data-clear-machine>Remove all"), 2)                           # each machine sets one
+        self.assertIn('data-unit="MB"', here); self.assertIn('data-unit-choice="GB"', here)       # memory: MB as kept, GB offered
+        self.post({"HOST_CONSTRAINTS": '{"local": {"memory_mb": 2048}, "bench": {"processes": 64}}'})      # one constraint
+        self.assertEqual(saved(), {"local": {"memory_mb": 2048}, "bench": {"processes": 64}})
+        self.post({"HOST_CONSTRAINTS": '{"local": {"memory_mb": 2048}}'})                                 # a machine's all
+        self.assertEqual(saved(), {"local": {"memory_mb": 2048}})
+        self.assertIn("data-clear-machine hidden>Remove all", self.page().split('data-machine="bench"')[1])
+        self.post({"HOST_CONSTRAINTS": "{}"})
+        self.assertEqual((saved(), constraints.of("local")), ({}, {}))
+        # the same guards as any save: no form token, nothing written
+        r = self.post({"HOST_CONSTRAINTS": '{"local": {"cpus": 1}}'}, csrf="not-the-token")
+        self.assertNotEqual(r.status_code, 200); self.assertEqual(saved(), {})
 
     def test_a_manual_host_is_added_from_the_form_with_a_key_file_or_a_password_used_once(self):
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
@@ -546,6 +819,19 @@ class SettingsPage(unittest.TestCase):
         os.environ["HOSTS"] = c
         self.post(clear=["HOSTS"])
         self.assertTrue((keys / "ubuntu@10.0.0.8").exists())
+
+    def test_delete_and_connection_take_the_key_file_saved_for_the_host(self):
+        keys = self.tmp / "keys"
+        self.stack.enter_context(patch.object(hosts, "KEY_DIR", str(keys)))
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        a, b = (f"ubuntu@{ip}:{hosts.save_key('ubuntu', ip, b'-----BEGIN OPENSSH PRIVATE KEY-----' + chr(10).encode())}" for ip in ("10.0.0.4", "10.0.0.5"))
+        self.post({"HOSTS": f"{a}, {b}"})
+        self.assertTrue(self.change_host(a).json["ok"])                              # Delete
+        self.assertFalse((keys / "ubuntu@10.0.0.4").exists())
+        self.assertTrue(self.change_host(b, b.replace("10.0.0.5:", "10.0.0.5:2222:")).json["ok"])   # Connection, the same key
+        self.assertTrue((keys / "ubuntu@10.0.0.5").exists())
+        self.assertTrue(self.change_host(b.replace("10.0.0.5:", "10.0.0.5:2222:"), "ubuntu@10.0.0.5:2222").json["ok"])   # Connection, no key
+        self.assertFalse((keys / "ubuntu@10.0.0.5").exists())
 
     def test_a_key_file_that_cannot_be_removed_is_said_and_the_list_is_saved(self):
         self.stack.enter_context(patch.object(hosts, "KEY_DIR", str(self.tmp / "keys")))

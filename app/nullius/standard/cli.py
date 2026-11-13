@@ -7,7 +7,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--unsandboxed | --backend container]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE ...] [--unsandboxed | --backend container]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -66,7 +66,7 @@ import signal
 import sys
 import tempfile
 
-from nullius import paths, prices as price_list, progress, secrets, settings
+from nullius import constraints as limits, paths, prices as price_list, progress, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed, just like the unified CLI does.
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
@@ -446,6 +446,20 @@ def options(pairs) -> dict:
     return out
 
 
+def constraint_values(pairs) -> dict:
+    """``--constraint KEY=VALUE``, repeatable: what the machine allows the run (``nullius.constraints``)."""
+    out = {}
+    for p in pairs or []:
+        key, eq, value = p.partition("=")
+        if not eq or key not in limits.BY_KEY:
+            sys.exit(f"--constraint {p!r}: KEY=VALUE, KEY one of {', '.join(limits.BY_KEY)}")
+        try:
+            out[key] = limits.cli_value(key, value)
+        except ValueError:
+            sys.exit(f"--constraint {p!r}: not a value of {key}")
+    return out
+
+
 def prices(given) -> dict:
     """``--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]``, repeatable: this run's own prices, over the user's list."""
     out = {}
@@ -493,13 +507,23 @@ def cmd_run(a):
         sys.exit("--model: the model the agent or the capability is run with")
     else:
         other = _other(a.other)
+    given = constraint_values(a.constraint)
+    why = "; ".join(limits.problems(given))
+    if not why:
+        try:
+            limits.confine(given)                # before any thread: every process this one starts inherits it
+        except OSError as e:
+            why = f"cpu_set: {e.strerror or e}"
+    if why:
+        print("refused: constraints:", why)
+        return 2
     held, spill = licences(b)
     try:
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
                       simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
                       licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
-                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit,
+                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, constraints=given,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
@@ -667,6 +691,9 @@ def main(argv=None):
                            help="this run's price for a model in USD per million tokens, over your price list (repeatable; nullius prices)")
             p.add_argument("--max-usd", type=float, metavar="USD",
                            help="the run's spending cap: no call goes out once the spend plus the calls in flight would pass it")
+            p.add_argument("--constraint", action="append", metavar="KEY=VALUE",
+                           help="what the machine allows the run, repeatable: cpus, memory_mb, processes and cpu_set on its "
+                                "containers and, through a systemd scope, on its processes here; concurrency; gpu_ids (empty for none)")
             p.add_argument("--max-usd-per-unit", type=float, metavar="USD",
                            help="each unit's own spending cap: a unit that reaches it is cut off there, and the run goes on")
     v = sub.add_parser("prove", help="prove a benchmark: its controls, its units, no leak; record what passed")

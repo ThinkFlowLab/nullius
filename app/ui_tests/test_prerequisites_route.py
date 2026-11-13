@@ -90,6 +90,20 @@ class PrerequisitesRoute(unittest.TestCase):
         self.assertTrue(standard["ready"])                            # a notice, not a refusal
         self.assertEqual(engine(harbor, "docker")["detail"], "the engine answers")
 
+    def test_a_constraint_the_engine_does_not_enforce_is_refused_on_the_container_backend(self):
+        from nullius import constraints
+        self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
+        constraints.save("local", {"capacity": {"cpus": 4}, "engine": {"kind": "podman", "version": "5.8.9"}, "enforced": ["memory_mb"]})
+        self.stack.enter_context(patch.dict(os.environ, {"HOST_CONSTRAINTS": '{"local": {"cpus": 2}}'}))
+        for backend in ("container", "docker"):                      # docker: the container backend's earlier name
+            rec = {"version": 1, "harness": "standard", "name": "s", "title": "s", "benchmark": "tau3-bench", "datasets": ["airline"],
+                   "others": ["nop"], "provider": "openai", "model": "", "limit": 1, "concurrency": 1, "where": "local", "backend": backend}
+            with patch.object(prerequisites, "docker_here", lambda fresh=False: None), patch("shutil.which", lambda p: "/x/" + p):
+                j = self.post("/new-run/prerequisites", {"recipe": rec}).get_json()
+            row = {r["name"]: r for r in j["machines"][0]["rows"]}["constraints"]
+            self.assertEqual((row["state"], j["ready"]), ("missing", False), backend)
+            self.assertIn("does not enforce CPUs", row["detail"])
+
     def test_hosts_are_probed_at_once_and_listed_in_order(self):
         import time
         names = [f"bench{i}" for i in range(4)]

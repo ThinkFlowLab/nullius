@@ -339,6 +339,15 @@ class FromTheCommandLine(unittest.TestCase):
                 self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "slow__u0002"])
                 self.assertEqual(read(os.path.join(job, "config.json"))["standard"]["units_file"]["units"], ["slow", "good"])
 
+    def test_the_listed_units_run_under_the_machine_s_constraints(self):
+        code, out = self.cli("--units", self.file("slow\ngood\n"), "--constraint", "concurrency=1", "--name", "constrained")
+        self.assertEqual(code, 0, out)
+        job = out.strip().splitlines()[-1]
+        self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "slow__u0002"])
+        cfg = read(os.path.join(job, "config.json"))
+        self.assertEqual((cfg["standard"]["units_file"]["units"], cfg["standard"]["constraints"], cfg["n_concurrent_trials"]),
+                         (["slow", "good"], {"concurrency": 1}, 1))
+
     def test_a_list_the_run_cannot_take_is_refused_with_exit_2(self):
         for text, said in (("good\ngood\n", "more than once"), ("# none\n", "lists no unit"), ("good\nnope\n", "nope")):
             with self.subTest(text=text):

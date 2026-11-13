@@ -94,14 +94,33 @@
 
 /* run hosts: a row each - its name tests it, the result says what answered */
 .st-hosts { padding: 14px 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); }
-.settings-page.st-page .host-pills { flex-direction: column; flex-wrap: nowrap; gap: 0; }
-.settings-page.st-page .host-pill { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 4px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; background: none; color: var(--text); }
-.settings-page.st-page .host-pill .host-name { font-size: 14px; text-decoration: underline dotted var(--text-faint); text-underline-offset: 4px; }
-.settings-page.st-page .host-pill .settings-test { flex: 1; font-size: 12.5px; color: var(--text-dim); overflow-wrap: anywhere; }
-.settings-page.st-page .host-pill.st-runs .settings-test { color: var(--ok); }
-.settings-page.st-page .host-pill.st-blocked .settings-test { color: var(--bad); }
-.settings-page.st-page .host-pill .host-remove { margin-left: auto; width: 28px; height: 28px; }
-.st-hosts .host-actions { padding-top: 10px; }
+.host-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.host-table th, .host-table td { padding: 6px 4px; text-align: left; vertical-align: middle; font-weight: 400; }
+.host-table thead th { padding-top: 0; font-size: 12px; font-weight: 500; color: var(--text-dim); }
+.host-row { border-top: 1px solid var(--border-soft); }
+.host-status { width: 16px; }
+.host-dot { display: block; width: 8px; height: 8px; border-radius: 50%; background: var(--status-color, var(--text-faint)); }
+.host-dot.testing { background: var(--accent); animation: host-testing 1.2s ease-in-out infinite; }
+@keyframes host-testing { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) {   /* testing, still: a hollow dot */
+  .host-dot.testing { animation: none; background: none; box-shadow: inset 0 0 0 1.5px var(--accent); }
+}
+.host-name { overflow-wrap: break-word; }   /* a long entry breaks, a name breaks between words */
+.host-name .settings-test { display: block; font-size: 12.5px; color: var(--bad); }
+.host-warn { width: 15px; height: 15px; margin-left: 4px; vertical-align: -2px; color: var(--warn, #b8860b); }
+.host-engine, .host-capacity { color: var(--text-dim); }
+.host-acts { width: 1%; white-space: nowrap; text-align: right; }
+.host-act-gap { display: inline-block; width: 32px; height: 32px; vertical-align: middle; }
+.host-panel-row > td { padding: 0; }
+.host-panel-row:has(> td > .host-panel[hidden]) { display: none; }   /* the row shows while its panel opens and closes */
+@media (max-width: 640px) { .host-capacity { display: none; } }        /* narrow: capacity is in Info */
+.host-act { display: inline-grid; vertical-align: middle; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; color: var(--text-dim); cursor: pointer; }
+.host-act:hover:not(:disabled), .host-act.on { color: var(--text); background: var(--surface-2); }
+.host-act.on { color: var(--accent); }
+.host-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.host-act:disabled { opacity: .4; cursor: not-allowed; }
+.host-panel { padding: 4px 4px 16px 24px; }
+.st-provider-ask.host-delete { width: auto; margin: 0; }   /* in the row's panel, at its start, as wide as the table lets it */
 
 .st-savebar[hidden] { display: none; }
 .st-savebar { position: sticky; bottom: 12px; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); box-shadow: 0 10px 30px var(--shadow, rgba(0, 0, 0, .25)); }
@@ -119,6 +138,38 @@
 .settings-dialog .dialog-head { padding: 18px 22px 0; }
 .settings-dialog h3 { margin: 0; font-size: 16px; }
 .settings-dialog .dialog-head p { margin: 2px 0 0; font-size: 12px; }
+.st-tabs { display: flex; flex-wrap: wrap; align-self: flex-start; gap: 2px; padding: 3px; border-radius: 8px; background: var(--surface-2); max-width: 100%; }
+.st-tab { background: none; border: 0; border-radius: 6px; color: var(--text-dim); font: inherit; font-size: 12px; padding: 5px 12px; cursor: pointer; overflow-wrap: anywhere; }
+.st-tab.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+.st-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.st-warn { color: var(--warn, #b8860b); }
+.st-constraints .st-input { font: 13px var(--mono); padding: 0 12px; }   /* numbers and lists alike */
+.st-constraint { --unit-w: 6.25rem; display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem var(--unit-w) 28px; align-items: center; column-gap: 12px; min-width: 0; }
+/* every row on the same columns, so the boxes and the × line up: slider | box | unit | × */
+.st-constraint > .st-input { grid-column: 1 / 4; min-width: 0; }
+.st-constraint > .st-unit { grid-column: 3; justify-self: start; flex-wrap: nowrap; }
+.st-constraint > .st-clear { grid-column: 4; }
+.st-constraint:has(.st-unit) > .st-input { grid-column: 1 / 3; }
+.st-constraint:has(.st-slider:not([hidden])) { margin-bottom: 14px; }
+.st-constraint:has(.st-slider:not([hidden])) > .st-input { grid-column: 2; }
+.st-row-value:has(> .st-constraint) { container: constraint / inline-size; }
+@container constraint (max-width: 460px) {   /* the slider takes its own line above the box */
+  .st-constraint { grid-template-columns: minmax(0, 1fr) var(--unit-w) 28px; row-gap: 10px; }
+  .st-constraint > .st-input, .st-constraint:has(.st-slider:not([hidden])) > .st-input { grid-column: 1 / 3; grid-row: 2; }
+  .st-constraint:has(.st-unit) > .st-input, .st-constraint:has(.st-unit):has(.st-slider:not([hidden])) > .st-input { grid-column: 1; }
+  .st-constraint > .st-unit { grid-column: 2; grid-row: 2; }
+  .st-constraint > .st-clear { grid-column: 3; grid-row: 2; }
+  .st-constraint > .st-input:only-of-type { grid-row: auto; }
+  .st-constraint:not(:has(.st-slider:not([hidden]))) > * { grid-row: 1; }
+  .st-constraint:has(.st-slider:not([hidden])) { margin-bottom: 0; }
+  .st-constraint > .st-slider { grid-column: 1 / -1; grid-row: 1; margin-bottom: 14px; }
+}
+.st-clear { flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%; background: none; color: inherit; font: inherit; line-height: 1; cursor: pointer; opacity: .55; }
+.st-clear:hover, .st-clear:focus-visible { opacity: 1; background: color-mix(in srgb, var(--bad) 20%, transparent); }
+.st-clear.off { visibility: hidden; }
+.st-slider { grid-column: 1; }
+.st-constraints .st-row-value.st-value { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.st-constraints .st-row-value.st-value [hidden] { display: none; }
 .settings-dialog .dialog-tabs { display: inline-flex; gap: 2px; margin: 14px 22px 0; padding: 3px; border-radius: 8px; background: var(--surface-2); }
 .settings-dialog .dialog-tab { background: none; border: 0; border-radius: 6px; color: var(--text-dim); font: inherit; font-size: 12px; padding: 5px 12px; cursor: pointer; }
 .settings-dialog .dialog-tab.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
@@ -248,6 +299,9 @@
 .st-provider-test.busy { display: block; min-height: 1.5em; animation: st-test-pulse 1.4s ease-in-out infinite; }
 @keyframes st-test-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .st-provider-test.busy { animation: none; opacity: .55; font-style: italic; } }
+.st-heading-acts { display: flex; flex: none; gap: 6px; }
+.settings-dialog.st-host-add { width: auto; display: flex; flex-direction: column; margin: 0 0 16px; box-shadow: none; }   /* the providers' place: below the heading, in the page */
+.st-constraints .st-input:disabled, .st-unit .st-tab:disabled { opacity: .5; cursor: not-allowed; }
 .st-provider-catalogue, .st-provider-fields { display: flex; flex-direction: column; gap: 18px; }
 .st-provider-catalogue h3, .st-provider-summary h3 { margin: 0; font: 500 15px/1.5 var(--sans); color: var(--text); text-transform: none; letter-spacing: normal; }
 .st-provider-catalogue .st-search { margin: 0; }

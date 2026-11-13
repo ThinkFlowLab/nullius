@@ -217,21 +217,136 @@
   {% include "settings/custom_keys.html" %}
 
   <section class="st-section" id="hosts" aria-labelledby="hosts-h">
+    {% set ro = hosts_row and hosts_row.source == 'environment' %}
     <div class="st-section-head">
-      <h2 id="hosts-h">Run hosts</h2>
-      <p>Machines a recipe can run on, over ssh. A host's name tests it.</p>
+      <div class="st-provider-heading"><h2 id="hosts-h">Run hosts</h2>{% if writable and hosts_row %}<span class="st-heading-acts"><button type="button" class="btn sm ghost" data-test-all>Test all</button><button type="button" class="btn sm ghost st-provider-add" data-add-host aria-label="Add a host" aria-expanded="false" aria-controls="add-host"{% if ro %} disabled title="Set in the environment"{% endif %}><span aria-hidden="true">+</span> Add</button></span>{% endif %}</div>
+      <p>Machines a recipe can run on, and what Nullius may use on each.</p>
     </div>
-    {% if hosts_row %}
-    <article class="st-field st-hosts" id="HOSTS" data-source="{{ hosts_row.source }}" data-secret="no">
-      {% if writable %}
-      <div class="settings-list" data-list="HOSTS" data-kind="hosts">
-        <div class="host-pills">{% for item in chosen %}<span class="chip st-watch host-pill" data-entry="{{ item }}" title="{{ item }}"><button type="button" class="host-name" data-test-host>{{ item.split('=', 1)[0] if '=' in item.split('@', 1)[0] else item.split(':/')[0].split(':~')[0] }}</button><span class="settings-test"></span><button type="button" class="host-remove" data-remove-item aria-label="Remove this host">×</button></span>{% endfor %}</div>
-        <div class="host-actions"><button type="button" class="btn sm" data-add-host>+ Add host</button><button type="button" class="btn sm ghost" data-test-all{% if not chosen %} hidden{% endif %}>Test all</button></div>
-        <input type="hidden" name="value:HOSTS" value="{{ hosts_row.shown }}">
+    {% if writable and hosts_row and not ro %}
+<div id="add-host" class="settings-dialog st-host-add" role="group" aria-labelledby="add-host-h" hidden>
+  {#- a host: one of the ssh config's, or by hand — who and where, and how ssh gets in without a prompt. Test before Add; no password is ever stored, one is used once to put this machine's key on the host. #}
+  <div class="dialog-head"><h3 id="add-host-h">Add host</h3><p class="faint">Choose a machine for your runs.</p></div>
+  {# The tabs and the config panel exist only when the ssh config names a
+     host; `dialog-panels` wraps the panels either way, or its closing tag
+     below would close an ancestor and take the dialog's own footer — and
+     the script's `[data-cancel]` — out of it. #}
+  {% if ssh_hosts %}<div class="dialog-tabs" role="tablist">
+    <button type="button" class="dialog-tab on" data-tab="config" role="tab" aria-selected="true">From SSH config</button>
+    <button type="button" class="dialog-tab" data-tab="manual" role="tab" aria-selected="false">Enter manually</button>
+  </div>{% endif %}
+  <div class="dialog-panels">
+  {% if ssh_hosts %}<div class="dialog-panel" data-panel="config">
+    <label class="fl" id="host-picker-label">Host</label>
+    <div class="host-picker">
+      <button type="button" class="host-picker-trigger" aria-labelledby="host-picker-label host-picked" aria-expanded="false" aria-controls="host-options"><span id="host-picked">Select a host</span><span aria-hidden="true">⌄</span></button>
+      <div id="host-options" class="host-options" hidden>
+        <input type="search" class="host-search" aria-label="Filter hosts by name, user or address" placeholder="Filter by name, user or address…" autocomplete="off">
+        <p class="host-count" aria-live="polite"></p>
+        <div class="host-options-list" role="listbox" aria-label="SSH hosts">{% for h in ssh_hosts %}<button type="button" class="pick" role="option" data-host-chip="{{ h.alias }}" aria-selected="false"><span class="pick-name">{{ h.alias }}</span><span class="pick-sub">{{ h.user ~ ' @ ' if h.user }}{{ h.hostname or h.alias }}{{ ' · ' ~ h.port if h.port }}</span></button>{% endfor %}</div>
+        <p class="faint small" data-no-matches hidden>No hosts match your search.</p>
       </div>
-      {% else %}
-      <p class="mono">{{ chosen | join(', ') or '—' }}</p>
+    </div>
+    <p class="faint small" data-all-chosen hidden>Every host in the config is already in the list.</p>
+  </div>{% endif %}
+  <div class="dialog-panel" data-panel="manual"{% if ssh_hosts %} hidden{% endif %}>
+    <label class="field host-field"><span class="fl">Host name</span><input form="add-host-form" type="text" name="display_name" required maxlength="64" placeholder="e.g. GPU lab" autocomplete="off"></label>
+    <div class="field-row">
+      <label class="field grow"><span class="fl">Address</span><input form="add-host-form" type="text" name="host" required spellcheck="false" placeholder="IP address or hostname"></label>
+      <label class="field port"><span class="fl">Port</span><input form="add-host-form" type="number" name="port" min="1" max="65535" value="22" required></label>
+    </div>
+    <label class="field host-field"><span class="fl">User</span><input form="add-host-form" type="text" name="user" required spellcheck="false" placeholder="e.g. ubuntu" autocomplete="off"></label>
+    <span class="fl">SSH key</span>
+    <div class="auth-cards">
+      <label class="auth-card"><input form="add-host-form" type="radio" name="auth" value="agent" checked><span class="auth-body"><span class="auth-title">Use SSH agent</span><span class="auth-sub">Use a key already available on this machine.</span></span></label>
+      <label class="auth-card"><input form="add-host-form" type="radio" name="auth" value="path"><span class="auth-body"><span class="auth-title">Path of the key</span><span class="auth-more"><span><input form="add-host-form" type="text" name="key_path" aria-label="Path of the key" placeholder="~/.ssh/id_ed25519" spellcheck="false"></span></span></span></label>
+      <label class="auth-card"><input form="add-host-form" type="radio" name="auth" value="file"><span class="auth-body"><span class="auth-title">Upload a key</span><span class="auth-more"><span><input form="add-host-form" type="file" name="key_file" aria-label="Upload a key"></span></span></span></label>
+      <details class="host-advanced"><summary>More authentication options</summary><label class="auth-card"><input form="add-host-form" type="radio" name="auth" value="password"><span class="auth-body"><span class="auth-title">A password, used once</span><span class="auth-sub">puts this machine's key on the host; the password is never stored</span><span class="auth-more"><span><input form="add-host-form" type="password" name="password" autocomplete="off" data-1p-ignore data-lpignore="true"></span></span></span></label></details>
+    </div>
+  </div>
+  </div>
+  <div class="dialog-foot">
+    <span class="settings-test dialog-status"></span>
+    <button type="button" class="btn sm ghost" data-cancel>Cancel</button>
+    <button type="button" class="btn sm ghost" data-dialog-test disabled>Test connection</button>
+    <button type="button" class="btn sm" data-dialog-add disabled>Add host</button>
+  </div>
+</div>
+    {% endif %}
+    {% if hosts_row %}{% set crow = by.get('HOST_CONSTRAINTS') %}
+    {#- one list: this machine, then each host; a row's actions open below it (hosts.js), constraints.js keeps the JSON -#}
+    {% macro act(name, icon, label, title, mi, off=false) %}<button type="button" class="host-act" data-open="{{ name }}" aria-expanded="false" aria-controls="hp-{{ mi }}-{{ name }}" aria-label="{{ title }}: {{ label }}" title="{{ 'Set in the environment' if off else title }}"{% if off %} disabled{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-{{ icon }}"/></svg></button>{% endmacro %}
+    {#- an action this machine never has: in its place, off, saying why -#}
+    {% macro never(icon, why) %}<button type="button" class="host-act" disabled aria-label="{{ why }}" title="{{ why }}"><svg class="ic" aria-hidden="true"><use href="#i-{{ icon }}"/></svg></button>{% endmacro %}
+    <article class="st-field st-hosts st-constraints" id="HOSTS" data-source="{{ hosts_row.source }}" data-secret="no" data-test="{{ url_for('settings_host_test') }}"{% if ro %} data-readonly{% endif %}>
+      <table class="host-table">
+        <thead><tr><th scope="col"><span class="sr">Status</span></th><th scope="col">Host</th><th scope="col" class="host-engine">Engine</th><th scope="col" class="host-capacity">Capacity</th><th scope="col"><span class="sr">Actions</span></th></tr></thead>
+      {% for m in machines %}{% set mi = loop.index %}{% set t = (m.found or {}).get('test') or {} %}
+      {#- a machine: its row, then a row per panel, one open at a time (hosts.js) -#}
+      <tbody class="host-row" data-machine="{{ m.entry }}"{% if m.host %} data-entry="{{ m.entry }}"{% endif %}>
+        <tr class="host-line">
+          <td class="host-status"><span class="host-dot {{ 'st-watch' if not t else 'st-runs' if t.ok else 'st-blocked' }}" aria-hidden="true"></span><span class="sr" data-status>{{ 'Not tested' if not t else 'Reached' if t.ok else 'Not reached' }}</span></td>
+          {%- set lost = m.not_enforced %}{% set said = (lost ~ (' constraint is' if lost == 1 else ' constraints are') ~ ' not enforced here: see Constraints.') if lost else '' %}
+          <th scope="row" class="host-name">{{ m.label }}{% if lost %} <svg class="ic host-warn" role="img" aria-label="{{ said }}"><title>{{ said }}</title><use href="#i-alert"/></svg>{% endif %}<span class="settings-test" aria-live="polite"></span></th>
+          <td class="host-engine" data-cell="engine">{{ m.engine_name }}</td>
+          <td class="host-capacity" data-cell="capacity">{{ m.capacity_text }}</td>
+          <td class="host-acts">
+            {% if writable %}<button type="button" class="host-act" data-test-machine aria-label="Test: {{ m.label }}" title="Test"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg></button>{% endif %}
+            {{ act('info', 'info', m.label, 'Info', mi) }}
+            {% if m.host and writable %}{{ act('edit', 'plug', m.label, 'Connection', mi, ro) }}{% elif writable %}{{ never('plug', 'Connection: not for this machine') }}{% else %}<span class="host-act-gap"></span>{% endif %}
+            {{ act('limits', 'sliders', m.label, 'Constraints', mi) }}
+            {% if m.host and writable %}{{ act('delete', 'trash', m.label, 'Delete', mi, ro) }}{% elif writable %}{{ never('trash', 'Delete: this machine cannot be removed') }}{% else %}<span class="host-act-gap"></span>{% endif %}
+          </td>
+        </tr>
+        <tr class="host-panel-row"><td colspan="5"><div class="host-panel" id="hp-{{ mi }}-info" data-panel="info" hidden>{% include "settings/machine_info.html" %}</div></td></tr>
+        {% if m.host and writable and not ro %}{% set h = m.host %}
+        <tr class="host-panel-row"><td colspan="5"><div class="host-panel" id="hp-{{ mi }}-edit" data-panel="edit" role="group" aria-label="Connection: {{ m.label }}" hidden><div class="st-sandbox-rows" data-host-edit data-kind="{{ h.kind }}">
+          {% if h.kind == 'alias' %}
+          <div class="st-row"><label class="st-row-label" for="he-{{ mi }}-alias">SSH alias</label><div class="st-row-value"><input class="st-input" id="he-{{ mi }}-alias" data-field="alias" value="{{ h.alias }}" spellcheck="false" autocomplete="off"></div></div>
+          {% else %}
+          {% for field, label, value in [('display_name', 'Name', h.display_name or ''), ('user', 'User', h.user), ('host', 'Address', h.host), ('port', 'Port', h.port or ''), ('key', 'Key path', h.key or '')] %}
+          <div class="st-row"><label class="st-row-label" for="he-{{ mi }}-{{ field }}">{{ label }}</label><div class="st-row-value"><input class="st-input" id="he-{{ mi }}-{{ field }}" data-field="{{ field }}" value="{{ value }}"{% if field == 'port' %} type="number" min="1" max="65535"{% endif %} spellcheck="false" autocomplete="off"></div></div>
+          {% endfor %}
+          {% endif %}
+          <div class="st-row"><span class="st-row-label"></span><span class="st-row-value st-value"><button type="button" class="btn sm" data-host-save>Save</button><button type="button" class="btn sm ghost" data-close>Cancel</button><span class="settings-test" data-host-said></span></span></div>
+        </div></div></td></tr>
+        {% endif %}
+        <tr class="host-panel-row"><td colspan="5"><div class="host-panel" id="hp-{{ mi }}-limits" data-panel="limits" hidden><div class="st-sandbox-rows">
+        {#- a cap holds through the engine on containers, or a systemd scope on the run's processes: off with neither -#}
+        {% set capless = m.engine_less and not m.scope_ok %}
+        {% if capless %}<p class="st-note" data-engine-less>Needs Docker or Podman, or systemd{{ (' (' ~ m.scope.why ~ ')') if m.scope and m.scope.why }}.</p>{% endif %}
+        {% for c in constraint_table %}{% set number = c.type.__name__ in ('int', 'float') %}{% set shown = m.shown.get(c.key, '') %}{% set off = not writable or (capless and 'docker' in c.apply and not c.machine) %}
+        <div class="st-row"><label class="st-row-label" for="c-{{ mi }}-{{ c.key }}">{{ c.label }}</label>
+          <div class="st-row-value">
+            <div class="st-constraint">
+            {% if c.step and m.capacity.get(c.key) and writable %}<div class="st-slider ui-range marked" data-slider hidden><input type="range" min="0" step="1" data-range-for="c-{{ mi }}-{{ c.key }}" data-step="{{ c.step }}" aria-label="{{ c.label }}"{% if off %} disabled{% endif %}><div class="ui-range-ends" aria-hidden="true"><span data-range-min></span><span class="ui-range-at-mark" data-range-max></span><span title="No limit">∞</span></div></div>{% endif %}
+            <input class="st-input" id="c-{{ mi }}-{{ c.key }}" data-key="{{ c.key }}" data-type="{{ c.type.__name__ }}" value="{{ shown }}"
+              {%- if number %} type="number" min="{{ c.minimum }}" step="{{ '1' if c.type.__name__ == 'int' else 'any' }}"{% else %} type="text" spellcheck="false"{% endif %}
+              {%- if c.unit %} data-unit="{{ c.unit }}"{% endif %}{% if m.capacity.get(c.key) %} data-capacity="{{ m.capacity[c.key] }}"{% endif %}
+              {%- set tip = ([c.tip] if c.tip else []) + (['This machine has ' ~ m.capacity[c.key] ~ (' ' ~ c.unit if c.unit) ~ '.'] if m.capacity.get(c.key) else []) %}
+              {%- if tip %} title="{{ tip | join(' ') }}" data-tip="{{ c.tip }}"{% endif %}{% if off %} disabled{% endif %}>
+            {% if c.unit %}<div class="st-tabs st-unit" role="group" aria-label="Unit">{% for u in ('MB', 'GB') %}<button type="button" class="st-tab{{ ' on' if u == c.unit }}" aria-pressed="{{ 'true' if u == c.unit else 'false' }}" data-unit-choice="{{ u }}"{% if off %} disabled{% endif %}>{{ u }}</button>{% endfor %}</div>{% endif %}
+            {% if writable %}<button type="button" class="st-clear{{ ' off' if not shown }}" data-clear-constraint aria-label="Remove {{ c.label }}" title="Remove">×</button>{% endif %}
+            </div>
+            {% if m.warnings.get(c.key) %}<p class="st-note st-warn">{{ m.warnings[c.key] }}</p>{% endif %}
+          </div></div>
+        {% endfor %}
+        {% if writable %}<div class="st-row"><span class="st-row-label"></span><span class="st-row-value st-value"><button type="button" class="btn sm ghost st-remove" data-clear-machine{% if not m.shown %} hidden{% endif %}>Remove all</button></span></div>{% endif %}
+        </div></div></td></tr>
+        {% if m.host and writable and not ro %}
+        <tr class="host-panel-row"><td colspan="5"><div class="host-panel" id="hp-{{ mi }}-delete" data-panel="delete" hidden><div class="bench-delete-ask st-provider-ask host-delete">{#- asks as a provider's Remove does #}
+          <span>Delete <b>{{ m.label }}</b> and its constraints?</span>
+          <button type="button" class="btn danger" data-host-delete>Yes, delete</button><button type="button" class="btn ghost" data-close>Keep it</button><span class="settings-test" data-host-said></span>
+        </div></div></td></tr>
+        {% endif %}
+      </tbody>
+      {% endfor %}
+      </table>
+      {% if writable %}
+      <input type="hidden" name="value:HOSTS" value="{{ hosts_row.shown }}">
+      {% if crow %}<input type="hidden" id="HOST_CONSTRAINTS" name="value:HOST_CONSTRAINTS" value="{{ crow.shown }}">{% endif %}
       {% endif %}
+      {% if ro %}<p class="st-note">HOSTS is set in the process environment: hosts are changed there.</p>{% endif %}
+      {% if crow and crow.problem %}<p class="st-note st-bad">{{ crow.problem }}</p>{% endif %}
     </article>
     <p class="st-about">HOSTS. An alias from ~/.ssh/config, or user@host[:port]. Only the name is stored; keys stay where they are.</p>
     {% endif %}
@@ -331,88 +446,21 @@
 <script src="{{ url_for('static', filename='settings/sandbox.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/prices.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/data-providers.js') }}"></script>
+<script src="{{ url_for('static', filename='settings/constraints.js') }}"></script>
+<script src="{{ url_for('static', filename='settings/hosts.js') }}"></script>
 {% if writable %}
-<dialog id="add-host" class="settings-dialog">
-  {# a host: one of the ssh config's, or by hand — who and where, and how ssh gets in without a prompt. Test before Add; no password is ever stored, one is used once to put this machine's key on the host. #}
-  <div class="dialog-head"><h3>Add host</h3><p class="faint">Choose a machine for your runs.</p></div>
-  {# The tabs and the config panel exist only when the ssh config names a
-     host; `dialog-panels` wraps the panels either way, or its closing tag
-     below would close an ancestor and take the dialog's own footer — and
-     the script's `[data-cancel]` — out of it. #}
-  {% if ssh_hosts %}<div class="dialog-tabs" role="tablist">
-    <button type="button" class="dialog-tab on" data-tab="config" role="tab" aria-selected="true">From SSH config</button>
-    <button type="button" class="dialog-tab" data-tab="manual" role="tab" aria-selected="false">Enter manually</button>
-  </div>{% endif %}
-  <div class="dialog-panels">
-  {% if ssh_hosts %}<div class="dialog-panel" data-panel="config">
-    <label class="fl" id="host-picker-label">Host</label>
-    <div class="host-picker">
-      <button type="button" class="host-picker-trigger" aria-labelledby="host-picker-label host-picked" aria-expanded="false" aria-controls="host-options"><span id="host-picked">Select a host</span><span aria-hidden="true">⌄</span></button>
-      <div id="host-options" class="host-options" hidden>
-        <input type="search" class="host-search" aria-label="Filter hosts by name, user or address" placeholder="Filter by name, user or address…" autocomplete="off">
-        <p class="host-count" aria-live="polite"></p>
-        <div class="host-options-list" role="listbox" aria-label="SSH hosts">{% for h in ssh_hosts %}<button type="button" class="pick" role="option" data-host-chip="{{ h.alias }}" aria-selected="false"><span class="pick-name">{{ h.alias }}</span><span class="pick-sub">{{ h.user ~ ' @ ' if h.user }}{{ h.hostname or h.alias }}{{ ' · ' ~ h.port if h.port }}</span></button>{% endfor %}</div>
-        <p class="faint small" data-no-matches hidden>No hosts match your search.</p>
-      </div>
-    </div>
-    <p class="faint small" data-all-chosen hidden>Every host in the config is already in the list.</p>
-  </div>{% endif %}
-  <form autocomplete="off" class="dialog-panel" data-panel="manual"{% if ssh_hosts %} hidden{% endif %}>
-    <label class="field host-field"><span class="fl">Host name</span><input type="text" name="display_name" required maxlength="64" placeholder="e.g. GPU lab" autocomplete="off"></label>
-    <div class="field-row">
-      <label class="field grow"><span class="fl">Address</span><input type="text" name="host" required spellcheck="false" placeholder="IP address or hostname"></label>
-      <label class="field port"><span class="fl">Port</span><input type="number" name="port" min="1" max="65535" value="22" required></label>
-    </div>
-    <label class="field host-field"><span class="fl">User</span><input type="text" name="user" required spellcheck="false" placeholder="e.g. ubuntu" autocomplete="off"></label>
-    <span class="fl">SSH key</span>
-    <div class="auth-cards">
-      <label class="auth-card"><input type="radio" name="auth" value="agent" checked><span class="auth-body"><span class="auth-title">Use SSH agent</span><span class="auth-sub">Use a key already available on this machine.</span></span></label>
-      <label class="auth-card"><input type="radio" name="auth" value="path"><span class="auth-body"><span class="auth-title">Path of the key</span><span class="auth-more"><span><input type="text" name="key_path" aria-label="Path of the key" placeholder="~/.ssh/id_ed25519" spellcheck="false"></span></span></span></label>
-      <label class="auth-card"><input type="radio" name="auth" value="file"><span class="auth-body"><span class="auth-title">Upload a key</span><span class="auth-more"><span><input type="file" name="key_file" aria-label="Upload a key"></span></span></span></label>
-      <details class="host-advanced"><summary>More authentication options</summary><label class="auth-card"><input type="radio" name="auth" value="password"><span class="auth-body"><span class="auth-title">A password, used once</span><span class="auth-sub">puts this machine's key on the host; the password is never stored</span><span class="auth-more"><span><input type="password" name="password" autocomplete="off" data-1p-ignore data-lpignore="true"></span></span></span></label></details>
-    </div>
-  </form>
-  </div>
-  <div class="dialog-foot">
-    <span class="settings-test dialog-status"></span>
-    <button type="button" class="btn sm ghost" data-cancel>Cancel</button>
-    <button type="button" class="btn sm ghost" data-dialog-test disabled>Test connection</button>
-    <button type="button" class="btn sm" data-dialog-add disabled>Add host</button>
-  </div>
-</dialog>
+<form id="add-host-form" autocomplete="off" hidden></form>
 <script>
-  // The hosts list: the chips that are on; the hidden value is their join, kept current.
+  // + Add: the panel's entry joins HOSTS, which autosave saves; the list comes back with the host's row.
   const csrf = document.querySelector('#settings-form input[name=csrf]').value;
-  document.querySelectorAll('.settings-list').forEach(list => {
-    const hidden = list.querySelector('input[type=hidden]');
-    const sync = () => {
-      const all = list.querySelector('[data-test-all]'); if (all) all.hidden = !list.querySelector('.host-pill');
-      hidden.value = [...list.querySelectorAll('.host-pill')].map(i => i.dataset.entry).filter(Boolean).join(', ');
-      hidden.dispatchEvent(new Event('change', {bubbles: true}));
-    };
-    const label = entry => entry.split('@')[0].includes('=') ? entry.split('=')[0] : entry.split(':/')[0].split(':~')[0];
-    const paint = (pill, result) => {   // grey until tested, green when it answers, red when not
-      pill.classList.remove('st-watch', 'st-runs', 'st-blocked'); pill.classList.add(!result ? 'st-watch' : result.ok ? 'st-runs' : 'st-blocked');
-      const out = pill.querySelector('.settings-test'); out.textContent = !result ? '' : result.ok ? '✓ ' + result.detail : '✕ ' + result.error;
-      pill.title = !result ? pill.dataset.entry : (result.ok ? result.detail : result.error) + ' — ' + pill.dataset.entry;   // the detail is a hover away
-    };
-    const addHost = (entry, result) => {
-      const pill = document.createElement('span'); pill.className = 'chip host-pill'; pill.dataset.entry = entry; pill.title = entry;
-      pill.innerHTML = '<button type="button" class="host-name" data-test-host></button><span class="settings-test"></span><button type="button" class="host-remove" data-remove-item aria-label="Remove this host">×</button>';
-      pill.querySelector('.host-name').textContent = label(entry);
-      list.querySelector('.host-pills').appendChild(pill); paint(pill, result); sync();
-    };
-    const testPill = pill => { pill.querySelector('.settings-test').textContent = '…'; return testHost(pill.dataset.entry).then(r => paint(pill, r)); };
-    list.addEventListener('click', e => {
-      if (e.target.closest('[data-add-host]')) openAddHost(addHost, () => [...list.querySelectorAll('.host-pill')].map(i => i.dataset.entry));
-      if (e.target.closest('[data-remove-item]')) { e.target.closest('.host-pill').remove(); sync(); }
-      const name = e.target.closest('[data-test-host]');
-      if (name) testPill(name.closest('.host-pill'));
-      const all = e.target.closest('[data-test-all]');
-      if (all) { all.disabled = true; Promise.all([...list.querySelectorAll('.host-pill')].map(testPill)).then(() => { all.disabled = false; }); }
-    });
+  const hostsField = () => document.querySelector('#HOSTS input[name="value:HOSTS"]');
+  const entries = () => (hostsField().value || '').split(',').map(x => x.trim()).filter(Boolean);
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#hosts [data-add-host]')) return;
+    if (!dialog.hidden) { closeAdd(); return; }
+    openAddHost(entry => { const field = hostsField(); field.value = [...entries(), entry].join(', '); field.dispatchEvent(new Event('change', {bubbles: true})); }, entries);
   });
-  // One ssh from the application host, nothing stored: whether the host answers, and what it has.
+  // One ssh from the application host: whether the host answers, and what it has (kept for its Info).
   const testHost = async entry => {
     try {
       const r = await nulliusFetch({{ url_for('settings_host_test')|tojson }}, {method: 'POST', headers: {'X-CSRF-Token': csrf}, body: new URLSearchParams({entry})});
@@ -422,9 +470,15 @@
       return {ok: true, detail: [j.hostname, has('uv'), j.engine ? j.engine + (j[j.engine + '_ok'] ? '' : ' (no access)') : 'docker or podman missing', j.harbor ? 'harbor ' + (j.harbor_version || '') : 'harbor missing', j.latency_ms + ' ms'].filter(Boolean).join(' · ')};
     } catch (err) { return {ok: false, error: String(err)}; }
   };
-  // The Add host dialog. Either panel names one host; Test tries it and Add puts it in the list with what Test found.
+  // The Add host panel, below the heading as the providers' is. Either tab names one host; Test tries it and Add puts it
+  // in the list with what Test found. Its manual fields belong to the add form outside the settings form, so autosave
+  // never reads them.
   // Manual: the SSH agent or a key path needs no request; a key file is saved on this machine first; a password is used once to put this machine's key on the host.
-  const dialog = document.getElementById('add-host'), dform = dialog.querySelector('form'), dstatus = dialog.querySelector('.dialog-status');
+  const dialog = document.getElementById('add-host'), dform = document.getElementById('add-host-form'), dstatus = dialog.querySelector('.dialog-status');
+  const manual = dialog.querySelector('[data-panel="manual"]'), addButton = () => document.querySelector('#hosts [data-add-host]');
+  const closeAdd = () => {
+    NulliusDisclosure.setHidden(dialog, false); addButton().setAttribute('aria-expanded', 'false'); addButton().focus({preventScroll: true});
+  };
   let onAdded = null, panel = 'manual', resolved = null, tested = null;
   const say = (text, cls) => { dstatus.textContent = text; dstatus.className = 'settings-test dialog-status' + (cls ? ' ' + cls : ''); dstatus.title = ''; };
   const showTab = name => {
@@ -441,17 +495,10 @@
     if (all) all.hidden = left;
     if (hostSearch) { hostSearch.value = ''; picked.textContent = 'Select a host'; filterHosts(); toggleHostOptions(false); }
     showTab(dialog.querySelector('.dialog-tab') && left ? 'config' : 'manual');
-    document.querySelector('[data-add-host]').focus({preventScroll: true});
-    dialog.showModal();
+    NulliusDisclosure.setHidden(dialog, true); addButton().setAttribute('aria-expanded', 'true');
+    (dialog.querySelector('.dialog-panel:not([hidden]) .host-picker-trigger, .dialog-panel:not([hidden]) input'))?.focus();
   };
-  // Some browsers do not focus buttons on pointer clicks. Restore a control,
-  // rather than letting the dialog return focus to the surrounding document.
-  dialog.addEventListener('close', () => document.querySelector('[data-add-host]').focus({preventScroll: true}));
-  dialog.querySelector('[data-cancel]').addEventListener('click', () => dialog.close());
-  dialog.addEventListener('click', event => {
-    const box = dialog.getBoundingClientRect();
-    if (event.target === dialog && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) dialog.close();
-  });
+  dialog.querySelector('[data-cancel]').addEventListener('click', closeAdd);
   dialog.querySelectorAll('.dialog-tab').forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
   const hostTrigger = dialog.querySelector('.host-picker-trigger'), hostOptions = dialog.querySelector('#host-options'), hostSearch = dialog.querySelector('.host-search'), picked = dialog.querySelector('#host-picked');
   const toggleHostOptions = open => { if (!hostOptions) return; hostOptions.hidden = !open; hostTrigger.setAttribute('aria-expanded', String(open)); };
@@ -475,7 +522,7 @@
     hostTrigger.addEventListener('click', () => { const open = hostOptions.hidden; toggleHostOptions(open); if (open) hostSearch.focus(); });
     hostSearch.addEventListener('input', filterHosts);
     dialog.addEventListener('click', e => { if (!e.target.closest('.host-picker')) toggleHostOptions(false); });
-    dialog.addEventListener('cancel', e => { if (!hostOptions.hidden) { e.preventDefault(); toggleHostOptions(false); hostTrigger.focus(); } });
+    dialog.addEventListener('keydown', e => { if (e.key === 'Escape' && !hostOptions.hidden) { e.preventDefault(); toggleHostOptions(false); hostTrigger.focus(); } });
     hostOptions.addEventListener('keydown', e => {
       const options = [...dialog.querySelectorAll('.pick')].filter(c => !c.hidden), index = options.indexOf(document.activeElement);
       if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
@@ -491,10 +538,11 @@
     picked.replaceChildren(...[...c.children].map(el => el.cloneNode(true)));
     resolved = tested = null; say(''); toggleHostOptions(false); updateHostButtons(); hostTrigger.focus();
   }));
-  dform.querySelectorAll('.auth-card input:not([type=radio])').forEach(i => i.addEventListener('focus', () => { i.closest('.auth-card').querySelector('[type=radio]').checked = true; }));
-  dform.addEventListener('input', () => { resolved = tested = null; updateHostButtons(); });
-  dform.addEventListener('change', () => { resolved = tested = null; updateHostButtons(); });
+  manual.querySelectorAll('.auth-card input:not([type=radio])').forEach(i => i.addEventListener('focus', () => { i.closest('.auth-card').querySelector('[type=radio]').checked = true; }));
+  manual.addEventListener('input', () => { resolved = tested = null; updateHostButtons(); });
+  manual.addEventListener('change', () => { resolved = tested = null; updateHostButtons(); });
   dform.addEventListener('submit', e => { e.preventDefault(); dialog.querySelector('[data-dialog-add]').click(); });
+  dialog.addEventListener('keydown', e => { if (e.key === 'Escape' && !e.defaultPrevented) closeAdd(); });
   // The entry the dialog names right now, or null with the reason said.
   const entry = async () => {
     if (panel === 'config') { const c = dialog.querySelector('.pick.on'); if (!c) { say('pick a host', 'bad'); return null; } return c.dataset.hostChip; }
@@ -519,7 +567,7 @@
       if (!j.ok) { say('✕ ' + (j.error || ('HTTP ' + r.status)), 'bad'); return null; }
       resolved = {target, auth, entry: j.entry}; return named(j.entry);
     } catch (err) { say('✕ ' + err, 'bad'); return null; }
-    finally { dform.querySelector('[name=password]').value = ''; }
+    finally { dform.elements.password.value = ''; }
   };
   dialog.querySelector('[data-dialog-test]').addEventListener('click', async () => {
     const e = await entry(); if (!e) return;
@@ -528,7 +576,7 @@
   });
   dialog.querySelector('[data-dialog-add]').addEventListener('click', async () => {
     const e = await entry(); if (!e) return;
-    dialog.close(); onAdded(e, tested && tested.entry === e ? tested.result : null);
+    closeAdd(); onAdded(e, tested && tested.entry === e ? tested.result : null);
   });
   // Keep pressed with the pointer leaves the focus in the input, so no change fires for what it discards.
   document.getElementById('settings-form').addEventListener('pointerdown', event => {

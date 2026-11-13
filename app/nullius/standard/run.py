@@ -68,7 +68,7 @@ from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from typing import Callable, Dict, List, Optional
 
-from nullius import paths, prices as price_list, progress, providers
+from nullius import constraints as limits, paths, prices as price_list, progress, providers
 from nullius.redact import redact
 from nullius.harbor import feed as live_feed
 from nullius.standard import acp, container, definitions, hostreq, install, job, jsonl, ledger as ledgers, match, mcp_machine, pace as pacing, relay, shard as shards
@@ -355,7 +355,8 @@ class Run:
                  launch: Optional[str] = None, repeat: int = 1, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
-                 max_usd_per_unit: Optional[float] = None, units_file: Optional[dict] = None):
+                 max_usd_per_unit: Optional[float] = None, units_file: Optional[dict] = None,
+                 constraints: Optional[dict] = None):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
@@ -394,7 +395,14 @@ class Run:
         (``options`` in its definition: a search, a mode), the rest at their
         defaults; a value that needs an embedding model gets a relay of the
         run's own for it, one that needs something of this machine
-        (``host``) is refused without it."""
+        (``host``) is refused without it.
+        ``constraints``: what the machine allows Nullius (``nullius.constraints``):
+        flags on every container the run starts here (``container.cap``); the most units at a time, the driver's environment and a
+        systemd scope for each process it starts here (its drivers, and its
+        agents on the local backend). Before the first unit the container
+        constraints are checked on the engine (where those containers run), and the scope's on systemd: on
+        the local backend a cap no scope holds is refused, on the container
+        backend its drivers then run without one."""
         backend = definitions.names.backend(backend)
         if backend not in BACKENDS:
             raise Refused(f"backend {backend!r} is not one of {list(BACKENDS)}")
@@ -410,6 +418,13 @@ class Run:
             why = container.unusable()
             if why:
                 raise Refused(f"the container backend cannot run here: {why}")
+        bad = limits.problems(constraints or {})
+        if bad:
+            raise Refused("constraints: " + "; ".join(bad))
+        self.constraints = dict(constraints or {})
+        self.container_limits = limits.container(self.constraints)
+        container.cap(self.constraints)          # every container the run starts on this machine, whatever the backend
+        self.scope_limits: dict = {}             # what each process started here gets, once ready() checked systemd
         self.container_check = False
         if backend == "local" and other.get("_kind") == "upstream" and (bench.get("score") or {}).get("runs_code"):
             why = container.unusable()
@@ -505,7 +520,7 @@ class Run:
                 raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs "
                               f"{', '.join(cannot)}, which a container setup cannot provide: choose local processes")
             on_host = []
-        lacking = hostreq.problems(bench, on_host, which)
+        lacking = hostreq.problems(bench, on_host, which, self.constraints.get("gpu_ids"))
         if lacking:
             raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
                           + "; ".join(f"{n} ({why})" for n, why in lacking.items())
@@ -514,7 +529,7 @@ class Run:
         self.bench_relay = None
         keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
-        self.limit, self.concurrency = limit, max(1, int(concurrency))
+        self.limit, self.concurrency = limit, limits.concurrency(max(1, int(concurrency)), self.constraints)
         self.units_file = units_file
         self.repeat = max(1, int(repeat or 1))
         # an own image this run pulled or built stays for the next run, unless the user asks it removed
@@ -579,12 +594,14 @@ class Run:
                             "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                             "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
                             **({container.CHECK_IMAGE: self.image, **container.check_env()} if self.image else {}),
-                            **option_env(getattr(self, "bench_options", {})), **self.file_env, **self.embeddings_env(), **self.driver_secrets()})
+                            **option_env(getattr(self, "bench_options", {})), **self.file_env, **self.embeddings_env(), **self.driver_secrets(),
+                            **limits.environment(getattr(self, "constraints", {}))})
             os.makedirs(env["HOME"], exist_ok=True)
             # its working directory is the job's, never its catalogue folder: an upstream that writes
             # beside itself (tau2's embeddings cache) would write into the package or the runner snapshot
             cwd = os.path.join(self.job_dir, ".work", "driver")
             os.makedirs(cwd, exist_ok=True)
+            cmd, env = limits.wrap(cmd, env, getattr(self, "scope_limits", {}))
             d = jsonl.Proc(cmd, cwd, env, os.path.join(self.job_dir, ".work", f"driver-{threading.get_ident()}.log"), stopped=self._stopped).start()
             self.local.driver = d
             self.drivers.append(d)
@@ -665,7 +682,7 @@ class Run:
                          # a shard of a list splits the listed units: they are its whole
                          shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit)
                          if self.shard else None, units_file=self.units_file,
-                         repeat=self.repeat, prices=self.prices_record(),
+                         repeat=self.repeat, prices=self.prices_record(), constraints=self.constraints,
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
         # every unit once, then every unit again: a repeat cut short still has each unit's first run
         work = [(i, u, r) for r in range(1, self.repeat + 1) for i, u in mine]
@@ -824,6 +841,8 @@ class Run:
         if why:
             raise Refused("; ".join(why))
         p = self.progress
+        self.scope_limits = self.scope_ready(limits.scoped(self.constraints), refuse=self.backend == "local")
+        owns = any(definitions.own_image(e) for e in (self.bench.get("environments") or {}).values())
         if self.backend == "container" or self.container_check:
             try:
                 tag = container.base_tag()
@@ -832,6 +851,17 @@ class Run:
                     self.image = container.base_image(os.path.join(self.job_dir, ".work", "image.log"))
             except container.Unavailable as e:
                 raise Refused(f"the Docker image: {e}")
+        # every container the run starts takes the caps: its agents', relays' and installs' on the container
+        # backend, its checks' and own images' on either
+        if self.backend == "container" or self.container_check or owns:
+            try:
+                # Docker can drop a limit with only a warning: a result would look limited when it was not
+                not_applied = container.unenforced(self.image or limits.PROBE_IMAGE, self.container_limits)
+            except container.Unavailable as e:
+                raise Refused(str(e))
+            if not_applied:
+                raise Refused("this machine's engine does not apply " + "; ".join(
+                    f"{limits.BY_KEY[k].label} ({limits.explain(k, self.container_limits[k], why)})" for k, why in not_applied.items()))
         # on the container backend the agent's packages are installed in the base image, with the Node, uv and libc it runs on
         image = self.image if self.backend == "container" else None
         run_in = (lambda cmd, where, env=None: container.install_argv(image, where, cmd, env)) if image else None
@@ -876,7 +906,6 @@ class Run:
             raise Refused(f"could not install what the run needs: {e}")
         # An own image has none of what the agent runs on: it is mounted in, fetched once on this machine.
         self.runtimes: Dict[str, tuple] = {}
-        owns = any(definitions.own_image(e) for e in (self.bench.get("environments") or {}).values())
         if owns and self.other["_kind"] == "agent" and self.backend == "container" and self.runtimes_needed():
             try:
                 with p.stage("runtime", start="fetching " + ", ".join(self.runtimes_needed()), name=",".join(self.runtimes_needed())):
@@ -1330,7 +1359,8 @@ class Run:
         extra = install.process_env(definitions.driver_install(self.bench), drv, home) if drv else {}
         return base_env(home, {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                                "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONDONTWRITEBYTECODE": "1",
-                               **option_env(getattr(self, "bench_options", {})), **self.embeddings_env()})
+                               **option_env(getattr(self, "bench_options", {})), **self.embeddings_env(),
+                               **limits.environment(getattr(self, "constraints", {}))})
 
     def embeddings_env(self) -> dict:
         """The driver's (and its MCP servers') search calls: one OpenAI base URL, with embeddings
@@ -1361,9 +1391,27 @@ class Run:
         with self.progress.stage("environment", cached=container.present(tag), start=f"building {tag}", name=name):
             return container.image_for(self.bench, setup, self.ds, work)
 
+    @staticmethod
+    def scope_ready(wanted: dict, refuse: bool = True) -> dict:
+        """What a scope gives each process the run starts here: ``wanted``, once
+        systemd here was seen to hold each cap of it (``constraints.scope_check``);
+        refused otherwise. Without ``refuse`` (the container backend: the caps
+        hold on its containers, and only its drivers run here) a driver no
+        scope holds runs unlimited instead. Without a scope, ``cpu_set`` stays
+        the run's affinity (``constraints.confine``), and nothing is wrapped."""
+        if not wanted:
+            return {}
+        found = limits.scope_check(wanted)
+        lost = [k for k in wanted if not limits.BY_KEY[k].machine and k not in found["enforced"]]
+        if lost and refuse:
+            raise Refused("systemd does not enforce on this machine's processes " + "; ".join(
+                f"{limits.BY_KEY[k].label} ({found['why'] or limits.explain(k, wanted[k], found['refused'][k], scope=True)})" for k in lost))
+        return {} if found["why"] else wanted
+
     def place(self, rl, cmd: List[str], env: dict, workdir: str, home: str, interactive: bool = True, box=None):
-        """A unit's command and environment as they are started: unchanged on
-        the local backend; in a container, ``docker run`` on the unit's network,
+        """A unit's command and environment as they are started: on the local
+        backend in a systemd scope when the machine sets caps
+        (``constraints.wrap``); in a container, ``docker run`` on the unit's network,
         with the folders it reads at their own paths and the image's ``PATH``
         behind the install's. The secrets its environment sends the agent
         (``to: agent``) are added to its environment - in a container passed by
@@ -1380,7 +1428,7 @@ class Run:
             argv = box.exec_argv(container.in_runtime(cmd, box.runtimes), inside, path, interactive=interactive)
             return argv, container.program_env(inside)
         if self.backend == "local":
-            return cmd, env
+            return limits.wrap(cmd, env, getattr(self, "scope_limits", {}))
         ws = os.path.join(os.path.dirname(home), "workspace")
         # What the agent's container sees: its workspace and home, its own
         # install and definition, and the files its MCP servers need - never
@@ -1487,8 +1535,8 @@ class Run:
                 runtimes = self.runtimes
             box = container.Box(self.name, tag, image, workdir=setup.get("workdir") or cfg["workdir"], path=cfg["path"],
                                 network=rl.names["network"] if isinstance(rl, container.Unit) else None,
-                                mounted=mounted, runtimes=runtimes, memory_mb=spec.get("memory_mb"), cpus=spec.get("cpus"),
-                                app=APP, env=setup.get("env")).start()
+                                mounted=mounted, runtimes=runtimes, app=APP, env=setup.get("env"),
+                                task={k: spec[k] for k in ("cpus", "memory_mb") if k in spec}).start()
             for name in runtimes:
                 why = box.runtime_problem(name)
                 if why:

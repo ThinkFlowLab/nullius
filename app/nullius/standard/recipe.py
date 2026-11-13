@@ -28,7 +28,8 @@ the runs page groups them and ``cli merge`` puts them together. A shard's
 ``limit`` is its own. ``backend``: ``local`` processes, or ``container`` - each
 unit's agent or capability in a container, ``docker`` its earlier name - which a
 host must have Docker or Podman for (``docker`` in the result: the run checks it
-before anything is sent).
+before anything is sent). Each machine's constraints in Settings
+(``nullius.constraints``) go on its command.
 """
 from __future__ import annotations
 
@@ -37,7 +38,7 @@ import re
 import shlex
 from typing import Callable, Dict, List, Optional
 
-from nullius import hosts, providers
+from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
 from nullius.standard import hostreq, definitions, ledger, match, ports, prove
 
@@ -489,6 +490,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         missing = unpriced([m for m in dict.fromkeys(called) if isinstance(m, str) and m])
         if missing:
             add("limits", f"A spending cap needs a price for {', '.join(missing)}: update the price list in Settings, or set a price there.")
+    try:
+        for t in targets:                                     # each machine's constraints go on its command
+            limits.of(t)
+    except ValueError as e:
+        add("where", f"{e}: fix it in Settings.")
     if errors:
         return out
     nouns = (b.get("units") or {}).get("nouns", "units")
@@ -528,7 +534,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
                  *(["--backend", "container"] if backend == "container" else []),
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
-                 *(["--shard", f"{index}/{of}", "--launch", launch] if of > 1 else []), "--from-run"]
+                 *(["--shard", f"{index}/{of}", "--launch", launch] if of > 1 else []),
+                 *limits.cli_words(limits.of(targets[index - 1])), "--from-run"]
         return " ".join(shlex.quote(w) for w in words) + ' --jobs "${NULLIUS_JOBS:-jobs_standard}"'
 
     def script_for(d: dict, p: dict, command: str, index: int) -> str:

@@ -34,6 +34,7 @@ class Table(unittest.TestCase):
         read -= {"NULLIUS_MCP_AT"}                                        # the MCP bridge's, in the agent's container (standard/mcp_bridge.py)
         read -= {"DOCKER_CONFIG"}                                         # docker's own: where it keeps a login (sandbox.py reads the username)
         read -= {"DOCKER_HOST", "DOCKER_CONTEXT"}                         # docker's own: when set, container.py leaves the current context to them
+        read -= {"XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}          # the user's session: where systemd-run finds its manager (constraints.session)
         missing = sorted(v for v in read if v not in settings.BY_NAME and v not in settings.STARTUP)
         self.assertEqual(missing, [], f"read by the application but neither on the page nor a named start-up option: {missing}")
         self.assertEqual(sorted(set(settings.BY_NAME) & set(settings.STARTUP)), [])
@@ -42,7 +43,7 @@ class Table(unittest.TestCase):
 
     def test_the_page_offers_what_a_person_sets_and_no_more(self):
         self.assertEqual([v.name for v in settings.VARIABLES],
-                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "SYSTEM_ONE_PROVIDER", "SYSTEM_ONE_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_MODEL", "AGENT_KEYS", "HOSTS"])
+                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "SYSTEM_ONE_PROVIDER", "SYSTEM_ONE_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_MODEL", "AGENT_KEYS", "HOSTS", "HOST_CONSTRAINTS"])
         self.assertEqual(sorted(v.name for v in settings.VARIABLES if v.secret), ["ANTHROPIC_API_KEY", "MODEL_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"])
         self.assertEqual(settings.BY_NAME["MODEL_API_URL"].kind, "endpoint")                         # shown, so it may hold no credential
         for name in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"):

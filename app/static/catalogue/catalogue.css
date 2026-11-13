@@ -130,24 +130,11 @@
 @media(max-width:640px){.setup-wrap.import-setup{margin:0}.import-setup h1{font-size:29px}.import-setup .setup-card{padding:22px 18px}.import-setup .drop{padding:26px 17px}.import-setup .field-label{font-size:12px}.import-setup .path-row input{font-size:16px}}
 @media(pointer:coarse){.import-setup .add-btn,.import-setup .row-x{min-width:44px;min-height:44px}}
 
-/* Settings: the run hosts list and what testing each one said. */
-.settings-page .settings-list { display: grid; gap: 6px; }
+/* Settings: what testing a run host said. */
 .settings-page .settings-test { font-size: 12px; color: var(--text-dim); }
 .settings-page .settings-test:empty { display: none; }
 .settings-page .settings-test.ok { color: var(--ok); }
 .settings-page .settings-test.bad { color: var(--bad); }
-
-/* The hosts chosen: chips, grey until tested, green when the host answers, red when it does not. */
-.settings-page .host-pills { display: flex; gap: 6px; flex-wrap: wrap; }
-.settings-page .host-pills:empty { display: none; }
-.settings-page .host-actions { display: flex; gap: 6px; }
-.settings-page .host-pill { gap: 6px; padding-right: 4px; }
-.settings-page .host-pill .host-name, .settings-page .host-pill .host-remove { background: none; border: 0; color: inherit; font: inherit; padding: 0; cursor: pointer; }
-.settings-page .host-pill .host-name { font-family: var(--mono); white-space: nowrap; }
-.settings-page .host-pill .settings-test { color: inherit; font-size: inherit; }
-.settings-page .host-pill .settings-test.ok, .settings-page .host-pill .settings-test.bad { color: inherit; }
-.settings-page .host-pill .host-remove { width: 18px; height: 18px; line-height: 1; border-radius: 50%; opacity: .55; }
-.settings-page .host-pill .host-remove:hover { opacity: 1; background: color-mix(in srgb, var(--bad) 20%, transparent); }
 
 /* Add a Harbor benchmark: two steps, the dataset read from Harbor, then the entry. */
 /* Find and Add side by side at the right of the title, the button the height of the box */

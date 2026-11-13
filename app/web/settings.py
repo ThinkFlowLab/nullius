@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import os
+import shutil
+import socket
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
-from nullius import execution, hosts, paths, prices, providers, sandbox, secrets, settings
+from nullius import constraints, execution, hosts, paths, prerequisites, prices, providers, sandbox, secrets, settings
+from nullius.standard import container
 from nullius.standard import recipe as standard_recipe
 from nullius.judge import client
 
@@ -48,6 +51,7 @@ def settings_page():
                            unread=[dict(u, inherited=u["name"] not in withheld, startup=u["instead"] in settings.STARTUP)
                                    for u in settings.unread(shared.ENV_FILE)],
                            prices=prices.state(),
+                           machines=_machines(), constraint_table=constraints.TABLE,
                            ssh_hosts=hosts.scan_ssh_config(), judges=(client.system_one(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), s1_providers=client.SYSTEM_ONE_PROVIDERS, agent_keys=settings.agent_key_names(),
                            endpoints=[(i, os.environ.get(f"MODEL_{i}_NAME") or i) for i in settings.endpoint_ids()],
                            tested={k: _shown(v) for k, v in providers.tests().items() if isinstance(v, dict)})
@@ -72,19 +76,114 @@ def settings_provider_test():
     return jsonify(_shown(got))
 
 
+def _size(mb: int) -> str:
+    """Memory as the constraint fields read it: whole gigabytes in GB, else MB."""
+    return f"{mb // 1024} GB" if mb and mb % 1024 == 0 else f"{mb} MB"
+
+
+def _engine(found: dict, whole: bool = False) -> str:
+    """The engine a machine's last test found: its name, as the list says it,
+    or ``whole`` with its version and how it runs, as its Info says it."""
+    e, t = found.get("engine") or {}, found.get("test") or {}
+    if e:
+        name = "Podman" if e["kind"] == "podman" else "Docker"
+        return name + (f" {e['version']}" + (", rootless" if e.get("rootless") else "")
+                       + (", userns-remap" if e.get("userns_remap") else "") if whole else "")
+    if not found:
+        return "Not tested"
+    if not t.get("ok"):
+        return "Unknown"                     # not reached
+    return f"{t['engine'].capitalize()} does not answer" if t.get("engine") else "None"
+
+
+def _capacity(cap: dict) -> str:
+    """A machine's capacity in a few words: CPUs, memory, its GPUs and their
+    memory, rounded to whole GB (MB below one); Info has the exact values."""
+    if not cap:
+        return "Not tested"
+    gb = lambda mb: f"{round(mb / 1024)} GB" if mb >= 1024 else f"{mb} MB"
+    gpus = cap.get("gpus") or []
+    return " · ".join([*([f"{cap['cpus']} CPUs"] if cap.get("cpus") else []), *([gb(cap["memory_mb"])] if cap.get("memory_mb") else []),
+                       *([f"{len(gpus)} GPU{'s' if len(gpus) > 1 else ''}, {gb(sum(g['memory_mb'] for g in gpus))}"] if gpus else [])])
+
+
+def _machine(entry: str, label: str, host=None, found=None) -> dict:
+    """One machine as the Run hosts list shows it: its constraints, what its
+    last test found (``found``, ``constraints.load``) and what Settings warns of."""
+    values, cap = constraints.of(entry, strict=False), (found or {}).get("capacity") or {}   # an invalid setting: said above the list
+    label_of = lambda k: constraints.BY_KEY[k].label if k in constraints.BY_KEY else k
+    sd = (found or {}).get("systemd")
+    return {"entry": entry, "label": label, "host": host, "found": found or {}, "engine_less": constraints.engine_less(found),
+            "scope_ok": constraints.scope_ok(found),
+            # a scope's: what it held, or why there is none; the test probes with samples
+            "scope": sd and {"why": sd.get("why", ""), "enforced": [label_of(k) for k in sd.get("enforced") or []],
+                             "refused": [(label_of(k), constraints.explain(k, constraints.samples(cap.get("local") or cap).get(k, ""), why, scope=True)
+                                          + ("; applied instead: the process can widen it" if getattr(constraints.BY_KEY.get(k), "machine", "") else ""))
+                                         for k, why in (sd.get("refused") or {}).items()]},
+            "not_enforced": len(constraints.not_enforced(values, found)), "undelegated": constraints.undelegated(found),
+            "engine_name": _engine(found or {}), "engine_text": _engine(found or {}, whole=True), "capacity_text": _capacity(cap), "memory_text": _size(cap["memory_mb"]) if cap.get("memory_mb") else "",
+            "local_text": ", ".join([*([f"{cap['local']['cpus']:g} CPUs"] if "cpus" in cap.get("local", {}) else []),
+                                     *([_size(cap["local"]["memory_mb"])] if "memory_mb" in cap.get("local", {}) else [])]),
+            "enforced": [label_of(k) for k in (found or {}).get("enforced") or []],
+            "refused": [(label_of(k), constraints.explain(k, constraints.samples(cap).get(k, ""), why))   # the test probes with samples
+                        for k, why in ((found or {}).get("refused") or {}).items()],
+            "warnings": constraints.warnings(values, found),
+            "shown": {k: "none" if v == [] else constraints.spell(v) for k, v in values.items()},
+            "capacity": {c.key: ("GPU " + ", ".join(str(g["index"]) for g in cap[c.capacity]) if cap[c.capacity] else "no GPU") if c.key == "gpu_ids"
+                         else constraints.spell(cap[c.capacity]) for c in constraints.TABLE if c.capacity in cap}}
+
+
+def _machines():
+    """This machine, then each host."""
+    try:
+        listed = hosts.parse_list(os.environ.get("HOSTS", ""))
+    except ValueError:
+        listed = []
+    found = constraints.load()
+    return [_machine(constraints.LOCAL, "This machine", None, found.get(constraints.LOCAL))] + \
+        [_machine(h.entry, h.label, h, found.get(h.entry)) for h in listed]
+
+
 @app.route("/settings/hosts/test", methods=["POST"])
 def settings_host_test():
-    """One host, one ssh: does it answer without a prompt, and are uv, docker
-    and harbor there. Same guards as Save; nothing is stored, nothing but
-    the probe is sent. The entry need not be saved yet."""
+    """One machine: for a host, one ssh - does it answer without a prompt,
+    and are uv, docker and harbor there. Then, where docker answers, its
+    capacity and the constraints its engine enforces (``hosts.measure``).
+    What it found is kept for the machine's Info and warnings, and its Info
+    comes back rendered (``info``). Same guards as Save. The entry need not be
+    saved yet; ``local`` is this machine."""
     shared._require_csrf()
     if not _local_client():
         abort(403, description="Hosts are tested from a browser on the application host only.")
-    try:
-        host = hosts.parse(request.form.get("entry", ""))
-    except ValueError as e:
-        return jsonify(ok=False, error=str(e)), 400
-    return jsonify(hosts.test(host))
+    entry = request.form.get("entry", "")
+    if entry == constraints.LOCAL:
+        # here: always reached, and asked as the Review step asks (prerequisites.check_here) - one probe, many rows
+        host, rows = None, {r["name"]: r for r in prerequisites.check_here(
+            ["engine", "uv", "harbor"], docker=lambda: prerequisites.docker_here(fresh=True))}
+        why = None if rows["engine"]["state"] == "ok" else rows["engine"]["detail"]
+        there = bool(shutil.which(container.DOCKER))
+        result = {"entry": entry, "ok": True, "error": why, "hostname": socket.gethostname(),
+                  "uv": rows["uv"]["state"] == "ok", "harbor": rows["harbor"]["state"] == "ok",
+                  "engine": container.DOCKER if there else None, "docker": there and not container.podman(),
+                  "podman": there and container.podman(), "docker_ok": why is None}
+    else:
+        try:
+            host = hosts.parse(entry)
+        except ValueError as e:
+            return jsonify(ok=False, error=str(e)), 400
+        result = hosts.test(host)
+    found = {"test": {k: result.get(k) for k in ("ok", "latency_ms", "hostname", "uv", "docker", "docker_ok", "docker_userns",
+                                                 "podman", "podman_ok", "engine", "harbor",
+                                                 "harbor_version", "error") if k in result}}
+    if result["ok"]:                     # the capacity on every machine; the engine's part where one answers
+        found.update(hosts.measure(host, engine=result.get("engine")))
+        result["constraints"] = dict(found, warnings=constraints.warnings(constraints.of(entry, strict=False), found))
+    constraints.save(entry, found)
+    m = _machine(entry, "This machine" if host is None else host.label, host, constraints.load().get(entry))
+    result["info"] = render_template("settings/machine_info.html", m=m, writable=True)
+    result["cells"] = {"engine": m["engine_name"], "capacity": m["capacity_text"]}
+    result["not_enforced"] = m["not_enforced"]
+    return jsonify(result)
 
 
 def _host_form():
@@ -235,6 +334,37 @@ def _provider_settings(card: str, ids) -> list:
     return _PROVIDER_SETTINGS.get(card, [])
 
 
+def _host_changed(current):
+    """A host edited (``host_from`` to ``host_to``) or deleted (``host_from``
+    alone): HOSTS and HOST_CONSTRAINTS saved together, the constraints under
+    the host's new entry or gone, and its last test with them: kept, marked
+    stale when the entry now reaches another machine, or forgotten."""
+    if current["HOSTS"]["source"] == "environment":
+        return _saved_response("HOSTS is set in the environment: hosts are changed there.", False, "#hosts")
+    old, new, before = request.form.get("host_from", ""), request.form.get("host_to"), os.environ.get("HOSTS", "")
+    try:
+        listed, host = hosts.replace(before, old, new.strip() if new is not None else None)
+    except ValueError as e:
+        return _saved_response(str(e), False, "#hosts")
+    if host and host.entry == old:
+        return _saved_response("Nothing changed.")
+    try:
+        settings.save_many(shared.ENV_FILE, {"HOSTS": listed or None,
+                                             constraints.SETTING: constraints.rekey(os.environ.get(constraints.SETTING, ""), old, host and host.entry)})
+    except ValueError as e:
+        return _saved_response(str(e), False, "#hosts")
+    except OSError as e:
+        return _saved_response(f"Not written: {e.strerror or e}", False, retryable=True)
+    constraints.move(old, host and host.entry, stale=bool(host) and not hosts.same_machine(hosts.parse(old), host))
+    said, notes = "Host saved" if host else "Host deleted", _forget_keys(before, listed or "")
+    return _saved_response(" ".join([said + ".", *notes]) if notes else said)
+
+
+def _forget_keys(before: str, after: str) -> list:
+    """Each key file uploaded for a host of ``before`` that ``after`` no longer names, deleted; what could not be, said."""
+    return [f"The key file for {os.path.basename(p)} could not be removed: {why}." for p, why in hosts.forget_keys(before, after)]
+
+
 def _settings_return():
     return url_for("settings_page", embedded="1") if request.form.get("embedded") == "1" else url_for("settings_page")
 
@@ -259,6 +389,8 @@ def settings_save():
     if not _local_client():
         abort(403, description="Settings are written from a browser on the application host only.")
     current = {s["name"]: s for s in settings.states(shared.ENV_FILE)}
+    if "host_from" in request.form:
+        return _host_changed(current)
     changes = {}
     names = settings.agent_key_names()
     ids = settings.endpoint_ids()
@@ -319,6 +451,5 @@ def settings_save():
     later = any(current.get(n, {}).get("source") == "environment" for n in changes)
     notes = ["Environment overrides still apply."] if later else []
     if "HOSTS" in changes and current["HOSTS"]["source"] == "file":   # a list from the environment is not this page's
-        notes += [f"The key file for {os.path.basename(p)} could not be removed: {why}."
-                  for p, why in hosts.forget_keys(current["HOSTS"]["shown"], changes["HOSTS"] or "")]
+        notes += _forget_keys(current["HOSTS"]["shown"], changes["HOSTS"] or "")
     return _saved_response(" ".join(["Saved."] + notes) if notes else "Saved", reload=cards)
