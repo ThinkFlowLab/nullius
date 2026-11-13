@@ -1,6 +1,7 @@
 """The Settings page and its one Save."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import socket
@@ -52,8 +53,8 @@ def settings_page():
                                    for u in settings.unread(shared.ENV_FILE)],
                            prices=prices.state(),
                            machines=_machines(), constraint_table=constraints.TABLE,
-                           ssh_hosts=hosts.scan_ssh_config(), judges=(client.system_one(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), s1_providers=client.system_one_providers(os.environ), agent_keys=settings.agent_key_names(),
-                           endpoints=[(i, os.environ.get(f"MODEL_{i}_NAME") or i) for i in settings.endpoint_ids()],
+                           provider_cards=provider_cards({r["name"]: r for r in rows}),
+                           ssh_hosts=hosts.scan_ssh_config(), judges=(client.system_one(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), s1_providers=client.system_one_providers(os.environ), agent_keys=settings.agent_key_names(), reserved_agent_keys=settings.reserved_agent_keys(),
                            tested={k: _shown(v) for k, v in providers.tests().items() if isinstance(v, dict)})
 
 
@@ -346,17 +347,102 @@ def settings_prices_remove():
     return jsonify(ok=True, **prices.state())
 
 
-# The settings each built-in provider card holds; an OpenAI-compatible endpoint's are its own.
-_PROVIDER_SETTINGS = {"typesafe": ["TYPESAFE_API_KEY"], "openrouter": ["OPENROUTER_API_KEY"], "openai": ["OPENAI_API_KEY"],
-                      "anthropic": ["ANTHROPIC_API_KEY"], "local": ["MODEL_API_URL", "MODEL_API_KEY"]}
-
-
 def _provider_settings(card: str, ids) -> list:
-    """The settings a provider card names (``local:<id>``, an endpoint), or [] for none."""
-    kind, _, i = card.partition(":")
-    if kind == "local" and i:
+    """The settings a provider card holds (``custom:<id>``, a custom provider), or [] for none."""
+    kind, i = providers.split(card)
+    if kind == "custom" and i:
         return settings.endpoint_settings(i) if i in ids else []
-    return _PROVIDER_SETTINGS.get(card, [])
+    if kind == "custom":
+        return ["MODEL_API_URL", "MODEL_API_KEY"]
+    return [providers.setting_of(kind), providers.key_setting(kind)] if kind in providers.PRESETS else []
+
+
+def _record_row(setting: str, field: str, value: str, held: list, problem: str = "") -> dict:
+    """A field of a provider's record as the field macro reads a setting's state: ``<SETTING>.<field>``,
+    read-only (``locked``) when the process environment sets it. A URL that holds a credential is shown
+    without it."""
+    held = field in held or field.partition(".")[0] in held          # the environment's endpoints hold each of them
+    return {"name": f"{setting}.{field}", "shown": settings.endpoint_url_shown(value) if value and field != "name" else value or "", "secret": False, "kind": "text", "locked": held,
+            "source": "environment" if held else "file" if value else "unset",
+            "problem": problem, "advice": "", "shadowed": False}
+
+
+def provider_cards(by: dict, env=None) -> list:
+    """Each provider's card, from the registry: its name, fixed base (a preset's), its fields as rows
+    (``field``) with how each is edited, its Endpoints rows, what it holds and whether it is ready."""
+    env = os.environ if env is None else env
+    recs = providers.records(env)
+    if not any(r["id"] == "custom" for r in recs):
+        recs.insert(len(providers.PRESETS), providers.record("custom", env))
+    out = []
+    for rec in recs:
+        setting, key = providers.setting_of(rec["id"]), rec["key"]
+        held = settings.locked(setting) if setting else []
+        if rec["preset"]:
+            fields = [(by[key], "Key", "key")]
+        elif not setting:
+            fields = [(dict(by["MODEL_API_URL"]), "Base", "plain"), (by[key], "Key", "optional-key")]
+        else:
+            problem = settings.endpoint_url_problem(rec["base"]) if rec["base"] else None
+            fields = [(_record_row(setting, "name", rec["name"], held), "Name", "plain"),
+                      (_record_row(setting, "base", rec["base"], held, f"This URL must be {problem}." if problem else ""), "Base", "plain"),
+                      (by[key], "Key", "optional-key")]
+        hint = providers.suggestions(rec["base"])
+        rows = [] if not setting else [
+            {"protocol": p, "format": d["label"], "fixed": providers.url(rec, p) if rec["preset"] and p in providers.PRESETS[rec["id"]]["endpoints"] else "",
+             "row": _record_row(setting, f"endpoints.{p}", rec["endpoints"].get(p, ""), held),
+             "placeholder": settings.endpoint_url_shown(providers.join(rec["base"], d["path"])) or d["path"], "suggestion": hint.get(p, "")}
+            for p, d in providers.PROTOCOLS.items()]
+        names = _provider_settings(rec["id"], settings.endpoint_ids(env))
+        configured = any(by.get(n, {}).get("source", "unset") != "unset" for n in names)
+        ready = providers.ready(rec, env)
+        refused = not rec["preset"] and bool(rec["base"]) and not ready
+        out.append({"key": rec["id"], "title": rec["name"], "preset": rec["preset"], "base": rec["base"] if rec["preset"] else "",
+                    "run": providers.split(rec["id"])[0] in providers.PROVIDERS,         # a provider a run is sent to
+                    "fields": fields, "endpoints": rows, "record": by.get(setting) if setting else None, "ignored": rec["ignored"],
+                    "configured": configured, "ready": ready, "held_by_process": any(by.get(n, {}).get("source") == "environment" for n in names),
+                    "state": ("Endpoint saved" if not rec["preset"] else "Key saved") if ready else "Fix the endpoint URL" if refused
+                             else ("Endpoint required" if configured else "Not configured"),
+                    "testable": rec["id"] != "typesafe"})
+    return out
+
+
+def _record_changes(form, filed: dict) -> dict:
+    """The record settings a form's ``value:<SETTING>.<field>`` entries change, written whole into the
+    file's layer: a name or a base replaces (empty keeps it), an endpoint is set or, empty, removed. A
+    custom provider's old name and URL lines move into its record, and leave the file."""
+    posted: dict = {}
+    for k, v in form.items():
+        setting, dot, field = k[6:].partition(".") if k.startswith("value:") else ("", "", "")
+        if dot and settings.is_record(setting) and (field in ("name", "base") or field.partition(".")[0] == "endpoints"):
+            posted.setdefault(setting, {})[field] = v.strip()
+    changes: dict = {}
+    for setting, fields in posted.items():
+        layer = dict(settings.json_object(filed.get(setting)) or {})
+        before = dict(layer)
+        if setting not in settings.BY_NAME:
+            for f, old in (("name", setting + "_NAME"), ("base", setting + "_API_URL")):
+                if old not in filed:
+                    continue
+                if filed[old] and f not in layer:
+                    if providers.record_problem(setting, json.dumps({f: filed[old]})):
+                        continue          # a value the record cannot take stays, read as before: it never blocks this edit
+                    layer[f] = filed[old]
+                changes[old] = None
+        for field, v in fields.items():
+            kind, _, proto = field.partition(".")
+            if kind != "endpoints":
+                if v:
+                    layer[kind] = v
+            elif v:
+                layer["endpoints"] = {**(layer.get("endpoints") or {}), proto: v}
+            elif proto in (layer.get("endpoints") or {}):
+                layer["endpoints"] = {p: e for p, e in layer["endpoints"].items() if p != proto}
+        if not layer.get("endpoints", True):
+            layer.pop("endpoints")
+        if layer != before:
+            changes[setting] = json.dumps(layer, ensure_ascii=False) if layer else None
+    return {n: v for n, v in changes.items() if v is not None or n in filed}
 
 
 def _host_changed(current):
@@ -452,14 +538,17 @@ def settings_save():
         if env:
             return _saved_response(f"{', '.join(env)} is set in the process environment; remove it there.", False, "#providers")
         changes.update({n: None for n in held if current[n]["source"] != "unset"})
-    # An endpoint added by name and URL, its key optional
+    # A record's fields, edited on its card: each record written whole into the file's layer
+    changes.update(_record_changes(request.form, settings.in_file(shared.ENV_FILE)))
+    # A custom provider added by name and base, its key optional
     new = {part: (request.form.get("endpoint_" + part) or "").strip() for part in ("name", "url", "key")}
     if any(new.values()):
         if not (new["name"] and new["url"]):
-            return _saved_response("An endpoint needs its name and its URL.", False, "#providers")
+            return _saved_response("A provider needs its name and its base URL.", False, "#providers")
         i = settings.new_endpoint_id(new["name"], set(ids) | set(settings.endpoint_ids(settings.in_file(shared.ENV_FILE))))
-        changes.update({f"MODEL_{i}_NAME": new["name"], f"MODEL_{i}_API_URL": new["url"], **({f"MODEL_{i}_API_KEY": new["key"]} if new["key"] else {})})
-    cards = bool(gone) or any(settings.endpoint_variable(n) and (n.endswith("_NAME") or n not in current or changes[n] is None) for n in changes)
+        changes.update({f"MODEL_{i}": json.dumps({"name": new["name"], "base": new["url"]}, ensure_ascii=False),
+                        **({f"MODEL_{i}_API_KEY": new["key"]} if new["key"] else {})})
+    cards = bool(gone) or any(settings.endpoint_variable(n) and (settings.is_record(n) or n not in current or changes[n] is None) for n in changes)
     if not changes:
         return _saved_response("Nothing changed.")
     try:
@@ -469,7 +558,7 @@ def settings_save():
     except OSError as e:
         return _saved_response(f"Not written: {e.strerror or e}", False, retryable=True)
     # a provider whose settings changed is no longer what its last test asked
-    stale = {card.replace("local", "custom", 1): None for card in [*_PROVIDER_SETTINGS, *(f"local:{i}" for i in ids)]
+    stale = {card: None for card in [*providers.PRESETS, "custom", *(f"custom:{i}" for i in ids)]
              if set(_provider_settings(card, ids)) & set(changes)}
     if stale.keys() & providers.tests().keys():
         providers.remember(stale)

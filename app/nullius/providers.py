@@ -164,6 +164,19 @@ def record(choice: str, env=None) -> dict:
             "preset": bool(preset), "ignored": ignored}
 
 
+# What a base on a preset's host also serves, its endpoints, suggested on Settings' Endpoints rows: a hint,
+# never saved unasked.
+KNOWN_HOSTS = {urllib.parse.urlsplit(d["base"]).hostname: {p: urllib.parse.urlsplit(join(d["base"], e)).path for p, e in d["endpoints"].items()}
+               for d in PRESETS.values()}
+
+
+def suggestions(base: str) -> dict:
+    """{protocol: full URL} a base on a known host suggests (``KNOWN_HOSTS``); {} for another host."""
+    parts = urllib.parse.urlsplit(base or "")
+    host = parts.netloc.rpartition("@")[2]           # never a user or password the base may hold
+    return {p: f"{parts.scheme}://{host}{path}" for p, path in KNOWN_HOSTS.get(parts.hostname or "", {}).items()}
+
+
 def records(env=None) -> List[dict]:
     """Every provider: the presets, then the OpenAI-compatible endpoint at MODEL_API_URL when it is set, then
     each custom provider by name."""

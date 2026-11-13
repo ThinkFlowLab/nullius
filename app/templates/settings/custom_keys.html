@@ -48,6 +48,7 @@
   </div>
   {% endfor %}
   <p class="st-about" data-keys-empty{% if benchmark_access or agent_keys %} hidden{% endif %}>No custom keys yet.</p>
+  {% for name in reserved_agent_keys or [] %}<p class="st-note st-bad">AGENT_KEYS lists {{ name }}, which is now the name of a Nullius setting. Add this key again with a different name.</p>{% endfor %}
   <div id="AGENT_KEYS">
     {% for name in agent_keys %}{% if by.get(name) %}
     {% set r = by[name] %}

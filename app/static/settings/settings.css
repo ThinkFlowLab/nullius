@@ -312,6 +312,9 @@
 .st-provider-summary { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .st-provider-summary > div { flex: 1; min-width: 0; }
 .st-provider-summary h3 { overflow-wrap: anywhere; }
+.st-endpoints { margin-top: 4px; }
+.st-endpoint-rows { display: flex; flex-direction: column; gap: 18px; padding-top: 8px; }
+.st-endpoints > summary { display: flex; align-items: center; padding: 10px 0; font-size: 13px; }
 .st-provider-summary .st-about { margin-top: 3px; }
 .st-provider-done { align-self: flex-end; }
 .st-provider-ask { position: static; width: 420px; max-width: 100%; box-sizing: border-box; margin: 12px 0 0 auto; }

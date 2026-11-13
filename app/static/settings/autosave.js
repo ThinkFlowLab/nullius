@@ -52,12 +52,12 @@
         return false;
       }
     }
-    // A new endpoint: its name, URL and optional key go together.
+    // A new custom provider: its name, base and optional key go together.
     const endpointChanged = changed.some(([key]) => key.startsWith('endpoint_'));
     if (endpointChanged) {
       for (const part of ['name', 'url', 'key']) body.set('endpoint_' + part, current.get('endpoint_' + part) || '');
       if (!body.get('endpoint_name') || !body.get('endpoint_url')) {
-        say('Enter the endpoint name and its URL.', true);
+        say('Enter the provider name and its base URL.', true);
         return false;
       }
     }
