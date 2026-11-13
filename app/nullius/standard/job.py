@@ -529,6 +529,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
                  bench_options: Optional[dict] = None,
                  simulator: str = "", prices: Optional[dict] = None, units_file: Optional[dict] = None,
+                 constraints: Optional[dict] = None,
                  served_by: Optional[Dict[str, List[str]]] = None):
     """``unsandboxed`` is true for an agent on the local backend only: in a
     container (``backend``, ``image``) it is not. ``standard.options`` holds
@@ -541,6 +542,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     ``simulator``: the models that graded and that played the user, when the
     benchmark has them. ``prices``: the rows its models' costs are
     estimated from and where the user's list came from, when it has any.
+    ``constraints``: what the machine allowed the run (``nullius.constraints``), when it set any.
     ``served_by``: by model, the serving providers the run let answer it
     (``--served-by``), said only for a run that pinned them."""
     with open(os.path.join(job_dir, "config.json"), "w") as f:
@@ -553,6 +555,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"launch": launch} if launch else {}), **({"shard": shard} if shard else {}),
                                 **({"units_file": units_file} if units_file else {}),
                                 **({"repeat": repeat} if repeat > 1 else {}), **({"prices": prices} if prices else {}),
+                                **({"constraints": constraints} if constraints else {}),
                                 **({"served_by": dict(sorted(served_by.items()))} if served_by else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,

@@ -15,6 +15,10 @@ and whether ``uv``, ``docker``, ``podman`` and ``harbor`` answer there, and
 whether its docker has ``userns-remap``. It runs ssh with
 ``BatchMode=yes`` so a password prompt is a refusal, not a hang, and it never
 sends anything but that one command. Nothing is stored beyond the host list.
+
+``measure`` asks a machine, a host or this one, for its capacity and which
+constraints its engine and its systemd enforce (``nullius.constraints``): a
+second command, which starts throwaway containers and scopes there.
 """
 from __future__ import annotations
 
@@ -23,9 +27,9 @@ import re
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
-from nullius import paths
+from nullius import constraints, paths
 
 _ALIAS = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _MANUAL = re.compile(r"^(?P<user>[A-Za-z0-9._-]+)@(?P<host>[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(?::(?P<port>[0-9]{1,5}))?(?::(?P<key>(?:/|~/)[^\s,:]+))?$")
@@ -108,6 +112,25 @@ def parse_list(text: str) -> List[Host]:
     return out
 
 
+def replace(text: str, old: str, new: Optional[str]) -> Tuple[str, Optional[Host]]:
+    """The list with ``old`` changed to ``new`` in its place, or taken out when
+    ``new`` is None, and the new Host; ValueError when ``old`` is not in it,
+    ``new`` is not an entry or is one already."""
+    listed = parse_list(text)
+    entries = [h.entry for h in listed]
+    if old not in entries:
+        raise ValueError(f"{old!r} is not one of the hosts")
+    host = parse(new) if new is not None else None
+    if host and host.entry != old and host.entry in entries:
+        raise ValueError(f"{host.label} is a host already")
+    return ", ".join(host.entry if e == old else e for e in entries if host or e != old), host
+
+
+def same_machine(a: Host, b: Host) -> bool:
+    """Whether two entries reach the same machine: the same alias, or user, address and port."""
+    return (a.kind, a.alias, a.user, a.host, a.port) == (b.kind, b.alias, b.user, b.host, b.port)
+
+
 def validate_list(text: str) -> Optional[str]:
     """None when every entry parses, else what was wrong."""
     try:
@@ -162,10 +185,10 @@ def scan_ssh_config(path: Optional[str] = None) -> List[dict]:
 
 
 
-def subprocess_run(argv: List[str], timeout: float) -> tuple:
+def subprocess_run(argv: List[str], timeout: float, env: Optional[dict] = None) -> tuple:
     """(returncode, stdout, stderr); a timeout is a return code of its own."""
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL, env=env)
         return proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired:
         return 124, "", f"no answer within {int(timeout)} s"
@@ -211,6 +234,32 @@ def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, prog
     result["engine"] = "docker" if result["docker"] else "podman" if result["podman"] else None
     result["ok"] = True
     return result
+
+
+def measure(host: Optional[Host], run: Optional[Callable] = None, timeout: float = 300.0, engine: Optional[str] = None) -> dict:
+    """The machine's capacity and which constraints its engine and a systemd
+    scope enforce (``constraints.read``), from ``constraints.probe`` and
+    ``constraints.scope_probe`` run there: over ssh on
+    ``host`` with ``engine``, the program ``test`` found there (docker by
+    default); or here when it is None, with the standard's own engine and the
+    options its units start with (``container``). ``run`` as in ``test``."""
+    if host:
+        program = engine or "docker"
+        options = ["--security-opt", "no-new-privileges", *(["--security-opt", "label=disable"] if program == "podman" else [])]
+    else:
+        from nullius.standard import container
+        program, options = container.DOCKER, [*container._userns(), "--user", container._user(), *container._security_opt()]
+        # with the engine program's environment, as a run's check and its units: what one sees, the others do
+        run = run or (lambda argv, t: subprocess_run(argv, t, env=container.client_env()))
+    script = constraints.probe(constraints.samples(), docker=program, options=options) + "; " + constraints.scope_probe(constraints.samples())
+    argv = host.argv(script) if host else ["sh", "-c", script]
+    rc, out, err = (run or subprocess_run)(argv, timeout)
+    found = constraints.read(out, constraints.samples())
+    if rc != 0:
+        # cut short (a timeout, nothing printed): what it did not measure keeps the last test's (constraints.save)
+        found = {k: v for k, v in found.items() if v}
+        found["error"] = _reason(rc, ((err or out).strip().splitlines() or [""])[-1])
+    return found
 
 
 def _reason(rc: int, last: str) -> str:

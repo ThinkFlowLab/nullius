@@ -113,6 +113,13 @@
       if (said) said.textContent = state.label;
       const tested = card.querySelector('[data-provider-test-state]');
       if (tested && state.tested !== undefined) { tested.textContent = state.tested; tested.dataset.state = state.mark; }
+      // Remove and its question are drawn only for a saved value: take the fresh card's when that changes.
+      const remove = card.querySelector('[data-provider-remove-ask]');
+      if (!remove !== !state.remove) {
+        remove?.remove(); card.querySelector('.st-provider-ask')?.remove();
+        if (state.remove) card.querySelector('.st-provider-summary').append(state.remove);
+        if (state.ask) card.querySelector('.st-provider-summary').after(state.ask);
+      }
     }
     if (removedSelectedKey) mode = 'list';
     render();

@@ -6,6 +6,7 @@ that install them."""
 from __future__ import annotations
 
 import copy
+import os
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -320,19 +321,19 @@ class GPURequirements(unittest.TestCase):
             self.assertEqual(definitions._host({"host": {"gpu": dict(GPU, gpu_memory_mb=value)}}), [])
 
     def test_largest_card_is_used_not_the_sum_and_boundary_is_inclusive(self):
-        for output, expected in (("8192\n11264\n", TOO_SMALL), ("8192\n12000\n", None),
-                                 ("24576\n8192\n", None)):
+        for output, expected in (("0, 8192\n1, 11264\n", TOO_SMALL), ("0, 8192\n1, 12000\n", None),
+                                 ("0, 24576\n1, 8192\n", None)):
             with self.subTest(output=output), patch.object(hostreq.subprocess, "run", return_value=
                     subprocess.CompletedProcess([], 0, output, "")) as query:
                 got = hostreq.problems(BENCH, ["gpu"], which=lambda p: True)
                 self.assertEqual(got, {"gpu": expected} if expected else {})
                 query.assert_called_once_with(
-                    ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                    ["nvidia-smi", "--query-gpu=index,memory.total", "--format=csv,noheader,nounits"],
                     capture_output=True, text=True, timeout=5)
 
     def test_unreadable_memory_is_not_reported_as_too_small(self):
-        for output, code in (("", 0), ("[N/A]\n", 0), ("8192\nN/A\n", 0), ("0\n", 0),
-                             ("-1\n", 0), ("12000 MiB\n", 0), ("24576\n", 1)):
+        for output, code in (("", 0), ("0, [N/A]\n", 0), ("0, 8192\n1, N/A\n", 0), ("0, 0\n", 0),
+                             ("0, -1\n", 0), ("0, 12000 MiB\n", 0), ("0, 24576\n", 1), ("12000\n", 0)):
             with self.subTest(output=output, code=code), patch.object(hostreq.subprocess, "run",
                     return_value=subprocess.CompletedProcess([], code, output, "driver unavailable")):
                 self.assertEqual(hostreq.problems(BENCH, ["gpu"], which=lambda p: True),
@@ -356,7 +357,36 @@ class GPURequirements(unittest.TestCase):
             query.assert_not_called()
             self.assertEqual(hostreq.problems(bench, ["gpu", "larger"], which=lambda p: True),
                              {"larger": "needs at least 24000 MiB of GPU memory; largest GPU has 12000 MiB"})
-            query.assert_called_once_with()
+            query.assert_called_once_with(None)
+
+    def test_only_the_gpus_the_machine_allows_count(self):
+        """gpu_ids (the machine's constraint): the largest of the GPUs allowed,
+        none allowed refuses, every GPU when it is not set."""
+        cards = subprocess.CompletedProcess([], 0, "0, 24576\n1, 8192\n", "")
+        with patch.object(hostreq.subprocess, "run", return_value=cards):
+            self.assertEqual(hostreq.gpu_memory_mb(), 24576)
+            self.assertEqual(hostreq.gpu_memory_mb([1]), 8192)
+            self.assertIsNone(hostreq.gpu_memory_mb([5]))
+            self.assertEqual(hostreq.problems(BENCH, ["gpu"], which=lambda p: True), {})
+            self.assertEqual(hostreq.problems(BENCH, ["gpu"], which=lambda p: True, gpu_ids=[1]),
+                             {"gpu": "needs at least 12000 MiB of GPU memory; largest GPU Nullius may use has 8192 MiB"})
+            self.assertEqual(hostreq.problems(BENCH, ["gpu"], which=lambda p: True, gpu_ids=[5]),
+                             {"gpu": "no GPU Nullius may use here could report its memory"})
+        with patch.object(hostreq, "gpu_memory_mb") as query:
+            self.assertEqual(hostreq.problems(BENCH, ["gpu"], which=lambda p: True, gpu_ids=[]),
+                             {"gpu": "this machine allows Nullius no GPU"})
+            query.assert_not_called()
+        # this machine's constraint reaches Review's check, and a run's
+        bench = definitions.get("benchmark", "longmemeval")
+        other, _ = definitions.setup(bench, "original", "gpt-4o", "openai")
+        with patch.object(hostreq.subprocess, "run", return_value=cards), \
+                patch.dict(os.environ, {"HOST_CONSTRAINTS": '{"local": {"gpu_ids": [1]}}'}):
+            rows = prerequisites.check_here([], {"stella_gpu": bench["host"]["stella_gpu"]}, which=lambda p: True)
+            self.assertEqual(rows[0]["state"], "missing"); self.assertIn("Nullius may use has 8192 MiB", rows[0]["detail"])
+            with self.assertRaisesRegex(run.Refused, "Nullius may use has 8192 MiB"):
+                run.Run(bench, other, model="gpt-4o", provider="openai", dataset="longmemeval_s",
+                        bench_options={"retriever": "flat-stella-session"}, env={}, which=lambda p: True,
+                        jobs_root="/nonexistent-never-written", constraints={"gpu_ids": [1]})
 
     def test_builder_and_run_refuse_stella_with_the_same_explanation(self):
         bench = definitions.get("benchmark", "longmemeval")
@@ -382,7 +412,7 @@ class GPURequirements(unittest.TestCase):
                 run.Run(bench, other, model="gpt-4o", provider="openai", dataset="longmemeval_s",
                         bench_options={"retriever": retriever}, env={"OPENAI_API_KEY": "fixture"}, which=lambda p: True,
                         jobs_root="/nonexistent-never-written")
-            query.assert_called_once_with()
+            query.assert_called_once_with(None)
             rows = prerequisites.check_here([], {"gpu": GPU}, which=lambda p: True)
             self.assertTrue(prerequisites.ready([{"rows": rows}]))
 

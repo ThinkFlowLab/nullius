@@ -42,6 +42,15 @@ class Entries(unittest.TestCase):
         self.assertIsNone(settings.BY_NAME["HOSTS"].validate("bench, ubuntu@10.0.0.4:22"))
         self.assertIn("not a host", settings.BY_NAME["HOSTS"].validate("bench, not a host"))
 
+    def test_an_entry_is_changed_in_its_place_or_taken_out(self):
+        self.assertEqual(hosts.replace("bench, u@h:22", "u@h:22", "Lab=u@h:22:~/.ssh/k")[0], "bench, Lab=u@h:22:~/.ssh/k")
+        self.assertEqual(hosts.replace("bench, u@h:22", "bench", None), ("u@h:22", None))
+        for old, new in (("u@h:22", "bench"), ("gone", "lab"), ("bench", "not a host")):
+            with self.assertRaises(ValueError, msg=(old, new)):
+                hosts.replace("bench, u@h:22", old, new)
+        self.assertTrue(hosts.same_machine(hosts.parse("u@h:22"), hosts.parse("Lab=u@h:22:~/.ssh/k")))
+        self.assertFalse(hosts.same_machine(hosts.parse("u@h:22"), hosts.parse("u@other:22")))
+
     def test_the_ssh_argv_prompts_for_nothing(self):
         argv = hosts.parse("ubuntu@10.0.0.4:2222:~/.ssh/id_bench").argv("true")
         self.assertIn("BatchMode=yes", argv); self.assertEqual(argv[-2:], ["ubuntu@10.0.0.4", "true"])

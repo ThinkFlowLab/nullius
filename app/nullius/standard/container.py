@@ -126,7 +126,7 @@ import urllib.request
 from secrets import compare_digest, token_hex
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from nullius import paths
+from nullius import constraints, paths
 from nullius.standard import definitions, install
 
 def _runs_podman(path: str) -> bool:
@@ -282,6 +282,43 @@ def unusable() -> Optional[str]:
             return (f"podman's network backend is {net or 'unknown'}: Nullius needs netavark"
                     ' (podman 4.7 or later, network_backend = "netavark")')
     return None
+
+
+# shortcut: one machine's ceiling per process (a run's CLI is one machine); pass it per run if one process ever runs for several
+_CEILING: Dict[str, object] = {}
+
+
+def cap(values: dict) -> None:
+    """The machine's constraints (``nullius.constraints``) as the ceiling of
+    every container this process starts: a unit's agent, its own image, its
+    relay, doors, forwarders and proxy, the installs, the checks and a
+    setup's driver. The connection test's probes are not capped: they test
+    the caps themselves."""
+    global _CEILING
+    _CEILING = constraints.container(values)
+
+
+def capped(task: Optional[dict] = None) -> List[str]:
+    """The ceiling's docker flags, a task's own ``cpus`` and ``memory_mb``
+    kept where lower (``constraints.argv``)."""
+    return constraints.argv(_CEILING, task)
+
+
+def unenforced(image: str, limits: dict) -> Dict[str, str]:
+    """The machine's constraints this engine does not apply, each with what a
+    container started with it read back (``constraints.probe``): one
+    throwaway container per constraint, in ``image``, started as a unit's are
+    (:func:`_userns`, :func:`_user`, :func:`_security_opt`)."""
+    if not constraints.container(limits):
+        return {}
+    try:
+        script = constraints.probe(limits, image, DOCKER, [*_userns(), "--user", _user(), *_security_opt()])
+        r = subprocess.run(["sh", "-c", script], env=client_env(),
+                           capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise Unavailable(f"the constraints' check: {e}")
+    got = constraints.read(r.stdout, limits)
+    return got["refused"] if got["engine"] else {k: "no Docker or Podman answers" for k in constraints.container(limits)}
 
 
 def dockerfile(machine: Optional[str] = None) -> str:
@@ -586,11 +623,11 @@ def run_argv(image: str, cmd: List[str], *, name: str, network: str, job: str, w
     """``docker run`` for a unit's agent or capability, its environment as
     :func:`env_args` gives it. ``binds``: (a file on this machine, its path
     inside), each read-only - a licence file where its environment says the
-    software looks for it."""
+    software looks for it. The machine's constraints: :func:`capped`."""
     values, named = env_args(env, path)
     a = [DOCKER, "run", "--rm", "--name", name, "--network", network, "--label", f"{LABEL}={job}",
          *_userns(), "--user", _user(), "--cap-drop", "ALL", *_security_opt(), "--init",
-         "-w", workdir, *values]
+         *capped(), "-w", workdir, *values]
     if interactive:
         a.insert(2, "-i")
     for p, ro in mounted:
@@ -629,7 +666,7 @@ def check_start() -> List[str]:
     """A check's container command up to its mounts (:func:`check_argv`): no
     network, no capabilities, as this machine's user."""
     return [DOCKER, "run", "--rm", "--network", "none", *_userns(), "--user", _user(), "--cap-drop", "ALL",
-            *_security_opt()]
+            *_security_opt(), *capped()]
 
 
 def check_env() -> dict:
@@ -640,8 +677,9 @@ def check_env() -> dict:
     ``XDG_DATA_HOME`` and ``XDG_CONFIG_HOME``, and ``CHECK_ENGINE``. That is
     :func:`check_start` behind ``env``, which gives podman this user's XDG data
     and config folders. The driver's own processes do not use these folders."""
-    if not podman():
-        return {k: v for k, v in client_env().items() if k.startswith("DOCKER")}
+    if not podman():                     # the machine's constraints reach the driver's checks as CHECK_ENGINE
+        return {**{k: v for k, v in client_env().items() if k.startswith("DOCKER")},
+                **({CHECK_ENGINE: json.dumps(check_start())} if _CEILING else {})}
     home = os.path.expanduser("~")
     xdg = [f"{k}={os.environ.get(k) or os.path.join(home, d)}" for k, d in _XDG]
     return {**{k: os.environ[k] for k in CLIENT_KEEP if k not in ("PATH", "HOME", *dict(_XDG)) and k in os.environ},
@@ -678,7 +716,7 @@ def install_argv(image: str, where: str, cmd: List[str], env: Optional[dict] = N
     env = {"HOME": home, "npm_config_cache": npm, "UV_CACHE_DIR": uv,
            "UV_PYTHON_INSTALL_DIR": f"{where}/.python", "UV_PYTHON_DOWNLOADS": "automatic", **(env or {})}
     return [DOCKER, "run", "--rm", "--label", "nullius.install=1", *_userns(), "--user", _user(), "--cap-drop", "ALL",
-            *_security_opt(), "-v", f"{where}:{where}:rw", "-w", where,
+            *_security_opt(), *capped(), "-v", f"{where}:{where}:rw", "-w", where,
             *[w for k, v in env.items() for w in ("-e", f"{k}={v}")],
             *[w for k in INSTALL_KEEP if k in os.environ for w in ("-e", k)], image] + list(cmd)
 
@@ -698,7 +736,7 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
     ``serving``: by model, the serving providers that may answer it, as the
     unit's own relay is given them (``relay.Relay``)."""
     a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_userns(), "--user", _user(),
-         "--cap-drop", "ALL", *_security_opt(), "--init",
+         "--cap-drop", "ALL", *_security_opt(), "--init", *capped(),
          *[w for n, ip in sorted((hosts or {}).items()) for w in ("--add-host", f"{n}:{ip}")],
          "-p", f"127.0.0.1::{RELAY_PORT}", "-v", f"{app}:{app}:ro", "-v", f"{record}:{record}:rw",
          *(["-v", f"{os.path.dirname(ledger)}:{os.path.dirname(ledger)}:rw"] if ledger else []),
@@ -915,7 +953,7 @@ def forward_argv(image: str, *, name: str, job: str, port: int, nonce_file: Opti
     door instead). A macOS door mounts its nonce read-only."""
     mount = ["--mount", f"type=bind,source={nonce_file},target={FORWARD_NONCE_IN},readonly"] if nonce_file else []
     return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_keep_id(), "--user", _user(),
-            "--cap-drop", "ALL", *_security_opt(), "--init",
+            "--cap-drop", "ALL", *_security_opt(), "--init", *capped(),
             "--add-host", "host.docker.internal:host-gateway", "-v", f"{FORWARD}:{FORWARD_IN}:ro", *mount,
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
             image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}",
@@ -932,7 +970,7 @@ def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
     forwards is named, never given: ``-e NULLIUS_FORWARD_TO``
     (``unix:<socket>``)."""
     return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *_userns(), "--user", _user(),
-            "--cap-drop", "ALL", *_security_opt(), "--init",
+            "--cap-drop", "ALL", *_security_opt(), "--init", *capped(),
             *(["--network", network, "--network-alias", alias] if network else way_out()),
             "-v", f"{FORWARD}:{FORWARD_IN}:ro", "-v", f"{socket_path}:{socket_path}:ro",
             "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "NULLIUS_FORWARD_TO",
@@ -953,7 +991,7 @@ def egress_argv(image: str, *, name: str, job: str) -> List[str]:
     """``docker run`` for an own image's check's proxy (``egress.py``): on the
     default bridge (``BRIDGE`` on podman), its one file mounted, nothing else given."""
     return [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_keep_id(), "--user", _user(),
-            "--cap-drop", "ALL", *_security_opt(), "--init",
+            "--cap-drop", "ALL", *_security_opt(), "--init", *capped(),
             "-v", f"{EGRESS}:{EGRESS_IN}:ro", "-e", "PYTHONDONTWRITEBYTECODE=1",
             image, "python3", EGRESS_IN, "--listen", f"0.0.0.0:{EGRESS_PORT}"]
 
@@ -1073,7 +1111,7 @@ class Unit:
         self.started.append(probe)
         args = ["run", "-d", "--name", probe, "--label", f"{LABEL}={self.job}",
                 "--init", "--network", self.names["network"],
-                "--cap-drop", "ALL", "--security-opt", "no-new-privileges"]
+                "--cap-drop", "ALL", "--security-opt", "no-new-privileges", *capped()]
         for key in self.network_env:
             args += ["-e", key]
         try:
@@ -1599,12 +1637,14 @@ class Box:
     harmless there: the install, definition and runtimes are read-only, the
     home is the trial's own folder and nothing else of this machine, the check
     does not read them, and nothing of the agent is left running to use them
-    (unless the task keeps its processes)."""
+    (unless the task keeps its processes).
+
+    **Its limits** are the machine's constraints (:func:`capped`) and the
+    task's own ``cpus`` and ``memory_mb`` (``task``), the lower value of each."""
 
     def __init__(self, job: str, tag: str, image: str, *, workdir: str, path: str = IMAGE_PATH,
                  network: Optional[str] = None, mounted: Iterable[Tuple[str, bool]] = (),
-                 runtimes: Optional[Dict[str, Tuple[str, str]]] = None, memory_mb=None, cpus=None,
-                 app: Optional[str] = None, env: Optional[dict] = None):
+                 runtimes: Optional[Dict[str, Tuple[str, str]]] = None, task: Optional[dict] = None, app: Optional[str] = None, env: Optional[dict] = None):
         n = names(job, tag)
         self.job, self.image, self.workdir, self.path = job, image, workdir, path
         self.env = dict(env or {})
@@ -1612,7 +1652,7 @@ class Box:
         self.net = network or n["network"]
         self.own_net = network is None
         self.mounted, self.runtimes = list(mounted), dict(runtimes or {})
-        self.memory_mb, self.cpus, self.app = memory_mb, cpus, app
+        self.task, self.app = dict(task or {}), app
         self.up = False
         self.keep: Optional[str] = None          # the keep-alive's PID inside, found at the start
         self.egress: Optional[str] = None        # the check's proxy container, once online
@@ -1630,10 +1670,7 @@ class Box:
             # containers.conf sets: keep-id makes it a sub-uid) and on a Docker with userns-remap
             a = ["run", "-d", "--name", self.name, "--label", f"{LABEL}={self.job}", "--network", self.net, "--init",
                  *_security_opt(), "-w", self.workdir, *(["--userns=host"] if podman() else _userns())]
-            if self.memory_mb:
-                a += ["--memory", f"{int(self.memory_mb)}m"]
-            if self.cpus:
-                a += ["--cpus", str(self.cpus)]
+            a += capped(self.task)
             for p, ro in self.mounted:
                 a += ["-v", f"{p}:{p}:{'ro' if ro else 'rw'}"]
             for host, inside in self.runtimes.values():

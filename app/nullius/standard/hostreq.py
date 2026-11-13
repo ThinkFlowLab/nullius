@@ -40,34 +40,44 @@ def missing(bench: dict, names: List[str], which=shutil.which) -> Dict[str, List
     return out
 
 
-def gpu_memory_mb() -> Optional[int]:
-    """The largest GPU's total memory in MiB, or None when it cannot be read.
-    Never add cards together or treat an unavailable query as zero memory."""
+def gpu_memory_mb(gpu_ids: Optional[List[int]] = None) -> Optional[int]:
+    """The largest GPU's total memory in MiB, among the GPUs ``gpu_ids`` allows
+    (the machine's constraint; None: every GPU), or None when it cannot be
+    read or no allowed GPU is there. Never add cards together or treat an
+    unavailable query as zero memory."""
     try:
-        result = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+        result = subprocess.run(["nvidia-smi", "--query-gpu=index,memory.total", "--format=csv,noheader,nounits"],
                                 capture_output=True, text=True, timeout=5)
-        values = [line.strip() for line in result.stdout.splitlines()]
-        if result.returncode == 0 and values and all(v.isascii() and v.isdecimal() and int(v) > 0 for v in values):
-            return max(map(int, values))
+        rows = [[v.strip() for v in line.split(",")] for line in result.stdout.splitlines()]
+        if result.returncode == 0 and rows and all(len(r) == 2 and all(v.isascii() and v.isdecimal() for v in r) and int(r[1]) > 0
+                                                   for r in rows):
+            sizes = [int(m) for i, m in rows if gpu_ids is None or int(i) in gpu_ids]
+            return max(sizes) if sizes else None
     except (OSError, subprocess.TimeoutExpired, UnicodeError):
         pass
     return None
 
 
-def problems(bench: dict, names: List[str], which=None) -> Dict[str, str]:
+def problems(bench: dict, names: List[str], which=None, gpu_ids: Optional[List[int]] = None) -> Dict[str, str]:
     """Why each selected requirement is missing on this machine, shared by
-    the builder and run startup. Query GPU memory only when needed, once."""
+    the builder and run startup. Query GPU memory only when needed, once,
+    among the GPUs ``gpu_ids`` allows (the machine's constraint; [] allows
+    none, so a requirement a GPU's memory meets is refused)."""
     which = which or shutil.which
     out = {n: ", ".join(ps) + " not on PATH" for n, ps in missing(bench, names, which).items()}
+    if gpu_ids == []:                    # a requirement nvidia-smi checks is a GPU's
+        out.update({n: "this machine allows Nullius no GPU" for n, r in requirements(bench, names).items()
+                    if n not in out and "nvidia-smi" in (r.get("check") or [])})
     gpu = {n: r["gpu_memory_mb"] for n, r in requirements(bench, names).items()
            if n not in out and "gpu_memory_mb" in r}
     if gpu:
-        available = gpu_memory_mb() if which("nvidia-smi") else None
+        available = gpu_memory_mb(gpu_ids) if which("nvidia-smi") else None
         for n, needed in gpu.items():
             if available is None:
-                out[n] = "nvidia-smi could not report GPU memory" if which("nvidia-smi") else "nvidia-smi not on PATH"
+                out[n] = ("no GPU Nullius may use here could report its memory" if gpu_ids else
+                          "nvidia-smi could not report GPU memory") if which("nvidia-smi") else "nvidia-smi not on PATH"
             elif available < needed:
-                out[n] = f"needs at least {needed} MiB of GPU memory; largest GPU has {available} MiB"
+                out[n] = f"needs at least {needed} MiB of GPU memory; largest GPU {'Nullius may use ' if gpu_ids else ''}has {available} MiB"
     return out
 
 

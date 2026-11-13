@@ -1,0 +1,22 @@
+{#- what a machine's last test found, the same rows for every machine (settings_host_test renders it again after a test) -#}
+{% set f = m.found %}{% set t = f.test or {} %}{% set cap = f.capacity or {} %}{% set never = 'Not tested' %}
+{% macro line(label, value) %}<div class="st-row"><span class="st-row-label">{{ label }}</span><span class="st-row-value">{{ value }}</span></div>{% endmacro %}
+<div class="st-sandbox-rows" data-info>
+  {% if f.stale %}<p class="st-note st-warn">Tested before the last edit.</p>{% endif %}
+  {% if m.undelegated %}<p class="st-note st-warn">The engine has no cgroup delegated to this user: limits cannot apply here.</p>{% endif %}
+  {{ line('Reached', 'This machine' if not m.host else never if not t else ('In ' ~ t.latency_ms ~ ' ms') if t.ok else (t.error or 'No')) }}
+  {{ line('Host name', t.hostname or (never if not t else 'Unknown')) }}
+  {% if t.ok and t.uv is not none %}{% set have = (['uv'] if t.uv else []) + (['docker'] if t.docker else []) + (['podman'] if t.podman else []) + ([('Harbor ' ~ (t.harbor_version or '')) | trim] if t.harbor else []) %}{% set lack = (['uv'] if not t.uv else []) + (['Docker or Podman'] if not (t.docker or t.podman) else []) + (['Harbor'] if not t.harbor else []) %}
+  <div class="st-row"><span class="st-row-label">Programs</span><span class="st-row-value"><span>{{ have | join(', ') or 'None' }}{% if lack %}<span class="faint"> · missing {{ lack | join(', ') }}</span>{% endif %}</span></span></div>
+  {% else %}{{ line('Programs', never) }}{% endif %}
+  <div class="st-row"><span class="st-row-label">Engine</span><span class="st-row-value"{% if not m.host and t.error %} title="{{ t.error }}"{% endif %}>{{ m.engine_text }}</span></div>
+  <div class="st-row"><span class="st-row-label">{{ 'Container capacity' if m.local_text else 'Capacity' }}</span><span class="st-row-value">{% if cap %}{{ ([cap.cpus ~ ' CPUs'] if cap.cpus else []) | join }}{{ ', ' if cap.cpus and cap.memory_mb }}{{ m.memory_text }}{% for g in cap.gpus or [] %}<br>GPU {{ g.index }}: {{ g.name }}, {{ g.memory_mb }} MB{% endfor %}{% else %}{{ never }}{% endif %}</span></div>
+  {% if m.local_text %}{{ line('Local capacity', m.local_text) }}{% endif %}
+  {#- the two ways a constraint holds: the engine on containers, systemd on the processes a run starts here -#}
+  {% macro held(enforced, refused) %}<span>{{ enforced | join(', ') or 'None' }}{% if refused %}<span class="faint"> · not {% for label, why in refused %}<span title="{{ why }}">{{ label }}</span>{{ ', ' if not loop.last }}{% endfor %}</span>{% endif %}</span>{% endmacro %}
+  <div class="st-row"><span class="st-row-label">Containers</span><span class="st-row-value">{% if not cap %}{{ never }}{% elif m.engine_less %}No engine{% else %}{{ held(m.enforced, m.refused) }}{% endif %}</span></div>
+  <div class="st-row"><span class="st-row-label">Local processes</span><span class="st-row-value">{% if not cap or m.scope is none %}{{ never }}{% elif m.scope.why %}{{ m.scope.why[:1] | upper }}{{ m.scope.why[1:] }}{% else %}{{ held(m.scope.enforced, m.scope.refused) }}{% endif %}</span></div>
+  {#- a container run's drivers take a scope where one holds, and run unlimited where none does -#}
+  {{ line('Drivers', never if not cap or m.scope is none else 'Limited' if m.scope_ok else 'Not limited') }}
+  {{ line('Tested', f.at | replace('T', ' ') if f.at else 'Never') }}
+</div>

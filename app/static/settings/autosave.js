@@ -86,11 +86,12 @@
       } else if (agentChanged || [...names].some(name => document.getElementById(name)?.dataset.secret === 'yes')) {
         message = [...names].some(name => body.get('clear:' + name) === '1') ? 'Key removed' : 'Key saved';
       }
+      // the hosts list holds the constraints and their warnings: it is drawn again whole, their field with it
+      if (names.delete('HOST_CONSTRAINTS')) names.add('HOSTS');
       const fresh = new DOMParser().parseFromString(result.html, 'text/html');
       const now = snapshot();
       for (const [key, value] of changed) saved.set(key, value);
       for (const name of names) {
-        if (name === 'HOSTS') continue; // host-list listeners and chips stay in place
         const field = document.getElementById(name), replacement = fresh.getElementById(name);
         if (!field || !replacement || (field.contains(document.activeElement) && document.activeElement.matches('input:not([type=hidden]), textarea, select')) || field.querySelector('input[type=radio]')) continue;
         const keys = [...field.querySelectorAll('[name]')].map(input => input.name);
@@ -115,7 +116,8 @@
         providers: [...fresh.querySelectorAll('[data-provider-card]')].map(card => ({
           key: card.dataset.providerCard, configured: card.dataset.configured, ready: card.dataset.ready,
           label: card.querySelector('[data-provider-state]')?.textContent ?? '',   // the new-endpoint form has no state line
-          tested: card.querySelector('[data-provider-test-state]')?.textContent, mark: card.querySelector('[data-provider-test-state]')?.dataset.state ?? ''
+          tested: card.querySelector('[data-provider-test-state]')?.textContent, mark: card.querySelector('[data-provider-test-state]')?.dataset.state ?? '',
+          remove: card.querySelector('[data-provider-remove-ask]'), ask: card.querySelector('.st-provider-ask')
         }))
       }}));
       return true;
@@ -134,7 +136,8 @@
     try { ok = await pending; } finally { pending = null; }
     return ok && changes(snapshot()).length ? flush() : ok;
   }
-  window.nulliusSettings = {flush, dirty: () => changes(snapshot()).length > 0};
+  // rebase: the form as it is now is what the file holds (a part of the page replaced from a save of its own)
+  window.nulliusSettings = {flush, dirty: () => changes(snapshot()).length > 0, rebase: () => { saved = snapshot(); }};
   // Replace, type, then Keep: moving to Keep blurs the input, whose change
   // would save the text Keep is about to throw away. A change whose focus
   // stays in the field (Keep, or Remove on the way to it) waits until focus

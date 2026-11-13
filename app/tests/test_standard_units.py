@@ -339,6 +339,14 @@ class FromTheCommandLine(unittest.TestCase):
                 self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "slow__u0002"])
                 self.assertEqual(read(os.path.join(job, "config.json"))["standard"]["units_file"]["units"], ["slow", "good"])
 
+    def test_the_listed_units_run_under_the_machine_s_constraints(self):
+        code, out = self.cli("--units", self.file("slow\ngood\n"), "--constraint", "concurrency=1", "--name", "constrained")
+        self.assertEqual(code, 0, out)
+        job = out.strip().splitlines()[-1]
+        self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "slow__u0002"])
+        cfg = read(os.path.join(job, "config.json"))
+        self.assertEqual((cfg["standard"]["units_file"]["units"], cfg["standard"]["constraints"], cfg["n_concurrent_trials"]),
+                         (["slow", "good"], {"concurrency": 1}, 1))
     def test_the_command_records_both_the_units_file_and_the_serving_pin(self):
         path = self.file("good\n")
         self.b["score"] = dict(self.b["score"], judge={"model": "m-judge", "says": "a judge"})
