@@ -11,6 +11,7 @@ The tasks and how each is scored; one folder in the catalogue, run on one or bot
 | Dataset | The tasks a benchmark offers; it may have several |
 | Task, unit | One problem of a dataset; the standard says unit |
 | Task limit | How many tasks a run takes; empty means every task |
+| List of units | The tasks a standard run takes by their ids, from a file ([`--units FILE`](cli/run.md#a-list-of-units)) |
 | Verifier | The benchmark's own scoring: tests, an exact answer, a judge model |
 | Setup | Who answers: `original` (the published pipeline and models), `model` (that pipeline, your model), or your agent or capability |
 | Control | A run with no agent: `nop` does nothing, `oracle` applies the reference solution |

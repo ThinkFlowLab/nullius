@@ -7,8 +7,8 @@
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--unsandboxed | --backend container]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--limit N]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--unsandboxed | --backend container]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
     PYTHONPATH=app python3 -m nullius.standard.cli merge JOB_DIR... -o OUT [--force]
@@ -37,7 +37,9 @@ which the application opens like any other; ``fidelity`` drives an agent over
 ACP and through its own command, compares the requests its model was sent, and
 writes the verdict into the definition (``standard/fidelity.py``). ``--shard I/N`` runs one
 shard of the dataset's units (``standard/shard.py``: by the unit id's hash, then
-``--limit``), the job recording its shard and its launch (``--launch``); ``merge``
+``--limit``), the job recording its shard and its launch (``--launch``); ``--units FILE``
+runs only the units a file lists (``run.units_file``: one id a line), read on
+the machine the command runs on, ``--from-run`` or not; ``merge``
 puts a launch's shard jobs together into one job (``standard/merge.py``). ``--option``
 sets one of the agent's or capability's options (``options`` in its definition);
 the rest keep the vendor's defaults, and the job's config records them all.
@@ -498,6 +500,7 @@ def cmd_run(a):
                       simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
                       licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
                       prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit,
+                      **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
         print("refused:", e)
@@ -644,6 +647,9 @@ def main(argv=None):
                            help="run each check K times; a check passes when it passes in most of them (default 1)")
         else:
             p.add_argument("--dataset")
+            p.add_argument("--units", metavar="FILE",
+                           help="only the units this file lists, one id a line (# starts a comment): in the dataset's order, "
+                                "before --shard and --limit; the job's config records the file's name, sha256 and units")
             p.add_argument("--limit", type=int)
             p.add_argument("-j", "--concurrency", type=int, default=4)
             p.add_argument("--judge-model", help="a benchmark scored by a model: this judge instead of its official one")
