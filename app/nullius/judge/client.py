@@ -3,9 +3,11 @@ pages store. Two judges answer the same questions (``judge_for`` says which
 one Settings chose); each asks a provider of the registry (``nullius.providers``)
 that serves its protocol:
 
-- **System One**, a decision model (TypeSafe's Jev at ``/systemone``, on
-  TypeSafe or OpenRouter), whose answers are its own: a Noul's probability, a
-  Choice's distribution over its options, a Score with the model's confidence.
+- **System One**, a decision model on a decision protocol: ``systemone``
+  (TypeSafe's Jev, on TypeSafe or OpenRouter), ``decisions`` (OpenRouter's,
+  for many makers' models) or ``openai-decisions``. Its answers are the
+  model's own: a Noul's probability, a Choice's distribution over its
+  options, a Score with the model's confidence.
 - **The LLM judge**, any chat model named in Settings (``chat``, or Anthropic's
   ``messages``), asked to answer every question in one JSON object. Its numbers
   are what the model states, so a Choice or a Score carries no confidence; the
@@ -44,10 +46,37 @@ CALIBRATION_MIN_CHARS = 4_000   # a stored call this small says nothing about a 
 LANES = ("system-one", "llm")              # the two judgements a trial can have, each with its own records
 # The protocols each judge speaks, in its order of preference; the providers come from the registry.
 LLM_PROTOCOLS = ("chat", "messages")
-SYSTEM_ONE_PROTOCOLS = ("systemone",)
+SYSTEM_ONE_PROTOCOLS = ("systemone", "decisions", "openai-decisions")
 # System One's models as each provider names them: the first is its default. Another is typed in Settings.
 SYSTEM_ONE_MODELS = {"typesafe": [MODEL],
-                     "openrouter": ["~typesafe/jev-latest", "typesafe/jev-1.14", "typesafe/jev-1.13", "typesafe/jev-router", "jaredpalmer/kev-4b"]}
+                     "openrouter": ["~typesafe/jev-latest", "typesafe/jev-1.14", "typesafe/jev-1.13", "typesafe/jev-router", "jaredpalmer/kev-4b"],
+                     "openai": ["gpt-6-luna"]}
+
+
+def system_one_models(choice: str, fetch: bool = False) -> list:
+    """System One's models on a provider, its default first: on OpenRouter, its decision models
+    (``providers.decision_models``, cached; asked only when ``fetch``), TypeSafe's next; else, or with
+    none, ``SYSTEM_ONE_MODELS``."""
+    listed = SYSTEM_ONE_MODELS.get(choice, [])
+    live = providers.decision_models(fetch=fetch) if choice == "openrouter" else []
+    if not live:
+        return list(listed)
+    return [listed[0]] + sorted(set(live) - {listed[0]}, key=lambda m: ("typesafe/" not in m, m))
+
+
+def system_one_protocol(choice: str, model: str, env=os.environ) -> str:
+    """The decision protocol System One speaks on a provider: ``SYSTEM_ONE_PROTOCOL`` when the provider
+    lists it; else, on one that serves both ``systemone`` and ``decisions`` (OpenRouter), ``systemone``
+    for TypeSafe's models and the ones listed for it, and ``decisions`` for another maker's; else the
+    first the provider lists."""
+    rec = providers.record(choice, env)
+    listed = [p for p in SYSTEM_ONE_PROTOCOLS if providers.serves(rec, p)]
+    if (env.get("SYSTEM_ONE_PROTOCOL") or "").strip() in listed:
+        return env["SYSTEM_ONE_PROTOCOL"].strip()
+    typesafe = "typesafe/" in model or model.startswith("jev") or model in SYSTEM_ONE_MODELS.get(choice, [])
+    if "systemone" in listed and "decisions" in listed:
+        return "systemone" if typesafe else "decisions"
+    return listed[0] if listed else "systemone"
 
 
 def _choice(raw) -> str:
@@ -58,15 +87,17 @@ def _choice(raw) -> str:
 
 
 def _table(protocols, env, known: bool) -> dict:
-    """{choice: {label, url, key, ready, protocol}} of every provider that may serve one of ``protocols``,
-    ready or not (Settings shows one once its key is saved). ``known``: only those that list one."""
+    """{choice: {label, url, key, ready, protocol, fit, listed}} of every provider that may serve one of
+    ``protocols``, ready or not (Settings shows one once its key is saved): ``fit`` the ones it may serve,
+    ``listed`` the ones it lists, ``protocol`` the first of them. ``known``: only those that list one."""
     out = {}
     for rec in providers.records(env):
         fit = [p for p in protocols if providers.serves(rec, p) or (providers.serves(rec, p) is None and not known)]
         fit.sort(key=lambda p: not providers.serves(rec, p))               # a protocol it lists before one it may serve
         if fit:
             out[rec["id"]] = {"label": rec["name"], "url": providers.url(rec, fit[0]) if rec["base"] else "",
-                              "key": rec["key"], "ready": providers.ready(rec, env), "protocol": fit[0]}
+                              "key": rec["key"], "ready": providers.ready(rec, env), "protocol": fit[0],
+                              "fit": fit, "listed": [p for p in fit if providers.serves(rec, p)]}
     return out
 
 
@@ -113,9 +144,13 @@ class Judge:
 
 def system_one_providers(env=os.environ) -> dict:
     """System One's providers: every one that lists one of its protocols, each with its models
-    (``SYSTEM_ONE_MODELS``; the first, ``model``, its default)."""
-    return {k: dict(d, models=SYSTEM_ONE_MODELS.get(k, []), model=(SYSTEM_ONE_MODELS.get(k) or [""])[0])
-            for k, d in _table(SYSTEM_ONE_PROTOCOLS, env, known=True).items()}
+    (``system_one_models``, never asked here; the first, ``model``, its default; ``live`` when the
+    provider has a list to ask) and the protocol it would be asked in."""
+    out = {k: dict(d, models=system_one_models(k), model=(SYSTEM_ONE_MODELS.get(k) or [""])[0], live=k == "openrouter")
+           for k, d in _table(SYSTEM_ONE_PROTOCOLS, env, known=True).items()}
+    for k, d in out.items():
+        d["protocol"] = system_one_protocol(k, (env.get("SYSTEM_ONE_MODEL") or "").strip() or d["model"], env)
+    return out
 
 
 def system_one(env=os.environ) -> Judge:
@@ -128,13 +163,21 @@ def system_one(env=os.environ) -> Judge:
     if chosen not in table:
         chosen = "openrouter" if not env.get("TYPESAFE_API_KEY") and env.get("OPENROUTER_API_KEY") else "typesafe"
     d = table[chosen]
-    return Judge(chosen, env.get(d["key"], ""), (env.get("SYSTEM_ONE_MODEL") or "").strip() or d["model"], d["url"],
-                 lane="system-one", name=d["label"], protocol=d["protocol"])
+    model = (env.get("SYSTEM_ONE_MODEL") or "").strip() or d["model"]
+    protocol = system_one_protocol(chosen, model, env)
+    return Judge(chosen, env.get(d["key"], ""), model, providers.url(providers.record(chosen, env), protocol),
+                 lane="system-one", name=d["label"], protocol=protocol)
 
 
 def llm_providers(env=os.environ) -> dict:
-    """The LLM judge's providers: every one that may serve ``chat`` or ``messages``."""
-    return _table(LLM_PROTOCOLS, env, known=False)
+    """The LLM judge's providers: every one that may serve ``chat`` or ``messages``, each with the protocol
+    it would be asked in: ``LLM_JUDGE_PROTOCOL`` when the provider may serve it, else the first it lists."""
+    out = _table(LLM_PROTOCOLS, env, known=False)
+    explicit = (env.get("LLM_JUDGE_PROTOCOL") or "").strip()
+    for k, d in out.items():
+        if explicit in d["fit"] and explicit != d["protocol"]:
+            d["protocol"], d["url"] = explicit, providers.url(providers.record(k, env), explicit) if d["url"] else ""
+    return out
 
 
 def llm_judge(env=os.environ) -> Judge:
@@ -270,26 +313,123 @@ def http_post(url: str, body: dict, key: str, timeout: float = 120.0, auth: Opti
         raise JudgeError(0, f"no answer from the judge: {getattr(e, 'reason', e)}") from e
 
 
+def _said(data) -> str:
+    """A provider's own error message: ``{"error": {"code", "message"}}`` (OpenRouter, OpenAI) or ``{"error": "..."}``."""
+    e = data.get("error") if isinstance(data, dict) else None
+    return str((e.get("message") if isinstance(e, dict) else e) or "")[:300]
+
+
+def _number(v) -> Optional[float]:
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _refusal(a) -> Optional[str]:
+    """Why a model refused a question (a ``refusal`` answer), or None when ``a`` is an answer. OpenAI-style
+    replies send ``"refusal": null`` beside an answer: that is no refusal."""
+    if isinstance(a, dict) and (a.get("type") == "refusal" or a.get("refusal")):
+        return str(a.get("refusal") or a.get("reason") or "refused")[:300]
+    return None
+
+
+def _typesafe_answers(data: dict, asked: dict) -> tuple:
+    """(answers, refusals) of a ``systemone`` or ``decisions`` reply: ``answers`` keyed by question id."""
+    answers, refusals = {}, {}
+    for qid, a in (data.get("answers") or {}).items():
+        if qid not in asked or not isinstance(a, dict):
+            continue
+        if _refusal(a) is not None:
+            refusals[qid] = _refusal(a)
+            continue
+        qtype = asked[qid]["type"]
+        if qtype == "noul" and _number(a.get("noul")) is not None:
+            answers[qid] = {"noul": float(a["noul"]), **({"confidence": _number(a["confidence"])} if _number(a.get("confidence")) is not None else {})}
+        elif qtype == "choice" and isinstance(a.get("choice"), str):
+            answers[qid] = {"choice": a["choice"], "probabilities": {k: float(v) for k, v in (a.get("probabilities") or {}).items()},
+                            "confidence": _number(a.get("confidence"))}
+        elif qtype == "score" and _number(a.get("score")) is not None:
+            legend = a.get("legend")
+            answers[qid] = {"score": float(a["score"]), "legend": list(asked[qid]["criteria"]) if not isinstance(legend, dict) else [legend[k] for k in sorted(legend, key=lambda x: int(x))],
+                            "probabilities": {k: float(v) for k, v in (a.get("probabilities") or {}).items()},
+                            "confidence": _number(a.get("confidence"))}
+    return answers, refusals
+
+
+def openai_questions(asked: dict) -> list:
+    """The questions as OpenAI's Decisions takes them: an array, each with its ``name``. A yes/no question
+    is a ``predicate``, which has no field for criteria: they fold into its instructions. A choice lists
+    ``choices`` and a score ``levels``. A box question has no form there: it is not sent."""
+    out = []
+    for qid, q in asked.items():
+        crit = q.get("criteria")
+        if q["type"] == "noul":
+            fold = f" True means: {crit.get('true', '')}. False means: {crit.get('false', '')}." if isinstance(crit, dict) else ""
+            out.append({"name": qid, "type": "predicate", "instructions": q["instructions"] + fold})
+        elif q["type"] == "choice" and isinstance(crit, dict):
+            out.append({"name": qid, "type": "choice", "instructions": q["instructions"],
+                        "choices": [{"value": k, "description": v} for k, v in crit.items()]})
+        elif q["type"] == "score" and isinstance(crit, list):
+            out.append({"name": qid, "type": "score", "instructions": q["instructions"],
+                        "levels": [{"label": str(i), "description": v} for i, v in enumerate(crit)]})
+    return out
+
+
+def _listed(rows, key: str) -> dict:
+    """``[{key: k, "probability": p}]`` as {k: p}, or a dict as it is."""
+    if isinstance(rows, dict):
+        return {str(k): float(v) for k, v in rows.items() if _number(v) is not None}
+    return {str(r[key]): float(r["probability"]) for r in rows or [] if isinstance(r, dict) and key in r and _number(r.get("probability")) is not None}
+
+
+def _openai_answers(data: dict, asked: dict) -> tuple:
+    """(answers, refusals) of an ``openai-decisions`` reply: an array of answers by ``name``, probabilities as
+    lists, read into the record's shape. An answer outside its question's choices or levels is left out."""
+    answers, refusals = {}, {}
+    for a in data.get("answers") or []:
+        qid = a.get("name") if isinstance(a, dict) else None
+        if qid not in asked:
+            continue
+        if _refusal(a) is not None:
+            refusals[qid] = _refusal(a)
+            continue
+        q, crit = asked[qid], asked[qid].get("criteria")
+        p = _number(a.get("probability"))
+        if q["type"] == "noul" and p is not None and 0 <= p <= 1:
+            answers[qid] = {"noul": p}
+        elif q["type"] == "choice" and isinstance(crit, dict) and a.get("choice") in crit:
+            answers[qid] = {"choice": a["choice"], "probabilities": _listed(a.get("probabilities"), "value"), "confidence": _number(a.get("confidence"))}
+        elif q["type"] == "score" and isinstance(crit, list):
+            level = a.get("level", a.get("score"))
+            index = int(level) if str(level).isdigit() else None
+            if index is not None and 0 <= index < len(crit):
+                answers[qid] = {"score": float(index), "legend": list(crit), "probabilities": _listed(a.get("probabilities"), "label"),
+                                "confidence": _number(a.get("confidence"))}
+    return answers, refusals
+
+
 def ask(state: str, ids, key: str, truncated: bool = False, post: Optional[Callable] = None, model: str = MODEL,
         retries: int = 3, sleep: Callable = time.sleep, kind: Optional[str] = None, questions: Optional[dict] = None) -> dict:
     """One judge call over one state for the questions named; the record.
-    429, 529 and 503 are retried with backoff; 401 and 422 are said plainly.
+    429, 529 and 503 are retried with backoff; 401, 402 and 422 are said plainly.
     `kind` names the state's kind in the record's `states`.
     `questions` is a prepared map in the API shape (type, instructions,
     criteria), sent instead of the vocabulary's entries for `ids`; each answer is
     parsed by the type its question declares. `key` is a TypeSafe key, or
-    the :class:`Judge` Settings chose - an OpenRouter one is asked there."""
-    url, provider = URL, PROVIDER
+    the :class:`Judge` Settings chose, asked in its protocol: ``systemone``
+    and ``decisions`` share one shape, ``openai-decisions`` has its own. A
+    refused question is recorded in ``refusals``, never as an answer; the
+    provider's own cost (``usage.cost``) is kept when it gives one."""
+    url, provider, protocol, who = URL, PROVIDER, "systemone", "TypeSafe"
     if isinstance(key, Judge):
         if key.lane == "llm":
             return ask_chat(state, ids, key, truncated=truncated, post=post, retries=retries, sleep=sleep, kind=kind, questions=questions)
-        url, model, provider = key.url, key.model, (PROVIDER if key.provider == "typesafe" else key.provider)
+        url, model, provider, protocol, who = key.url, key.model, (PROVIDER if key.provider == "typesafe" else key.provider), key.protocol, key.who
         key = key.key
     if not key:
         raise JudgeError(401, "no TypeSafe.ai key: set TYPESAFE_API_KEY in Settings, Judge" if provider == PROVIDER
-                         else f"no {provider} key for System One: set it in Settings, Model providers")
+                         else f"no {who} key for System One: set it in Settings, Model providers")
     asked = questions if questions is not None else Q.request_questions(ids)
-    body = {"state": state, "model": model, "questions": asked}
+    openai = protocol == "openai-decisions"
+    body = {"model": model, "input": state, "questions": openai_questions(asked)} if openai else {"state": state, "model": model, "questions": asked}
     post = post or http_post
     status, data = 0, {}
     for attempt in range(retries + 1):
@@ -298,33 +438,28 @@ def ask(state: str, ids, key: str, truncated: bool = False, post: Optional[Calla
             sleep(backoff(attempt, data))
             continue
         break
+    said = _said(data)
     if status == 401:
         raise JudgeError(401, "the judge refused the key (401)")
+    if status == 402:
+        raise JudgeError(402, f"{who} asks for payment (402): the key's credit is spent, or the model is not free" + (f": {said}" if said else ""))
     if status == 422:
-        raise JudgeError(422, "the judge refused the request (422): " + json.dumps(data)[:300])
+        raise JudgeError(422, "the judge refused the request (422): " + (said or json.dumps(data)[:300]))
     if status in (429, 503, 529):
         raise JudgeError(status, f"the judge is busy ({status}); try again in a moment")
     if status != 200:
-        raise JudgeError(status, f"the judge answered {status}")
-    answers = {}
-    for qid, a in (data.get("answers") or {}).items():
-        if qid not in asked or not isinstance(a, dict):
-            continue
-        qtype = asked[qid]["type"]
-        if qtype == "noul" and isinstance(a.get("noul"), (int, float)):
-            answers[qid] = {"noul": float(a["noul"])}
-        elif qtype == "choice" and isinstance(a.get("choice"), str):
-            answers[qid] = {"choice": a["choice"], "probabilities": {k: float(v) for k, v in (a.get("probabilities") or {}).items()},
-                            "confidence": float(a["confidence"]) if isinstance(a.get("confidence"), (int, float)) else None}
-        elif qtype == "score" and isinstance(a.get("score"), (int, float)):
-            legend = a.get("legend")
-            answers[qid] = {"score": float(a["score"]), "legend": list(asked[qid]["criteria"]) if not isinstance(legend, dict) else [legend[k] for k in sorted(legend, key=lambda x: int(x))],
-                            "probabilities": {k: float(v) for k, v in (a.get("probabilities") or {}).items()},
-                            "confidence": float(a["confidence"]) if isinstance(a.get("confidence"), (int, float)) else None}
-    usage = data.get("usage") or {}
-    rec = {"questions": Q.VERSION, "judge": {"provider": provider, "model": str(data.get("model") or model)},
-           "asked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "state_chars": len(state), "truncated": bool(truncated),
-           "answers": answers, "usage": {"input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens")}}
+        raise JudgeError(status, f"the judge answered {status}" + (f": {said}" if said else ""))
+    try:
+        answers, refusals = (_openai_answers if openai else _typesafe_answers)(data, asked)
+        usage = data.get("usage") or {}
+        rec = {"questions": Q.VERSION, "judge": {"provider": provider, "model": str(data.get("model") or model)},
+               "asked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "state_chars": len(state), "truncated": bool(truncated),
+               "answers": answers, "usage": {"input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens"),
+                                             **({"cost_usd": float(usage["cost"])} if _number(usage.get("cost")) is not None else {})}}
+    except (AttributeError, KeyError, TypeError, ValueError) as e:      # a reply of another shape: said, never a crash of the batch
+        raise JudgeError(502, f"the judge's reply could not be read: {e.__class__.__name__}") from e
+    if refusals:
+        rec["refusals"] = refusals
     if kind is not None:
         # `request_chars` is what the judge tokenised: the state and the questions' JSON. A calibration reads it,
         # so a tiny state whose request is mostly questions does not read as a low characters-per-token ratio.
@@ -392,7 +527,7 @@ def ask_chat(state: str, ids, judge: Judge, truncated: bool = False, post: Optio
             sleep(backoff(attempt, data))
             continue
         break
-    said = ((data.get("error") or {}).get("message") if isinstance(data.get("error"), dict) else "") or ""
+    said = _said(data)
     if status == 401:
         raise JudgeError(401, f"{who} refused the key (401)")
     if status == 402:
@@ -451,6 +586,8 @@ def merge(records) -> Optional[dict]:
         merged["truncated"] = merged["truncated"] or rec["truncated"]
         merged["states"].update(rec.get("states") or {})
         merged["hygiene"].update(rec.get("hygiene") or {})                    # per state kind, like `states`
+        if rec.get("refusals"):
+            merged["refusals"] = {**(merged.get("refusals") or {}), **rec["refusals"]}
         merged["asked_at"] = rec["asked_at"]; merged["judge"] = rec["judge"]
         for k in ("input_tokens", "output_tokens", "cost_usd"):
             if rec["usage"].get(k) is not None:

@@ -363,25 +363,25 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _MOST = 8 * 1024 * 1024
 
 
-def _get(url: str, headers: dict, opener=None) -> bytes:
+def _get(url: str, headers: dict, opener=None, timeout: float = 12) -> bytes:
     """One GET, never another method: no redirect followed, so a key stays at its endpoint; at most 8 MiB read."""
     req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "nullius", **headers})
-    with (opener or urllib.request.build_opener(_NoRedirect()).open)(req, timeout=12) as response:
+    with (opener or urllib.request.build_opener(_NoRedirect()).open)(req, timeout=timeout) as response:
         content = response.read(_MOST + 1)
     if len(content) > _MOST:
         raise ValueError("response too large")
     return content
 
 
-def _models(content: bytes) -> list[dict]:
-    """The model list of a ``{"data": [{"id": ...}]}`` answer, by name; ValueError when there is none."""
+def _models(content: bytes, keep=lambda row: True) -> list[dict]:
+    """The model list of a ``{"data": [{"id": ...}]}`` answer, by name, of the rows ``keep`` accepts; ValueError when there is none."""
     data = json.loads(content)
     rows = data.get("data") if isinstance(data, dict) else None
     if not isinstance(rows, list):
         raise ValueError("missing model list")
     models = {}
     for row in rows:
-        if not isinstance(row, dict):
+        if not isinstance(row, dict) or not keep(row):
             continue
         model = row.get("id")
         if not isinstance(model, str) or not model or len(model) > 256 or any(c.isspace() or ord(c) < 32 for c in model):
@@ -403,6 +403,45 @@ def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
     except (OSError, ValueError, TypeError, http.client.HTTPException):
         # Provider errors can contain keys or private endpoint details; do not echo them.
         raise ValueError("Model list unavailable. Enter a model ID manually.") from None
+
+
+DECISION_TTL = 6 * 3600     # seconds OpenRouter's list of decision models is kept before it is asked again
+
+
+def _decides(row: dict) -> bool:
+    arch = row.get("architecture")
+    out = arch.get("output_modalities") if isinstance(arch, dict) else None
+    return isinstance(out, list) and "decisions" in out
+
+
+def decision_models(env=None, *, fetch: bool = True, opener=None, clock=time.time) -> list[str]:
+    """OpenRouter's decision models by ID, from its public list (no key sent, no redirect followed), kept
+    ``DECISION_TTL`` in the cache. ``fetch`` false, or the list unreadable: the cached IDs, however old;
+    [] when there are none. Only the filtered list has them: the unfiltered one leaves them out."""
+    file = os.path.join(paths.cache_dir(env), "openrouter-decision-models.json")
+    try:
+        with open(file, encoding="utf-8") as f:
+            cached = json.load(f)
+        at, models = cached["at"], [m for m in cached["models"] if isinstance(m, str)]
+    except (OSError, ValueError, TypeError, KeyError):
+        at, models = 0, []
+    if not fetch or (models and isinstance(at, (int, float)) and clock() - at < DECISION_TTL):
+        return models
+    try:
+        fresh = [m["id"] for m in _models(_get(PRESETS["openrouter"]["base"] + "/models?output_modalities=decisions",
+                                               {}, opener, timeout=5), keep=_decides)]
+    except (OSError, ValueError, TypeError, http.client.HTTPException):
+        return models
+    if not fresh:
+        return models
+    try:
+        os.makedirs(os.path.dirname(file), exist_ok=True)
+        with open(file + ".tmp", "w", encoding="utf-8") as f:
+            json.dump({"at": clock(), "models": fresh}, f)
+        os.replace(file + ".tmp", file)
+    except OSError:
+        pass                    # an unwritable cache asks again next time
+    return fresh
 
 
 # Settings' Test, for each run provider (TypeSafe has no free request): only requests that cost nothing. A

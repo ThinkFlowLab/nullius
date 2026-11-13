@@ -5,7 +5,8 @@ import json
 import re
 from pathlib import Path
 
-from nullius import importers as harnesses
+from nullius import importers as harnesses, providers
+from nullius.judge import client as judge_client
 from nullius.runs import classify
 from nullius import workspace
 from nullius.standard import ledger, ports, definitions
@@ -189,6 +190,12 @@ def _nsoff(value):
     if not value:
         return "0"          # the axis origin, not "+0ns"
     return "+" + _nsdur(value)
+
+
+@app.template_filter("provider")
+def _provider(value):
+    """A judge record's provider by its name in the registry (``local``, an old name, read as ``custom``)."""
+    return providers.label(judge_client._choice(value))
 
 
 @app.context_processor
