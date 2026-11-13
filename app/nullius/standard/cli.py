@@ -66,7 +66,7 @@ import signal
 import sys
 import tempfile
 
-from nullius import constraints as limits, paths, prices as price_list, progress, secrets, settings
+from nullius import constraints as limits, paths, prices as price_list, progress, providers, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed, just like the unified CLI does.
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
@@ -97,12 +97,11 @@ def run_env(provider: str, env=os.environ) -> dict:
     ``execution``'s launcher hands every run its one key as ``OPENAI_API_KEY``
     and its endpoint as ``OPENAI_BASE_URL`` (empty for OpenAI's own), so they
     are named here as the provider's own settings and nothing else is."""
-    p = run.PROVIDERS[provider]
     out = {k: v for k, v in env.items() if k in run.KEEP}
     if env.get("OPENAI_API_KEY"):
-        out[p["key"]] = env["OPENAI_API_KEY"]
-    if "base_var" in p and env.get("OPENAI_BASE_URL"):
-        out[p["base_var"]] = env["OPENAI_BASE_URL"]
+        out[providers.key_setting(provider)] = env["OPENAI_API_KEY"]
+    if provider == "custom" and env.get("OPENAI_BASE_URL"):
+        out["MODEL_API_URL"] = env["OPENAI_BASE_URL"]
     return out
 
 
@@ -651,7 +650,7 @@ def main(argv=None):
                        + ("; or nop, oracle: a control the benchmark declares; or original, model: one of its setups" if name == "run" else ""))
         p.add_argument("--model", required=name == "conform",
                        help="the model (a control needs none; original takes one of the paper's, its first by default)" if name == "run" else None)
-        p.add_argument("--provider", default="openai", choices=sorted(run.PROVIDERS))
+        p.add_argument("--provider", default="openai", choices=sorted(providers.PROVIDERS))
         p.add_argument("--jobs", default="jobs_standard", help="where jobs are written (default jobs_standard/, gitignored)")
         p.add_argument("--unsandboxed", action="store_true",
                        help="allow an agent, or a setup check without Docker, to execute code on this machine as you")
@@ -700,7 +699,7 @@ def main(argv=None):
     v.add_argument("benchmark")
     v.add_argument("--dataset", help="one dataset (default: each)")
     v.add_argument("--limit", type=int, help="the first N units of each dataset (the record says so)")
-    v.add_argument("--provider", default="openai", choices=sorted(run.PROVIDERS), help="a judged benchmark's: the judge's provider")
+    v.add_argument("--provider", default="openai", choices=sorted(providers.PROVIDERS), help="a judged benchmark's: the judge's provider")
     v.add_argument("--judge-model", help="a judged benchmark: this judge instead of its official one")
     v.add_argument("-j", "--concurrency", type=int, default=4)
     v.add_argument("--jobs", default="jobs_standard", help="where the control jobs are written (default jobs_standard/)")

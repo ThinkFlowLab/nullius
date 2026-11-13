@@ -42,6 +42,12 @@ def run_start():
     if recipe.get("harness", "harbor") != "harbor":
         return jsonify(ok=False, error=providers.GONE), 400
     # A Harbor recipe runs its pin (nullius/harbor/source.py), or harbor on the target's PATH when unpinned.
+    # Its agents speak chat: a provider that serves none is refused, model or not (command-builder-core.js, providerBlocker).
+    offered, provider = providers.offered(["chat"]), str(recipe.get("provider") or "openrouter")
+    if provider not in offered:
+        names = [providers.label(p) for p in offered]
+        return jsonify(ok=False, error=f"{providers.label(provider)} does not serve what this recipe's agent speaks. Choose "
+                                       + ", ".join(names[:-1]) + (" or " if len(names) > 1 else "") + names[-1] + " on the Model step."), 400
     # One with a model to call needs its provider's key here (controls alone call none).
     missing = provider_problem(recipe.get("provider") or "openrouter", recipe.get("endpoint")) if body.get("model") else ""
     if missing:
@@ -62,18 +68,17 @@ def run_start():
 
 
 def credentials_for(provider, endpoint=None) -> dict:
-    """Where a run's key and endpoint come from, as ``Plan`` fields: a recipe
-    on OpenAI is sent to OpenAI's own endpoint, fixed, with OPENAI_API_KEY;
-    one on OpenRouter to OpenRouter's own, fixed, with OPENROUTER_API_KEY;
-    one on an OpenAI-compatible endpoint - or a provider this does not
-    know - with that endpoint's URL and key (``endpoint``, its id: none,
-    MODEL_API_URL and MODEL_API_KEY), which such a run cannot go
-    without. Every run is given its endpoint: a Harbor part's script requires
-    API_URL, and an OpenAI run left without one exited before Harbor began."""
-    if provider == "openai":
-        return {"key_var": providers.PROVIDER_KEY["openai"], "url_var": "", "base_url": providers.PROVIDER_BASE["openai"]}
-    if provider == "openrouter":
-        return {"key_var": providers.PROVIDER_KEY["openrouter"], "url_var": "", "base_url": providers.PROVIDER_BASE["openrouter"]}
+    """Where a run's key and endpoint come from, as ``Plan`` fields, from the
+    provider's record: a recipe on a preset run provider (OpenAI, OpenRouter, Anthropic) is
+    sent to its own base, fixed, with its own key; one on a custom provider -
+    or a provider this does not know - with that provider's base and key
+    (``endpoint``, its id: none, MODEL_API_URL and MODEL_API_KEY), which such a
+    run cannot go without. Every run is given its endpoint: a Harbor part's
+    script requires API_URL, and an OpenAI run left without one exited before
+    Harbor began."""
+    if provider in providers.PROVIDERS and provider in providers.PRESETS:      # a run provider: never TypeSafe's key
+        rec = providers.record(provider)
+        return {"key_var": rec["key"], "url_var": "", "base_url": rec["base"]}
     url_var, key_var = providers.endpoint_vars(str(endpoint or "") if provider == "custom" else "")
     return {"key_var": key_var, "url_var": url_var, "base_url": ""}
 

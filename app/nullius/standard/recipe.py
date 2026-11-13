@@ -42,6 +42,7 @@ from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
 from nullius.standard import hostreq, definitions, ledger, match, ports, prove
 
+CHOOSE_PROVIDER = "Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider."
 HARNESS = "standard"
 # The builder's runner card (command-builder-core.js, runners()): not a definition file, so builtin like Harbor's.
 RUNNER = {"key": HARNESS, "label": "Nullius", "builtin": True, "standard": True,
@@ -174,7 +175,7 @@ def skills_of(port: str, record: Optional[dict]) -> List[dict]:
 
 def _other_page(o: dict) -> dict:
     return {"key": o["_ref"], "base": o["key"], "label": definitions.title(o), "summary": o["summary"], "kind": o["_kind"],
-            "featureKind": o.get("kind", ""), "protocol": protocol(o), "version": str((o.get("upstream") or {}).get("version") or ""),
+            "featureKind": o.get("kind", ""), "protocol": protocol(o), "apis": list((o.get("model") or {}).get("apis") or ["chat"]), "version": str((o.get("upstream") or {}).get("version") or ""),
             "default": o.get("_version") == o.get("_default"),
             "offers": list(o.get("offers") or []),
             # each proof with the kit version it passed and, on an older kit than the current one, a note saying so
@@ -413,7 +414,15 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             add("model", "The paper's models are not listed for this provider.")
     provider = recipe.get("provider")
     if provider not in PROVIDERS:
-        add("model", "Choose a provider: OpenRouter, OpenAI or an OpenAI-compatible endpoint.")
+        add("model", CHOOSE_PROVIDER)
+    # what each part asks of the provider, as the builder reads it (command-builder-core.js, consumersOf): an agent its
+    # apis, a setup chat; a judged benchmark's judge chat
+    for pk in picks if provider in PROVIDERS else ():
+        apis = None if pk["control"] else (pk["o"].get("model") or {}).get("apis") or ["chat"]
+        if apis and provider not in providers.offered(apis):
+            add("model", f"{providers.label(provider)} does not serve what {pk['o']['label']} speaks: choose another provider.")
+    if provider in PROVIDERS and (b.get("score") or {}).get("judge") and provider not in providers.offered(["chat"]):
+        add("model", f"{providers.label(provider)} does not serve what {b['label']}'s judge speaks: choose another provider.")
     model = str(recipe.get("model") or "").strip()
     if not _MODEL.match(model) and (needs_model or model):
         add("model", "Choose a model or enter its ID.")
@@ -682,7 +691,7 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
         return {"errors": [f"no {kind} {key!r}"], "script": "", "jobs": [], "label": key}
     o = dict(o, label=definitions.title(o))
     if provider not in PROVIDERS:
-        errors.append("Choose a provider: OpenRouter, OpenAI or an OpenAI-compatible endpoint.")
+        errors.append(CHOOSE_PROVIDER)
     if not _MODEL.match(model or ""):
         errors.append("Choose a model or enter its ID.")
     backend = definitions.names.backend(backend)

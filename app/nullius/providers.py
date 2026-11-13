@@ -1,12 +1,12 @@
-"""Where a run's model calls go, and the builder's steps.
+"""Where model calls go: the one definition of each model provider, and the builder's steps.
 
-The builder's three providers (command-builder-core.js, ``PROVIDERS``), named
-the same here: what each is called, where it is served, the setting its key is
-read from, and what makes it one a run can start on here. The third,
-``custom``, is any number of OpenAI-compatible endpoints: the one at
-MODEL_API_URL, and one per id in Settings (``settings.endpoint_ids``). A
-recipe names one by ``provider: custom`` and its ``endpoint`` id; the builder
-and the judge pickers by a choice, ``custom:<id>`` (``choice``, ``split``). Also the builder's
+Every feature reads the registry below (``record``, ``records``, ``serves``) and asks for the
+protocol it speaks: a run what its agent speaks, the LLM judge ``chat`` or ``messages``, System One
+a decision protocol. A provider is a preset (``PRESETS``) or a custom provider, ``custom``: the
+OpenAI-compatible endpoint at MODEL_API_URL, and one per id in Settings (``settings.endpoint_ids``).
+A recipe names one by ``provider`` (``PROVIDERS``, the ones a run is sent to) and, for a custom one,
+its ``endpoint`` id; the builder and the judge pickers by a choice, ``custom:<id>`` (``choice``,
+``split``). Also the builder's
 step numbers, so an error from a compiled recipe names the step that edits it.
 Settings' Test (``test``) asks a provider with free GETs only, and keeps the last
 result per choice (``tests``, ``remember``) for its card and Review.
@@ -219,19 +219,9 @@ HARBOR = {"key": "harbor", "label": "Harbor", "builtin": True,
 GONE = ("The Native runner is no longer offered: the benchmark's own code runs as its Original setup "
         "on the Nullius runner.")
 
-PROVIDERS = ("openrouter", "openai", "custom")
-PROVIDER_LABEL = {"openrouter": "OpenRouter", "openai": "OpenAI", "custom": settings.DEFAULT_ENDPOINT_NAME}
-# Where a provider is served: OpenRouter and OpenAI at their own endpoint,
-# fixed; an OpenAI-compatible endpoint has no default and must be named
-# (Settings: MODEL_API_URL, or an endpoint's own).
-PROVIDER_BASE = {"openrouter": "https://openrouter.ai/api/v1", "openai": "https://api.openai.com/v1", "custom": ""}
-# The setting a run's key is read from, per provider (web/execute.py,
-# credentials_for): a key of its own for OpenRouter and for OpenAI, the
-# endpoint's key for an OpenAI-compatible one.
-PROVIDER_KEY = {"openrouter": "OPENROUTER_API_KEY", "openai": "OPENAI_API_KEY", "custom": "MODEL_API_KEY"}
-# What makes a provider one a run can start on here: its key, for OpenRouter
-# and OpenAI; its endpoint, for an OpenAI-compatible one, whose key is optional.
-PROVIDER_NEEDS = dict(PROVIDER_KEY, custom="MODEL_API_URL")
+# The providers a run is sent to, in the order the builder prefers them. A run asks for what its agent
+# speaks, so the builder offers each only where its protocols fit (``offered``).
+PROVIDERS = ("openrouter", "openai", "anthropic", "custom")
 
 
 def endpoint_vars(endpoint: str = "") -> tuple:
@@ -239,6 +229,14 @@ def endpoint_vars(endpoint: str = "") -> tuple:
     and MODEL_API_KEY for none named, else that endpoint's own. An id that is not
     one names settings that are never set, so a run on it never falls back to another."""
     return ("MODEL_API_URL", "MODEL_API_KEY") if not endpoint else (f"MODEL_{endpoint}_API_URL", f"MODEL_{endpoint}_API_KEY")
+
+
+def base_of(url_var: str, env=None) -> str:
+    """The base a run's ``url_var`` names (``execution.Plan``): a custom provider's, from its record when it
+    has one (MODEL_<ID>_API_URL is its old setting), else the variable's own value."""
+    env = os.environ if env is None else env
+    i = url_var[6:-8] if url_var.startswith("MODEL_") and url_var.endswith("_API_URL") else ""
+    return record(choice("custom", i), env)["base"] if i and settings.ENDPOINT_ID.match(i) else env.get(url_var, "")
 
 
 def choice(provider: str, endpoint: str = "") -> str:
@@ -252,38 +250,46 @@ def split(value: str) -> tuple:
     return (p, e) if p == "custom" and settings.ENDPOINT_ID.match(e) else (str(value or ""), "")
 
 
-def _with_url(env) -> List[tuple]:
-    """(id, URL) of each OpenAI-compatible endpoint whose URL is set; "" is MODEL_API_URL's."""
-    return [(e, env[endpoint_vars(e)[0]]) for e in ("", *settings.endpoint_ids(env)) if env.get(endpoint_vars(e)[0])]
+def _custom(env) -> List[dict]:
+    """The custom providers whose base is set: the one at MODEL_API_URL first, then the named ones by name."""
+    return [r for r in records(env) if not r["preset"] and r["base"]]
 
 
 def endpoints(env=os.environ) -> List[dict]:
-    """The OpenAI-compatible endpoints a run can be sent to, each whose URL is set and
-    holds no credential (``broken``): the one at MODEL_API_URL first, then the named
-    ones by name. Names only, never a value."""
-    out = [{"id": e, "name": (env.get(f"MODEL_{e}_NAME") if e else "") or e or settings.DEFAULT_ENDPOINT_NAME}
-           for e, url in _with_url(env) if not settings.endpoint_url_problem(url)]
-    return sorted(out, key=lambda x: (x["id"] != "", x["name"].casefold()))
+    """The custom providers a run can be sent to, each whose base is set and holds no credential
+    (``broken``): the one at MODEL_API_URL first, then the named ones by name. Names only, never a value."""
+    return [{"id": split(r["id"])[1], "name": r["name"]} for r in _custom(env) if ready(r, env)]
 
 
 def broken(env=os.environ) -> List[str]:
-    """The endpoint choices whose URL is set but is refused (a credential in it, or no
+    """The custom providers whose base is set but is refused (a credential in it, or no
     http(s) URL): never offered, and a recipe on one is told to fix it in Settings."""
-    return [choice("custom", e) for e, url in _with_url(env) if settings.endpoint_url_problem(url)]
+    return [r["id"] for r in _custom(env) if not ready(r, env)]
 
 
 def label(value: str, env=os.environ) -> str:
-    """What a choice is called: the provider's name, or the endpoint's."""
+    """What a choice is called: the provider's name."""
     p, e = split(value)
-    if not e:
-        return PROVIDER_LABEL.get(p, p)
-    return next((x["name"] for x in endpoints(env) if x["id"] == e), env.get(f"MODEL_{e}_NAME") or e)
+    return record(value, env)["name"] if p in PRESETS or p == "custom" else p
 
 
 def needs(value: str) -> str:
-    """The setting that makes a choice one a run can start on."""
+    """The setting that makes a choice one a run can start on: a preset's key, a custom provider's base."""
     p, e = split(value)
-    return endpoint_vars(e)[0] if e else PROVIDER_NEEDS.get(p, PROVIDER_NEEDS["custom"])
+    return PRESETS[p]["key"] if p in PRESETS else endpoint_vars(e)[0]
+
+
+def offered(apis, env=None) -> List[str]:
+    """The run providers that may serve a consumer speaking ``apis``: every custom one, a preset only
+    when it lists one of them. Anthropic is not offered to a ``chat``-only agent."""
+    return [p for p in PROVIDERS if any(serves(record(p, env), a) is not False for a in apis)]
+
+
+def run_choices(env=None) -> List[dict]:
+    """The run providers as the builder reads them (command-builder-core.js): id, name, the setting that
+    makes one ready, and the protocols it lists (None: a custom provider, which may serve any)."""
+    return [{"id": p, "label": label(p, os.environ if env is None else env), "needs": needs(p),
+             "protocols": list(record(p, env)["endpoints"]) if p in PRESETS else None} for p in PROVIDERS]
 
 
 # OpenRouter names a model with its maker in front (openai/gpt-4o); a
@@ -307,32 +313,33 @@ def served_as(model: str, provider: str) -> str:
 
 def available(env=os.environ) -> List[str]:
     """The choices whose setting is set (``needs``), in the order the builder
-    prefers them: OpenRouter, OpenAI, then each OpenAI-compatible endpoint."""
-    return [p for p in PROVIDERS[:2] if env.get(PROVIDER_NEEDS[p])] + [choice("custom", e["id"]) for e in endpoints(env)]
+    prefers them: OpenRouter, OpenAI, Anthropic, then each custom provider."""
+    return [p for p in PROVIDERS if p in PRESETS and env.get(PRESETS[p]["key"])] + [choice("custom", e["id"]) for e in endpoints(env)]
 
 
 def embedding_problem(model: str, provider: str) -> str:
     """Bare OpenAI embedding names work on OpenAI or OpenRouter; qualified names require OpenRouter."""
     allowed = ("openrouter",) if "/" in model else ("openai", "openrouter")
     if provider not in allowed:
-        names = " or ".join(PROVIDER_LABEL[p] for p in allowed)
+        names = " or ".join(PRESETS[p]["name"] for p in allowed)
         return f"{model} needs the {names} provider for this search."
     return ""
 
 
 def _where(provider: str, endpoint: str, env) -> tuple:
-    """(base URL, key) a choice is asked at; ValueError, before any request, when it cannot be asked."""
-    url_var, key_var = endpoint_vars(endpoint)
-    base = PROVIDER_BASE[provider] if provider != "custom" else env.get(url_var, "")
-    key = env.get(key_var if provider == "custom" else PROVIDER_KEY[provider], "")
+    """(base URL, key, headers) a choice is asked at, the headers its own protocol's (Anthropic's
+    ``x-api-key``); ValueError, before any request, when it cannot be asked."""
+    rec = record(choice(provider, endpoint), env)
+    base, key = rec["base"], env.get(rec["key"], "")
     if not base:
         raise ValueError("Set the provider endpoint in Settings, or enter a model ID.")
-    if provider == "openai" and not key:
+    if provider in ("openai", "anthropic") and not key:
         raise ValueError("Add the provider key in Settings, or enter a model ID.")
     parsed = urllib.parse.urlsplit(base)
     if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("The provider endpoint must be an HTTP or HTTPS base URL.")
-    return base.rstrip("/"), key
+    native = "messages" if serves(rec, "messages") and not serves(rec, "chat") else "chat"
+    return base.rstrip("/"), key, auth(native, key)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -371,28 +378,22 @@ def _models(content: bytes) -> list[dict]:
     return sorted(models.values(), key=lambda m: (m["name"].casefold(), m["id"]))
 
 
-def _bearer(key: str) -> dict:
-    return {"Authorization": "Bearer " + key} if key else {}
-
-
 def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
     """Read model IDs from the selected provider, or ``custom:<id>``'s endpoint; credentials never leave its endpoint."""
     env = os.environ if env is None else env
     provider, endpoint = split(provider)
     if provider not in PROVIDERS:
         raise ValueError("Choose a model provider.")
-    base, key = _where(provider, endpoint, env)
+    base, _, headers = _where(provider, endpoint, env)
     try:
-        return _models(_get(base + "/models", _bearer(key), opener))
+        return _models(_get(base + "/models" + ("?limit=1000" if provider == "anthropic" else ""), headers, opener))
     except (OSError, ValueError, TypeError, http.client.HTTPException):
         # Provider errors can contain keys or private endpoint details; do not echo them.
         raise ValueError("Model list unavailable. Enter a model ID manually.") from None
 
 
-# Settings' Test, per provider: only requests that cost nothing. A model list everywhere; OpenRouter's is
-# public, so its key is asked at its own key-information endpoint. TypeSafe has no free request: no Test.
-TESTED = ("openrouter", "openai", "anthropic", "custom")
-ANTHROPIC = ("https://api.anthropic.com/v1", "ANTHROPIC_API_KEY")
+# Settings' Test, for each run provider (TypeSafe has no free request): only requests that cost nothing. A
+# model list everywhere; OpenRouter's is public, so its key is asked at its own key-information endpoint.
 _TESTS_LOCK = threading.Lock()
 
 
@@ -413,26 +414,22 @@ def test(choice: str, env=None, *, opener=None, clock=time.monotonic) -> dict:
     ValueError, before any request, when the provider has no test or its settings are incomplete."""
     env = os.environ if env is None else env
     provider, endpoint = split(choice)
-    if provider not in TESTED:
+    if provider not in PROVIDERS:
         raise ValueError("This provider has no test.")
-    if provider == "anthropic":
-        from nullius.standard.relay import ANTHROPIC_VERSION
-        base, key = ANTHROPIC[0], env.get(ANTHROPIC[1], "")
-        auth, models = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION}, base + "/models?limit=1000"
-    else:
-        base, key = _where(provider, endpoint, env)
-        auth, models = _bearer(key), base + "/models"
-    if not key and provider != "custom":
+    rec = record(choice, env)
+    if rec["preset"] and not env.get(rec["key"]):
         raise ValueError("Add the provider key in Settings.")
+    base, key, headers = _where(provider, endpoint, env)
+    models = base + "/models" + ("?limit=1000" if provider == "anthropic" else "")
     out = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "reached": False, "key": "not tested",
            "models": None, "ms": 0, "error": ""}
     start = clock()
     try:
         # OpenRouter's model list is public: its key goes to its key endpoint only
-        out["models"] = len(_models(_get(models, {} if provider == "openrouter" else auth, opener)))
+        out["models"] = len(_models(_get(models, {} if provider == "openrouter" else headers, opener)))
         out["reached"] = True
         if provider == "openrouter":
-            _get(base + "/key", auth, opener)
+            _get(base + "/key", headers, opener)
             out["key"] = "accepted"
         elif provider != "custom":
             out["key"] = "accepted"
@@ -440,7 +437,7 @@ def test(choice: str, env=None, *, opener=None, clock=time.monotonic) -> dict:
             out["key"] = "not checked"
         else:
             try:
-                _get(models, _bearer("nullius-wrong-" + secrets.token_hex(8)), opener)
+                _get(models, auth("chat", "nullius-wrong-" + secrets.token_hex(8)), opener)
                 out["key"] = "not checked"
             except urllib.error.HTTPError as e:
                 e.close()

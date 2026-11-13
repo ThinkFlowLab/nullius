@@ -174,7 +174,7 @@ def check(agent: dict, *, model: str, provider: str, jobs_root: str = "jobs", pa
     # records side by side, with the fields fidelity reads.
     r.relay = relay.Relay(r.base, r.key, os.path.join(r.job_dir, ".work", "relay"), prices=price_list.table(), model=model,
                           side_models=(agent.get("model") or {}).get("side_models") or (),
-                          key_header=run.PROVIDERS[provider].get("key_header", "authorization"), fields=True).start()
+                          key_header=r.key_header, fields=True).start()
     order = [(s, n) for n in range(1, passes + 1) for s in SIDES]
     got: Dict[str, List[dict]] = {s: [] for s in SIDES}
     solved: Dict[str, List[str]] = {}

@@ -186,7 +186,7 @@
     {% macro picker(name, providers, judge, label) %}
     <div class="st-judges" role="radiogroup" aria-label="{{ label }}" data-picker>
       {% for key, d in providers.items() %}
-      {% set available = (d.get('url_var') or d['key']) in held %}
+      {% set available = d.ready %}
       <label class="st-judge" data-provider="{{ key }}" data-available="{{ 'true' if available else 'false' }}"{% if not available %} hidden{% endif %}><input type="radio" name="value:{{ name }}" value="{{ key }}"{{ ' checked' if judge.provider == key and available }}{{ ' disabled' if not writable or not available }}
         data-default="{{ d.get('model', '') }}" data-models="{{ d.get('models', [])|join('|') }}">
         <span><b>{{ 'TypeSafe AI' if key == 'typesafe' else d.label }}</b></span></label>

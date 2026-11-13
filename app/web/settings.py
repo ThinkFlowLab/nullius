@@ -52,7 +52,7 @@ def settings_page():
                                    for u in settings.unread(shared.ENV_FILE)],
                            prices=prices.state(),
                            machines=_machines(), constraint_table=constraints.TABLE,
-                           ssh_hosts=hosts.scan_ssh_config(), judges=(client.system_one(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), s1_providers=client.SYSTEM_ONE_PROVIDERS, agent_keys=settings.agent_key_names(),
+                           ssh_hosts=hosts.scan_ssh_config(), judges=(client.system_one(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), s1_providers=client.system_one_providers(os.environ), agent_keys=settings.agent_key_names(),
                            endpoints=[(i, os.environ.get(f"MODEL_{i}_NAME") or i) for i in settings.endpoint_ids()],
                            tested={k: _shown(v) for k, v in providers.tests().items() if isinstance(v, dict)})
 
