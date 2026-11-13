@@ -487,13 +487,17 @@ class StandardPieces(unittest.TestCase):
         self.assertIn('.filter(s => !s.shown).map(s => `<span class="nb-tick no"', js)        # the agent step draws a skill not shown, as a tick
 
     def test_the_builder_is_given_the_controls_their_proofs_and_whether_docker_runs_here(self):
+        from nullius.standard import boat
         self.fixture()
-        html = self.get("/new-run").get_data(as_text=True)
+        with patch.object(boat, "unusable", lambda: "no Boat API key: set it in Settings → Sandbox"):
+            html = self.get("/new-run").get_data(as_text=True)
         schema = json.loads(re.search(r'<script id="nb-schema" type="application/json">(.*?)</script>', html, re.S).group(1))
         ds = schema["standard"]["benchmarks"][0]["datasets"][0]
         self.assertEqual([(c["key"], c["source"], c["proven"], c["failed"]) for c in ds["controls"]],
                          [("nop", "nullius", None, None), ("oracle", "adapter", None, None)])
-        self.assertEqual(schema["standardHere"], {"docker": None, "licences": {}, "host": {}})        # no benchmark here needs a machine setup
+        # no benchmark here needs a machine setup; boat says why it cannot run, never its key
+        self.assertEqual(schema["standardHere"], {"docker": None, "boat": "no Boat API key: set it in Settings → Sandbox",
+                                                  "licences": {}, "host": {}})
 
     def test_docker_is_refused_on_the_where_step_with_this_machines_reason(self):
         self.fixture()

@@ -1091,8 +1091,16 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('data-sandbox="/settings/sandbox"', section)
         self.assertNotIn("data-images", section)                                         # no Images card
         self.assertNotIn('name="value:', section)                                       # outside Save: nothing of it lands in the file
-        for login in ("Docker Hub", 'type="password"', "data-login", "data-logout"):      # signed in once, under Data providers
+        for login in ("Docker Hub", "data-login", "data-logout"):                          # signed in once, under Data providers
             self.assertNotIn(login, section)
+        # the one secret asked here: boat.dev's key, outside Save
+        self.assertEqual(section.count('type="password"'), 1)
+        self.assertIn('name="key" type="password"', section)
+        # a provider card like Data providers': its mark, its name, Edit and Remove, the key asked only on Edit
+        self.assertIn('<h3>Boat</h3>', section)
+        self.assertIn('brand/boat.svg', section)
+        for control in ("data-boat-edit", "data-boat-remove", "data-boat-cancel", "data-boat-form autocomplete=\"off\" hidden"):
+            self.assertIn(control, section)
         self.assertNotIn('data-data-form', section)
         providers = html[html.index('id="data-providers"'):html.index('id="sandbox"')]
         self.assertIn('data-data-search', providers)
@@ -1102,7 +1110,7 @@ class SettingsPage(unittest.TestCase):
         with patch.object(sandbox, "docker_state", lambda: {"ok": True, "version": "29.0"}), \
                 patch.object(sandbox, "login_user", lambda: self.fail("asked")):
             r = self.client.get("/settings/sandbox"); self.addCleanup(r.close)
-        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"}})
+        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"}, "boat": {"set": False, "env": False}})
         seen = []
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
         with patch.object(sandbox, "login", lambda u, t: seen.append((u, t)) or {"ok": True, "user": u}):
@@ -1114,6 +1122,30 @@ class SettingsPage(unittest.TestCase):
                 self.assertEqual(self.client.post("/settings/sandbox/login", data={"username": "x", "token": "y"}, **kw).status_code, 403)
         self.assertEqual(seen, [("someone", "dckr_pat_synthetic")])
         self.assertIsNone(self.file())
+
+    def test_the_boat_key_is_saved_from_this_machines_browser_and_never_echoed(self):
+        from nullius import secrets
+        from nullius.standard import boat
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"SECRETS_DIR": folder}):
+            os.environ.pop(boat.NAME, None)
+            headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
+            url = "/settings/sandbox/boat"
+            for kwargs in ({"headers": {"Origin": "http://localhost"}},
+                           {"headers": headers, "environ_base": {"REMOTE_ADDR": "10.0.0.7"}}):
+                self.assertEqual(self.client.post(url, data={"key": "boat_synthetic"}, **kwargs).status_code, 403)
+            self.assertEqual(self.client.post(url, data={"key": " "}, headers=headers).status_code, 400)
+            response = self.client.post(url, data={"key": "boat_synthetic"}, headers=headers)
+            self.assertTrue(response.json["ok"])
+            self.assertNotIn("boat_synthetic", response.get_data(as_text=True))
+            self.assertEqual(secrets.value(boat.STORE, boat.NAME), b"boat_synthetic")
+            self.assertEqual(boat.key({}), "boat_synthetic")
+            with patch.object(sandbox, "docker_state", lambda: {"ok": True, "version": "29.0"}):
+                state = self.client.get("/settings/sandbox").json
+            self.assertEqual(state["boat"], {"set": True, "env": False})
+            self.assertNotIn("boat_synthetic", json.dumps(state))
+            self.assertIsNone(self.file())                                                    # never in the settings file
+            self.assertTrue(self.client.post(url, data={"action": "remove"}, headers=headers).json["ok"])
+            self.assertIsNone(boat.key({}))
 
     def test_data_provider_save_is_local_guarded_and_never_echoes_token(self):
         from nullius import secrets

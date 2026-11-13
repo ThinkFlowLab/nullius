@@ -8,7 +8,7 @@ import time
 from flask import abort, jsonify, request, url_for
 from nullius import execution, hosts, prerequisites, prices, providers, settings
 from nullius.harbor import source as harbor_source
-from nullius.standard import recipe as standard_recipe
+from nullius.standard import boat, recipe as standard_recipe
 
 from .core import app
 from . import shared
@@ -127,7 +127,7 @@ def _start_standard(recipe: dict):
     one checked before any starts."""
     if len(json.dumps(recipe)) > 200_000:
         return jsonify(ok=False, error="the recipe is too large to keep with the run"), 400
-    out = standard_recipe.compile(recipe, docker_unusable=docker_problem, unpriced=unpriced)
+    out = standard_recipe.compile(recipe, docker_unusable=docker_problem, boat_unusable=boat.unusable, unpriced=unpriced)
     if out["errors"]:
         return jsonify(ok=False, error=" ".join(e["message"] for e in out["errors"])), 400
     # a run of controls calls no model: it is handed no key, so none need be set

@@ -86,7 +86,7 @@
     <div class="st-nav-group">
       <div class="st-nav-label">Execution</div>
       {{ section_link('hosts', 'Hosts', 'server', 'ssh remote machines server hosts') }}
-      {{ section_link('sandbox', 'Sandbox', 'kit', 'docker container') }}
+      {{ section_link('sandbox', 'Sandbox', 'kit', 'docker container boat vm') }}
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Application</div>
@@ -392,10 +392,20 @@
   </div>{% endif %}
   {% include 'settings/data_providers.html' %}
   {# the container backend's engine on this machine, outside the form: asked when the section opens (sandbox.js) #}
-  <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}">
+  <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}"{% if writable %} data-csrf="{{ csrf }}" data-boat="{{ url_for('settings_sandbox_boat') }}"{% endif %}>
     <div class="st-section-head"><h2 id="sandbox-h">Sandbox</h2><p>Where agents run, apart from this machine.</p></div>
     <div class="st-card">
       <div class="st-row"><span class="st-row-label">Engine</span><span class="st-row-value" data-docker-state>Checking…</span></div>
+    </div>
+    {# Boat: a VM per unit (standard/boat.py); its key kept in the owner-only store, never shown again #}
+    <div class="st-card" data-boat-card>
+      <div class="st-provider-summary"><img class="st-logo" src="{{ url_for('static', filename='brand/boat.svg') }}" alt="" width="28" height="28"><div><h3>Boat</h3><p class="st-about" data-boat-state>Checking…</p></div>{% if writable %}<button type="button" class="btn sm ghost" data-boat-edit>Edit</button><button type="button" class="btn sm ghost" data-boat-remove hidden>Remove</button>{% endif %}</div>
+      {% if writable %}
+      <form class="st-sandbox-rows" data-boat-form autocomplete="off" hidden>
+        <div class="st-row"><label class="st-row-label" for="sandbox-boat-key">API key</label><div class="st-row-value"><input class="st-input" id="sandbox-boat-key" name="key" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false" required></div></div>
+        <div class="st-row"><span class="st-row-label"></span><span class="st-row-value st-value"><button type="submit" class="btn sm">Save</button><button type="button" class="btn sm ghost" data-boat-cancel>Cancel</button></span></div>
+      </form>
+      {% endif %}
     </div>
   </section>
 

@@ -6,8 +6,8 @@
     PYTHONPATH=app python3 -m nullius.standard.cli pins BENCHMARK[@VERSION] [--tag TAG] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
-    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container]
+    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container|boat]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container|boat]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -19,6 +19,9 @@ an agent's run or conformance check there is refused without ``--unsandboxed``.
 ``--backend container`` (``docker``, its earlier name) runs each unit's agent or capability in a container whose
 only way out is the unit's relay, or a public web proxy when its environment
 declares ``network`` (``standard/container.py``), and needs no such yes.
+``--backend boat`` runs each unit's agent or capability in a boat.dev VM of its
+own, whose only way out is a tunnel to the unit's relay on this machine
+(``standard/boat.py``); its API key is Settings → Sandbox's, or ``BOAT_API_KEY``.
 A benchmark's control (``nop``, ``oracle``: its ``controls``) runs no agent
 and calls no model - only a judged benchmark's judge - so it asks for neither.
 ``prove`` runs a benchmark's controls and checks its units and that nothing
@@ -663,8 +666,8 @@ def main(argv=None):
         p.add_argument("--unsandboxed", action="store_true",
                        help="allow an agent, or a setup check without Docker, to execute code on this machine as you")
         p.add_argument("--backend", default="local", type=definitions.names.backend, choices=list(run.BACKENDS),
-                       help="local processes (the default), or container: each unit in a container, its relay beside it "
-                            "(docker: its earlier name)")
+                       help="local processes (the default); container: each unit in a container, its relay beside it "
+                            "(docker: its earlier name); boat: each unit's agent in a boat.dev VM of its own")
         p.add_argument("--from-run", action="store_true",
                        help="started by Nullius: the key is OPENAI_API_KEY (and OPENAI_BASE_URL), saved settings are not read")
         p.add_argument("--option", action="append", metavar="NAME=VALUE",

@@ -28,8 +28,10 @@ the runs page groups them and ``cli merge`` puts them together. A shard's
 ``limit`` is its own. ``backend``: ``local`` processes, or ``container`` - each
 unit's agent or capability in a container, ``docker`` its earlier name - which a
 host must have Docker or Podman for (``docker`` in the result: the run checks it
-before anything is sent). Each machine's constraints in Settings
-(``nullius.constraints``) go on its command.
+before anything is sent), or ``boat`` - each unit's agent or capability in a
+boat.dev VM of its own (``boat.py``), started from this machine with its key.
+Each machine's constraints in Settings (``nullius.constraints``) go on its
+command.
 """
 from __future__ import annotations
 
@@ -262,6 +264,7 @@ def _int(v, low: int, high: Optional[int] = None) -> Optional[int]:
 
 def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             docker_unusable: Optional[Callable[[], Optional[str]]] = None,
+            boat_unusable: Optional[Callable[[], Optional[str]]] = None,
             unpriced: Optional[Callable[[List[str]], List[str]]] = None) -> dict:
     """{errors, notes, review, jobs, confirm, script, parts, model}
     for one recipe; errors name the step
@@ -274,7 +277,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     machine, why docker cannot run here (``container.unusable``) - a reason
     is the Where step's error. Not given, it is not asked: compiling stays a
     function of the definitions alone, and the routes that preview or start
-    a run pass it.
+    a run pass it. ``boat_unusable``: the same for the boat backend
+    (``boat.unusable``): its key, and the programs that reach a VM.
 
     ``max_usd``: the run's spending cap (``standard.ledger``), one amount for
     the whole run: its jobs that call a model - each dataset with each
@@ -318,7 +322,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # Several may be chosen: each is its own job of the one run, one after the other.
     backend = definitions.names.backend(recipe.get("backend") or "local")
     if backend not in BACKENDS:
-        add("where", "The backend is local processes or a container.")
+        add("where", "The backend is local processes, a container or Boat.")
         backend = "local"
     what = "an agent" if side == "agent" else f"a {_bench_page(b)['kind'] or 'capability'}"
     refs = chosen_of(recipe)
@@ -498,6 +502,12 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         why = docker_unusable()
         if why:
             add("where", f"The container backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman.")
+    elif backend == "boat" and targets != ["local"]:
+        add("where", "Boat VMs are started from this machine, with its key: choose This machine alone.")
+    elif backend == "boat" and boat_unusable is not None:
+        why = boat_unusable()
+        if why:
+            add("where", f"Boat cannot run from this machine: {why}.")
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
     spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"])
     paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])
@@ -600,7 +610,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--simulator-model", sim_model] if sim_model and not p["control"] else []),
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
-                 *(["--backend", "container"] if backend == "container" else []),
+                 *(["--backend", backend] if backend != "local" else []),
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
                  *(["--shard", f"{index}/{of}", "--launch", launch_of(d, p)] if of > 1 else []),
                  *limits.cli_words(limits.of(targets[index - 1])),
@@ -707,9 +717,13 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         notes.append(f"Each machine runs the units whose shard is its own, by their ids' hash: {of} jobs under one launch, "
                      f"{name}, put together by cli merge.")
     docker_only = [n for n, e in (b.get("environments") or {}).items() if not e.get("local_ok")]
-    if docker_only and not only_controls and backend == "local":
+    if docker_only and not only_controls and backend in ("local", "boat"):
         notes.append(f"Units in {b['label']}'s environment{'s' if len(docker_only) > 1 else ''} {', '.join(docker_only)} "
-                     "need the container backend: on local processes they are recorded as not run.")
+                     f"need the container backend: on {'local processes' if backend == 'local' else 'Boat'} they are recorded as not run.")
+    web_only = [n for n, e in (b.get("environments") or {}).items() if e.get("network") and e.get("local_ok")]
+    if web_only and side == "agent" and not only_controls and backend == "boat":
+        notes.append(f"Units in {b['label']}'s environment{'s' if len(web_only) > 1 else ''} {', '.join(web_only)} "
+                     "give the agent the public web, which a Boat VM does not yet: they are recorded as not run.")
     if any(p["control"] for p in picks) and any(definitions.own_image(e) for e in (b.get("environments") or {}).values()):
         notes.append(f"Each {(b.get('units') or {}).get('noun', 'unit')} of {b['label']} is its own image: the control "
                      "runs in it, so docker is needed where it runs, whatever the backend.")
@@ -759,7 +773,7 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
         errors.append("Choose a model or enter its ID.")
     backend = definitions.names.backend(backend)
     if backend not in BACKENDS:
-        errors.append("Choose local processes or a container for the checks.")
+        errors.append("Choose local processes, a container or Boat for the checks.")
     if kind == "agent" and backend == "local" and unsandboxed is not True:
         errors.append(f"{o['label']} runs on this machine as you while its kits run: the local backend is not a sandbox. Say yes to that to check it.")
     if not re.match(r"^\d{4}-\d{2}-\d{2}__\d{2}-\d{2}-\d{2}$", stamp or ""):
@@ -771,7 +785,7 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
     if errors:
         return {"errors": errors, "script": "", "jobs": [], "label": o["label"]}
     words = ["nullius", "standard", "conform", o["_ref"], "--model", model, "--provider", provider,
-             "--stamp", stamp, *(["--backend", "container"] if backend == "container" else []),
+             "--stamp", stamp, *(["--backend", backend] if backend != "local" else []),
              *(["--unsandboxed"] if kind == "agent" and backend == "local" else []), "--from-run"]
     command = " ".join(shlex.quote(w) for w in words) + ' --jobs "${NULLIUS_JOBS:-jobs_standard}"'
     script = ("#!/usr/bin/env bash\n"
