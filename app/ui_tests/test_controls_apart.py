@@ -56,7 +56,7 @@ class ControlsApart(unittest.TestCase):
         cls.agent = write_job(root, "tau-x-agent", "my-agent",
                               {"a": 1, "b": 1, "c": 0, "d": "ApiRateLimitError"}, n_tasks=4)
         cls.nop = write_job(root, "tau-x-nop", "nop", {t: 0 for t in "abcde"}, n_tasks=5)
-        cls.oracle = write_job(root, "tau-x-oracle", "oracle", {"a": 1, "b": 1, "c": 1}, n_tasks=5)
+        cls.oracle = write_job(root, "tau-x-oracle", "oracle", {"a": 1, "b": 1, "c": 1}, n_tasks=3)
         cls.leaky_nop = write_job(root, "tau-y-nop", "nop", {"a": 0, "leaky": 1}, n_tasks=2)
         cls.broken_oracle = write_job(root, "tau-y-oracle", "oracle", {"a": 1, "bad": 0}, n_tasks=2)
         cls.ws = workspace.Workspace("active", "Active", [root], "2026-01-01", "2026-01-01",

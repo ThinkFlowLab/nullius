@@ -77,8 +77,8 @@
       <span class="launch-id mono" title="{{ 'Launched together by one Run from the builder' if L.source == 'record' and not L.launch_ids else 'Shards of one launch, run on several machines' if L.launch_ids else 'Grouped: the same dataset, started within half an hour of the first' }}">{{ L.title }}</span>
       <span class="launch-when">{% if L.started %}{{ L.started|dt }} · {% endif %}{{ L.job_ids|length + L.pending|length }} run{{ '' if (L.job_ids|length + L.pending|length) == 1 else 's' }}</span>
     </header>
-    {# a runner's launch is checked by its own floor and ceiling, which are arms in its table #}
-    {% if not by_runner %}
+    {# a runner's launch without controls is checked by its own floor and ceiling, which are arms in its table #}
+    {% if g.controls or not by_runner %}
     {#- the controls themselves are rows at the top of the table; this line says what they add up to #}
     <div class="launch-checks{{ ' none' if not g.controls }}">
       <span class="lc-label">Task checks</span>
@@ -91,7 +91,7 @@
       <thead><tr><th>Agent</th><th class="lh-state">State</th><th title="Solved ÷ trials that actually ran; the tick is the raw rate, solved ÷ all trials">Adjusted solve rate</th><th class="lh-mix">Outcomes</th><th class="num">Solved</th><th class="num lh-more">Tokens</th><th class="num lh-more">Cost</th><th class="num lh-more">Time</th><th></th></tr></thead>
       <tbody>
       {#- the task checks first: their verdict where an agent has its rate, never ranked, kept once they end #}
-      {% for r in g.controls if not by_runner %}{% set j = r.job %}{% set v = r.verdict %}
+      {% for r in g.controls %}{% set j = r.job %}{% set v = r.verdict %}
       <tr class="la-control st-{{ r.state }}" data-control="{{ r.control }}" data-state="{{ v.state if v else 'pending' }}">
         <td><div class="la-who"><span class="la-name"><a href="{{ url_for('job', job_id=r.job_id) }}">{{ r.control }}</a> <span class="la-kind">task check</span></span>
           <small class="mono">{{ r.job_id }}</small></div></td>
