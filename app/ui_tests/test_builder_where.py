@@ -33,7 +33,17 @@ class StandardWhere(CompilerCase):
                 tile = re.search(r'<button [^>]*data-std-backend="container"[^>]*>', html).group(0)
                 self.assertIn('title="Not on this machine: docker is not installed"', tile)
                 self.assertEqual(html.count("Not on this machine"), 1)
-                self.assertNotIn("disabled", re.search(r'<button [^>]*data-std-backend="container"[^>]*>', here[name]).group(0))
+                container = re.search(r'<button [^>]*data-std-backend="container"[^>]*>', here[name]).group(0)
+                if name.startswith("osworld1 "):     # its Original's docker provider needs docker, which no image installs
+                    self.assertIn('title="docker cannot be provided in a container: choose local processes."', container)
+                else:
+                    self.assertNotIn("disabled", container)
+
+    def test_a_setup_whose_option_needs_what_no_image_installs_is_not_offered_the_container(self):
+        tile = lambda html: re.search(r'<button [^>]*data-std-backend="container"[^>]*>', html).group(0)
+        gpu = self.draw(None, "r.bench_options={retriever:'flat-contriever-session'};")["longmemeval local"]
+        self.assertIn('disabled aria-disabled="true" title="cuda_gpu cannot be provided in a container: choose local processes."', tile(gpu))
+        self.assertNotIn("disabled", tile(self.draw(None, "r.others=['nop'];")["osworld1 local"]))     # Review's rule names setups only
 
     def test_docker_names_the_public_web_proxy_only_for_an_agent_whose_environment_declares_network(self):
         networked = {b["key"] for b in self.schema["standard"]["benchmarks"]
