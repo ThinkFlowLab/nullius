@@ -1019,7 +1019,6 @@
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
     // a provider added to a Served by, after the ones already there; the field shows the list, in its order
     else if(d.servedAdd!==undefined){const rec=r(),role=d.servedAdd,now=(rec.served_by||{})[role]||[];if(el.value&&!now.includes(el.value))C.setServed(rec,role,[...now,el.value]);el.value='';const f=root.querySelector(`[data-served-by="${role}"]`);if(f)f.value=((r().served_by||{})[role]||[]).join(', ');refreshPlan();}
-    // a model chosen: its Served by lists that model's providers
     // a model chosen: its Served by lists that model's providers; the keyboard stays on the field the new form holds
     else if(['model','simulator_model','judge_model'].includes(d.field)&&C.servedRoles(r()).length){renderForm();refreshPlan();
       requestAnimationFrame(()=>{const f=root.querySelector(`[data-field="${d.field}"]`);if(f&&document.activeElement!==f)f.focus();});}
