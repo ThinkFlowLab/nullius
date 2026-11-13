@@ -626,10 +626,14 @@ class Run:
             held = set(everything)
             unknown = [u for u in listed if u not in held]
             if unknown:
+                # what the run holds is let go as when its driver cannot list the units: on the container
+                # backend that includes the containers its driver or its doors started
                 for d in self.drivers:
                     d.close()
                 if self.bench_relay is not None:
                     self.bench_relay.stop()
+                if self.backend == "container":
+                    container.sweep(self.name)
                 # the record a refusal in ready() leaves, which the runs list reads (execution's refused):
                 # the job's folder with its progress.jsonl, the driver's working folders and logs taken out
                 work = os.path.join(self.job_dir, ".work")

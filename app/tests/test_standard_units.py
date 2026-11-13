@@ -19,7 +19,7 @@ from unittest import mock
 
 from nullius import progress
 from nullius.harbor import feed
-from nullius.standard import cli, definitions, install, merge, run, shard
+from nullius.standard import cli, container, definitions, install, merge, run, shard
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 NOP = {"nop": {"source": "nullius", "from": "nothing said"}}
@@ -114,6 +114,23 @@ class Listed(unittest.TestCase):
         self.assertEqual(tree(preparing.job_dir), [".work", "progress.jsonl"])
         self.assertEqual(tree(unknown.job_dir), tree(preparing.job_dir))
         self.assertIn("nope", progress.refusal(progress.read(unknown.job_dir)))
+
+    def test_on_the_container_backend_a_refused_list_removes_the_jobs_containers(self):
+        """On the container backend a driver, or a door it was given, may run in a container of the job's:
+        a run whose list its dataset does not hold removes them, as a run whose driver cannot list its
+        units does."""
+        with mock.patch.object(container, "unusable", return_value=None), \
+                mock.patch.object(container, "present", return_value=True), \
+                mock.patch.object(container, "base_image", return_value="nullius/base:x"), \
+                mock.patch.object(container, "check_env", return_value={}), \
+                mock.patch.object(container, "sweep") as sweep:
+            r = run.Run(self.b, definitions.control(self.b, "nop"), model="", provider="openai", jobs_root=self.jobs, env={},
+                        say=lambda s: None, backend="container", units_file=run.units_file(self.file("good\nnope\n")))
+            with self.assertRaisesRegex(run.Refused, "nope"):
+                r.start()
+        sweep.assert_called_once_with(r.name)
+        self.assertTrue(r.drivers and all(d.p.poll() is not None for d in r.drivers))
+        self.assertEqual(self.trials(r.job_dir), [])
 
     def test_an_id_given_twice_is_refused_and_named(self):
         with self.assertRaises(run.Refused) as e:
