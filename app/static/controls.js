@@ -115,3 +115,11 @@
   document.addEventListener('reset', () => requestAnimationFrame(scan));
   scan();
 })();
+
+// A .ui-range's filled part follows its value. Code that sets a value calls nulliusRangeFill(input): no event says so.
+(() => {
+  const fill = input => input.closest('.ui-range')?.style.setProperty('--fill', String((input.value - (input.min || 0)) / ((input.max || 100) - (input.min || 0) || 1)));
+  window.nulliusRangeFill = fill;
+  document.addEventListener('input', event => { if (event.target.matches?.('.ui-range input[type=range]')) fill(event.target); });
+  document.querySelectorAll('.ui-range input[type=range]').forEach(fill);
+})();

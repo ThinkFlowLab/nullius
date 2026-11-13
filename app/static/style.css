@@ -1722,6 +1722,45 @@ select.ui-select-native { display: none !important; }
 .ui-select-option[aria-disabled=true] { opacity: .45; cursor: default; }
 @media (max-width: 560px) { .ui-select-trigger { font-size: 16px; } }
 
+/* Shared slider: <div class="ui-range"><input type="range"><div class="ui-range-ends"><span>…</span><span>…</span></div></div>.
+   --fill (0 to 1) is the filled part, kept by controls.js. .marked draws a tick at --mark (0 to 1): past it the
+   track is dotted, a step beyond the values (No limit); .ui-range-at-mark labels the tick. .unset: no value chosen.
+   The ends hang below the track. */
+.ui-range { --thumb: 14px; --track: 4px; --fill: 0; --mark: 1; --range-fill: var(--accent); --range-thumb: var(--accent); position: relative; min-width: 0; }
+.ui-range[hidden] { display: none; }
+.ui-range input[type=range] {
+  --at-fill: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--fill));
+  --at-mark: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--mark));
+  --range-track: linear-gradient(var(--range-fill) 0 0) 0 / var(--at-fill) 100% no-repeat,
+                 linear-gradient(var(--border) 0 0) 0 / var(--at-mark) 100% no-repeat,
+                 repeating-linear-gradient(90deg, var(--border) 0 2px, transparent 2px 5px);
+  position: relative; display: block; width: 100%; height: 22px; margin: 0; background: none; -webkit-appearance: none; appearance: none; cursor: pointer;
+}
+.ui-range input[type=range]::-webkit-slider-runnable-track { height: var(--track); border-radius: 2px; background: var(--range-track); }
+.ui-range input[type=range]::-moz-range-track { height: var(--track); border-radius: 2px; background: var(--range-track); }
+.ui-range input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; box-sizing: border-box; width: var(--thumb); height: var(--thumb); margin-top: calc((var(--track) - var(--thumb)) / 2);
+  border: 2px solid var(--range-thumb); border-radius: 50%; background: var(--surface); transition: background .12s, box-shadow .12s;
+}
+.ui-range input[type=range]::-moz-range-thumb {
+  box-sizing: border-box; width: var(--thumb); height: var(--thumb);
+  border: 2px solid var(--range-thumb); border-radius: 50%; background: var(--surface); transition: background .12s, box-shadow .12s;
+}
+.ui-range input[type=range]:hover::-webkit-slider-thumb, .ui-range input[type=range]:active::-webkit-slider-thumb { background: var(--accent-soft); }
+.ui-range input[type=range]:hover::-moz-range-thumb, .ui-range input[type=range]:active::-moz-range-thumb { background: var(--accent-soft); }
+.ui-range input[type=range]:focus-visible { outline: none; }
+.ui-range input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.ui-range input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.ui-range input[type=range]:disabled { opacity: .5; cursor: not-allowed; }
+.ui-range.unset { --range-fill: transparent; --range-thumb: var(--text-faint); }
+.ui-range.marked::before { content: ''; position: absolute; top: 50%; left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--mark) - 1px); width: 2px; height: 12px; border-radius: 1px; background: var(--text-faint); transform: translateY(-50%); pointer-events: none; }
+.ui-range-ends { position: absolute; top: calc(100% + 1px); left: 0; right: 0; display: flex; justify-content: space-between; gap: 8px; font-size: 11px; line-height: 1; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
+.ui-range-at-mark { position: absolute; left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--mark) + 1px); transform: translateX(-100%); }   /* a label ending at the tick: the gap past it stays clear */
+@media (prefers-reduced-motion: reduce) {
+  .ui-range input[type=range]::-webkit-slider-thumb { transition: none; }
+  .ui-range input[type=range]::-moz-range-thumb { transition: none; }
+}
+
 /* Bundled upstream agent marks, shared by catalogue pages and the builder. */
 .agent-logo { display: block; width: 100%; height: 100%; object-fit: contain; flex: none; }
 .nav-agent-logo { width: 18px; height: 18px; }
