@@ -166,6 +166,34 @@ class Listed(unittest.TestCase):
         with self.assertRaisesRegex(merge.Refused, "units file"):
             merge.check([other, jobs[1]])
 
+    def test_force_never_merges_shards_whose_lists_hold_different_units(self):
+        """``--force`` merges shards of different launches, models or agents; a merged job records one
+        list, so shards of different lists, or of a list and none, are refused whatever it says."""
+        left = self.go("good\n", shard=(1, 2), name="left-shard-1of2", launch="L")
+        right = self.go("slow\n", shard=(2, 2), name="right-shard-2of2", launch="L")
+        whole = self.go(shard=(2, 2), name="whole-shard-2of2", launch="L")
+        for pair in ((left, right), (left, whole)):
+            with self.subTest(pair=[os.path.basename(p) for p in pair]):
+                for force in (False, True):
+                    with self.assertRaisesRegex(merge.Refused, "units file"):
+                        merge.merge(list(pair), os.path.join(self.jobs, "merged"), force=force)
+                self.assertFalse(os.path.exists(os.path.join(self.jobs, "merged")))
+
+    def test_lists_of_the_same_units_merge_whatever_their_files_names_comments_or_order(self):
+        """``merge`` compares the units each list holds, after the file's reading rules, never the file's
+        bytes: a name, a comment, a line ending or an order of its own changes the sha256, not the units."""
+        with open(os.path.join(self.tmp, "right.txt"), "wb") as f:
+            f.write(b"# the same two\r\nmodel\r\ngood\r\n")
+        left = self.go("good\nmodel\n", shard=(1, 2), name="left-shard-1of2", launch="L")
+        right = run.run(self.b, definitions.control(self.b, "nop"), model="", provider="openai", jobs_root=self.jobs, env={},
+                        say=lambda s: None, shard=(2, 2), name="right-shard-2of2", launch="L",
+                        units_file=run.units_file(os.path.join(self.tmp, "right.txt")))
+        records = [read(os.path.join(j, "config.json"))["standard"]["units_file"] for j in (left, right)]
+        self.assertNotEqual(records[0]["sha256"], records[1]["sha256"])
+        self.assertEqual((records[0]["name"], records[1]["name"]), ("units.txt", "right.txt"))
+        got = merge.merge([left, right], os.path.join(self.jobs, "merged"))
+        self.assertEqual(got["trials"], 2)
+
     def test_a_run_without_a_list_is_the_run_it_was(self):
         job = self.go()
         self.assertEqual(self.trials(job), ["good__u0000", "model__u0003", "slow__u0002", "wrong__u0001"])

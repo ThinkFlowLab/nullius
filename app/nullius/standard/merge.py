@@ -9,13 +9,16 @@ verdicts, the earliest start and the latest end - and its ``config.json``
 the shards' with ``shard`` taken out and ``merged_from`` put in.
 
 What is merged must be one launch: the same launch id, benchmark and
-version, dataset, agent or capability and model, the same number of shards
-and, for shards of a list of units (``run.units_file``), the same list - else
-it is refused, naming what differs, unless ``force``. Two trials of
+version, dataset, agent or capability and model, and the same number of shards
+- else it is refused, naming what differs, unless ``force``. Two trials of
 one unit are always refused, with the units named: one of them would be
-counted twice. Units no shard ran are not a refusal - a shard may be
-missing, or stopped early - and are said: the shards absent, and the units a
-shard planned and has no trial for.
+counted twice. So are shards whose lists of units (``run.units_file``) hold
+different units, or a shard of a list and one of none: the merged job
+records one list. The units are compared in any order; a list's name,
+comments, line endings and sha256 may differ from shard to shard, and the
+merged job records the first shard's list. Units no shard ran
+are not a refusal - a shard may be missing, or stopped early - and are said:
+the shards absent, and the units a shard planned and has no trial for.
 
 Files are hard-linked into the merged job where the file system allows (a
 copy where it does not), so a merge of a thousand trials costs no second
@@ -37,8 +40,7 @@ from nullius.standard.names import backend as backend_name
 SAME = (("launch", ("standard", "launch")), ("benchmark", ("standard", "benchmark")),
         ("benchmark version", ("standard", "benchmark_version")), ("dataset", ("datasets", 0, "name")),
         ("agent or capability", ("standard", "plugged")), ("model", ("agents", 0, "model_name")),
-        ("backend", ("standard", "backend")), ("number of shards", ("standard", "shard", "of")),
-        ("units file", ("standard", "units_file", "sha256")))
+        ("backend", ("standard", "backend")), ("number of shards", ("standard", "shard", "of")))
 
 
 class Refused(Exception):
@@ -63,6 +65,12 @@ def _at(d, path):
         else:
             return None
     return d
+
+
+def _listed(cfg: dict) -> Optional[tuple]:
+    """The units a shard's list holds (``standard.units_file``), sorted; None for a shard of no list."""
+    units = _at(cfg, ("standard", "units_file", "units"))
+    return tuple(sorted(str(u) for u in units)) if isinstance(units, list) else None
 
 
 def _trials(job_dir: str) -> List[str]:
@@ -105,6 +113,14 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
         shards.append({"dir": d, "name": os.path.basename(d), "config": cfg, "result": res, "shard": sh or {}})
     if len({s["dir"] for s in shards}) != len(shards):
         raise Refused("a job is named twice")
+    # one list of units, force or not: the merged job records one
+    lists = [_listed(s["config"]) for s in shards]
+    if len(set(lists)) > 1:
+        odd = sorted({u for got in lists for u in got or ()} - set.intersection(*(set(got or ()) for got in lists)))
+        raise Refused("the shards' units files hold different units - "
+                      + "; ".join(f"{s['name']} {f'{len(got)} units' if got is not None else 'no list'}" for s, got in zip(shards, lists))
+                      + (f"; not in every list: {', '.join(odd[:10])}" + (" and more" if len(odd) > 10 else "") if odd else "")
+                      + " (--force does not merge them)")
     differ = []
     for label, path in SAME:
         seen = {json.dumps(_at(s["config"], path)) for s in shards}
