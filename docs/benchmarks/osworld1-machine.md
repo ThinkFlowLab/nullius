@@ -90,7 +90,7 @@ More at once is optional: `-j N` runs N tasks side by side, each with a VM of it
     stat -c %s Ubuntu.qcow2              # the same size
     ```
 
-    Fetch it before the first run: a task that finds no image downloads it within its own limit (600 s for the null control's score, 2 hours for a setup), and a stop during the unzip leaves a partial `Ubuntu.qcow2` that the upstream takes as present. If the sizes differ, `rm Ubuntu.qcow2 && unzip Ubuntu.qcow2.zip`. Once both checks pass, the zip can go (`rm Ubuntu.qcow2.zip`): the upstream looks only for `Ubuntu.qcow2`. Where Hugging Face is out of reach, run `export HF_ENDPOINT=https://hf-mirror.com` before the download command above, and the upstream's downloader uses its mirror. This holds for this step only: a run does not pass `HF_ENDPOINT` on to the driver.
+    Fetch it before the first run: a task that finds no image downloads it within its own limit (600 s for the null control's score, 2 hours for a setup), and a stop during the unzip leaves a partial `Ubuntu.qcow2` that the upstream takes as present. If the sizes differ, `rm Ubuntu.qcow2 && unzip Ubuntu.qcow2.zip`. Once both checks pass, the zip can go (`rm Ubuntu.qcow2.zip`): the upstream looks only for `Ubuntu.qcow2`. Where Hugging Face is out of reach, run `export HF_ENDPOINT=https://hf-mirror.com` before the download command above. The upstream's downloader then uses its mirror. This holds for this step only: a run does not pass `HF_ENDPOINT` on to the driver.
 
 5. **Pull the VM's Docker image.** The upstream's provider pulls it when it is missing; pulled now, it is not part of the first task.
 

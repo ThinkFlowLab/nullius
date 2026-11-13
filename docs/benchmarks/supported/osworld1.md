@@ -60,7 +60,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 - The 8 Google Drive tasks need a Google account's credentials, which OSWorld does not ship. They are in All tasks only.
 - 49 tasks ask for a proxy whose credentials OSWorld does not ship. PromptAgent, GPT-5.4, OpenAI CUA, OS-Symphony, EvoCUA and Muse Spark always use it: for them those tasks fail or run without a network.
 - The VM image is not pinned: a later download can differ from the one a score was made with.
-- OSWorld's docker provider opens each VM's ports on every network interface of the machine, including a port that runs any command in the VM. Bind Docker's ports to 127.0.0.1, or keep the machine off untrusted networks.
+- OSWorld's docker provider opens each VM's ports on every network interface of the machine. One of them runs any command in the VM. Bind Docker's ports to 127.0.0.1, or keep the machine off untrusted networks.
 
 ## Nullius limitations
 
