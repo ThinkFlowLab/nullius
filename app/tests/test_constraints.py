@@ -580,19 +580,22 @@ class Scope(unittest.TestCase):
         ok, off = scope(enforced=["cpus", "memory_mb", "processes"]), scope(why="no cgroup v2")
         self.assertTrue(constraints.scope_ok(ok)); self.assertFalse(constraints.scope_ok(off)); self.assertFalse(constraints.scope_ok({}))
         values = {"cpus": 2, "processes": 64, "cpu_set": "0"}
-        self.assertEqual(constraints.not_enforced(values, ok), [])                      # no engine: a local run holds them
-        self.assertEqual(constraints.not_enforced(values, off), ["cpus", "processes"])  # cpu_set: the affinity
+        self.assertEqual(constraints.not_enforced(values, ok), {})                      # no engine: a local run holds them
+        self.assertEqual(list(constraints.not_enforced(values, off)), ["cpus", "processes"])  # cpu_set: the affinity
         self.assertEqual(constraints.warnings(values, ok), {})
         self.assertEqual(constraints.warnings(values, off), {})                         # no engine, no scope: off in Settings
         engine = dict(off, engine={"kind": "docker", "version": "29"}, enforced=["cpus", "processes", "cpu_set"])
-        self.assertEqual(constraints.warnings(values, engine), {})                      # a container run holds them; its driver runs unlimited
-        self.assertEqual(constraints.not_enforced(values, engine), [])
-        rows = lambda found, docker=False: Review().rows(values, docker=docker, found=found)["constraints"]
+        rows = lambda found, backend="local", own=False: Review().rows(values, backend=backend, found=found, own=own)["constraints"]
         self.assertEqual(rows(ok)["state"], "ok")
         self.assertEqual(rows(off)["detail"], "systemd does not enforce CPUs, Processes and threads here (no cgroup v2): test it in Settings")
-        self.assertEqual(rows(engine, docker=True)["state"], "ok")                      # the container backend: its drivers run unlimited
+        self.assertEqual(rows(engine, "container")["state"], "ok")                      # the container backend: its drivers run unlimited
         self.assertEqual(rows(engine)["state"], "missing")                              # the local backend: its agents need the scope
-        self.assertEqual(rows({"capacity": {"cpus": 4}, "enforced": ["cpus", "processes", "cpu_set"]}, docker=True)["state"], "ok")   # scope never tested
+        self.assertEqual(rows({"capacity": {"cpus": 4}, "enforced": ["cpus", "processes", "cpu_set"]}, "container")["state"], "ok")   # scope never tested
+        self.assertEqual(rows(dict(ok, engine={"kind": "docker"}, enforced=["processes"]), own=True)["detail"],   # own images, local backend
+                         "this machine's engine does not enforce CPUs, CPUs Nullius may use: test it in Settings")
+        # one function: Settings marks what Review refuses, on either backend
+        self.assertEqual(constraints.not_enforced(values, engine), {"cpus": "systemd", "processes": "systemd"})
+        self.assertEqual(constraints.warnings(values, engine)["cpus"], "Local processes here do not enforce it: run in a container, or remove it.")
 
 
 class Cli(unittest.TestCase):
@@ -624,6 +627,34 @@ class Compile(unittest.TestCase):
         with mock.patch.dict(os.environ, {constraints.SETTING: '{"me@bench": {"cpus": 0}}'}):
             said = [e["message"] for e in recipe.compile(r, defs)["errors"]]
         self.assertTrue(any(m.startswith("HOST_CONSTRAINTS must be valid constraints") for m in said), said)   # never run without them
+
+
+class Review(unittest.TestCase):
+    GPU = {"cuda_gpu": {"summary": "a GPU", "check": ["nvidia-smi"]}}
+
+    def rows(self, values, runner="standard", backend="container", found=None, setups=None, where="local", own=False):
+        with mock.patch.dict(os.environ, {constraints.SETTING: json.dumps({where: values})}):
+            return {r["name"]: r for r in prerequisites.constraint_rows(where, runner, backend, setups, found=found or {}, own=own)}
+
+    def test_rows(self):
+        self.assertEqual(self.rows({}), {})
+        tested = {"capacity": {"cpus": 4}, "engine": {"kind": "docker"}}
+        self.assertEqual(self.rows({"cpus": 2}, found=dict(tested, enforced=["cpus"]))["constraints"]["state"], "ok")
+        lost = self.rows({"cpus": 2}, found=dict(tested, enforced=[]))["constraints"]
+        self.assertEqual((lost["state"], lost["detail"]), ("missing", "this machine's engine does not enforce CPUs: test it in Settings"))
+        self.assertEqual(self.rows({"cpus": 2}, backend="local", found=dict(tested, enforced=[]))["constraints"]["state"], "ok")
+        self.assertEqual(self.rows({"cpus": 2}, found={"test": {"ok": False}, "enforced": []})["constraints"]["state"], "ok")   # not reached: not measured
+        with mock.patch.dict(os.environ, {constraints.SETTING: '{"local": {"cpus": 0}}'}):
+            bad = prerequisites.constraint_rows("local", "standard", "local")
+            self.assertEqual((bad[0]["state"], bad[0]["detail"][:40]), ("missing", "HOST_CONSTRAINTS must be valid constrain"))
+            self.assertEqual(prerequisites.constraint_rows("local", "harbor", "local"), [])     # Harbor takes none
+        self.assertEqual(self.rows({"cpus": 2}, runner="harbor")["constraints"]["detail"], "not applied to Harbor runs")
+        self.assertEqual(self.rows({"gpu_ids": []}, setups=self.GPU, where="bench")["gpu"]["state"], "missing")
+        self.assertNotIn("gpu", self.rows({"gpu_ids": [0]}, setups=self.GPU, where="bench"))
+        self.assertNotIn("gpu", self.rows({"gpu_ids": []}, setups=self.GPU))        # here, the setup's own row says it (hostreq)
+        with mock.patch.dict(os.environ, {constraints.SETTING: '{"local": {"gpu_ids": []}}'}):
+            here = {r["name"]: r for r in prerequisites.check_here([], self.GPU, which=lambda p: True)}
+        self.assertEqual((here["setup:cuda_gpu"]["state"], here["setup:cuda_gpu"]["detail"]), ("missing", "this machine allows Nullius no GPU"))
 
 
 if __name__ == "__main__":

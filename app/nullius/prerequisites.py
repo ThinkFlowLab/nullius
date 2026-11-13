@@ -17,7 +17,11 @@ A need is one of:
 - ``harbor``: a recipe from before the pin runs the ``harbor`` on PATH;
 - ``python3``, ``git``: the standard's cli, on a host;
 - a benchmark's machine setup (``host`` in its definition): its programs,
-  optional GPU memory minimum, and the commands that install them.
+  optional GPU memory minimum, and the commands that install them;
+- the machine's constraints (``nullius.constraints``, ``constraint_rows``):
+  a container constraint its engine, or a cap its systemd, did not enforce at
+  its last test, or a setup that needs a GPU (checked by ``nvidia-smi``)
+  where no GPU is allowed.
 
 Nothing here installs anything or writes anything: each check is
 ``command -v``, the engine's ``version`` and, when needed, ``nvidia-smi`` here,
@@ -121,6 +125,40 @@ def check_host(host: hosts.Host, needs: List[str], setups: Optional[Dict[str, di
         lacking = [p for p in s.get("check") or [] if p in gone]
         rows.append(row("setup:" + name, "missing", ", ".join(lacking) + " not on PATH", s.get("install"), label=name)
                     if lacking else row("setup:" + name, "ok", s.get("summary", ""), label=name))
+    return rows
+
+
+def constraint_rows(where: str, runner: str, backend: str, setups: Optional[Dict[str, dict]] = None,
+                    found: Optional[dict] = None, own: bool = False) -> List[dict]:
+    """The rows for a machine's constraints: none when it sets none. A Harbor
+    run does not take them; a standard run on ``backend`` (``own``: its units
+    in their own images) is refused what the machine's last test found will
+    not hold (``constraints.not_enforced``; the run checks again as it
+    starts), and every run is refused while the setting is not valid. A setup
+    that needs a GPU is refused where the machine allows none. ``found``: its
+    last test, by default the one ``constraints.save`` kept."""
+    try:
+        values = constraints.of(where, strict=runner != "harbor")
+    except ValueError as e:
+        return [row("constraints", "missing", f"{e}: fix it in Settings", label="Constraints")]
+    if not values:
+        return []
+    if runner == "harbor":
+        return [row("constraints", "ok", "not applied to Harbor runs", label="Constraints")]
+    found = constraints.load().get(where) if found is None else found
+    label = lambda keys: ", ".join(constraints.BY_KEY[k].label for k in keys)
+    lost = constraints.not_enforced(values, found, backend, own)
+    engine, unscoped = [k for k in lost if lost[k] == "engine"], [k for k in lost if lost[k] == "systemd"]
+    sd = (found or {}).get("systemd") or {}
+    said = ", ".join(f"{constraints.BY_KEY[k].label} {constraints.spell(v) or 'none'}"
+                     + (f" {constraints.BY_KEY[k].unit}" if constraints.BY_KEY[k].unit else "") for k, v in values.items())
+    why = [*([f"this machine's engine does not enforce {label(engine)}"] if engine else []),
+           *([f"systemd does not enforce {label(unscoped)} here" + (f" ({sd['why']})" if sd.get("why") else "")] if unscoped else [])]
+    rows = [row("constraints", "missing", "; ".join(why) + ": test it in Settings", label="Constraints") if why
+            else row("constraints", "ok", said, label="Constraints")]
+    # here check_here says it, with the GPU memory it checks among the GPUs allowed
+    if where != constraints.LOCAL and constraints.no_gpu(values) and any("nvidia-smi" in (s.get("check") or []) for s in (setups or {}).values()):
+        rows.append(row("gpu", "missing", "this machine allows no GPU: GPUs Nullius may use, in Settings", label="GPUs"))
     return rows
 
 

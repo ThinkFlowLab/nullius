@@ -135,12 +135,17 @@ def new_run_prerequisites():
         host_needs = needs
     known = {h.entry: h for h in execute._hosts()}
 
+    runner = "standard" if recipe.get("harness") == standard_recipe.HARNESS else "harbor"
+    backend = definitions.names.backend(recipe.get("backend"))   # docker: the container backend's earlier name
+    own = runner == "standard" and bool(out["docker"])      # its containers, own images on the local backend included
+
     def machine(w):
+        limits = prerequisites.constraint_rows(w, runner, backend, setups, own=own)
         if w == "local":
-            return {"where": w, "label": "this machine", "rows": prerequisites.check_here(needs, setups, standard=standard)}
+            return {"where": w, "label": "this machine", "rows": prerequisites.check_here(needs, setups, standard=standard) + limits}
         if w not in known:
             return {"where": w, "label": w, "rows": [prerequisites.row("connect", "missing", f"{w} is not one of the hosts in Settings", label="Connection")]}
-        return {"where": w, "label": known[w].label, "rows": prerequisites.check_host(known[w], host_needs, setups, standard=standard)}
+        return {"where": w, "label": known[w].label, "rows": prerequisites.check_host(known[w], host_needs, setups, standard=standard) + limits}
     # one ssh probe per host, all at once: one after another, Review waited for their sum
     # (an unreachable host alone holds a probe 8 to 12 s)
     with ThreadPoolExecutor(max(1, min(8, len(wheres)))) as pool:
