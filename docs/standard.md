@@ -442,7 +442,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `python` | The interpreter version |
 | `indexes` | Packages from another index |
 | `wheels` | A wheel served by URL only (a model package such as spaCy's `en_core_web_sm`), `{url, sha256}`: refused unless the file matches, resolved with `pip` |
-| `project` | The upstream itself, from its clone; `locked: true` installs it at its own lock file's pins (`uv export --frozen`) from the project's folder, `pip` resolved beside them; a locked project is the folder holding its `uv.lock`; a git submodule the lock names as a local package is fetched first, at its pinned commit |
+| `project` | The upstream itself, from its clone; `locked: true` installs it at its own lock file's pins (`uv export --frozen`), `pip` resolved beside them |
 | `extras`, `prefetch` | The project's extras; what to download ahead |
 
 #### Benchmark options
