@@ -17,7 +17,8 @@
       {% if writable %}
       <form class="st-sandbox-rows" data-data-form autocomplete="off">
         {% if key == 'dockerhub' %}<div class="st-row"><label class="st-row-label" for="data-dockerhub-user">Username</label><div class="st-row-value"><input class="st-input" id="data-dockerhub-user" name="username" type="text" autocomplete="off" spellcheck="false" required></div></div>{% endif %}
-        <div class="st-row"><label class="st-row-label" for="data-{{ key }}-token">Access token</label><div class="st-row-value"><input class="st-input" id="data-{{ key }}-token" name="token" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false" required></div></div>
+        <div class="st-row"><label class="st-row-label" for="data-{{ key }}-token">Access token</label><div class="st-row-value"><input class="st-input" id="data-{{ key }}-token" name="token" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false"{% if key == 'dockerhub' %} required{% endif %}></div></div>
+        {% if key == 'huggingface' %}<div class="st-row"><label class="st-row-label" for="HF_ENDPOINT">Endpoint URL <span class="faint">(optional)</span></label><div class="st-row-value"><input class="st-input" id="HF_ENDPOINT" name="endpoint" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://huggingface.co"></div></div>{% endif %}
         <div class="st-row"><span class="st-row-label"></span><span class="st-row-value st-value"><button type="submit" class="btn sm">Save</button><button type="button" class="btn sm ghost" data-data-remove hidden>Remove</button></span></div>
       </form>
       {% endif %}

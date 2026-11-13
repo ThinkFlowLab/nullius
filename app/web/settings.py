@@ -243,20 +243,45 @@ def settings_sandbox():
 
 @app.route("/settings/data-providers")
 def settings_data_providers():
-    """Connection metadata only; no credential is returned."""
+    """Connection metadata only; no credential is returned. The Hugging Face
+    endpoint is not one: it is shown, and marked when the environment holds it."""
+    endpoint = settings.state(settings.BY_NAME["HF_ENDPOINT"], settings.in_file(shared.ENV_FILE))
     return jsonify(huggingface=bool(secrets.status(secrets.HUGGINGFACE).get("HF_TOKEN", {}).get("set")),
+                   huggingface_endpoint=settings.endpoint_url_shown(os.environ.get("HF_ENDPOINT", "")) if endpoint["source"] != "unset" else "",
+                   huggingface_endpoint_env=endpoint["source"] == "environment",
+                   huggingface_endpoint_default=settings.HF_ENDPOINT_DEFAULT,
                    dockerhub=sandbox.login_user())
 
 
 @app.route("/settings/data-providers/huggingface", methods=["POST"])
 def settings_huggingface():
+    """The token, kept in the owner-only secret store, and the endpoint, a
+    setting of its own (``HF_ENDPOINT``): either may be saved alone. An empty
+    token keeps the saved one; an empty endpoint, or the default, removes it."""
     _sandbox_guard("Data providers are changed")
     action = request.form.get("action", "save")
+    held = settings.state(settings.BY_NAME["HF_ENDPOINT"], settings.in_file(shared.ENV_FILE))
     try:
         if action == "remove":
             secrets.delete(secrets.HUGGINGFACE, "HF_TOKEN")
+            if held["source"] == "file":
+                settings.save(shared.ENV_FILE, "HF_ENDPOINT", None)
         elif action == "save":
-            secrets.set(secrets.HUGGINGFACE, "HF_TOKEN", request.form.get("token", ""))
+            token = request.form.get("token", "").strip()
+            endpoint = request.form.get("endpoint", "").strip().rstrip("/")
+            has_token = bool(secrets.status(secrets.HUGGINGFACE).get("HF_TOKEN", {}).get("set"))
+            if not token and not has_token and not endpoint:
+                return jsonify(ok=False, error="Enter an access token or an endpoint URL."), 400
+            if endpoint and endpoint != settings.HF_ENDPOINT_DEFAULT:
+                why = settings.BY_NAME["HF_ENDPOINT"].validate(endpoint)
+                if why:
+                    return jsonify(ok=False, error=f"The endpoint URL must be {why}."), 400
+            if token:
+                secrets.set(secrets.HUGGINGFACE, "HF_TOKEN", token)
+            if held["source"] != "environment":
+                value = endpoint if endpoint and endpoint != settings.HF_ENDPOINT_DEFAULT else None
+                if value is not None or held["source"] == "file":
+                    settings.save(shared.ENV_FILE, "HF_ENDPOINT", value)
         else:
             return jsonify(ok=False, error="Unknown action."), 400
     except ValueError as e:

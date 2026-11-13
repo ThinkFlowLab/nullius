@@ -1488,7 +1488,9 @@ class Execution:
                            + ([("NULLIUS_PRICES", prices_on_target)] if prices_on_target else [])
                            + ([("NULLIUS_PYTHON", sys.executable)] if self.plan.runner == STANDARD and not self.on_host else [])
                            + ([("NULLIUS_LICENCE_DIR", self._licence_dir())] if self._licence_dir() else [])
-                           + ([("API_MODEL_NAME", self.plan.model)] if self.plan.model else []))
+                           + ([("API_MODEL_NAME", self.plan.model)] if self.plan.model else [])
+                           # this machine's Hugging Face endpoint: a host's run reads no saved settings (--from-run)
+                           + ([("HF_ENDPOINT", settings.hf_endpoint())] if self.on_host and settings.hf_endpoint() else []))
         base = script[:-3]
         # macOS has no setsid executable. Python can create the same session and
         # exec in place, keeping $!, the pid file and the process group identical.

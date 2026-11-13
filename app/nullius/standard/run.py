@@ -173,6 +173,15 @@ def driver_secrets(bench: dict, licences) -> dict:
     return out
 
 
+def data_env() -> dict:
+    """Where a driver's dataset downloads go: the Hugging Face endpoint
+    (``settings.hf_endpoint``), in its process's environment from its start,
+    so ``huggingface_hub`` reads it when first imported. Nothing for the default."""
+    from nullius import settings
+    endpoint = settings.hf_endpoint()
+    return {"HF_ENDPOINT": endpoint} if endpoint else {}
+
+
 def option_env(values: dict) -> dict:
     """A benchmark's option values as its driver reads them: ``NULLIUS_OPTION_<NAME>``."""
     return {"NULLIUS_OPTION_" + n.upper(): str(v) for n, v in (values or {}).items()}
@@ -574,7 +583,7 @@ class Run:
                 os.makedirs(cwd, exist_ok=True)
                 env = {"HOME": home, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                        "NULLIUS_DATASET_ID": self.ds["id"], "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
-                       **option_env(self.bench_options), **self.file_env, **self.embeddings_env(), **self.driver_secrets()}
+                       **option_env(self.bench_options), **data_env(), **self.file_env, **self.embeddings_env(), **self.driver_secrets()}
                 files = [h["path"] for s in definitions.secrets_of(self.bench)
                          if s.get("to") == "driver" and s.get("kind") == "file"
                          for h in [self.licences.get(s["name"])] if h] + list(self.file_env.values())
@@ -594,7 +603,7 @@ class Run:
                             "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                             "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
                             **({container.CHECK_IMAGE: self.image, **container.check_env()} if self.image else {}),
-                            **option_env(getattr(self, "bench_options", {})), **self.file_env, **self.embeddings_env(), **self.driver_secrets(),
+                            **option_env(getattr(self, "bench_options", {})), **data_env(), **self.file_env, **self.embeddings_env(), **self.driver_secrets(),
                             **limits.environment(getattr(self, "constraints", {}))})
             os.makedirs(env["HOME"], exist_ok=True)
             # its working directory is the job's, never its catalogue folder: an upstream that writes
@@ -1359,7 +1368,7 @@ class Run:
         extra = install.process_env(definitions.driver_install(self.bench), drv, home) if drv else {}
         return base_env(home, {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                                "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONDONTWRITEBYTECODE": "1",
-                               **option_env(getattr(self, "bench_options", {})), **self.embeddings_env(),
+                               **option_env(getattr(self, "bench_options", {})), **data_env(), **self.embeddings_env(),
                                **limits.environment(getattr(self, "constraints", {}))})
 
     def embeddings_env(self) -> dict:
