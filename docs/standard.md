@@ -147,12 +147,13 @@ record); verifier/reward.txt and score.json
 | Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate, unless the unit passed; a turn past its limit is the agent's timeout. `"kind": "score"` leaves a score and no pass |
 | Rate limits | After a unit ends `rate_limited`, no unit starts for 5 s, doubling while units keep ending so (up to 300 s) and reset by any other end; `stage=units state=progress` says the pause and how many run. Each `rate_limited` unit is run once more after the others, one at a time: its first attempt moves whole to `retried/<trial>/`, the second is the trial and counts. Not after a Stop, a refused key or the spending cap, which counts both attempts |
 | The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. Provider `anthropic` speaks Anthropic's Messages (`ANTHROPIC_API_KEY` as `x-api-key`) |
+| Constraints (`--constraint KEY=VALUE`) | What the machine allows Nullius, from Settings ([constraints](settings/run-hosts.md#constraints)): flags on every container the run starts on the machine, on either backend; a systemd scope for each process the run starts there (its drivers, and its agents and capabilities on the local backend); the most units at a time; the CPU affinity; the driver's `CUDA_VISIBLE_DEVICES`. Before the first unit, the run checks the container caps on the engine and the scope caps on systemd: the local backend refuses a cap that no scope holds, and the container backend runs its drivers without a scope. `config.json` records the values under `standard.constraints` |
 | A spending cap (`--max-usd`, `--max-usd-per-unit`) | Each relay books a call in the job's ledger (`.work/ledger`, `standard/ledger.py`) before sending it, and refuses the one that does not fit the run's cap or its unit's ([Run a benchmark](cli/run.md#a-spending-cap)) |
 
 ## Safety
 
 !!! warning "The local backend is not a sandbox"
-    An agent runs as you, in the unit's workspace, with its own `HOME`, `PATH` and locale. An agent run or conformance check is refused there without `--unsandboxed`; the job's config records it, and that the agent's permission requests were granted. Capabilities are not asked.
+    An agent runs as you, in the unit's workspace, with its own `HOME`, `PATH` and locale. An agent run or conformance check is refused there without `--unsandboxed`; the job's config records it, and that the agent's permission requests were granted. Capabilities are not asked. A machine's [constraints](settings/run-hosts.md#constraints) put it in a systemd scope, which limits its CPU, memory and processes. A scope is not a sandbox either: the agent can still reach your systemd manager and start processes outside it.
 
 A benchmark whose check executes submitted code declares `score.runs_code: true` (optional boolean, default false). Its Original setup uses the base image through `NULLIUS_CHECK_IMAGE` when Docker is usable; otherwise it requires `--unsandboxed`. Container failures never fall back to local execution. HumanEval's trial detail records `check: container` or `check: this machine`.
 
@@ -291,7 +292,7 @@ A benchmark whose tasks are containers (their own Dockerfile and `FROM`) says so
 | --- | --- |
 | `image.build` | A folder of the upstream holding a Dockerfile, its whole context: `nullius/own-<benchmark>-<folder>:<hash>`, the sha256 of every file the build reads. On Podman, a short name in its `FROM` may fail under `short-name-mode = "enforcing"`: name the image in full |
 | `image.pull` | A reference pinned by its digest (`name@sha256:...`) |
-| `image.memory_mb`, `image.cpus` | The task's limits |
+| `image.memory_mb`, `image.cpus` | The task's limits; a machine's [constraint](settings/run-hosts.md#constraints) wins when lower |
 | `workdir` | The session's `cwd` when not the image's working directory |
 | `prepare` | A step (`copy`, `write`, `run`, `seconds`, `network`) run as root in the unit's container before the agent or a control starts: what the task's own harness adds to every image |
 | `internet` | Boolean task policy, only in an own image: `true` gives the agent and reference solution a public-address proxy during their work. No run option can enable it |

@@ -29,6 +29,7 @@ changes save automatically; data providers and benchmark credentials use **Save*
 | `LLM_JUDGE_PROVIDER`, `LLM_JUDGE_MODEL` | [LLM judge](llm-judge.md) |
 | `AGENT_KEYS` | Comma-separated agent key names; Harbor runs only |
 | `HOSTS` | The run hosts |
+| `HOST_CONSTRAINTS` | What Nullius may use on each machine: [constraints](run-hosts.md#constraints) |
 
 | Rule | |
 | --- | --- |
