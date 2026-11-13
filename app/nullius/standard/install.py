@@ -420,8 +420,18 @@ def download(url: str, sha256: str, home: str = HOME, progress: Optional[Callabl
         return where
     with _locked(where):
         if not os.path.isfile(where):
-            _fetch(url, sha256, where, "dataset", progress)
+            _fetch(hf_url(url), sha256, where, "dataset", progress)
     return where
+
+
+def hf_url(url: str) -> str:
+    """``url`` from the Hugging Face endpoint the run uses (``settings.hf_endpoint``)
+    when it is a huggingface.co file: the same path from a mirror, checked by the
+    same digest. Any other URL as it is."""
+    from nullius import settings
+    endpoint = settings.hf_endpoint()
+    prefix = settings.HF_ENDPOINT_DEFAULT + "/"
+    return endpoint + "/" + url[len(prefix):] if endpoint and url.startswith(prefix) else url
 
 
 def _fetch(url: str, sha256: str, where: str, what: str, progress: Optional[Callable] = None) -> None:

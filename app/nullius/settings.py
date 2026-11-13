@@ -132,7 +132,7 @@ class Variable:
     name: str
     group: str
     purpose: str
-    kind: str            # secret | localkey | endpoint | path | paths | url | repo | name | bool | text | envname | hosts | constraints | model | llmprovider | s1provider | envnames
+    kind: str            # secret | localkey | endpoint | mirror | path | paths | url | repo | name | bool | text | envname | hosts | constraints | model | llmprovider | s1provider | envnames
     example: str = ""    # shown as a placeholder, written to .env.example as a comment
 
     @property
@@ -152,6 +152,7 @@ class Variable:
             "paths": _paths,
             "url": _check(_URL_OK, "an http(s) URL"),
             "endpoint": endpoint_url_problem,
+            "mirror": endpoint_url_problem,
             "repo": _check(_REPO_OK, "owner/name"),
             "name": _check(_NAME_OK, "letters, digits, dots, dashes or underscores (64 at most)"),
             "bool": _bool,
@@ -166,7 +167,7 @@ class Variable:
         }[self.kind](value)
 
 
-GROUPS = ["Model credentials", "Run hosts", "Custom keys"]
+GROUPS = ["Model credentials", "Run hosts", "Custom keys", "Data providers"]
 # The key a run on an OpenAI-compatible endpoint is sent with when the
 # endpoint has no key: many such servers check none, but an
 # OpenAI-compatible client refuses to start without one.
@@ -195,6 +196,7 @@ VARIABLES: List[Variable] = [
     Variable("LLM_JUDGE_MODEL", GROUPS[0], "The model of the LLM judgement, as its provider names it (on OpenRouter, vendor/model). It is asked the same questions as System One and answers them as JSON; its numbers are what it states, so a choice or a score carries no confidence.", "model"),
     Variable("AGENT_KEYS", GROUPS[2], "The names of the agent keys this file holds, comma-separated: the keys an agent needs of its own vendor, beside the model's (Cursor's CLI agent a CURSOR_API_KEY, Copilot's a GH_TOKEN). Each is a line of its own in this file. A Harbor run gets every one of them in its environment - over stdin to a host - and a Nullius standard run's never; none is ever written into a recipe or a log.", "envnames"),
     Variable("HOSTS", GROUPS[1], "Machines a recipe can run on, over ssh: an alias from ~/.ssh/config, or user@host[:port][:/path/to/key]. Only the name is stored; keys stay where they are.", "hosts", "user@host[:port][:/path/to/key]"),
+    Variable("HF_ENDPOINT", GROUPS[3], "Where Hugging Face downloads go: https://huggingface.co when unset, or a mirror's address. A run's dataset downloads, installs and drivers get it as HF_ENDPOINT before they load huggingface_hub; the environment wins over this file, a run on a host is sent it.", "mirror", "https://hf-mirror.com"),
     Variable("HOST_CONSTRAINTS", GROUPS[1], "What Nullius may use on a machine: a JSON object from local (this machine) or a host's entry to its constraints (cpus, memory_mb, processes, concurrency, cpu_set, gpu_ids). A constraint not set is no constraint.", "constraints", '{"local": {"cpus": 4, "memory_mb": 8192}}'),
 ]
 # Read by the application but not offered on the page: each has a
@@ -322,6 +324,17 @@ def sync(path: str) -> Dict[str, List[str]]:
     done = refresh(path)
     _SEEN[here] = now
     return done
+
+
+HF_ENDPOINT_DEFAULT = "https://huggingface.co"
+
+
+def hf_endpoint(env=None) -> str:
+    """The Hugging Face endpoint a run's downloads use, without a final slash:
+    HF_ENDPOINT from the environment (saved settings included, ``load``), or
+    "" for the default - unset, the default itself, or not a usable URL."""
+    v = ((os.environ if env is None else env).get("HF_ENDPOINT") or "").strip().rstrip("/")
+    return "" if not v or v == HF_ENDPOINT_DEFAULT or endpoint_url_problem(v) else v
 
 
 def in_file(path: str) -> Dict[str, str]:
