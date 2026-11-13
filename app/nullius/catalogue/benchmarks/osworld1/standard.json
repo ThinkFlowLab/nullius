@@ -185,7 +185,8 @@
       "default": "docker",
       "setups": [
         "original",
-        "model"
+        "model",
+        "yours"
       ],
       "about": {
         "docker": "the upstream's happysixd/osworld-docker image running its Ubuntu qcow2 under QEMU, KVM when /dev/kvm is there"

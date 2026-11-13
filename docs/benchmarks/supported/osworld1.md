@@ -39,7 +39,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 |---|---|---|---|
 | `agent` | **`m3`**, `prompt`, `claude`, `gpt54`, `openai_cua`, `qwen`, `os_symphony`, `evocua`, `autoglm`, `autoglm_v`, `mano`, `muse_spark` | Which of OSWorld's own agents runs: each its script as published, with its own prompts, action format and step limit. | `original`, `model` |
 | `thinking` | **`adaptive`**, `off` | M3_THINKING_MODE: adaptive, as run_multienv_m3.py's own documented invocation exports it (the model decides whether to think; temperature 1, no top_p), or off, the agent's code default when the variable is unset. | `original`, `model` |
-| `vm_provider` | **`docker`** | --provider_name: where the task's VM runs. docker only: the upstream's aws, azure, pyromind, vmware and virtualbox providers need cloud accounts or a hypervisor of their own. | `original`, `model` |
+| `vm_provider` | **`docker`** | --provider_name: where the task's VM runs. docker only: the upstream's aws, azure, pyromind, vmware and virtualbox providers need cloud accounts or a hypervisor of their own. | `original`, `model`, `yours` |
 
 | Option | Value | Refused without (`host`: the driver's machine; `embeddings`: a model the provider serves) |
 |---|---|---|
