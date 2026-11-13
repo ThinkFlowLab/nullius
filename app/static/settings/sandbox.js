@@ -7,7 +7,7 @@
   const load = async () => {
     asked = true;
     let j;
-    try { j = await (await fetch(section.dataset.sandbox)).json(); } catch (err) { j = {docker: {ok: false, error: String(err)}}; }
+    try { j = await (await nulliusFetch(section.dataset.sandbox)).json(); } catch (err) { j = {docker: {ok: false, error: String(err)}}; }
     const state = section.querySelector('[data-docker-state]');
     state.textContent = j.docker.ok ? '✓ ' + j.docker.version : '✕ ' + j.docker.error;
     state.className = 'st-row-value ' + (j.docker.ok ? 'ok' : 'bad');

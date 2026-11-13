@@ -81,7 +81,7 @@
   const tick = async () => {
     let retry = true;
     try {
-      const r = await fetch(box.dataset.run + '?since=' + since, {cache: 'no-store'}); if (!r.ok) return;
+      const r = await nulliusFetch(box.dataset.run + '?since=' + since, {cache: 'no-store'}); if (!r.ok) return;
       const j = await r.json();
       if (j.log.length) { pre.textContent += j.log.join('\n') + '\n'; pre.scrollTop = pre.scrollHeight; since = j.lines; }
       const bar = document.getElementById('execution-progress'), p = j.progress;
@@ -105,7 +105,7 @@
       const ask = document.getElementById('execution-ask'); ask.hidden = j.state !== 'paused'; document.getElementById('execution-question').textContent = j.question || '';
       if (!alive && live) { live = false; document.getElementById('execution-stop')?.remove(); if (j.error && !own) { const e = document.createElement('span'); e.className = 'small bad'; e.textContent = j.error; state.after(e); } }
       // Check once more at completion, but do not wait forever for a job that never started.
-      if (box.dataset.waiting === 'yes') { const h = await fetch(location.pathname, {method: 'HEAD', cache: 'no-store'}); if (h.ok) location.reload(); }
+      if (box.dataset.waiting === 'yes') { const h = await nulliusFetch(location.pathname, {method: 'HEAD', cache: 'no-store'}); if (h.ok) location.reload(); }
       if (alive) setTimeout(tick, 1000);
     } catch { if (retry) setTimeout(tick, 5000); }
   };
@@ -115,7 +115,7 @@
   document.getElementById('execution-stop')?.addEventListener('click', async e => {
     e.target.disabled = true;
     try {
-      const r = await fetch(box.dataset.stop, {method: 'POST', headers: {'X-CSRF-Token': box.dataset.csrf}});
+      const r = await nulliusFetch(box.dataset.stop, {method: 'POST', headers: {'X-CSRF-Token': box.dataset.csrf}});
       if (!r.ok) throw new Error('stop refused: HTTP ' + r.status);
       const j = await r.json(); state.textContent = j.state; e.target.remove();
     } catch (err) {
@@ -124,7 +124,7 @@
     }
   });
   document.getElementById('execution-continue')?.addEventListener('click', async e => {
-    e.target.disabled = true; try { await fetch(box.dataset.continue, {method: 'POST', headers: {'X-CSRF-Token': box.dataset.csrf}}); } catch {} e.target.disabled = false;
+    e.target.disabled = true; try { await nulliusFetch(box.dataset.continue, {method: 'POST', headers: {'X-CSRF-Token': box.dataset.csrf}}); } catch {} e.target.disabled = false;
   });
 })();
 </script>

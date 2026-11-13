@@ -63,6 +63,7 @@ and job roots also have command-line options. The app does not load `app/.env`.
 | Keys | No provider-specific length check; values must be single-line and contain no spaces. Agent key names use environment-variable syntax, without a length limit |
 | Secrets | Provider values are masked; custom-key rows show their saved status, never the value |
 | Guards | Its own address in the Host header, loopback browser, same origin, form token |
+| Out of date | A page loaded before a restart, or rendered by other templates, static files or web routes, says so once: reload it |
 | Validation | One bad value, nothing written |
 | Code | `app/nullius/settings.py`; `app/.env.example` documents variable names for scripts and migration |
 

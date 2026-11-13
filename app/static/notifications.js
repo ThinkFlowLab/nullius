@@ -24,6 +24,21 @@
     toast.append(text, close, bar); tray.append(toast);
     if (tray.showPopover) { if (tray.matches(':popover-open')) tray.hidePopover(); tray.showPopover(); }
   };
+  // Every request of a page goes through here. A server that serves other code than the page was
+  // rendered with, or no longer holds its form token (a restart), gets one notice: the page is out of date.
+  const rendered = document.querySelector('meta[name=nullius-interface]')?.content;
+  let told = false;
+  const outOfDate = () => window.nulliusNotify('This page is out of date. Reload it.', {error: true, key: 'out-of-date'});
+  window.nulliusFetch = async (url, options) => {
+    const response = await fetch(url, options);
+    const served = response.headers.get('X-Nullius-Interface');
+    if (rendered && served && served !== rendered && !told) { told = true; outOfDate(); }
+    if (response.status === 403 && response.headers.get('X-Nullius-Reason') === 'stale-form-token') {
+      outOfDate();
+      return new Promise(() => {});  // never settles: the caller's own error would only repeat the notice
+    }
+    return response;
+  };
   // Keep a notification visible and operable when a dialog closes beneath it.
   new MutationObserver(() => {
     const tray = document.querySelector('.toasts');

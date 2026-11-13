@@ -54,7 +54,7 @@
     const url = key === 'huggingface' ? section.dataset.huggingface : remove ? section.dataset.dockerhubRemove : section.dataset.dockerhub;
     section.querySelectorAll('button').forEach(b => { b.disabled = true; });
     try {
-      const response = await fetch(url, {method: 'POST', headers: {'X-CSRF-Token': section.dataset.csrf}, body: fields});
+      const response = await nulliusFetch(url, {method: 'POST', headers: {'X-CSRF-Token': section.dataset.csrf}, body: fields});
       const result = await response.json();
       if (!response.ok || !result.ok) { notify(result.error || 'Could not save the connection.', true); return; }
       saved[key] = remove ? null : key === 'huggingface' ? true : result.user;
@@ -76,7 +76,7 @@
     if (asked || section.hidden) return;
     asked = true;
     try {
-      const response = await fetch(section.dataset.state);
+      const response = await nulliusFetch(section.dataset.state);
       if (!response.ok) throw new Error();
       saved = await response.json(); render();
     } catch {

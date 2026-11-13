@@ -55,7 +55,7 @@
       const controller = new AbortController();
       request = controller;
       try {
-        const response = await fetch(list.dataset.suggestionsUrl, {
+        const response = await nulliusFetch(list.dataset.suggestionsUrl, {
           method: 'POST', signal: controller.signal,
           headers: {'X-CSRF-Token': csrf}, body: new URLSearchParams({path: value})
         });

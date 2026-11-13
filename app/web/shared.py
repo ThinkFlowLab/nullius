@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import glob
+import hashlib
 import ipaddress
 from itertools import islice
 import secrets
@@ -9,6 +10,7 @@ import os
 from urllib.parse import urlsplit
 from flask import abort, flash, g, has_request_context, request, session
 from markupsafe import Markup, escape
+from werkzeug.exceptions import Forbidden
 from nullius import importers as harnesses
 from nullius import execution
 from nullius.catalogue import catalog
@@ -457,12 +459,49 @@ def _origin_of(url: str) -> str:
 app.jinja_env.globals["csrf_token"] = lambda: _csrf_token()
 
 
+def _interface_id() -> str:
+    """A digest of the templates, static files and web routes a page is made of
+    and reads. A page rendered under another digest runs code this process no
+    longer serves."""
+    digest = hashlib.sha256()
+    for root in (os.path.join(app.root_path, app.template_folder), app.static_folder, os.path.join(app.root_path, "web")):
+        for folder, subfolders, names in os.walk(root):
+            subfolders[:] = sorted(d for d in subfolders if d != "__pycache__")   # written at import, not code
+            for name in sorted(names):
+                path = os.path.join(folder, name)
+                digest.update(os.path.relpath(path, root).encode() + b"\0")
+                with open(path, "rb") as f:
+                    digest.update(f.read())
+    return digest.hexdigest()[:16]
+
+
+INTERFACE = _interface_id()
+app.jinja_env.globals["interface_id"] = lambda: INTERFACE
+
+
+@app.after_request
+def _send_interface(response):
+    response.headers["X-Nullius-Interface"] = INTERFACE
+    return response
+
+
+class StaleFormToken(Forbidden):
+    """A token the session does not hold, as from a page loaded before a restart.
+    Its header tells the page to ask for a reload instead of showing the error."""
+    description = "Stale form token; reload the page and try again."
+
+    def get_headers(self, environ=None, scope=None):
+        return [*super().get_headers(environ, scope), ("X-Nullius-Reason", "stale-form-token")]
+
+
 def _require_csrf():
     """The one guard every mutation of the environments takes: the session's
     token, sent back by the form, and a same-origin request."""
     sent = request.form.get("csrf") or request.headers.get("X-CSRF-Token")
-    if not sent or not secrets.compare_digest(sent, session.get("csrf", "")):
-        abort(403, description="Missing or stale form token; reload the page and try again.")
+    if not sent:
+        abort(403, description="Missing form token; reload the page and try again.")
+    if not secrets.compare_digest(sent, session.get("csrf", "")):
+        raise StaleFormToken()
     origin = request.headers.get("Origin") or request.headers.get("Referer")
     if origin and _origin_of(origin) != request.host_url.rstrip("/").lower():
         abort(403, description="Cross-origin requests cannot change environments.")

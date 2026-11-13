@@ -143,7 +143,7 @@
   });
 
   // ---- on load: the checklist read, this page's visit kept, then whatever was under way carried on
-  fetch(STATE_URL, {headers: {Accept: 'application/json'}}).then(r => r.ok ? r.json() : {sections: []}).catch(() => ({sections: []})).then(j => {
+  nulliusFetch(STATE_URL, {headers: {Accept: 'application/json'}}).then(r => r.ok ? r.json() : {sections: []}).catch(() => ({sections: []})).then(j => {
     sections = j.sections || [];
     const here = location.pathname + location.search, tour = read(sessionStorage, 'onb-tour', null);
     // a page the tour opened was shown, not used: it counts as no visit

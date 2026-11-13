@@ -64,7 +64,7 @@
     say('');
     form.setAttribute('aria-busy', 'true');
     try {
-      const response = await fetch(form.action, {method: 'POST', headers: {Accept: 'application/json'}, body});
+      const response = await nulliusFetch(form.action, {method: 'POST', headers: {Accept: 'application/json'}, body});
       if (!response.ok && !response.headers.get('content-type')?.includes('application/json')) throw new Error('Settings could not be saved. Try again.');
       const result = await response.json();
       if (!result.ok) {

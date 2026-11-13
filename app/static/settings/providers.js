@@ -51,7 +51,7 @@
     button.disabled = true; out.classList.add('busy'); out.prepend(busy);
     let got;
     try {
-      const response = await fetch(section.dataset.test, {method: 'POST', headers: {'X-CSRF-Token': document.querySelector('#settings-form [name=csrf]').value},
+      const response = await nulliusFetch(section.dataset.test, {method: 'POST', headers: {'X-CSRF-Token': document.querySelector('#settings-form [name=csrf]').value},
                                                           body: new URLSearchParams({provider: button.dataset.providerTest})});
       got = await response.json().catch(() => ({error: 'HTTP ' + response.status}));
     } catch (error) { got = {error: 'Not tested: ' + error.message}; }
