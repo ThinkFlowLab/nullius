@@ -48,8 +48,8 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 ## Good to know
 
 - Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.
-- Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark, at Meta's API, and for EvoCUA, both AutoGLM-OS agents and Mano, at your model server; otherwise OpenRouter.
-- Only M3, PromptAgent and Qwen-CUA have been run on tasks here. The other agents were checked up to their first model call.
+- Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.
+- Only M3, PromptAgent and Qwen-CUA have completed tasks through Nullius. The other agents were checked up to their first model call.
 - Each task's VM takes 4 cores and 4 GB of memory; OS-Symphony can start a second. Run no more tasks at once than the machine holds.
 - Prepare the machine before the first run (Docker, KVM, five system libraries, a VM image of about 25 GB): see OSWorld1 machine setup under Benchmarks in the documentation.
 - Scores depend on the machine's speed, because OSWorld waits a fixed time after each action. Compare runs made on similar machines.
@@ -65,9 +65,8 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 ## Nullius limitations
 
 - No agent from the Agents page can run it yet.
-- OSWorld's other agents are not offered: at this commit they fail before their first model call, or call services that Nullius's relay cannot reach.
-- Only OSWorld's docker VM provider is offered, and only on Docker's default socket: rootless Docker and Docker contexts are not reached. Podman is untested.
-- The Windows tasks are not offered.
+- Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.
+- The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.
 - A task still running after 2 hours is stopped and gets no score.
 
 ## Cite
