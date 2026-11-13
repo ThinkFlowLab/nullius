@@ -66,6 +66,13 @@ class Table(unittest.TestCase):
         self.assertEqual(constraints.argv(ALL), ["--cpus", "2", "--memory", "512m", "--memory-swap", "512m",
                                                  "--pids-limit", "100", "--cpuset-cpus", "0-1"])
 
+    def test_a_task_s_own_memory_alone_keeps_its_swap(self):
+        self.assertEqual(constraints.argv({}, {"memory_mb": 1024, "cpus": 2}), ["--cpus", "2", "--memory", "1024m"])   # as before constraints
+        for machine in (4096, 512):                       # the machine's memory: no swap, whichever value applies
+            a = constraints.argv({"memory_mb": machine}, {"memory_mb": 1024})
+            low = f"{min(machine, 1024)}m"
+            self.assertEqual(a, ["--memory", low, "--memory-swap", low])
+
     def test_the_lower_value_wins(self):
         self.assertEqual(constraints.lowest({"cpus": 2, "memory_mb": 4096}, {"cpus": 4, "memory_mb": 1024}),
                          {"cpus": 2, "memory_mb": 1024})
@@ -303,6 +310,320 @@ def _or(failed: list, call) -> None:
     except Exception as e:                                # a thread's error, for the test to see
         failed.append(e)
 
+
+class Containers(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(container.cap, {})
+
+    def test_every_container_a_run_starts_takes_the_machine_s_caps(self):
+        from nullius.standard import setup_container
+        container.cap({"cpus": 1.5, "memory_mb": 512, "concurrency": 2, "gpu_ids": [0]})
+        flags = ["--cpus", "1.5", "--memory", "512m", "--memory-swap", "512m"]
+        tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)
+        os.makedirs(os.path.join(tmp, ".work"))
+        self.addCleanup(setattr, install, "HOME", install.HOME); install.HOME = tmp
+        seen = []
+        with mock.patch.object(container, "_docker", lambda a, **k: seen.append(a) or mock.Mock(stdout="", returncode=0)), \
+                mock.patch.object(container.Box, "keeper", return_value="7"):
+            container.Box("j", "u1", "img", workdir="/w", network="net").start()
+        driver = setup_container.Driver({"_here": tmp}, image="img", app=tmp, job="j", work=tmp, upstream=None, data=None, needs=[])
+        built = {"agent": container.run_argv("img", ["a"], name="n", network="net", job="j", workdir="/w", mounted=[], env={}, path="/bin"),
+                 "check": container.check_start(), "install": container.install_argv("img", "/i", ["true"]),
+                 "relay": container.relay_argv("img", name="r", job="j", app="/a", record="/r", key_file="/k", base="http://b", model=None, routes={}),
+                 "forwarder": container.forward_argv("img", name="f", job="j", port=1),
+                 "door": container.door_argv("img", name="d", job="j", port=1, socket_path="/s"),
+                 "proxy": container.egress_argv("img", name="e", job="j"), "own image": seen[-1],
+                 "setup driver": driver.command({}, tmp)[0]}
+        for what, argv in built.items():
+            self.assertTrue(any(argv[i:i + len(flags)] == flags for i in range(len(argv))), what)
+            self.assertNotIn("concurrency", " ".join(argv))
+        with mock.patch.object(container, "podman", return_value=False):        # a driver's checks, in its own process
+            self.assertEqual(json.loads(container.check_env()[container.CHECK_ENGINE]), container.check_start())
+        container.cap({})
+        self.assertNotIn("--cpus", container.run_argv("img", ["a"], name="n", network="net", job="j", workdir="/w",
+                                                      mounted=[], env={}, path="/bin"))
+
+    def test_a_task_s_box_takes_the_lower_of_each(self):
+        seen = []
+        with mock.patch.object(container, "_docker", lambda a, **k: seen.append(a) or mock.Mock(stdout="", returncode=0)), \
+                mock.patch.object(container.Box, "keeper", return_value="7"):
+            container.cap({"cpus": 2, "memory_mb": 4096})
+            container.Box("j", "u1", "img", workdir="/w", network="net", task={"cpus": 4, "memory_mb": 1024}).start()
+            a = seen[-1]
+            self.assertEqual((a[a.index("--cpus") + 1], a[a.index("--memory") + 1], a[a.index("--memory-swap") + 1]), ("2", "1024m", "1024m"))
+            container.cap({})
+            container.Box("j", "u1", "img", workdir="/w", network="net", task={"memory_mb": 1024}).start()
+            self.assertNotIn("--memory-swap", seen[-1])       # no machine constraint: the task's flags as they were
+
+    def test_the_engine_is_asked_before_the_first_unit(self):
+        with mock.patch.object(container.subprocess, "run", return_value=mock.Mock(stdout="engine=29.9.3|Engine,|\ncpus=max 100000 \nprocesses=64 \n")):
+            self.assertEqual(list(container.unenforced("img", {"cpus": 2, "processes": 64, "gpu_ids": [0]})), ["cpus"])
+        with mock.patch.object(container.subprocess, "run", return_value=mock.Mock(stdout="ncpu=4\n")):           # no engine answers
+            self.assertEqual(container.unenforced("img", {"processes": 64}), {"processes": "no Docker or Podman answers"})
+        self.assertEqual(container.unenforced("img", {"gpu_ids": [0]}), {})                 # no container: no probe
+
+
+class ARun(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(container.cap, {})
+        self.tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.addCleanup(setattr, install, "HOME", install.HOME); install.HOME = os.path.join(self.tmp, "home")
+        self.b, self.a = definitions.get("benchmark", "fakebench", ROOT), definitions.get("agent", "fake", ROOT)
+        self.env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}
+
+    def test_a_run_takes_its_machine_s_constraints(self):
+        with mock.patch.object(container, "unusable", return_value=None):
+            r = run.Run(self.b, self.a, model="m", provider="custom", env=self.env, backend="docker", concurrency=8,
+                        jobs_root=self.tmp, constraints=ALL)
+        self.assertEqual(r.concurrency, 3)
+        self.assertEqual(r.container_limits, constraints.container(ALL))
+        local = run.Run(self.b, self.a, model="m", provider="custom", env=self.env, unsandboxed=True, jobs_root=self.tmp,
+                        constraints=ALL)
+        # an own image's container takes them on the local backend too; a scope once ready
+        self.assertEqual((local.constraints, local.container_limits, local.scope_limits), (ALL, constraints.container(ALL), {}))
+        with self.assertRaisesRegex(run.Refused, "not a constraint"):
+            run.Run(self.b, self.a, model="m", provider="custom", env=self.env, unsandboxed=True, constraints={"disk_gb": 1})
+
+    def test_a_local_run_caps_each_own_image_and_checks_its_engine_first(self):
+        from tests.test_standard_own_image import bench
+        b = bench()
+        given = {"cpus": 2, "memory_mb": 4096}
+        with mock.patch.object(container, "unusable", return_value=None):
+            r = run.Run(b, definitions.control(b, "oracle"), model="m", provider="custom", env=self.env, backend="local",
+                        jobs_root=self.tmp, constraints=given)
+        with mock.patch.object(container, "unenforced", return_value={"memory_mb": "max max"}) as asked, \
+                mock.patch.object(constraints, "scope_check", return_value={"why": "", "enforced": ["cpus", "memory_mb"], "refused": {}}), \
+                self.assertRaisesRegex(run.Refused, r"engine does not apply Memory \(Asked 4 GB, the container had no limit\)"):
+            r.ready()
+        self.assertEqual(asked.call_args.args, (constraints.PROBE_IMAGE, given))
+        boxes = []
+        with mock.patch.object(container, "unusable", return_value=None), \
+                mock.patch.object(r, "own_image", return_value="img"), \
+                mock.patch.object(container, "image_config", return_value={"workdir": "/w", "path": "/bin"}), \
+                mock.patch.object(container, "Box", lambda *a, **k: boxes.append(k) or mock.Mock()):
+            r.own_box("u1", {"image": {"pull": "x/y@sha256:" + "a" * 64, "memory_mb": 1024}}, None, self.tmp)
+        self.assertEqual((container._CEILING, boxes[0]["task"]), (given, {"memory_mb": 1024}))
+
+    def test_a_local_run_records_them_and_its_driver_sees_its_gpus(self):
+        seen = {}
+        real = run.jsonl.Proc
+
+        def proc(cmd, cwd, env, log, stopped=None):
+            seen.update(env)
+            return real(cmd, cwd, env, log, stopped=stopped)
+        with mock.patch.object(run.jsonl, "Proc", proc):
+            job = run.run(self.b, self.a, model="m", provider="custom", jobs_root=self.tmp, env=self.env, limit=1,
+                          say=lambda s: None, unsandboxed=True, constraints={"gpu_ids": [1], "concurrency": 1})
+        with open(os.path.join(job, "config.json")) as f:
+            cfg = json.load(f)
+        self.assertEqual(cfg["standard"]["constraints"], {"gpu_ids": [1], "concurrency": 1})
+        self.assertEqual(cfg["n_concurrent_trials"], 1)
+        self.assertEqual(seen["CUDA_VISIBLE_DEVICES"], "1")
+
+    def test_a_local_run_starts_its_driver_and_agent_in_scopes(self):
+        stub = exec_stub(self)
+        seen = []
+        for mod, name in ((run.jsonl, "Proc"), (run.acp, "Client")):
+            real = getattr(mod, name)
+            patch = mock.patch.object(mod, name, lambda cmd, *a, real=real, **k: seen.append(cmd) or real(cmd, *a, **k))
+            patch.start(); self.addCleanup(patch.stop)
+        ok = {"why": "", "enforced": ["processes"], "refused": {}}
+        with mock.patch.object(constraints, "SYSTEMD_RUN", (stub,)), mock.patch.object(constraints, "scope_check", return_value=ok):
+            job = run.run(self.b, self.a, model="m", provider="custom", jobs_root=self.tmp, env=self.env, limit=1,
+                          say=lambda s: None, unsandboxed=True, constraints={"processes": 4096})
+        self.assertTrue(len(seen) >= 2 and all(cmd[:4] == [stub, "-p", "TasksMax=4096", "--"] for cmd in seen), seen)
+        with open(os.path.join(job, "config.json")) as f:
+            self.assertEqual(json.load(f)["standard"]["constraints"], {"processes": 4096})
+
+
+def exec_stub(test, body='while [ $# -gt 0 ] && [ "$1" != -- ]; do shift; done; shift; exec "$@"') -> str:
+    """A ``systemd-run`` that runs its command as a scope does, in its own process (``exec``)."""
+    d = tempfile.mkdtemp(); test.addCleanup(shutil.rmtree, d, True)
+    path = os.path.join(d, "systemd-run")
+    with open(path, "w") as f:
+        f.write("#!/bin/sh\n" + body + "\n")
+    os.chmod(path, 0o755)
+    return path
+
+
+class Scope(unittest.TestCase):
+    """A systemd scope for each process a run starts here."""
+
+    def test_the_argv_has_a_property_per_value_set_and_none_other(self):
+        self.assertEqual(constraints.scoped(ALL), {"cpus": 2, "memory_mb": 512, "processes": 100, "cpu_set": "0-1"})
+        self.assertEqual(constraints.scope_argv({"cpus": 1.5, "memory_mb": 256, "processes": 64, "cpu_set": "0,2", "gpu_ids": [0]}),
+                         ["systemd-run", "--user", "--scope", "-q", "-p", "CPUQuota=150%", "-p", "MemoryMax=256M",
+                          "-p", "MemorySwapMax=0", "-p", "TasksMax=64", "-p", "AllowedCPUs=0,2", "--"])
+        self.assertEqual(constraints.scope_argv({"cpus": 0.01}), [*constraints.SYSTEMD_RUN, "-p", "CPUQuota=1%", "--"])
+        self.assertEqual(constraints.wrap(["a"], {"X": "1"}, {"concurrency": 2, "gpu_ids": []}), (["a"], {"X": "1"}))   # nothing to hold
+
+    def test_systemd_run_finds_the_user_manager_and_the_command_does_not_see_how(self):
+        d = tempfile.mkdtemp(dir="/tmp"); self.addCleanup(shutil.rmtree, d, True)
+        self.assertEqual(constraints.session({"XDG_RUNTIME_DIR": d}), {"XDG_RUNTIME_DIR": d})            # no bus there
+        bus = socket.socket(socket.AF_UNIX); self.addCleanup(bus.close); bus.bind(os.path.join(d, "bus"))
+        self.assertEqual(constraints.session({"XDG_RUNTIME_DIR": d}),
+                         {"XDG_RUNTIME_DIR": d, "DBUS_SESSION_BUS_ADDRESS": f"unix:path={d}/bus"})
+        self.assertEqual(constraints.session({})["XDG_RUNTIME_DIR"], f"/run/user/{os.getuid()}")         # derived when unset
+        self.assertEqual(constraints.session({"DBUS_SESSION_BUS_ADDRESS": "unix:abstract=x"})["DBUS_SESSION_BUS_ADDRESS"], "unix:abstract=x")
+        with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": d}), mock.patch.object(constraints, "_literal", lambda p: ()):
+            os.environ.pop("DBUS_SESSION_BUS_ADDRESS", None)
+            cmd, env = constraints.wrap(["a", "b"], {"PATH": "/bin"}, {"processes": 8})
+            self.assertEqual(cmd, [*constraints.SYSTEMD_RUN, "-p", "TasksMax=8", "--", "env", "-u", "XDG_RUNTIME_DIR",
+                                   "-u", "DBUS_SESSION_BUS_ADDRESS", "a", "b"])
+            self.assertEqual(env, {"PATH": "/bin", "XDG_RUNTIME_DIR": d, "DBUS_SESSION_BUS_ADDRESS": f"unix:path={d}/bus"})
+            cmd, env = constraints.wrap(["a"], {"XDG_RUNTIME_DIR": "/mine"}, {"processes": 8})          # its own stays, and stays its own
+            self.assertEqual((cmd[-4:], env["XDG_RUNTIME_DIR"]), (["env", "-u", "DBUS_SESSION_BUS_ADDRESS", "a"], "/mine"))
+
+    def test_a_dollar_in_the_command_reaches_it_as_written(self):
+        newer = exec_stub(self, 'echo "  --expand-environment=BOOL  Control expansion"')
+        older = exec_stub(self, 'echo "  --scope  Run this as scope"')
+        constraints._literal.cache_clear(); self.addCleanup(constraints._literal.cache_clear)
+        self.assertEqual((constraints._literal(newer), constraints._literal(older), constraints._literal("/nonexistent")),
+                         ((constraints.LITERAL,), (), ()))
+        with mock.patch.object(constraints, "SYSTEMD_RUN", (newer, "--user")):
+            self.assertEqual(constraints.wrap(["a"], {"XDG_RUNTIME_DIR": "/r", "DBUS_SESSION_BUS_ADDRESS": "b"}, {"processes": 8})[0],
+                             [newer, "--user", constraints.LITERAL, "-p", "TasksMax=8", "--", "a"])
+        self.assertIn("-q $x -p TasksMax=8 --", constraints.scope_probe({"processes": 8}))        # the probe asks its own machine's
+
+    def test_a_scope_keeps_the_exit_code_the_streams_and_the_environment(self):
+        stub = exec_stub(self)
+        with mock.patch.object(constraints, "SYSTEMD_RUN", (stub,)):
+            cmd, env = constraints.wrap(["sh", "-c", 'echo "$FOO ${DBUS_SESSION_BUS_ADDRESS:-none}"; exit 3'],
+                                        {"PATH": os.environ["PATH"], "FOO": "bar"}, {"processes": 8})
+        r = run.run_group(cmd, 30, env=env, stdout=subprocess.PIPE, text=True)
+        self.assertEqual((r.returncode, r.stdout), (3, "bar none\n"))
+
+    def test_a_unit_past_its_timeout_is_killed_with_its_group(self):
+        stub, d = exec_stub(self), tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        with mock.patch.object(constraints, "SYSTEMD_RUN", (stub,)):
+            cmd, env = constraints.wrap(["sh", "-c", f"sleep 60 & echo $! >{d}/child; sleep 60"], {"PATH": os.environ["PATH"]}, {"cpus": 1})
+        with self.assertRaises(subprocess.TimeoutExpired):
+            run.run_group(cmd, 1, env=env)
+        with open(f"{d}/child") as f:
+            child = int(f.read())
+        time.sleep(0.2)
+        with self.assertRaises(ProcessLookupError):                  # the background child went with its group
+            os.kill(child, 0)
+
+    def probe(self, values=None, ssh=False, systemctl=0, linger="yes", runs="exit 0", bus=True, booted=True, v2=True, tools=True):
+        """``scope_check`` against stand-ins for systemd's programs and files."""
+        bin_, run_dir, fs = (tempfile.mkdtemp(dir="/tmp") for _ in range(3))
+        for x in (bin_, run_dir, fs):
+            self.addCleanup(shutil.rmtree, x, True)
+        for prog in ("sh", "id", "tr", "cat"):
+            os.symlink(shutil.which(prog), os.path.join(bin_, prog))
+        stubs = {"systemctl": f"exit {systemctl}", "loginctl": f"echo {linger}", **({"systemd-run": runs} if tools else {})}
+        for name, body in stubs.items():
+            with open(os.path.join(bin_, name), "w") as f:
+                f.write("#!/bin/sh\n" + body + "\n")
+            os.chmod(os.path.join(bin_, name), 0o755)
+        if bus:
+            s = socket.socket(socket.AF_UNIX); self.addCleanup(s.close); s.bind(os.path.join(run_dir, "bus"))
+        if v2:
+            open(os.path.join(fs, "cgroup.controllers"), "w").close()
+        env = {"PATH": bin_, "XDG_RUNTIME_DIR": run_dir, **({"SSH_CONNECTION": "10.0.0.1 1 10.0.0.2 22"} if ssh else {})}
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(constraints, "CGROUP", fs), \
+                mock.patch.object(constraints, "BOOTED", fs if booted else os.path.join(fs, "absent")):
+            return constraints.scope_check(values or {"cpus": 1})
+
+    def test_each_reason_a_scope_cannot_start_is_its_own(self):
+        uid = os.getuid()
+        for kw, why in (({"tools": False}, "systemd-run is not on this machine"), ({"booted": False}, "systemd does not run this machine"),
+                        ({"v2": False}, "no cgroup v2"), ({"systemctl": 3}, f"user@{uid}.service is not active"),
+                        ({"bus": False}, "no session bus at "), ({"ssh": True, "linger": "no"}, "lingering is off: limits would end with the SSH session"),
+                        ({"runs": "echo 'Failed to connect to bus: No medium found' >&2; exit 1"}, "Failed to connect to bus: No medium found")):
+            got = self.probe(**kw)
+            self.assertTrue(got["why"].startswith(why), (kw, got)); self.assertEqual(got["enforced"], [])
+        self.assertEqual(self.probe(linger="no")["why"], "")                          # not under SSH: no lingering needed
+        self.assertEqual(self.probe(ssh=True)["why"], "")
+
+    def test_each_value_is_read_back_from_its_scope(self):
+        # what a delegated cpu, memory and pids controller and an undelegated cpuset read back
+        said = {"CPUQuota": "150000 100000", "MemoryMax": "268435456 0", "TasksMax": "max", "AllowedCPUs": "cat: cpuset.cpus.effective: No such file"}
+        body = 'case "$*" in true) exit 0;; ' + " ".join(f"*{k}=*) echo '{v}';;" for k, v in said.items()) + " esac"
+        got = self.probe({"cpus": 1.5, "memory_mb": 256, "processes": 64, "cpu_set": "0"}, runs=body)
+        self.assertEqual((got["why"], got["enforced"], sorted(got["refused"])), ("", ["cpus", "memory_mb"], ["cpu_set", "processes"]))
+        self.assertEqual(constraints.explain("processes", 64, got["refused"]["processes"], scope=True), "Asked 64 processes, the scope had no limit")
+        self.assertTrue(constraints.explain("cpu_set", "0", got["refused"]["cpu_set"], scope=True).startswith("Asked CPUs 0: systemd did not apply it (cat:"))
+        swap = self.probe({"memory_mb": 256}, runs='case "$*" in true) exit 0;; *) echo "268435456 max";; esac')
+        self.assertEqual(constraints.explain("memory_mb", 256, swap["refused"]["memory_mb"], scope=True), "Asked 256 MB, the scope could also use swap")
+        # a cpuset without CPU 0: the scope asks for the first CPU it has
+        pinned = self.probe({"cpu_set": constraints.FIRST_CPU}, runs='case "$*" in *Cpus_allowed_list*) echo "n:4 a:6-9 m:max";; '
+                            '*AllowedCPUs=6\\ *) echo 6;; *AllowedCPUs=*) echo "cat: cpuset.cpus.effective: Invalid argument";; esac')
+        self.assertEqual((pinned["enforced"], pinned["refused"]), (["cpu_set"], {}))
+        # one process and thread: the read-back starts nothing (builtins, then exec)
+        inside = constraints.scope_probe({"processes": 1}).split("sh -c ")[-1].split(" 2>&1")[0]
+        self.assertIn("exec cat pids.max", inside); self.assertNotIn("$(", inside)
+
+    def test_a_run_holds_the_caps_or_is_refused_and_the_cpu_set_falls_back_to_its_affinity(self):
+        held = {"why": "", "enforced": ["cpus", "processes"], "refused": {"cpu_set": "cat: no such file"}}
+        with mock.patch.object(constraints, "scope_check", return_value=held):
+            self.assertEqual(run.Run.scope_ready({"cpus": 2, "processes": 64, "cpu_set": "0"}), {"cpus": 2, "processes": 64, "cpu_set": "0"})
+        dropped = dict(held, enforced=["cpus"], refused={"processes": "max"})
+        with mock.patch.object(constraints, "scope_check", return_value=dropped), \
+                self.assertRaisesRegex(run.Refused, r"systemd does not enforce on this machine's processes Processes and threads \(Asked 64 processes, the scope had no limit\)"):
+            run.Run.scope_ready({"cpus": 2, "processes": 64})
+        none = {"why": "lingering is off: limits would end with the SSH session", "enforced": [], "refused": {}}
+        with mock.patch.object(constraints, "scope_check", return_value=none):
+            with self.assertRaisesRegex(run.Refused, r"CPUs \(lingering is off"):
+                run.Run.scope_ready({"cpus": 2})
+            self.assertEqual(run.Run.scope_ready({"cpu_set": "0"}), {})                 # the affinity alone: nothing wrapped
+            self.assertEqual(run.Run.scope_ready({"cpus": 2}, refuse=False), {})        # the container backend: the driver unlimited, the run goes on
+        with mock.patch.object(constraints, "scope_check", return_value=dropped):
+            self.assertEqual(run.Run.scope_ready({"cpus": 2, "processes": 64}, refuse=False), {"cpus": 2, "processes": 64})   # what holds, holds
+        self.assertEqual(run.Run.scope_ready({}), {})
+
+    def test_what_settings_and_review_say_of_a_scope(self):
+        scope = lambda **sd: {"capacity": {"cpus": 4}, "engine": {}, "enforced": [], "refused": {},
+                              "systemd": {"why": "", "enforced": [], "refused": {}, **sd}}
+        ok, off = scope(enforced=["cpus", "memory_mb", "processes"]), scope(why="no cgroup v2")
+        self.assertTrue(constraints.scope_ok(ok)); self.assertFalse(constraints.scope_ok(off)); self.assertFalse(constraints.scope_ok({}))
+        values = {"cpus": 2, "processes": 64, "cpu_set": "0"}
+        self.assertEqual(constraints.not_enforced(values, ok), [])                      # no engine: a local run holds them
+        self.assertEqual(constraints.not_enforced(values, off), ["cpus", "processes"])  # cpu_set: the affinity
+        self.assertEqual(constraints.warnings(values, ok), {})
+        self.assertEqual(constraints.warnings(values, off), {})                         # no engine, no scope: off in Settings
+        engine = dict(off, engine={"kind": "docker", "version": "29"}, enforced=["cpus", "processes", "cpu_set"])
+        self.assertEqual(constraints.warnings(values, engine), {})                      # a container run holds them; its driver runs unlimited
+        self.assertEqual(constraints.not_enforced(values, engine), [])
+        rows = lambda found, docker=False: Review().rows(values, docker=docker, found=found)["constraints"]
+        self.assertEqual(rows(ok)["state"], "ok")
+        self.assertEqual(rows(off)["detail"], "systemd does not enforce CPUs, Processes and threads here (no cgroup v2): test it in Settings")
+        self.assertEqual(rows(engine, docker=True)["state"], "ok")                      # the container backend: its drivers run unlimited
+        self.assertEqual(rows(engine)["state"], "missing")                              # the local backend: its agents need the scope
+        self.assertEqual(rows({"capacity": {"cpus": 4}, "enforced": ["cpus", "processes", "cpu_set"]}, docker=True)["state"], "ok")   # scope never tested
+
+
+class Cli(unittest.TestCase):
+    def refused(self, *words):
+        app = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        r = subprocess.run([sys.executable, "-m", "nullius.standard.cli", "run", "humaneval", "nop", *words],
+                           capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=app), timeout=120)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        return r.stdout
+
+    def test_a_constraint_the_machine_cannot_take_refuses_the_run(self):
+        self.assertIn("refused: constraints: Processes and threads: a whole number of at least 1",
+                      self.refused("--constraint", "processes=0"))
+        if hasattr(os, "sched_setaffinity"):
+            self.assertIn("refused: constraints: cpu_set:", self.refused("--constraint", "cpu_set=8191"))
+
+
+class Compile(unittest.TestCase):
+    def test_each_machine_s_constraints_go_on_its_command(self):
+        defs = {k: definitions.load(k, ROOT)[0] for k in ("benchmark", "agent", "capability")}
+        r = {"version": 1, "harness": "standard", "name": "fake-0101-120000", "title": "t", "benchmark": "fakebench",
+             "dataset": "all", "other": "fake", "provider": "openai", "model": "gpt-5-mini", "concurrency": 4,
+             "unsandboxed": True, "where": ["local", "me@bench"]}
+        with mock.patch.dict(os.environ, {constraints.SETTING: '{"me@bench": {"cpus": 2, "gpu_ids": []}}'}):
+            out = recipe.compile(r, defs)
+        here, there = (sh["command"] for sh in out["shards"])
+        self.assertNotIn("--constraint", here)
+        self.assertIn("--constraint cpus=2 --constraint gpu_ids= --from-run", there)
+        with mock.patch.dict(os.environ, {constraints.SETTING: '{"me@bench": {"cpus": 0}}'}):
+            said = [e["message"] for e in recipe.compile(r, defs)["errors"]]
+        self.assertTrue(any(m.startswith("HOST_CONSTRAINTS must be valid constraints") for m in said), said)   # never run without them
 
 
 if __name__ == "__main__":

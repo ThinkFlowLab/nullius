@@ -10,10 +10,14 @@ starts on the machine (``environment``). A new constraint is one entry.
 
 Constraints are set per machine in Settings, ``HOST_CONSTRAINTS``: a JSON
 object from a machine (``local`` for this machine, else a host's entry) to
-``{key: value}``. A key not set is no constraint. On the container backend each
-container constraint is a ceiling per container. Every unit's agent and task
-containers get it; the relay, install and check containers do not. A task's
-own ``cpus`` or ``memory_mb`` stays when it is lower (``lowest``).
+``{key: value}``. A key not set is no constraint; a setting that is not valid
+refuses every run (``of``). Each container constraint is a ceiling per
+container, on every container a run starts on the machine, whatever the
+backend (``container.cap``): a unit's agent, its own image, its relay,
+doors, forwarders and proxy, the installs, the checks and a setup's driver.
+The connection test's probe containers are not capped. A task's own ``cpus``
+or ``memory_mb`` stays when it is lower (``argv``). An image build or pull
+takes none: the engine applies no limit there.
 
 Three constraints act beyond containers. ``concurrency`` caps the units a run
 starts at a time on the machine; the recipe's own ``concurrency`` is a cap
@@ -266,9 +270,17 @@ def container(values: dict) -> dict:
     return {c.key: values[c.key] for c in TABLE if "docker" in c.apply and c.key in values}
 
 
-def argv(values: dict) -> List[str]:
-    """The docker flags for every container constraint that is set, and none other."""
-    return [w for k, v in container(values).items() for w in BY_KEY[k].apply["docker"](v)]
+def argv(values: dict, task: Optional[dict] = None) -> List[str]:
+    """The docker flags for every container constraint that is set, and none
+    other: the machine's ``values``, or a task's own (``task``: its ``cpus``
+    and ``memory_mb``) where it is lower (:func:`lowest`). A machine's memory
+    allows no swap above it, whichever of the two is applied; a task's memory
+    alone is ``--memory`` alone, so its container keeps the swap Docker gives it."""
+    flags = [w for k, v in container(lowest(values, task)).items() for w in BY_KEY[k].apply["docker"](v)]
+    if "memory_mb" in (task or {}) and "memory_mb" not in values:
+        i = flags.index("--memory-swap")
+        del flags[i:i + 2]
+    return flags
 
 
 def scoped(values: dict) -> dict:
