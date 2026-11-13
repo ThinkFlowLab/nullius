@@ -85,7 +85,7 @@ nullius standard run humaneval reference --provider openrouter --model meta-llam
 | Who served the run | Each trial's `result.json`, `standard.served`, and the job's `result.json`, `served`: the answered calls of every route (the agent's, the judge's, the simulated user's, the benchmark's own relay's) by serving provider, those that named none, and for each pinned model `held`: `true` when every answered call names a provider that reads as a pinned slug, `unknown` when one names none or another name, `null` with no answered call. A name reads as a slug lowercased with its spaces as dashes (`Google AI Studio` is `google-ai-studio`), and nothing else is folded. The tokens and the cost stay the agent's own calls' |
 | What `held` reads | The provider's name alone: a reply names no endpoint variant, and `held` for `deepinfra/fp8` is true for any endpoint of `deepinfra` |
 | Shards | `merge` refuses shards whose pins differ, unless `--force`; a model pinned differently in the merged shards reads `held: unknown` |
-| The builder | A recipe has no field for it yet: a pinned run starts from the command line |
+| The builder | *Model* step, **Served by** under each model field, on OpenRouter alone: the recipe's `served_by`, by field (`model`, `simulator`, `judge`), compiled into `--served-by` for each job that calls that model. Its list of a model's providers comes from OpenRouter (`/models/{maker}/{model}/endpoints`), asked as the model list is; when it cannot be had, a slug typed by hand is taken |
 
 <div class="grid cards" markdown>
 
