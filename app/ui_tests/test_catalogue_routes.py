@@ -201,6 +201,13 @@ class BenchmarkPage(PageCase):
         self.assertIn("benchmarks/swe-bench-verified/ ├─ benchmark.json ├─ driver.py ├─ images.json ├─ standard.json └─ upstream-settings.json", self.page("swe-bench-verified"))
         self.assertIn("benchmarks/terminal-bench/ ├─ benchmark.json ├─ driver.py ├─ standard.json └─ upstream-settings.json", self.page("terminal-bench"))
 
+    def test_a_machine_setup_says_what_checks_it_and_what_installs_it(self):
+        osworld = self.page("osworld1")
+        self.assertIn("Setup: docker", osworld)
+        self.assertIn("Checked by docker on PATH, on each machine a run uses; the builder's Where step checks it.", osworld)
+        self.assertNotIn("nothing installs it", osworld)
+        self.assertIn("the builder's Where step checks it and can install it.", self.page("tau3-bench"))
+
 
 class DatasetsOnTheirPage(PageCase):
     """A benchmark's page carries its datasets: the task count, the official

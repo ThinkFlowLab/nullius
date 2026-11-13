@@ -137,7 +137,7 @@
         {% for h, r in std.host.items() %}
         <div class="std-hostreq" id="setup-{{ h }}">
           <h3 class="std-optname">Setup: {{ h }}</h3>
-          <p class="bench-ds-note">{{ r.summary }} Checked by {{ r.check|join(', ') }} on PATH, on each machine a run uses; the builder's Where step checks it{% if r.install %} and can install it{% else %}: a machine's own hardware, nothing installs it{% endif %}.</p>
+          <p class="bench-ds-note">{{ r.summary }} Checked by {{ r.check|join(', ') }} on PATH, on each machine a run uses; the builder's Where step checks it{% if r.install %} and can install it{% endif %}.</p>
           {% if r.install %}<div class="std-code"><div class="std-code-head"><span>install, on each machine</span><button type="button" class="std-copy">Copy</button></div><pre><code>{{ r.install|join('\n') }}</code></pre></div>{% endif %}
         </div>
         {% endfor %}

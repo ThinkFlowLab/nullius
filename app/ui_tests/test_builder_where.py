@@ -47,6 +47,11 @@ class StandardWhere(CompilerCase):
                 self.assertEqual("public web proxy" in tip(html), proxy)
                 self.assertNotIn("public web proxy", tip(setup[name]))         # an Original setup gets no proxy
 
+    def test_a_machine_setup_is_said_to_be_needed_by_the_options_chosen(self):
+        html = self.draw(None)["osworld1 local"]
+        self.assertIn("<h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small>", html)
+        self.assertIn("<b>docker</b>: Docker on the machine the driver runs on", html)
+
 
 if __name__ == "__main__":
     unittest.main()
