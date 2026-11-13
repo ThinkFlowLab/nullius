@@ -188,22 +188,41 @@
     </div>
     {% set s1, llm = judges %}
 
-    {% macro picker(name, providers, judge, label) %}
-    <div class="st-judges" role="radiogroup" aria-label="{{ label }}" data-picker>
-      {% for key, d in providers.items() %}
-      {% set available = d.ready %}
-      <label class="st-judge" data-provider="{{ key }}" data-available="{{ 'true' if available else 'false' }}"{% if not available %} hidden{% endif %}><input type="radio" name="value:{{ name }}" value="{{ key }}"{{ ' checked' if judge.provider == key and available }}{{ ' disabled' if not writable or not available }}
-        data-default="{{ d.get('model', '') }}" data-models="{{ d.get('models', [])|join('|') }}">
-        <span><b>{{ 'TypeSafe AI' if key == 'typesafe' else d.label }}</b></span></label>
-      {% endfor %}
-    </div>
-    <p class="st-about" data-no-judge-provider>No compatible provider added. <a href="#providers">Add a provider</a></p>
+    {#- Provider, then Protocol when the provider lists two this judge speaks (else a quiet line), then Model. -#}
+    {% macro judge_rows(prefix, choices, judge, label) %}
+    {% set name, pname = prefix ~ '_PROVIDER', prefix ~ '_PROTOCOL' %}
+    {% set prow, qrow = by[name], by[pname] %}
+    {% set on = choices.get(judge.provider) if choices.get(judge.provider, {}).get('ready') else none %}
+    {% set offered = on.listed if on else [] %}
+    <article class="st-field st-row" id="{{ name }}" data-source="{{ prow.source }}" data-secret="no">
+      <label class="st-row-label" for="value-{{ name }}">Provider</label>
+      <div class="st-row-value">
+        <select class="st-input" id="value-{{ name }}" name="value:{{ name }}" aria-label="{{ label }}" data-picker{{ ' disabled' if not writable }}>
+          <option value="" hidden{{ ' selected' if not on }}></option>
+          {% for key, d in choices.items() %}
+          <option value="{{ key }}" data-available="{{ 'true' if d.ready else 'false' }}" data-protocol="{{ d.protocol }}" data-protocols="{{ d.listed|join('|') }}"
+            data-default="{{ d.get('model', '') }}" data-models="{{ d.get('models', [])|join('|') }}"{% if d.get('live') %} data-live{% endif %}{{ ' selected' if on and judge.provider == key }}{% if not d.ready %} hidden{% endif %}>{{ 'TypeSafe AI' if key == 'typesafe' else d.label }}</option>
+          {% endfor %}
+        </select>
+        <p class="st-note" data-judge-via{% if not on or offered|length > 1 %} hidden{% endif %}>via {{ protocols[judge.protocol].label }}</p>
+        <p class="st-about" data-no-judge-provider>No compatible provider added. <a href="#providers">Add a provider</a></p>
+      </div>
+    </article>
+    <article class="st-field st-row" id="{{ pname }}" data-source="{{ qrow.source }}" data-secret="no"{% if offered|length < 2 %} hidden{% endif %}>
+      <label class="st-row-label" for="value-{{ pname }}">Protocol</label>
+      <div class="st-row-value">
+        {#- named only once set, so a provider change never saves a protocol nobody chose (judges.js) -#}
+        <select class="st-input" id="value-{{ pname }}"{% if qrow.source != 'unset' %} name="value:{{ pname }}"{% endif %} data-name="value:{{ pname }}" data-protocol-picker{{ ' disabled' if not writable }}>
+          {% for p in judge_protocols[prefix] %}<option value="{{ p }}"{{ ' selected' if judge.protocol == p }}{% if p not in offered %} hidden{% endif %}>{{ protocols[p].label }}</option>{% endfor %}
+        </select>
+      </div>
+    </article>
     {% endmacro %}
     {% set srow = by.get('SYSTEM_ONE_PROVIDER') %}
     {% if srow and by.get('SYSTEM_ONE_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not s1 }}" data-judge-card>
       <legend><svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v18M7 21h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/></svg>System One</legend>
-      <article class="st-field" id="SYSTEM_ONE_PROVIDER" data-source="{{ srow.source }}" data-secret="no">{{ picker('SYSTEM_ONE_PROVIDER', s1_providers, s1, 'Where System One is asked') }}</article>
+      {{ judge_rows('SYSTEM_ONE', s1_providers, s1, 'Where System One is asked') }}
       {{ field(by['SYSTEM_ONE_MODEL'], 'Model', writable, s1_providers[s1.provider].models) }}
     </fieldset>
     {% endif %}
@@ -211,10 +230,8 @@
     {% if prow and by.get('LLM_JUDGE_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not llm }}" data-judge-card>
       <legend><svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01M9 15c1.5 1.2 4.5 1.2 6 0"/></svg>LLM judge</legend>
-      <article class="st-field" id="LLM_JUDGE_PROVIDER" data-source="{{ prow.source }}" data-secret="no">{{ picker('LLM_JUDGE_PROVIDER', llm_providers, llm, "The LLM judge's provider") }}</article>
-
+      {{ judge_rows('LLM_JUDGE', llm_providers, llm, "The LLM judge's provider") }}
       {{ field(by['LLM_JUDGE_MODEL'], 'Model', writable, []) }}
-
     </fieldset>
     {% endif %}
   </section>

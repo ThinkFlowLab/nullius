@@ -38,6 +38,8 @@
         const provider = current.get('value:' + prefix + '_PROVIDER');
         if (provider) body.set('value:' + prefix + '_PROVIDER', provider);
       }
+      // The provider and the model decide the protocol: redraw the judge's rows from the saved state.
+      if (['_PROVIDER', '_PROTOCOL', '_MODEL'].some(part => names.has(prefix + part))) ['_PROVIDER', '_PROTOCOL'].forEach(part => names.add(prefix + part));
     }
     // Removing the final host is an explicit removal, not an empty "keep" input.
     if (body.has('value:HOSTS') && !body.get('value:HOSTS')) body.set('clear:HOSTS', '1');
@@ -93,7 +95,7 @@
       for (const [key, value] of changed) saved.set(key, value);
       for (const name of names) {
         const field = document.getElementById(name), replacement = fresh.getElementById(name);
-        if (!field || !replacement || (field.contains(document.activeElement) && document.activeElement.matches('input:not([type=hidden]), textarea, select')) || field.querySelector('input[type=radio]')) continue;
+        if (!field || !replacement || (field.contains(document.activeElement) && document.activeElement.matches('input:not([type=hidden]), textarea, select, .ui-select-trigger')) || field.querySelector('input[type=radio]')) continue;
         const keys = [...field.querySelectorAll('[name]')].map(input => input.name);
         if (keys.some(key => now.get(key) !== current.get(key))) continue;
         field.replaceWith(replacement);

@@ -54,7 +54,8 @@ def settings_page():
                            prices=prices.state(),
                            machines=_machines(), constraint_table=constraints.TABLE,
                            provider_cards=provider_cards({r["name"]: r for r in rows}),
-                           ssh_hosts=hosts.scan_ssh_config(), judges=(client.system_one(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), s1_providers=client.system_one_providers(os.environ), agent_keys=settings.agent_key_names(), reserved_agent_keys=settings.reserved_agent_keys(),
+                           ssh_hosts=hosts.scan_ssh_config(), judges=(client.system_one(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), s1_providers=client.system_one_providers(os.environ),
+                           judge_protocols={"SYSTEM_ONE": client.SYSTEM_ONE_PROTOCOLS, "LLM_JUDGE": client.LLM_PROTOCOLS}, protocols=providers.PROTOCOLS, agent_keys=settings.agent_key_names(), reserved_agent_keys=settings.reserved_agent_keys(),
                            tested={k: _shown(v) for k, v in providers.tests().items() if isinstance(v, dict)})
 
 
@@ -75,6 +76,16 @@ def settings_provider_test():
         return jsonify(ok=False, error=str(e)), 400
     providers.remember({choice: got})
     return jsonify(_shown(got))
+
+
+@app.route("/settings/system-one/models", methods=["POST"])
+def settings_system_one_models():
+    """System One's models on OpenRouter for its card, asked after the page has loaded: OpenRouter's
+    public list of decision models, kept in the cache (``client.system_one_models``)."""
+    shared._require_csrf()
+    if not _local_client():
+        abort(403)
+    return jsonify(ok=True, models=[{"id": m, "name": m} for m in client.system_one_models("openrouter", fetch=True)])
 
 
 def _size(mb: int) -> str:
