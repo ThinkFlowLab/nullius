@@ -89,7 +89,7 @@ class ProviderFromSettings(CompilerCase):
     def on(self, available, code, model_key=True, endpoints=None):
         schema = dict(self.schema, credentials={'available': available, 'model_key': model_key, 'endpoints': endpoints or {}})
         program = 'const C=require(' + json.dumps(str(APP / 'static/builder/command-builder-core.js')) + ')(' + json.dumps(schema) + ');\n' + code
-        return json.loads(subprocess.run([self.node, '-e', program], check=True, capture_output=True, text=True).stdout)
+        return json.loads(subprocess.run([self.node, '-'], input=program, check=True, capture_output=True, text=True).stdout)
 
     def test_a_recipe_names_its_endpoint_by_id_and_the_step_lists_each_by_name(self):
         """A named OpenAI-compatible endpoint: the recipe keeps provider custom
@@ -109,9 +109,9 @@ class ProviderFromSettings(CompilerCase):
         self.assertEqual(gone[0][4], 'This recipe runs on GONE, and MODEL_GONE_API_URL is not set in Settings. '
                                      'Choose OpenRouter or GPU box on the Model step to run it, or set it in Settings.')
         self.assertEqual(self.on(['custom:GPU'], code % "'openai'", endpoints=endpoints)[0][:2], ['openai', ''])   # another provider drops the id
-        bad = json.loads(subprocess.run([self.node, '-e', 'const C=require(' + json.dumps(str(APP / 'static/builder/command-builder-core.js')) + ')('
+        bad = json.loads(subprocess.run([self.node, '-'], input='const C=require(' + json.dumps(str(APP / 'static/builder/command-builder-core.js')) + ')('
                                          + json.dumps(dict(self.schema, credentials={'available': ['custom:GPU'], 'endpoints': endpoints, 'broken': ['custom:BAD']})) + ');'
-                                         + "const r=C.create();r.agents=['tau3-llm-agent'];" + PIN + "r.model='m';C.setChoice(r,'custom:BAD');process.stdout.write(JSON.stringify(C.providerBlocker(r)))"],
+                                         + "const r=C.create();r.agents=['tau3-llm-agent'];" + PIN + "r.model='m';C.setChoice(r,'custom:BAD');process.stdout.write(JSON.stringify(C.providerBlocker(r)))",
                                         check=True, capture_output=True, text=True).stdout)
         self.assertEqual(bad, 'This recipe runs on BAD, and its URL in Settings holds a credential or is not an http(s) URL. Put the key in the Key field in Settings.')
         odd = self.on(['custom:GPU'], "const r=C.fromJSON(JSON.stringify({...C.create(),provider:'custom',endpoint:'gpu box'}));"

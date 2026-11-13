@@ -274,7 +274,7 @@ class AddBenchmark(unittest.TestCase):
             core = os.path.join(os.path.dirname(catalogue_web.__file__), "..", "static", "builder", "command-builder-core.js")
             program = ("const C=require(" + json.dumps(os.path.abspath(core)) + ")(" + json.dumps(payload(catalog.load(), [])) + ");"
                        "process.stdout.write(JSON.stringify(['longmemeval-harbor','longmemeval-s'].map(d=>{const r=C.prefill({dataset:d});return [r.harness,r.dataset];})))")
-            got = json.loads(subprocess.run([node, "-e", program], capture_output=True, text=True, check=True).stdout)
+            got = json.loads(subprocess.run([node, "-"], input=program, capture_output=True, text=True, check=True).stdout)
             self.assertEqual(got[0], ["harbor", "acme/longmemeval"]); self.assertEqual(got[1][0], "standard")
         again = self.client.post("/benchmarks/new", data=dict(FORM, route_for="longmemeval", csrf=self.token()), content_type="multipart/form-data")
         self.assertEqual(again.status_code, 400); self.assertIn("already runs with Harbor", again.get_data(as_text=True))

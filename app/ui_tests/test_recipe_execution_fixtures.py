@@ -44,7 +44,7 @@ class ReferenceRecipes(unittest.TestCase):
         program = ('const C=require(' + json.dumps(str(APP / 'static/builder/command-builder-core.js')) + ')(' + json.dumps(self.schema) + ');\n'
                    'const r=C.fromJSON(' + json.dumps(recipe_json) + ');'
                    'process.stdout.write(JSON.stringify({compiled:C.compile(r),runnable:C.runnable(r)}));')
-        result = subprocess.run([self.node, '-e', program], capture_output=True, text=True, check=True)
+        result = subprocess.run([self.node, '-'], input=program, capture_output=True, text=True, check=True)
         return json.loads(result.stdout)
 
     @staticmethod

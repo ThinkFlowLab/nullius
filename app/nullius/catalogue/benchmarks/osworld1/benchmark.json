@@ -1,0 +1,48 @@
+{
+  "key": "osworld1",
+  "title": "OSWorld1",
+  "category": "Computer use",
+  "domain": "Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of its own.",
+  "scoring": "OSWorld evaluator",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "good_to_know": [
+    "Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.",
+    "Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.",
+    "Only M3, PromptAgent and Qwen-CUA have completed tasks through Nullius. The other agents were checked up to their first model call.",
+    "Each task's VM takes 4 cores and 4 GB of memory; OS-Symphony can start a second. Run no more tasks at once than the machine holds.",
+    "Prepare the machine before the first run (Docker, KVM, five system libraries, a VM image of about 25 GB): see OSWorld1 machine setup under Benchmarks in the documentation.",
+    "Scores depend on the machine's speed, because OSWorld waits a fixed time after each action. Compare runs made on similar machines.",
+    "OSWorld's infeasible tasks are listed publicly, and its scorer checks only the last action. An agent that looks a task up online and answers FAIL scores it."
+  ],
+  "upstream_limitations": [
+    "OSWorld publishes no solutions: no reference run shows that each task can be solved.",
+    "The 8 Google Drive tasks need a Google account's credentials, which OSWorld does not ship. They are in All tasks, and 3 of them in Small.",
+    "49 tasks ask for a proxy whose credentials OSWorld does not ship; with PromptAgent, GPT-5.4, OpenAI CUA, OS-Symphony, EvoCUA or Muse Spark, those tasks fail or run offline.",
+    "The VM image is not pinned: a later download can differ from the one a score was made with.",
+    "Each VM's ports are open on every network interface; one runs any command in the VM. Bind Docker's ports to 127.0.0.1, or keep the machine off untrusted networks."
+  ],
+  "limitations": [
+    "No agent from the Agents page can run it yet.",
+    "Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.",
+    "The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.",
+    "A task still running after 2 hours is stopped and gets no score."
+  ],
+  "datasets": [
+    {
+      "key": "osworld1",
+      "title": "OSWorld, Ubuntu tasks",
+      "tasks": 369,
+      "official": "https://github.com/xlang-ai/OSWorld",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "OSWorld's own evaluator, DesktopEnv.evaluate: the task's evaluator functions on the VM's final state.",
+      "notes": "369 tasks in 10 domains; 361 without Google Drive. Apache-2.0."
+    }
+  ],
+  "citation": "@misc{OSWorld,\n      title={OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments}, \n      author={Tianbao Xie and Danyang Zhang and Jixuan Chen and Xiaochuan Li and Siheng Zhao and Ruisheng Cao and Toh Jing Hua and Zhoujun Cheng and Dongchan Shin and Fangyu Lei and Yitao Liu and Yiheng Xu and Shuyan Zhou and Silvio Savarese and Caiming Xiong and Victor Zhong and Tao Yu},\n      year={2024},\n      eprint={2404.07972},\n      archivePrefix={arXiv},\n      primaryClass={cs.AI}\n}",
+  "citation_source": "https://github.com/xlang-ai/OSWorld"
+}

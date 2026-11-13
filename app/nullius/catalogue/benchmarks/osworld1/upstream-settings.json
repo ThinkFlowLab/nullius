@@ -1,0 +1,3061 @@
+[
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--base_url / ANTHROPIC_BASE_URL",
+  "values": "an Anthropic-compatible endpoint",
+  "default": "$ANTHROPIC_BASE_URL",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--api_key / ANTHROPIC_API_KEY",
+  "values": "a key",
+  "default": "$ANTHROPIC_API_KEY",
+  "nullius": "fixed:the relay's placeholder - the provider's key stays in the relay"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--extra_headers / ANTHROPIC_EXTRA_HEADERS",
+  "values": "a JSON object of headers",
+  "default": "unset",
+  "nullius": "fixed:unset - its default; a gateway's routing headers, which the relay's providers do not need"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--path_to_vm",
+  "values": "a VM image",
+  "default": "unset: the provider's manager downloads it into ./docker_vm_data",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit, instead of once per unit's folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "off",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--action_space",
+  "values": "pyautogui",
+  "default": "pyautogui",
+  "nullius": "fixed:pyautogui - its default; M3's parser writes pyautogui code"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--observation_type",
+  "values": "screenshot, a11y_tree, screenshot_a11y_tree, som",
+  "default": "screenshot",
+  "nullius": "fixed:screenshot - its default and its documented invocation; M3Agent reads screenshots"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--sleep_after_execution",
+  "values": "seconds",
+  "default": "3.0",
+  "nullius": "fixed:3.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--max_steps",
+  "values": "a number",
+  "default": "100",
+  "nullius": "fixed:100 - its default and its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--test_config_base_dir",
+  "values": "a folder",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--model",
+  "values": "a model name",
+  "default": "$ANTHROPIC_MODEL, else m3",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--temperature",
+  "values": "a number",
+  "default": "0.6",
+  "nullius": "fixed:0.6 - its default (M3Agent sets 1 with thinking on)"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--top_p",
+  "values": "a number",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--max_tokens",
+  "values": "a number",
+  "default": "8192",
+  "nullius": "fixed:8192 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--coordinate_type",
+  "values": "relative, absolute",
+  "default": "relative",
+  "nullius": "fixed:relative - its default: M3's [0, 1000] coordinates"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--max_trajectory_length",
+  "values": "a number",
+  "default": "10",
+  "nullius": "fixed:10 - its default, M3Agent's only_n_most_recent_images"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--platform",
+  "values": "ubuntu, macos, windows",
+  "default": "ubuntu",
+  "nullius": "fixed:ubuntu - its default; the tasks' VM is Ubuntu"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--domain",
+  "values": "all, or one domain",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--test_all_meta_path",
+  "values": "test_all.json, test_nogdrive.json, test_small.json, test_infeasible.json",
+  "default": "evaluation_examples/test_all.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--result_dir",
+  "values": "a folder",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--num_envs",
+  "values": "a number",
+  "default": "1",
+  "nullius": "fixed:1 - its default; Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--env_start_delay",
+  "values": "seconds",
+  "default": "1.0",
+  "nullius": "fixed:1.0 - its default; one environment, so no stagger happens"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--log_level",
+  "values": "DEBUG, INFO, WARNING, ERROR, CRITICAL",
+  "default": "INFO",
+  "nullius": "fixed:INFO - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--region",
+  "values": "an AWS region",
+  "default": "us-east-1",
+  "nullius": "not offered - the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--provider_name",
+  "values": "aws, virtualbox, vmware, docker, azure, pyromind",
+  "default": "aws",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--client_password",
+  "values": "a password",
+  "default": "osworld-public-evaluation on aws, password otherwise",
+  "nullius": "fixed:password - its default on the docker provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--screen_width",
+  "values": "pixels",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--screen_height",
+  "values": "pixels",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--enable_proxy",
+  "values": "on, off",
+  "default": "off",
+  "nullius": "fixed:off - its default: a task whose config asks for a proxy runs without its proxy setup"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_THINKING_MODE",
+  "values": "adaptive, unset",
+  "default": "unset (adaptive in its documented invocation)",
+  "nullius": "option:thinking"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_THINKING_BUDGET",
+  "values": "a number of tokens",
+  "default": "unset",
+  "nullius": "not offered - unset in its documented invocation; adaptive thinking sets its own budget"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_IMAGE_FORMAT",
+  "values": "JPEG, PNG",
+  "default": "JPEG",
+  "nullius": "fixed:JPEG - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_IMAGE_QUALITY",
+  "values": "1 to 100",
+  "default": "90",
+  "nullius": "fixed:90 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_MAX_LLM_RETRIES",
+  "values": "a number",
+  "default": "2",
+  "nullius": "fixed:2 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_TASK_MAX_REQUEUE",
+  "values": "a number",
+  "default": "3",
+  "nullius": "fixed:3 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_TASK_REQUEUE_BACKOFF_S",
+  "values": "seconds",
+  "default": "5",
+  "nullius": "fixed:5 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_STUCK_THRESHOLD_S",
+  "values": "seconds",
+  "default": "900",
+  "nullius": "fixed:900 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_WATCHDOG_POLL_S",
+  "values": "seconds",
+  "default": "60",
+  "nullius": "fixed:60 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "./.env",
+  "values": "a file of variables",
+  "default": "loaded when present",
+  "nullius": "fixed:none - the unit's folder holds no .env"
+ },
+ {
+  "entry": "run.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - the same PromptAgent as scripts/python/run_multienv.py, which is offered, in a single-environment runner on vmware"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "unset",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--provider_name",
+  "values": "str",
+  "default": "docker",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "True",
+  "nullius": "fixed:True - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "autoglm_computer_use",
+  "nullius": "fixed:autoglm_computer_use - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--observation_type",
+  "values": "['screenshot', 'a11y_tree', 'screenshot_a11y_tree', 'som']",
+  "default": "a11y_tree",
+  "nullius": "fixed:a11y_tree - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "1.0",
+  "nullius": "fixed:1.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "50",
+  "nullius": "fixed:50 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--max_trajectory_length",
+  "values": "int",
+  "default": "3",
+  "nullius": "fixed:3 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--model",
+  "values": "str",
+  "default": "autoglm-os",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--temperature",
+  "values": "float",
+  "default": "0.4",
+  "nullius": "fixed:0.4 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--top_p",
+  "values": "float",
+  "default": "0.5",
+  "nullius": "fixed:0.5 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--max_tokens",
+  "values": "int",
+  "default": "4096",
+  "nullius": "fixed:4096 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--stop_token",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/test_nogdrive.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:empty - its default: DesktopEnv then uses the docker VM's password"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "OPENAI_BASE_URL",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_autoglm.py",
+  "setting": "OPENAI_API_KEY",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "unset",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--provider_name",
+  "values": "str",
+  "default": "docker",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "True",
+  "nullius": "fixed:True - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "autoglm_computer_use",
+  "nullius": "fixed:autoglm_computer_use - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--observation_type",
+  "values": "['screenshot', 'a11y_tree', 'screenshot_a11y_tree', 'som']",
+  "default": "a11y_tree",
+  "nullius": "fixed:a11y_tree - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "1.0",
+  "nullius": "fixed:1.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "50",
+  "nullius": "fixed:50 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--max_trajectory_length",
+  "values": "int",
+  "default": "3",
+  "nullius": "fixed:3 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples/examples",
+  "nullius": "fixed:the upstream's evaluation_examples/examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--model",
+  "values": "str",
+  "default": "autoglm-os",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--temperature",
+  "values": "float",
+  "default": "0.4",
+  "nullius": "fixed:0.4 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--top_p",
+  "values": "float",
+  "default": "0.5",
+  "nullius": "fixed:0.5 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--max_tokens",
+  "values": "int",
+  "default": "4096",
+  "nullius": "fixed:4096 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--stop_token",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--image_width",
+  "values": "int",
+  "default": "1280",
+  "nullius": "fixed:1280 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--image_height",
+  "values": "int",
+  "default": "720",
+  "nullius": "fixed:720 - its default"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/test_nogdrive.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:empty - its default: DesktopEnv then uses the docker VM's password"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "OPENAI_BASE_URL",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_autoglm_v.py",
+  "setting": "OPENAI_API_KEY",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_coact.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - fails at import at this commit: its vendored autogen imports diskcache (mm_agents/coact/autogen/cache/disk_cache.py:11), which the upstream's lock does not install"
+ },
+ {
+  "entry": "scripts/python/run_maestro.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its VM provider is hard-coded to aws (run_maestro.py:368) and its Doubao calls go to a literal Volcengine address (core/engine.py:299, 1323), past the relay"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--vm_secret_mount",
+  "values": "on, off",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "pyautogui",
+  "nullius": "fixed:pyautogui - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--observation_type",
+  "values": "['screenshot', 'a11y_tree', 'screenshot_a11y_tree', 'som']",
+  "default": "screenshot",
+  "nullius": "fixed:screenshot - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "0.0",
+  "nullius": "fixed:3 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "15",
+  "nullius": "fixed:15 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--max_trajectory_length",
+  "values": "int",
+  "default": "3",
+  "nullius": "fixed:3 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--model",
+  "values": "str",
+  "default": "gpt-4o",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--temperature",
+  "values": "float",
+  "default": "1.0",
+  "nullius": "fixed:1.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--top_p",
+  "values": "float",
+  "default": "0.9",
+  "nullius": "fixed:0.9 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--max_tokens",
+  "values": "int",
+  "default": "1500",
+  "nullius": "fixed:1500 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--stop_token",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/test_all.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--num_envs",
+  "values": "int",
+  "default": "1",
+  "nullius": "fixed:1 - Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--log_level",
+  "values": "['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']",
+  "default": "INFO",
+  "nullius": "fixed:INFO - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--provider_name",
+  "values": "['aws', 'virtualbox', 'vmware', 'docker', 'azure', 'pyromind', 'modal', 'daytona']",
+  "default": "docker",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:password - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "OPENAI_BASE_URL",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "OPENAI_API_KEY",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_agi.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its model is a private session server at a literal placeholder address (run_multienv_agi.py:187), not a model API"
+ },
+ {
+  "entry": "scripts/python/run_multienv_aguvis.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its planner and executor post to literal addresses (aguvis_agent.py:585, 604, 610), past the relay; its reset() also rejects vm_ip, so every task fails before a call"
+ },
+ {
+  "entry": "scripts/python/run_multienv_autoglm.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - the same AutoGLM agent as scripts/python/run_autoglm.py, which is offered, in a worker pool; Nullius runs units side by side"
+ },
+ {
+  "entry": "scripts/python/run_multienv_autoglm_v.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - the same AutoGLM-V agent as scripts/python/run_autoglm_v.py, which is offered, in a worker pool"
+ },
+ {
+  "entry": "scripts/python/run_multienv_aworldguiagent.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - it needs the external AWorld framework (inclusionAI/AWorld, branch osworld_benchmark), which the upstream neither vendors nor declares in its lock"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "claude_computer_use",
+  "nullius": "fixed:claude_computer_use - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--observation_type",
+  "values": "['screenshot', 'a11y_tree', 'screenshot_a11y_tree', 'som']",
+  "default": "a11y_tree",
+  "nullius": "fixed:screenshot - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--provider_name",
+  "values": "['aws', 'virtualbox', 'vmware', 'docker', 'azure', 'pyromind']",
+  "default": "aws",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:password - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "0.5",
+  "nullius": "fixed:0.5 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "15",
+  "nullius": "fixed:50 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--max_trajectory_length",
+  "values": "int",
+  "default": "3",
+  "nullius": "fixed:3 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--model",
+  "values": "str",
+  "default": "empty",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--temperature",
+  "values": "float",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--top_p",
+  "values": "float",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--max_tokens",
+  "values": "int",
+  "default": "16000",
+  "nullius": "fixed:16000 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--stop_token",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--thinking",
+  "values": "['none', 'regular', 'isp', 'adaptive']",
+  "default": "adaptive",
+  "nullius": "fixed:adaptive - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--no-auto-screenshot",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--api-resolution",
+  "values": "['720p', '768p', '1080p']",
+  "default": "720p",
+  "nullius": "fixed:720p - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--batch-tool-prompt",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--no-step-prompt",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--step-prompt-mode",
+  "values": "['full', 'system-only', 'none']",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--system-prompt",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/test_all.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--specific_task_id",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--num_envs",
+  "values": "int",
+  "default": "1",
+  "nullius": "fixed:1 - Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--log_level",
+  "values": "['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']",
+  "default": "INFO",
+  "nullius": "fixed:INFO - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "ANTHROPIC_BASE_URL",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "ANTHROPIC_API_KEY",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "AWS_REGION, AWS_SUBNET_ID, AWS_SECURITY_GROUP_ID",
+  "values": "AWS settings",
+  "default": "unset",
+  "nullius": "fixed:us-east-1 and placeholders - the script imports the upstream's AWS manager whatever the provider, which refuses to load without them; no AWS call is made on docker"
+ },
+ {
+  "entry": "scripts/python/run_multienv_dart_gui.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - fails every task at this commit: DartAgent.reset() rejects the vm_ip lib_run_single passes (dart_gui_agent.py:182); its start also removes every running container (run_multienv_dart_gui.py:775-821)"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "pyautogui",
+  "nullius": "fixed:pyautogui - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--observation_type",
+  "values": "['screenshot', 'a11y_tree', 'screenshot_a11y_tree', 'som']",
+  "default": "screenshot",
+  "nullius": "fixed:screenshot - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "5.0",
+  "nullius": "fixed:5.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "50",
+  "nullius": "fixed:50 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--model",
+  "values": "str",
+  "default": "evocua",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--temperature",
+  "values": "float",
+  "default": "0.0",
+  "nullius": "fixed:0.01 with EvoCUA-S2 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--top_p",
+  "values": "float",
+  "default": "0.9",
+  "nullius": "fixed:0.9 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--max_tokens",
+  "values": "int",
+  "default": "32768",
+  "nullius": "fixed:10240 with EvoCUA-S1 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--stop_token",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--prompt_style",
+  "values": "['S1', 'S2']",
+  "default": "S2",
+  "nullius": "fixed:S2 with EvoCUA-S2, S1 with EvoCUA-S1 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--history_type",
+  "values": "str",
+  "default": "action_history",
+  "nullius": "fixed:action_history - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--coordinate_type",
+  "values": "str",
+  "default": "relative",
+  "nullius": "fixed:relative with EvoCUA-S2, qwen25 with EvoCUA-S1 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--password",
+  "values": "str",
+  "default": "osworld-public-evaluation",
+  "nullius": "fixed:osworld-public-evaluation - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--max_history_turns",
+  "values": "int",
+  "default": "3",
+  "nullius": "fixed:4 with EvoCUA-S2, 3 with EvoCUA-S1 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--resize_factor",
+  "values": "int",
+  "default": "32",
+  "nullius": "fixed:32 with EvoCUA-S2, 28 with EvoCUA-S1 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/test_nogdrive.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--num_envs",
+  "values": "int",
+  "default": "1",
+  "nullius": "fixed:1 - Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--log_level",
+  "values": "['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']",
+  "default": "INFO",
+  "nullius": "fixed:INFO - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--provider_name",
+  "values": "['aws', 'virtualbox', 'vmware', 'docker', 'azure', 'pyromind']",
+  "default": "aws",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:empty - its default: DesktopEnv then uses the docker VM's password"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "OPENAI_BASE_URL",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_evocua.py",
+  "setting": "OPENAI_API_KEY",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gemini.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its calls use Google's native Gemini API with the ComputerUse tool (gemini_agent.py:577), which the relay does not carry"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "pyautogui",
+  "nullius": "fixed:pyautogui - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--observation_type",
+  "values": "['screenshot']",
+  "default": "screenshot",
+  "nullius": "fixed:screenshot - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "0.0",
+  "nullius": "fixed:3 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "15",
+  "nullius": "fixed:50 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--max_trajectory_length",
+  "values": "int",
+  "default": "3",
+  "nullius": "fixed:3 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--model",
+  "values": "str",
+  "default": "gpt-5.4",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--temperature",
+  "values": "float",
+  "default": "1.0",
+  "nullius": "fixed:1.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--top_p",
+  "values": "float",
+  "default": "0.9",
+  "nullius": "fixed:0.9 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--max_tokens",
+  "values": "int",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--reasoning_effort",
+  "values": "['none', 'low', 'medium', 'high', 'xhigh']",
+  "default": "xhigh",
+  "nullius": "fixed:xhigh - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--stop_token",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/test_all.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--num_envs",
+  "values": "int",
+  "default": "1",
+  "nullius": "fixed:1 - Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--log_level",
+  "values": "['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']",
+  "default": "INFO",
+  "nullius": "fixed:DEBUG - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--provider_name",
+  "values": "['aws', 'virtualbox', 'vmware', 'docker', 'azure', 'pyromind']",
+  "default": "docker",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:password - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "OPENAI_BASE_URL",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt54.py",
+  "setting": "OPENAI_API_KEY",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gta1.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its o3 planner and judge post to a literal api.openai.com address (gta1_agent.py:1479, 1586), and its GTA1.5 grounder speaks a custom /call_llm protocol"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gui_owl15.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its default engine is DashScope's native API; its OpenAI engine uploads every screenshot to Aliyun OSS, whose oss2 package the lock lacks"
+ },
+ {
+  "entry": "scripts/python/run_multienv_hosted_gbox.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its model calls run inside a remote GBOX service behind a custom /execute protocol, which must reach the VM by its address"
+ },
+ {
+  "entry": "scripts/python/run_multienv_kimi_k25.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - fails at import at this commit: mm_agents/kimi/__init__.py imports three modules the commit does not have"
+ },
+ {
+  "entry": "scripts/python/run_multienv_kimi_k3.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - fails at import at this commit: mm_agents/kimi/__init__.py imports three modules the commit does not have"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "pyautogui",
+  "nullius": "fixed:pyautogui - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--observation_type",
+  "values": "['screenshot', 'a11y_tree', 'screenshot_a11y_tree', 'som']",
+  "default": "screenshot",
+  "nullius": "fixed:screenshot - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "3.0",
+  "nullius": "fixed:3.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "15",
+  "nullius": "fixed:15 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--model",
+  "values": "str",
+  "default": "mano",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--model_type",
+  "values": "str",
+  "default": "qwen25vl",
+  "nullius": "fixed:qwen25vl - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--infer_mode",
+  "values": "str",
+  "default": "qwen25vl_normal",
+  "nullius": "fixed:qwen25vl_normal - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--prompt_style",
+  "values": "str",
+  "default": "qwen25vl_normal",
+  "nullius": "fixed:qwen25vl_normal - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--input_swap",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--language",
+  "values": "str",
+  "default": "Chinese",
+  "nullius": "fixed:Chinese - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--max_pixels",
+  "values": "float",
+  "default": "16384 * 28 * 28",
+  "nullius": "fixed:16384 * 28 * 28 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--min_pixels",
+  "values": "float",
+  "default": "100 * 28 * 28",
+  "nullius": "fixed:100 * 28 * 28 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--temperature",
+  "values": "float",
+  "default": "1.0",
+  "nullius": "fixed:1.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--top_p",
+  "values": "float",
+  "default": "0.9",
+  "nullius": "fixed:0.9 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--top_k",
+  "values": "int",
+  "default": "-1",
+  "nullius": "fixed:-1 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--history_n",
+  "values": "int",
+  "default": "5",
+  "nullius": "fixed:5 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--callusr_tolerance",
+  "values": "int",
+  "default": "3",
+  "nullius": "fixed:3 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--max_tokens",
+  "values": "int",
+  "default": "1000",
+  "nullius": "fixed:1000 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--stop_token",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--max_trajectory_length",
+  "values": "int",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--max_image_history_length",
+  "values": "int",
+  "default": "5",
+  "nullius": "fixed:5 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/test_all.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--num_envs",
+  "values": "int",
+  "default": "1",
+  "nullius": "fixed:1 - Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--log_level",
+  "values": "['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']",
+  "default": "INFO",
+  "nullius": "fixed:INFO - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--provider_name",
+  "values": "['aws', 'virtualbox', 'vmware', 'docker', 'azure', 'pyromind']",
+  "default": "aws",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:empty - its default: DesktopEnv then uses the docker VM's password"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "MANO_API_URL",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mano.py",
+  "setting": "MANO_API_KEY",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_mobileagent_v3.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its VM provider is hard-coded to aws (run_multienv_mobileagent_v3.py:238) and its OpenAI engine uploads screenshots to Aliyun OSS"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "pyautogui",
+  "nullius": "fixed:pyautogui - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--observation_type",
+  "values": "['screenshot']",
+  "default": "screenshot",
+  "nullius": "fixed:screenshot - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "0.0",
+  "nullius": "fixed:3 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "100",
+  "nullius": "fixed:100 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--max_trajectory_length",
+  "values": "int",
+  "default": "100",
+  "nullius": "fixed:100 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--model",
+  "values": "str",
+  "default": "os.getenv('MUSE_SPARK_MODEL', 'muse-spark-1.1')",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--base_url",
+  "values": "str",
+  "default": "os.getenv('MUSE_SPARK_BASE_URL', DEFAULT_BASE_URL)",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--api_key_envs",
+  "values": "str",
+  "default": "','.join(DEFAULT_API_KEY_ENVS)",
+  "nullius": "fixed:','.join(DEFAULT_API_KEY_ENVS) - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--temperature",
+  "values": "float",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--top_p",
+  "values": "float",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--max_tokens",
+  "values": "int",
+  "default": "131072",
+  "nullius": "fixed:131072 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--reasoning_effort",
+  "values": "['none', 'low', 'medium', 'high', 'xhigh']",
+  "default": "high",
+  "nullius": "fixed:high - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--reasoning_summary",
+  "values": "str",
+  "default": "auto",
+  "nullius": "fixed:auto - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--request_timeout",
+  "values": "float",
+  "default": "3200",
+  "nullius": "fixed:3200 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--max_retries",
+  "values": "int",
+  "default": "6",
+  "nullius": "fixed:6 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--truncation",
+  "values": "['disabled', 'auto']",
+  "default": "os.getenv('MUSE_SPARK_TRUNCATION')",
+  "nullius": "fixed:os.getenv('MUSE_SPARK_TRUNCATION') - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--max_seq_len",
+  "values": "int",
+  "default": "131072",
+  "nullius": "fixed:131072 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--output_clamp_margin",
+  "values": "int",
+  "default": "2048",
+  "nullius": "fixed:2048 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--min_output_tokens",
+  "values": "int",
+  "default": "512",
+  "nullius": "fixed:512 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--max_recent_media",
+  "values": "int",
+  "default": "10",
+  "nullius": "fixed:10 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--min_media_removal_threshold",
+  "values": "int",
+  "default": "20",
+  "nullius": "fixed:20 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--enable_batched_actions",
+  "values": "on, off",
+  "default": "True",
+  "nullius": "fixed:True - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--max_batched_actions",
+  "values": "int",
+  "default": "20",
+  "nullius": "fixed:20 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--store",
+  "values": "on, off",
+  "default": "False",
+  "nullius": "fixed:False - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--passback_reasoning",
+  "values": "on, off",
+  "default": "True",
+  "nullius": "fixed:True - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--tool_name",
+  "values": "str",
+  "default": "computer.computer",
+  "nullius": "fixed:computer.computer - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--stop_tool_name",
+  "values": "str",
+  "default": "computer.stop",
+  "nullius": "fixed:computer.stop - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--stop_token",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/test_nogdrive.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results_muse_spark",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--num_envs",
+  "values": "int",
+  "default": "1",
+  "nullius": "fixed:1 - Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--log_level",
+  "values": "['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']",
+  "default": "INFO",
+  "nullius": "fixed:INFO - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--provider_name",
+  "values": "['aws', 'virtualbox', 'vmware', 'docker', 'azure']",
+  "default": "docker",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:password - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "MUSE_SPARK_API_KEY",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_o3.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - it posts to a literal api.openai.com address (o3_agent.py:240) with a fixed model; its reset() also rejects vm_ip, so every task fails before a call"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "pyautogui",
+  "nullius": "fixed:pyautogui - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--observation_type",
+  "values": "['screenshot', 'a11y_tree', 'screenshot_a11y_tree', 'som']",
+  "default": "screenshot",
+  "nullius": "fixed:screenshot - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "0.0",
+  "nullius": "fixed:0.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "15",
+  "nullius": "fixed:50 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--max_trajectory_length",
+  "values": "int",
+  "default": "3",
+  "nullius": "fixed:3 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--model",
+  "values": "str",
+  "default": "gpt-4o",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--temperature",
+  "values": "float",
+  "default": "1.0",
+  "nullius": "fixed:1.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--top_p",
+  "values": "float",
+  "default": "0.9",
+  "nullius": "fixed:0.9 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--max_tokens",
+  "values": "int",
+  "default": "1500",
+  "nullius": "fixed:1500 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--stop_token",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:None - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/test_all.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--num_envs",
+  "values": "int",
+  "default": "1",
+  "nullius": "fixed:1 - Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--log_level",
+  "values": "['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']",
+  "default": "INFO",
+  "nullius": "fixed:INFO - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--provider_name",
+  "values": "['aws', 'virtualbox', 'vmware', 'docker', 'azure', 'pyromind']",
+  "default": "aws",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:password - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "OPENAI_BASE_URL",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "OPENAI_API_KEY_CUA",
+  "values": "read from the environment",
+  "default": "unset",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_openaicua.py",
+  "setting": "AWS_REGION, AWS_SUBNET_ID, AWS_SECURITY_GROUP_ID",
+  "values": "AWS settings",
+  "default": "unset",
+  "nullius": "fixed:us-east-1 and placeholders - the script imports the upstream's AWS manager whatever the provider, which refuses to load without them; no AWS call is made on docker"
+ },
+ {
+  "entry": "scripts/python/run_multienv_opencua.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - it posts to an address built from the model name on a private host (opencua_agent.py:452), past the relay"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--provider_name",
+  "values": "str",
+  "default": "vmware",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "pyautogui",
+  "nullius": "fixed:pyautogui - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--observation_type",
+  "values": "['screenshot', 'a11y_tree', 'screenshot_a11y_tree', 'som']",
+  "default": "screenshot",
+  "nullius": "fixed:screenshot - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--num_envs",
+  "values": "int",
+  "default": "1",
+  "nullius": "fixed:1 - Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "1.0",
+  "nullius": "fixed:3 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "15",
+  "nullius": "fixed:50 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--benchmark",
+  "values": "str",
+  "default": "osworld",
+  "nullius": "fixed:osworld - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/osworld/test_all.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "password",
+  "nullius": "fixed:password - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--proxy",
+  "values": "str",
+  "default": "http://10.1.8.5:23128",
+  "nullius": "fixed:http://10.1.8.5:23128 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--max_trajectory_length",
+  "values": "int",
+  "default": "8",
+  "nullius": "fixed:8 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--enable_reflection",
+  "values": "on, off",
+  "default": "False",
+  "nullius": "fixed:on - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--enable_rewrite_instruction",
+  "values": "on, off",
+  "default": "False",
+  "nullius": "fixed:False - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--tool_config",
+  "values": "str",
+  "default": "unset",
+  "nullius": "fixed:the upstream's mm_agents/os_symphony/tool/all_tool_config.yaml - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--orchestrator_provider",
+  "values": "str",
+  "default": "openai",
+  "nullius": "fixed:openai - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--orchestrator_model",
+  "values": "str",
+  "default": "gpt-5",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--orchestrator_url",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--orchestrator_api_key",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--orchestrator_temperature",
+  "values": "float",
+  "default": "None",
+  "nullius": "fixed:0.1 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--orchestrator_keep_first_image",
+  "values": "on, off",
+  "default": "False",
+  "nullius": "fixed:on - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--coder_provider",
+  "values": "str",
+  "default": "openai",
+  "nullius": "fixed:openai - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--coder_model",
+  "values": "str",
+  "default": "gpt-4o",
+  "nullius": "fixed:the model asked - every role its documented invocation gives the main model"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--coder_url",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--coder_api_key",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--coder_temperature",
+  "values": "float",
+  "default": "None",
+  "nullius": "fixed:0.1 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--coder_budget",
+  "values": "int",
+  "default": "20",
+  "nullius": "fixed:20 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--memoryer_provider",
+  "values": "str",
+  "default": "openai",
+  "nullius": "fixed:openai - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--memoryer_model",
+  "values": "str",
+  "default": "gpt-4o",
+  "nullius": "fixed:the model asked - every role its documented invocation gives the main model"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--memoryer_url",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--memoryer_api_key",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--memoryer_temperature",
+  "values": "float",
+  "default": "None",
+  "nullius": "fixed:0.1 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--memoryer_max_images",
+  "values": "int",
+  "default": "9",
+  "nullius": "fixed:8 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_provider",
+  "values": "str",
+  "default": "openai",
+  "nullius": "fixed:openai - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_model",
+  "values": "str",
+  "default": "gpt-4o",
+  "nullius": "fixed:the model asked - every role its documented invocation gives the main model"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_url",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_api_key",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_temperature",
+  "values": "float",
+  "default": "None",
+  "nullius": "fixed:0.1 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_type",
+  "values": "str",
+  "default": "vlm",
+  "nullius": "fixed:vlm - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_engine",
+  "values": "str",
+  "default": "google",
+  "nullius": "fixed:google - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_budget",
+  "values": "int",
+  "default": "20",
+  "nullius": "fixed:20 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its documented invocation, and its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--searcher_path_to_vm",
+  "values": "str",
+  "default": "/nvme/yangbowen/vm_stroage/osworld/Ubuntu.qcow2",
+  "nullius": "fixed:/nvme/yangbowen/vm_stroage/osworld/Ubuntu.qcow2 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--grounder_provider",
+  "values": "str",
+  "default": "unset",
+  "nullius": "fixed:vllm - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--grounder_url",
+  "values": "str",
+  "default": "unset",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--grounder_api_key",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--grounder_model",
+  "values": "str",
+  "default": "unset",
+  "nullius": "fixed:UI-TARS-1.5-7B - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--grounding_width",
+  "values": "int",
+  "default": "unset",
+  "nullius": "fixed:1920 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--grounding_height",
+  "values": "int",
+  "default": "unset",
+  "nullius": "fixed:1080 - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--grounding_smart_resize",
+  "values": "on, off",
+  "default": "False",
+  "nullius": "fixed:on - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--grounder_zoom_in_time",
+  "values": "int",
+  "default": "1",
+  "nullius": "fixed:1 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_os_symphony.py",
+  "setting": "--exp_name",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:nullius - its documented invocation"
+ },
+ {
+  "entry": "scripts/python/run_multienv_owl.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - it uploads every screenshot to Aliyun OSS (owl_agent.py:520), whose oss2 package the lock lacks; its reset() also rejects vm_ip"
+ },
+ {
+  "entry": "scripts/python/run_multienv_pointer.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - every inference call goes through AWS Bedrock with SigV4 credentials (pointer/config.py:31), which the relay does not carry"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--path_to_vm",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the upstream's docker_vm_data/Ubuntu.qcow2 - what its own docker manager downloads, once for every unit"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--action_space",
+  "values": "str",
+  "default": "pyautogui",
+  "nullius": "fixed:pyautogui - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--observation_type",
+  "values": "['screenshot']",
+  "default": "screenshot",
+  "nullius": "fixed:screenshot - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--sleep_after_execution",
+  "values": "float",
+  "default": "0.0",
+  "nullius": "fixed:0.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--max_steps",
+  "values": "int",
+  "default": "50",
+  "nullius": "fixed:50 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--test_config_base_dir",
+  "values": "str",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--examples_subdir",
+  "values": "str",
+  "default": "examples",
+  "nullius": "fixed:examples - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--history_n",
+  "values": "int",
+  "default": "100",
+  "nullius": "fixed:100 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--coord",
+  "values": "['absolute', 'relative']",
+  "default": "relative",
+  "nullius": "fixed:relative - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--add_thought_prefix",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--image_max",
+  "values": "int",
+  "default": "20",
+  "nullius": "fixed:20 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--fold_size",
+  "values": "int",
+  "default": "10",
+  "nullius": "fixed:10 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--enable_thinking",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--model",
+  "values": "str",
+  "default": "qwen-vl",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--temperature",
+  "values": "float",
+  "default": "0.0",
+  "nullius": "fixed:0.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--top_p",
+  "values": "float",
+  "default": "0.9",
+  "nullius": "fixed:0.9 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--max_tokens",
+  "values": "int",
+  "default": "32768",
+  "nullius": "fixed:32768 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--base_url",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the unit's relay - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--api_key",
+  "values": "str",
+  "default": "None",
+  "nullius": "fixed:the relay's placeholder - every model call goes through the relay, which holds the key"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--domain",
+  "values": "str",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--test_all_meta_path",
+  "values": "str",
+  "default": "evaluation_examples/test_nogdrive.json",
+  "nullius": "dataset:test_all"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--result_dir",
+  "values": "str",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--simple_path",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--num_envs",
+  "values": "int",
+  "default": "1",
+  "nullius": "fixed:1 - Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--log_level",
+  "values": "['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']",
+  "default": "INFO",
+  "nullius": "fixed:INFO - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--region",
+  "values": "str",
+  "default": "us-east-1",
+  "nullius": "fixed:us-east-1 - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--provider_name",
+  "values": "['aws', 'virtualbox', 'vmware', 'docker', 'azure']",
+  "default": "docker",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--client_password",
+  "values": "str",
+  "default": "empty",
+  "nullius": "fixed:empty - its default: DesktopEnv then uses the docker VM's password"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--screen_width",
+  "values": "int",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--screen_height",
+  "values": "int",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--use_public_ip",
+  "values": "on, off",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "--enable_proxy",
+  "values": "on, off",
+  "default": "True",
+  "nullius": "fixed:off - its default, on, needs a proxy provider's credentials (the upstream's DataImpulse settings hold placeholders), so off, M3's default; a task whose config asks for a proxy runs without it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen25vl.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - fails every task at this commit: Qwen25VLAgent.reset() rejects the vm_ip lib_run_single passes (qwen25vl_agent.py:573)"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen3vl.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its calls use DashScope's native API (qwen3vl_agent.py:661), which the relay does not carry; its reset() also rejects vm_ip"
+ },
+ {
+  "entry": "scripts/python/run_multienv_seedagent.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - it imports Volcengine's Ark SDK (seed_agent.py:17), which the upstream's lock does not install"
+ },
+ {
+  "entry": "scripts/python/run_multienv_uipath.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its planner and grounder are UiPath's private services at empty literal addresses (llm_client.py:6, grounder_client.py:9)"
+ },
+ {
+  "entry": "scripts/python/run_multienv_uitars.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - fails every task at this commit: UITARSAgent.reset() rejects the vm_ip lib_run_single passes (uitars_agent.py:766)"
+ },
+ {
+  "entry": "scripts/python/run_multienv_uitars15_v1.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - fails every task at this commit: UITARSAgent.reset() rejects the vm_ip lib_run_single passes (uitars15_v1.py:674)"
+ },
+ {
+  "entry": "scripts/python/run_multienv_uitars15_v2.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - fails every task at this commit: UITarsAgent.reset() rejects the vm_ip lib_run_single passes (uitars15_v2.py:685)"
+ },
+ {
+  "entry": "scripts/python/run_multienv_vlaa.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - its published configuration calls AWS Bedrock, DashScope and Gemini's native API with Google Search, which one relay cannot carry"
+ },
+ {
+  "entry": "scripts/bash/run_gpt54.sh",
+  "setting": "its documented invocation",
+  "values": "its flags and variables",
+  "default": "-",
+  "nullius": "fixed:the flags agents.json passes for the gpt54 agent - its values, on the docker provider"
+ },
+ {
+  "entry": "scripts/bash/run_muse_spark.sh",
+  "setting": "its documented invocation",
+  "values": "its flags and variables",
+  "default": "-",
+  "nullius": "fixed:the flags agents.json passes for the muse_spark agent - its values, on the docker provider"
+ },
+ {
+  "entry": "scripts/bash/run_os_symphony.sh",
+  "setting": "its documented invocation",
+  "values": "its flags and variables",
+  "default": "-",
+  "nullius": "fixed:the flags agents.json passes for the os_symphony agent - its values, on the docker provider"
+ },
+ {
+  "entry": "scripts/bash/run_dart_gui.sh",
+  "setting": "its documented invocation",
+  "values": "its flags and variables",
+  "default": "-",
+  "nullius": "not offered - the documented invocation of run_multienv_dart_gui.py, which is not offered"
+ },
+ {
+  "entry": "scripts/bash/run_vlaa_gui.sh",
+  "setting": "its documented invocation",
+  "values": "its flags and variables",
+  "default": "-",
+  "nullius": "not offered - the documented invocation of run_multienv_vlaa.py, which is not offered"
+ },
+ {
+  "entry": "desktop_env/providers/docker/provider.py",
+  "setting": "image",
+  "values": "a Docker image",
+  "default": "happysixd/osworld-docker",
+  "nullius": "fixed:happysixd/osworld-docker - the upstream's, unpinned: pulled as latest when the machine does not have it"
+ },
+ {
+  "entry": "desktop_env/providers/docker/provider.py",
+  "setting": "DISK_SIZE, RAM_SIZE, CPU_CORES",
+  "values": "hard-coded",
+  "default": "32G, 4G, 4",
+  "nullius": "fixed:32G, 4G, 4 - hard-coded in the upstream"
+ },
+ {
+  "entry": "desktop_env/providers/docker/manager.py",
+  "setting": "UBUNTU_X86_URL, HF_ENDPOINT",
+  "values": "the image's address; a mirror",
+  "default": "huggingface.co/datasets/xlangai/ubuntu_osworld, main",
+  "nullius": "fixed:the upstream's address - Hugging Face's main revision, unpinned, as the upstream downloads it"
+ },
+ {
+  "entry": "scripts/bash/run_manual_examine.sh",
+  "setting": "its agent harness",
+  "values": "a person at the VM",
+  "default": "manual",
+  "nullius": "not offered - a person examines tasks by hand: no run to score"
+ }
+]
