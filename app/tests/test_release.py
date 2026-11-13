@@ -65,11 +65,21 @@ class ReleaseDownloads(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Missing release notes'):
             release.candidate(TAG, self.root)
 
-    def test_candidate_refuses_non_rc_and_path_shaped_tags(self):
-        for tag in ('v0.1.0', '0.1.0rc1', 'v0.1.0rc0', 'v0.1.0rc1/../notes',
-                    '../v0.1.0rc1', 'v0.1.0rc1\n'):
-            with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, 'release-candidate tag'):
+    def test_candidate_refuses_malformed_and_path_shaped_tags(self):
+        for tag in ('0.1.0rc1', 'v0.1.0rc0', 'v0.1.0rc1/../notes', 'v0.1', 'v0.1.0.post1',
+                    '../v0.1.0rc1', 'v0.1.0rc1\n', 'v0.1.0\n'):
+            with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, 'release tag'):
                 release.candidate(tag, self.root)
+
+    def test_a_final_version_is_a_release_and_an_rc_a_prerelease(self):
+        self.assertTrue(release.prerelease('v0.1.0rc1'))
+        self.assertFalse(release.prerelease('v0.1.0'))
+        (self.root / 'pyproject.toml').write_text(
+            '[project]\nname = "nullius-eval"\nversion = "0.1.0"\n')
+        notes = self.root / 'docs/releases/v0.1.0.md'
+        notes.parent.mkdir(parents=True)
+        notes.write_text('First release.\n')
+        self.assertEqual(release.candidate('v0.1.0', self.root), '0.1.0')
 
     def test_distributions_accepts_only_the_requested_pair(self):
         pair = artifacts(self.root)

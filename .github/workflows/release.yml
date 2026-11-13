@@ -1,4 +1,4 @@
-# Prepare a release candidate for review. Publishing the draft is a separate,
+# Prepare a release for review. Publishing the draft is a separate,
 # manual action; this workflow never publishes to PyPI.
 name: draft release
 
@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release candidate tag matching pyproject.toml
+        description: Release tag matching pyproject.toml
         required: true
-        default: v0.1.0rc2
+        default: v0.1.0
         type: string
 
 permissions:
@@ -48,7 +48,7 @@ jobs:
           python3 app/packaging/release.py build
           --tag "$RELEASE_TAG"
           --out-dir "$RUNNER_TEMP/nullius-release"
-      - name: Create draft prerelease
+      - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
         # Refuse existing tags or releases, including drafts. No assets are replaced.
@@ -67,11 +67,13 @@ jobs:
               exit 1
             fi
           done <<< "$releases"
+          # A release candidate is a prerelease; a final version becomes the latest release.
+          if [[ "$RELEASE_TAG" == *rc* ]]; then kind=(--prerelease --latest=false); else kind=(--latest); fi
           gh release create "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Nullius $RELEASE_TAG" \
-            --draft --prerelease --latest=false \
+            --draft "${kind[@]}" \
             --notes-file "docs/releases/$RELEASE_TAG.md" \
             "$RUNNER_TEMP/nullius-release/"*.whl \
             "$RUNNER_TEMP/nullius-release/"*.tar.gz \

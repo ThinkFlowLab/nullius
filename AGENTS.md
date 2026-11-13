@@ -212,12 +212,12 @@ wheel install/reinstall check on pull requests. `app/packaging/verify.py` checks
 runtime assets, one backend provider, installed commands and pages, and user
 storage preservation. The `tests` workflow also runs by hand.
 The manual `draft release` workflow (`.github/workflows/release.yml`) runs both
-suites and uses `app/packaging/release.py` to build and verify a release
-candidate's wheel and source archive, then attaches them and `SHA256SUMS` to a
-draft prerelease. It does not publish or upload to PyPI; see
+suites and uses `app/packaging/release.py` to build and verify a release's
+wheel and source archive, then attaches them and `SHA256SUMS` to a draft
+release (a prerelease for an `rc` tag). It does not publish or upload to PyPI; see
 `app/packaging/README.md` and the versioned notes under `docs/releases/`.
 The separate manual `publish to PyPI` workflow (`.github/workflows/publish.yml`)
-requires confirmation and a reviewed, published GitHub prerelease. It verifies
+requires confirmation and a reviewed, published GitHub release. It verifies
 the downloaded assets before a separate `pypi` environment job uploads the
 same bytes through Trusted Publishing. PyPI and environment configuration
 must be completed before that workflow can publish.

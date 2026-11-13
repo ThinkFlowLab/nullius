@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nullius-eval"
-version = "0.1.0rc2"
+version = "0.1.0"
 description = "An evaluation framework for AI agents. Bring any benchmark, agent or capability, run it on your machines, and inspect the evidence behind every score. Bring anything, run it, prove it."
 readme = "app/packaging/PYPI.md"
 requires-python = ">=3.12"
