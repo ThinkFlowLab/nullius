@@ -66,11 +66,10 @@ By default the command line runs 4 tasks at once: four VMs, 16 cores and 16 GB o
 
 6. **Add the model provider** in Settings, on the machine where Nullius runs ([Model providers](../settings/model-providers.md)): OpenAI for OpenAI CUA; OpenAI-compatible for EvoCUA, AutoGLM-OS, Mano and Muse Spark; OpenRouter for the rest. The null control needs none.
 
-7. **Run one task of the null control.**
+7. **Run one task of the null control**, from the checkout's root.
 
     ```bash
     PYTHONPATH=app python3 -m nullius standard run osworld1 nop --dataset test_small --limit 1
-    docker ps --filter ancestor=happysixd/osworld-docker
     ```
 
-    The task scores 0. The second command lists no container. For a host, run it from the builder with that host in **Where**.
+    The task scores 0. For a host, run it from the builder with that host in **Where**.
