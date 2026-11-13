@@ -114,7 +114,9 @@
   };
   // The standard's recipe as the server compiles it from the definitions (POST
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
-  let runnerOut = null, runnerKey = '', runnerTimer;
+  let runnerOut = null, runnerKey = '', runnerTimer, runnerOutKey = '';
+  // the server's compile of the recipe as it is now, or null while a newer one is asked
+  const compiledNow = () => runnerOutKey === JSON.stringify(r()) ? runnerOut : null;
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -635,7 +637,8 @@
         out = await res.json();
       } catch (e) { out = {errors: [{step: REVIEW, message: 'The recipe could not be compiled here: ' + e}], notes: [], review: []}; }
       if (key !== runnerKey) return;
-      runnerOut = out;
+      runnerOut = out; runnerOutKey = key;
+      if (step === S.model) fillServed();
       if (step === REVIEW) renderForm();
       refreshPlan();
     }, 120);
@@ -647,10 +650,10 @@
   // Served by: under a model field, on OpenRouter alone, the serving providers that may answer it, in order (recipe.py,
   // served_by); typed as slugs, or added from the model's providers (POST /new-run/endpoints)
   const SERVED_NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
+  // its list: the providers of the model the run sends (the server's served_models), not of the name shown
   const servedField = (rec, role, model) => !C.servedRoles(rec).includes(role) ? '' :
-    `<div class="nb-field std-served"><label>Served by<input aria-label="Served by, ${SERVED_NAME[role]}" data-served-by="${role}" value="${esc(((rec.served_by || {})[role] || []).join(', '))}" placeholder="any provider" autocomplete="off" spellcheck="false"></label>`
-    + `<select aria-label="Add a provider for the ${SERVED_NAME[role]}" data-served-add="${role}" data-served-model="${esc(model || '')}"><option value="">${model ? 'Add a provider…' : 'Choose the model first'}</option></select>`
-    + `<small>OpenRouter's providers for this model, tried in this order and no other. Empty: any of them.</small></div>`;
+    `<div class="nb-field std-served"><label title="Tried in this order, and no other provider. Empty: any.">Served by<input aria-label="Served by, ${SERVED_NAME[role]}" data-served-by="${role}" value="${esc(((rec.served_by || {})[role] || []).join(', '))}" placeholder="any provider" autocomplete="off" spellcheck="false"></label>`
+    + `<select aria-label="Add a provider for the ${SERVED_NAME[role]}" data-served-add="${role}" data-served-model="${esc(C.servedModelOf(role, model, compiledNow()))}" data-served-shown="${esc(model || '')}"><option value="">${model ? 'Add a provider…' : 'Choose the model first'}</option></select></div>`;
   const servedCache = new Map();
   function servedList(model) {
     let entry = servedCache.get(model);
@@ -664,6 +667,11 @@
   }
   function fillServed() {
     root.querySelectorAll('select[data-served-add]').forEach(async select => {
+      // the model the run sends, once the server has compiled it: a list asked under another name is asked again
+      const sent = C.servedModelOf(select.dataset.servedAdd, select.dataset.servedShown, compiledNow());
+      if (sent !== select.dataset.servedModel) { select.dataset.servedModel = sent; select.length = 1; delete select.dataset.servedFilled; }
+      if (select.dataset.servedFilled) return;
+      select.dataset.servedFilled = 'true';
       const model = select.dataset.servedModel;
       if (!model) return;
       const got = await servedList(model);
@@ -987,6 +995,7 @@
       else if(!d.providerModel&&['model','userModel','evalModel'].includes(d.field)&&/^(openrouter|openai)\//.test(String(value))){rec.provider=C.providerOf(rec,value);rec[d.field]=C.bareModel(value);
         renderForm();refreshPlan();const f=root.querySelector(`[data-field="${d.field}"]`);if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);}return;}   // the provider the prefix named, and whether it is set
       else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
+      else if(['model','simulator_model','judge_model'].includes(d.field))C.setModelOf(rec,d.field,value);   // the field's pin goes with its model
       else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
     }else if(d.minutes){C.setPhaseMinutes(rec,d.minutes,el.value===''?'':Number(el.value));const row=el.closest('tr');if(row){const m=row.querySelector('.nb-mono');const t=C.effectiveTimeouts(rec);const p=t&&t.phases.find(x=>x.key===d.minutes);if(m&&p)m.textContent='×'+p.multiplier;}refreshPlan();return;}
@@ -1011,7 +1020,9 @@
     // a provider added to a Served by, after the ones already there; the field shows the list, in its order
     else if(d.servedAdd!==undefined){const rec=r(),role=d.servedAdd,now=(rec.served_by||{})[role]||[];if(el.value&&!now.includes(el.value))C.setServed(rec,role,[...now,el.value]);el.value='';const f=root.querySelector(`[data-served-by="${role}"]`);if(f)f.value=((r().served_by||{})[role]||[]).join(', ');refreshPlan();}
     // a model chosen: its Served by lists that model's providers
-    else if(['model','simulator_model','judge_model'].includes(d.field)&&C.servedRoles(r()).length){renderForm();refreshPlan();}
+    // a model chosen: its Served by lists that model's providers; the keyboard stays on the field the new form holds
+    else if(['model','simulator_model','judge_model'].includes(d.field)&&C.servedRoles(r()).length){renderForm();refreshPlan();
+      requestAnimationFrame(()=>{const f=root.querySelector(`[data-field="${d.field}"]`);if(f&&document.activeElement!==f)f.focus();});}
     else if(d.stdVersion!==undefined){C.setStandardBenchmark(r(),el.value);render();}
     // an option at its default is left out: the recipe names only what was changed
     else if(d.benchOptSelect!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOptSelect]||{};rec.bench_options={...(rec.bench_options||{})};const v=el.value.trim();if(!v||v===o.default)delete rec.bench_options[d.benchOptSelect];else rec.bench_options[d.benchOptSelect]=v;refreshPlan();}

@@ -177,7 +177,7 @@ class TheRelay(WithUpstream):
         for serving in (None, {"m-run": ["prov-a"]}):
             with self.subTest(serving=serving):
                 r = self.relay(model="m-run", key=KEY, serving=serving)
-                asked = dict(body_for("/chat/completions", False), provider={"order": ["prov-a"], "token": KEY, "note": f"key {KEY}"})
+                asked = dict(body_for("/chat/completions", False), provider={"order": ["prov-a"], "token": KEY, "note": f"key {KEY}", KEY: "as a key"})
                 post(r.url("u0") + "/chat/completions", asked)
                 c = r.calls("u0")[-1]
                 self.assertNotIn(KEY, json.dumps(c))
@@ -368,7 +368,7 @@ class TheSidecar(WithUpstream):
             f.write("or-test")
         p = subprocess.Popen([sys.executable, "-m", "nullius.standard.relay", "serve", "--listen", "127.0.0.1:0", "--base", self.base,
                               "--record", os.path.join(self.tmp, "rec"), "--key-file", key, "--model", "m-run",
-                              "--served-by", "m-run=prov-a,prov-b/fp8"],
+                              "--served-by", "m-run=prov-a,prov-b/fp8", "--routing"],
                              cwd=APP, env=dict(os.environ, PYTHONPATH=APP), stdout=subprocess.PIPE, text=True)
         try:
             ready, _, _ = select.select([p.stdout], [], [], 20)              # its one line, or no more than 20 s
@@ -581,6 +581,79 @@ class TheRecord(unittest.TestCase):
         parts = [{"standard": {"served": {"calls": {"Prov A": 2}, "unnamed": 1, "held": {"m-1": True}}}},
                  {"standard": {"served": {"calls": {"Prov A": 1, "Prov B": 1}, "unnamed": 0, "held": {"m-1": "unknown"}}}}]
         self.assertEqual(job.served_total(parts), {"calls": {"Prov A": 3, "Prov B": 1}, "unnamed": 1, "held": {"m-1": "unknown"}})
+
+
+class TheReview(unittest.TestCase):
+    """What a review of the pin found, each a rule of its own."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def test_the_provider_of_the_replys_end_is_recorded_never_an_earlier_attempts(self):
+        events = [{"type": "response.created", "response": {"status": "in_progress", "openrouter_metadata": {
+                      "attempts": [{"provider": "Prov A", "status": 503}]}}},
+                  {"type": "response.completed", "response": {"status": "completed", "output": [], "provider": "Prov B"}}]
+        facts = relay.reply_facts("/responses", sse(*events), True)
+        held = job.served([{"status": 200, "model": "m", "reply": facts}], {"m": ["prov-a"]})["held"]["m"]
+        self.assertEqual((facts["served_by"], held), ("Prov B", "unknown"))
+
+    def test_a_last_attempt_that_names_no_provider_takes_no_earlier_name(self):
+        body = {"choices": [{"message": {"content": "ok"}}], "openrouter_metadata": {"attempts": [
+            {"provider": "Prov A", "status": 503}, {"provider": 7, "status": 200}]}}
+        self.assertNotIn("served_by", relay.reply_facts("/chat/completions", json.dumps(body).encode(), False))
+        stream = sse({"provider": "Prov A", "choices": [{"index": 0, "delta": {"content": "o"}}]},
+                     {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                      "openrouter_metadata": {"attempts": [{"provider": "Prov A", "status": 503}, {"status": 200}]}})
+        self.assertNotIn("served_by", relay.reply_facts("/chat/completions", stream, True))
+
+    def test_an_error_keeps_its_stated_fields_alone(self):
+        nested = relay.reply_facts("/chat/completions", json.dumps({"error": {"api_key": ["review-only-credential"]}}).encode(), False)
+        self.assertNotIn("review-only-credential", json.dumps(nested))
+        self.assertEqual(relay.reply_facts("/messages", b'{"type":"message","content":[],"error":{"code":[],"type":{},"message":17}}', False), {})
+        self.assertEqual(relay.reply_facts("/chat/completions", b'{"error":{"code":502,"message":"m","detail":{"key":"x"}}}', False),
+                         {"error": {"code": 502, "message": "m"}})
+
+    def test_of_several_choices_errors_the_top_level_one_else_the_first_is_kept(self):
+        two = [{"index": 0, "finish_reason": "error", "error": {"code": 429, "message": "rate limited"}},
+               {"index": 1, "finish_reason": "error", "error": {"code": 503, "message": "unavailable"}}]
+        self.assertEqual(relay.reply_facts("/chat/completions", json.dumps({"choices": two}).encode(), False)["error"],
+                         {"code": 429, "message": "rate limited", "choice": 0})
+        top = {"choices": two, "error": {"code": 500, "message": "whole"}}
+        self.assertEqual(relay.reply_facts("/chat/completions", json.dumps(top).encode(), False)["error"], {"code": 500, "message": "whole"})
+
+    def test_a_merged_job_keeps_each_shards_whole_summary(self):
+        """A shard's summary holds its benchmark relay's calls too: a merge made of its trials alone would drop
+        them, and an ``unknown`` would read true."""
+        pin = {"m": ["prov-a"]}
+        trial = {"standard": {"served": job.served([{"status": 200, "model": "m", "reply": {"served_by": "Prov A"}}], pin), "shard_job": "s1"}}
+        bench = job.served([{"status": 200, "model": "m", "reply": {"served_by": "Prov B"}}], pin)
+        shard = {"name": "s1", "config": {"standard": {"served_by": pin}}, "result": {"served": job.served_total([trial], bench)}}
+        self.assertEqual(merge._served([shard], [trial]), shard["result"]["served"])
+        old = {"name": "s2", "config": {"standard": {"served_by": pin}}, "result": {}}          # a shard written before: its trials
+        self.assertEqual(merge._served([old], [dict(trial, standard=dict(trial["standard"], shard_job="s2"))])["held"], {"m": True})
+
+    def test_a_control_is_refused_a_pin_on_its_simulated_users_model(self):
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), controls={"nop": {"source": "nullius", "from": "nothing"}},
+                 simulator={"model": "sim"})
+        with self.assertRaisesRegex(run.Refused, "names sim, which this run does not call"):
+            run.Run(b, definitions.control(b, "nop"), model="sim", provider="openrouter", env={},
+                    jobs_root=self.tmp, say=lambda _: None, served_by={"sim": ["prov-a"]})
+
+    def test_the_relays_own_command_refuses_another_provider_and_a_model_it_does_not_send(self):
+        key = os.path.join(self.tmp, "key")
+        with open(key, "w") as f:
+            f.write("review-test-key")
+        for base, model, extra in (("https://api.openai.com/v1", "m", []), ("https://openrouter.ai/api/v1", "unused", []),
+                                   ("http://127.0.0.1:9/v1", "m", [])):
+            with self.subTest(base=base, model=model):
+                out = io.StringIO()
+                with mock.patch.object(relay, "Relay") as fake, redirect_stdout(out):
+                    code = relay.serve(["--base", base, "--model", "m", "--key-file", key, "--record", self.tmp,
+                                        "--served-by", model + "=prov-a", *extra])
+                self.assertEqual(code, 2)
+                self.assertIn("--served-by", json.loads(out.getvalue())["error"])
+                fake.assert_not_called()
 
 
 class TheMerge(unittest.TestCase):

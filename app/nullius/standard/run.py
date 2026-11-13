@@ -506,9 +506,9 @@ class Run:
             if not PROVIDERS.get(provider, {}).get("routing"):
                 raise Refused(f"--served-by: {provider} serves each model itself, with no serving providers to choose "
                               "among; the option needs a provider that routes a model to several (openrouter)")
-            # a control calls no model of its own: only its judge, simulated user or an option's models
-            called = [m for m in self.models_called()
-                      if other.get("_kind") != "control" or m in (self.judge_model, self.simulator_model, self.embed_model, self.rerank_model)]
+            # a control calls no model of its own and plays no user: only its judge and an option's models
+            called = ([m for m in (self.judge_model, self.embed_model, self.rerank_model) if m] if other.get("_kind") == "control"
+                      else self.models_called())
             stray = [m for m in self.serving if m not in called]
             if stray:
                 raise Refused(f"--served-by names {', '.join(stray)}, which this run does not call: it calls "

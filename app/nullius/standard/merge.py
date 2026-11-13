@@ -66,10 +66,18 @@ def _at(d, path):
 
 
 def _served(shards: List[dict], results: List[dict]) -> Optional[dict]:
-    """The merged job's ``served`` (``job.served_total``). A model the shards pinned differently - merged
-    with ``force`` - reads ``unknown``: the merged config keeps the first shard's pin, which the others' calls
-    were never held to."""
-    who = job.served_total(results)
+    """The merged job's ``served`` (``job.served_total``), made of each shard's whole one - its trials' and its
+    benchmark relay's calls, an ``unknown`` kept - else, for a shard that has none, of its trials'. A model the
+    shards pinned differently - merged with ``force`` - reads ``unknown``: the merged config keeps the first
+    shard's pin, which the others' calls were never held to."""
+    parts = []
+    for s in shards:
+        whole = (s.get("result") or {}).get("served")
+        if isinstance(whole, dict):
+            parts.append(whole)
+        else:
+            parts.append(job.served_total([r for r in results if (r.get("standard") or {}).get("shard_job") == s.get("name")]))
+    who = job.served_total([{"standard": {"served": p}} for p in parts if p])
     pins = [_at(s["config"], ("standard", "served_by")) or {} for s in shards]
     pins = [p if isinstance(p, dict) else {} for p in pins]
     differ = sorted(m for m in {m for p in pins for m in p} if len({json.dumps(p.get(m)) for p in pins}) > 1)

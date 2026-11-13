@@ -401,8 +401,9 @@ def backfill_trace(trial_dir: str, write: bool = False) -> str:
 
 
 def _named(name: str) -> str:
-    """A serving provider's name as its slug reads: lowercased, its words joined by dashes (``Google AI Studio``
-    reads ``google-ai-studio``) and nothing else folded: ``Prov/A`` is not ``prov-a``. A run fetches no list of
+    """A serving provider's name as its slug reads: lowercased, its words joined by dashes (``DeepInfra`` reads
+    ``deepinfra``) and nothing else folded: ``Prov/A`` is not ``prov-a``, and a provider whose name differs from its
+    slug otherwise (``Google`` serving ``google-vertex``) reads as another. A run fetches no list of
     providers, and this is all a name is matched by."""
     return re.sub(r"\s+", "-", name.strip().lower())
 

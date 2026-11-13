@@ -716,8 +716,11 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
         a += ["--ledger", ledger]
     for m in side_models:
         a += ["--side-model", m]
+    # the pins of the models this relay sends; the run's other models (an option's embeddings) are another relay's
+    sends = {model} | set(routes.values()) | {str(s).partition("=")[2] or str(s) for s in side_models}
     for m, slugs in sorted((serving or {}).items()):
-        a += ["--served-by", f"{m}={','.join(slugs)}"]
+        if m in sends:
+            a += ["--served-by", f"{m}={','.join(slugs)}"]
     if key_header != "authorization":
         a += ["--key-header", key_header]
     return a

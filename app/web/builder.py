@@ -92,7 +92,8 @@ def new_run_runner():
         abort(413)
     if recipe.get("harness") == standard_recipe.HARNESS:
         out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, unpriced=execute.unpriced)
-        return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm")}
+        # served_models: each model field's model as the run sends it, which Served by lists the providers of
+        return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models")}
     return {"errors": [{"step": providers.STEP["runner"], "message": providers.GONE}],
             "notes": [], "review": []}, 404
 

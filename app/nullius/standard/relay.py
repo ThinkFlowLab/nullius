@@ -273,9 +273,11 @@ def parse_served_by(given, model: str) -> tuple:
 
 def _clean(value, secrets=()):
     """A recorded copy, never what is sent: a value under a credential's name
-    replaced, the relay's own key cut out of every string, then ``redact``."""
+    replaced, the relay's own key cut out of every string - a key of a
+    mapping as much as a value - then ``redact``."""
     if isinstance(value, dict):
-        return {k: "[REDACTED]" if isinstance(k, str) and _CREDENTIAL.search(k) else _clean(v, secrets) for k, v in value.items()}
+        return {_clean(k, secrets): "[REDACTED]" if isinstance(k, str) and _CREDENTIAL.search(k) else _clean(v, secrets)
+                for k, v in value.items()}
     if isinstance(value, list):
         return [_clean(v, secrets) for v in value]
     if isinstance(value, str):
@@ -291,19 +293,23 @@ def _name(v) -> Optional[str]:
 
 
 def _an_error(e) -> Optional[dict]:
-    """An error object, in one shape: its code, type and message, as given."""
+    """An error object, in one shape: its code (a word or a number), type and
+    message (words), as given; None when it has none of them of that kind.
+    Nothing else of the object is kept."""
     if not isinstance(e, dict) or not e:
         return None
     got = {k: e[k] for k in ("code", "type") if isinstance(e.get(k), (str, int)) and not isinstance(e.get(k), bool)}
     if isinstance(e.get("message"), str):
         got["message"] = _cut(e["message"], 500)
-    return got or {"message": _cut(json.dumps(e), 500)}
+    return got or None
 
 
 def _provider(obj) -> Optional[str]:
     """The serving provider an object of a reply names: its own ``provider``,
     its ``message``'s or its ``response``'s, else the last attempt of
-    OpenRouter's routing facts (``openrouter_metadata``) there."""
+    OpenRouter's routing facts (``openrouter_metadata``) there - the one that
+    answered; an earlier, failed attempt is never taken for it, and a last
+    attempt that names none gives none."""
     if not isinstance(obj, dict):
         return None
     inner = [obj] + [o for o in (obj.get("message"), obj.get("response")) if isinstance(o, dict)]
@@ -313,10 +319,18 @@ def _provider(obj) -> Optional[str]:
     for o in inner:
         meta = o.get("openrouter_metadata")
         attempts = meta.get("attempts") if isinstance(meta, dict) else None
-        named = [a["provider"] for a in attempts if isinstance(a, dict) and _name(a.get("provider"))] if isinstance(attempts, list) else []
-        if named:
-            return named[-1]
+        if isinstance(attempts, list) and attempts:
+            last = attempts[-1]
+            return _name(last.get("provider")) if isinstance(last, dict) else None
     return None
+
+
+def _attempts_in(obj) -> bool:
+    """Whether an object of a reply holds OpenRouter's routing facts, with at least one attempt."""
+    return isinstance(obj, dict) and any(
+        isinstance(o, dict) and isinstance(o.get("openrouter_metadata"), dict)
+        and isinstance(o["openrouter_metadata"].get("attempts"), list) and bool(o["openrouter_metadata"]["attempts"])
+        for o in (obj, obj.get("message"), obj.get("response")))
 
 
 def _choices(choices, ends: dict, errors: dict) -> None:
@@ -365,7 +379,9 @@ def _facts(path: str, body: bytes, streamed: bool) -> dict:
                 continue
             if not isinstance(ev, dict):
                 continue
-            served = served or _provider(ev)
+            # the latest event that names one: the end's over an earlier attempt's; routing facts whose last
+            # attempt names none leave none
+            served = _provider(ev) if _attempts_in(ev) else (_provider(ev) or served)
             kind = ev.get("type")
             if kind == "error":                  # Messages' error event, or a Responses one
                 error = error or _an_error(ev.get("error")) or _an_error({k: v for k, v in ev.items() if k != "type"})
@@ -969,11 +985,23 @@ def serve(argv=None) -> int:
     ap.add_argument("--prices", help="a JSON object: model -> USD per million tokens, for a cost estimate")
     ap.add_argument("--ledger", help="the file of the run's spending cap: a call is booked there before it is sent")
     ap.add_argument("--served-by", action="append", default=[], metavar="MODEL=SLUG[,SLUG...]",
-                    help="the serving providers that may answer a request sent as MODEL, in order, and no other")
+                    help="the serving providers that may answer a request sent as MODEL, in order, and no other; "
+                         "MODEL one this relay sends (--model, a --route's, a --side-model's), and --base OpenRouter's "
+                         "or --routing given")
+    ap.add_argument("--routing", action="store_true",
+                    help="the endpoint at --base routes a model to several serving providers, as OpenRouter does")
     a = ap.parse_args(argv)
     serving, bad = parse_served_by(a.served_by, "")
+    if serving and not bad:
+        host = (urllib.parse.urlsplit(a.base).hostname or "").lower()
+        if not (a.routing or host == "openrouter.ai" or host.endswith(".openrouter.ai")):
+            bad.append(f"{a.base} routes no model to several serving providers (OpenRouter's does; --routing says another does)")
+        sent = {a.model} | {r.partition("=")[2] for r in a.route} | {(s.partition("=")[2] or s) for s in a.side_model}
+        stray = [m for m in serving if a.model and m not in sent]
+        if stray:
+            bad.append(f"{', '.join(stray)}: a model this relay does not send (it sends {', '.join(sorted(x for x in sent if x))})")
     if bad:
-        print(json.dumps({"error": "; ".join(bad)}), flush=True)
+        print(json.dumps({"error": "--served-by: " + "; ".join(bad)}), flush=True)
         return 2
     try:
         with open(a.key_file) as f:

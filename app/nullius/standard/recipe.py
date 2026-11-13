@@ -291,7 +291,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     d = defs or _all()
     errors, notes = [], []
     add = lambda step, message: errors.append({"step": STEP[step], "message": message})
-    out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": ""}
+    out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
+           "served_models": {}}
     name = str(recipe.get("name") or "")
     if not _NAME.match(name):
         add("limits", "The recipe's name may hold letters, digits, dots, dashes and underscores.")
@@ -512,30 +513,39 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             add("limits", f"A spending cap needs a price for {', '.join(missing)}: update the price list in Settings, or set a price there.")
     judge_def, sim_def = (b.get("score") or {}).get("judge"), b.get("simulator")
 
-    def pinned(p: dict, used: Optional[set] = None) -> Dict[str, List[str]]:
-        """The --served-by of one job: each pinned role's model as the run sends it, where the job calls it
-        (ledger.models, as the run reads them); ``used`` collects the roles that apply."""
-        sent = {"model": None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
+    def sent_of(p: dict) -> Dict[str, Optional[str]]:
+        """Each model field's model as job ``p`` sends it; None where it has none (a control has no model of its own)."""
+        return {"model": None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
                 "judge": (judge_model or providers.served_as(judge_def["model"], provider)) if judge_def else None,
                 "simulator": (sim_model or providers.served_as(sim_def["model"], provider)) if sim_def else None}
-        called = ledger.models(p["o"], sent["model"], sent["judge"], sent["simulator"], None, control=p["control"])
-        got: Dict[str, List[str]] = {}
+
+    def called_of(p: dict) -> List[str]:
+        s = sent_of(p)
+        return ledger.models(p["o"], s["model"], s["judge"], s["simulator"], None, control=p["control"])
+
+    # the pins by model, as the run sends each: a field's pin is its model's, on every job that calls that model
+    # (a control's judge job too, when the judge's model is the one the model field pinned)
+    by_model: Dict[str, List[str]] = {}
+    for p in picks:
         for role, slugs in served.items():
-            m = sent.get(role)
-            if not m or m not in called:
+            m = sent_of(p).get(role)
+            if not m:
                 continue
-            if used is not None:
-                used.add(role)
-            if m in got and got[m] != list(slugs):
+            if m in by_model and by_model[m] != list(slugs):
                 add("model", f"Served by pins {m} twice, with different providers: give its fields the same ones.")
-            got[m] = list(slugs)
-        return got
+            by_model[m] = list(slugs)
+    # each field's model as the run sends it, for the builder to ask its providers under that name
+    out["served_models"] = {role: next((sent_of(p)[role] for p in sorted(picks, key=lambda q: q["control"]) if sent_of(p)[role]), None)
+                            for role in roles}
+
+    def pinned(p: dict) -> Dict[str, List[str]]:
+        """The --served-by of one job: the pins of the models it calls."""
+        called = called_of(p)
+        return {m: s for m, s in by_model.items() if m in called}
     if served and not errors:
-        used: set = set()
-        for p in picks:
-            pinned(p, used)
+        everything = {m for p in picks for m in called_of(p)}
         for role in served:
-            if role not in used:
+            if not {sent_of(p)[role] for p in picks} & everything:
                 add("model", f"Served by: no job of this recipe calls {roles[role]}; leave it empty.")
     if errors:
         return out

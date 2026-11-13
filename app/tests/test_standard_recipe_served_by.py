@@ -88,6 +88,32 @@ class TheRecipe(unittest.TestCase):
         other = recipe.compile(a_recipe(model="openai/gpt-4o-mini", served_by={"model": ["a"], "judge": ["b"]}), d)
         self.assertIn("pins openai/gpt-4o-mini twice", other["errors"][0]["message"])
 
+    def test_a_pin_is_its_models_on_every_job_that_calls_it(self):
+        """The model field's model is also the judge's: the control beside the agent calls it as its judge, and its job
+        takes the pin too."""
+        out = recipe.compile(a_recipe(others=["fake", "nop"], model="openai/gpt-4o-mini", served_by={"model": ["prov-a"]}), defs(judged()))
+        self.assertEqual(out["errors"], [])
+        for part in out["parts"]:
+            self.assertIn("--served-by openai/gpt-4o-mini=prov-a", part["script"])
+
+    def test_a_list_with_an_empty_or_a_bad_slug_is_refused_in_sight(self):
+        for slugs in (["deepinfra", ""], ["deepinfra", "bad slug"]):
+            with self.subTest(slugs=slugs):
+                out = recipe.compile(a_recipe(served_by={"model": slugs}), defs())
+                self.assertTrue(any("not a serving provider's slug" in e["message"] for e in out["errors"]), out["errors"])
+
+    def test_each_fields_model_is_given_as_the_run_sends_it(self):
+        """Like the paper, LongMemEval's gpt-4o is sent as openai/gpt-4o-2024-08-06 on OpenRouter: its providers are that
+        model's, and the pin is put on that name."""
+        sets = definitions.find(definitions.load("benchmark")[0], "longmemeval")["datasets"]
+        r = a_recipe(benchmark="longmemeval", dataset=sets[0]["id"], other="", others=["original"], model_choice="paper", model="gpt-4o",
+                     served_by={"model": ["openai"]})
+        out = recipe.compile(r)
+        sent = out["served_models"]["model"]
+        self.assertEqual(sent, "openai/gpt-4o-2024-08-06")
+        self.assertIn(f"--served-by {sent}=openai", out["script"])
+        self.assertEqual(recipe.compile(a_recipe(), defs())["served_models"]["model"], "openai/gpt-5-mini")
+
     def test_a_recipe_with_no_pin_compiles_to_the_command_it_did(self):
         plain = recipe.compile(a_recipe(), defs())
         self.assertEqual(plain["errors"], [])
