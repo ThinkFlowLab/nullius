@@ -222,7 +222,7 @@
       "units": {
         "units": 361,
         "passed": "361 ids, the same twice, unique",
-        "on": "2026-10-29"
+        "on": "2026-11-13"
       },
       "nop": {
         "passed": "0/8",
@@ -234,6 +234,39 @@
         "job": "2026-10-29__18-38-14__osworld1__test_nogdrive__prove-nop",
         "source": "nullius",
         "on": "2026-10-29",
+        "limit": 8
+      }
+    },
+    "test_all": {
+      "units": {
+        "units": 369,
+        "passed": "369 ids, the same twice, unique",
+        "on": "2026-11-13"
+      }
+    },
+    "test_infeasible": {
+      "units": {
+        "units": 25,
+        "passed": "25 ids, the same twice, unique",
+        "on": "2026-11-13"
+      }
+    },
+    "test_small": {
+      "units": {
+        "units": 39,
+        "passed": "39 ids, the same twice, unique",
+        "on": "2026-11-13"
+      },
+      "nop": {
+        "passed": "0/8",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 8,
+        "job": "2026-11-13__14-08-41__osworld1__test_small__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-13",
         "limit": 8
       }
     }
