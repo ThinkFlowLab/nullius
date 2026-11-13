@@ -63,6 +63,7 @@ import threading
 import time
 import traceback
 import tempfile
+from collections import Counter
 from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from typing import Callable, Dict, List, Optional
@@ -131,6 +132,33 @@ def provider_endpoint(provider: str, env=os.environ) -> tuple:
         raise Refused(f"{p['key']} holds a character a request header cannot carry (a line break, a space or a "
                       "byte-order mark around it, or one outside Latin-1): set it again in Settings")
     return base, key
+
+
+def units_file(path: str) -> dict:
+    """The units a file lists, for a run of those alone (``--units``): one
+    id a line, the spaces around it dropped; a blank line, or one whose
+    first mark is ``#``, is skipped. The path is opened as given, on the
+    machine the run starts on. {name: the file's name, sha256: of its bytes,
+    units: the ids in the file's order}. Refused when it cannot be read as
+    text, lists no unit, or lists one more than once (``repeat`` runs each
+    unit more than once)."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError as e:
+        raise Refused(f"--units {path}: cannot read it: {e.strerror or e}")
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise Refused(f"--units {path}: not UTF-8 text")
+    ids = [s for s in (line.strip() for line in text.splitlines()) if s and not s.startswith("#")]
+    if not ids:
+        raise Refused(f"--units {path} lists no unit: one id a line (a line that starts with # is a comment)")
+    counts = Counter(ids)
+    twice = [u for u in counts if counts[u] > 1]
+    if twice:
+        raise Refused(f"--units {path} lists {', '.join(twice)} more than once: list each unit once (--repeat K runs each K times)")
+    return {"name": os.path.basename(path), "sha256": hashlib.sha256(data).hexdigest(), "units": ids}
 
 
 def _slug(s: str) -> str:
@@ -327,7 +355,7 @@ class Run:
                  launch: Optional[str] = None, repeat: int = 1, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
-                 max_usd_per_unit: Optional[float] = None):
+                 max_usd_per_unit: Optional[float] = None, units_file: Optional[dict] = None):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
@@ -339,6 +367,11 @@ class Run:
         their defaults, and the job's config records every value.
         ``shard``: (I, N), only the units of shard I of N (``shard``), before
         ``limit``; ``launch``: the id every shard of one launch records.
+        ``units_file``: the units a file lists (:func:`units_file`): only
+        those of the dataset run, in the dataset's order, before ``limit``;
+        an id the dataset does not hold refuses the run before any unit
+        starts. The job's config records the file's name, its sha256 and its
+        units.
         ``repeat``: each unit run that many times (a conformance check run for
         confidence, ``conform``), each run a trial of its own tagged
         ``u0042r2``; once by default, tagged ``u0042`` as always.
@@ -482,6 +515,7 @@ class Run:
         keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
         self.limit, self.concurrency = limit, max(1, int(concurrency))
+        self.units_file = units_file
         self.repeat = max(1, int(repeat or 1))
         # an own image this run pulled or built stays for the next run, unless the user asks it removed
         # when its last unit ends (never with a repeat): {image: how many units are using it now}
@@ -587,8 +621,25 @@ class Run:
                 container.sweep(self.name)
             raise
         everything = [str(u) for u in units]
-        # the shard, then the limit; each unit keeps its place in the whole dataset (its trial's tag)
+        listed = self.units_file["units"] if self.units_file else None
+        if listed is not None:
+            held = set(everything)
+            unknown = [u for u in listed if u not in held]
+            if unknown:
+                for d in self.drivers:
+                    d.close()
+                if self.bench_relay is not None:
+                    self.bench_relay.stop()
+                words = self.bench["units"]
+                why = (f"{self.units_file['name']} lists {len(unknown)} {words['noun'] if len(unknown) == 1 else words['nouns']} "
+                       f"that {self.bench['label']}'s dataset {self.ds['id']} does not hold: " + ", ".join(unknown))
+                p.emit("refused", detail=why)
+                raise Refused(why)
+        # the list and the shard, then the limit; each unit keeps its place in the whole dataset (its trial's tag)
         mine = shards.select(everything, *self.shard) if self.shard else list(enumerate(everything))
+        if listed is not None:
+            wanted = set(listed)
+            mine = [(i, u) for i, u in mine if u in wanted]
         mine = mine[: self.limit] if self.limit else mine
         units = [u for _, u in mine]
         self.n_units = len(units)
@@ -598,7 +649,9 @@ class Run:
                          granted=self.other["_kind"] == "agent", judge=self.judge_model or "", backend=self.backend,
                          image=self.setup_driver.image if self.setup_driver else self.image,
                          options=self.options, launch=self.launch or "", bench_options=self.bench_options,
-                         shard=shards.record(*self.shard, len(everything), units, self.limit) if self.shard else None,
+                         # a shard of a list splits the listed units: they are its whole
+                         shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit)
+                         if self.shard else None, units_file=self.units_file,
                          repeat=self.repeat, prices=self.prices_record(),
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
         # every unit once, then every unit again: a repeat cut short still has each unit's first run

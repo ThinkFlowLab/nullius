@@ -9,8 +9,9 @@ verdicts, the earliest start and the latest end - and its ``config.json``
 the shards' with ``shard`` taken out and ``merged_from`` put in.
 
 What is merged must be one launch: the same launch id, benchmark and
-version, dataset, agent or capability and model, and the same number of shards
-- else it is refused, naming what differs, unless ``force``. Two trials of
+version, dataset, agent or capability and model, the same number of shards
+and, for shards of a list of units (``run.units_file``), the same list - else
+it is refused, naming what differs, unless ``force``. Two trials of
 one unit are always refused, with the units named: one of them would be
 counted twice. Units no shard ran are not a refusal - a shard may be
 missing, or stopped early - and are said: the shards absent, and the units a
@@ -36,7 +37,8 @@ from nullius.standard.names import backend as backend_name
 SAME = (("launch", ("standard", "launch")), ("benchmark", ("standard", "benchmark")),
         ("benchmark version", ("standard", "benchmark_version")), ("dataset", ("datasets", 0, "name")),
         ("agent or capability", ("standard", "plugged")), ("model", ("agents", 0, "model_name")),
-        ("backend", ("standard", "backend")), ("number of shards", ("standard", "shard", "of")))
+        ("backend", ("standard", "backend")), ("number of shards", ("standard", "shard", "of")),
+        ("units file", ("standard", "units_file", "sha256")))
 
 
 class Refused(Exception):
@@ -153,7 +155,10 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
     if isinstance(total, int):
         short = total - len(by_unit)
         if short > 0:
-            notes.append(f"{short} of the dataset's {total} units are not in the merge")
+            # a shard of a list of units counts the listed ones as its whole (run.units_file)
+            listed = any(_at(s["config"], ("standard", "units_file")) for s in shards)
+            whole = f"{total} listed units" if listed else f"dataset's {total} units"
+            notes.append(f"{short} of the {whole} are not in the merge")
     return {"shards": shards, "by_unit": by_unit, "notes": notes, "missing": missing, "units_total": total, "differ": differ}
 
 

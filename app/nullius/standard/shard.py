@@ -11,6 +11,8 @@ The order inside a run is: the driver's ``units``, then the shard, then
 ``--limit`` - so ``--shard 1/2 --limit 6`` is the first six units of shard 1,
 and the two shards of a ``--limit 6`` launch run up to twelve units between
 them. The limit is a shard's own: a machine is told how much it takes on.
+With ``--units FILE`` the shard takes the listed units of its own, and its
+record counts the listed units as the whole (``units_total``).
 
 A trial keeps its unit's place in the whole dataset as its tag (``u0042`` is
 the 43rd unit in every shard), so the shards' trials never share a name and
