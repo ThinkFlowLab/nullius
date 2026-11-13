@@ -977,8 +977,9 @@
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
     else if(d.stdVersion!==undefined){C.setStandardBenchmark(r(),el.value);render();}
-    // an option at its default is left out: the recipe names only what was changed
-    else if(d.benchOptSelect!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOptSelect]||{};rec.bench_options={...(rec.bench_options||{})};const v=el.value.trim();if(!v||v===o.default)delete rec.bench_options[d.benchOptSelect];else rec.bench_options[d.benchOptSelect]=v;refreshPlan();}
+    // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
+    // the options that apply under it (`when`): the step is drawn again and the select keeps the focus; a typed value is left as it is
+    else if(d.benchOptSelect!==undefined){const rec=r(),n=d.benchOptSelect,o=((C.standardBench(rec)||{}).options||{})[n]||{};rec.bench_options={...(rec.bench_options||{})};const v=el.value.trim();if(!v||v===o.default)delete rec.bench_options[n];else rec.bench_options[n]=v;if(el.tagName==='SELECT'){renderForm();root.querySelector(`select[data-bench-opt-select="${CSS.escape(n)}"]`)?.focus();}refreshPlan();}
     else if(d.stdOption!==undefined){const rec=r(),k=d.stdOptionOf,o=(C.standardOthers(rec).find(x=>x.key===k)||{}).options||{},x=o[d.stdOption]||{},v=el.value.trim();rec.options={...(rec.options||{})};const mine={...(rec.options[k]||{})};if(v===''||v===x.default)delete mine[d.stdOption];else mine[d.stdOption]=v;if(Object.keys(mine).length)rec.options[k]=mine;else delete rec.options[k];refreshPlan();}
     // a release or a ref picked, a commit typed: an explicit choice, so its agents are asked for (built here the first time)
     else if(d.harborVersion!==undefined){r().harbor.version=el.value.trim();applyScan();renderForm();refreshPlan();askScan(true);}
