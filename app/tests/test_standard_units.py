@@ -4,7 +4,8 @@ whole dataset; an id the dataset does not hold refuses the run before any
 unit starts, naming it; a file that lists an id twice, or none, is refused as
 it is read; the job's config names the file, its sha256 and its units. A run
 without a list is the run it always was. No key, no network: the runs are a
-control's."""
+control's, but for one agent's whose model answers on this machine's
+loopback."""
 from __future__ import annotations
 
 import hashlib
@@ -13,13 +14,16 @@ import json
 import os
 import shutil
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stdout
+from http.server import ThreadingHTTPServer
 from unittest import mock
 
 from nullius import progress
 from nullius.harbor import feed
-from nullius.standard import cli, container, definitions, install, merge, run, shard
+from nullius.standard import cli, container, definitions, install, merge, pace as pacing, run, shard
+from tests.test_standard_run import Echo
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 NOP = {"nop": {"source": "nullius", "from": "nothing said"}}
@@ -223,6 +227,52 @@ class Listed(unittest.TestCase):
         limited = self.go(limit=2, name="limited")
         self.assertEqual(self.trials(limited), ["good__u0000", "wrong__u0001"])
         self.assertNotIn("units_file", read(os.path.join(limited, "config.json"))["standard"])
+
+
+class RateLimited(unittest.TestCase):
+    """A listed unit that ends rate-limited is run once more after the others, as any unit is: under its own
+    trial's name, its first attempt kept in the job's ``retried/``. A unit the list leaves out is never run."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.up = ThreadingHTTPServer(("127.0.0.1", 0), Echo)
+        threading.Thread(target=cls.up.serve_forever, daemon=True).start()
+        cls.env = {"MODEL_API_URL": f"http://127.0.0.1:{cls.up.server_address[1]}/v1", "MODEL_API_KEY": "sk-test"}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.up.shutdown()
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._home = install.HOME
+        install.HOME = os.path.join(self.tmp, "home")
+        Echo.status, Echo.refused, Echo.limited = 200, None, 0
+        self.addCleanup(setattr, Echo, "limited", 0)
+        self.addCleanup(setattr, pacing, "FIRST", pacing.FIRST)
+        pacing.FIRST = 0.5                       # a rate-limited unit's pause, short enough for a test
+
+    def tearDown(self):
+        install.HOME = self._home
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_a_listed_unit_that_ends_rate_limited_is_run_again_under_its_own_name(self):
+        Echo.limited = 1                         # the first model call is refused, every later one answered
+        path = os.path.join(self.tmp, "units.txt")
+        with open(path, "w") as f:
+            f.write("model\ngood\n")
+        # the responding dataset is good, wrong, model: the list leaves wrong out
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
+        job = run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom",
+                      jobs_root=os.path.join(self.tmp, "jobs"), concurrency=1, env=self.env, say=lambda s: None,
+                      unsandboxed=True, dataset="responding", units_file=run.units_file(path))
+        self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "model__u0002"])
+        self.assertEqual(os.listdir(os.path.join(job, "retried")), ["model__u0002"])
+        first = read(os.path.join(job, "retried", "model__u0002", "result.json"))
+        self.assertEqual(first["exception_info"]["exception_type"], "RateLimitError")
+        self.assertFalse(read(os.path.join(job, "model__u0002", "result.json")).get("exception_info"))   # its second counts
+        self.assertEqual(read(os.path.join(job, "result.json"))["n_total_trials"], 2)
+        self.assertEqual(read(os.path.join(job, "config.json"))["standard"]["units_file"]["units"], ["model", "good"])
 
 
 class FromTheCommandLine(unittest.TestCase):
