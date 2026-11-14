@@ -64,7 +64,7 @@ import time
 import traceback
 import tempfile
 from collections import Counter
-from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_EXCEPTION, CancelledError, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from typing import Callable, Dict, List, Optional
 
@@ -738,10 +738,14 @@ class Run:
                 self.loopback = container.Loopback(self.base, image=self.image, job=self.name).start()
             for iur in work:
                 futures.append(pool.submit(work_unit, iur))
-            for future in as_completed(futures):
-                res = future.result()
-                if res is not None:              # None: a unit not begun once the endpoint refused the run
-                    results.append(res)
+            pending = set(futures)
+            while pending:
+                # timed: Python runs signal handlers only in this thread, and Stop's SIGTERM can reach another thread
+                done, pending = wait(pending, timeout=0.5, return_when=FIRST_EXCEPTION)
+                for future in done:
+                    res = future.result()
+                    if res is not None:          # None: a unit not begun once the endpoint refused the run
+                        results.append(res)
             self.run_again(results, work, work_unit, again)
         except BaseException:
             self._stopped.set()
