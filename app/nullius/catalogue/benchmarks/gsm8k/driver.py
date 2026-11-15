@@ -1,12 +1,15 @@
 """GSM8K's driver for the Nullius standard (JSON lines on stdin and stdout).
 
-units  - one per problem of the test file, named by its line number ("0001")
+units  - one per problem of the test file, named by its line number ("0001");
+         a GSM8K-Platinum problem keeps the number of the test file's problem
+         it is (the same question, word for word), so a problem has one name
+         in both datasets and Platinum's numbers have gaps where it removed one
 setup  - the question goes in the prompt; the workspace stays empty
 score  - the upstream's own extract_answer and is_correct, imported from
          grade_school_math/dataset.py at the tested commit ($NULLIUS_UPSTREAM),
          applied to the agent's last message
-oracle - the reference control: the problem's own worked solution, the test
-         file's "answer" field, which ends in '#### <number>'
+oracle - the reference control: the problem's own worked solution, the
+         dataset file's "answer" field, which ends in '#### <number>'
 answer - the original setup: the problem asked of a model in one call through
          the unit's relay, in the format the paper's solutions end with
          ('#### <number>'), the reply scored as any agent's last message is.
@@ -16,8 +19,9 @@ answer - the original setup: the problem asked of a model in one call through
          model that reasons refuses one)
 
 The upstream's module imports torch (for a training dataset class the score
-never uses), so the driver runs in the environment of its own that
-standard.json declares (driver.install), never in Nullius's.
+never uses), and Platinum is published as a parquet file, read with pyarrow, so
+the driver runs in the environment of its own that standard.json declares
+(driver.install), never in Nullius's.
 
 The reference solution is never in the workspace: it is read from the
 dataset only when the score is taken.
@@ -31,14 +35,25 @@ sys.path.insert(0, os.path.join(os.environ["NULLIUS_UPSTREAM"], "grade_school_ma
 import dataset as upstream                      # noqa: E402  grade_school_math/dataset.py, as published
 
 PROBLEMS = {}
+TEST = os.path.join(os.environ["NULLIUS_UPSTREAM"], "grade_school_math", "data", "test.jsonl")
+
+
+def numbered(path):
+    """The problems of a GSM8K file, each under its line number."""
+    with open(path) as f:
+        return {f"{n:04d}": json.loads(line) for n, line in enumerate(f, 1) if line.strip()}
 
 
 def load():
-    if not PROBLEMS:
-        with open(os.environ["NULLIUS_DATASET"]) as f:
-            for n, line in enumerate(f, 1):
-                if line.strip():
-                    PROBLEMS[f"{n:04d}"] = json.loads(line)
+    if PROBLEMS:
+        return PROBLEMS
+    if os.environ.get("NULLIUS_DATASET_ID") == "platinum":
+        import pyarrow.parquet as parquet       # Platinum's own format; the test file needs none
+        number = {p["question"]: n for n, p in numbered(TEST).items()}
+        for row in parquet.read_table(os.environ["NULLIUS_DATASET"]).to_pylist():
+            PROBLEMS[number[row["question"]]] = row     # a question the test file lacks is an error, never a new number
+    else:
+        PROBLEMS.update(numbered(os.environ["NULLIUS_DATASET"]))
     return PROBLEMS
 
 
