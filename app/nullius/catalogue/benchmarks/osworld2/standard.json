@@ -318,7 +318,7 @@
       "units": {
         "units": 108,
         "passed": "108 ids, the same twice, unique",
-        "on": "2026-11-12"
+        "on": "2026-11-15"
       },
       "nop": {
         "passed": "0/108",
@@ -327,7 +327,7 @@
           "at_most": 0.01
         },
         "units": 108,
-        "job": "2026-11-12__06-56-46__osworld2__test_v2__prove-nop",
+        "job": "2026-11-15__06-18-44__osworld2__test_v2__prove-nop",
         "source": "nullius",
         "options": [
           {
@@ -356,7 +356,7 @@
           }
         ],
         "judge": "anthropic/claude-sonnet-4.6",
-        "on": "2026-11-12"
+        "on": "2026-11-15"
       }
     }
   }
