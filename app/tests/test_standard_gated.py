@@ -128,6 +128,7 @@ class Gated(unittest.TestCase):
         self.assertEqual(definitions.problems(dict(self.b, gated=True), "benchmark"), [])
         self.assertIn("gated: true for a benchmark whose tasks are gated, so no provider's words about them are kept",
                       definitions.problems(dict(self.b, gated="yes"), "benchmark"))
+        self.assertIs(definitions.get("benchmark", "osworld2").get("gated"), True)
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ class StandardWhere(CompilerCase):
                 self.assertIn('title="Not on this machine: docker is not installed"', tile)
                 self.assertEqual(html.count("Not on this machine"), 1)
                 container = re.search(r'<button [^>]*data-std-backend="container"[^>]*>', here[name]).group(0)
-                if name.startswith("osworld1 "):     # its Original's docker provider needs docker, which no image installs
+                if name.split()[0] in ("osworld1", "osworld2"):     # its Original's docker provider needs docker, which no image installs
                     self.assertIn('title="docker cannot be provided in a container: choose local processes."', container)
                 else:
                     self.assertNotIn("disabled", container)

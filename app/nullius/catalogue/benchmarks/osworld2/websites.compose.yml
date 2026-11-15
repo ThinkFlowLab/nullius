@@ -1,0 +1,176 @@
+name: osworld2-web
+
+x-blkio: &blkio
+  device_write_bps:
+    - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+      rate: ${OSWORLD2_WEB_QUIET_BPS:?as websites.py sets it}
+  device_write_iops:
+    - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+      rate: ${OSWORLD2_WEB_QUIET_IOPS:?as websites.py sets it}
+
+x-logging: &logs
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  awsconsole:
+    blkio_config: *blkio
+    logging: *logs
+  budgetwise_web_backend:
+    blkio_config: *blkio
+    logging: *logs
+  budgetwise_web_frontend:
+    blkio_config: *blkio
+    logging: *logs
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy@sha256:33081120c6df8613cebbdbdd4c3b8aef641e9e56c1cd3d86d04ea9651cb3cc68
+    ports: !override
+      - ${OSWORLD2_WEB_ADDRESS:?the address Caddy listens on, as websites.py sets it}:80:80
+    blkio_config:
+      device_write_bps:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_CADDY_BPS:?as websites.py sets it}
+      device_write_iops:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_CADDY_IOPS:?as websites.py sets it}
+    logging: *logs
+  calendar_web:
+    blkio_config: *blkio
+    logging: *logs
+  careerlink_web:
+    blkio_config:
+      device_write_bps:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_CAREERLINK_WEB_BPS:?as websites.py sets it}
+      device_write_iops:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_CAREERLINK_WEB_IOPS:?as websites.py sets it}
+    logging: *logs
+  cloudcrm_web_backend:
+    blkio_config: *blkio
+    logging: *logs
+  cloudcrm_web_frontend:
+    blkio_config: *blkio
+    logging: *logs
+  dinogame_web:
+    blkio_config: *blkio
+    logging: *logs
+  eventix_web_backend:
+    blkio_config: *blkio
+    logging: *logs
+  eventix_web_frontend:
+    blkio_config: *blkio
+    logging: *logs
+  expenseflow_web_backend:
+    blkio_config: *blkio
+    logging: *logs
+  expenseflow_web_frontend:
+    blkio_config: *blkio
+    logging: *logs
+  formcraft_web_backend:
+    blkio_config: *blkio
+    logging: *logs
+  formcraft_web_frontend:
+    blkio_config: *blkio
+    logging: *logs
+  glbviewer_web:
+    blkio_config: *blkio
+    logging: *logs
+  insurance_claim_web_backend:
+    blkio_config: *blkio
+    logging: *logs
+  insurance_claim_web_frontend:
+    blkio_config: *blkio
+    logging: *logs
+  interfacinglinux_web:
+    blkio_config: *blkio
+    logging: *logs
+  mailhub_web_backend:
+    blkio_config: *blkio
+    logging: *logs
+  mailhub_web_frontend:
+    blkio_config: *blkio
+    logging: *logs
+  overleaf_collab_compiler:
+    blkio_config: *blkio
+    logging: *logs
+  overleaf_collab_web:
+    blkio_config:
+      device_write_bps:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_OVERLEAF_COLLAB_WEB_BPS:?as websites.py sets it}
+      device_write_iops:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_OVERLEAF_COLLAB_WEB_IOPS:?as websites.py sets it}
+    logging: *logs
+  overleaf_web_admin_bootstrap:
+    blkio_config: *blkio
+    logging: *logs
+  overleaf_web_app:
+    blkio_config:
+      device_write_bps:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_OVERLEAF_WEB_APP_BPS:?as websites.py sets it}
+      device_write_iops:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_OVERLEAF_WEB_APP_IOPS:?as websites.py sets it}
+    logging: *logs
+  overleaf_web_mongo:
+    blkio_config:
+      device_write_bps:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_OVERLEAF_WEB_MONGO_BPS:?as websites.py sets it}
+      device_write_iops:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_OVERLEAF_WEB_MONGO_IOPS:?as websites.py sets it}
+    logging: *logs
+  overleaf_web_mongo_init:
+    blkio_config: *blkio
+    logging: *logs
+  overleaf_web_redis:
+    blkio_config:
+      device_write_bps:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_OVERLEAF_WEB_REDIS_BPS:?as websites.py sets it}
+      device_write_iops:
+        - path: ${OSWORLD2_WEB_DISK:?the disk under Docker's root, as websites.py sets it}
+          rate: ${OSWORLD2_WEB_OVERLEAF_WEB_REDIS_IOPS:?as websites.py sets it}
+    logging: *logs
+  reviewsphere:
+    blkio_config: *blkio
+    logging: *logs
+  slidepuzzle_web:
+    blkio_config: *blkio
+    logging: *logs
+  streamview_web_backend:
+    blkio_config: *blkio
+    logging: *logs
+  streamview_web_frontend:
+    blkio_config: *blkio
+    logging: *logs
+  teamchat_web_backend:
+    blkio_config: *blkio
+    logging: *logs
+  teamchat_web_frontend:
+    blkio_config: *blkio
+    logging: *logs
+  travelhub_pro_web:
+    blkio_config: *blkio
+    logging: *logs
+  trippza_web:
+    blkio_config: *blkio
+    logging: *logs
+  vaultbank_web_backend:
+    blkio_config: *blkio
+    logging: *logs
+  vaultbank_web_frontend:
+    blkio_config: *blkio
+    logging: *logs
+  visaapplication_web:
+    blkio_config: *blkio
+    logging: *logs
+  wandb:
+    blkio_config: *blkio
+    logging: *logs
