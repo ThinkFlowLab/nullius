@@ -289,10 +289,12 @@ class Responses(unittest.TestCase):
 
     def test_a_run_reads_the_wait_from_the_benchmarks_limits(self):
         b = definitions.get("benchmark", "osworld2")
-        r = run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={"OPENAI_API_KEY": "k"})
+        r = run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={"OPENAI_API_KEY": "k"},
+                    which=lambda p: "/bin/" + p)
         self.assertEqual(r.call_seconds, 3300)
         del b["limits"]["call_seconds"]
-        r = run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={"OPENAI_API_KEY": "k"})
+        r = run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={"OPENAI_API_KEY": "k"},
+                    which=lambda p: "/bin/" + p)
         self.assertEqual(r.call_seconds, relay.TIMEOUT)
 
 

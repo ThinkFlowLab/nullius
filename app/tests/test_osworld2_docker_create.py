@@ -416,8 +416,7 @@ class Sweep(unittest.TestCase):
             clock[0] += seconds
             on_sleep(len(self.calls()))
 
-        with mock.patch.object(self.site.time, "sleep", sleep), \
-                mock.patch.object(self.site.time, "monotonic", lambda: clock[0]):
+        with mock.patch.object(self.site, "time", types.SimpleNamespace(sleep=sleep, monotonic=lambda: clock[0])):
             self.site.sweep("t" * 32)
         return clock[0]
 

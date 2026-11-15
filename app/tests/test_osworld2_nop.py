@@ -86,7 +86,8 @@ class ScoreLimit(unittest.TestCase):
         b = definitions.get("benchmark", "osworld2")
         self.assertEqual(b["limits"]["score_seconds"], 3600)
         self.assertFalse([p for p in definitions.problems(b, "benchmark") if "limits" in p])
-        r = run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={"OPENAI_API_KEY": "k"})
+        r = run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={"OPENAI_API_KEY": "k"},
+                    which=lambda p: "/bin/" + p)
         self.assertEqual(r.score_seconds, 3600)
 
 
