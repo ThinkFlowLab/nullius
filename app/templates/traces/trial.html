@@ -122,8 +122,10 @@
   <h3 style="margin-top:0">Where the time went <b class="total">{{ trial.dur_total|secs }}</b></h3>
   {# All four phases Harbor records, and the same four on a standard run: Env
      its environment, Setup the agent's start, Verify its check and score (a
-     model judge included). A phase that took no time draws neither a segment
-     nor a chip, so the bar and the chips always match. #}
+     model judge included). A recorded phase has its chip however short it
+     was: a check that took no time was still made. One never recorded has
+     none, and Other, which is computed, only when there is some. A segment
+     needs enough time to draw. #}
   {%- if job.runner %}
   {%- set says = {'env': "The unit's environment: the driver's setup, the relay, its image", 'setup': "The agent's start and session, its MCP servers included", 'verify': "The unit's check and its score, a model judge included", 'other': 'After the check: the container, the relay and the trial written'} %}
   {%- else %}
@@ -134,7 +136,7 @@
     {% for key, label, dur, title in phases if dur|phase %}<span class="seg ph-{{ key }}" style="flex:{{ dur|phase }}" title="{{ label }}: {{ dur|secs }}. {{ title }}"></span>{% endfor %}
   </div>
   <div class="legend" style="margin-bottom:0">
-    {% for key, label, dur, title in phases if dur|phase %}<span class="chip ph-{{ key }}" title="{{ title }}">{{ label }} <b>{{ dur|secs }}</b></span>
+    {% for key, label, dur, title in phases if (dur is not none and key != 'other') or dur|phase %}<span class="chip ph-{{ key }}" title="{{ title }}">{{ label }} <b>{{ dur|secs }}</b></span>
     {% endfor %}
   </div>
 </div>

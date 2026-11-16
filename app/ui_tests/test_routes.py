@@ -453,6 +453,27 @@ class Routes(unittest.TestCase):
         self.assertNotIn("Agent error", trial_page)
 
 
+    def test_a_recorded_phase_keeps_its_chip_however_short(self):
+        """A check that took no time was still made: its chip stays, with no
+        segment to draw. A phase never recorded has neither."""
+        job_dir = self.root / "instant-check"
+        synthetic_job(self.root, "instant-check")
+        result = job_dir / "task-001" / "result.json"
+        res = json.loads(result.read_text())
+        res.update(started_at="2026-09-13T17:00:00+00:00", finished_at="2026-09-13T17:00:12+00:00",
+                   environment_setup={"started_at": "2026-09-13T17:00:00+00:00", "finished_at": "2026-09-13T17:00:02+00:00"},
+                   agent_execution={"started_at": "2026-09-13T17:00:02+00:00", "finished_at": "2026-09-13T17:00:12+00:00"},
+                   verifier={"started_at": "2026-09-13T17:00:12+00:00", "finished_at": "2026-09-13T17:00:12.000500+00:00"})
+        write_json(result, res)
+        job = parse.parse_job(str(job_dir))
+        with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
+            html = self.get_ok("/trial/instant-check/task-001").get_data(as_text=True)
+        panel = html.split("Where the time went", 1)[1].split('<div class="panel', 1)[0]
+        self.assertIn('<span class="chip ph-verify"', panel)
+        self.assertNotIn('class="seg ph-verify"', panel)
+        self.assertNotIn("ph-setup", panel)
+        self.assertNotIn("ph-other", panel)
+
     def test_retried_rate_limits_reach_the_job_table(self):
         """A 429 the agent's SDK retried is in agent/gateway.log and nowhere
         else: the outcome is untouched. The job table marks the row, and a

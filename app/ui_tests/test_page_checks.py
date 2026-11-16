@@ -87,9 +87,9 @@ class Pages(unittest.TestCase):
     # --- views.md ---------------------------------------------------------
 
 
-    def test_a_degenerate_clock_keeps_the_totals_and_draws_no_empty_phase(self):
+    def test_a_degenerate_clock_keeps_the_totals(self):
         control = self.page("trial-oracle-control")
-        self.assertNotIn("Setup <b>", control)                               # a phase that took no time has no chip
+        self.assertIn("Verify 6.7s", control)
         self.assertIn("Agent 0.2s", control)                                  # the all-call total stays
 
 
