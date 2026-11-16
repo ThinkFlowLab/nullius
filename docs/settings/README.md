@@ -1,6 +1,6 @@
 # Settings
 
-Configure model and data providers, judges, custom keys, run hosts and Docker.
+Configure model and data providers, judges, custom keys, hosts and Docker.
 Existing results open without credentials. Model provider, agent key and host
 changes save automatically; data providers and benchmark credentials use **Save**.
 
@@ -11,7 +11,7 @@ changes save automatically; data providers and benchmark credentials use **Save*
 | [LLM judge provider](llm-judge.md) | The second judge |
 | [Custom keys](agent-keys.md) | Agent credentials, dataset keys and benchmark tool licences |
 | [Model prices](model-prices.md) | What a run's cost is estimated from |
-| [Run hosts](run-hosts.md) | SSH machines |
+| [Hosts](run-hosts.md) | SSH machines |
 | [Data providers](data-providers.md) | Hugging Face and Docker Hub connections |
 | [Sandbox](sandbox.md) | Docker on this machine |
 | [General](other.md) | Tour and checklist; start-up options remain in the environment |
@@ -29,7 +29,7 @@ changes save automatically; data providers and benchmark credentials use **Save*
 | `SYSTEM_ONE_PROVIDER`, `SYSTEM_ONE_PROTOCOL`, `SYSTEM_ONE_MODEL`, `TYPESAFE_API_KEY` | [System One](system-one.md) |
 | `LLM_JUDGE_PROVIDER`, `LLM_JUDGE_PROTOCOL`, `LLM_JUDGE_MODEL` | [LLM judge](llm-judge.md) |
 | `AGENT_KEYS` | Comma-separated agent key names; Harbor runs only |
-| `HOSTS` | The run hosts |
+| `HOSTS` | The hosts |
 | `HOST_CONSTRAINTS` | What Nullius may use on each machine: [constraints](run-hosts.md#constraints) |
 
 | Rule | |
@@ -125,7 +125,7 @@ Set `NULLIUS_HOME` before both commands to migrate into a separate profile.
 
 <div class="grid cards" markdown>
 
-- [Run hosts](run-hosts.md)
+- [Hosts](run-hosts.md)
 - [Sandbox](sandbox.md)
 
     SSH machines.

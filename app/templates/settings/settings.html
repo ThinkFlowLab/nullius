@@ -3,7 +3,7 @@
 {% block crumb %}/ settings{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='settings/settings.css') }}">{% endblock %}
 {% block body %}
-{#- A section per thing a run needs - the model providers, the judge, the run hosts - and the file they
+{#- A section per thing a run needs - the model providers, the judge, the hosts - and the file they
     are kept in, one at a time from the menu beside them; the strip above says what a run can use today.
     The menu's entries are links to the sections, so without a script every section shows. -#}
 {% set by = {} %}{% set held = [] %}
@@ -53,7 +53,7 @@
     {% endfor %}
     <a href="#providers" class="st-ready-i{{ ' on' if ns.custom }}"><span aria-hidden="true">{{ '✓' if ns.custom else '○' }}</span> Custom<span class="sr">{{ ': set' if ns.custom else ': not set' }}</span></a>
     {% for jj, name in [(judges[0], 'System One'), (judges[1], 'LLM judge')] %}<a href="#judge" class="st-ready-i{{ ' on' if jj }}"><span aria-hidden="true">{{ '✓' if jj else '○' }}</span> {{ name }}<span class="sr">{{ ': set' if jj else ': not set' }}</span></a>{% endfor %}
-    {% for item in chosen %}<a href="#HOSTS" class="st-ready-i on"><span aria-hidden="true">✓</span> <span class="mono">{{ item.split('=', 1)[0] if '=' in item.split('@', 1)[0] else item.split(':/')[0].split(':~')[0] }}</span></a>{% else %}<a href="#HOSTS" class="st-ready-i"><span aria-hidden="true">○</span> no run host</a>{% endfor %}
+    {% for item in chosen %}<a href="#HOSTS" class="st-ready-i on"><span aria-hidden="true">✓</span> <span class="mono">{{ item.split('=', 1)[0] if '=' in item.split('@', 1)[0] else item.split(':/')[0].split(':~')[0] }}</span></a>{% else %}<a href="#HOSTS" class="st-ready-i"><span aria-hidden="true">○</span> no host</a>{% endfor %}
   </div>
 </header>
 {% if not writable %}
@@ -85,7 +85,7 @@
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Execution</div>
-      {{ section_link('hosts', 'Run hosts', 'server', 'ssh remote machines server hosts') }}
+      {{ section_link('hosts', 'Hosts', 'server', 'ssh remote machines server hosts') }}
       {{ section_link('sandbox', 'Sandbox', 'kit', 'docker container') }}
     </div>
     <div class="st-nav-group">
@@ -241,7 +241,7 @@
   <section class="st-section" id="hosts" aria-labelledby="hosts-h">
     {% set ro = hosts_row and hosts_row.source == 'environment' %}
     <div class="st-section-head">
-      <div class="st-provider-heading"><h2 id="hosts-h">Run hosts</h2>{% if writable and hosts_row %}<span class="st-heading-acts"><button type="button" class="btn sm ghost" data-test-all>Test all</button><button type="button" class="btn sm ghost st-provider-add" data-add-host aria-label="Add a host" aria-expanded="false" aria-controls="add-host"{% if ro %} disabled title="Set in the environment"{% endif %}><span aria-hidden="true">+</span> Add</button></span>{% endif %}</div>
+      <div class="st-provider-heading"><h2 id="hosts-h">Hosts</h2>{% if writable and hosts_row %}<span class="st-heading-acts"><button type="button" class="btn sm ghost" data-test-all>Test all</button><button type="button" class="btn sm ghost st-provider-add" data-add-host aria-label="Add a host" aria-expanded="false" aria-controls="add-host"{% if ro %} disabled title="Set in the environment"{% endif %}><span aria-hidden="true">+</span> Add</button></span>{% endif %}</div>
       <p>Machines a recipe can run on, and what Nullius may use on each.</p>
     </div>
     {% if writable and hosts_row and not ro %}

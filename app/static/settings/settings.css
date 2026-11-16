@@ -92,7 +92,7 @@
   .st-key-new-fields { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* run hosts: a row each - its name tests it, the result says what answered */
+/* hosts: a row each - its name tests it, the result says what answered */
 .st-hosts { padding: 14px 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); }
 .host-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .host-table th, .host-table td { padding: 6px 4px; text-align: left; vertical-align: middle; font-weight: 400; }

@@ -1,4 +1,4 @@
-// Constraints, in each machine's Constraints panel of the Run hosts list. Each edit rewrites the hidden JSON, which
+// Constraints, in each machine's Constraints panel of the Hosts list. Each edit rewrites the hidden JSON, which
 // autosave saves. × empties one field, Remove all a machine's; an empty field is no constraint. Memory is kept in MB
 // and shown in MB or GB. Where the capacity is known, a slider moves with CPUs and Memory: continuous from one step
 // to a tick at the capacity, then one jump to No limit (the field empty) at the far end. A value above the capacity
