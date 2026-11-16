@@ -114,6 +114,7 @@ class Score(unittest.TestCase):
                              stdin=subprocess.DEVNULL)
         os.close(read)
         self.owned(p, life=write)
+        self.d.SCORE_SECONDS, self.d.REAP_SECONDS = 10, 0.5     # a runner never told would be let go at 10 s
         self.assertEqual(self.d.score("os__t1", self.ws, answer="")["reward"], 1.0)
 
     def test_a_planted_runner_record_is_no_runner_of_this_drivers(self):

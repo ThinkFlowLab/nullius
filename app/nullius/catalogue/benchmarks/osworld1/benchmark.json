@@ -26,7 +26,7 @@
     "Each VM's ports are open on every network interface; one runs any command in the VM. Bind Docker's ports to 127.0.0.1, or keep the machine off untrusted networks."
   ],
   "limitations": [
-    "An agent needs the computer port, proven by its conformance kit. The agent side has been checked on a fake desktop only, not on real VMs.",
+    "An agent needs the computer port, proven by its conformance kit. The agent side has been checked on a fake desktop alone.",
     "Preparing the VM image (its lock and its download) is not bounded by a unit's setup time; the core's own limit on setup ends it.",
     "A VM start that hangs holds the start gate until its unit's setup time ends; units waiting for the gate fail at the end of theirs.",
     "Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.",

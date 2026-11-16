@@ -68,7 +68,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 ## Nullius limitations
 
-- An agent needs the computer port, proven by its conformance kit. The agent side has been checked on a fake desktop only, not on real VMs.
+- An agent needs the computer port, proven by its conformance kit. The agent side has been checked on a fake desktop alone.
 - Preparing the VM image (its lock and its download) is not bounded by a unit's setup time; the core's own limit on setup ends it.
 - A VM start that hangs holds the start gate until its unit's setup time ends; units waiting for the gate fail at the end of theirs.
 - Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.
