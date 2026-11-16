@@ -57,17 +57,17 @@ LAUNCH = {
 
 def payload(cat, jobs, workspace_name=""):
     from nullius import providers
-    from nullius.standard import recipe as standard
+    from nullius.standard.pages import recipe as standard
     models = sorted({j.model_name for j in jobs if j.model_name})
     dated = [j for j in jobs if j.model_name and j.started_at]
     latest = max(dated, key=lambda j: j.started_at.timestamp()).model_name if dated else ""
     return {
         "version": 1, "workspace": workspace_name or "unassigned", "agents": AGENTS,
-        # Harbor and the Nullius standard: the page offers choices, the core and standard/recipe.py compile them.
+        # Harbor and the Nullius standard: the page offers choices, the core and standard/pages/recipe.py compile them.
         "runners": [standard.RUNNER, providers.HARBOR],
         # why a saved recipe of a runner no longer offered does not open (a benchmark's own scripts: its Original setup)
         "runnerGone": providers.GONE,
-        # the standard's benchmarks, agents and capabilities, and why a pair does not fit (standard/recipe.py, choices)
+        # the standard's benchmarks, agents and capabilities, and why a pair does not fit (standard/pages/recipe.py, choices)
         "standard": standard.choices(),
         "parameters": PARAMETERS, "benchmarks": [asdict(b) | {"label": b.label} for b in cat.benchmarks],
         "datasets": [asdict(d) | LAUNCH.get(d.key, {}) for d in cat.datasets],

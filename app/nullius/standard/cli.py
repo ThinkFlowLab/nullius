@@ -18,11 +18,11 @@ An agent runs commands as you on the local backend, which is not a sandbox:
 an agent's run or conformance check there is refused without ``--unsandboxed``.
 ``--backend container`` (``docker``, its earlier name) runs each unit's agent or capability in a container whose
 only way out is the unit's relay, or a public web proxy when its environment
-declares ``network`` (``standard/container.py``), and needs no such yes.
+declares ``network`` (``standard/containers/container.py``), and needs no such yes.
 A benchmark's control (``nop``, ``oracle``: its ``controls``) runs no agent
 and calls no model - only a judged benchmark's judge - so it asks for neither.
 ``prove`` runs a benchmark's controls and checks its units and that nothing
-leaks, and writes what passed into its ``proven`` (``standard/prove.py``).
+leaks, and writes what passed into its ``proven`` (``standard/proofs/prove.py``).
 
 A benchmark, an agent or a capability is named by its key (its default
 version) or ``key@version``. ``list`` shows every definition - each version - and which
@@ -35,12 +35,12 @@ definition - the port, and each skill of its kit shown or not (``--repeat K``:
 each check K times, held by a majority); ``run`` runs a benchmark into a job under ``--jobs`` (``jobs_standard/``),
 which the application opens like any other; ``fidelity`` drives an agent over
 ACP and through its own command, compares the requests its model was sent, and
-writes the verdict into the definition (``standard/fidelity.py``). ``--shard I/N`` runs one
-shard of the dataset's units (``standard/shard.py``: by the unit id's hash, then
+writes the verdict into the definition (``standard/proofs/fidelity.py``). ``--shard I/N`` runs one
+shard of the dataset's units (``standard/runner/shard.py``: by the unit id's hash, then
 ``--limit``), the job recording its shard and its launch (``--launch``); ``--units FILE``
 runs only the units a file lists (``run.units_file``: one id a line), read on
 the machine the command runs on, ``--from-run`` or not; ``merge``
-puts a launch's shard jobs together into one job (``standard/merge.py``). ``--option``
+puts a launch's shard jobs together into one job (``standard/runner/merge.py``). ``--option``
 sets one of the agent's or capability's options (``options`` in its definition);
 the rest keep the vendor's defaults, and the job's config records them all.
 A run says each stage before its first unit, and each unit's end, as one
@@ -49,7 +49,7 @@ A run says each stage before its first unit, and each unit's end, as one
 
 Keys come from the process environment, then the saved user settings - the
 file the Settings page edits. Nothing is printed of them. With ``--from-run`` (a run
-the builder or a page started, ``standard/recipe.py``) saved settings are not
+the builder or a page started, ``standard/pages/recipe.py``) saved settings are not
 read: the key is the one the run was handed, ``OPENAI_API_KEY``, and the
 endpoint ``OPENAI_BASE_URL`` when it names one (``run_env``). The licences a
 benchmark's environments declare are never in either: the run reads them from
@@ -72,7 +72,9 @@ from nullius import constraints as limits, paths, prices as price_list, progress
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
     settings.load(paths.settings_file())
 
-from nullius.standard import conform, definitions, fidelity, job, match, merge, pins, ports, prove, run, shard
+from nullius.standard.contract import definitions, match, ports
+from nullius.standard.proofs import conform, fidelity, pins, prove
+from nullius.standard.runner import job, merge, run, shard
 
 ENV_FILE = paths.settings_file()
 
@@ -132,7 +134,7 @@ def older(d: dict, ports_=None) -> list:
 def skills(d: dict, ports_=None) -> list:
     """``agent.tools/v1 skills: decoys ✗ · chain ✓ · retry ✗``, for each port
     ``d`` offers (of ``ports_``, when given) whose kit has skills."""
-    from nullius.standard.recipe import skills_of
+    from nullius.standard.pages.recipe import skills_of
     proven, out = d.get("proven") or {}, []
     for p in d.get("offers") or []:
         got = skills_of(p, proven.get(p)) if ports_ is None or p in ports_ else []

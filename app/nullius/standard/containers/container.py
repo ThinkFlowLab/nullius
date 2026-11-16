@@ -38,7 +38,7 @@ daemon.
 **The relay is a sidecar, and the agent's only way out** but for the public
 web proxy of an environment that declares ``network``. Per unit, an
 internal network (``docker network create --internal``: no route off it); a
-relay container (``python3 -m nullius.standard.relay serve``) on the default
+relay container (``python3 -m nullius.standard.calls.relay serve``) on the default
 bridge *and* on that network as ``relay``; the agent's container on the
 internal network alone. Its model endpoint is ``http://relay:8080/<tag>/v1``
 and nothing else answers it. The real key reaches the relay's container
@@ -127,7 +127,8 @@ from secrets import compare_digest, token_hex
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from nullius import constraints, paths
-from nullius.standard import definitions, install
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import install
 
 def _runs_podman(path: str) -> bool:
     """Whether the program at ``path`` is podman under another name: a link to
@@ -740,7 +741,7 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
          *(["-v", f"{os.path.dirname(ledger)}:{os.path.dirname(ledger)}:rw"] if ledger else []),
          "--mount", f"type=bind,source={key_file},target={RELAY_KEY_IN},readonly", "-w", app,
          "-e", "PYTHONPATH=" + app, "-e", "PYTHONDONTWRITEBYTECODE=1",
-         image, "python3", "-m", "nullius.standard.relay", "serve", "--listen", f"0.0.0.0:{RELAY_PORT}",
+         image, "python3", "-m", "nullius.standard.calls.relay", "serve", "--listen", f"0.0.0.0:{RELAY_PORT}",
          "--base", base, "--record", record, "--key-file", RELAY_KEY_IN, "--public", f"http://{RELAY_ALIAS}:{RELAY_PORT}"]
     if model:
         a += ["--model", model]
@@ -1144,7 +1145,7 @@ class Unit:
         if platform.system() == "Darwin":
             # Docker Desktop cannot connect to host Unix sockets through a
             # file mount. Expose only this socket via a loopback TCP bridge.
-            from nullius.standard import forward
+            from nullius.standard.containers import forward
             nonce = token_hex(32)
             class Handler(socketserver.BaseRequestHandler):
                 def handle(self):

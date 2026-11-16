@@ -995,7 +995,8 @@ class SettingsPage(unittest.TestCase):
 
     def test_data_provider_save_is_local_guarded_and_never_echoes_token(self):
         from nullius import secrets
-        from nullius.standard import definitions, run
+        from nullius.standard.contract import definitions
+        from nullius.standard.runner import run
         gaia = run.Licences(definitions.get("benchmark", "gaia"))                  # GAIA's HF_TOKEN: this provider's alone
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"SECRETS_DIR": folder}):
             headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}

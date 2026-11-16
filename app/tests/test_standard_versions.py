@@ -13,7 +13,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from nullius.standard import cli, conform, definitions, match
+from nullius.standard import cli
+from nullius.standard.contract import definitions, match
+from nullius.standard.proofs import conform
 
 BENCH = {
     "schema": "nullius.benchmark/v1", "key": "toy", "label": "Toy", "summary": "A toy.",
@@ -269,7 +271,7 @@ class BenchmarkVersions(unittest.TestCase):
         self.assertIn("versions.2: datasets: at least one", bad)
 
     def test_match_and_the_recipe_name_a_version(self):
-        from nullius.standard import recipe
+        from nullius.standard.pages import recipe
         defs = {"benchmark": definitions.load("benchmark", self.root, every=True)[0],
                 "agent": definitions.load("agent", self.root, every=True)[0], "capability": []}
         self.assertEqual(set(match.table(defs["benchmark"], defs["agent"], [])), {"toy", "toy@2"})
@@ -285,7 +287,7 @@ class BenchmarkVersions(unittest.TestCase):
         self.assertEqual([(v["ref"], v["default"]) for v in page[0]["versions"]], [("toy@2", False), ("toy", True)])
 
     def test_a_run_and_its_proof_carry_the_version(self):
-        from nullius.standard import prove
+        from nullius.standard.proofs import prove
         b = definitions.get("benchmark", "toy@2", self.root)
         got = prove.prove(b, dataset="hard", jobs_root=os.path.join(self.root, "jobs"), stamp="2026-10-12__00-00-00", say=lambda s: None)
         self.assertTrue(got["hard"]["nop"]["ok"], got)
@@ -362,7 +364,7 @@ class ForkVersion(unittest.TestCase):
         self.assertEqual(tagged["upstream"]["tag"], "fix-1")
 
     def test_each_version_is_cloned_at_its_own_commit_and_its_data_checked_by_its_own_digest(self):
-        from nullius.standard import install
+        from nullius.standard.requirements import install
         d = self.bench({"repository": self.upstream, "tag": "v1.0.0", "tested": self.published},
                        {"repository": self.fork, "tested": self.fixed})
         one, fork = definitions.resolve(dict(d, _here=self.tmp), "1"), definitions.resolve(dict(d, _here=self.tmp), "fork")
@@ -378,7 +380,7 @@ class ForkVersion(unittest.TestCase):
         self.assertNotEqual(install.driver_dir(dict(one, driver=drv), self.home), install.driver_dir(dict(fork, driver=drv), self.home))
 
     def test_a_fetch_never_waits_on_a_password(self):
-        from nullius.standard import install
+        from nullius.standard.requirements import install
         self.assertEqual(install.git_env()["GIT_TERMINAL_PROMPT"], "0")
 
     def test_the_tag_is_a_plain_name_of_the_repository(self):

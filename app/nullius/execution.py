@@ -31,7 +31,7 @@ thread of its own and writes what it does to a log the page follows:
   it does not.
 
 A plan for the Nullius standard (``runner`` ``standard``,
-``standard/recipe.py``) runs this repository's own ``cli`` from
+``standard/pages/recipe.py``) runs this repository's own ``cli`` from
 ``$NULLIUS_STANDARD``: this repository here; from an installed wheel or on
 a host, a content-addressed copy of the backend and effective catalogue.
 Only code, definitions and their declared resources travel, never user
@@ -41,7 +41,7 @@ folder is. There it needs ``python3`` and ``git``, gets ``uv`` when missing
 (an agent's pip install builds with it), and docker when the plan says so
 (``docker``: a recipe on the container backend) - checked, like a Harbor run's,
 before anything is sent. A run split over several machines is one plan per
-machine, each one shard (``standard/shard.py``).
+machine, each one shard (``standard/runner/shard.py``).
 
 The target reads an explicit catalogue: the user's catalogue for a local
 run; on a host, a writable copy of the snapshot in the run's ``catalogue/``.
@@ -124,7 +124,8 @@ from typing import Callable, Dict, List, Optional
 
 from nullius import hosts, paths, prices as price_list, progress, redact, secrets, settings
 from nullius.harbor import source as harbor_source
-from nullius.standard import container, payload as standard_payload
+from nullius.standard.containers import container
+from nullius.standard.runner import payload as standard_payload
 
 REMOTE_HOME = "~/.nullius"                    # on a host: tasks/, runs/, app/, harbor/ (a pinned Harbor's wheels)
 # The names the launcher gives a run's key and its endpoint (_launch), read
@@ -140,7 +141,7 @@ STOP_WAIT = 20.0                              # seconds a Stop's own commands on
 LAUNCH_GRACE = 5.0                            # seconds a restart waits for a part a launcher claimed to start (_settle)
 UV_INSTALL = "curl -LsSf https://astral.sh/uv/install.sh | sh"
 RECORD = "run.json"
-STANDARD = "standard"                         # the Nullius standard's runner key (standard/recipe.py HARNESS)
+STANDARD = "standard"                         # the Nullius standard's runner key (standard/pages/recipe.py HARNESS)
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # this repository: app/ is in it
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 _ID = re.compile(r"[^A-Za-z0-9_.-]")
@@ -253,7 +254,7 @@ class Plan:
     jobs: List[dict] = field(default_factory=list)   # the job directories the script writes: [{"name", "agent", "dataset"}]
     parts: List[dict] = field(default_factory=list)  # the run, one agent at a time: [{"id", "label", "script"}]; empty: the whole script at once
     recipe: dict = field(default_factory=dict)       # the builder's recipe the script was compiled from, so the run can be opened again as one; {} for a plan from before
-    runner: str = "harbor"                    # or "standard" (standard/recipe.py): the Nullius standard's own cli
+    runner: str = "harbor"                    # or "standard" (standard/pages/recipe.py): the Nullius standard's own cli
     harbor_pin: dict = field(default_factory=dict)   # the Harbor the recipe pins (harbor/source.py pin_of); {} for a plan from before: the harbor on PATH
     docker: bool = False                      # a runner that needs docker on its target though it is not Harbor (the standard's container backend)
     keyless: bool = False                     # nothing in it calls a model (the standard's controls): handed no key and no endpoint at all
@@ -350,7 +351,7 @@ def _licence_names() -> List[str]:
     own; a data provider's token (``provider``) is none, so a shell's reaches
     a Harbor run. A standard driver or agent never inherits it (``run.KEEP``)."""
     try:
-        from nullius.standard import definitions
+        from nullius.standard.contract import definitions
         return sorted({s["name"] for b in definitions.load("benchmark", every=True)[0] for s in definitions.secrets_of(b)
                        if not s.get("provider")})
     except Exception:

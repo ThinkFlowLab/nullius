@@ -49,7 +49,10 @@ import time
 from typing import Callable, Dict, List, Optional
 
 from nullius.runs import parse
-from nullius.standard import definitions, install, jsonl, run, shard as shards
+from nullius.standard.contract import definitions
+from nullius.standard.protocols import jsonl
+from nullius.standard.requirements import install
+from nullius.standard.runner import run, shard as shards
 
 STAMP = "%Y-%m-%d__%H-%M-%S"
 SHORT = 12                      # characters: a reference shorter than this is not looked for

@@ -1,6 +1,6 @@
 /* Pure recipe compiler for Harbor recipes. It prints shell; it has no DOM, storage, or execution API.
    This file also creates, loads and saves Nullius standard recipes; the server compiles those
-   (POST /new-run/runner, standard/recipe.py). Other harnesses are rejected. */
+   (POST /new-run/runner, standard/pages/recipe.py). Other harnesses are rejected. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory;
   else root.NulliusRecipe = factory;
@@ -25,7 +25,7 @@
   const runners = () => schema.runners || [{key: 'harbor', label: 'Harbor', builtin: true}];
   // Unsupported runners use the server's rejection message.
   const RUNNER_GONE = schema.runnerGone || 'Only Harbor and Nullius recipes are supported.';
-  // The Nullius standard (nullius/standard/recipe.py): a benchmark, an agent or a capability that proved the ports it
+  // The Nullius standard (nullius/standard/pages/recipe.py): a benchmark, an agent or a capability that proved the ports it
   // needs, a model. Its choices and why a pair does not fit come with the schema; the server compiles the recipe.
   const isStandard = r => !!(r && r.harness === 'standard');
   const standard = () => schema.standard || {benchmarks: [], agents: [], capabilities: [], fits: {}, ports: {}};

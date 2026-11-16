@@ -11,7 +11,8 @@ from unittest.mock import patch
 
 from nullius import paths
 from nullius.catalogue import catalog, harbor_entry, storage
-from nullius.standard import definitions, install
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import install
 from .test_harbor_entry import form
 from .test_standard_definitions import AGENT, BENCH, CAPABILITY
 from .test_standard_versions import VERSIONED

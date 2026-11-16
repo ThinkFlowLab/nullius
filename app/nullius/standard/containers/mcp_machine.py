@@ -42,7 +42,7 @@ import tempfile
 import threading
 from typing import List, Optional, Tuple
 
-from nullius.standard import install
+from nullius.standard.requirements import install
 
 BRIDGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_bridge.py")
 DOOR_PORT = 9000          # where a door listens, on the unit's network

@@ -45,7 +45,7 @@ class Store(unittest.TestCase):
             secrets.store_of("bench-a", "HF_TOKEN", "elsewhere")
 
     def test_a_run_reads_a_data_providers_token_from_its_provider_alone(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         bench = {"key": "bench-a", "environments": {"e": {"needs_secrets": [
             {"name": "HF_TOKEN", "to": "driver", "provider": "huggingface"}, {"name": "LICENSE_KEY", "to": "driver"}]}}}
         secrets.set("bench-a", "HF_TOKEN", "stale-synthetic")
@@ -161,7 +161,7 @@ class LicenceFolderTest(unittest.TestCase):
                                                                        "path": "/opt/x/lic"}]}}}
 
     def test_written_0600_in_a_0700_folder(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         with tempfile.TemporaryDirectory() as d:
             spill = os.path.join(d, "spill")
             got = run.Licences.handed(self.bench(), {"LIC": b"secret"}, spill)
@@ -170,7 +170,7 @@ class LicenceFolderTest(unittest.TestCase):
             self.assertEqual(oct(os.stat(p).st_mode & 0o777), "0o600")
 
     def test_a_folder_open_to_others_or_a_link_is_refused(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         with tempfile.TemporaryDirectory() as d:
             wide = os.path.join(d, "wide")
             os.mkdir(wide, 0o777)
@@ -186,7 +186,7 @@ class LicenceFolderTest(unittest.TestCase):
             self.assertEqual(os.listdir(target), [])
 
     def test_a_link_planted_as_the_file_is_not_followed(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         with tempfile.TemporaryDirectory() as d:
             spill = os.path.join(d, "spill")
             os.mkdir(spill, 0o700)

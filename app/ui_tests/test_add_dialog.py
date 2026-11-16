@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import unittest
 
-from nullius.standard import howto
+from nullius.standard.pages import howto
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "static" / "catalogue" / "add.js"

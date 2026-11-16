@@ -71,7 +71,12 @@ from typing import Callable, Dict, List, Optional
 from nullius import constraints as limits, paths, prices as price_list, progress, providers
 from nullius.redact import redact
 from nullius.harbor import feed as live_feed
-from nullius.standard import acp, container, definitions, hostreq, install, job, jsonl, ledger as ledgers, match, mcp_machine, pace as pacing, relay, shard as shards
+from nullius.standard.calls import ledger as ledgers, relay
+from nullius.standard.containers import container, mcp_machine
+from nullius.standard.contract import definitions, match
+from nullius.standard.protocols import acp, jsonl
+from nullius.standard.requirements import hostreq, install
+from nullius.standard.runner import job, pace as pacing, shard as shards
 
 # the totals a unit's end carries onto the live board, from its trial's agent_result
 FEED_TOTALS = ("n_input_tokens", "n_cache_tokens", "n_output_tokens", "cost_usd")
@@ -79,7 +84,7 @@ FEED_TOTALS = ("n_input_tokens", "n_cache_tokens", "n_output_tokens", "cost_usd"
 # The variables of this machine's environment a run's processes keep: where
 # programs are, the locale, the temporary folder. Not a key among them.
 KEEP = ("PATH", "LANG", "LC_ALL", "TMPDIR", "TERM", "NVM_DIR", "NODE_PATH", "SSL_CERT_FILE", "SSL_CERT_DIR")
-APP = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))      # the folder holding the nullius package
+APP = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))      # the folder holding the nullius package
 
 
 def driver_path() -> str:
@@ -849,7 +854,7 @@ class Run:
         upstream, its dataset when it is downloaded, its driver's environment
         when it declares one (``driver.install``), the agent's or capability's
         packages. Refused when one cannot be had."""
-        from . import network_requirements
+        from ..requirements import network_requirements
         why = network_requirements.check(self.bench, self.other)
         if why:
             raise Refused("; ".join(why))
@@ -899,7 +904,7 @@ class Run:
                         f["url"], f["sha256"], progress=None if there else p.download("file"))
             drv = install.driver_dir(self.bench)
             if self.backend == "container" and self.upstream:
-                from nullius.standard import setup_container
+                from nullius.standard.containers import setup_container
                 with p.stage("driver", start=f"preparing {self.bench['key']}'s container driver"):
                     needs = definitions.option_needs(self.bench, self.bench_options)["host"]
                     image = setup_container.image(self.image, self.bench, needs, os.path.join(self.job_dir, ".work", "image.log"))
@@ -1331,7 +1336,7 @@ class Run:
                                                                    self.machine_env(trial), work, work)
             except mcp_machine.Unknown as e:
                 raise _Ended("EnvironmentSetupError", f"the unit's setup: {e}")
-        from . import web_services
+        from ..containers import web_services
         try:
             doors.extend(web_services.doors(setup))
         except (ValueError, OSError) as e:

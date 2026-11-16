@@ -14,7 +14,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from nullius import execution, paths
-from nullius.standard import install, payload
+from nullius.standard.requirements import install
+from nullius.standard.runner import payload
 
 
 class Snapshot(unittest.TestCase):
@@ -254,7 +255,7 @@ class Snapshot(unittest.TestCase):
         key, here = payload.build(str(self.cache))
         self.assertFalse((Path(here) / "app/.env").exists())
         other = self.tmp / "elsewhere"; other.mkdir()
-        ran = subprocess.run([sys.executable, "-c", "from nullius.standard import definitions; print(definitions.get('agent', 'reference')['label'])"],
+        ran = subprocess.run([sys.executable, "-c", "from nullius.standard.contract import definitions; print(definitions.get('agent', 'reference')['label'])"],
                              cwd=other, env=dict(os.environ, PYTHONPATH=str(Path(here) / "app"),
                                                   NULLIUS_CATALOGUE=str(Path(here) / "app/nullius/catalogue")),
                              capture_output=True, text=True)
@@ -280,7 +281,7 @@ class Snapshot(unittest.TestCase):
         for selected in (self.catalogue, remote):
             with self.subTest(selected=selected):
                 ran = subprocess.run([sys.executable, "-c",
-                    "from nullius.standard import definitions; "
+                    "from nullius.standard.contract import definitions; "
                     "d = definitions.get('agent', 'reference'); "
                     "assert d['label'] == 'Selected reference'; "
                     "d.setdefault('proven', {})['fixture-proof'] = {'job': 'fixture-evidence'}; "
@@ -316,7 +317,7 @@ class Snapshot(unittest.TestCase):
         shutil.copytree(installed / "catalogue/agents/reference", self.catalogue / "agents/reference")
         self.write(installed / "standard/cli.py", '''import json, os, pathlib, sys
 import nullius
-from nullius.standard import definitions
+from nullius.standard.contract import definitions
 providers = sorted({str((pathlib.Path(p or os.getcwd()) / "nullius").resolve()) for p in sys.path
                     if (pathlib.Path(p or os.getcwd()) / "nullius").is_dir()})
 definition = definitions.get("agent", "reference")
@@ -335,7 +336,7 @@ pathlib.Path(os.environ["NULLIUS_PROBE"]).write_text(json.dumps({
         driver = '''import hashlib, json, pathlib, sys
 import nullius
 from nullius import execution, paths
-from nullius.standard import recipe
+from nullius.standard.pages import recipe
 execution.SYNC_EVERY = 0.02
 def make_plan(index):
     # Repeat without changing any input, then verify proof persistence too.

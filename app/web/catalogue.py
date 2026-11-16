@@ -12,9 +12,9 @@ import time
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from nullius import execution, paths, providers, secrets, settings
 from nullius.catalogue import catalog, citation, harbor_entry, sources, storage
-from nullius.standard import definitions as standard_definitions
-from nullius.standard import howto, prove
-from nullius.standard import recipe as standard_recipe
+from nullius.standard.contract import definitions as standard_definitions
+from nullius.standard.pages import howto, recipe as standard_recipe
+from nullius.standard.proofs import prove
 
 from .core import app
 from . import execute

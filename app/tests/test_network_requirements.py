@@ -4,8 +4,10 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 import tempfile
-from nullius.standard import container
-from nullius.standard import network_requirements as net, recipe, definitions
+from nullius.standard.containers import container
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.requirements import network_requirements as net
 from tests.test_standard_recipe import defs, a_recipe
 
 
@@ -85,7 +87,7 @@ class NetworkRequirements(unittest.TestCase):
                 unit._online()
             self.assertEqual(unit.network_env['HTTPS_PROXY'], 'http://egress:3128')         # its proxy, still
             self.assertNotIn(unit.names['agent'] + '-network-check', str(docker.call_args_list))
-        from nullius.standard import run
+        from nullius.standard.runner import run
         r = run.Run.__new__(run.Run)
         self.assertEqual([r.first_probe() for _ in range(3)], [True, False, False])
 

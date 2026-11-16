@@ -13,7 +13,7 @@ import json
 import os
 import queue
 from concurrent.futures import CancelledError
-from nullius.standard.cancellation import reply as wait_reply
+from nullius.standard.protocols.cancellation import reply as wait_reply
 import signal
 import subprocess
 import threading

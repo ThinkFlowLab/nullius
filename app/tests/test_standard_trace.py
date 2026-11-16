@@ -7,7 +7,7 @@ import os
 import tempfile
 import unittest
 
-from nullius.standard import job
+from nullius.standard.runner import job
 from nullius.traces import trace
 
 T = 1_800_000_000.0

@@ -30,7 +30,11 @@ import time
 from typing import Callable, Dict, List, Optional
 
 from nullius import prices as price_list
-from nullius.standard import definitions, install, jsonl, relay, run
+from nullius.standard.calls import relay
+from nullius.standard.contract import definitions
+from nullius.standard.protocols import jsonl
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 
 SIDES = ("acp", "cli")
 # Fields that label a request for the vendor - ids, cache keys, analytics -

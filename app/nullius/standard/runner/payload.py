@@ -19,9 +19,9 @@ import tempfile
 from pathlib import Path
 
 from nullius import paths
-from nullius.standard import definitions
+from nullius.standard.contract import definitions
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = Path(__file__).resolve().parents[2]
 FORMAT = 1
 _KINDS = {"benchmarks": ("benchmark.json", "standard.json"),
           "agents": ("agent.json",), "capabilities": ("capability.json",)}

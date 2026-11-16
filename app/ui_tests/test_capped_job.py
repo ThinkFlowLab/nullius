@@ -13,7 +13,8 @@ from unittest.mock import patch
 
 from nullius import workspace
 from nullius.runs import classify
-from nullius.standard import job, ledger
+from nullius.standard.calls import ledger
+from nullius.standard.runner import job
 from ui_tests.builder_support import AGENT as CUSTOM_AGENT, APP, PIN, CompilerCase
 from .test_routes import web
 

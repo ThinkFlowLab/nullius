@@ -18,7 +18,9 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from nullius.catalogue import catalog
-from nullius.standard import definitions, install, jsonl
+from nullius.standard.contract import definitions
+from nullius.standard.protocols import jsonl
+from nullius.standard.requirements import install
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(definitions.CATALOGUE)))
 

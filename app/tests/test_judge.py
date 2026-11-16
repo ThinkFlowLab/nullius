@@ -614,7 +614,7 @@ class PrJudgeWorkflow(unittest.TestCase):
         self.assertEqual(J.priority_of(["app/web/runs.py", "docs/a.md"])[0], "medium")
         self.assertEqual(J.priority_of(["app/nullius/catalogue/benchmarks/x/benchmark.json"])[0], "medium")
         self.assertEqual(J.priority_of(["app/nullius/runs/parse.py"])[0], "high")
-        self.assertEqual(J.priority_of(["app/nullius/standard/relay.py", "docs/a.md"]), ("extreme", "app/nullius/standard/relay.py"))
+        self.assertEqual(J.priority_of(["app/nullius/standard/calls/relay.py", "docs/a.md"]), ("extreme", "app/nullius/standard/calls/relay.py"))
         self.assertEqual(J.priority_of([".github/workflows/x.yml"])[0], "extreme")
         self.assertEqual(J.priority_of([".github/ISSUE_TEMPLATE/bug.yml", ".github/pull_request_template.md"])[0], "low")
 

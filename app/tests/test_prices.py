@@ -12,7 +12,7 @@ import unittest
 from unittest import mock
 
 from nullius import prices
-from nullius.standard import run
+from nullius.standard.runner import run
 
 # LiteLLM's shape: costs per token, a sample entry and an image model without an input price.
 LISTING = {

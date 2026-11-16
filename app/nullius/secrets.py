@@ -15,7 +15,7 @@ there alone, never from the benchmark's (:func:`store_of`).
 ``index.json`` beside them says, per name, when it was set, when it expires
 (when said), its kind and the file it came from - never the value. A page
 reads :func:`status` or :func:`state`; only a run reads :func:`value` or
-:func:`path`, when a unit starts (``standard/run.py``), or to send it to a
+:func:`path`, when a unit starts (``standard/runner/run.py``), or to send it to a
 host over stdin (``execution``). Standard library only.
 """
 from __future__ import annotations

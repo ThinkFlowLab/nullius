@@ -14,7 +14,9 @@ from urllib.error import HTTPError, URLError
 from unittest.mock import patch
 
 from nullius import cli
-from nullius.standard import cli as standard_cli, definitions, pins
+from nullius.standard import cli as standard_cli
+from nullius.standard.contract import definitions
+from nullius.standard.proofs import pins
 
 APP = Path(__file__).resolve().parents[1]
 
@@ -107,7 +109,7 @@ try:
     exec(INVOCATION)
 except SystemExit as exc:
     assert exc.code == 0
-from nullius.standard import install
+from nullius.standard.requirements import install
 import os
 assert install.HOME == os.environ['STANDARD_DIR'], install.HOME
 """.replace("INVOCATION", repr(invocation))

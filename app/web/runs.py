@@ -177,7 +177,7 @@ def _cut_short(r) -> str:
     return ""
 
 
-# A shard's job as a recipe names it (standard/recipe.py): ``<launch>-shard-<I>of<N>``.
+# A shard's job as a recipe names it (standard/pages/recipe.py): ``<launch>-shard-<I>of<N>``.
 _SHARD = re.compile(r"-shard-(\d+)of\d+$")
 # A participant's state is its shards' most telling: one still working, else the one that ended worst.
 _TELLING = ("running", "preparing", "stopping", "paused", "queued", "failed", "refused", "stopped", execution.NOT_RUN,

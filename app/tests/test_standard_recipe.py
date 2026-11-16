@@ -15,7 +15,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from nullius.standard import cli, conform, definitions, recipe
+from nullius.standard import cli
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.proofs import conform
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 

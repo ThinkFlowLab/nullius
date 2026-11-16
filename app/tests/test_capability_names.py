@@ -9,7 +9,9 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
-from nullius.standard import cli, definitions, match, names, payload, ports
+from nullius.standard import cli
+from nullius.standard.contract import definitions, match, names, ports
+from nullius.standard.runner import payload
 from .test_standard_definitions import BENCH, CAPABILITY
 
 

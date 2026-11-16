@@ -40,7 +40,10 @@ from typing import Callable, Dict, List, Optional
 
 from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
-from nullius.standard import hostreq, definitions, ledger, match, ports, prove
+from nullius.standard.calls import ledger
+from nullius.standard.contract import definitions, match, ports
+from nullius.standard.proofs import prove
+from nullius.standard.requirements import hostreq
 
 HARNESS = "standard"
 # The builder's runner card (command-builder-core.js, runners()): not a definition file, so builtin like Harbor's.
@@ -675,7 +678,7 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
     """The check an Agents or Capabilities page starts: every kit the agent or
     capability can take, as one command (``cli conform``), the jobs it will
     write named ahead (``conform.job_name``). {errors, script, jobs, label}."""
-    from nullius.standard import conform
+    from nullius.standard.proofs import conform
     o = definitions.get(kind, key) if kind in ("agent", "capability") else None
     errors = []
     if o is None:

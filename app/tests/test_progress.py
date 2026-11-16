@@ -13,7 +13,9 @@ import unittest
 from unittest.mock import patch
 
 from nullius import progress
-from nullius.standard import definitions, install, run
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 
 
 class Line(unittest.TestCase):

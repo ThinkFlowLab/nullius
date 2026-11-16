@@ -1,15 +1,23 @@
 """The Nullius standard: benchmarks, agents and capabilities, matched by ports.
 
 A benchmark *needs* ports, an agent or a capability *offers* them, and a pair fits
-when every port the benchmark needs is offered and proven (``match``). A port
-is a versioned contract (``ports``) with a conformance kit, a tiny benchmark
+when every port the benchmark needs is offered and proven (``contract.match``). A port
+is a versioned contract (``contract.ports``) with a conformance kit, a tiny benchmark
 run against the agent or capability before its claim is written down
-(``conform``). The definitions are files in the catalogue (``definitions``).
+(``proofs.conform``). The definitions are files in the catalogue (``contract.definitions``).
 
-A run (``run``) sets each unit up with the benchmark's driver (``jsonl``),
-drives the agent over ACP (``acp``) with the benchmark's environment as MCP
+A run (``runner.run``) sets each unit up with the benchmark's driver (``protocols.jsonl``),
+drives the agent over ACP (``protocols.acp``) with the benchmark's environment as MCP
 servers, sends every model call through a relay that holds the key and records
-the call (``relay``), scores the unit with the driver, and writes a job in
-Harbor's shape (``job``) that the rest of the application reads unchanged.
+the call (``calls.relay``), scores the unit with the driver, and writes a job in
+Harbor's shape (``runner.job``) that the rest of the application reads unchanged.
 ``docs/standard.md`` is the design.
+
+One folder per purpose: ``contract`` (what a definition may say, which pairs fit),
+``requirements`` (what a run needs of the machine), ``protocols`` (ACP and JSON
+lines), ``calls`` (the relay and the spending cap), ``containers`` (the container
+backend and its doors), ``runner`` (a run, on one machine or several), ``proofs``
+(kits, fidelity, a benchmark's controls) and ``pages`` (the builder's recipe, the How
+to add steps). ``cli`` is the shell command over all of them; ``kits/`` holds the
+conformance kits, each a benchmark.
 """

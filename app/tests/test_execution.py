@@ -783,7 +783,8 @@ class StandardOnHost(HostBase):
         # over the launcher's stdin as a licence is, read from Settings → Data providers; a value GAIA's own folder
         # holds under that name is never sent
         from nullius import secrets
-        from nullius.standard import definitions, recipe
+        from nullius.standard.contract import definitions
+        from nullius.standard.pages import recipe
         gaia = definitions.get("benchmark", "gaia")
         out = recipe.compile({"version": 1, "harness": "standard", "name": "gaia-nop", "title": "t", "benchmark": "gaia",
                               "dataset": "gaia-validation", "other": "nop", "provider": "openai", "model": "", "limit": 1,

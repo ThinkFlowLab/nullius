@@ -22,7 +22,10 @@ from unittest import mock
 
 from nullius import secrets, settings
 from nullius.runs import classify, parse
-from nullius.standard import container, definitions, install, run
+from nullius.standard.containers import container
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 from tests import docker_tier
 
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "envbench")

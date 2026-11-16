@@ -36,7 +36,7 @@
     <div class="bench-main">
 
       {% if std %}
-      {#- The standard's proofs of it, per dataset (standard/prove.py): its controls as chips, their source in the title - the
+      {#- The standard's proofs of it, per dataset (standard/proofs/prove.py): its controls as chips, their source in the title - the
           builder's dataset step draws the same - then its units and leak checks; and Prove it, cli prove as a run. -#}
       {% macro proof(rec, failed, expect) -%}
         {%- if rec %}<span class="std-proof std-proof-ok" title="proven on {{ rec.on }}{% if rec.limit %}, over the first {{ rec.limit }}{% endif %}{% if rec.shard %}, shard {{ rec.shard }}{% endif %}">✓ {{ rec.passed }}{% if rec.limit %} · first {{ rec.limit }}{% endif %}</span>

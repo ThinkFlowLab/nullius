@@ -13,8 +13,9 @@ from nullius import constraints, settings, execution, gitrefs, hosts, prerequisi
 from nullius.harbor import source as harbor_source
 from nullius.catalogue import catalog
 from nullius.recipes import launch as command_builder
-from nullius.standard import definitions, hostreq
-from nullius.standard import recipe as standard_recipe
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe as standard_recipe
+from nullius.standard.requirements import hostreq
 
 from .core import app
 
@@ -219,7 +220,7 @@ def _licence_states() -> dict:
     benchmark whose environments need licences: what is held of each name
     they declare, a data provider's token in that provider's store."""
     from nullius import secrets
-    from nullius.standard import definitions
+    from nullius.standard.contract import definitions
     out: dict = {}
     for b in definitions.load("benchmark", every=True)[0]:
         for s in definitions.secrets_of(b):

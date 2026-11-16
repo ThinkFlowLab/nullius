@@ -7,7 +7,9 @@ import shutil
 import tempfile
 import unittest
 
-from nullius.standard import conform, definitions, install, match
+from nullius.standard.contract import definitions, match
+from nullius.standard.proofs import conform
+from nullius.standard.requirements import install
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard")
 

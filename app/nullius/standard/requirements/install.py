@@ -42,7 +42,7 @@ import shutil
 import subprocess
 from typing import Callable, Dict, List, Optional
 
-from nullius.standard import definitions
+from nullius.standard.contract import definitions
 
 from nullius import paths
 

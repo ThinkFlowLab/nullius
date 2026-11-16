@@ -238,7 +238,7 @@ def test(choice: str, env=None, *, opener=None, clock=time.monotonic) -> dict:
     if provider not in TESTED:
         raise ValueError("This provider has no test.")
     if provider == "anthropic":
-        from nullius.standard.relay import ANTHROPIC_VERSION
+        from nullius.standard.calls.relay import ANTHROPIC_VERSION
         base, key = ANTHROPIC[0], env.get(ANTHROPIC[1], "")
         auth, models = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION}, base + "/models?limit=1000"
     else:

@@ -45,7 +45,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional
 
 from nullius.redact import redact
-from nullius.standard import ledger as ledgers
+from nullius.standard.calls import ledger as ledgers
 
 PLACEHOLDER_KEY = "nullius-relay"
 _TAG = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -723,7 +723,7 @@ def failure(calls: List[dict]) -> Optional[tuple]:
 
 # -- the relay as a process of its own: a container backend's sidecar ----------
 def serve(argv=None) -> int:
-    """``python3 -m nullius.standard.relay serve --listen HOST:PORT --base URL
+    """``python3 -m nullius.standard.calls.relay serve --listen HOST:PORT --base URL
     --record DIR --key-file PATH [--model M] [--route TAG=MODEL ...] [--side-model M ...] [--key-header NAME]
     [--public URL] [--prices JSON] [--ledger FILE]``.
 
@@ -735,7 +735,7 @@ def serve(argv=None) -> int:
     is ready; SIGTERM (or SIGINT) stops it."""
     import argparse
     import signal
-    ap = argparse.ArgumentParser(prog="nullius.standard.relay serve")
+    ap = argparse.ArgumentParser(prog="nullius.standard.calls.relay serve")
     ap.add_argument("--listen", default="127.0.0.1:0", help="HOST:PORT")
     ap.add_argument("--base", required=True, help="the provider's endpoint")
     ap.add_argument("--record", required=True, help="the folder each route's calls are recorded in")
@@ -781,5 +781,5 @@ def serve(argv=None) -> int:
 if __name__ == "__main__":
     import sys
     if sys.argv[1:2] != ["serve"]:
-        sys.exit("python3 -m nullius.standard.relay serve --listen HOST:PORT --base URL --record DIR --key-file PATH [--model M]")
+        sys.exit("python3 -m nullius.standard.calls.relay serve --listen HOST:PORT --base URL --record DIR --key-file PATH [--model M]")
     sys.exit(serve(sys.argv[2:]))

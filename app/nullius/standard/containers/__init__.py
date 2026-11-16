@@ -1,0 +1,14 @@
+"""The container backend, and the doors through it.
+
+``container`` runs each unit's agent or capability in a container of its own,
+its relay beside it; ``setup_container`` runs an Original setup's driver in
+one. The rest is what crosses the boundary, one address at a time: ``forward``
+(a licence server, or a server on the machine), ``egress`` (an own image's
+check, to public addresses only), ``mcp_machine`` and ``mcp_bridge`` (a
+benchmark's MCP server run on the machine, and the agent's bridge to it) and
+``web_services`` (the HTTP fixtures a driver's setup declares).
+
+``forward.py``, ``egress.py`` and ``mcp_bridge.py`` are each mounted alone into
+a container and run there: they import nothing of this application, and
+``container`` and ``mcp_machine`` find them beside themselves.
+"""

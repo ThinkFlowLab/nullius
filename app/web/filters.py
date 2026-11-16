@@ -8,7 +8,8 @@ from pathlib import Path
 from nullius import importers as harnesses
 from nullius.runs import classify
 from nullius import workspace
-from nullius.standard import ledger, ports, definitions
+from nullius.standard.calls import ledger
+from nullius.standard.contract import ports, definitions
 
 from .core import app
 from . import shared

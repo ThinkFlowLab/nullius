@@ -334,7 +334,7 @@
   };
   // The Nullius standard (C.isStandard): a benchmark, then an agent or a capability among every one there is - the
   // ones that have not proved the ports it needs shown greyed, with the reasons - a model and a scope. The server
-  // compiles the choices (POST /new-run/runner, nullius/standard/recipe.py).
+  // compiles the choices (POST /new-run/runner, nullius/standard/pages/recipe.py).
   // what a unit is: the benchmark's, or a setup's own when only setups run (a conversation, where the paper batches its questions)
   const unitsOf = rec => { const b = C.standardBench(rec) || {}, own = (b.setups || []).filter(x => C.chosenOf(rec).includes(x.key));
     return own.length && own.length === C.chosenOf(rec).length ? own[0].units : b.units || {noun: 'unit', nouns: 'units'}; };
@@ -348,7 +348,7 @@
   // an option's key read as words: reasoning_effort -> Reasoning effort
   const words = k => { const t = String(k).replace(/[_-]+/g, ' ').trim(); return t.charAt(0).toUpperCase() + t.slice(1); };
   // A control's proof on a dataset: ✓ with what passed (when, in its title), ✕ with the value the last try
-  // reached against its bound, or not run. Its source (nullius/standard/definitions.py, SOURCES) is in its title.
+  // reached against its bound, or not run. Its source (nullius/standard/contract/definitions.py, SOURCES) is in its title.
   const SOURCE_SAYS = {official: 'from the authors', adapter: 'from Harbor\'s adapter', nullius: 'made by Nullius'};
   const bound = e => { const [k, v] = Object.entries(e || {})[0] || ['at_least', 1]; return [k === 'at_most' ? '>' : '<', v]; };
   function proofOf(proven, failed, expect) {
@@ -371,7 +371,7 @@
     const backend = rec.backend || 'local';
     const selected = C.standardOthers(rec).filter(o => C.chosenOf(rec).includes(o.key));
     const dockerWhy = list.includes('local') && here.docker ? 'Not on this machine: ' + here.docker : '';
-    // Review's rule (nullius/standard/recipe.py): a setup's image installs what has an install; nothing else reaches its container
+    // Review's rule (nullius/standard/pages/recipe.py): a setup's image installs what has an install; nothing else reaches its container
     const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
     const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);

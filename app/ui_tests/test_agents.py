@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from nullius import execution
-from nullius.standard import definitions
+from nullius.standard.contract import definitions
 from .test_routes import web
 
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tests", "fixtures", "standard", "catalogue")
@@ -118,7 +118,7 @@ class Tabs(unittest.TestCase):
                 self.assertTrue(block[1].startswith('>'))
 
     def test_kits_catalogue_and_proof_links(self):
-        from nullius.standard import ports
+        from nullius.standard.contract import ports
         from html import unescape
         page = self.get("/kits").get_data(as_text=True)
         for port, info in ports.PORTS.items():

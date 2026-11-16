@@ -49,7 +49,7 @@ the probe's own); containers land where the engine puts them, which a probe
 container in the host's cgroup namespace reads. ``read`` turns what it printed into ``{capacity, enforced,
 refused, applied, systemd}``; ``save`` keeps that per machine, and ``warnings`` is
 what Settings says of a value against it. A run checks again on its own
-engine and its own systemd before its first unit (``standard/run.py``).
+engine and its own systemd before its first unit (``standard/runner/run.py``).
 """
 from __future__ import annotations
 

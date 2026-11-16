@@ -9,7 +9,7 @@ each - the skills of that kit it showed or not, and the job that shows it,
 when the open workspace holds that job - and
 every benchmark of its family, the ones it fits linked to a builder recipe for
 the pair and the others with the reasons. *Prove its ports* runs its conformance
-kits as a run of this machine (``standard/recipe.py``, ``conformance``), the
+kits as a run of this machine (``standard/pages/recipe.py``, ``conformance``), the
 record rewritten by what passes.
 
 An agent or a capability with several versions is one card, its default
@@ -28,8 +28,9 @@ from pathlib import Path
 from flask import abort, flash, redirect, render_template, request, url_for
 from nullius import execution, paths, providers
 from nullius.catalogue import storage
-from nullius.standard import conform, definitions, howto, match, ports
-from nullius.standard import recipe as standard_recipe
+from nullius.standard.contract import definitions, match, ports
+from nullius.standard.pages import howto, recipe as standard_recipe
+from nullius.standard.proofs import conform
 
 from .core import app
 from . import shared

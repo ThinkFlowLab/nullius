@@ -6,8 +6,8 @@ import shutil
 import socket
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from nullius import constraints, execution, hosts, paths, prerequisites, prices, providers, sandbox, secrets, settings
-from nullius.standard import container
-from nullius.standard import recipe as standard_recipe
+from nullius.standard.containers import container
+from nullius.standard.pages import recipe as standard_recipe
 from nullius.judge import client
 
 from .core import app

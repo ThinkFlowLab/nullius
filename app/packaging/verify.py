@@ -25,7 +25,7 @@ BACKEND = r'''
 import importlib.metadata, importlib.util, json, pathlib, sys
 import nullius
 from nullius.catalogue import catalog
-from nullius.standard import definitions
+from nullius.standard.contract import definitions
 assert importlib.util.find_spec('flask') is None
 assert importlib.util.find_spec('harbor') is None
 assert importlib.util.find_spec('app') is None

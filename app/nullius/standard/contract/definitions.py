@@ -29,7 +29,7 @@ is run as the other side of a pair (:func:`control`), with no agent, no
 capability and no model of its own; ``nop`` and ``oracle`` are the words Harbor
 calls its controls by, so the runs pages read the jobs as controls. A
 benchmark's ``proven`` is what ``cli prove`` found, per dataset
-(``standard/prove.py``).
+(``standard/proofs/prove.py``).
 
 A benchmark's **setups** are driver methods behind one Original procedure.
 ``original`` uses the upstream's model selection; ``model`` substitutes the
@@ -81,14 +81,14 @@ import os
 import re
 from typing import Callable, Dict, List, Optional, Tuple
 
-from nullius.standard import ports
+from nullius.standard.contract import ports
 from nullius import paths
 from nullius.catalogue import storage
 from . import names
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-CATALOGUE = os.path.join(os.path.dirname(HERE), "catalogue")
-KITS = os.path.join(HERE, "kits")
+STANDARD = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))      # the standard's folder, which holds this one
+CATALOGUE = os.path.join(os.path.dirname(STANDARD), "catalogue")
+KITS = os.path.join(STANDARD, "kits")
 
 KINDS = {
     "benchmark": {"schema": "nullius.benchmark/v1", "dir": "benchmarks", "file": "standard.json"},
@@ -885,7 +885,7 @@ def _environments(envs, here: Optional[str]) -> List[str]:
         if "local_ok" in e and not isinstance(e["local_ok"], bool):
             bad.append(f"{w}.local_ok: true or false")
         if "network" in e:
-            from . import network_requirements
+            from ..requirements import network_requirements
             bad += [f"{w}.{message}" for message in network_requirements.problems(e["network"])]
         bad += _secrets(w, e.get("needs_secrets"), bool(e.get("local_ok")), settings)
     kinds: Dict[str, set] = {}

@@ -1,5 +1,5 @@
 """Kit for cap.memory/v1: add sessions, recall for a question, the fact must come back."""
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 
 FILLER = ["We discussed the train timetable for the weekend.", "The weather was cold and grey all morning.",
           "I watched a documentary about volcanoes.", "Dinner plans changed to a quiet night in.",

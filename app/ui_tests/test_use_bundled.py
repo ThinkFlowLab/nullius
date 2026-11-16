@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from nullius.catalogue import catalog, storage
-from nullius.standard import definitions
+from nullius.standard.contract import definitions
 from .test_routes import web
 
 

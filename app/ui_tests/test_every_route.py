@@ -150,10 +150,10 @@ class EveryRoute(unittest.TestCase):
                     local["key"] = catalog.load().listed_benchmarks[0].key
                 # an agent's or a capability's page is the standard's definition of that key
                 if raw in ("/agents/<key>", "/capabilities/<key>", "/features/<key>"):
-                    from nullius.standard import definitions
+                    from nullius.standard.contract import definitions
                     local["key"] = definitions.load("agent" if raw.startswith("/agents") else "capability")[0][0]["key"]
                 if raw == "/kits/<key>":
-                    from nullius.standard import definitions
+                    from nullius.standard.contract import definitions
                     local["key"] = definitions.kits()[0]["key"]
                 # its edit form is for a Harbor entry on the hub or in the registry
                 if raw == "/benchmarks/<key>/edit":

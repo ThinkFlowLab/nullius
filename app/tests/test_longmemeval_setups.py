@@ -17,7 +17,8 @@ import tempfile
 import textwrap
 import unittest
 
-from nullius.standard import definitions, install
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import install
 
 BENCH = definitions.get("benchmark", "longmemeval")
 DRIVER = os.path.join(BENCH["_here"], "driver.py")

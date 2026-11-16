@@ -12,7 +12,11 @@ import unittest
 from unittest.mock import patch
 
 from nullius.runs import classify, feasibility, parse
-from nullius.standard import definitions, install, match, prove, recipe, run
+from nullius.standard.contract import definitions, match
+from nullius.standard.pages import recipe
+from nullius.standard.proofs import prove
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 CONTROLS = {"nop": {"source": "nullius", "from": "Nothing runs; the answer is empty."},
@@ -115,7 +119,7 @@ class ControlRun(unittest.TestCase):
         """The shard before the limit, each unit's tag its place in the whole
         dataset, the config saying which shard of which launch; merged, the
         two read as the one run they are."""
-        from nullius.standard import merge, shard
+        from nullius.standard.runner import merge, shard
         b = kit("agent-workspace-v1", os.path.join(self.tmp, "kits"))
         go = lambda which, **kw: run.run(b, definitions.control(b, which), model="", provider="openai",
                                          jobs_root=os.path.join(self.tmp, "jobs"), env={}, say=lambda s: None, **kw)
@@ -199,7 +203,7 @@ class Prove(unittest.TestCase):
         self.assertEqual(definitions.problems(written, "benchmark"), [])
 
     def test_a_shard_s_proof_runs_its_controls_on_its_units_and_says_which(self):
-        from nullius.standard import shard
+        from nullius.standard.runner import shard
         b = kit("agent-workspace-v1", os.path.join(self.tmp, "kits"))
         got = self.prove(b, shard=(2, 2), launch="P", write=False)["kit"]
         self.assertEqual(got["oracle"]["shard"], "2/2"); self.assertNotIn("shard", got["units"])
@@ -281,7 +285,7 @@ class Prove(unittest.TestCase):
         self.assertIn("held-unit-2", b["proven"]["leaky"]["failed"]["leak"]["problems"][0])
 
 
-LEAKY = '''from nullius.standard.jsonl import serve
+LEAKY = '''from nullius.standard.protocols.jsonl import serve
 import os
 ANSWER = "the reference answer is forty-two"
 def units(dataset):
@@ -302,7 +306,7 @@ def score(unit, dir, transcript, answer):
 serve({"units": units, "setup": setup, "oracle": oracle, "score": score})
 '''
 
-HELD = '''from nullius.standard.jsonl import serve
+HELD = '''from nullius.standard.protocols.jsonl import serve
 import os
 ANSWER = "the reference answer is forty-two"
 UNITS = {"choice": ["held-unit-1"], "leaky": ["held-unit-2"]}
@@ -397,7 +401,7 @@ class ProofDriverCredentials(unittest.TestCase):
             here = Path(tmp) / "benchmark"
             here.mkdir()
             (here / "driver.py").write_text('''import os
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 def units(dataset):
     assert os.environ.get("HF_TOKEN") == "synthetic-proof-token"
     assert "AGENT_ONLY" not in os.environ

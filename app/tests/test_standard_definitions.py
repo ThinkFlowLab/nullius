@@ -13,7 +13,9 @@ import tempfile
 import unittest
 from unittest import mock
 
-from nullius.standard import cli, definitions, jsonl, match, ports
+from nullius.standard import cli
+from nullius.standard.contract import definitions, match, ports
+from nullius.standard.protocols import jsonl
 from tests import APP
 
 BENCH = {

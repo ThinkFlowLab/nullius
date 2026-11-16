@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from nullius.standard import ports
-from nullius.standard.definitions import CONTROLS, port_skills, ref_of, skills_shown
+from nullius.standard.contract import ports
+from nullius.standard.contract.definitions import CONTROLS, port_skills, ref_of, skills_shown
 
 
 def fit(bench: dict, other: dict) -> List[str]:

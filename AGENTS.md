@@ -60,9 +60,16 @@ and its resources. The source layout stays under `app/`.
   `harbor/` (`source`: the Harbor a recipe pins - built, kept, scanned for its agents;
   `feed`: the live feed any Harbor writes, from its own trial hooks),
   `importers/` (`atif` ATIF, `otel` OpenTelemetry, and the `cli`), `judge/` (`questions`, `state`, `client`, `store`, `batch`, `reconcile`, `lanes`),
-  `standard/` (the Nullius standard, `docs/standard.md`: `ports`, `names` (capability vocabulary and legacy aliases), `definitions` (with an agent's or capability's versions), `match`,
-  `jsonl`, `acp`, `cancellation` (interruptible protocol waits), `relay`, `ledger` (a run's spending cap), `pins` (image digests checked against registry tags), `install`, `run`, `container` (the container backend), `setup_container` (an Original setup's driver and its Linux dependencies in Docker), `forward` (a licence server's one door from it, or a benchmark's MCP server's), `web_services` (HTTP fixtures a driver's setup declares, each behind a unit-local Docker door), `mcp_machine` and `mcp_bridge` (a benchmark's MCP server run on the machine, in its driver's environment, and the agent's bridge to it), `network_requirements` (an environment's declared public web access: the schema and the connectivity check), `hostreq` (what a benchmark's options need of the machine its driver runs on: the check and the install) and `egress` (an own image's check's proxy to public addresses), `job`, `conform`, `fidelity` (ACP against the agent's own CLI), `prove` (a benchmark's controls and proofs), `shard` and `merge` (one run over many machines), `recipe` (the builder's standard recipe), `howto` (the How to add steps) and the `cli`; its
-  `payload` snapshots the running backend and effective catalogue for a remote host;
+  `standard/` (the Nullius standard, `docs/standard.md`, one folder per purpose:
+  `contract/`: `ports`, `names` (capability vocabulary and legacy aliases), `definitions` (with an agent's or capability's versions), `match`;
+  `requirements/`, what a run needs of the machine: `install`, `hostreq` (what a benchmark's options need of the machine its driver runs on: the check and the install), `network_requirements` (an environment's declared public web access: the schema and the connectivity check);
+  `protocols/`: `jsonl`, `acp`, `cancellation` (interruptible protocol waits);
+  `calls/`: `relay`, `ledger` (a run's spending cap);
+  `containers/`: `container` (the container backend), `setup_container` (an Original setup's driver and its Linux dependencies in Docker), `forward` (a licence server's one door from it, or a benchmark's MCP server's), `web_services` (HTTP fixtures a driver's setup declares, each behind a unit-local Docker door), `mcp_machine` and `mcp_bridge` (a benchmark's MCP server run on the machine, in its driver's environment, and the agent's bridge to it), `egress` (an own image's check's proxy to public addresses);
+  `runner/`: `run`, `job`, `pace` (how soon the next unit starts after one ends rate-limited), `shard` and `merge` (one run over many machines), `payload` (a snapshot of the running backend and effective catalogue for a remote host);
+  `proofs/`: `conform`, `fidelity` (ACP against the agent's own CLI), `prove` (a benchmark's controls and proofs), `pins` (image digests checked against registry tags);
+  `pages/`: `recipe` (the builder's standard recipe), `howto` (the How to add steps);
+  and the `cli` at its top;
   conformance kits under `standard/kits/`, each a benchmark: a `driver` and, for the
   tools kit, an MCP server `mcp_kit`) - the definitions it reads are in the catalogue:
   a benchmark's `standard.json` and `driver` in its folder (τ³-bench's also the MCP

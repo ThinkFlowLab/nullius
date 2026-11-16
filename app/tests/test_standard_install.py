@@ -10,7 +10,7 @@ import threading
 import unittest
 from unittest import mock
 
-from nullius.standard import install
+from nullius.standard.requirements import install
 
 
 class UpstreamTest(unittest.TestCase):

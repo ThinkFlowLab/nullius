@@ -19,7 +19,7 @@ import subprocess
 from typing import Callable, Iterable, Optional
 
 from nullius import providers
-from nullius.standard import container
+from nullius.standard.containers import container
 
 CONTROLS = ("nop", "oracle")
 PROVIDER_KEYS = ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "MODEL_API_URL")

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from nullius.standard import fidelity, relay
+from nullius.standard.calls import relay
+from nullius.standard.proofs import fidelity
 
 CONTEXT = [{"type": "message", "role": "developer", "content": [{"type": "input_text", "text": "permissions"}]},
            {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "write result.txt"}]}]
