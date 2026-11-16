@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from 'traces/_attempts.html' import attempt_count %}
+{% from 'traces/_repeats.html' import repeat_count %}
 {% block title %}{{ task }} side by side — Nullius{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">
 <style>
@@ -16,7 +16,7 @@
    call it without knowing which page they are on. Only the legend state rides
    in it: this page has no trace filter, so `f` is always the empty one. #}
 {% macro view_url(f, cf=none) -%}
-{{ url_for('compare_task', task=task, pick=picks, cohort=cohort, dataset=dataset, attempt=chosen,
+{{ url_for('compare_task', task=task, pick=picks, cohort=cohort, dataset=dataset, repeat=chosen,
            **((cf if cf is not none else chart_filter).query)) }}
 {%- endmacro %}
 
@@ -58,12 +58,12 @@
       {% endif %}
     </div>
     <p class="compare-workspace">{{ p.selection.workspace_label }}</p>
-    {% if p.attempt_links %}
-    <div class="attempt-head">
-      <span class="attempt-count">{{ attempt_count(p.tried) }}</span>
-      <nav class="attempt-tabs" aria-label="Attempts by {{ p.job.agent_label or p.job.job_id }}">
-        {%- for a in p.attempt_links %}
-        <a class="attempt-tab oc-{{ a.trial.outcome }}" href="{{ a.href }}" title="Attempt {{ loop.index }}: {{ a.trial.outcome_label }}"{% if a.current %} aria-current="page"{% endif %}>{{ ('Attempt ' if p.tried.n <= 4 else '') ~ loop.index }}</a>
+    {% if p.repeat_links %}
+    <div class="repeat-head">
+      <span class="repeat-count">{{ repeat_count(p.tried) }}</span>
+      <nav class="repeat-tabs" aria-label="Repeats by {{ p.job.agent_label or p.job.job_id }}">
+        {%- for a in p.repeat_links %}
+        <a class="repeat-tab oc-{{ a.trial.outcome }}" href="{{ a.href }}" title="Repeat {{ loop.index }}: {{ a.trial.outcome_label }}"{% if a.current %} aria-current="page"{% endif %}>{{ ('Repeat ' if p.tried.n <= 4 else '') ~ loop.index }}</a>
         {%- endfor %}
       </nav>
     </div>
@@ -331,7 +331,7 @@
         next.forEach(id => url.searchParams.append('pick', id));
         url.searchParams.set('cohort', {{ cohort|tojson }});
         url.searchParams.set('dataset', {{ dataset|tojson }});
-        {{ chosen|tojson }}.forEach(a => url.searchParams.append('attempt', a));
+        {{ chosen|tojson }}.forEach(a => url.searchParams.append('repeat', a));
         location.href = url;
       });
     });

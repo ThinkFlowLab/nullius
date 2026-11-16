@@ -1,0 +1,25 @@
+{# One tab per repeat of a task, and All repeats. `current` is the trial on
+   screen, or none on the All repeats view. A tab keeps the evidence tab the
+   reader is on (conversation.js rewrites `tab` on every [data-keep-tab]). #}
+{% macro repeat_tabs(job, repeats, current=none, workspace=none) -%}
+<nav class="repeat-tabs" aria-label="Repeats of this task">
+  {%- for a in repeats.trials %}
+  {%- set on = current is not none and a.trial_name == current.trial_name %}
+  <a class="repeat-tab oc-{{ a.outcome }}" data-keep-tab
+     href="{{ url_for('trial', job_id=job.job_id, trial_name=a.trial_name, workspace=workspace) }}"
+     title="Repeat {{ loop.index }}: {{ a.outcome_label }}"{% if on %} aria-current="page"{% endif %}>{{ ('Repeat ' if repeats.n <= 4 else '') ~ loop.index }}</a>
+  {%- endfor %}
+  <a class="repeat-tab all" href="{{ url_for('trial_repeats', job_id=job.job_id, trial_name=(current or repeats.trials[0]).trial_name, workspace=workspace) }}"
+     {% if current is none %} aria-current="page"{% endif %}>All repeats</a>
+</nav>
+{%- endmacro %}
+
+{# How a run did at one task over its repeats, as its adjusted rate reads
+   them: passes over the repeats that ran, infra counted apart. `word` false
+   leaves out "passed", for a row with no room. #}
+{% macro repeat_count(repeats, word=true) -%}
+{%- if repeats.has_verdicts %}<b>{{ repeats.n_passed }}/{{ repeats.n_ran }}</b>{% if word %} passed{% endif %}
+{%- elif repeats.mean_score is not none %}mean <b>{{ '%.2f'|format(repeats.mean_score) }}</b> over {{ repeats.n_scored }}
+{%- else %}{{ repeats.n }} repeats{% endif %}
+{%- if repeats.n_infra %}<span class="faint"> · {{ repeats.n_infra }} infra</span>{% endif %}
+{%- endmacro %}

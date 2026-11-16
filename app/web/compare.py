@@ -458,7 +458,7 @@ def trace_panel(t, chart_filter=None):
 
 @app.route("/compare/task/<path:task>")
 def compare_task(task):
-    """Full detail of the same last indexed attempt shown in the task table."""
+    """Full detail of the same last indexed repeat shown in the task table."""
     view = _comparison_requested()
     if len(view.selected) < 2:
         return redirect(url_for("compare_picker", cohort=view.cohort))
@@ -475,12 +475,12 @@ def compare_task(task):
     # trace filter (`hide`) is deliberately not offered here — a filtered view
     # belongs to one trial, and is saved from its own page.
     cfilt = charts.ChartFilter.of(request.args.getlist("chart_off"))
-    # Each side shows one attempt: the one `attempt=<run>/<trial>` names, else
+    # Each side shows one repeat: the one `repeat=<run>/<trial>` names, else
     # the last indexed, as the task table does.
-    asked = dict(value.rsplit("/", 1) for value in request.args.getlist("attempt") if "/" in value)
+    asked = dict(value.rsplit("/", 1) for value in request.args.getlist("repeat") if "/" in value)
     sides = []
     for selection, job, t, group in zip(view.selected, view.jobs, row.trials, row.tried):
-        # the row's own attempts, so this page and the table count the same ones
+        # the row's own repeats, so this page and the table count the same ones
         tried = list(group.trials) if group else []
         chosen = next((x for x in tried if x.trial_name == asked.get(selection.value)), t)
         sides.append((selection, job, chosen, group))
@@ -493,11 +493,11 @@ def compare_task(task):
             others = [q for q in chosen_query if q.rsplit("/", 1)[0] != selection.value]
             links = [{"trial": x, "current": x.trial_name == t.trial_name,
                       "href": url_for("compare_task", task=task, pick=view.references, cohort=view.cohort,
-                                      dataset=row.dataset, attempt=others + [f"{selection.value}/{x.trial_name}"],
+                                      dataset=row.dataset, repeat=others + [f"{selection.value}/{x.trial_name}"],
                                       **cfilt.query)}
                      for x in group.trials]
         panels.append({"job": job, "selection": selection, "trial": t,
-                       "tried": group, "attempt_links": links,
+                       "tried": group, "repeat_links": links,
                        "traj": traj if traj and not traj.error else None,
                        **trace_panel(t, cfilt)})
     return render_template(

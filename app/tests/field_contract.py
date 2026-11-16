@@ -45,7 +45,7 @@ MANIFEST = os.path.join(HERE, "field_contract.json")
 # Moving a module must not reset the field comparison or conceal removals.
 PACKAGE_OF = {
     "parse": "nullius.runs", "classify": "nullius.runs", "artifacts": "nullius.runs",
-    "attempts": "nullius.runs",
+    "repeats": "nullius.runs",
     "trace": "nullius.traces", "trajectory": "nullius.traces", "charts": "nullius.traces",
     "conversation": "nullius.traces", "behavior": "nullius.traces",
     "comparison": "nullius.compare",

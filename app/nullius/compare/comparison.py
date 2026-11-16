@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Mapping, Sequence
 
-from nullius.runs import attempts as task_attempts
+from nullius.runs import repeats as task_repeats
 from nullius.runs.parse import Job, Trial
 
 
@@ -78,14 +78,14 @@ def resolve(values: Sequence[str], jobs_by_workspace: Mapping[str, Sequence[Job]
 @dataclass(frozen=True)
 class TaskRow:
     """One task across the runs. ``trials`` holds each run's last indexed
-    attempt, the one its cell links to; ``attempts`` counts each run's
-    attempts and ``tried`` holds them, read as ``attempts.Attempts`` reads
+    repeat, the one its cell links to; ``repeats`` counts each run's
+    repeats and ``tried`` holds them, read as ``repeats.Repeats`` reads
     them (infra apart)."""
     dataset: str
     task: str
     trials: tuple[Trial | None, ...]
-    attempts: tuple[int, ...]
-    tried: tuple[task_attempts.Attempts | None, ...] = ()
+    repeats: tuple[int, ...]
+    tried: tuple[task_repeats.Repeats | None, ...] = ()
 
     def _compared(self) -> list:
         """The runs whose rates are set against each other, one kind of number
@@ -101,15 +101,15 @@ class TaskRow:
 
     @property
     def differs(self) -> bool:
-        """The pass rate moved, or the attempts that ran ended differently:
+        """The pass rate moved, or the repeats that ran ended differently:
         one failed verification, another timed out. A run none of whose
-        attempts ran differs from one that ran."""
+        repeats ran differs from one that ran."""
         return self.rate_moved or len({a.endings for a in self.tried if a}) > 1
 
     @property
     def movement(self) -> float:
         """How far apart the runs' pass rates are, each read as if the run had
-        one more pass and one more fail, so a gap over many attempts outranks
+        one more pass and one more fail, so a gap over many repeats outranks
         the same gap over one: 1/1 against 0/1 reads 67% against 33%, 2/3
         against 0/3 reads 60% against 20%. Mean scores are taken as they are.
         0 when the rates are the same, and it can be 0 when they are not (1/1
@@ -150,8 +150,8 @@ def build(selected: Sequence[SelectedRun], cohort: str = "whole") -> Comparison:
     """Build a whole-run or exact shared-task view without changing any Job.
 
     Matching uses the dataset string as recorded, without alias/path guessing.
-    Every attempt on a shared task remains in the rates, costs and token sums.
-    A task row holds every attempt and keeps the last indexed one to link to;
+    Every repeat on a shared task remains in the rates, costs and token sums.
+    A task row holds every repeat and keeps the last indexed one to link to;
     rows sort by how far the pass rate moved (``TaskRow.movement``), the
     largest first, then the other rows whose rate moved, then the rest that
     differ.
@@ -172,7 +172,7 @@ def build(selected: Sequence[SelectedRun], cohort: str = "whole") -> Comparison:
 
     sets = [{key(selection, trial) for trial in selection.job.trials} for selection in selected]
     common = set.intersection(*sets) if sets else set()
-    # each task's attempts, one list per run, the tasks in the order they appear
+    # each task's repeats, one list per run, the tasks in the order they appear
     jobs, excluded, repeated, by_task = [], [], [], {}
     for column, selection in enumerate(selected):
         original = selection.job
@@ -189,14 +189,14 @@ def build(selected: Sequence[SelectedRun], cohort: str = "whole") -> Comparison:
             by_task.setdefault(key(selection, trial), [[] for _ in selected])[column].append(trial)
 
     def task_row(task_key, columns):
-        # the cell links to the last indexed attempt
+        # the cell links to the last indexed repeat
         return TaskRow(*task_key, tuple(ts[-1] if ts else None for ts in columns), tuple(len(ts) for ts in columns),
-                       tuple(task_attempts.Attempts(tuple(task_attempts.ordered(ts))) if ts else None for ts in columns))
+                       tuple(task_repeats.Repeats(tuple(task_repeats.ordered(ts))) if ts else None for ts in columns))
 
     rows = [task_row(task_key, columns) for task_key, columns in by_task.items()]
     rows.sort(key=lambda row: (-round(row.movement, 3), not row.rate_moved, not row.differs, row.dataset, row.task))
     # pass@k from the rows' own tasks, so the summary and the table count alike
-    pass_k = tuple(task_attempts.for_tasks(row.tried[column].trials for row in rows if row.tried[column])
+    pass_k = tuple(task_repeats.for_tasks(row.tried[column].trials for row in rows if row.tried[column])
                    for column in range(len(selected)))
     return Comparison(selected, cohort, tuple(jobs), tuple(rows), len(common),
                       tuple(excluded), tuple(repeated), datasets_match, known, pass_k)

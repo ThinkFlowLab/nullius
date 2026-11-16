@@ -23,7 +23,7 @@
 {%- endmacro %}
 
 {% from 'traces/_judgement.html' import judgement_panel %}
-{% from 'traces/_attempts.html' import attempt_tabs, attempt_count %}
+{% from 'traces/_repeats.html' import repeat_tabs, repeat_count %}
 {% block body %}
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
 
@@ -49,10 +49,10 @@
     title="The agent's version as the trial's agent_info reports it">v{{ trial.agent_version }}</span>{% endif %}
   {%- if job.runner %}<span class="dot">·</span>{{ what_ran(job) }}{% endif %}
 </p>
-{% if attempts %}
-<div class="attempt-head">
-  <span class="attempt-count">{{ attempt_count(attempts) }}</span>
-  {{ attempt_tabs(job, attempts, trial, request.args.get('workspace')) }}
+{% if repeats %}
+<div class="repeat-head">
+  <span class="repeat-count">{{ repeat_count(repeats) }}</span>
+  {{ repeat_tabs(job, repeats, trial, request.args.get('workspace')) }}
 </div>
 {% endif %}
 
@@ -337,7 +337,7 @@
 {{ judgement_panel(llm_judgement, job, trial, csrf) }}
 </section>
 <section class="trial-tab" id="trial-task" role="tabpanel" aria-labelledby="tab-task">
-{# The task's instruction, scored on its own text: once per dataset and task, the same for every attempt,
+{# The task's instruction, scored on its own text: once per dataset and task, the same for every repeat,
    nothing of any run read. An unclear instruction caps every agent on this task - a finding about the
    benchmark, not this trial. The score changes no outcome. #}
 {% set tt = task_tab(job, trial, traj) %}

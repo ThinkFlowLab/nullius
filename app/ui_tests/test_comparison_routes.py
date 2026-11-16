@@ -86,21 +86,21 @@ class ComparisonRoutes(unittest.TestCase):
             self.assertEqual(query["cohort"], ["matched"])
             self.assertEqual(query["dataset"], [self.left.dataset])
 
-    def test_last_indexed_attempt_is_the_same_in_the_table_and_detail(self):
-        first = trial("shared", "agent_error", trial_name="attempt-first")
-        last = trial("shared", trial_name="attempt-last")
+    def test_last_indexed_repeat_is_the_same_in_the_table_and_detail(self):
+        first = trial("shared", "agent_error", trial_name="repeat-first")
+        last = trial("shared", trial_name="repeat-last")
         self.left.trials = [first, last]
         table = self.get(cohort="matched")
         detail = self.get("/compare/task/shared", cohort="matched", dataset=self.left.dataset)
         for body in (table, detail):
-            self.assertIn("/trial/run/attempt-last?workspace=active", unescape(body))
-            self.assertNotIn("/trial/run/attempt-first?workspace=active", unescape(body))
+            self.assertIn("/trial/run/repeat-last?workspace=active", unescape(body))
+            self.assertNotIn("/trial/run/repeat-first?workspace=active", unescape(body))
         self.assertEqual(self.cells(table, "Trials"), ["2", "1"])
-        tabs = re.findall(r'<a class="attempt-tab[^"]*" href="([^"]*)"[^>]*?( aria-current="page")?>', detail)
+        tabs = re.findall(r'<a class="repeat-tab[^"]*" href="([^"]*)"[^>]*?( aria-current="page")?>', detail)
         self.assertEqual([bool(current) for _, current in tabs], [False, True])
         self.assertIn("<b>1/2</b> passed", detail)
 
-    def test_a_compared_task_counts_its_infra_attempts_apart(self):
+    def test_a_compared_task_counts_its_infra_repeats_apart(self):
         limited = trial("shared", "rate_limited", trial_name="limited", exception_type="ApiRateLimitError")
         self.left.trials = [trial("shared", trial_name="one"), trial("shared", trial_name="two"), limited]
         expected = '<b>2/2</b> passed<span class="faint"> · 1 infra</span>'
@@ -113,21 +113,21 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertIn("mean <b>0.60</b> over 2", detail)
         self.assertNotIn("0/2", detail)
 
-    def test_each_side_of_a_compared_task_chooses_its_attempt(self):
-        first = trial("shared", "agent_error", trial_name="attempt-first")
-        last = trial("shared", trial_name="attempt-last")
+    def test_each_side_of_a_compared_task_chooses_its_repeat(self):
+        first = trial("shared", "agent_error", trial_name="repeat-first")
+        last = trial("shared", trial_name="repeat-last")
         self.left.trials = [first, last]
         detail = unescape(self.get("/compare/task/shared", cohort="matched", dataset=self.left.dataset,
-                                   attempt="active:run/attempt-first"))
-        self.assertIn("/trial/run/attempt-first?workspace=active", detail)
-        self.assertNotIn("/trial/run/attempt-last?workspace=active", detail)
-        # the other attempt's tab keeps the right side as it is and names the left one
-        href = re.search(r'<a class="attempt-tab oc-resolved" href="([^"]*)"', detail).group(1)
-        self.assertEqual(parse_qs(urlsplit(href).query)["attempt"], ["active:run/attempt-last"])
-        # a name that is not an attempt at this task falls back to the last indexed
+                                   repeat="active:run/repeat-first"))
+        self.assertIn("/trial/run/repeat-first?workspace=active", detail)
+        self.assertNotIn("/trial/run/repeat-last?workspace=active", detail)
+        # the other repeat's tab keeps the right side as it is and names the left one
+        href = re.search(r'<a class="repeat-tab oc-resolved" href="([^"]*)"', detail).group(1)
+        self.assertEqual(parse_qs(urlsplit(href).query)["repeat"], ["active:run/repeat-last"])
+        # a name that is not a repeat of this task falls back to the last indexed
         fallback = unescape(self.get("/compare/task/shared", cohort="matched", dataset=self.left.dataset,
-                                     attempt="active:run/right-only"))
-        self.assertIn("/trial/run/attempt-last?workspace=active", fallback)
+                                     repeat="active:run/right-only"))
+        self.assertIn("/trial/run/repeat-last?workspace=active", fallback)
 
     def test_dataset_mismatch_is_an_empty_matched_cohort_not_a_false_join(self):
         self.right.dataset = "different-dataset@1.0"

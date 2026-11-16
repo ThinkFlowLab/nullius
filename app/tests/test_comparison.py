@@ -82,13 +82,13 @@ class CohortArithmetic(unittest.TestCase):
         self.assertEqual([asdict(left), asdict(right)], originals)
 
     def test_infra_is_excluded_but_unknown_stays_in_adjusted_denominator(self):
-        attempts = [trial("a"), trial("b", "rate_limited"), trial("c", "unknown")]
-        result = comparison.build(selected(job(attempts), job(attempts)), "matched")
+        repeats = [trial("a"), trial("b", "rate_limited"), trial("c", "unknown")]
+        result = comparison.build(selected(job(repeats), job(repeats)), "matched")
         self.assertAlmostEqual(result.jobs[0].raw_solve_rate, 1 / 3)
         self.assertEqual(result.jobs[0].adjusted_solve_rate, .5)
         self.assertEqual(result.jobs[0].n_infra, 1)
 
-    def test_repeated_attempts_count_in_metrics_and_rows_disclose_their_projection(self):
+    def test_repeated_repeats_count_in_metrics_and_rows_disclose_their_projection(self):
         first = trial("a", "agent_error", trial_name="a-1", cost_usd=2)
         last = trial("a", trial_name="a-2", cost_usd=3)
         result = comparison.build(selected(job([first, last]), job([trial("a")])), "matched")
@@ -97,14 +97,14 @@ class CohortArithmetic(unittest.TestCase):
         self.assertEqual(result.jobs[0].total_cost_usd, 5)
         self.assertEqual(result.shared_tasks, 1)
         self.assertEqual(result.repeated_trials, (1, 0))
-        self.assertEqual(result.tasks[0].attempts, (2, 1))
+        self.assertEqual(result.tasks[0].repeats, (2, 1))
         self.assertIs(result.tasks[0].trials[0], last)
 
-    def test_a_task_disagrees_by_its_pass_rate_over_every_attempt(self):
+    def test_a_task_disagrees_by_its_pass_rate_over_every_repeat(self):
         def tries(task, *outcomes):
             return [trial(task, o, trial_name=f"{task}-{i}") for i, o in enumerate(outcomes)]
         fail = "failed_verification"
-        # same 2/3 on "same", last attempts differ; 0/3 against 3/3 on "far"; 1/3 against 2/3 on "near"
+        # same 2/3 on "same", last repeats differ; 0/3 against 3/3 on "far"; 1/3 against 2/3 on "near"
         left = job(tries("same", "resolved", fail, "resolved") + tries("far", fail, fail, fail) + tries("near", "resolved", fail, fail))
         right = job(tries("same", "resolved", "resolved", fail) + tries("far", "resolved", "resolved", "resolved")
                     + tries("near", "resolved", "resolved", fail))
@@ -112,23 +112,23 @@ class CohortArithmetic(unittest.TestCase):
         self.assertEqual([(r.task, r.differs) for r in result.tasks], [("far", True), ("near", True), ("same", False)])
         self.assertEqual(result.n_differing, 2)
         far = result.tasks[0]
-        self.assertEqual(far.attempts, (3, 3))
+        self.assertEqual(far.repeats, (3, 3))
         self.assertEqual([(a.n_passed, a.n_ran, a.rate, a.has_verdicts) for a in far.tried], [(0, 3, 0.0, True), (3, 3, 1.0, True)])
-        self.assertEqual(far.trials[0].trial_name, "far-2")     # the cell still links to the last indexed attempt
+        self.assertEqual(far.trials[0].trial_name, "far-2")     # the cell still links to the last indexed repeat
 
-    def test_a_single_attempt_that_ended_differently_still_differs(self):
+    def test_a_single_repeat_that_ended_differently_still_differs(self):
         fail = "failed_verification"
         left = job([trial("moved", "resolved"), trial("timed-out", fail), trial("unscored", "resolved"), trial("same", fail)])
         right = job([trial("moved", fail), trial("timed-out", "agent_error", exception_type="AgentTimeoutError"),
                      trial("unscored", "unknown"), trial("same", fail)])
         result = comparison.build(selected(left, right), "matched")
-        # the pass rate moved first, then the rows whose attempts ended differently, then the rest
+        # the pass rate moved first, then the rows whose repeats ended differently, then the rest
         self.assertEqual([(r.task, r.differs) for r in result.tasks],
                          [("moved", True), ("timed-out", True), ("unscored", True), ("same", False)])
         self.assertEqual([r.movement for r in result.tasks[1:]], [0.0, 0.0, 0.0])
         self.assertEqual(result.n_differing, 3)
 
-    def test_infra_attempts_are_counted_apart_not_as_failures(self):
+    def test_infra_repeats_are_counted_apart_not_as_failures(self):
         tries = lambda task, *outcomes, **kw: [trial(task, o, trial_name=f"{task}-{i}", **kw) for i, o in enumerate(outcomes)]
         limited = dict(exception_type="ApiRateLimitError")
         left = job(tries("limited", "resolved", "resolved", "resolved") + tries("partly", "resolved", "resolved", "resolved")
@@ -144,10 +144,10 @@ class CohortArithmetic(unittest.TestCase):
         self.assertEqual(list(rows)[0], "moved")
         partly = rows["partly"].tried[1]
         self.assertEqual((partly.n_passed, partly.n_ran, partly.n_infra, partly.rate), (2, 2, 1, 1.0))
-        # the attempts that ran ended alike: a rate limit beside them is no disagreement
+        # the repeats that ran ended alike: a rate limit beside them is no disagreement
         self.assertEqual((rows["partly"].movement, rows["partly"].differs), (0.0, False))
 
-    def test_a_steady_gap_outranks_one_flipped_attempt(self):
+    def test_a_steady_gap_outranks_one_flipped_repeat(self):
         fail = "failed_verification"
         left = job([trial("flip", "resolved", trial_name="p0")]
                    + [trial("steady", o, trial_name=f"p{i + 1}") for i, o in enumerate(["resolved", "resolved", fail])])
@@ -181,23 +181,23 @@ class CohortArithmetic(unittest.TestCase):
                   + [trial("b", o, trial_name=f"b-{i}") for i, o in enumerate(["resolved", fail, fail])]
                   # an agent's timeout is a failure of its own: its task stays in
                   + [trial("c", o, trial_name=f"c-{i}", exception_type="AgentTimeoutError" if i else "") for i, o in enumerate(["resolved", "agent_error", "resolved"])]
-                  # an infra attempt leaves its task out
+                  # an infra repeat leaves its task out
                   + [trial("d", o, trial_name=f"d-{i}", exception_type="ApiRateLimitError" if i else "") for i, o in enumerate(["resolved", "rate_limited", "resolved"])])
         got = comparison.build(selected(run, run)).pass_k[0]
-        self.assertEqual((got["units"], got["attempts"]), (3, 3))
+        self.assertEqual((got["units"], got["repeats"]), (3, 3))
         passed = (2, 1, 2)
         for k in (1, 2, 3):
             self.assertAlmostEqual(got["at"][k], sum(1 - comb(3 - c, k) / comb(3, k) for c in passed) / 3)
             self.assertAlmostEqual(got["hat"][k], sum(comb(c, k) / comb(3, k) for c in passed) / 3)
         self.assertAlmostEqual(got["at"][2], (1 + (1 - 1 / 3) + 1) / 3)
-        # one attempt per task: no series
+        # one repeat per task: no series
         self.assertIsNone(comparison.build(selected(job([trial("a")]), job([trial("a")]))).pass_k[0])
 
     def test_pass_at_k_reads_the_tasks_the_rows_read(self):
         # one dataset's short name twice in a run: one row, and one task to pass@k too
         run = job([trial("a", trial_name="x", task_name="d1/a"), trial("a", "failed_verification", trial_name="y", task_name="d2/a")])
         view = comparison.build(selected(run, run))
-        self.assertEqual(view.tasks[0].attempts, (2, 2))
+        self.assertEqual(view.tasks[0].repeats, (2, 2))
         self.assertEqual(view.pass_k[0]["units"], 1)
 
     def test_a_scored_task_moves_by_its_mean_score(self):

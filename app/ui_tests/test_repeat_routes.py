@@ -1,5 +1,5 @@
-"""A task attempted several times: its tabs on the trial page, All attempts,
-and the attempt number on the job page."""
+"""A task repeated several times: its tabs on the trial page, All repeats,
+and the repeat number on the job page."""
 
 from __future__ import annotations
 
@@ -39,14 +39,14 @@ def repeated_job(root: Path, job_id="repeat-run", single=True):
     return parse.parse_job(str(job_dir))
 
 
-def written_job(root: Path, job_id: str, attempts):
-    """A job of ``(trial name, task, minute, reward, exception type)`` attempts:
+def written_job(root: Path, job_id: str, repeats):
+    """A job of ``(trial name, task, minute, reward, exception type)`` repeats:
     a reward of None leaves no verifier result, an exception type records one."""
     job_dir = root / job_id
-    write_json(job_dir / "result.json", {"stats": {"n_trials": len(attempts)}})
+    write_json(job_dir / "result.json", {"stats": {"n_trials": len(repeats)}})
     write_json(job_dir / "config.json", {"agents": [{"name": "fixture-agent", "model_name": "fixture-model"}],
-                                         "datasets": [{"name": "terminal-bench", "n_tasks": 1}], "n_attempts": len(attempts)})
-    for name, task, minute, reward, exception in attempts:
+                                         "datasets": [{"name": "terminal-bench", "n_tasks": 1}], "n_attempts": len(repeats)})
+    for name, task, minute, reward, exception in repeats:
         write_json(job_dir / name / "result.json", {
             "task_name": f"terminal-bench/{task}", "trial_name": name, "source": "terminal-bench",
             "started_at": f"2026-09-01T10:{minute:02d}:00Z", "finished_at": f"2026-09-01T10:{minute + 1:02d}:00Z",
@@ -61,15 +61,15 @@ def written_job(root: Path, job_id: str, attempts):
 
 
 def tabs(html):
-    """(href, current) for every attempt tab, in order."""
+    """(href, current) for every repeat tab, in order."""
     return [(unescape(href), bool(cur)) for href, cur in
-            re.findall(r'<a class="attempt-tab[^"]*"[^>]*?href="([^"]*)"[^>]*?( aria-current="page")?>', html, re.S)]
+            re.findall(r'<a class="repeat-tab[^"]*"[^>]*?href="([^"]*)"[^>]*?( aria-current="page")?>', html, re.S)]
 
 
-class AttemptRoutes(unittest.TestCase):
+class RepeatRoutes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.temp = tempfile.TemporaryDirectory(prefix="nullius-attempts-")
+        cls.temp = tempfile.TemporaryDirectory(prefix="nullius-repeats-")
         cls.root = Path(cls.temp.name)
         cls.job = repeated_job(cls.root)
         cls.ws = workspace.Workspace("active", "Active workspace", ["/fixture"], "2026-01-01", "2026-01-01",
@@ -101,50 +101,50 @@ class AttemptRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, status, path)
         return response.get_data(as_text=True)
 
-    def test_trial_page_has_a_tab_per_attempt_in_start_order(self):
+    def test_trial_page_has_a_tab_per_repeat_in_start_order(self):
         html = self.get("/trial/repeat-run/auth-token__a")
         self.assertEqual(tabs(html), [
             ("/trial/repeat-run/auth-token__c", False),
             ("/trial/repeat-run/auth-token__a", True),
             ("/trial/repeat-run/auth-token__b", False),
-            ("/trial/repeat-run/auth-token__a/attempts", False),
+            ("/trial/repeat-run/auth-token__a/repeats", False),
         ])
-        self.assertIn(">Attempt 2</a>", html)
+        self.assertIn(">Repeat 2</a>", html)
         self.assertIn("<b>2/3</b> passed", html)
-        # the attempt tabs carry the evidence tab along; the All attempts tab does not
+        # the repeat tabs carry the evidence tab along; the All repeats tab does not
         self.assertEqual(html.count("data-keep-tab"), 3)
 
-    def test_a_task_attempted_once_has_no_attempt_tabs(self):
+    def test_a_task_repeated_once_has_no_repeat_tabs(self):
         html = self.get("/trial/repeat-run/single__a")
         self.assertEqual(tabs(html), [])
-        self.assertNotIn("attempt-head", html)
-        single = self.get("/trial/repeat-run/single__a/attempts")
-        self.assertEqual(re.findall(r'>Attempt (\d)</a></td>', single), ["1"])
+        self.assertNotIn("repeat-head", html)
+        single = self.get("/trial/repeat-run/single__a/repeats")
+        self.assertEqual(re.findall(r'>Repeat (\d)</a></td>', single), ["1"])
 
-    def test_all_attempts_lists_each_attempt_once_with_its_link(self):
-        html = self.get("/trial/repeat-run/auth-token__b/attempts")
-        self.assertEqual(tabs(html)[-1], ("/trial/repeat-run/auth-token__c/attempts", True))
-        rows = re.findall(r'<td><a href="(/trial/repeat-run/[^"]+)">Attempt (\d)</a></td>', html)
+    def test_all_repeats_lists_each_repeat_once_with_its_link(self):
+        html = self.get("/trial/repeat-run/auth-token__b/repeats")
+        self.assertEqual(tabs(html)[-1], ("/trial/repeat-run/auth-token__c/repeats", True))
+        rows = re.findall(r'<td><a href="(/trial/repeat-run/[^"]+)">Repeat (\d)</a></td>', html)
         self.assertEqual(rows, [("/trial/repeat-run/auth-token__c", "1"), ("/trial/repeat-run/auth-token__a", "2"),
                                 ("/trial/repeat-run/auth-token__b", "3")])
         self.assertEqual(html.count('class="tag oc-resolved"'), 2)
 
-    def test_job_page_groups_a_tasks_attempts_under_one_row(self):
+    def test_job_page_groups_a_tasks_repeats_under_one_row(self):
         html = self.get("/job/repeat-run")
         self.assertEqual(html.count('<tr class="task-group"'), 1)
         head = re.search(r'<tr class="task-group" data-group="([^"]+)"[^>]*>(.*?)</tr>', html, re.S)
         self.assertEqual(head.group(1), "g-auth-token__c")
         self.assertIn("<b>2/3</b>", head.group(2))
         self.assertEqual(re.findall(r'class="sw oc-(\w+)"', head.group(2)), ["resolved", "failed_verification", "resolved"])
-        self.assertIn('href="/trial/repeat-run/auth-token__c/attempts"', head.group(2))
-        # tokens and times are the mean over the attempts, the range on hover; sorting reads the mean
-        self.assertIn('data-tip="Mean of 3 attempts · 110 to 1.0k">577</span>', head.group(2))
+        self.assertIn('href="/trial/repeat-run/auth-token__c/repeats"', head.group(2))
+        # tokens and times are the mean over the repeats, the range on hover; sorting reads the mean
+        self.assertIn('data-tip="Mean of 3 repeats · 110 to 1.0k">577</span>', head.group(2))
         self.assertIn('data-tokens="576.6666666666666"', head.group(0))
-        # its attempts follow it, in start order, closed until it is opened
-        attempts = re.findall(r'data-trial="([^"]+)"[^>]*class="in-group" data-group="g-auth-token__c" hidden>', html)
-        self.assertEqual(attempts, ["auth-token__c", "auth-token__a", "auth-token__b"])
-        self.assertEqual(re.findall(r'>attempt (\d)</a></td>', html), ["1", "2", "3"])
-        # a task attempted once is an ordinary row
+        # its repeats follow it, in start order, closed until it is opened
+        repeats = re.findall(r'data-trial="([^"]+)"[^>]*class="in-group" data-group="g-auth-token__c" hidden>', html)
+        self.assertEqual(repeats, ["auth-token__c", "auth-token__a", "auth-token__b"])
+        self.assertEqual(re.findall(r'>repeat (\d)</a></td>', html), ["1", "2", "3"])
+        # a task run once is an ordinary row
         self.assertRegex(html, r'data-trial="single__a"[^>]*>\s*<td><a class="task" [^>]*>single</a></td>')
 
     def test_job_page_has_pass_at_k_only_when_every_task_was_tried_twice(self):
@@ -152,31 +152,31 @@ class AttemptRoutes(unittest.TestCase):
         only = repeated_job(self.root, "repeat-only", single=False)
         self.stack.enter_context(patch.object(workspace, "load_jobs", return_value=[only]))
         table = re.search(r'<table class="pass-k" id="pass-k"(.*?)</table>', self.get("/job/repeat-only"), re.S).group(1)
-        self.assertIn("1 task, each read on its first 3 attempts", table)
+        self.assertIn("1 task, each read on its first 3 repeats", table)
         rows = re.findall(r'<th scope="row">(\d+)</th><td>(\d+)%</td><td>(\d+)%</td>', table)
         # 2 of 3 passed: pass@k 2/3, 1, 1; pass^k 2/3, 1/3, 0
         self.assertEqual(rows, [("1", "67", "67"), ("2", "100", "33"), ("3", "100", "0")])
 
-    def test_an_infra_attempt_is_counted_apart_on_the_job_page(self):
+    def test_an_infra_repeat_is_counted_apart_on_the_job_page(self):
         run = written_job(self.root, "infra-run", [("t__a", "t", 0, 1, None), ("t__b", "t", 2, None, "ApiRateLimitError"),
                                                    ("t__c", "t", 4, 0, None)])
         self.assertEqual([t.outcome for t in run.trials if t.trial_name == "t__b"], ["rate_limited"])
         self.stack.enter_context(patch.object(workspace, "load_jobs", return_value=[run]))
         head = re.search(r'<tr class="task-group"[^>]*>(.*?)</tr>', self.get("/job/infra-run"), re.S)
-        # one pass over the two attempts that ran; the rate-limited one is apart, and out of the means
+        # one pass over the two repeats that ran; the rate-limited one is apart, and out of the means
         self.assertIn('<b>1/2</b><span class="faint"> · 1 infra</span>', head.group(1))
-        self.assertIn('data-tip="Mean of 2 attempts · 110 to 510">310</span>', head.group(1))
+        self.assertIn('data-tip="Mean of 2 repeats · 110 to 510">310</span>', head.group(1))
         self.assertIn('data-tokens="310.0"', head.group(0))
 
-    def test_all_attempts_writes_a_reward_as_the_score_beside_it(self):
+    def test_all_repeats_writes_a_reward_as_the_score_beside_it(self):
         run = written_job(self.root, "partial-run", [("p__a", "p", 0, 1, None), ("p__b", "p", 2, 2 / 3, None)])
         self.stack.enter_context(patch.object(workspace, "load_jobs", return_value=[run]))
-        html = self.get("/trial/partial-run/p__a/attempts")
+        html = self.get("/trial/partial-run/p__a/repeats")
         rewards = [re.findall(r'<td class="num">([^<]*)</td>', row)[0] for row in re.findall(r"<tr>(.*?)</tr>", html, re.S)[1:]]
         self.assertEqual(rewards, ["1", "0.67"])
 
-    def test_an_unknown_trial_has_no_attempts_page(self):
-        self.get("/trial/repeat-run/nope/attempts", status=404)
+    def test_an_unknown_trial_has_no_repeats_page(self):
+        self.get("/trial/repeat-run/nope/repeats", status=404)
 
 
 if __name__ == "__main__":
