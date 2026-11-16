@@ -52,7 +52,8 @@
     const {menu, input, result, query, several} = active;
     menu.replaceChildren(); active.items = []; active.index = -1;
     const status = document.createElement('div'); status.className = 'nb-model-status'; status.setAttribute('role', 'status');
-    if (several && !input.dataset.servedModel) status.textContent = 'Choose the model first';
+    // no model yet, or the one the run sends not yet known (the server compiles it): no list is asked
+    if (several && !input.dataset.servedModel) status.textContent = input.dataset.servedPending === 'true' ? 'Loading providers…' : 'Choose the model first';
     else if (!result) status.textContent = several ? 'Loading providers…' : 'Loading models…';
     else if (result.ok && input.dataset.field === 'model' && JSON.parse(root.dataset.paperModels || 'null') !== null && !result.models.length) status.textContent = 'No paper models available from this provider.';
     else if (!result.ok) status.textContent = result.message || (several ? "Provider list unavailable. Enter a provider's slug by hand." : 'Model list unavailable. Enter a model ID manually.');

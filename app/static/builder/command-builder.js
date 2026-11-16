@@ -1,6 +1,41 @@
 /* Builder page controller: edit recipes, resolve their dependencies, and start an explicit Run. */
 (() => {
   'use strict';
+  // Served by: a row after each model field's, on OpenRouter alone: the serving providers that may answer that model,
+  // in order (recipe.py, served_by). Its picker is the Model row's (model-picker.js, list="nb-served"): typing filters
+  // the model's providers (POST /new-run/endpoints), a pick or a slug typed and Enter joins the list under it, each
+  // removable. Empty: any provider. What a row shows is C.servedRow's; `compiled()` is the server's last compile and
+  // the key of the recipe it was made for (C.servedKey). The tests run this under Node, with stand-ins for the page.
+  function servedRows({C, root, r, compiled, esc, button}) {
+    const NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
+    // the model a Served by is for, as the step shows it: the field's, else the leaderboard's or the official one
+    const shown = (rec, role) => {
+      if (role === 'model') return rec.model || '';
+      const b = C.standardBench(rec) || {}, lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
+      return (!paper && rec[role + '_model']) || lb && lb[role] || b[role] || '';
+    };
+    // the server's compile, while what decides the models it names has not changed since
+    const known = rec => { const c = compiled(); return c && c.out && c.key === C.servedKey(rec) ? c.out : null; };
+    const row = (rec, role) => C.servedRow(rec, role, shown(rec, role), known(rec));
+    const chips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick">${esc(slug) || '“”'}`
+      + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
+    const field = (rec, role) => { if (!C.servedRoles(rec).includes(role)) return ''; const s = row(rec, role);
+      return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any.">Served by<input list="nb-served" aria-label="Served by, ${NAME[role]}" data-served-by="${role}" data-served-model="${esc(s.model)}" data-served-pending="${s.pending}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
+        + `<span class="nb-chips std-served-list" data-served-list="${role}" data-of="${esc(JSON.stringify(s.chosen))}">${chips(role, s.chosen)}</span></label>`; };
+    // each Served by drawn again in place, as the recipe holds it now: its list, and the model its providers are listed
+    // for. The rest of the form stays as it is: the keyboard stays where it is, and an open menu stays open.
+    function sync() {
+      const rec = r();
+      root.querySelectorAll('input[data-served-by]').forEach(input => {
+        const role = input.dataset.servedBy, s = row(rec, role), list = root.querySelector(`[data-served-list="${role}"]`);
+        Object.assign(input.dataset, {servedModel: s.model, servedPending: String(s.pending), chosen: s.chosen.join(',')});
+        input.placeholder = s.placeholder;
+        if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = chips(role, s.chosen); }
+      });
+    }
+    return {field, sync};
+  }
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
@@ -114,9 +149,9 @@
   };
   // The standard's recipe as the server compiles it from the definitions (POST
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
-  let runnerOut = null, runnerKey = '', runnerTimer, runnerOutKey = '';
-  // the server's compile of the recipe as it is now, or null while a newer one is asked
-  const compiledNow = () => runnerOutKey === JSON.stringify(r()) ? runnerOut : null;
+  let runnerOut = null, runnerKey = '', runnerTimer, runnerOutServed = '';
+  // Served by's rows (servedRows above), given the server's last compile and what decided its models (C.servedKey)
+  const {field: servedField, sync: syncServed} = servedRows({C, root, r, esc, button, compiled: () => runnerOut && {out: runnerOut, key: runnerOutServed}});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -640,7 +675,7 @@
         out = await res.json();
       } catch (e) { out = {errors: [{step: REVIEW, message: 'The recipe could not be compiled here: ' + e}], notes: [], review: []}; }
       if (key !== runnerKey) return;
-      runnerOut = out; runnerOutKey = key;
+      runnerOut = out; runnerOutServed = C.servedKey(JSON.parse(key));
       if (step === S.model) syncServed();
       if (step === REVIEW) renderForm();
       refreshPlan();
@@ -650,37 +685,6 @@
   const select = (label,key,value,options) => `<label class="nb-field">${label}<select data-field="${key}">${options.map(([v,t])=>`<option value="${esc(v)}" ${v===value?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
   const fixed = (label,value,whose='official') => `<label class="nb-field ui-field-row"><span class="ui-field-copy">${esc(label)}</span><span class="nb-fixed">${esc(value)} (${whose})</span></label>`;
   const note = (title,text) => `<div class="nb-notice"><strong>${title}</strong>${text}</div>`;
-  // Served by: a row after each model field's, on OpenRouter alone: the serving providers that may answer that model,
-  // in order (recipe.py, served_by). Its picker is the Model row's (model-picker.js, list="nb-served"): typing filters
-  // the model's providers (POST /new-run/endpoints), a pick or a slug typed and Enter joins the list under it, each
-  // removable. Empty: any provider.
-  const SERVED_NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
-  // the model a Served by is for, as the step shows it: the field's, else the leaderboard's or the official one
-  const servedShown = (rec, role) => {
-    if (role === 'model') return rec.model || '';
-    const b = C.standardBench(rec) || {}, lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
-    return (!paper && rec[role + '_model']) || lb && lb[role] || b[role] || '';
-  };
-  // its list is of the model the run sends (the server's served_models), not of the name shown
-  const servedState = (rec, role) => { const shown = servedShown(rec, role), chosen = (rec.served_by || {})[role] || [];
-    return {shown, model: C.servedModelOf(role, shown, compiledNow()), chosen, placeholder: chosen.length ? 'Add a provider' : 'any provider'}; };
-  const servedChips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick">${esc(slug) || '“”'}`
-    + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${SERVED_NAME[role]}"`, 'nb-remove') + '</span>').join('');
-  const servedField = (rec, role) => { if (!C.servedRoles(rec).includes(role)) return ''; const s = servedState(rec, role);
-    return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any.">Served by<input list="nb-served" aria-label="Served by, ${SERVED_NAME[role]}" data-served-by="${role}" data-served-shown="${esc(s.shown)}" data-served-model="${esc(s.model)}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
-      + `<span class="nb-chips std-served-list" data-served-list="${role}" data-of="${esc(JSON.stringify(s.chosen))}">${servedChips(role, s.chosen)}</span></label>`; };
-  // each Served by drawn again in place, as the recipe holds it now: its list, and the model its providers are listed
-  // for. The rest of the form stays as it is: the keyboard stays where it is, and an open menu stays open.
-  function syncServed() {
-    const rec = r();
-    root.querySelectorAll('input[data-served-by]').forEach(input => {
-      const role = input.dataset.servedBy, s = servedState(rec, role), list = root.querySelector(`[data-served-list="${role}"]`);
-      Object.assign(input.dataset, {servedShown: s.shown, servedModel: s.model, chosen: s.chosen.join(',')});
-      input.placeholder = s.placeholder;
-      if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = servedChips(role, s.chosen); }
-    });
-  }
-
   function customRows(agent = '') {
     // '' lists the shared entries (every agent, and the other owners); an id lists that agent's own --ak.
     const rows = r().custom.map((p, i) => [p, i]).filter(([p]) => agent ? p.scope === 'agent' && p.agent === agent : !p.agent);

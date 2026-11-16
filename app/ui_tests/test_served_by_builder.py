@@ -71,14 +71,14 @@ class TheStep(unittest.TestCase):
     STYLE = (STATIC / 'builder' / 'command-builder.css').read_text()
 
     def test_served_by_holds_no_sentence_and_its_help_is_a_tooltip(self):
-        field = self.SCRIPT[self.SCRIPT.index('const servedField'):self.SCRIPT.index('function syncServed')]
+        field = self.SCRIPT[self.SCRIPT.index('const field = (rec, role)'):self.SCRIPT.index('function sync()')]
         self.assertNotIn('<small>', field)
         self.assertIn('title="', field)
 
     def test_served_by_is_a_row_with_the_model_rows_picker(self):
         """A row as the Model row is (a ``label.nb-field``, which the page sets as a settings row), its input one the
         Model row's picker takes (``list="nb-served"``), with no block set in under the model's row."""
-        field = self.SCRIPT[self.SCRIPT.index('const servedField'):self.SCRIPT.index('function syncServed')]
+        field = self.SCRIPT[self.SCRIPT.index('const field = (rec, role)'):self.SCRIPT.index('function sync()')]
         self.assertIn('<label class="nb-field std-served"', field)
         self.assertIn('<input list="nb-served"', field)
         self.assertNotIn('<select', field)
@@ -108,6 +108,45 @@ class TheStep(unittest.TestCase):
         changed = self.SCRIPT[self.SCRIPT.index("root.addEventListener('change'"):]
         self.assertNotIn("'model','simulator_model','judge_model'", changed)
         self.assertNotIn('requestAnimationFrame', changed)
+
+
+class TheRows(CompilerCase):
+    """command-builder.js's servedRows, run under Node with stand-ins for the page's elements: what each Served by row
+    shows after a change, drawn where it is, and the model its providers are listed for."""
+    BUILDER = Path(__file__).resolve().parents[1] / 'static' / 'builder' / 'command-builder.js'
+    SETUP = ('const {servedRows}=require(' + json.dumps(str(Path(__file__).resolve().parents[1] / 'static' / 'builder' / 'command-builder.js')) + ');'
+             'const b=C.standard().benchmarks.find(x=>x.judge)||C.standard().benchmarks[0];const r=C.createStandard(b.key);C.setChoice(r,"openrouter");'
+             'r.model_choice="any";C.setModelOf(r,"model","gpt-4o");'
+             'const input={dataset:{servedBy:"model"},placeholder:""},list={dataset:{},innerHTML:""},asked=[];'
+             'const root={querySelectorAll:s=>{asked.push(s);return s==="input[data-served-by]"?[input]:[];},querySelector:s=>{asked.push(s);return s===\'[data-served-list="model"]\'?list:null;}};'
+             'let compiled={out:{served_models:{model:"openai/gpt-4o-2024-08-06"}},key:C.servedKey(r)};'
+             'const esc=x=>String(x??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"}[c]));'
+             'const rows=servedRows({C,root,r:()=>r,compiled:()=>compiled,esc,button:(t,a,c)=>`<button class="${c}" ${a}>${t}</button>`});'
+             'const seen=()=>({model:input.dataset.servedModel,pending:input.dataset.servedPending,chosen:input.dataset.chosen,placeholder:input.placeholder,'
+             'chips:(list.innerHTML.match(/std-served-pick">([^<]*)</g)||[]).map(x=>x.slice(17,-1))});')
+
+    def test_a_change_draws_each_served_by_again_in_place(self):
+        """A pick, a removal and a model change each draw that row's list and field again, in the elements already there,
+        and touch nothing else of the page."""
+        out = self.js(self.SETUP + 'const got=[];C.addServed(r,"model","deepinfra/fp8");C.addServed(r,"model","together");rows.sync();got.push(seen());'
+                      'C.removeServed(r,"model",0);rows.sync();got.push(seen());C.setModelOf(r,"model","gpt-4o-mini");rows.sync();got.push(seen());'
+                      'got.push([...new Set(asked)]);process.stdout.write(JSON.stringify(got));')
+        self.assertEqual(out[0], {'model': 'openai/gpt-4o-2024-08-06', 'pending': 'false', 'chosen': 'deepinfra/fp8,together', 'placeholder': 'Add a provider', 'chips': ['deepinfra/fp8', 'together']})
+        self.assertEqual(out[1]['chips'], ['together'])
+        self.assertEqual((out[2]['chosen'], out[2]['placeholder'], out[2]['chips']), ('', 'any provider', []))
+        self.assertEqual(out[3], ['input[data-served-by]', '[data-served-list="model"]'])
+
+    def test_the_list_waits_for_the_model_the_run_sends(self):
+        """A pin added or taken out keeps the model the server compiled (the run sends `openai/gpt-4o-2024-08-06`, the field
+        shows `gpt-4o`); another model leaves none until the server has compiled it, and no list is asked meanwhile."""
+        out = self.js(self.SETUP + 'const got=[];rows.sync();got.push(seen().model);C.addServed(r,"model","openai");rows.sync();got.push([seen().model,seen().pending]);'
+                      'C.removeServed(r,"model",0);rows.sync();got.push(seen().model);C.setModelOf(r,"model","gpt-4o-mini");rows.sync();got.push([seen().model,seen().pending]);'
+                      'got.push(/data-served-model="" data-served-pending="true"/.test(rows.field(r,"model")));'
+                      'compiled={out:{served_models:{model:"openai/gpt-4o-mini-2024-07-18"}},key:C.servedKey(r)};rows.sync();got.push(seen().model);'
+                      'got.push([C.servedRow(r,"judge","gpt-4.1",null),C.servedKey({a:1,served_by:{model:["x"]}})===C.servedKey({a:1})]);process.stdout.write(JSON.stringify(got));')
+        self.assertEqual(out[:6], ['openai/gpt-4o-2024-08-06', ['openai/gpt-4o-2024-08-06', 'false'], 'openai/gpt-4o-2024-08-06', ['', 'true'], True,
+                                   'openai/gpt-4o-mini-2024-07-18'])
+        self.assertEqual(out[6], [{'shown': 'gpt-4.1', 'model': '', 'pending': True, 'chosen': [], 'placeholder': 'any provider'}, True])
 
 
 class ThePicker(unittest.TestCase):
