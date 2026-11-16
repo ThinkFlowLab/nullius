@@ -54,7 +54,9 @@ read: the key is the one the run was handed, ``OPENAI_API_KEY``, and the
 endpoint ``OPENAI_BASE_URL`` when it names one (``run_env``). The licences a
 benchmark's environments declare are never in either: the run reads them from
 the benchmark's store (``nullius.secrets``) on this machine, or, on a host, from
-the one line its launcher handed it (``licences``).
+the one line its launcher handed it (``licences``). A data provider's token the
+benchmark declares is the exception: a run without ``--from-run`` takes the
+provider's variable (``HF_TOKEN``) from the environment first.
 """
 from __future__ import annotations
 
@@ -106,16 +108,18 @@ def run_env(provider: str, env=os.environ) -> dict:
     return out
 
 
-def licences(bench: dict, env=os.environ):
+def licences(bench: dict, env=os.environ, from_run: bool = False):
     """(``run.Licences``, the folder to remove after) for a run on a host,
     whose launcher handed it the benchmark's licences as one line
     (``secrets.HANDED``, ``execution``): a licence file is written to
     ``NULLIUS_LICENCE_DIR`` - in memory, ``/dev/shm`` - and nowhere else.
-    The line leaves this process's environment once read. (None, None) on
-    this machine: the run reads the benchmark's own store."""
+    The line leaves this process's environment once read. On this machine
+    the run reads the benchmark's own store; a headless run (not
+    ``from_run``) first takes a data provider's token the benchmark declares
+    from ``env``, under the provider's variable (``HF_TOKEN``)."""
     line = env.pop(secrets.HANDED, None)
     if not line:
-        return None, None
+        return (None if from_run else run.Licences(bench, environ=env)), None
     shm = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
     spill = env.get("NULLIUS_LICENCE_DIR") or os.path.join(shm, f"nullius-{os.getpid()}")
     return run.Licences.handed(bench, secrets.unpack(line), spill), spill
@@ -517,7 +521,7 @@ def cmd_run(a):
     if why:
         print("refused: constraints:", why)
         return 2
-    held, spill = licences(b)
+    held, spill = licences(b, from_run=a.from_run)
     try:
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
@@ -596,7 +600,7 @@ def cmd_fidelity(a):
 
 def cmd_prove(a):
     b = _bench(a.benchmark)
-    held, spill = licences(b)
+    held, spill = licences(b, from_run=a.from_run)
     try:
         got = prove.prove(b, dataset=a.dataset, limit=a.limit, jobs_root=a.jobs, provider=a.provider, judge_model=a.judge_model,
                           stamp=a.stamp, concurrency=a.concurrency, say=print, shard=_shard(a.shard), launch=a.launch,

@@ -56,6 +56,34 @@ class Store(unittest.TestCase):
         secrets.set(secrets.HUGGINGFACE, "HF_TOKEN", "shared-synthetic")
         self.assertEqual(held.get("HF_TOKEN"), {"kind": "value", "value": "shared-synthetic"})
 
+    def test_a_headless_run_takes_a_data_providers_token_from_its_environment_first(self):
+        from nullius.standard import cli, run
+        bench = {"key": "bench-a", "environments": {"e": {"needs_secrets": [
+            {"name": "HF_TOKEN", "to": "driver", "provider": "huggingface"}, {"name": "LICENSE_KEY", "to": "driver"}]}}}
+        env = {"HF_TOKEN": "env-synthetic", "LICENSE_KEY": "env-licence-synthetic"}
+        held, spill = cli.licences(bench, env=dict(env))
+        self.assertIsNone(spill)
+        self.assertEqual(held.get("HF_TOKEN"), {"kind": "value", "value": "env-synthetic"})     # nothing in the store
+        self.assertIsNone(held.get("LICENSE_KEY"))                                               # not a provider's: the store alone
+        secrets.set(secrets.HUGGINGFACE, "HF_TOKEN", "stored-synthetic")
+        self.assertEqual(held.get("HF_TOKEN"), {"kind": "value", "value": "env-synthetic"})     # the environment wins
+        for unset in ({}, {"HF_TOKEN": ""}, {"HF_TOKEN": "  "}):
+            with self.subTest(env=unset):
+                self.assertEqual(cli.licences(bench, env=unset)[0].get("HF_TOKEN"), {"kind": "value", "value": "stored-synthetic"})
+        self.assertIsNone(cli.licences(bench, env=dict(env), from_run=True)[0])                 # the app's run: as before
+        handed = {secrets.HANDED: base64.b64encode(json.dumps({"HF_TOKEN": base64.b64encode(b"handed-synthetic").decode()}).encode()).decode(), "HF_TOKEN": "env-synthetic"}
+        self.assertEqual(cli.licences(bench, env=handed)[0].get("HF_TOKEN"), {"kind": "value", "value": "handed-synthetic"})
+
+    def test_a_benchmark_that_declares_no_provider_takes_nothing_from_the_environment(self):
+        from nullius.standard import cli, run
+        bench = {"key": "bench-a", "environments": {"e": {"needs_secrets": [{"name": "HF_TOKEN", "to": "driver"}]}}}
+        held = cli.licences(bench, env={"HF_TOKEN": "env-synthetic"})[0]
+        self.assertEqual(held.environ, {})
+        self.assertIsNone(held.get("HF_TOKEN"))
+        bare = run.Licences({"key": "bench-b"}, environ={"HF_TOKEN": "env-synthetic"})
+        self.assertEqual(bare.environ, {})
+        self.assertIsNone(bare.get("HF_TOKEN"))
+
     def mode(self, p):
         return stat.S_IMODE(os.stat(p).st_mode)
 

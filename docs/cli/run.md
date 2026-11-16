@@ -45,6 +45,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | --- | --- |
 | The pair must fit | Else refused, naming the missing port |
 | Keys | Environment, then user `settings.json`; the agent never gets one |
+| A data provider's token | `HF_TOKEN` from the environment, then Settings → Data providers, for a benchmark that declares Hugging Face; only its driver gets it. Not with `--from-run` |
 | A control | No `--model`, no `--unsandboxed`; only a judge is called |
 | Machine programs | An option needing them is refused without them |
 | Progress | stderr, one line per stage (`[nullius] stage=install ...`, `stage=units n=10`, `stage=done`, `stage=refused`), also `progress.jsonl` |
