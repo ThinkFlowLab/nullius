@@ -9,6 +9,7 @@
   ],
   "origin": "official",
   "good_to_know": [
+    "An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. Steps (100) and Pause (3.0 seconds) set that loop.",
     "Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.",
     "Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.",
     "Only M3, PromptAgent and Qwen-CUA have completed tasks through Nullius. The other agents were checked up to their first model call.",
@@ -25,7 +26,9 @@
     "Each VM's ports are open on every network interface; one runs any command in the VM. Bind Docker's ports to 127.0.0.1, or keep the machine off untrusted networks."
   ],
   "limitations": [
-    "No agent from the Agents page can run it yet.",
+    "An agent needs the computer port, proven by its conformance kit. The agent side has been checked on a fake desktop only, not on real VMs.",
+    "Preparing the VM image (its lock and its download) is not bounded by a unit's setup time; the core's own limit on setup ends it.",
+    "A VM start that hangs holds the start gate until its unit's setup time ends; units waiting for the gate fail at the end of theirs.",
     "Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.",
     "The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.",
     "A task still running after 2 hours is stopped and gets no score."
