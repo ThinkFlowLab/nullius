@@ -15,6 +15,7 @@ import secrets
 import shutil
 import select
 import signal
+import stat
 import struct
 import subprocess
 import sys
@@ -231,6 +232,122 @@ class FakeDesktop:
 
     def remove(self):
         self.removed = True
+
+
+class ScoreRecords(unittest.TestCase):
+    """The optional copies at score, over a desktop with no socket or running loop."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.enterContext(mock.patch.dict(driver.OPEN, {}, clear=True))
+        self.enterContext(mock.patch.object(driver.REAPER, "tell"))
+        self.addCleanup(driver.close_all)
+
+    def unit(self):
+        ws = os.path.join(self.tmp, str(len(FakeDesktop.made)), "workspace")
+        os.makedirs(ws)
+        u = driver.Unit("see", ws)
+        os.makedirs(os.path.dirname(u.log))
+        u.expected = {"code": "ACDE34679HJK"}
+        d = u.desktop = FakeDesktop("fake", u.values)
+        u.boxes = d.boxes
+        u.bridge = driver.KitBridge(driver.KitDesktop(d), u.steps, 0, desktop.SCREEN, 1)
+        driver.OPEN["see"] = u
+        return ws, u, d
+
+    def test_a_failed_record_write_does_not_change_the_verdict_or_cleanup(self):
+        for answer in ("ACDE34679HJK", ""):
+            ws, _, _ = self.unit()
+            expected = driver.score("see", ws, [], answer)
+            self.assertEqual(expected["passed"], bool(answer))
+            for index in (0, 1):
+                for when in ("write", "close"):
+                    with self.subTest(answer=answer, file=index, when=when):
+                        ws, u, d = self.unit()
+                        opened = []
+                        original, fdopen = open, os.fdopen
+
+                        def opening(file, mode="r", **kw):
+                            f = (fdopen if isinstance(file, int) else original)(file, mode, **kw)
+                            if mode != "w":
+                                return f
+                            opened.append(f)
+                            if len(opened) != index + 1:
+                                return f
+                            wrapped = mock.MagicMock(wraps=f)
+                            wrapped.__enter__.return_value = wrapped
+
+                            def close(*args):
+                                f.__exit__(*args)
+                                if when == "close":
+                                    raise OSError("disk full at close")
+
+                            wrapped.__exit__.side_effect = close
+                            if when == "write":
+                                wrapped.write.side_effect = OSError("disk full at write")
+                                wrapped.writelines.side_effect = OSError("disk full at write")
+                            return wrapped
+
+                        with mock.patch.object(driver, "open", side_effect=opening, create=True), \
+                                mock.patch.object(driver.os, "fdopen", side_effect=opening):
+                            try:
+                                got = driver.score("see", ws, [], answer)
+                            finally:
+                                self.assertTrue(d.removed)
+                                self.assertIsNone(u.desktop)
+                                self.assertNotIn("see", driver.OPEN)
+                        self.assertEqual(len(opened), index + 1)
+                        self.assertTrue(all(f.closed for f in opened))
+                        self.assertEqual(got, expected)
+                        self.assertFalse(any(n.startswith(".computer-") for n in os.listdir(os.path.dirname(u.log))))
+
+    def test_record_names_replace_a_link_and_a_fifo_without_blocking_score(self):
+        names = ("computer-events.jsonl", "computer-boxes.json")
+        for linked, piped in (names, names[::-1]):
+            with self.subTest(link=linked, fifo=piped):
+                ws, u, d = self.unit()
+                folder = os.path.dirname(u.log)
+                outside = os.path.join(os.path.dirname(ws), "untouched")
+                with open(outside, "w") as f:
+                    f.write("untouched")
+                os.symlink(outside, os.path.join(folder, linked))
+                fifo = os.path.join(folder, piped)
+                os.mkfifo(fifo)
+                replies = queue.Queue()
+
+                def score():
+                    try:
+                        replies.put(driver.score("see", ws, [], u.expected["code"]))
+                    except Exception as e:
+                        replies.put(e)
+
+                t = threading.Thread(target=score, daemon=True)
+                t.start()
+                t.join(5)
+                blocked = t.is_alive()
+                if blocked:                          # release an old writer before the test's folders go
+                    fd = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+                    try:
+                        t.join(5)
+                    finally:
+                        os.close(fd)
+                self.assertFalse(t.is_alive(), "scoring did not end after the FIFO was released")
+                self.assertFalse(blocked, "scoring blocked on the FIFO")
+                got = replies.get_nowait()
+                self.assertIsInstance(got, dict, got)
+                self.assertTrue(got["passed"], got)
+                self.assertTrue(d.removed)
+                self.assertNotIn("see", driver.OPEN)
+                self.assertEqual(sorted(os.listdir(folder)), sorted(names))
+                for name in names:
+                    self.assertTrue(stat.S_ISREG(os.lstat(os.path.join(folder, name)).st_mode))
+                with open(outside) as f:
+                    self.assertEqual(f.read(), "untouched")
+                with open(os.path.join(folder, names[0])) as f:
+                    self.assertEqual([json.loads(line) for line in f], d.events())
+                with open(os.path.join(folder, names[1])) as f:
+                    self.assertEqual(json.load(f), u.boxes)
 
 
 class FakeUnits(unittest.TestCase):
