@@ -71,4 +71,26 @@ The shared code is `app/nullius/standard/computer_port.py`, with the standard li
 
 ## The kit
 
-None yet. Until it exists, no agent offers this port.
+`cli conform AGENT --port agent.computer/v1` runs the kit `agent-computer-v1`: eight checks, each on a desktop of its own, reached through this port's server. A program decides each check from the desktop's own records and the server's call log.
+
+| Check | Kind | The task | Passes when |
+| --- | --- | --- | --- |
+| `see` | basic | Read a code of twelve characters drawn on the screen | The final message holds the code |
+| `click` | basic | Click the named one of six buttons | A left press on that button, and no press on the five others |
+| `type` | basic | Type a word in a text field and press Enter | The field holds exactly the word at the last Enter |
+| `limit` | basic | Click six buttons with a budget of two steps | A button was pressed, no input came after the last step, and no acting call was sent once the steps were used up |
+| `drag` | skill | Drag a handle into a marked zone | A left press on the handle, released inside the zone |
+| `scroll` | skill | Scroll a list to read a code below what it shows at first | The final message holds the code, and the list moved |
+| `recover` | skill | Click a named button; the first acting call is answered with an error and not run | An acting call succeeds after the error, and the button is clicked as in `click` |
+| `batch` | skill | Fill three text fields with a budget of two steps | Each field holds its word |
+
+Every check also fails when a pointer or key event came outside an acting call: input sent through `python` fails it. Each check has 8 steps (2 for `limit` and `batch`), a pause of 1 s, 90 s for one `python` call and 600 s for the agent's turn.
+
+| Piece | Where |
+| --- | --- |
+| The desktop | A container of the kit's image, `desktop.Dockerfile` on Nullius's base image, built the first time a unit needs it: an X display at 1920 by 1080, a window manager, a session bus, the accessibility bus, Python with Tk, `pyautogui` and Pillow. The agent's Python and its actions run as its user; the kit's fixture runs as another, its log out of that user's reach |
+| The server and the loop | In the kit's driver: the port's server over the unit's desktop, and a loop of the kit's own that runs each step's actions and waits the pause |
+| What a stop leaves | A unit that never reaches its score is let go by the next unit or by the driver's end; a reaper the driver starts removes the containers and sockets of a driver that was killed |
+| The controls | The null control passes no check; the reference makes the right calls through the unit's own server and passes all eight |
+
+A machine that runs the kit needs Docker, or Podman 4.7 or later, as the container backend does. The first unit builds the image (about 0.5 GB over the base image).

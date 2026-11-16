@@ -140,7 +140,7 @@ class Draw(unittest.TestCase):
         self.assertEqual(values, {"screen": "type"})                     # the word is the prompt's, never the screen's
         self.assertRegex(exp["word"], r"^[a-z]{8}$")
         with self.assertRaises(ValueError):
-            checks.draw("drag")
+            checks.draw("hover")
 
     def test_every_character_drawn_has_a_glyph_of_five_by_seven(self):
         for ch in checks.ALPHABET + "".join(checks.LABELS):

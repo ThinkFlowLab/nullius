@@ -5,7 +5,12 @@ It reads what to draw from the kit on its stdin, as one JSON object:
 
 - ``{"screen": "see", "code": "..."}``: the code, drawn large;
 - ``{"screen": "click", "labels": [six words]}``: six buttons, each labelled;
-- ``{"screen": "type"}``: a text field.
+- ``{"screen": "type"}``: a text field;
+- ``{"screen": "drag"}``: a handle labelled MOVE and a zone labelled HERE;
+- ``{"screen": "scroll", "code": "..."}``: a list of words with the code at
+  its end, below what the list shows at first;
+- ``{"screen": "batch", "labels": [three words]}``: three text fields, each
+  labelled.
 
 Codes and labels are drawn as bitmaps from the glyphs below: no widget holds
 their text, and Tk's ``send`` is removed, so no other program can read them
@@ -15,10 +20,13 @@ Each press, release, scroll and key goes to ``events.jsonl`` in the fixture's
 home, a folder only ``fixture`` reads, one JSON object a line: ``kind``, the
 time ``t`` on the desktop's monotonic clock (the one an action's times are read
 on), the point or the key, and ``hit``, what it
-landed on (a button's label, ``field`` or ``background``). The first line is
+landed on (a button's label, ``field``, a field's label, ``handle``, ``zone``,
+``list`` or ``background``). The first line is
 ``ready``, with where each target is on the screen, written once the window is
 mapped at the screen's size and holds the focus; Enter in the field writes
-``enter`` with the field's text.
+``enter`` with the field's text; each key let go in a labelled field writes
+``value`` with its text; each turn of the wheel that moves the list writes
+``moved`` with the list's top, a fraction of its length.
 
 The program leaves the caller once its window is up: it prints ``ready`` and
 the window lives on, on its own, until the desktop ends.
@@ -32,6 +40,8 @@ HOME = "/var/lib/fixture"
 LOG = os.path.join(HOME, "events.jsonl")
 ERRORS = os.path.join(HOME, "fixture.err")
 TITLE = "Check"
+SCREENS = ("see", "click", "type", "drag", "scroll", "batch")
+LIST_WORDS = ("APPLE", "BRICK", "CLOUD", "DELTA", "EMBER", "FROST", "GRAPE", "HONEY", "MAPLE", "NORTH")
 BACKGROUND = "#eceff1"
 INK = "#111111"
 
@@ -127,6 +137,64 @@ class Fixture:
             b.grid(row=i // 3, column=i % 3, padx=60, pady=60)
             self.names[str(b)] = label
 
+    def _drag(self):
+        zone = self.tk.Frame(self.root, width=360, height=240, background="#ffffff", highlightthickness=6,
+                             highlightbackground="#2e7d32")
+        zone.place(relx=0.72, rely=0.5, anchor="center")
+        img = bitmap(self.tk, zone, "HERE", 5, ink="#2e7d32", paper="#ffffff")
+        self.images.append(img)
+        self.tk.Label(zone, image=img, background="#ffffff", borderwidth=0).place(relx=0.5, rely=0.5, anchor="center")
+        self.names[str(zone)] = "zone"
+        img = bitmap(self.tk, self.root, "MOVE", 4, ink="#ffffff", paper="#1565c0")
+        self.images.append(img)
+        handle = self.tk.Label(self.root, image=img, background="#1565c0", borderwidth=0, padx=16, pady=16)
+        handle.place(relx=0.25, rely=0.5, anchor="center")
+        self.names[str(handle)] = "handle"
+
+        def follow(e):                                  # the handle goes where the pointer drags it
+            handle.place(relx=0, rely=0, x=e.x_root - self.root.winfo_rootx(), y=e.y_root - self.root.winfo_rooty(),
+                         anchor="center")
+        handle.bind("<B1-Motion>", follow, add="+")
+
+    def _scroll(self):
+        rows, step, scale = 40, 60, 4
+        c = self.tk.Canvas(self.root, width=760, height=540, background="#ffffff", highlightthickness=2,
+                           highlightbackground="#90a4ae", yscrollincrement=20)
+        c.place(relx=0.5, rely=0.5, anchor="center")
+        for i in range(rows):
+            img = bitmap(self.tk, c, LIST_WORDS[i % len(LIST_WORDS)], scale, paper="#ffffff")
+            self.images.append(img)
+            c.create_image(40, 40 + i * step, image=img, anchor="nw")
+        img = bitmap(self.tk, c, self.values["code"], scale, paper="#ffffff")
+        self.images.append(img)
+        c.create_image(40, 40 + rows * step + 40, image=img, anchor="nw")
+        c.configure(scrollregion=(0, 0, 760, 40 + rows * step + 160))
+        self.names[str(c)] = "list"
+
+        def turn(units):
+            def moved(e):
+                before = c.yview()[0]
+                c.yview_scroll(units, "units")
+                if c.yview()[0] != before:
+                    self.write("moved", top=round(c.yview()[0], 4))
+            return moved
+        c.bind("<Button-4>", turn(-3), add="+")
+        c.bind("<Button-5>", turn(3), add="+")
+        c.bind("<MouseWheel>", lambda e: turn(-3 if e.delta > 0 else 3)(e), add="+")
+
+    def _batch(self):
+        frame = self.tk.Frame(self.root, background=BACKGROUND)
+        frame.place(relx=0.5, rely=0.5, anchor="center")
+        for i, label in enumerate(self.values["labels"]):
+            img = bitmap(self.tk, frame, label, 4)
+            self.images.append(img)
+            self.tk.Label(frame, image=img, background=BACKGROUND, borderwidth=0).grid(row=i, column=0, padx=30, pady=30,
+                                                                                       sticky="e")
+            field = self.tk.Entry(frame, font=("DejaVu Sans", 24), width=20, relief="sunken", borderwidth=3)
+            field.grid(row=i, column=1, padx=30, pady=30)
+            self.names[str(field)] = label
+            field.bind("<KeyRelease>", lambda e, f=field, n=label: self.write("value", field=n, value=f.get()), add="+")
+
     def _type(self):
         self.field = self.tk.Entry(self.root, font=("DejaVu Sans", 28), width=24, relief="sunken", borderwidth=3)
         self.field.place(relx=0.5, rely=0.5, anchor="center")
@@ -189,7 +257,7 @@ class Fixture:
 
 def main():
     values = json.loads(sys.stdin.read())
-    if values.get("screen") not in ("see", "click", "type"):
+    if values.get("screen") not in SCREENS:
         sys.exit(f"fixture: no such screen: {values.get('screen')!r}")
     r, w = os.pipe()
     if os.fork():                                       # the caller's side: wait for the window, then return
