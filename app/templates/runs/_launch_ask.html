@@ -1,0 +1,45 @@
+{#- Delete on a launch: the button, and what it asks in the dialog `dialogs()` draws. The caller lists the launch's runs,
+    as <li>. `back`: where the route returns to. The element that holds both carries data-launch. #}
+{% macro delete_ask(L, gone, back='') %}{% set n, wss, k = gone.judgements, gone.workspaces, gone.runs|length %}
+      <button type="button" class="btn sm ghost danger launch-delete-btn" aria-haspopup="dialog">Delete launch</button>
+      <template class="launch-ask">
+        <div class="std-how-head"><h2 id="launch-delete-h">Delete launch {{ L.title }}</h2></div>
+        <form method="post" action="{{ url_for('launch_delete', key=L.key) }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}">{% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
+          <ul>{{ caller() }}</ul>
+          <p>{{ k }} folder{{ '' if k == 1 else 's' }} · {{ gone.bytes|filesizeformat }}{% if n %} · {{ n }} judgement{{ '' if n == 1 else 's' }}{% endif %}{% if wss %} · workspace{{ '' if wss|length == 1 else 's' }} {{ wss|join(', ') }}{% endif %}</p>
+          {% for h, c in gone.hosts.items() %}<label><input type="checkbox" name="host" value="{{ h }}" checked> Its cop{{ 'y' if c == 1 else 'ies' }} on <b>{{ h }}</b></label>{% endfor %}
+          <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete launch</button></div>
+        </form>
+      </template>
+{%- endmacro %}
+
+{#- One dialog for every launch: a button fills it from its launch's template (`asks`: button class -> template class);
+    ?delete=<key> opens the Delete question on load. #}
+{% macro dialogs(asks={'launch-delete-btn': 'launch-ask'}) %}
+  <dialog class="std-how launch-delete" id="launch-delete" aria-labelledby="launch-delete-h"></dialog>
+<script>
+(() => {
+  const d = document.getElementById('launch-delete');
+  const asks = {{ asks|tojson }};
+  const btn = (key, cls) => document.querySelector(`[data-launch="${CSS.escape(key)}"] .${cls}`);
+  let key = '', cls = '';
+  const open = b => {
+    const l = b.closest('[data-launch]');
+    key = l.dataset.launch;
+    cls = Object.keys(asks).find(c => b.classList.contains(c));
+    d.replaceChildren(l.querySelector('template.' + asks[cls]).content.cloneNode(true));
+    d.showModal();
+  };
+  const sel = Object.keys(asks).map(c => '.' + c).join(',');
+  document.addEventListener('click', e => { const b = e.target.closest(sel); if (b) open(b); });
+  d.addEventListener('click', e => {   // the backdrop, not the dialog's own padding
+    const r = d.getBoundingClientRect();
+    if (e.target === d && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) d.close();
+  });
+  d.addEventListener('close', () => btn(key, cls)?.focus());   // the button again, though a refresh replaced its block
+  const b = btn(new URLSearchParams(location.search).get('delete') || '', 'launch-delete-btn');
+  if (b) { b.focus(); open(b); }
+})();
+</script>
+{%- endmacro %}
