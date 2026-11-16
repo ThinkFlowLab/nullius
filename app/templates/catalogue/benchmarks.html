@@ -66,7 +66,7 @@
       <a class="bench-card" href="{{ url_for('benchmark_page', key=b.key) }}" data-category="{{ b.category }}" data-origin="{{ b.origin }}" data-runs="{{ ((['standard'] if 'standard' in b.harness else []) + (['harbor'] if 'harbor' in b.harness else []))|join(' ') }}"
          data-keys="{{ ([b.key] + b.datasets)|join(' ') }}"
          data-find="{{ ([b.title, b.category, b.key] + ds|map(attribute='title')|list + b.datasets)|join(' ')|lower }}">
-        {% set runs = (['harbor'] if 'harbor' in b.harness else []) + (['standard'] if 'standard' in b.harness else []) %}
+        {% set runs = (['standard'] if 'standard' in b.harness else []) + (['harbor'] if 'harbor' in b.harness else []) %}
         <div class="bench-card-tags">{% if b.category %}<span class="cat-tag">{{ b.category }}</span>{% endif %}<span class="origin-tag {{ b.origin }}">{{ b.origin|capitalize }}</span></div>
         <div class="bench-card-title"><svg class="bench-mark" aria-hidden="true"><use href="{{ url_for('static', filename='catalogue/marks.svg') }}#bm-{{ b.key }}"/></svg>{{ b.title }}</div>
         {% if b.domain %}<div class="bench-card-domain">{{ b.domain }}</div>{% endif %}
