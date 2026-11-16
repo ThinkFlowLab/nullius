@@ -392,10 +392,9 @@ class ResumeIntoWorkspace(unittest.TestCase):
         return web.shared.STATE["workspace"]
 
     def test_a_restart_puts_the_run_back_into_its_workspace(self):
-        again = self.restart()
-        self.assertEqual(again.name, self.ws.name)
+        self.assertIsNone(self.restart())                                                  # the run does not open its workspace
         self.assertEqual([w.name for w in workspace.list_all(self.home)], [self.ws.name])      # no new workspace
-        self.assertIn(self.jobs, again.roots)
+        self.assertIn(self.jobs, workspace.load(self.home, self.ws.name).roots)
         self.assertEqual(json.loads(self.record.read_text())["workspace"], self.ws.name)
 
     def test_a_run_whose_workspace_is_gone_gets_one_as_before(self):
