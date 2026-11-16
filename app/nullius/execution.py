@@ -253,7 +253,7 @@ class Plan:
     url_var: str = "MODEL_API_URL"            # same for the endpoint, which a run on it cannot go without; "" for none
     base_url: str = ""                        # the endpoint when url_var names none: a provider's own (OpenRouter's), or "" for its clients' default
     model: str = ""
-    jobs: List[dict] = field(default_factory=list)   # the job directories the script writes: [{"name", "agent", "dataset"}]
+    jobs: List[dict] = field(default_factory=list)   # the job directories the script writes: [{"name", "agent", "dataset"}], a shard's also its "launch"
     parts: List[dict] = field(default_factory=list)  # the run, one agent at a time: [{"id", "label", "script"}]; empty: the whole script at once
     recipe: dict = field(default_factory=dict)       # the builder's recipe the script was compiled from, so the run can be opened again as one; {} for a plan from before
     runner: str = "harbor"                    # or "standard" (standard/recipe.py): the Nullius standard's own cli

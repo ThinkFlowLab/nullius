@@ -54,7 +54,7 @@ def write_launch(root, runs, nop=None, stopped="terminus-2", written=("nop", "ji
                 os.remove(os.path.join(d, "result.json"))
             jobs.append(parse.parse_job(d))
         plan = execution.Plan(name=f"{NAME}-shard-{i}of2", script="", runner="standard", host=hosts.parse(host) if host else None,
-                              jobs=[{"name": f"{NAME}-{p}-shard-{i}of2", "agent": p} for p in order],
+                              jobs=[{"name": f"{NAME}-{p}-shard-{i}of2", "agent": p, "launch": f"{NAME}-{p}"} for p in order],
                               parts=[{"id": p, "label": p, "script": "true"} for p in order])
         record = ({"id": "s1", "state": "done", "launched": order[-1], "part": len(order) - 1, "ends": {p: DONE for p in order}} if i == 1 else
                   {"id": "s2", "state": "stopped", "launched": stopped, "part": order.index(stopped), "exit_code": 130,
@@ -116,6 +116,11 @@ class LaunchShards(unittest.TestCase):
         self.assertNotIn("Open", self.fold_row(block, "terminus-2"))
         self.assertIn('title="fold-terminus-2-shard-2of2">shard 2 · host-2</a>', block)
         self.assertIn('title="fold-terminus-2-shard-1of2">shard 1 · this machine</a>', block)
+
+    def test_a_shard_that_wrote_no_job_yet_is_in_the_launch(self):
+        block = self.block(written=())                       # one launch block, asserted by block()
+        for p in CONTROLS + AGENTS:
+            self.assertIn(f"{NAME}-{p}-shard-2of2", block)
 
     def test_a_folded_row_shows_the_merged_job_and_says_what_did_not_run(self):
         block = self.block()
