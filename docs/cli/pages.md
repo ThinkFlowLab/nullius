@@ -38,6 +38,7 @@ Each page's command, or why there is none.
 | `/judge/…` | `judge.cli job <root> <id> --confirm` |
 | Rename or delete a workspace | `nullius workspace rename`, `nullius workspace delete --yes` |
 | `/new-run` | `recipes.cli`; today `POST /new-run/runner` |
+| Delete a launch | `execution.delete`; today `POST /launch/<key>/delete` |
 
 ## None needed
 
