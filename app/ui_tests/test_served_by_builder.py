@@ -169,6 +169,34 @@ class TheRows(CompilerCase):
         sent = 'openai/gpt-4o-2024-08-06'
         self.assertEqual(out, [['', 'true'], [sent, 'false'], [sent, 'false'], ['', 'true'], [sent, 'false']])
 
+    def test_a_pin_failure_keeps_an_overlapping_compiles_models_in_either_order(self):
+        """A model change waits for its compiled name. A pin edit starts another compile, which fails: the earlier
+        answer still ends the wait, but cannot replace the command or Review. An old model's answer stays ignored."""
+        for failure_first in (False, True):
+            with self.subTest(failure_first=failure_first):
+                out = self.js(self.SETUP + 'const got={},key=()=>JSON.stringify(r),state=()=>[seen().model,seen().pending];'
+                              'const originalKey=key(),original=compiled.out,failed={errors:[{message:"Compile failed"}],notes:[],review:[]};'
+                              'let runnerOut=original;const receive=(answer,sentKey)=>{const accepted=rows.acceptCompile(r,compiled,answer,sentKey,key());'
+                              'compiled=accepted.served;rows.sync();if(accepted.current)runnerOut=answer;'
+                              'return [...state(),accepted.current,runnerOut===failed?"failure":runnerOut===original?"original":"stale"];};'
+                              'rows.sync();got.original=state();C.setModelOf(r,"model","gpt-4o-mini");rows.sync();got.changed=state();const unpinnedKey=key();'
+                              'C.addServed(r,"model","openai");rows.sync();const pinnedKey=key();'
+                              'got.keys=[unpinnedKey!==pinnedKey,C.servedKey(JSON.parse(unpinnedKey))===C.servedKey(r)];'
+                              'const success={errors:[],served_models:{model:"openai/gpt-4o-mini-2024-07-18"},command:"unpinned command",review:["unpinned review"]};'
+                              f'const failureFirst={json.dumps(failure_first)};'
+                              'if(failureFirst)got.failure=receive(failed,pinnedKey);got.success=receive(success,unpinnedKey);'
+                              'if(!failureFirst)got.failure=receive(failed,pinnedKey);got.lateOriginal=receive(original,originalKey);'
+                              'C.setModelOf(r,"model","gpt-4.1");rows.sync();got.next=state();got.lateSuccess=receive(success,unpinnedKey);'
+                              'got.nextFailure=receive(failed,key());process.stdout.write(JSON.stringify(got));')
+                sent = 'openai/gpt-4o-mini-2024-07-18'
+                self.assertEqual(out, {
+                    'original': ['openai/gpt-4o-2024-08-06', 'false'], 'changed': ['', 'true'], 'keys': [True, True],
+                    'success': [sent, 'false', False, 'failure' if failure_first else 'original'],
+                    'failure': ['', 'true', True, 'failure'] if failure_first else [sent, 'false', True, 'failure'],
+                    'lateOriginal': [sent, 'false', False, 'failure'], 'next': ['', 'true'],
+                    'lateSuccess': ['', 'true', False, 'failure'], 'nextFailure': ['', 'true', True, 'failure'],
+                })
+
 
 class ThePicker(unittest.TestCase):
     """model-picker.js, as the Model row and each Served by use it: what typing keeps, and what Enter takes."""

@@ -16,6 +16,11 @@
     };
     // the server's compile, while what decides the models it names has not changed since
     const known = rec => { const c = compiled(); return c && c.out && c.key === C.servedKey(rec) ? c.out : null; };
+    // A compile's models can still apply after a pin edit; the rest of its answer needs the whole recipe's key.
+    const acceptCompile = (rec, last, out, key, currentKey) => ({
+      current: key === currentKey,
+      served: C.servedKey(JSON.parse(key)) === C.servedKey(rec) ? C.servedCompiled(last, out, key) : last,
+    });
     const row = (rec, role) => C.servedRow(rec, role, shown(rec, role), known(rec));
     const chips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick"><span class="std-served-slug">${esc(slug) || '“”'}</span>`
       + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
@@ -33,7 +38,7 @@
         if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = chips(role, s.chosen); }
       });
     }
-    return {field, sync};
+    return {field, sync, acceptCompile};
   }
   if (typeof module === 'object' && module.exports) { module.exports = {servedRows}; return; }
   const root = document.getElementById('nullius-builder');
@@ -151,7 +156,7 @@
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
   let runnerOut = null, runnerKey = '', runnerTimer, runnerServed = null;
   // Served by's rows (servedRows above), given the models the server last named and what decided them (C.servedCompiled)
-  const {field: servedField, sync: syncServed} = servedRows({C, root, r, esc, button, compiled: () => runnerServed});
+  const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -674,9 +679,11 @@
         const res = await nulliusFetch('/new-run/runner', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({recipe: rec})});
         out = await res.json();
       } catch (e) { out = {errors: [{step: REVIEW, message: 'The recipe could not be compiled here: ' + e}], notes: [], review: []}; }
-      if (key !== runnerKey) return;
-      runnerOut = out; runnerServed = C.servedCompiled(runnerServed, out, key);
+      const accepted = acceptCompile(r(), runnerServed, out, key, runnerKey);
+      runnerServed = accepted.served;
       if (step === S.model) syncServed();
+      if (!accepted.current) return;
+      runnerOut = out;
       if (step === REVIEW) renderForm();
       refreshPlan();
     }, 120);
