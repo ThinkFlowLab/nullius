@@ -85,6 +85,9 @@ class ControlsApart(unittest.TestCase):
         self.assertEqual(response.status_code, 200, path)
         return response.get_data(as_text=True)
 
+    def header(self, html):
+        return text_of(re.search(r'<p class="subtitle" id="counts".*?</p>', html, re.S).group(0))
+
     def row(self, html, job_id):
         rows = [r for r in re.findall(r'<tr [^>]*>.*?</tr>', html, re.S) if '<td data-col="run"><a href="/job/%s">' % job_id in r]
         self.assertEqual(len(rows), 1, job_id)
@@ -112,7 +115,7 @@ class ControlsApart(unittest.TestCase):
     def test_the_header_the_chips_and_the_mix_bar_count_the_agent_only(self):
         html = self.get("/runs")
         self.assertIn('data-runs="1" data-trials="4"', html)
-        self.assertIn("· 1 run · 4 trials", text_of(re.search(r'<p class="subtitle" id="counts".*?</p>', html, re.S).group(0)))
+        self.assertEqual(self.header(html), "3 launches · 1 run · 4 trials · 2 checks")
         self.assertIn('class="dataset-count">1 run<span class="dot">·</span>4 trials', html)
         legend = re.search(r'<div class="legend">.*?</div>', html, re.S).group(0)
         chips = dict(re.findall(r'data-outcome="([a-z_]+)"[^>]*>[^<]*<b>(\d+)</b>', legend))
@@ -120,6 +123,14 @@ class ControlsApart(unittest.TestCase):
         bar = re.search(r'<div class="bar">.*?</div>', html, re.S).group(0)
         self.assertEqual(sorted(re.findall(r'style="flex:(\d+)" data-outcome="([a-z_]+)"', bar)),
                          [("1", "failed_verification"), ("1", "rate_limited"), ("2", "resolved")])
+
+    def test_the_header_counts_the_checks_apart_and_only_when_there_are_some(self):
+        # each job is a launch of its own here: no start time is recorded
+        for jobs, header in (([self.nop, self.oracle], "2 launches · 0 runs · 0 trials · 2 checks"),
+                             ([self.nop], "1 launch · 0 runs · 0 trials · 1 check"),
+                             ([self.agent], "1 launch · 1 run · 4 trials")):
+            self.jobs = jobs
+            self.assertEqual(self.header(self.get("/runs")), header)
 
     def test_a_controls_line_names_each_control_with_its_verdict(self):
         # the controls are their launch's task checks: a row each at the top of its table, with its verdict
