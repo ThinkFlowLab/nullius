@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import json
 import os
+from concurrent.futures import CancelledError
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import sys
 import threading
+import time
 import unittest
 
 from unittest import mock
@@ -285,15 +287,101 @@ class ThroughARun(unittest.TestCase):
             self.assertEqual(json.load(f)["exception_info"]["exception_type"], "CancelledError")
         self.assertEqual([d for d in os.listdir(os.path.dirname(trial)) if "__u" in d], ["a__u0000"])
 
-    def test_an_end_never_starts_a_driver(self):
+    def ending(self) -> "run.Run":
         r = run.Run.__new__(run.Run)
         r.bench, r.other, r.local = dict(BENCH, driver=dict(BENCH["driver"], unit_end=True)), {"_kind": "agent"}, threading.local()
-        for driver in (None, mock.Mock(p=None), mock.Mock()):
-            with self.subTest(driver=driver):
-                r.local.driver = driver
-                r.unit_ended("a", self.tmp)
-                if driver is not None:
-                    driver.request.assert_not_called()
+        return r
+
+    def driver_proc(self, code: str, *args, stopped=None) -> jsonl.Proc:
+        here = tempfile.mkdtemp(dir=self.tmp)
+        return jsonl.Proc([sys.executable, "-c", code, *args], here, dict(os.environ), os.path.join(here, "driver.log"),
+                          stopped=stopped)
+
+    def test_an_end_never_starts_a_driver(self):
+        r = self.ending()
+        r.local.driver = None
+        r.unit_ended("a", self.tmp)                                 # no driver: nothing is started
+        never = self.driver_proc("import sys; sys.stdin.read()")
+        ended = self.driver_proc("pass").start()
+        ended.p.wait(timeout=10)
+        running = self.driver_proc("import sys\nfor line in sys.stdin: print('{}', flush=True)").start()
+        try:
+            for driver, asked in ((never, False), (ended, False), (running, True)):
+                with self.subTest(started=driver.p is not None, asked=asked):
+                    r.local.driver = driver
+                    with mock.patch.object(driver, "request", wraps=driver.request) as request:
+                        r.unit_ended("a", self.tmp)
+                    self.assertEqual(request.called, asked)
+            self.assertIsNone(never.p)                                  # a driver never started stays so
+        finally:
+            for driver in (ended, running):
+                driver.close()
+
+    def test_an_end_is_waited_for_once_the_run_is_stopped(self):
+        here = tempfile.mkdtemp(dir=self.tmp)
+        mark = os.path.join(here, "ended")
+        answering = ("import sys, time\n"
+                     "for line in sys.stdin:\n"
+                     "    time.sleep(1.0)\n"
+                     "    open(sys.argv[1], 'w').write('ended')\n"
+                     "    print('{}', flush=True)\n")
+        stopped = threading.Event()
+        r = self.ending()
+        r.local.driver = self.driver_proc(answering, mark, stopped=stopped).start()
+        stopped.set()
+        try:
+            r.unit_ended("a", here)
+            self.assertTrue(os.path.exists(mark), "returned before the driver answered its end")
+        finally:
+            r.local.driver.close()
+
+    def test_a_driver_with_a_request_the_stop_left_unanswered_gets_no_end(self):
+        here = tempfile.mkdtemp(dir=self.tmp)
+        ops = os.path.join(here, "ops")
+        late = ("import sys, json, time\n"
+                "for line in sys.stdin:\n"
+                "    op = json.loads(line)['op']\n"
+                "    open(sys.argv[1], 'a').write(op + '\\n')\n"
+                "    time.sleep(1.0)\n"
+                "    print(json.dumps({'to': op}), flush=True)\n")
+        stopped = threading.Event()
+        r = self.ending()
+        d = r.local.driver = self.driver_proc(late, ops, stopped=stopped).start()
+        threading.Timer(0.3, stopped.set).start()
+        try:
+            with self.assertRaises(CancelledError):
+                d.request("setup", unit="a", dir=here, timeout=60)  # its reply comes after the stop
+            r.unit_ended("a", here)
+            time.sleep(1.5)                                         # the setup's late reply, then anything after it
+        finally:
+            d.close()
+        with open(ops) as f:
+            self.assertEqual(f.read().split(), ["setup"])
+
+    def test_a_stop_before_setup_is_sent_sends_no_end(self):
+        real_phase = run.Run.phase
+
+        def phase(r, name, unit, ph, timeout=None):
+            if unit == "b" and ph == "env_setup":
+                r._stopped.set()                                    # b passed the stop check; its setup is not sent yet
+            return real_phase(r, name, unit, ph, timeout)
+
+        noting = ENDING_DRIVER.replace("def setup(unit, dir, **told):\n",
+                                       "def setup(unit, dir, **told):\n"
+                                       "    open(os.path.join(os.path.dirname(dir), 'setup-sent'), 'w').write(unit)\n")
+        with mock.patch.object(run.Run, "phase", phase):
+            job = os.path.dirname(self.trial_of(noting.replace('["a"]', '["a", "b"]'), driver=dict(BENCH["driver"], unit_end=True)))
+        a, b = os.path.join(job, "a__u0000"), os.path.join(job, "b__u0001")
+        self.assertTrue(os.path.isfile(os.path.join(a, "ended.json")))               # a: set up and ended
+        self.assertFalse(os.path.exists(os.path.join(b, "setup-sent")))
+        self.assertFalse(os.path.exists(os.path.join(b, "ended.json")))
+
+    def test_a_setup_past_its_time_gets_no_end_from_its_closed_driver(self):
+        slow = ENDING_DRIVER.replace('    return {"prompt": "hi"}', '    import time; time.sleep(3)\n    return {"prompt": "hi"}')
+        trial = self.trial_of(slow, driver=dict(BENCH["driver"], unit_end=True), limits={"setup_seconds": 1})
+        with open(os.path.join(trial, "result.json")) as f:
+            self.assertEqual(json.load(f)["exception_info"]["exception_type"], "EnvironmentSetupError")
+        self.assertFalse(os.path.exists(os.path.join(trial, "ended.json")))
 
     def test_the_run_selects_agent_options_by_kind(self):
         option = {"summary": "Steps.", "values": ["10"], "default": "10", "setups": ["agent"]}

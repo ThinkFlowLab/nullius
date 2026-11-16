@@ -982,12 +982,13 @@ class Run:
     def unit_ended(self, unit: str, ws: str) -> None:
         """A driver that asks for it (``driver.unit_end``) is told that a unit an agent ran has ended, scored or not -
         also when the run was stopped - so that what its setup started for the agent ends now. The driver the unit
-        used is asked, never a new one; its answer is waited for ``END_SECONDS`` at most, and a failure is no
-        unit's."""
+        used is asked, never a new one, and only while it runs with no request the stop left unanswered (that
+        request's late reply would be read as this one's); its answer is waited for ``END_SECONDS`` at most, and a
+        failure is no unit's."""
         if self.other.get("_kind") != "agent" or not (self.bench.get("driver") or {}).get("unit_end"):
             return
         d = getattr(self.local, "driver", None)
-        if d is None or d.p is None or d.p.poll() is not None:
+        if d is None or d.p is None or d.p.poll() is not None or d.unanswered:
             return
         try:
             d.request("end", unit=unit, dir=ws, timeout=END_SECONDS, force=True)
@@ -1002,7 +1003,7 @@ class Run:
             self.feed.emit("trial.phase", name, task=unit, agent=self.other["key"], phase=phase, timeout_sec=timeout)
 
     def unit(self, i: int, unit: str, r: int = 1) -> Optional[dict]:
-        """One unit (:meth:`_unit`); once its setup was asked, whatever happened after, the driver is told its end
+        """One unit (:meth:`_unit`); once its setup was sent, whatever happened after, the driver is told its end
         (:meth:`unit_ended`)."""
         self.local.set_up = None
         try:
@@ -1039,9 +1040,12 @@ class Run:
         rl, environment, box, changes = None, None, None, None
         try:
             try:
-                # a setup's unit needs none: the upstream's answerer reads its data itself
-                self.local.set_up = None if self.upstream else (unit, ws)
-                setup = {} if self.upstream else self.driver().request("setup", unit=unit, dir=ws, timeout=self.setup_seconds(), **self.setup_kw())
+                # a setup's unit needs none: the upstream's answerer reads its data itself. The unit is set up
+                # once its request is written: a stop before that leaves the driver nothing to end
+                def sent():
+                    self.local.set_up = (unit, ws)
+                setup = {} if self.upstream else self.driver().request("setup", unit=unit, dir=ws, timeout=self.setup_seconds(),
+                                                                       on_sent=sent, **self.setup_kw())
             except jsonl.Failed as e:
                 raise _Ended("EnvironmentSetupError", str(e))
             environment, env_def = self.unit_environment(setup)
