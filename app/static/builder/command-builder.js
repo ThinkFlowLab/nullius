@@ -454,7 +454,8 @@
         const shared = on.includes('yours') && on.includes('original');
         if (scope === 'shared') return shared;
         if (shared) return false;
-        return scope === 'setup' ? !on.includes('yours') && on.some(k => chosen.includes(k)) : on.includes('yours');
+        // 'agent': an agent's run alone takes it, shown with the agents
+        return scope === 'setup' ? !on.includes('yours') && !on.includes('agent') && on.some(k => chosen.includes(k)) : on.includes('yours') || on.includes('agent');
       })
       .map(([n, o]) => {
       const cur = (rec.bench_options || {})[n] ?? o.default;

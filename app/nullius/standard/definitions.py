@@ -484,8 +484,11 @@ def _bench_options(d: dict) -> List[str]:
         if ds is not None and (not isinstance(ds, list) or not ds or any(x not in ids for x in ds)):
             bad.append(f"{w}.datasets: some of the benchmark's dataset ids")
         on = o.get("setups")
-        if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours",) for x in on)):
-            bad.append(f"{w}.setups: where it applies - some of original, model, yours (an agent or a capability)")
+        # agent: an agent's run alone, on a benchmark agents run, and never beside another scope
+        if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours", "agent") for x in on)
+                               or "agent" in on and (on != ["agent"] or d.get("family") != "agent")):
+            bad.append(f"{w}.setups: where it applies - some of original, model, yours (an agent or a capability); "
+                       "or agent alone (an agent's run), on a benchmark agents run")
         when = o.get("when") or {}
         if not _when_valid(name, when, opts):
             bad.append(f"{w}.when: another option -> the values of it this one applies under")
@@ -570,14 +573,17 @@ def _host(d: dict) -> List[str]:
     return bad
 
 
-def bench_options_of(bench: dict, dataset: str, given: Optional[dict] = None, setup: str = "yours") -> Tuple[dict, List[str]]:
+def bench_options_of(bench: dict, dataset: str, given: Optional[dict] = None, setup: str = "yours",
+                     kind: Optional[str] = None) -> Tuple[dict, List[str]]:
     """The benchmark's options for one run on ``dataset`` in ``setup`` (original, model, or yours: an
     agent or a capability in its port): each that applies to both, at the value ``given`` or its default;
     and what is wrong with the given ones. An option given for a dataset or a setup it does not apply
     to is ignored - a run of several carries one choice for all. An option applies to an agent's or a
-    capability's run unless its ``setups`` say otherwise."""
+    capability's run unless its ``setups`` say otherwise; one whose ``setups`` name ``agent`` applies to a run
+    whose ``kind`` is an agent, never to a capability's or a control's."""
     opts = {n: o for n, o in (bench.get("options") or {}).items()
-            if dataset in (o.get("datasets") or [dataset]) and setup in (o.get("setups") or ["yours"])}
+            if dataset in (o.get("datasets") or [dataset])
+            and (setup in (o.get("setups") or ["yours"]) or (kind == "agent" and setup == "yours" and "agent" in (o.get("setups") or [])))}
     given = {n: v for n, v in (given or {}).items() if n in opts or n not in (bench.get("options") or {})}
     vals, bad = options_of(dict(options=opts, label=bench.get("label"), key=bench.get("key")), given)
     return vals, bad
@@ -1278,6 +1284,10 @@ def problems(d: dict, kind: str) -> List[str]:
                 bad += _install(dict(driver_install(d), install=drv["install"]), "driver.install")
             elif any("{install}" in w for w in drv.get("command") or [] if isinstance(w, str)):
                 bad.append("driver.command: {install} names driver.install, which is not set")
+            if "participant" in drv and not isinstance(drv["participant"], bool):
+                bad.append("driver.participant: true or false - whether setup is told the participant's kind")
+            if "unit_end" in drv and not isinstance(drv["unit_end"], bool):
+                bad.append("driver.unit_end: true or false - whether the driver is told each unit's end")
         bad += _mcp_servers(d.get("mcp_servers"), isinstance(drv, dict) and "install" in drv)
         ds = d.get("datasets")
         if not isinstance(ds, list) or not ds:
@@ -1313,7 +1323,7 @@ def problems(d: dict, kind: str) -> List[str]:
             if not isinstance(lim, dict):
                 bad.append("limits: an object")
             else:
-                for f in ("turn_seconds", "turns"):
+                for f in ("turn_seconds", "turns", "setup_seconds"):
                     v = lim.get(f)
                     if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 100000):
                         bad.append(f"limits.{f}: a whole number from 1")

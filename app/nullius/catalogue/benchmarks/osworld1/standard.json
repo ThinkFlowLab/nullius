@@ -2,7 +2,7 @@
   "schema": "nullius.benchmark/v1",
   "key": "osworld1",
   "label": "OSWorld1",
-  "summary": "Each task is a unit: a real Ubuntu desktop in its own VM, set up by the task's config, one of OSWorld's own agents acting on it from its observations, and OSWorld's own evaluator reading the VM's final state.",
+  "summary": "Each task is a unit: a real Ubuntu desktop in its own VM, set up by the task's config. One of OSWorld's own agents acts on it from its observations, or an agent acts through the computer port, its tool calls the steps of OSWorld's own loop; OSWorld's own evaluator reads the VM's final state.",
   "family": "agent",
   "needs": [
     "agent.computer/v1"
@@ -18,13 +18,27 @@
       "{install}/.venv/bin/python",
       "{here}/driver.py",
       "{here}/agents.json",
-      "{here}/nop.py"
+      "{here}/nop.py",
+      "{here}/runner.py"
     ],
     "install": {
       "python": "3.12",
       "project": ".",
       "locked": true
+    },
+    "participant": true,
+    "unit_end": true
+  },
+  "mcp_servers": {
+    "computer": {
+      "command": [
+        "{install}/.venv/bin/python"
+      ],
+      "summary": "The unit's desktop for an agent: the computer port's pipe (the nullius package's standard/computer_pipe.py, whose path setup gives as the first argument) joined to the socket where the unit's runner serves the port's MCP server, its second argument."
     }
+  },
+  "limits": {
+    "setup_seconds": 3600
   },
   "datasets": [
     {
@@ -198,6 +212,24 @@
           ]
         }
       }
+    },
+    "max_steps": {
+      "label": "Steps",
+      "summary": "run_single_example's max_steps for an agent: the steps of OSWorld's own loop, each one acting call of the computer port.",
+      "pattern": "[1-9][0-9]{0,2}",
+      "default": "100",
+      "setups": [
+        "agent"
+      ]
+    },
+    "pause": {
+      "label": "Pause",
+      "summary": "run_single_example's sleep_after_execution for an agent: the seconds env.step waits after each action, 3.0 as in run_multienv_m3.py's default.",
+      "pattern": "[0-9]{1,2}(\\.[0-9]{1,2})?",
+      "default": "3.0",
+      "setups": [
+        "agent"
+      ]
     }
   },
   "host": {

@@ -67,7 +67,7 @@ and its resources. The source layout stays under `app/`.
   tools kit, an MCP server `mcp_kit`) - the definitions it reads are in the catalogue:
   a benchmark's `standard.json` and `driver` in its folder (τ³-bench's also the MCP
   server of its domains' tools, `mcp_server`: the upstream's own, run on the machine; OSWorld1's also its null control's
-  agent, `nop`), `catalogue/agents/<key>/`
+  agent, `nop`, and the `runner` of a unit an agent runs: the upstream's loop with the computer port's bridge), `catalogue/agents/<key>/`
   (the reference `agent`; JiuwenSwarm's `agent` and mini-swe-agent's `run`, the wrappers that start them) and `catalogue/capabilities/<key>/` (the keyword-memory `capability`); `workspace` (and
   `workspace_cli`, its shell command),
   `cli` and `__main__` (the unified `nullius` and `python -m nullius` commands),

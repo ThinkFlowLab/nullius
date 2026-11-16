@@ -31,13 +31,15 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `osworld1` | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `thinking`, `vm_provider` |
+| `osworld1` | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
 
 ## Options
 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
 | `agent` | **`m3`**, `prompt`, `claude`, `gpt54`, `openai_cua`, `qwen`, `os_symphony`, `evocua`, `autoglm`, `autoglm_v`, `mano`, `muse_spark` | Which of OSWorld's own agents runs: each its script as published, with its own prompts, action format and step limit. | `original`, `model` |
+| `max_steps` | pattern `[1-9][0-9]{0,2}`, default `100` | run_single_example's max_steps for an agent: the steps of OSWorld's own loop, each one acting call of the computer port. | `agent` |
+| `pause` | pattern `[0-9]{1,2}(\.[0-9]{1,2})?`, default `3.0` | run_single_example's sleep_after_execution for an agent: the seconds env.step waits after each action, 3.0 as in run_multienv_m3.py's default. | `agent` |
 | `thinking` | **`adaptive`**, `off` | M3_THINKING_MODE: adaptive, as run_multienv_m3.py's own documented invocation exports it (the model decides whether to think; temperature 1, no top_p), or off, the agent's code default when the variable is unset. | `original`, `model` |
 | `vm_provider` | **`docker`** | --provider_name: where the task's VM runs. docker only: the upstream's other providers need cloud accounts or a hypervisor of their own. | `original`, `model`, `yours` |
 
@@ -47,6 +49,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 ## Good to know
 
+- An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. Steps (100) and Pause (3.0 seconds) set that loop.
 - Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.
 - Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.
 - Only M3, PromptAgent and Qwen-CUA have completed tasks through Nullius. The other agents were checked up to their first model call.
@@ -65,10 +68,18 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 ## Nullius limitations
 
-- No agent from the Agents page can run it yet.
+- An agent needs the computer port, proven by its conformance kit. The agent side has been checked on a fake desktop alone.
+- Preparing the VM image (its lock and its download) is not bounded by a unit's setup time; the core's own limit on setup ends it.
+- A VM start that hangs holds the start gate until its unit's setup time ends; units waiting for the gate fail at the end of theirs.
+- On the local backend an agent runs as you and can write where you can, the runner's folder included.
+- A runner let go at the end of scoring's time that then ends by itself is scored from its complete result.
+- A stop during the runner's last clean-up keeps the result already written.
+- A driver killed outright leaves the runner to stop on its own; a kill during a VM's start can leave that VM.
+- A reaper checks a runner's start time before it ends the runner's group; a process number reused in between is not caught.
+- The agent's python and upload calls do not mark OSWorld's desktop as used; each unit's desktop is reset once, before the agent's first call.
 - Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.
 - The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.
-- A task still running after 2 hours is stopped and gets no score.
+- A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes; past any of them the task gets no score.
 
 ## Cite
 
