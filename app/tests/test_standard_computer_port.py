@@ -239,7 +239,7 @@ class Tools(Port):
         init = c.initialize()["result"]
         self.assertEqual(init["serverInfo"]["name"], "computer")
         self.assertIn("1920 by 1080 pixels", init["instructions"])
-        self.assertIn("there are 3 steps in all", init["instructions"])
+        self.assertIn("There are 3 steps in all", init["instructions"])
         self.assertEqual([t["name"] for t in c.ask("tools/list")["result"]["tools"]],
                          ["info", "screenshot", "read", "python", "upload", "click", "move", "drag", "scroll", "type",
                           "key", "wait", "step", "done", "fail"])
@@ -729,6 +729,36 @@ class Bare(unittest.TestCase):
         call = cp.Call("upload", args, None)
         cp.checked(call, b.screen)
         return b._upload(call)
+
+
+class Descriptions(Bare):
+    def test_acting_answers_and_screenshot_coordinates_are_described(self):
+        listed = {t["name"]: t for t in cp.listed((100, 100))}
+        for name in cp.ACTING:
+            with self.subTest(tool=name):
+                description = listed[name]["description"]
+                if name in cp.FINAL:
+                    self.assertIn("Returns {steps_left, done}, with no image", description)
+                else:
+                    self.assertIn("Returns the screen as a PNG image after the", description)
+                    self.assertIn("pause", description)
+                    if name == "step":
+                        self.assertIn("when screenshot is true", description)
+        for name in ("click", "move", "drag", "scroll"):
+            props = listed[name]["inputSchema"]["properties"]
+            for point, edge in (("x", "left"), ("y", "top"), ("to_x", "left"), ("to_y", "top")):
+                if point in props:
+                    with self.subTest(tool=name, point=point):
+                        self.assertIn("Pixels of the screenshot at the screen's size", props[point]["description"])
+                        self.assertIn(f"from its {edge} edge", props[point]["description"])
+        self.assertIn("before the first pointing action", listed["screenshot"]["description"])
+        instructions = self.bridge().instructions()
+        self.assertIn("x and y in screenshot pixels at the screen's size, from its top left corner", instructions)
+        self.assertIn("Look at a screenshot before the first pointing action", instructions)
+        self.assertIn("After the actions and their 0.01 s pauses", instructions)
+        self.assertIn("click, move, drag, scroll, type, key and wait return the screen as a PNG image", instructions)
+        self.assertIn("step does when screenshot is true", instructions)
+        self.assertIn("done and fail answer before they run, with no image", instructions)
 
 
 class Wires(Bare):
