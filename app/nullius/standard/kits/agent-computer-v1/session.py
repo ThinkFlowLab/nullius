@@ -1,12 +1,16 @@
 """The desktop's session, the container's command, run as root under the
-engine's init: the X display, then the session bus and the window manager as
-``user``. Each of root, ``user`` and ``fixture`` gets the display's cookie in
-its ``~/.Xauthority``, under this host's name and for any host, as
-``python3-xlib`` (pyautogui's) and libX11 look it up; access control stays
-off, so a client without it connects too. Once the window manager has
-claimed the display it writes ``/run/desktop/ready``; it lives as long as the
-display does, and its end ends the container. Standard library only, but for
-the Xlib check of the window manager."""
+engine's init.
+
+The X display runs as ``display``, an account of its own, with access
+control on: a client connects with the display's cookie, which this session
+writes into the ``~/.Xauthority`` of root, ``user`` and ``fixture``, under
+this host's name and for any host, as ``python3-xlib`` (pyautogui's) and
+libX11 look it up. The server's key repeat is off: a key held between two
+actions sends nothing in between. Then the session bus and the window
+manager start as ``user``. Once the window manager has claimed the display
+the session writes ``/run/desktop/ready``; it ends, and the container with
+it, when the display, the bus or the window manager ends. Standard library
+only, but for Xlib."""
 import os
 import signal
 import socket
@@ -19,6 +23,8 @@ DISPLAY = ":0"
 SCREEN = "1920x1080x24"
 UID = 1000
 HOME = "/home/user"
+SERVER_UID = 1002                                  # `display`, as whom the X server runs
+SERVER_AUTH = "/var/lib/display/Xauthority"
 RUNTIME = f"/run/user/{UID}"
 BUS = f"unix:path={RUNTIME}/bus"
 READY = "/run/desktop/ready"
@@ -45,6 +51,23 @@ def xauthority(cookie: bytes, host: str) -> bytes:
                     for family, addr in ((256, host.encode()), (0xFFFF, b"")))
 
 
+def write_owned(path, data, uid):
+    with open(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as f:
+        f.write(data)
+    os.chown(path, uid, uid)
+
+
+# XKB keeps the repeat delay in 16 bits: the longest it can wait before a held key repeats, 65.5 s
+REPEAT_DELAY_MS = 65535
+
+
+def server_argv():
+    """The X server's command: the screen, its cookie file, no TCP, access control left on, and every
+    keyboard's repeat delayed as long as XKB allows (the core switch below misses the input-test device)."""
+    return ["Xvfb", DISPLAY, "-screen", "0", SCREEN, "-auth", SERVER_AUTH, "-nolisten", "tcp",
+            "-ardelay", str(REPEAT_DELAY_MS), "-arinterval", str(REPEAT_DELAY_MS)]
+
+
 def wait_for(what, ok, seconds=30.0):
     end = time.monotonic() + seconds
     while not ok():
@@ -53,44 +76,55 @@ def wait_for(what, ok, seconds=30.0):
         time.sleep(0.05)
 
 
-def window_manager_up():
-    """Whether a window manager has said so on the root window (EWMH)."""
+def _with_display(fn):
     try:
         from Xlib import display
         d = display.Display(DISPLAY)
         try:
-            prop = d.screen().root.get_full_property(d.intern_atom("_NET_SUPPORTING_WM_CHECK"), 0)
-            return bool(prop and prop.value)
+            return fn(d)
         finally:
             d.close()
     except Exception:
         return False
 
 
+def repeat_off(d):
+    """The server's key repeat turned off, for every keyboard: a held key sends one press and one release."""
+    from Xlib import X
+    d.change_keyboard_control(auto_repeat_mode=X.AutoRepeatModeOff)
+    d.sync()
+    return d.get_keyboard_control().global_auto_repeat == X.AutoRepeatModeOff
+
+
+def window_manager_up(d):
+    """Whether a window manager has said so on the root window (EWMH)."""
+    prop = d.screen().root.get_full_property(d.intern_atom("_NET_SUPPORTING_WM_CHECK"), 0)
+    return bool(prop and prop.value)
+
+
 def main():
     os.makedirs("/tmp/.X11-unix", exist_ok=True)
     os.chmod("/tmp/.X11-unix", 0o1777)
     data = xauthority(os.urandom(16), socket.gethostname())
+    write_owned(SERVER_AUTH, data, SERVER_UID)
     for home, uid in HOMES:
-        path = os.path.join(home, ".Xauthority")
-        with open(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as f:
-            f.write(data)
-        os.chown(path, uid, uid)
-    # access control off: every local account draws and is drawn on; the only way in is the socket
-    xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", SCREEN, "-auth", "/root/.Xauthority", "-nolisten", "tcp", "-ac"],
-                            stdin=subprocess.DEVNULL)
+        write_owned(os.path.join(home, ".Xauthority"), data, uid)
+    xvfb = subprocess.Popen(server_argv(), user=SERVER_UID, group=SERVER_UID, extra_groups=[], cwd="/var/lib/display",
+                            env={"PATH": user_env()["PATH"], "HOME": "/var/lib/display"},
+                            stdin=subprocess.DEVNULL, start_new_session=True)
     wait_for("the X display", lambda: os.path.exists(X_SOCKET) or xvfb.poll() is not None)
     if xvfb.poll() is not None:
         sys.exit("desktop: Xvfb ended")
+    wait_for("the key repeat's switch", lambda: _with_display(repeat_off))
     os.makedirs(RUNTIME, exist_ok=True)
     os.chown(RUNTIME, UID, UID)
     os.chmod(RUNTIME, 0o700)
     bus = as_user(["dbus-daemon", "--session", f"--address={BUS}", "--nofork", "--nopidfile"])
     wait_for("the session bus", lambda: os.path.exists(f"{RUNTIME}/bus"))
     wm = as_user(["openbox"])
-    wait_for("the window manager", window_manager_up)
+    wait_for("the window manager", lambda: _with_display(window_manager_up))
     with open(READY, "w") as f:
-        f.write(f"{time.time():.6f}\n")
+        f.write(f"{time.monotonic():.6f}\n")
 
     def stop(*_, code=0):
         for p in (wm, bus, xvfb):
@@ -99,8 +133,9 @@ def main():
         sys.exit(code)
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    xvfb.wait()
-    stop(code=1)                                   # the display ended on its own
+    while all(p.poll() is None for p in (xvfb, bus, wm)):
+        time.sleep(0.5)
+    stop(code=1)                                   # one of the three ended on its own
 
 
 if __name__ == "__main__":
