@@ -590,6 +590,11 @@ elif mode == "hung":
     with stop.deferred():
         os.kill(os.getpid(), signal.SIGTERM)
         time.sleep(30)
+elif mode == "stderr-full":
+    stop.last = lambda: (sys.stderr.write("x" * 4194304), sys.stderr.flush())
+    with stop.deferred():
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(30)
 elif mode == "stalled-last":
     stop.last = lambda: time.sleep(30)
     with stop.deferred():
@@ -642,6 +647,13 @@ class Runner(unittest.TestCase):
         self.assertEqual((p.returncode, out), (1, b"last resort\n"))
         self.assertLess(time.monotonic() - t0, 5)
         self.assertIn(b"did not end within 0.3 s of the stop", err)
+
+    def test_a_last_resort_exits_when_stderr_is_a_pipe_nobody_reads(self):
+        p = self.child("stderr-full", "0.05")                    # its stderr is a pipe the test does not read
+        try:
+            self.assertEqual(p.wait(timeout=5), 1)
+        except subprocess.TimeoutExpired:
+            self.fail("the last resort waited on stderr")
 
     def test_a_last_resort_whose_own_callback_hangs_still_exits(self):
         p = self.child("stalled-last", "0.05")
@@ -708,6 +720,11 @@ class Bare(unittest.TestCase):
         b.submit(call)
         return call
 
+    def wire(self, conn=None):
+        w = cp.Wire(conn if conn is not None else FakeConnection())
+        self.addCleanup(w.close)
+        return w
+
     def upload(self, b, **args):
         call = cp.Call("upload", args, None)
         cp.checked(call, b.screen)
@@ -726,7 +743,7 @@ class Wires(Bare):
                 raise OSError("let go")
 
         b = self.bridge()
-        wire = cp.Wire(Stalled())
+        wire = self.wire(Stalled())
         self.server(b).call(1, {"name": "screenshot"}, wire)
         served = threading.Thread(target=b._serve, args=(b.calls.popleft(),), daemon=True)
         served.start()
@@ -746,7 +763,7 @@ class Wires(Bare):
             def sendall(self, data):
                 release.wait(10)
 
-        wire = cp.Wire(Stalled())
+        wire = self.wire(Stalled())
         with mock.patch.object(cp, "OUT_BYTES", 1000):
             self.assertTrue(wire.send({"x": "a" * 400}))           # taken by the writer, which stalls
             self.assertTrue(until(lambda: not wire.out))
@@ -799,14 +816,27 @@ class Wires(Bare):
     def test_a_complete_message_over_the_bound_is_refused(self):
         conn = FakeConnection([b" " * 127, b"{}\n"])
         with mock.patch.object(cp, "LINE_BYTES", 128):
-            self.assertEqual(list(cp.Wire(conn).lines()), [])
+            self.assertEqual(list(self.wire(conn).lines()), [])
         self.assertTrue(until(lambda: conn.sent))
         self.assertEqual(conn.sent[0]["error"]["code"], -32600)
+
+    def test_every_outgoing_frame_is_within_the_bound(self):
+        class Raw(FakeConnection):
+            def sendall(self, data):
+                self.sent.append(data)
+
+        with mock.patch.object(cp, "LINE_BYTES", 2000):
+            for method in ("tools/list", "initialize", "no/such"):
+                with self.subTest(method=method):
+                    conn = Raw([(json.dumps({"jsonrpc": "2.0", "id": "x" * 1900, "method": method}) + "\n").encode()])
+                    self.server(self.bridge())._serve(self.wire(conn))
+                    self.assertTrue(until(lambda: conn.sent))
+                    self.assertTrue(all(len(frame) <= 2000 for frame in conn.sent), [len(f) for f in conn.sent])
 
     def test_json_too_deep_to_read_is_answered_and_the_connection_closed(self):
         s = self.server(self.bridge())
         conn = FakeConnection([b"[" * 100000 + b"]" * 100000 + b"\n"])
-        s._serve(cp.Wire(conn))
+        s._serve(self.wire(conn))
         self.assertTrue(until(lambda: conn.closed), "the connection stayed open")
         self.assertEqual(conn.sent[0]["error"]["code"], -32700)
 
@@ -822,9 +852,38 @@ class Envelope(Bare):
         b = self.bridge()
         s = self.server(b)
         s.handle(json.loads('{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "click", '
-                            '"arguments": {"x": 1e999, "y": 1}}}'), cp.Wire(FakeConnection()))
+                            '"arguments": {"x": 1e999, "y": 1}}}'), self.wire())
         self.assertEqual([(r["tool"], r["isError"]) for r in s.records], [("click", True)])
         self.assertEqual(b.booked, 0)
+
+    def test_nan_and_infinity_are_no_json_and_take_no_step(self):
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                b = self.bridge()
+                conn = FakeConnection([('{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "wait", '
+                                        '"arguments": {"extra": %s}}}\n' % constant).encode()])
+                self.server(b)._serve(self.wire(conn))
+                self.assertTrue(until(lambda: conn.sent))
+                self.assertEqual((conn.sent[0]["error"]["code"], b.booked), (-32700, 0))
+
+    def test_an_argument_the_schema_does_not_list_is_refused(self):
+        b = self.bridge()
+        s = self.server(b)
+        s.call(1, {"name": "wait", "arguments": {"extra": 1}}, self.wire())
+        s.call(2, {"name": "click", "arguments": {"x": 1, "y": 1, "clicks": 2}}, self.wire())
+        self.assertEqual(([r["isError"] for r in s.records], b.booked), ([True, True], 0))
+        self.assertEqual([t["inputSchema"]["additionalProperties"] for t in cp.listed((100, 100))], [False] * 15)
+
+    def test_the_patterns_mean_the_same_in_python_and_in_the_listed_schema(self):
+        for actions in (["\ufeff"], ["\u0085"], ["\u00a0"], ["a"]):              # not blank, read alike either way
+            cp.checked(cp.Call("step", {"actions": actions}, None), (100, 100))
+        for actions in ([" \t\r\n\f\v"], ["DONE\n"], [" FAIL "]):
+            with self.subTest(actions=actions), self.assertRaises(cp.Refused):
+                cp.checked(cp.Call("step", {"actions": actions}, None), (100, 100))
+        with self.assertRaisesRegex(cp.Refused, "64 lowercase"):                     # $ is the text's end
+            cp.checked(cp.Call("upload", {"path": "f", "sha256": "0" * 64 + "\n"}, None), (100, 100))
+        patterns = json.dumps(cp.listed((100, 100)))
+        self.assertNotRegex(patterns, r"\\\\[sSdDwWbB]", "a class whose meaning differs between engines")
 
     def test_a_request_that_is_not_json_rpc_2_takes_no_step(self):
         b = self.bridge()
@@ -834,7 +893,7 @@ class Envelope(Bare):
                   {"jsonrpc": "2.0", "id": True, "method": "tools/call", "params": {"name": "wait"}},
                   {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": [{"name": "wait"}]},
                   {"id": 1, "method": "tools/call", "params": {"name": "wait"}}]:
-            self.assertEqual(s.handle(m, cp.Wire(FakeConnection()))["error"]["code"], -32600, m)
+            self.assertEqual(s.handle(m, self.wire())["error"]["code"], -32600, m)
         self.assertEqual((b.booked, len(b.calls), s.records), (0, 0, []))
 
     def test_calls_against_their_schema_are_refused_before_they_are_queued(self):
@@ -843,7 +902,7 @@ class Envelope(Bare):
             with self.subTest(tool=tool, args=args):
                 b = self.bridge()
                 s = self.server(b)
-                s.call(1, {"name": tool, "arguments": args}, cp.Wire(FakeConnection()))
+                s.call(1, {"name": tool, "arguments": args}, self.wire())
                 self.assertEqual((b.booked, len(b.calls)), (0, 0))
                 self.assertEqual(s.records[0]["isError"], True)
 
@@ -867,7 +926,7 @@ class Envelope(Bare):
     def test_an_answer_over_the_bound_is_recorded_as_failed(self):
         b = self.bridge()
         s, conn = self.server(b), FakeConnection()
-        s.call(1, {"name": "python", "arguments": {"code": "print('x' * 2000)"}}, cp.Wire(conn))
+        s.call(1, {"name": "python", "arguments": {"code": "print('x' * 2000)"}}, self.wire(conn))
         with mock.patch.object(cp, "LINE_BYTES", 512):
             b._serve(b.calls.popleft())
         self.assertTrue(until(lambda: conn.sent))
@@ -948,6 +1007,52 @@ class Uploads(Bare):
         self.upload(second, path="f", data=base64.b64encode(b"B").decode(), append=True)
         self.assertIsNone(held.get(digest))
         self.assertEqual(os.listdir(held.folder), [])
+
+    def test_the_listed_bound_of_data_is_the_checks(self):
+        schema = next(t["inputSchema"] for t in cp.listed((100, 100)) if t["name"] == "upload")
+        for size in (cp.CHUNK_BYTES - 1, cp.CHUNK_BYTES, cp.CHUNK_BYTES + 1, cp.CHUNK_BYTES + 2):
+            args = {"path": "f", "data": base64.b64encode(b"a" * size).decode()}
+            listed = cp._passes(args, schema, "upload", "arguments")
+            try:
+                cp.checked(cp.Call("upload", args, None), (100, 100))
+                taken = True
+            except cp.Refused:
+                taken = False
+            self.assertEqual((size, listed, taken), (size, size <= cp.CHUNK_BYTES, size <= cp.CHUNK_BYTES))
+        for wrong in ("YQ", "YQ=", "Y===", "YWJj\n"):
+            self.assertFalse(cp._passes({"path": "f", "data": wrong}, schema, "upload", "arguments"), wrong)
+
+    def test_a_transport_failure_during_an_append_leaves_no_part(self):
+        b = self.bridge()
+        b64 = lambda d: base64.b64encode(d).decode()
+        self.upload(b, path="f", data=b64(b"A"))
+        real, failed = self.desktop.python, []
+
+        def python(code):
+            if not failed:
+                failed.append(code)
+                raise TimeoutError("the desktop's transport failed")
+            return real(code)
+
+        self.desktop.python = python
+        with self.assertRaises(TimeoutError):
+            self.upload(b, path="f", data=b64(b"B"), append=True)
+        self.assertEqual(sorted(os.listdir(self.desktop.root)), ["f"])
+
+    def test_a_stop_as_a_file_is_kept_leaves_no_file_and_no_descriptor(self):
+        held = self.held()
+        opened, real = [], cp.tempfile.mkstemp
+
+        def mkstemp(**kw):
+            opened.append(real(**kw))
+            return opened[-1]
+
+        with mock.patch.object(cp.tempfile, "mkstemp", mkstemp), \
+                mock.patch.object(cp.os, "fdopen", side_effect=SystemExit(1)), self.assertRaises(SystemExit):
+            held.keep(hashlib.sha256(b"x").hexdigest(), b"x")
+        self.assertEqual(os.listdir(held.folder), [])
+        with self.assertRaises(OSError):                    # the descriptor was closed
+            os.fstat(opened[0][0])
 
     def test_a_file_over_the_bound_is_not_kept(self):
         held = self.held()
