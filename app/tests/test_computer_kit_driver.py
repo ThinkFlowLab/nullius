@@ -142,9 +142,22 @@ class Definition(unittest.TestCase):
         self.assertEqual(set(kit["skills"]), set(checks.CHECKS) - set(checks.BASIC))
         self.assertEqual(kit["environments"]["desktop"], dict(desktop.KIT["environments"]["desktop"],
                                                              summary=kit["environments"]["desktop"]["summary"]))
-        pipe = os.path.normpath(kit["mcp_servers"]["computer"]["command"][1].replace("{here}", KIT))
+        self.assertEqual(kit["mcp_servers"]["computer"]["command"], ["python3", "{here}/pipe.py"])     # a file of its folder
+        pipe = _module("computer_kit_pipe_under_test", "pipe.py").PIPE
         self.assertEqual(pipe, os.path.join(os.path.dirname(os.path.dirname(KIT)), "computer_pipe.py"))
         self.assertTrue(os.path.isfile(pipe))
+
+    def test_the_pipe_from_the_kits_folder_joins_stdio_to_the_socket(self):
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
+            path = os.path.join(tmp, "s")
+            server = port.Server(port.Bridge(FakeDesktop("d", {}), 1, 0, (1920, 1080), 1), path)
+            try:
+                p = subprocess.run([sys.executable, os.path.join(KIT, "pipe.py"), path], capture_output=True, timeout=30,
+                                   input=(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) + "\n").encode())
+            finally:
+                server.close()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads(p.stdout)["result"]["tools"][0]["name"], "info")
 
 
 # -- the driver over a fake desktop -------------------------------------------------------------------------------------

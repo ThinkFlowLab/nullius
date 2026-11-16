@@ -30,7 +30,7 @@
     "computer": {
       "command": [
         "python3",
-        "{here}/../../computer_pipe.py"
+        "{here}/pipe.py"
       ],
       "summary": "The unit's desktop: a pipe to the socket where the kit's driver serves the computer port over it; the socket is setup's argument."
     }
@@ -137,7 +137,7 @@
           "at_most": 0.0
         },
         "units": 8,
-        "job": "2026-11-16__12-16-15__agent-computer-v1__kit__prove-nop",
+        "job": "2026-11-16__12-32-36__agent-computer-v1__kit__prove-nop",
         "source": "nullius",
         "on": "2026-11-16"
       },
@@ -148,7 +148,7 @@
           "at_least": 1.0
         },
         "units": 8,
-        "job": "2026-11-16__12-16-15__agent-computer-v1__kit__prove-oracle",
+        "job": "2026-11-16__12-32-36__agent-computer-v1__kit__prove-oracle",
         "source": "nullius",
         "on": "2026-11-16"
       }
