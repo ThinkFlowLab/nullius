@@ -604,13 +604,13 @@
       return `<div class="nb-sectionhead"><h2>Choose the model.</h2></div>` + modelChoiceCards(rec)
         + providerField(rec, C.PROVIDERS)
         + field('Model', 'model', rec.model, {list:'nb-models', placeholder:paper && C.paperListed(rec) ? 'Choose a paper model' : 'Search or enter a model ID'})
-        + servedField(rec, 'model', rec.model)
+        + servedField(rec, 'model')
         // the benchmark's other models: the user simulator its conversations need, the judge that grades - each its official one
         // unless named; like the paper, the official one; like the leaderboard, its own and the options it fixes
         + (b.simulator ? (paper ? fixed('Model for the user simulator', lb && lb.simulator || b.simulator, lb && lb.simulator ? 'leaderboard' : 'official') : field('Model for the user simulator', 'simulator_model', rec.simulator_model || '', {list: 'nb-models', placeholder: b.simulator + ' (official)',
-            hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator', (!paper && rec.simulator_model) || lb && lb.simulator || b.simulator) : '')
+            hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator') : '')
         + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)',
-            hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge', (!paper && rec.judge_model) || lb && lb.judge || b.judge) : '')
+            hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
         + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, v, 'leaderboard')).join('') : '')
         + keyLine(rec);
     }
@@ -650,54 +650,34 @@
   const select = (label,key,value,options) => `<label class="nb-field">${label}<select data-field="${key}">${options.map(([v,t])=>`<option value="${esc(v)}" ${v===value?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
   const fixed = (label,value,whose='official') => `<label class="nb-field ui-field-row"><span class="ui-field-copy">${esc(label)}</span><span class="nb-fixed">${esc(value)} (${whose})</span></label>`;
   const note = (title,text) => `<div class="nb-notice"><strong>${title}</strong>${text}</div>`;
-  // Served by: under a model field, on OpenRouter alone, the serving providers that may answer it, in order (recipe.py,
-  // served_by); typed as slugs, or added from the model's providers (POST /new-run/endpoints)
+  // Served by: a row after each model field's, on OpenRouter alone: the serving providers that may answer that model,
+  // in order (recipe.py, served_by). Its picker is the Model row's (model-picker.js, list="nb-served"): typing filters
+  // the model's providers (POST /new-run/endpoints), a pick or a slug typed and Enter joins the list under it, each
+  // removable. Empty: any provider.
   const SERVED_NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
-  // its list: the providers of the model the run sends (the server's served_models), not of the name shown
-  const servedField = (rec, role, model) => !C.servedRoles(rec).includes(role) ? '' :
-    `<div class="nb-field std-served"><label title="Tried in this order, and no other provider. Empty: any.">Served by<input aria-label="Served by, ${SERVED_NAME[role]}" data-served-by="${role}" value="${esc(((rec.served_by || {})[role] || []).join(', '))}" placeholder="any provider" autocomplete="off" spellcheck="false"></label>`
-    + `<select aria-label="Add a provider for the ${SERVED_NAME[role]}" data-served-add="${role}" data-served-model="${esc(C.servedModelOf(role, model, compiledNow()))}" data-served-shown="${esc(model || '')}"><option value="">${model ? 'Add a provider…' : 'Choose the model first'}</option></select></div>`;
-  const servedCache = new Map();
-  function servedList(model) {
-    let entry = servedCache.get(model);
-    if (!entry || Date.now() - entry.at > 300000) {
-      entry = {at: Date.now(), promise: nulliusFetch('/new-run/endpoints', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({provider: 'openrouter', model})})
-        .then(x => x.json()).then(x => ({...x, endpoints: Array.isArray(x.endpoints) ? x.endpoints : []}))
-        .catch(() => ({ok: false, endpoints: [], message: "Provider list unavailable. Enter a provider's slug by hand."}))};
-      servedCache.set(model, entry);
-    }
-    return entry.promise.then(x => { if (!x.ok) servedCache.delete(model); return x; });
-  }
   // the model a Served by is for, as the step shows it: the field's, else the leaderboard's or the official one
   const servedShown = (rec, role) => {
     if (role === 'model') return rec.model || '';
     const b = C.standardBench(rec) || {}, lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
     return (!paper && rec[role + '_model']) || lb && lb[role] || b[role] || '';
   };
-  // each Served by drawn again in place, as the recipe holds it now: its slugs (but the one being typed in), and its
-  // list of the model it is for. The rest of the form stays as it is: the keyboard stays where it is, and an open
-  // menu stays open.
+  // its list is of the model the run sends (the server's served_models), not of the name shown
+  const servedState = (rec, role) => { const shown = servedShown(rec, role), chosen = (rec.served_by || {})[role] || [];
+    return {shown, model: C.servedModelOf(role, shown, compiledNow()), chosen, placeholder: chosen.length ? 'Add a provider' : 'any provider'}; };
+  const servedChips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick">${esc(slug) || '“”'}`
+    + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${SERVED_NAME[role]}"`, 'nb-remove') + '</span>').join('');
+  const servedField = (rec, role) => { if (!C.servedRoles(rec).includes(role)) return ''; const s = servedState(rec, role);
+    return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any.">Served by<input list="nb-served" aria-label="Served by, ${SERVED_NAME[role]}" data-served-by="${role}" data-served-shown="${esc(s.shown)}" data-served-model="${esc(s.model)}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
+      + `<span class="nb-chips std-served-list" data-served-list="${role}" data-of="${esc(JSON.stringify(s.chosen))}">${servedChips(role, s.chosen)}</span></label>`; };
+  // each Served by drawn again in place, as the recipe holds it now: its list, and the model its providers are listed
+  // for. The rest of the form stays as it is: the keyboard stays where it is, and an open menu stays open.
   function syncServed() {
     const rec = r();
-    root.querySelectorAll('input[data-served-by]').forEach(f => { if (f !== document.activeElement) f.value = ((rec.served_by || {})[f.dataset.servedBy] || []).join(', '); });
-    root.querySelectorAll('select[data-served-add]').forEach(select => { select.dataset.servedShown = servedShown(rec, select.dataset.servedAdd); });
-    fillServed();
-  }
-  function fillServed() {
-    root.querySelectorAll('select[data-served-add]').forEach(async select => {
-      // the model the run sends, once the server has compiled it: a list asked under another name is asked again
-      const sent = C.servedModelOf(select.dataset.servedAdd, select.dataset.servedShown, compiledNow());
-      if (sent !== select.dataset.servedModel) { select.dataset.servedModel = sent; select.length = 1; delete select.dataset.servedFilled; }
-      if (select.dataset.servedFilled) return;
-      select.dataset.servedFilled = 'true';
-      const model = select.dataset.servedModel;
-      if (!model) return;
-      const got = await servedList(model);
-      if (!select.isConnected || select.dataset.servedModel !== model) return;
-      const first = select.options[0];
-      if (!got.ok || !got.endpoints.length) { first.textContent = got.ok ? 'No provider listed: type a slug' : got.message; return; }
-      first.textContent = 'Add a provider…';
-      for (const e of got.endpoints) { const o = document.createElement('option'); o.value = e.slug; o.textContent = e.name + ' · ' + e.slug + (e.quantization ? ' · ' + e.quantization : ''); select.append(o); }
+    root.querySelectorAll('input[data-served-by]').forEach(input => {
+      const role = input.dataset.servedBy, s = servedState(rec, role), list = root.querySelector(`[data-served-list="${role}"]`);
+      Object.assign(input.dataset, {servedShown: s.shown, servedModel: s.model, chosen: s.chosen.join(',')});
+      input.placeholder = s.placeholder;
+      if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = servedChips(role, s.chosen); }
     });
   }
 
@@ -785,7 +765,7 @@
       const rows=own?[...((runnerOut&&runnerOut.review)||[]),...(C.isStandard(rec)?[]:[[S.where,'Where',C.whereLabel(rec)]])]:C.review(rec);
       html='<div class="nb-sectionhead"><h2>Review the experiment.</h2></div>'+rows.map(([i,t,v])=>`<div class="nb-reviewrow"><div><small>${t}</small><strong>${esc(v)}</strong></div>${button('Edit',`data-step="${i}"`)}</div>`).join('')+'<div id="nb-errors" class="nb-errorlist" hidden></div><div id="nb-reviewnotes"></div>'+(schema.local?'<section id="nb-prereq" class="nb-prereq" aria-live="polite"></section>':'')+runPanel();
     }
-    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';applyPick();fillServed();
+    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';applyPick();
     if(step===REVIEW&&schema.local){drawPrereq();checkPrereq();}
     $('#nb-back').hidden=step===S.benchmark;
     $('#nb-next').textContent=step===REVIEW?'Export recipe JSON':stepName(steps[nextShown(step,1)],nextShown(step,1))+' →';
@@ -945,6 +925,9 @@
   root.addEventListener('click',async event=>{
     const b=event.target.closest('button');if(!b)return;const d=b.dataset;
     if(d.modelChoice){C.setModelChoice(r(),d.modelChoice);renderForm();refreshPlan();return;}
+    // a provider taken out of a Served by. Its row's label does not then focus the field (its menu would open); by
+    // key, the keyboard goes back to that field
+    if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);syncServed();refreshPlan();if(event.detail===0)root.querySelector(`input[data-served-by="${d.servedRole}"]`)?.focus();return;}
     if(d.benchOpt!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOpt]||{};rec.bench_options={...(rec.bench_options||{})};if(d.benchVal===o.default)delete rec.bench_options[d.benchOpt];else rec.bench_options[d.benchOpt]=d.benchVal;renderForm();refreshPlan();return;}
     if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check');return;}
     if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install');return;}
@@ -1003,7 +986,7 @@
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
     if(d.pickFind!==undefined){pickOf().q=el.value;applyPick();return;}
-    if(d.servedBy!==undefined){C.setServed(rec,d.servedBy,el.value);refreshPlan();return;}
+    if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
     if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
       const value=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;
@@ -1031,12 +1014,12 @@
     const el=event.target;
     if(el.type==='number'&&el.dataset.field&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
   });
+  // a provider picked in a Served by, or slugs typed there and Enter: they join its list, after the ones there
+  root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);syncServed();refreshPlan();});
   root.addEventListener('change',async event=>{
     const el=event.target,d=el.dataset;
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
-    // a provider added to a Served by, after the ones already there; the field shows the list, in its order
-    else if(d.servedAdd!==undefined){const rec=r(),role=d.servedAdd,now=(rec.served_by||{})[role]||[];if(el.value&&!now.includes(el.value))C.setServed(rec,role,[...now,el.value]);el.value='';const f=root.querySelector(`[data-served-by="${role}"]`);if(f)f.value=((r().served_by||{})[role]||[]).join(', ');refreshPlan();}
     else if(d.stdVersion!==undefined){C.setStandardBenchmark(r(),el.value);render();}
     // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
     // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the

@@ -1,9 +1,12 @@
 """The Model step's Served by: the route that lists a model's providers on
-OpenRouter (local, form-token guarded, asked as the model list is), and the
+OpenRouter (local, form-token guarded, asked as the model list is), the row
+and its picker (the Model row's, taking several providers in order), and the
 recipe's ``served_by`` in the builder's core script (its fields on
 OpenRouter alone, kept by a saved recipe, dropped with another provider)."""
 import json
 import os
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -62,12 +65,31 @@ class ProviderList(unittest.TestCase):
 
 class TheStep(unittest.TestCase):
     """What the Model step's script draws and what the compile route hands it."""
-    SCRIPT = (Path(__file__).resolve().parents[1] / 'static' / 'builder' / 'command-builder.js').read_text()
+    STATIC = Path(__file__).resolve().parents[1] / 'static'
+    SCRIPT = (STATIC / 'builder' / 'command-builder.js').read_text()
+    PICKER = (STATIC / 'builder' / 'model-picker.js').read_text()
+    STYLE = (STATIC / 'builder' / 'command-builder.css').read_text()
 
     def test_served_by_holds_no_sentence_and_its_help_is_a_tooltip(self):
-        field = self.SCRIPT[self.SCRIPT.index('const servedField'):self.SCRIPT.index('const servedCache')]
+        field = self.SCRIPT[self.SCRIPT.index('const servedField'):self.SCRIPT.index('function syncServed')]
         self.assertNotIn('<small>', field)
         self.assertIn('title="', field)
+
+    def test_served_by_is_a_row_with_the_model_rows_picker(self):
+        """A row as the Model row is (a ``label.nb-field``, which the page sets as a settings row), its input one the
+        Model row's picker takes (``list="nb-served"``), with no block set in under the model's row."""
+        field = self.SCRIPT[self.SCRIPT.index('const servedField'):self.SCRIPT.index('function syncServed')]
+        self.assertIn('<label class="nb-field std-served"', field)
+        self.assertIn('<input list="nb-served"', field)
+        self.assertNotIn('<select', field)
+        self.assertIn('input[list="nb-models"], input[list="nb-served"]', self.PICKER)
+        served_css = [line for line in self.STYLE.splitlines() if 'std-served' in line]
+        self.assertTrue(served_css)
+        self.assertFalse([line for line in served_css if 'border-left' in line or 'margin-left' in line])
+        # a pick joins the list (never replaces it); a removal is one place of it; a field of several opens on a click
+        self.assertIn("root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);", self.SCRIPT)
+        self.assertIn('if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);', self.SCRIPT)
+        self.assertIn("if (severalOf(input)) input.addEventListener('click', () => { if(active?.input !== input)void open(input); });", self.PICKER)
 
     def test_the_compile_route_gives_each_fields_model_as_the_run_sends_it(self):
         client = web.app.test_client()
@@ -86,6 +108,32 @@ class TheStep(unittest.TestCase):
         changed = self.SCRIPT[self.SCRIPT.index("root.addEventListener('change'"):]
         self.assertNotIn("'model','simulator_model','judge_model'", changed)
         self.assertNotIn('requestAnimationFrame', changed)
+
+
+class ThePicker(unittest.TestCase):
+    """model-picker.js, as the Model row and each Served by use it: what typing keeps, and what Enter takes."""
+    PICKER = Path(__file__).resolve().parents[1] / 'static' / 'builder' / 'model-picker.js'
+    ROWS = [{'id': 'deepinfra/fp8', 'name': 'DeepInfra · fp8'}, {'id': 'together', 'name': 'Together · fp8'}, {'id': 'novita/bf16', 'name': 'Novita · bf16'}]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.node = shutil.which('node')
+        if not cls.node:
+            raise unittest.SkipTest('Node is required for the picker')
+
+    def js(self, code):
+        program = 'const P=require(' + json.dumps(str(self.PICKER)) + ');const ROWS=' + json.dumps(self.ROWS) + ';\n' + code
+        return json.loads(subprocess.run([self.node, '-'], input=program, check=True, capture_output=True, text=True).stdout)
+
+    def test_typing_filters_a_models_providers(self):
+        out = self.js('const ids=x=>x.map(m=>m.id);process.stdout.write(JSON.stringify([ids(P.matching(ROWS,"nov")),ids(P.matching(ROWS,"DEEP")),'
+                      'ids(P.matching(ROWS,"fp8")),ids(P.matching(ROWS,"fp8",["deepinfra/fp8"])),ids(P.matching(ROWS,"")).length,ids(P.matching(ROWS,"zz"))]));')
+        self.assertEqual(out, [['novita/bf16'], ['deepinfra/fp8'], ['deepinfra/fp8', 'together'], ['together'], 3, []])
+
+    def test_enter_takes_a_slug_the_list_lacks_in_a_field_of_several(self):
+        out = self.js('process.stdout.write(JSON.stringify([P.entered([],-1," my-provider/fp8 ",true),P.entered(ROWS,1,"x",true),'
+                      'P.entered([],-1,"x",false),P.entered([],-1,"  ",true),P.entered(ROWS,-1,"gpt-4o",false)]));')
+        self.assertEqual(out, [{'id': 'my-provider/fp8', 'typed': True}, self.ROWS[1], None, None, None])
 
 
 class ServedInTheCore(CompilerCase):
@@ -122,6 +170,22 @@ class ServedInTheCore(CompilerCase):
                       'C.setServed(r,"model",["a"]);const other=C.standard().benchmarks.find(x=>x.key!==b.key);C.setStandardBenchmark(r,other.key);seen.push(JSON.stringify(r.served_by||null));'
                       'process.stdout.write(JSON.stringify(seen));')
         self.assertEqual(out, ['{"model":["a"],"judge":["j"]}', '{"judge":["j"]}', 'null', '{"model":["a"]}', 'null', 'null'])
+
+    def test_a_pick_then_a_second_join_the_list_in_order(self):
+        out = self.js('const b=C.standard().benchmarks.find(x=>x.judge)||C.standard().benchmarks[0];const r=C.createStandard(b.key);C.setChoice(r,"openrouter");'
+                      'const seen=[];C.addServed(r,"model","deepinfra/fp8");seen.push(r.served_by.model.slice());C.addServed(r,"model","together");seen.push(r.served_by.model.slice());'
+                      'C.addServed(r,"model","deepinfra/fp8");seen.push(r.served_by.model.slice());C.addServed(r,"model","my-provider/fp8, novita ,");seen.push(r.served_by.model.slice());'
+                      'C.addServed(r,"judge",["openai"]);C.addServed(r,"judge","");seen.push(r.served_by);process.stdout.write(JSON.stringify(seen));')
+        self.assertEqual(out, [['deepinfra/fp8'], ['deepinfra/fp8', 'together'], ['deepinfra/fp8', 'together'],
+                               ['deepinfra/fp8', 'together', 'my-provider/fp8', 'novita'],
+                               {'model': ['deepinfra/fp8', 'together', 'my-provider/fp8', 'novita'], 'judge': ['openai']}])
+
+    def test_a_removal_takes_out_the_one_at_its_place(self):
+        out = self.js('const b=C.standard().benchmarks.find(x=>x.judge)||C.standard().benchmarks[0];const r=C.createStandard(b.key);C.setChoice(r,"openrouter");'
+                      'C.setServed(r,"model",["a","b","a"]);C.setServed(r,"judge",["j"]);const seen=[];C.removeServed(r,"model",2);seen.push(r.served_by.model.slice());'
+                      'C.removeServed(r,"model","0");seen.push(r.served_by.model.slice());C.removeServed(r,"model",0);seen.push(r.served_by);'
+                      'C.removeServed(r,"judge",0);seen.push(r.served_by===undefined);process.stdout.write(JSON.stringify(seen));')
+        self.assertEqual(out, [['a', 'b'], ['b'], {'judge': ['j']}, True])
 
     def test_a_pin_is_kept_as_written_for_the_server_to_refuse(self):
         raw = {'version': 1, 'harness': 'standard', 'benchmark': '', 'provider': 'openrouter', 'served_by': {'model': ['deepinfra', 'bad slug']}}
