@@ -109,6 +109,11 @@
             title="{{ LABELS[k] }}: {{ totals[k] }} — click to filter"></button>
   {% endif %}{% endfor %}
 </div>
+<div class="runs-filters">
+<div class="runs-views" role="group" aria-label="View">
+  <a class="rv{{ ' on' if view == 'launch' }}" href="?view=launch" data-view="launch" aria-pressed="{{ 'true' if view == 'launch' else 'false' }}">By launch</a>
+  <a class="rv{{ ' on' if view == 'all' }}" href="?view=all" data-view="all" aria-pressed="{{ 'true' if view == 'all' else 'false' }}">All runs</a>
+</div>
 <div class="legend">
   {% for k in ORDER %}{% if totals[k] %}
     <button class="chip oc-{{ k }}" data-outcome="{{ k }}"
@@ -121,10 +126,6 @@
   {% endif %}
   <button class="chip clear" id="clear-filter" hidden>Clear filter ×</button>
 </div>
-
-<div class="runs-views" role="group" aria-label="View">
-  <a class="rv{{ ' on' if view == 'launch' }}" href="?view=launch" data-view="launch" aria-pressed="{{ 'true' if view == 'launch' else 'false' }}">By launch</a>
-  <a class="rv{{ ' on' if view == 'all' }}" href="?view=all" data-view="all" aria-pressed="{{ 'true' if view == 'all' else 'false' }}">All runs</a>
 </div>
 
 {#- By launch: runs started together ran the same tasks. Each launch is one block - its task checks (the nop and oracle
