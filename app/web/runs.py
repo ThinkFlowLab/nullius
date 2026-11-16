@@ -100,6 +100,7 @@ def index():
         datasets=datasets, choices=choices, pulse=_roots_pulse(), preparing=preparing,
         launches=groups, view=view, states=states,
         n_checked=sum(1 for g in groups if g["checked"]),
+        n_checks=sum(g["n_checks"] for g in groups),
     )
 
 
