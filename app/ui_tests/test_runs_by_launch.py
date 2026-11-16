@@ -206,7 +206,7 @@ class RunsByLaunch(unittest.TestCase):
         with patch.dict(execution.EXECUTIONS, {"r2": ex}, clear=True):
             page = self.get("/job/exp-1008-codex")                                     # its own page, before Harbor writes it
         self.assertIn('id="execution-state">queued</span>', page)
-        self.assertIn("· the run: running", page)
+        self.assertIn("· the launch: running", page)
 
     def test_a_standard_launch_draws_its_controls_whatever_their_state(self):
         # A standard job carries a runner; its declared controls are still task checks, before and after they are written.

@@ -278,7 +278,7 @@
         {%- if j.is_preparing %} <span class="badge"
           title="Launched: Harbor has written this run's configuration and nothing else yet. No trial has started; the row will change on its own.">preparing</span>
         {%- elif j.is_running and ended[j.job_id] %} <span class="badge"
-          title="The run that wrote this job was {{ ended[j.job_id][0] }} at {{ ended[j.job_id][1].strftime('%H:%M:%S') }}Z; Harbor never closed it, so its record still names {{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending — those trials will not run">{{ ended[j.job_id][0] }}</span>
+          title="This run was {{ ended[j.job_id][0] }} at {{ ended[j.job_id][1].strftime('%H:%M:%S') }}Z; Harbor never closed it, so its record still names {{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending. Those trials will not run.">{{ ended[j.job_id][0] }}</span>
         {%- elif j.is_running %} <span class="badge warn"
           title="{{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending — this run is not finished; its numbers are partial">running</span>{% endif %}</td>
       <td data-col="agent"><span>{{ j.agent_label or '—' }}</span>

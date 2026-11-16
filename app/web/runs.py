@@ -527,7 +527,7 @@ def launch_delete(key):
         abort(404)
     runs = _runs_of(g)
     if not runs:
-        flash(f"{g.title} has jobs Nullius did not run: it cannot be deleted here.", "error")
+        flash(f"{g.title} has runs that Nullius did not start: it cannot be deleted here.", "error")
         return redirect(url_for("index", view="launch"))
     try:
         gone = execution.delete([e.plan.name for e in runs], shared.WS_HOME, runs[0].root, copies=set(request.form.getlist("host")))

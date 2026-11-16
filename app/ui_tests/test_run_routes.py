@@ -618,7 +618,7 @@ class RunDelete(unittest.TestCase):
         self.assertNotIn("Delete launch", html)
         self.assertNotIn("Delete its launch", self.get("/job/L1-shard-1of3").get_data(as_text=True))
         r = self.delete(key)
-        self.assertIn("L1 has jobs Nullius did not run: it cannot be deleted here.", self.get(r.headers["Location"]).get_data(as_text=True))
+        self.assertIn("L1 has runs that Nullius did not start: it cannot be deleted here.", self.get(r.headers["Location"]).get_data(as_text=True))
         self.assertTrue((self.tmp / "runs" / "s1").is_dir())
 
     def test_a_launch_with_a_run_still_going_has_no_delete_and_is_refused(self):
