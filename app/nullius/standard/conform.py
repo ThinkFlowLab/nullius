@@ -111,10 +111,13 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
     jobs before they exist. ``backend``: where the kits run (``run.Run``).
     ``options``: the agent's options for the kits'
     runs; a record proven with any of them off its default says which.
-    ``repeat``: how many times each check runs (:func:`outcome`)."""
+    ``repeat``: how many times each check runs (:func:`outcome`). A benchmark-specific
+    refusal is reported and skipped when checking all candidates. An explicit
+    ``which`` or a refusal of the whole command still ends the check."""
     import os
     env = env if env is not None else os.environ
     repeat = max(1, int(repeat or 1))
+    run.provider_endpoint(provider, env)
     got = {}
     for p in which or candidates(other):
         kit = definitions.kit(p)
@@ -122,10 +125,16 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
             say(f"{p}: no kit yet")
             continue
         say(f"{p}: {kit['summary']}")
-        job_dir = run.run(kit, other, model=model, provider=provider, jobs_root=jobs_root, concurrency=2,
-                          name=job_name(stamp or time.strftime(STAMP), kit["key"], definitions.job_word(other)),
-                          say=lambda s: say("  " + s), env=env, proving=True, unsandboxed=unsandboxed,
-                          backend=backend, options=options, repeat=repeat)
+        try:
+            job_dir = run.run(kit, other, model=model, provider=provider, jobs_root=jobs_root, concurrency=2,
+                              name=job_name(stamp or time.strftime(STAMP), kit["key"], definitions.job_word(other)),
+                              say=lambda s: say("  " + s), env=env, proving=True, unsandboxed=unsandboxed,
+                              backend=backend, options=options, repeat=repeat)
+        except run.BenchmarkRefused as e:
+            if which:
+                raise
+            say(f"{p}: refused: {e}")
+            continue
         o = outcome(kit, _runs(parse.parse_job(job_dir)), repeat)
         got[p] = {"passed": o["passed"], "ok": o["ok"], "on": time.strftime("%Y-%m-%d"), "model": model, "provider": provider,
                   "version": str((other.get("upstream") or {}).get("version") or ""),

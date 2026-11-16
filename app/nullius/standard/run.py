@@ -118,6 +118,10 @@ class Refused(Exception):
     """The run cannot start: the pair does not fit, or a setting is missing."""
 
 
+class BenchmarkRefused(Refused):
+    """This benchmark cannot run here; another benchmark may still run."""
+
+
 def setup_request(bench: dict, kind: str, attempt: Optional[int] = None) -> tuple:
     """What a unit's ``setup`` is sent besides the unit and its folder, and how long it may take, for a unit that
     ``kind`` runs (agent, capability, control): ``attempt`` when the benchmark tells attempts apart
@@ -482,16 +486,16 @@ class Run:
         # A control (definitions.control) calls no model: its run needs a key only for the benchmark's judge.
         ds = [d for d in bench["datasets"] if dataset in (None, d["id"])]
         if not ds:
-            raise Refused(f"{bench['label']} has no dataset {dataset!r}: {[d['id'] for d in bench['datasets']]}")
+            raise BenchmarkRefused(f"{bench['label']} has no dataset {dataset!r}: {[d['id'] for d in bench['datasets']]}")
         self.ds = ds[0]
         try:
             _, env_def = definitions.environment_of(bench, None, self.ds)
         except ValueError as e:
-            raise Refused(str(e))
+            raise BenchmarkRefused(str(e))
         if backend != "container" and other.get("_kind") == "control" and definitions.own_image(env_def):
             why = container.unusable()
             if why:
-                raise Refused(f"each {(bench.get('units') or {}).get('noun', 'unit')} of {bench['label']} runs in its own image, "
+                raise BenchmarkRefused(f"each {(bench.get('units') or {}).get('noun', 'unit')} of {bench['label']} runs in its own image, "
                               f"which needs docker: {why}")
         # The benchmark's own options on this dataset; what their values need: an embedding model the driver
         # calls through a relay of the run's own (bench_relay), programs on this machine.
@@ -500,14 +504,14 @@ class Run:
                                                                other["key"] if self.upstream else "yours",
                                                                kind=other.get("_kind"))
         if bad:
-            raise Refused("; ".join(bad))
+            raise BenchmarkRefused("; ".join(bad))
         needs = definitions.option_needs(bench, self.bench_options)
         self.files = needs["files"]
         self.file_env: Dict[str, str] = {}
         for m in needs["embeddings"]:
             why = providers.embedding_problem(m, provider)
             if why:
-                raise Refused(why)
+                raise BenchmarkRefused(why)
         self.embed_model = providers.served_as(needs["embeddings"][0], provider) if needs["embeddings"] else None
         self.rerank_model = providers.served_as(needs["reranker"][0], provider) if needs["reranker"] else None
         # What a call's cost is estimated from when the provider does not say it: the user's price list
@@ -541,12 +545,12 @@ class Run:
             imaged = hostreq.in_image(bench, on_host)
             cannot = [n for n in hostreq.requirements(bench, on_host) if n not in imaged]
             if cannot:
-                raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs "
+                raise BenchmarkRefused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs "
                               f"{', '.join(cannot)}, which a container setup cannot provide: choose local processes")
             on_host = []
         lacking = hostreq.problems(bench, on_host, which, self.constraints.get("gpu_ids"))
         if lacking:
-            raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
+            raise BenchmarkRefused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
                           + "; ".join(f"{n} ({why})" for n, why in lacking.items())
                           + (". Install with: " + " && ".join(lines) if (lines := hostreq.install_lines(bench, list(lacking)))
                              else ". Run it on a machine that has it"))
@@ -612,7 +616,7 @@ class Run:
             try:
                 cmd, extra = install.driver_argv(self.bench)     # its driver.install: installed in ready(), found here
             except install.InstallFailed as e:
-                raise Refused(f"could not install the driver's environment: {e}")
+                raise BenchmarkRefused(f"could not install the driver's environment: {e}")
             env = base_env(os.path.join(self.job_dir, ".work", "driver-home"),
                            {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                             "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
@@ -863,7 +867,7 @@ class Run:
         from . import network_requirements
         why = network_requirements.check(self.bench, self.other)
         if why:
-            raise Refused("; ".join(why))
+            raise BenchmarkRefused("; ".join(why))
         p = self.progress
         self.scope_limits = self.scope_ready(limits.scoped(self.constraints), refuse=self.backend == "local")
         owns = any(definitions.own_image(e) for e in (self.bench.get("environments") or {}).values())
@@ -878,13 +882,14 @@ class Run:
         # every container the run starts takes the caps: its agents', relays' and installs' on the container
         # backend, its checks' and own images' on either
         if self.backend == "container" or self.container_check or owns:
+            refusal = Refused if self.backend == "container" else BenchmarkRefused
             try:
                 # Docker can drop a limit with only a warning: a result would look limited when it was not
                 not_applied = container.unenforced(self.image or limits.PROBE_IMAGE, self.container_limits)
             except container.Unavailable as e:
-                raise Refused(str(e))
+                raise refusal(str(e))
             if not_applied:
-                raise Refused("this machine's engine does not apply " + "; ".join(
+                raise refusal("this machine's engine does not apply " + "; ".join(
                     f"{limits.BY_KEY[k].label} ({limits.explain(k, self.container_limits[k], why)})" for k, why in not_applied.items()))
         # on the container backend the agent's packages are installed in the base image, with the Node, uv and libc it runs on
         image = self.image if self.backend == "container" else None
@@ -920,6 +925,11 @@ class Run:
             elif drv is not None:                  # the environment the upstream's own code needs, for the driver
                 with p.stage("driver", cached=install.ready(drv), start=f"installing {self.bench['key']}'s driver environment"):
                     install.driver_packages(self.bench)
+        except (install.InstallFailed, container.Unavailable) as e:
+            if self.backend == "container":
+                container.sweep(self.name)
+            raise BenchmarkRefused(f"could not install what the run needs: {e}")
+        try:
             self.inst = ""
             if self.other["_kind"] not in ("control", "upstream"):
                 with p.stage("install", cached=install.ready(install.packages_dir(self.other, image=image)), agent=self.other.get("_ref") or self.other["key"]):
@@ -935,7 +945,7 @@ class Run:
                 with p.stage("runtime", start="fetching " + ", ".join(self.runtimes_needed()), name=",".join(self.runtimes_needed())):
                     self.runtimes = container.runtime_mounts(self.runtimes_needed())
             except container.Unavailable as e:
-                raise Refused(f"the agent's runtime for an own image: {e}")
+                raise BenchmarkRefused(f"the agent's runtime for an own image: {e}")
         # An option whose driver embeds or reranks: its calls go through a relay of the run's
         # own, recorded in the job's .work/relay-benchmark beside the units', never counted as the agent's.
         if (self.embed_model or self.rerank_model) and self.bench_relay is None:
