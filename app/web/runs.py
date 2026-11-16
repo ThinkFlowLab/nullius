@@ -115,8 +115,13 @@ def _grouped():
     mine = [e for e in execution.EXECUTIONS.values() if _launched_here(e, have)]
     merged = launches.merged_sources(jobs)
     jobs = [j for j in jobs if j.job_id not in merged]
-    records = {e.id: (e.plan.name, [str(x.get("name")) for x in e.plan.jobs if str(x.get("name")) not in merged], e.started) for e in mine}
-    return jobs, have, mine, launches.group(jobs, records)
+    return jobs, have, mine, launches.group(jobs, {e.id: _record(e, merged) for e in mine})
+
+
+def _record(ex, merged=()) -> tuple:
+    """A run record as ``launches.group`` reads it, less the jobs a merge stands for."""
+    names = [str(x.get("name")) for x in ex.plan.jobs if str(x.get("name")) not in merged]
+    return ex.plan.name, names, ex.started, {str(x.get("launch") or "") for x in ex.plan.jobs}
 
 
 def _launched_here(ex, have) -> bool:

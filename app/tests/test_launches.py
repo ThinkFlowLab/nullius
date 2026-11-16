@@ -43,7 +43,7 @@ class Group(unittest.TestCase):
     def test_the_run_record_wins_and_names_the_runs_not_written_yet(self):
         jobs = [job("tau-latest3-0919-132944-agent", 24), job("tau-latest3-0919-132944-nop", 0), job("other", 5)]
         records = {"r1": ("tau-latest3-0919-132944", ["tau-latest3-0919-132944-nop", "tau-latest3-0919-132944-agent",
-                                                       "tau-latest3-0919-132944-claude-code"], None)}
+                                                       "tau-latest3-0919-132944-claude-code"], None, set())}
         out = L.group(jobs, records)
         rec = next(l for l in out if l.source == "record")
         self.assertEqual((rec.key, rec.name), ("run:r1", "tau-latest3-0919-132944"))
@@ -53,17 +53,17 @@ class Group(unittest.TestCase):
         self.assertEqual([l.job_ids for l in out if l.source == "inferred"], [["other"]])   # the record's jobs never join an inferred launch
 
     def test_a_record_with_only_pending_runs_is_still_a_launch(self):
-        out = L.group([], {"r2": ("sweep", ["sweep-a", "sweep-b"], None)})
+        out = L.group([], {"r2": ("sweep", ["sweep-a", "sweep-b"], None, set())})
         self.assertEqual([(l.pending, l.started, l.dataset) for l in out], [(["sweep-a", "sweep-b"], None, None)])
 
     def test_a_launch_with_no_job_yet_sorts_by_when_it_was_launched(self):
         later = (T0 + timedelta(hours=5)).timestamp()
-        out = L.group([job("older", 0), job("newer", 60 * 10)], {"r": ("r", ["r-nop", "r-agent"], later)})
+        out = L.group([job("older", 0), job("newer", 60 * 10)], {"r": ("r", ["r-nop", "r-agent"], later, set())})
         self.assertEqual([l.key for l in out], ["inferred:newer", "run:r", "inferred:older"])
         self.assertEqual(out[1].started, T0 + timedelta(hours=5))
 
     def test_a_launchs_written_jobs_outrank_when_it_was_launched(self):
-        out = L.group([job("r-nop", 3)], {"r": ("r", ["r-nop", "r-agent"], (T0 + timedelta(hours=5)).timestamp())})
+        out = L.group([job("r-nop", 3)], {"r": ("r", ["r-nop", "r-agent"], (T0 + timedelta(hours=5)).timestamp(), set())})
         self.assertEqual(out[0].started, T0 + timedelta(minutes=3))
 
     def test_a_run_with_no_start_is_its_own_launch_and_sorts_last(self):
@@ -78,7 +78,7 @@ class Group(unittest.TestCase):
 
     def test_every_job_lands_in_exactly_one_launch(self):
         jobs = [job(f"j{k}", k * 7, dataset="ds" + str(k % 2)) for k in range(12)]
-        records = {"r": ("r", ["j3", "j4", "gone"], None)}
+        records = {"r": ("r", ["j3", "j4", "gone"], None, set())}
         placed = [i for l in L.group(jobs, records) for i in l.job_ids]
         self.assertEqual(sorted(placed), sorted(j.job_id for j in jobs))
 
