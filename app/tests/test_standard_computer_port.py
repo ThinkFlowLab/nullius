@@ -755,9 +755,19 @@ class Wires(Bare):
         self.assertTrue(wire.closed and wire.conn.closed)
 
     def test_a_connection_accepted_as_the_server_closes_is_closed(self):
-        accepted, release = threading.Event(), threading.Event()
+        accepted, release, shut = threading.Event(), threading.Event(), threading.Event()
         self.addCleanup(release.set)
-        conn = FakeConnection()
+        self.addCleanup(shut.set)
+
+        class Pending(FakeConnection):                           # a client that sends nothing and stays
+            def recv(self, n):
+                shut.wait(10)
+                return b""
+
+            def shutdown(self, how):
+                shut.set()
+
+        conn = Pending()
 
         class Listener:
             closed = False
