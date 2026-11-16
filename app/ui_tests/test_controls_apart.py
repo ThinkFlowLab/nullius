@@ -112,7 +112,8 @@ class ControlsApart(unittest.TestCase):
     def test_the_header_the_chips_and_the_mix_bar_count_the_agent_only(self):
         html = self.get("/runs")
         self.assertIn('data-runs="1" data-trials="4"', html)
-        self.assertIn("1 runs", text_of(re.search(r'<p class="subtitle" id="counts".*?</p>', html, re.S).group(0)))
+        self.assertIn("· 1 run · 4 trials", text_of(re.search(r'<p class="subtitle" id="counts".*?</p>', html, re.S).group(0)))
+        self.assertIn('class="dataset-count">1 run<span class="dot">·</span>4 trials', html)
         legend = re.search(r'<div class="legend">.*?</div>', html, re.S).group(0)
         chips = dict(re.findall(r'data-outcome="([a-z_]+)"[^>]*>[^<]*<b>(\d+)</b>', legend))
         self.assertEqual(chips, {"resolved": "2", "failed_verification": "1", "rate_limited": "1"})

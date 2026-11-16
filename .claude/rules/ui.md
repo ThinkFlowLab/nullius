@@ -15,6 +15,8 @@ also supports `--only KEY` for a focused benchmark check.
   Nullius handles automatically; being technically accurate is not enough.
 - **Names, not keys**: an option that does not read carries a `label`;
   acronyms in capitals. Never cut a name: it wraps.
+- **Launch, run, trial, task** each mean one thing (`docs/concepts.md`). A
+  count says which.
 - **Generic names for groups** ("Any agent", "Every agent"), never one
   vendor's name standing for all.
 - **Every choice is a card** (`tile()`, the catalogue's shape), one size per

@@ -6,7 +6,7 @@ Read a result, inspect its evidence, and compare runs on the same terms.
 
 ### Did it run?
 
-Check the execution status and run log first. A failed launch is not a benchmark score. A stopped or failed run may contain only some planned trials.
+Check the launch's state and the launch log first. A failed launch is not a benchmark score. A stopped or failed run may contain only some planned trials.
 
 ### What was measured?
 
@@ -89,7 +89,7 @@ A run Harbor never wrote (ATIF trajectories, an OpenTelemetry export), converted
 
 `nullius/runs/parse.py`
 
-One benchmark invocation. Aggregates its trials; owns solve rates and totals.
+One benchmark invocation: a run on the Runs page. Aggregates its trials; owns solve rates and totals.
 
 *Layer 2 · task*
 
@@ -97,7 +97,7 @@ One benchmark invocation. Aggregates its trials; owns solve rates and totals.
 
 `nullius/runs/parse.py`
 
-One agent against one task. Outcome, tests, phase timings, tokens, cost.
+One task attempted by one run. Outcome, tests, phase timings, tokens, cost.
 
 *Layer 3 · transcript*
 

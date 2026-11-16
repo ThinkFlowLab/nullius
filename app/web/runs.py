@@ -70,8 +70,9 @@ def index():
     used = {}
     for j in jobs:
         entry = used.setdefault(j.dataset, {"runs": 0, "trials": 0})
-        entry["runs"] += 1
-        entry["trials"] += len(j.trials)
+        if verdicts[j.job_id] is None:          # agents only, as the header counts them
+            entry["runs"] += 1
+            entry["trials"] += len(j.trials)
     datasets = [
         {"name": name, "info": shared.dataset_info(name), **counts}
         for name, counts in sorted(used.items(), key=lambda kv: -kv[1]["trials"])
@@ -293,6 +294,7 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
             "launch": g, "checks": checks, "verdict": verdict,
             "controls": controls, "checked": checked, "agents": rows,
             "n_tasks": n_tasks, "compare": finished,
+            "n_runs": len(leaves(rows)), "n_checks": len(leaves(controls)),
             "paused": next((i for i in g.job_ids + g.pending
                             if (execution.for_job(i) is not None and execution.for_job(i).state == "paused")), None),
             "summary": " · ".join(f"{n} {s}" for s, n in sorted(counts.items(), key=lambda kv: _STATE_ORDER.get(kv[0], 9))),
@@ -527,7 +529,7 @@ def launch_delete(key):
         abort(404)
     runs = _runs_of(g)
     if not runs:
-        flash(f"{g.title} has jobs Nullius did not run: it cannot be deleted here.", "error")
+        flash(f"{g.title} has runs that Nullius did not start: it cannot be deleted here.", "error")
         return redirect(url_for("index", view="launch"))
     try:
         gone = execution.delete([e.plan.name for e in runs], shared.WS_HOME, runs[0].root, copies=set(request.form.getlist("host")))

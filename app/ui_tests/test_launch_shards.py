@@ -103,7 +103,7 @@ class LaunchShards(unittest.TestCase):
     def test_each_participant_is_one_row_of_its_shards_and_every_shard_keeps_its_row(self):
         block = self.block()
         # the header counts every shard; each has its row, under a folded row that says how many it holds
-        self.assertIn("· 8 runs</span>", block)
+        self.assertIn("· 4 runs · 4 checks</span>", block)
         classes = rows_of(block)
         self.assertEqual(sum("la-shard" in c for c in classes), 8)
         self.assertEqual(sum("la-fold" in c for c in classes), 4)
@@ -164,7 +164,7 @@ class LaunchShards(unittest.TestCase):
         self.addCleanup(response.close)
         block = re.search(r'<section class="launch".*?</section>', response.get_data(as_text=True), re.S).group(0)
         self.assertNotIn("la-fold", block); self.assertNotIn("la-shard", block)
-        self.assertIn("· 4 runs</span>", block)
+        self.assertIn("· 2 runs · 2 checks</span>", block)
         self.assertEqual(len(rows_of(block)), 4)
 
 
