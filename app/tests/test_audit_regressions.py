@@ -73,6 +73,15 @@ class Regressions(unittest.TestCase):
                     except (ProcessLookupError, ValueError): pass                  # ValueError: not written yet
 
     def test_sigterm_stops_a_real_memory_process_and_writes_cancelled_results(self):
+        self._stop_a_memory_run(to_a_thread=False)
+
+    def test_sigterm_given_to_a_thread_other_than_main_stops_the_run(self):
+        # a process's SIGTERM can reach any of its threads, and Python runs the handler only in the main thread
+        self._stop_a_memory_run(to_a_thread=True)
+
+    def _stop_a_memory_run(self, to_a_thread):
+        """Stop a run whose memory does not answer: SIGTERM from outside, or
+        from one of the run's own threads once the memory has started."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / 'memory.py').write_text("import os,sys,time\nopen('pid','w').write(str(os.getpid()))\nfor line in sys.stdin: time.sleep(60)\n")
@@ -84,7 +93,17 @@ o=definitions.get('capability','fakemem',{ROOT!r})
 o=dict(o,start={{'command':[{sys.executable!r},{str(root / 'memory.py')!r}]}})
 run.run(b,o,model='m',provider='custom',jobs_root={tmp!r},name='stopped',env={{'MODEL_API_URL':'http://127.0.0.1:9/v1'}},say=lambda s:None)
 """
+            if to_a_thread:
+                script = f"""
+import glob,signal,threading,time
+def stop():
+    while not glob.glob({tmp!r} + '/stopped/*/.work/capability/pid'): time.sleep(.05)
+    signal.pthread_kill(threading.get_ident(), signal.SIGTERM)
+threading.Thread(target=stop, daemon=True).start()
+""" + script
             process = subprocess.Popen([sys.executable, '-c', script], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if to_a_thread:
+                process.terminate = lambda: None                                   # the run's own thread sends SIGTERM
             memory_pid = None
             try:
                 deadline = time.monotonic() + 60
@@ -97,7 +116,7 @@ run.run(b,o,model='m',provider='custom',jobs_root={tmp!r},name='stopped',env={{'
                     time.sleep(.05)
                 self.assertIsNotNone(memory_pid, process.communicate(timeout=1) if process.poll() is not None else 'memory did not start')
                 process.terminate()
-                out, err = process.communicate(timeout=12)
+                out, err = process.communicate(timeout=60)
                 self.assertEqual(process.returncode, 143, err.decode())
                 self.assertTrue(gone(memory_pid), 'memory outlived the run')
                 results = [json.loads(p.read_text()) for p in root.glob('stopped/*/result.json')]

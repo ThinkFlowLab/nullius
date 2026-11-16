@@ -21,6 +21,64 @@
 </span>
 {% endmacro %}
 
+{#- One row of a launch's table: a task check (`kind` 'control') or an agent; `part` 'fold' for a participant's
+    shards as one row, 'shard' for one of them, '' for a run of one job. #}
+{% macro launch_row(r, g, kind, part='', first=False) %}{% set L = g.launch %}{% set j = r.job %}{% set v = r.verdict %}
+      <tr class="{{ 'la-control ' if kind == 'control' }}st-{{ r.state }}{{ ' la-' ~ part if part }}{{ ' la-first' if first }}"
+        {%- if kind == 'control' %} data-control="{{ r.control }}" data-state="{{ v.state if v else 'pending' }}"
+        {%- else %} data-outcomes="{% if j %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"{% endif %}>
+        {%- if part == 'shard' %}
+        <td><div class="la-who"><span class="la-name"><a href="{{ url_for('job', job_id=r.job_id) }}" title="{{ r.job_id }}">shard {{ r.shard }}{% if r.host %} · {{ r.host }}{% endif %}</a></span></div></td>
+        {%- else %}
+        <td>{% if part == 'fold' %}<div class="la-fold-who"><button class="la-fold-btn" type="button" aria-expanded="false" aria-controls="fold-{{ L.key }}-{{ r.control or '' }}-{{ r.job_id }}" aria-label="Shards of {{ r.control or (j.agent_label if j and j.agent_label else r.job_id) }}"></button>{% endif %}<div class="la-who"><span class="la-name">
+          {%- if kind == 'control' %}
+          {%- if part == 'fold' %}{{ r.control }}{% else %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ r.control }}</a>{% endif %} <span class="la-kind">task check</span>
+          {%- else %}
+          {%- set name = j.agent_label if j and j.agent_label else r.job_id[L.prefix|length - 1:] if L.prefix.endswith('*') and r.job_id.startswith(L.prefix[:-1]) else r.job_id %}
+          {%- if part == 'fold' %}{{ name }}{% else %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ name }}</a>{% endif %}
+          {%- if j and j.runner %} {{ what_ran(j) }}{% elif j and j.agent_version %} <span class="la-ver mono">{{ j.agent_version }}</span>{% endif %}
+          {%- endif %}</span>
+          {%- if part == 'fold' %}
+          <small>{{ r.shards|length }} shards{% if r.note %} · <span class="la-note" title="{{ r.notes|join('; ') }}">⚠ {{ r.note }}</span>{% endif %}</small>
+          {%- else %}
+          <small class="mono">{{ r.job_id }}</small>{% endif %}</div>{% if part == 'fold' %}</div>{% endif %}</td>
+        {%- endif %}
+        {%- if kind == 'control' %}
+        <td class="lh-state"><span class="la-state {{ r.state|replace(' ', '-') }}"><i aria-hidden="true"></i>{{ r.state }}</span></td>
+        <td><div class="la-verdict control-verdict {{ v.state if v else 'pending' }}"><span class="lc-mark" aria-hidden="true">{{ '✓' if v and v.state == 'ok' else ('⚠' if v and v.state == 'warn' else '○') }}</span>
+          {%- if v %}<b>{{ v.label }}</b>{% else %}<span class="faint">{{ 'must reject every task' if r.control == 'nop' else 'must pass every task' }}</span>{% endif %}</div></td>
+        {%- else %}
+        <td class="lh-state"><span class="la-state {{ r.state|replace(' ', '-') }}"{% if r.state == 'not in this workspace' %} title="Its run ended, and Harbor's job for it is not under this workspace's roots"{% elif r.state == 'refused' %} title="Refused before it started: {{ r.why }}"{% endif %}><i aria-hidden="true"></i>{{ r.state }}</span></td>
+        <td>{% if j and j.scored_only %}
+          <div class="la-rate la-score" title="This benchmark gives a score and no pass or fail: the mean score{% if j.n_scored_parts %} over its {{ j.n_scored_parts }} scored{% endif %}, no solve rate"><b>{{ '%.2f'|format(j.mean_score) }}</b><span class="la-scale"><i style="width:{{ '%.1f'|format(100 * j.mean_score) }}%"></i></span></div>
+          {%- elif j and j.adjusted_solve_rate is not none %}
+          <div class="la-rate"><b>{{ j.adjusted_solve_rate|pct }}</b><span class="la-scale" title="Adjusted {{ j.adjusted_solve_rate|pct }} (the bar), raw {{ j.raw_solve_rate|pct }} (the tick)"><i style="width:{{ '%.1f'|format(100 * j.adjusted_solve_rate) }}%"></i><s style="left:{{ '%.1f'|format(100 * j.raw_solve_rate) }}%"></s></span></div>
+          {%- else %}<div class="la-rate na"><b>—</b><span class="la-scale"></span></div>{% endif %}
+          {%- if j and j.trials and not j.scored_only and j.counts.unknown and j.counts.unknown * 4 >= j.trials|length %}<span class="la-flag" title="Trials the classifier could not give an outcome: no verifier record, no exception">⚠ {{ j.counts.unknown }} of {{ j.trials|length }} have no verdict</span>{% endif %}</td>
+        {%- endif %}
+        <td class="lh-mix">{% if j and j.trials %}<span class="la-mix" role="img" aria-label="{% for k in ORDER %}{% if j.counts[k] %}{{ LABELS[k] }} {{ j.counts[k] }}{{ ', ' if not loop.last }}{% endif %}{% endfor %}">{% for k in ORDER %}{% if j.counts[k] %}<span class="oc-{{ k }}" style="flex:{{ j.counts[k] }}"></span>{% endif %}{% endfor %}</span>{% else %}<span class="la-mix"></span>{% endif %}</td>
+        {%- if kind == 'control' %}
+        <td class="num"><span class="faint" title="A check on the tasks, not a score">—</span></td>
+        {%- else %}
+        <td class="num">{% if j and j.scored_only %}<span class="faint" title="Scored, not solved: no pass or fail in this benchmark">—</span>{% elif j and part == 'fold' %}{{ j.n_resolved }}<span class="faint">/{{ j.trials|length }}</span>{% if r.not_run %}<span class="la-gap" title="{{ r.notes|join('; ') }}">{{ r.not_run }} of {{ r.total }} not run</span>{% endif %}{% elif j %}{{ j.n_resolved }}<span class="faint">/{{ j.n_planned or j.trials|length }}</span>{% else %}<span class="faint">0{% if g.n_tasks %}/{{ g.n_tasks }}{% endif %}</span>{% endif %}</td>
+        {%- endif %}
+        <td class="num lh-more">{% if j and (j.total_input_tokens or j.total_output_tokens) %}{{ (j.total_input_tokens + j.total_output_tokens)|tokens(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="num lh-more">{% if j and j.total_cost_usd is not none %}{{ j.total_cost_usd|usd(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="num lh-more">{% if j and j.duration_min %}{{ j.duration_min|runtime }}{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="la-go">{% if part != 'fold' and r.state != 'not in this workspace' %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ 'Open to resume' if r.state == 'paused' else 'Open →' }}</a>{% endif %}</td>
+      </tr>
+{%- endmacro %}
+
+{#- A participant run as several shards is one row that unfolds into its shards' own; a run of one job is its row. #}
+{% macro launch_rows(r, g, kind, first=False) %}{% set L = g.launch %}
+{%- if r.shards %}
+      </tbody><tbody class="la-fold">{{ launch_row(r, g, kind, 'fold', first) }}</tbody>
+      <tbody class="la-shards" id="fold-{{ L.key }}-{{ r.control or '' }}-{{ r.job_id }}" hidden inert>
+      {%- for s in r.shards %}{{ launch_row(s, g, kind, 'shard') }}{% endfor %}
+      </tbody><tbody>
+{%- else %}{{ launch_row(r, g, kind, '', first) }}{% endif %}
+{%- endmacro %}
+
 {% block body %}
 
 <div class="page-title runs-head"><h1>Runs</h1>
@@ -91,41 +149,8 @@
       <thead><tr><th>Agent</th><th class="lh-state">State</th><th title="Solved ÷ trials that actually ran; the tick is the raw rate, solved ÷ all trials">Adjusted solve rate</th><th class="lh-mix">Outcomes</th><th class="num">Solved</th><th class="num lh-more">Tokens</th><th class="num lh-more">Cost</th><th class="num lh-more">Time</th><th></th></tr></thead>
       <tbody>
       {#- the task checks first: their verdict where an agent has its rate, never ranked, kept once they end #}
-      {% for r in g.controls %}{% set j = r.job %}{% set v = r.verdict %}
-      <tr class="la-control st-{{ r.state }}" data-control="{{ r.control }}" data-state="{{ v.state if v else 'pending' }}">
-        <td><div class="la-who"><span class="la-name"><a href="{{ url_for('job', job_id=r.job_id) }}">{{ r.control }}</a> <span class="la-kind">task check</span></span>
-          <small class="mono">{{ r.job_id }}</small></div></td>
-        <td class="lh-state"><span class="la-state {{ r.state|replace(' ', '-') }}"><i aria-hidden="true"></i>{{ r.state }}</span></td>
-        <td><div class="la-verdict control-verdict {{ v.state if v else 'pending' }}"><span class="lc-mark" aria-hidden="true">{{ '✓' if v and v.state == 'ok' else ('⚠' if v and v.state == 'warn' else '○') }}</span>
-          {%- if v %}<b>{{ v.label }}</b>{% else %}<span class="faint">{{ 'must reject every task' if r.control == 'nop' else 'must pass every task' }}</span>{% endif %}</div></td>
-        <td class="lh-mix">{% if j and j.trials %}<span class="la-mix" role="img" aria-label="{% for k in ORDER %}{% if j.counts[k] %}{{ LABELS[k] }} {{ j.counts[k] }}{{ ', ' if not loop.last }}{% endif %}{% endfor %}">{% for k in ORDER %}{% if j.counts[k] %}<span class="oc-{{ k }}" style="flex:{{ j.counts[k] }}"></span>{% endif %}{% endfor %}</span>{% else %}<span class="la-mix"></span>{% endif %}</td>
-        <td class="num"><span class="faint" title="A check on the tasks, not a score">—</span></td>
-        <td class="num lh-more">{% if j and (j.total_input_tokens or j.total_output_tokens) %}{{ (j.total_input_tokens + j.total_output_tokens)|tokens(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
-        <td class="num lh-more">{% if j and j.total_cost_usd is not none %}{{ j.total_cost_usd|usd(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
-        <td class="num lh-more">{% if j and j.duration_min %}{{ j.duration_min|runtime }}{% else %}<span class="faint">—</span>{% endif %}</td>
-        <td class="la-go"><a href="{{ url_for('job', job_id=r.job_id) }}">Open →</a></td>
-      </tr>
-      {% endfor %}
-      {% for r in g.agents %}{% set j = r.job %}
-      <tr class="st-{{ r.state }}" data-outcomes="{% if j %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}">
-        <td><div class="la-who"><span class="la-name"><a href="{{ url_for('job', job_id=r.job_id) }}">{{ j.agent_label if j and j.agent_label else r.job_id[L.prefix|length - 1:] if L.prefix.endswith('*') and r.job_id.startswith(L.prefix[:-1]) else r.job_id }}</a>
-          {%- if j and j.runner %} {{ what_ran(j) }}{% elif j and j.agent_version %} <span class="la-ver mono">{{ j.agent_version }}</span>{% endif %}</span>
-          <small class="mono">{{ r.job_id }}</small></div></td>
-        <td class="lh-state"><span class="la-state {{ r.state|replace(' ', '-') }}"{% if r.state == 'not in this workspace' %} title="Its run ended, and Harbor's job for it is not under this workspace's roots"{% elif r.state == 'refused' %} title="Refused before it started: {{ r.why }}"{% endif %}><i aria-hidden="true"></i>{{ r.state }}</span></td>
-        <td>{% if j and j.scored_only %}
-          <div class="la-rate la-score" title="This benchmark gives a score and no pass or fail: the mean score{% if j.n_scored_parts %} over its {{ j.n_scored_parts }} scored{% endif %}, no solve rate"><b>{{ '%.2f'|format(j.mean_score) }}</b><span class="la-scale"><i style="width:{{ '%.1f'|format(100 * j.mean_score) }}%"></i></span></div>
-          {%- elif j and j.adjusted_solve_rate is not none %}
-          <div class="la-rate"><b>{{ j.adjusted_solve_rate|pct }}</b><span class="la-scale" title="Adjusted {{ j.adjusted_solve_rate|pct }} (the bar), raw {{ j.raw_solve_rate|pct }} (the tick)"><i style="width:{{ '%.1f'|format(100 * j.adjusted_solve_rate) }}%"></i><s style="left:{{ '%.1f'|format(100 * j.raw_solve_rate) }}%"></s></span></div>
-          {%- else %}<div class="la-rate na"><b>—</b><span class="la-scale"></span></div>{% endif %}
-          {%- if j and j.trials and not j.scored_only and j.counts.unknown and j.counts.unknown * 4 >= j.trials|length %}<span class="la-flag" title="Trials the classifier could not give an outcome: no verifier record, no exception">⚠ {{ j.counts.unknown }} of {{ j.trials|length }} have no verdict</span>{% endif %}</td>
-        <td class="lh-mix">{% if j and j.trials %}<span class="la-mix" role="img" aria-label="{% for k in ORDER %}{% if j.counts[k] %}{{ LABELS[k] }} {{ j.counts[k] }}{{ ', ' if not loop.last }}{% endif %}{% endfor %}">{% for k in ORDER %}{% if j.counts[k] %}<span class="oc-{{ k }}" style="flex:{{ j.counts[k] }}"></span>{% endif %}{% endfor %}</span>{% else %}<span class="la-mix"></span>{% endif %}</td>
-        <td class="num">{% if j and j.scored_only %}<span class="faint" title="Scored, not solved: no pass or fail in this benchmark">—</span>{% elif j %}{{ j.n_resolved }}<span class="faint">/{{ j.n_planned or j.trials|length }}</span>{% else %}<span class="faint">0{% if g.n_tasks %}/{{ g.n_tasks }}{% endif %}</span>{% endif %}</td>
-        <td class="num lh-more">{% if j and (j.total_input_tokens or j.total_output_tokens) %}{{ (j.total_input_tokens + j.total_output_tokens)|tokens(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
-        <td class="num lh-more">{% if j and j.total_cost_usd is not none %}{{ j.total_cost_usd|usd(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
-        <td class="num lh-more">{% if j and j.duration_min %}{{ j.duration_min|runtime }}{% else %}<span class="faint">—</span>{% endif %}</td>
-        <td class="la-go">{% if r.state != 'not in this workspace' %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ 'Open to resume' if r.state == 'paused' else 'Open →' }}</a>{% endif %}</td>
-      </tr>
-      {% endfor %}
+      {% for r in g.controls %}{{ launch_rows(r, g, 'control') }}{% endfor %}
+      {% for r in g.agents %}{{ launch_rows(r, g, 'agent', loop.first and g.controls) }}{% endfor %}
       </tbody>
     </table>
     </div>
@@ -537,6 +562,33 @@
      a feed growing, a result landing), reads itself again and puts in only what
      moved. No reload: the scroll, the view, the filters, the sort and the ticks
      stay. A hidden tab does not ask, and a selection is left to be copied. */
+  /* a participant's shards fold into one row: the row, or its chevron, unfolds them */
+  const still = matchMedia('(prefers-reduced-motion: reduce)');
+  function setFold(btn, open, animate = true) {
+    const body = document.getElementById(btn.getAttribute('aria-controls'));
+    btn.setAttribute('aria-expanded', String(open));
+    body.inert = !open;
+    if (!animate || still.matches) { body.hidden = !open; return; }
+    // a table row is never shorter than its content: what slides is each cell's content, the shared way
+    const cells = [...body.querySelectorAll(':scope > tr > td')].map(td => {
+      if (!td.firstElementChild?.matches('.la-cell')) {
+        const cell = document.createElement('div');
+        cell.className = 'la-cell';
+        cell.append(...td.childNodes);
+        td.append(cell);
+      }
+      return td.firstElementChild;
+    });
+    if (open) { cells.forEach(c => { c.hidden = true; }); body.hidden = false; }
+    cells.forEach(c => NulliusDisclosure.setHidden(c, open));
+    if (!open) setTimeout(() => { if (btn.getAttribute('aria-expanded') !== 'true') body.hidden = true; }, 260);
+  }
+  document.addEventListener('click', e => {
+    const row = e.target.closest('.launch-agents tr.la-fold');
+    if (!row || e.target.closest('a')) return;
+    const btn = row.querySelector('.la-fold-btn');
+    setFold(btn, btn.getAttribute('aria-expanded') !== 'true');
+  });
   function refreshLaunches(fresh) {
     const wrap = document.getElementById('view-launch');
     const coming = [...fresh.querySelectorAll('#view-launch > .launch')], keys = new Set(coming.map(l => l.dataset.launch));
@@ -545,7 +597,12 @@
     coming.forEach(l => {
       const name = l.dataset.launch, html = l.outerHTML;
       let el = wrap.querySelector(`:scope > .launch[data-launch="${CSS.escape(name)}"]`);
-      if (el && sent.get(name) !== html) { el.replaceWith(l); el = l; }
+      if (el && sent.get(name) !== html) {
+        // what the reader unfolded stays unfolded
+        const open = [...el.querySelectorAll('.la-fold-btn[aria-expanded="true"]')].map(b => b.getAttribute('aria-controls'));
+        el.replaceWith(l); el = l;
+        open.forEach(id => { const b = l.querySelector(`.la-fold-btn[aria-controls="${CSS.escape(id)}"]`); if (b) setFold(b, true, false); });
+      }
       el = el || l;
       sent.set(name, html);
       const next = before ? before.nextElementSibling : wrap.firstElementChild;

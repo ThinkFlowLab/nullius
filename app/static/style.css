@@ -1802,11 +1802,11 @@ select.ui-select-native { display: none !important; }
 :root .slide-disclosure { box-sizing: border-box; }
 :root .slide-disclosure > summary { cursor: pointer; list-style: none; color: var(--text-dim); }
 :root .slide-disclosure > summary::-webkit-details-marker { display: none; }
-:root .slide-disclosure > summary::before, :root .disclosure-chevron::before { content: ''; display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin: 0 10px 0 3px; transition: transform .24s ease; }
-:root .slide-disclosure[open]:not([data-expanded=false]) > summary::before, :root .disclosure-chevron[aria-expanded="true"]::before { transform: rotate(45deg); }
+:root .slide-disclosure > summary::before, :root .disclosure-chevron::before, .la-fold-btn::before { content: ''; display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin: 0 10px 0 3px; transition: transform .24s ease; }
+:root .slide-disclosure[open]:not([data-expanded=false]) > summary::before, :root .disclosure-chevron[aria-expanded="true"]::before, .la-fold-btn[aria-expanded=true]::before { transform: rotate(45deg); }
 :root .slide-disclosure > summary > .tw { display: none; }
 :root .slide-disclosure > summary:hover { color: var(--text); }
 :root .slide-disclosure > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tree-kids { box-sizing: border-box; }
 @media (prefers-reduced-motion: no-preference) { .shell { transition: grid-template-columns .24s ease; } .tree-caret .ic { transition: transform .24s ease; } }
-@media (prefers-reduced-motion: reduce) { :root .slide-disclosure > summary, :root .slide-disclosure > summary::before, :root .disclosure-chevron::before, .tree-caret .ic, .side { transition: none; } }
+@media (prefers-reduced-motion: reduce) { :root .slide-disclosure > summary, :root .slide-disclosure > summary::before, :root .disclosure-chevron::before, .la-fold-btn::before, .tree-caret .ic, .side { transition: none; } }

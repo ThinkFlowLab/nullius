@@ -78,7 +78,7 @@ class RunRoutes(unittest.TestCase):
             return 0, ""
         self.stack.enter_context(patch.object(execution, "subprocess_run", run))
         self.stack.enter_context(patch.object(execution, "docker_here", lambda sh, needs="": None))           # docker answers here, as the probe says it does there
-        self.stack.enter_context(patch.object(web.shared, "adopt_roots", lambda roots, **kw: self.adopted.extend(roots)))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: self.adopted.extend(ex.jobs for ex in runs)))
         self.adopted = []
         self.client = web.app.test_client()
         r = self.client.get("/new-run"); self.addCleanup(r.close)
@@ -345,6 +345,70 @@ class RunRoutes(unittest.TestCase):
         self.assertEqual(s.status_code, 200); self.assertEqual(s.json["state"], "stopping")       # said at once
         ex.thread.join(10); self.assertEqual((ex.state, ex.exit_code), ("stopped", 130))
         self.assertEqual(self.client.post(f"/run/{r.json['id']}/stop", headers={"Origin": "http://localhost", "X-CSRF-Token": ""}).status_code, 403)
+
+
+class ResumeIntoWorkspace(unittest.TestCase):
+    """A restart while a run started from the builder goes on: the run's job goes back into the workspace it started in."""
+    def setUp(self):
+        self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        self.tmp = Path(tempfile.mkdtemp(prefix="nullius-resume-")); self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = str(self.tmp / "ws")
+        self.stack.enter_context(patch.dict(os.environ, {"RUNS_DIR": str(self.tmp / "runs"), "JOB_ROOTS": ""}))
+        self.stack.enter_context(patch.dict(web.app.config, TESTING=True))
+        self.stack.enter_context(patch.dict(execution.EXECUTIONS, clear=True))
+        self.stack.enter_context(patch.object(web.shared, "WS_HOME", self.home))
+        self.stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}))
+        self.stack.enter_context(patch.object(web.app, "run", lambda **kw: None))       # main() serves nothing
+        roots = [self.tmp / "a", self.tmp / "b"]
+        for r in roots:
+            r.mkdir()
+        self.held = [str(r) for r in roots]
+        self.ws = workspace.create(self.home, self.held, label="witty pelican")
+        web.shared.open_workspace(self.ws)
+        self.client = web.app.test_client()
+        r = self.client.get("/new-run"); self.addCleanup(r.close)
+        with self.client.session_transaction() as s:
+            self.csrf = s["csrf"]
+        # a run that pauses after its first part, so it is still alive when the app stops
+        parts = [{"id": "a", "label": "a", "script": "exit 2"}, {"id": "b", "label": "b", "script": "echo b"}]
+        r = self.client.post("/run", data=json.dumps({"name": "p", "script": "", "where": "local", "parts": parts}), content_type="application/json",
+                             headers={"Origin": "http://localhost", "X-CSRF-Token": self.csrf}); self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        self.jobs = str(self.tmp / "runs" / "p" / "jobs")
+        self.record = self.tmp / "runs" / "p" / "run.json"
+        for _ in range(250):
+            if json.loads(self.record.read_text())["state"] == "paused":
+                break
+            time.sleep(0.02)
+        ex = execution.EXECUTIONS[r.json["id"]]
+        ex._save = lambda: None                                # the app stops: the old thread writes no record again
+        execution.EXECUTIONS.clear()
+        web.shared.close_workspace()
+
+    def restart(self):
+        web.main([])
+        back = list(execution.EXECUTIONS.values())
+        self.addCleanup(lambda: [e.stop() for e in back])
+        return web.shared.STATE["workspace"]
+
+    def test_a_restart_puts_the_run_back_into_its_workspace(self):
+        again = self.restart()
+        self.assertEqual(again.name, self.ws.name)
+        self.assertEqual([w.name for w in workspace.list_all(self.home)], [self.ws.name])      # no new workspace
+        self.assertIn(self.jobs, again.roots)
+        self.assertEqual(json.loads(self.record.read_text())["workspace"], self.ws.name)
+
+    def test_a_run_whose_workspace_is_gone_gets_one_as_before(self):
+        workspace.delete(self.home, self.ws.name)
+        again = self.restart()
+        self.assertEqual(again.roots, [self.jobs])
+
+    def test_an_old_record_without_its_workspace_gets_one_as_before(self):
+        rec = json.loads(self.record.read_text()); rec.pop("workspace", None); self.record.write_text(json.dumps(rec))
+        again = self.restart()
+        self.assertNotEqual(again.name, self.ws.name)
+        self.assertEqual(again.roots, [self.jobs])
+        self.assertEqual(workspace.load(self.home, self.ws.name).roots, self.held + [self.jobs])   # added when it started, left as it is
 
 
 class Credentials(unittest.TestCase):
