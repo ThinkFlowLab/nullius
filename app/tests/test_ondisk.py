@@ -56,15 +56,19 @@ class Whole(unittest.TestCase):
 
     def test_writers_of_one_file_at_once_each_finish_and_one_of_them_wins(self):
         texts = [str(i) * 4096 for i in range(16)]
-        failed = []
+        gate, rename, failed = threading.Barrier(len(texts), timeout=5), os.replace, []
+        def held_rename(src, dst):
+            gate.wait()                                            # every writer has written its own file, none has renamed
+            return rename(src, dst)
         def write(text):
             try:
                 ondisk.write_whole(self.path, text)
             except Exception as e:                                 # noqa: BLE001 - the failure under test
                 failed.append(e)
-        threads = [threading.Thread(target=write, args=(t,)) for t in texts]
-        for t in threads: t.start()
-        for t in threads: t.join(10)
+        with mock.patch.object(os, "replace", held_rename):
+            threads = [threading.Thread(target=write, args=(t,)) for t in texts]
+            for t in threads: t.start()
+            for t in threads: t.join(10)
         self.assertEqual(failed, [])
         with open(self.path) as f:
             self.assertIn(f.read(), texts)

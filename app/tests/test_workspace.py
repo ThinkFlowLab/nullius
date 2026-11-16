@@ -216,20 +216,21 @@ class Cache(unittest.TestCase):
         changing, and both wrote the cache through one shared `<hash>.json.tmp`:
         the first rename took the file away and the second raised
         FileNotFoundError, a 500 on the page. Both writers are held with
-        their temp file open until the other has opened its own, then released:
+        their temp file written until the other has written its own, then released:
         each must finish, and the cache must be whole."""
         gate = threading.Barrier(2, timeout=5)
-        stamp = workspace._now
-        def held_now():
-            gate.wait()                                   # both are about to write: neither has renamed yet
-            return stamp()
+        cache, rename = workspace._cache_file(self.ws, self.job_dir), os.replace
+        def held_rename(src, dst):
+            if dst == cache:                              # the cache alone: the index is written after it, by one or both
+                gate.wait()                               # both have written their temp file, neither has renamed yet
+            return rename(src, dst)
         results, errors = [], []
         def load():
             try:
                 results.append(workspace.load_job(self.ws, self.job_dir))
             except Exception as e:                        # noqa: BLE001 - the failure under test
                 errors.append(e)
-        with patch.object(workspace, "_now", held_now):
+        with patch.object(os, "replace", held_rename):
             threads = [threading.Thread(target=load) for _ in range(2)]
             for t in threads: t.start()
             for t in threads: t.join(10)
