@@ -285,7 +285,7 @@ def summary_tokenizer(dir):
     return root
 
 
-def answer(unit, dir, setup, model, base_url, key, judge=None, simulator=None, attempt=None):
+def answer(unit, dir, setup, model, base_url, key, judge=None, simulator=None, repeat=None):
     up = os.environ["NULLIUS_UPSTREAM"]
     retriever = _opt("retriever", "full-history-session")
     reading = _opt("reading", "con")

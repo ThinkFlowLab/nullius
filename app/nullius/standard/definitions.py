@@ -1039,7 +1039,7 @@ def _leaderboard(d: dict) -> List[str]:
     """``leaderboard``: {says, simulator?, judge?, bench_options?, repeat?} - what the
     upstream's leaderboard fixes besides the ranked model, from its own submission
     rules: the user simulator's model, the judge's, the benchmark's options (a
-    simulator's reasoning effort) and the fewest attempts per unit."""
+    simulator's reasoning effort) and the fewest repeats per unit."""
     lb = d.get("leaderboard")
     if lb is None:
         return []
@@ -1060,7 +1060,7 @@ def _leaderboard(d: dict) -> List[str]:
                 if k not in opts or v not in (opts[k].get("values") or [])]
     r = lb.get("repeat", 1)
     if isinstance(r, bool) or not isinstance(r, int) or not 1 <= r <= 32:
-        bad.append(f"{w}.repeat: the fewest attempts per unit, 1 to 32")
+        bad.append(f"{w}.repeat: the fewest repeats per unit, 1 to 32")
     return bad
 
 
@@ -1317,10 +1317,15 @@ def problems(d: dict, kind: str) -> List[str]:
                     v = lim.get(f)
                     if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 100000):
                         bad.append(f"limits.{f}: a whole number from 1")
-                a = lim.get("attempts")
-                if a is not None and (not isinstance(a, str) or not a.strip()):
-                    bad.append("limits.attempts: how the upstream tells one attempt of a unit from another (its seed per trial), "
-                               "in a sentence - the driver is then sent attempt with setup, turn and answer")
+                # how the upstream tells one repeat of a unit from another; limits.attempts is its older name,
+                # read as it was: the driver of a definition that declares it is sent attempt, not repeat
+                for f, sent in (("repeats", "repeat"), ("attempts", "attempt")):
+                    a = lim.get(f)
+                    if a is not None and (not isinstance(a, str) or not a.strip()):
+                        bad.append(f"limits.{f}: how the upstream tells one repeat of a unit from another (its seed per trial), "
+                                   f"in a sentence - the driver is then sent {sent} with setup, turn and answer")
+                if lim.get("repeats") is not None and lim.get("attempts") is not None:
+                    bad.append("limits: repeats or its older name attempts, not both")
         s = d.get("score") or {}
         if s.get("kind") not in SCORES or not s.get("says"):
             bad.append(f"score: {{kind: one of {SCORES}, says}}")

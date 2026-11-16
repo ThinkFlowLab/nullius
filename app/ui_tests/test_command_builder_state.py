@@ -48,17 +48,17 @@ class StandardBenchmarkSwitch(CompilerCase):
                       'C.unpackDraft(C.packDraft({recipe:r,step:1,tab:"select"}),{}).step)));')
         self.assertEqual(out, [1, 0, 2, 1])
 
-    def test_a_new_recipe_has_no_limit_concurrency_or_attempts_and_keeps_them_empty(self):
+    def test_a_new_recipe_has_no_limit_concurrency_repeats_or_attempts_and_keeps_them_empty(self):
         out = self.js('const r=C.createStandard("gsm8k");const back=C.fromJSON(JSON.stringify(r));'
-                      'process.stdout.write(JSON.stringify([r.limit,r.concurrency,"repeat" in r,back.limit,back.concurrency]));')
-        self.assertEqual(out, ["", "", False, "", ""])
+                      'process.stdout.write(JSON.stringify([r.limit,r.concurrency,"repeat" in r,"attempts" in r,back.limit,back.concurrency]));')
+        self.assertEqual(out, ["", "", False, False, "", ""])
 
     def test_like_the_paper_is_offered_when_the_paper_fixes_a_model(self):
         out = self.js('process.stdout.write(JSON.stringify(["locomo","tau3-bench","gsm8k"].map(k=>{const r=C.createStandard(k);'
                       'return [C.paperOffered(r),C.paperListed(r)];})));')
         self.assertEqual(out, [[True, True], [True, False], [False, False]])
 
-    def test_like_the_leaderboard_sets_its_options_and_attempts_and_leaving_it_gives_them_back(self):
+    def test_like_the_leaderboard_sets_its_options_and_repeats_and_leaving_it_gives_them_back(self):
         out = self.js('const r=C.createStandard("tau3-bench");r.repeat=2;r.simulator_model="x";'
                       'C.setModelChoice(r,"leaderboard");const on=[r.bench_options.user_reasoning_effort,r.repeat,"simulator_model" in r];'
                       'C.setModelChoice(r,"any");'
@@ -74,16 +74,17 @@ class StandardBenchmarkSwitch(CompilerCase):
                           'process.stdout.write(JSON.stringify(restored.bench_options));')
             self.assertEqual(out, {"temperature": "0.5"})
 
-    def test_attempts_and_the_judge_and_simulator_models_survive_reopening(self):
+    def test_repeats_attempts_and_the_judge_and_simulator_models_survive_reopening(self):
         """New run like this, the draft, Load and Import all go through
-        fromJSON: a tau3-bench recipe at 3 attempts with a judge model chosen
-        came back at 1 attempt with the official judge, and ran so."""
-        out = self.js('const r=C.createStandard("tau3-bench");r.repeat=3;r.judge_model="openai/gpt-5";r.simulator_model="openai/gpt-4.1";'
+        fromJSON: a tau3-bench recipe at 3 repeats with a judge model chosen
+        came back at 1 repeat with the official judge, and ran so."""
+        out = self.js('const r=C.createStandard("tau3-bench");r.repeat=3;r.attempts=3;r.judge_model="openai/gpt-5";r.simulator_model="openai/gpt-4.1";'
                       'const back=C.fromJSON(JSON.stringify(r));'
                       'const d=C.unpackDraft(C.packDraft({recipe:r,step:C.STEP.model,tab:"select"}),{});'
-                      'process.stdout.write(JSON.stringify([[back.repeat,back.judge_model,back.simulator_model],'
-                      '[d.recipe.repeat,d.recipe.judge_model,d.recipe.simulator_model],C.fromJSON(JSON.stringify(Object.assign(r,{repeat:99}))).repeat]));')
-        self.assertEqual(out, [[3, "openai/gpt-5", "openai/gpt-4.1"], [3, "openai/gpt-5", "openai/gpt-4.1"], None])
+                      'process.stdout.write(JSON.stringify([[back.repeat,back.attempts,back.judge_model,back.simulator_model],'
+                      '[d.recipe.repeat,d.recipe.attempts,d.recipe.judge_model,d.recipe.simulator_model],'
+                      'C.fromJSON(JSON.stringify(Object.assign(r,{repeat:99}))).repeat,C.fromJSON(JSON.stringify(Object.assign(r,{attempts:11}))).attempts]));')
+        self.assertEqual(out, [[3, 3, "openai/gpt-5", "openai/gpt-4.1"], [3, 3, "openai/gpt-5", "openai/gpt-4.1"], None, None])
 
     def test_another_benchmarks_options_are_dropped(self):
         # a memory benchmark's RAG mode does not follow the recipe to an agent benchmark; a value the benchmark takes stays
@@ -107,13 +108,22 @@ class CommonAndPerAgent(CompilerCase):
         out = self.runs()
         for text in out['runs'].values():
             self.assertNotIn('--n-attempts', text); self.assertNotIn('--verifier-timeout-multiplier', text)
-        out = self.runs("r.attempts=3;r.setupTimeoutMultiplier=2;r.verifierTimeoutMultiplier=1.5;r.buildTimeoutMultiplier=4")
+        out = self.runs("r.repeat=3;r.setupTimeoutMultiplier=2;r.verifierTimeoutMultiplier=1.5;r.buildTimeoutMultiplier=4")
         for text in out['runs'].values():
             for flag in ('--n-attempts 3', '--agent-setup-timeout-multiplier 2', '--verifier-timeout-multiplier 1.5', '--environment-build-timeout-multiplier 4'):
                 self.assertIn(flag, text)
         self.assertEqual(out['e'], [])
-        bad = self.runs("r.attempts=0;r.verifierTimeoutMultiplier='x'")['e']
+        bad = self.runs("r.repeat=0;r.verifierTimeoutMultiplier='x'")['e']
         self.assertEqual(sorted(g for g, _ in bad), ['Common', 'Common'])
+
+    def test_attempts_per_repeat_are_harbors_retries_plus_one(self):
+        out = self.runs()
+        for text in out['runs'].values():
+            self.assertIn('--max-retries 3', text)          # 4 attempts by default: Harbor run three times again at most
+        out = self.runs("r.attempts=1")
+        for text in out['runs'].values():
+            self.assertIn('--max-retries 0', text)
+        self.assertEqual([m for _, m in self.runs("r.attempts=0")['e']], ['Attempts per repeat must be a whole number of at least 1.'])
 
     def test_an_agents_own_kwarg_reaches_that_agent_only(self):
         out = self.runs("r.custom=[{scope:'agent',key:'shared',type:'string',value:'s'},{scope:'agent',key:'mine',type:'number',value:'7',agent:'oracle'},{scope:'agent',key:'mine',type:'number',value:'8',agent:'custom-0'}]")
@@ -123,9 +133,18 @@ class CommonAndPerAgent(CompilerCase):
         self.assertIn("--ak 'mine=7'", out['runs']['run-oracle']); self.assertNotIn("--ak 'mine=8'", out['runs']['run-oracle'])
 
     def test_the_common_fields_and_agent_kwargs_survive_a_saved_recipe(self):
-        out = self.js('const r=C.create("harbor");r.attempts=2;r.verifierTimeoutMultiplier=1.5;r.custom=[{scope:"agent",key:"k",type:"string",value:"v",agent:"nop"}];'
-                      'const b=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify([b.attempts,b.verifierTimeoutMultiplier,b.setupTimeoutMultiplier,b.custom[0].agent]));')
-        self.assertEqual(out, [2, 1.5, '', 'nop'])
+        out = self.js('const r=C.create("harbor");r.repeat=2;r.attempts=3;r.verifierTimeoutMultiplier=1.5;r.custom=[{scope:"agent",key:"k",type:"string",value:"v",agent:"nop"}];'
+                      'const b=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify([b.repeat,b.attempts,b.verifierTimeoutMultiplier,b.setupTimeoutMultiplier,b.custom[0].agent,b.version]));')
+        self.assertEqual(out, [2, 3, 1.5, '', 'nop', 2])
+
+    def test_a_harbor_recipe_saved_as_version_1_reads_as_it_was_saved(self):
+        """Version 1 named Harbor's --n-attempts `attempts` and its
+        --max-retries `retries`: 3 repeats and 1 retry come back as 3 repeats
+        and 2 attempts, and the recipe is saved again as version 2."""
+        out = self.js('const r=C.create("harbor");const v1=Object.assign(JSON.parse(JSON.stringify(r)),{version:1,attempts:3,retries:1});delete v1.repeat;'
+                      'const b=C.fromJSON(JSON.stringify(v1));const empty=C.fromJSON(JSON.stringify(Object.assign({},v1,{attempts:""})));'
+                      'process.stdout.write(JSON.stringify([b.repeat,b.attempts,b.version,"retries" in b,empty.repeat,empty.attempts]));')
+        self.assertEqual(out, [3, 2, 2, False, "", 2])
 
 
 

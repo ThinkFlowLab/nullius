@@ -27,10 +27,10 @@ turn   - the conversation is the upstream's: its batch runner,
          this driver, with a ``TextRunConfig`` at the upstream's defaults (max
          steps, max errors, no timeout, one trial, its seed 300, three
          retries, its user simulator). It draws the trial's seed from the
-         base seed as it does for every run: the unit's first attempt is
-         trial 0 of a one-trial run, its attempt N (``--repeat``) trial N-1
+         base seed as it does for every run: the unit's first repeat is
+         trial 0 of a one-trial run, its repeat N (``--repeat``) trial N-1
          at the seed run_tasks draws for that trial (``trial``), and each
-         attempt is its ``run_single_task``: an ``Orchestrator`` built by its
+         repeat is its ``run_single_task``: an ``Orchestrator`` built by its
          ``build_text_orchestrator`` at that seed, run by its
          ``run_simulation``; an attempt that raises is made again by its
          ``run_with_retry``, and after the last the runner records
@@ -273,15 +273,15 @@ class Conversation:
             reply(text, error)
 
     # -- the conversation: the upstream's batch runner, on the one task, in a thread
-    def start(self, cfg, task, attempt=None):
+    def start(self, cfg, task, repeat=None):
         self.config = cfg
-        self.thread = threading.Thread(target=self._run, args=(cfg, task, attempt), daemon=True)
+        self.thread = threading.Thread(target=self._run, args=(cfg, task, repeat), daemon=True)
         self.thread.start()
 
-    def _run(self, cfg, task, attempt):
+    def _run(self, cfg, task, repeat):
         _CURRENT[0] = self
         try:
-            self.result = trial(cfg, task, attempt)
+            self.result = trial(cfg, task, repeat)
         except BaseException as e:                       # the runner raised (the unit was left): no SimulationRun
             self.error = e
         with self.lock:
@@ -330,22 +330,22 @@ class Conversation:
         shutil.rmtree(self.dir, ignore_errors=True)
 
 
-def trial_seed(base, attempt):
-    """The seed the upstream's batch runner gives trial ``attempt - 1``: run_tasks draws one per trial
+def trial_seed(base, repeat):
+    """The seed the upstream's batch runner gives trial ``repeat - 1``: run_tasks draws one per trial
     from its base seed (batch.py, "Seed management": ``random.seed(config.seed)``, then
     ``random.randint(0, 1000000)`` for each trial in order) - the same draws, from a generator of
     their own so nothing else's randomness moves."""
     r = random.Random(base)
-    return [r.randint(0, 1000000) for _ in range(attempt)][-1]
+    return [r.randint(0, 1000000) for _ in range(repeat)][-1]
 
 
-def trial(cfg, t, attempt=None):
-    """One unit's run: trial ``attempt - 1`` of the upstream's batch runner on the unit's task. The first
-    attempt is run_tasks itself (a one-trial run: trial 0 at its seed), as every run was before attempts;
+def trial(cfg, t, repeat=None):
+    """One unit's run: trial ``repeat - 1`` of the upstream's batch runner on the unit's task. The first
+    repeat is run_tasks itself (a one-trial run: trial 0 at its seed), as every run was before repeats;
     a later one is what run_tasks does for that trial of a run of as many (its ``_run_tracked``): its
     run_single_task at the trial's seed, made again by its run_with_retry, which records
     INFRASTRUCTURE_ERROR after the last retry."""
-    n = int(attempt or 1)
+    n = int(repeat or 1)
     if n <= 1:
         return run_tasks(cfg, [t], evaluation_type=EvaluationType.ALL).simulations[0]
     seed = trial_seed(cfg.seed, n)
@@ -467,7 +467,7 @@ def units(dataset, setup=None):
     return {"units": [u for u, t in tasks().items() if keep is None or keep(t)]}
 
 
-def setup(unit, dir, attempt=None):
+def setup(unit, dir, repeat=None):
     t = task(unit)
     _leave()                                              # one unit at a time: an earlier one left unfinished is ended
     env = environment(t)
@@ -479,17 +479,17 @@ def setup(unit, dir, attempt=None):
                                                                   **({"TAU_RETRIEVAL": retrieval()} if retrieval() else {})}}]}
 
 
-def turn(unit, dir, transcript, simulator=None, judge=None, attempt=None):
+def turn(unit, dir, transcript, simulator=None, judge=None, repeat=None):
     """The user's next message, or done. With nothing said yet, the upstream's
     Orchestrator starts: its first agent message, then the user's answer - in
-    trial ``attempt - 1`` of the upstream's batch runner (``trial``)."""
+    trial ``repeat - 1`` of the upstream's batch runner (``trial``)."""
     st, t = _state(unit), task(unit)
     c = st["conversation"]
     if not transcript:
         if not simulator:
             raise ValueError("the user is played by a model, and none was given")
         use_judge(t, judge, st)
-        c.start(run_config(agent=AGENT, **user_config(simulator)), t, attempt)
+        c.start(run_config(agent=AGENT, **user_config(simulator)), t, repeat)
         return c.next()
     if c.thread is None:
         raise ValueError("the conversation was not started: the first turn has an empty transcript")
@@ -499,7 +499,7 @@ def turn(unit, dir, transcript, simulator=None, judge=None, attempt=None):
     return c.next()
 
 
-def answer(unit, dir, setup, model, base_url, key, simulator=None, judge=None, attempt=None):
+def answer(unit, dir, setup, model, base_url, key, simulator=None, judge=None, repeat=None):
     """The original: the upstream's own agent (its --agent, the ``upstream_agent`` option: LLMAgent by
     default) asked as ``model`` through the unit's relay, at the upstream's agent arguments
     (temperature 0) or the run's ``agent_reasoning_effort``, as --agent-llm-args gives one; the
@@ -519,7 +519,7 @@ def answer(unit, dir, setup, model, base_url, key, simulator=None, judge=None, a
     cfg = run_config(agent=upstream_agent(), llm_agent=llm,
                      llm_args_agent=dict(effort_args("agent_reasoning_effort") or config.DEFAULT_LLM_ARGS_AGENT, **at),
                      **({"user": "dummy_user"} if solo else user_config(simulator)))
-    st.update(original=trial(cfg, t, attempt), config=cfg)
+    st.update(original=trial(cfg, t, repeat), config=cfg)
     said = [m.content for m in st["original"].messages if m.role == "assistant" and m.content]
     return {"answer": said[-1] if said else ""}
 

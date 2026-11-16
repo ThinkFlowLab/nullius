@@ -11,14 +11,14 @@
   "setting": "--k",
   "values": "1,10,100",
   "default": "1,10,100",
-  "nullius": "fixed:pass@1 to pass@n with n the run's attempts (cli run --repeat n, the builder's Attempts per problem) - the job's result.json reports it, 1 - C(n-c, k)/C(n, k) as estimate_pass_at_k reads it; one attempt by default, pass@1"
+  "nullius": "fixed:pass@1 to pass@n with n the run's repeats (cli run --repeat n, the builder's Repeats per problem) - the job's result.json reports it, 1 - C(n-c, k)/C(n, k) as estimate_pass_at_k reads it; one repeat by default, pass@1"
  },
  {
   "entry": "README",
   "setting": "num_samples_per_task",
   "values": "200",
   "default": "200",
-  "nullius": "fixed:the run's attempts (--repeat), 1 by default - 200 agent runs per problem are offered, never assumed"
+  "nullius": "fixed:the run's repeats (--repeat), 1 by default - 200 agent runs per problem are offered, never assumed"
  },
  {
   "entry": "evaluate_functional_correctness",

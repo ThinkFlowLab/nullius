@@ -72,6 +72,7 @@ from nullius import constraints as limits, paths, prices as price_list, progress
 from nullius.redact import redact
 from nullius.harbor import feed as live_feed
 from nullius.standard import acp, container, definitions, hostreq, install, job, jsonl, ledger as ledgers, match, mcp_machine, pace as pacing, relay, shard as shards
+from nullius.standard.attempts import ATTEMPTS, retryable
 
 # the totals a unit's end carries onto the live board, from its trial's agent_result
 FEED_TOTALS = ("n_input_tokens", "n_cache_tokens", "n_output_tokens", "cost_usd")
@@ -361,7 +362,7 @@ class Run:
                  turn_seconds: Optional[int] = None, say: Callable[[str], None] = print, env=os.environ,
                  proving: bool = False, unsandboxed: bool = False, judge_model: Optional[str] = None,
                  backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None,
-                 launch: Optional[str] = None, repeat: int = 1, simulator_model: Optional[str] = None,
+                 launch: Optional[str] = None, repeat: int = 1, attempts: int = ATTEMPTS, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
                  max_usd_per_unit: Optional[float] = None, units_file: Optional[dict] = None,
@@ -385,6 +386,10 @@ class Run:
         ``repeat``: each unit run that many times (a conformance check run for
         confidence, ``conform``), each run a trial of its own tagged
         ``u0042r2``; once by default, tagged ``u0042`` as always.
+        ``attempts``: the tries each repeat may take: a repeat that ended in a
+        failure a further try may mend (``retryable``) runs again after the
+        others, one at a time, until it ends otherwise or has had this many;
+        each try before is kept under the job's ``retried/``. 2 by default.
         ``simulator_model``: a benchmark whose user a model plays
         (``simulator``): this model instead of its official one.
         ``prices``: this run's own prices, by model, over the user's list
@@ -541,6 +546,7 @@ class Run:
         self.limit, self.concurrency = limit, limits.concurrency(max(1, int(concurrency)), self.constraints)
         self.units_file = units_file
         self.repeat = max(1, int(repeat or 1))
+        self.attempts = max(1, int(attempts or ATTEMPTS))
         # an own image this run pulled or built stays for the next run, unless the user asks it removed
         # when its last unit ends (never with a repeat): {image: how many units are using it now}
         self.keep_images = not remove_images or self.repeat > 1
@@ -691,7 +697,7 @@ class Run:
                          # a shard of a list splits the listed units: they are its whole
                          shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit)
                          if self.shard else None, units_file=self.units_file,
-                         repeat=self.repeat, prices=self.prices_record(), constraints=self.constraints,
+                         repeat=self.repeat, attempts=self.attempts, prices=self.prices_record(), constraints=self.constraints,
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
         # every unit once, then every unit again: a repeat cut short still has each unit's first run
         work = [(i, u, r) for r in range(1, self.repeat + 1) for i, u in mine]
@@ -710,7 +716,7 @@ class Run:
         self.loopback = None
         self.pace = pacing.Pace(self._stopped, self._halt)
         self._running = 0
-        again: Dict[str, dict] = {}              # a rate-limited unit's second attempt, by its trial's name
+        again: Dict[str, dict] = {}              # a repeat's last try, by its trial's name, when it was tried again
 
         def work_unit(iur):
             self.pace.wait()                     # a unit ended rate-limited: the next waits its pause out
@@ -766,7 +772,7 @@ class Run:
                 container.sweep(self.name)          # whatever an interrupted unit left
             if self.loopback is not None:
                 self.loopback.stop()
-            budget = self.budget([self.attempt_name(u, r) for n, (_, u, r) in enumerate(work) if n >= len(begun) or not begun[n]])
+            budget = self.budget([self.repeat_name(u, r) for n, (_, u, r) in enumerate(work) if n >= len(begun) or not begun[n]])
             self.capped = bool(budget and budget["stopped"])
             job.write_result(self.job_dir, self.name, t0, time.time(), results, len(work), budget=budget)
             errored = sum(1 for x in results if x.get("exception_info"))
@@ -815,33 +821,37 @@ class Run:
                                                            f"{self._running} running of {self.concurrency} at once")
 
     def run_again(self, results: List[dict], work: list, work_unit, done: Dict[str, dict]) -> None:
-        """Each unit that ended rate-limited, run once more after the others,
-        one at a time and paced as the rest: its first attempt moved into the
-        job's ``retried/`` (kept whole, its calls and its cost with it, where
-        no reader takes it for a trial of its own), its second written under
-        the trial's own name and counted (into ``done``, as each ends). Nothing
-        is run again once the run is stopped or halted; the spending cap goes
-        on counting every call."""
+        """Each repeat that ended in a failure a further try may mend
+        (``retryable``: a rate limit, a provider or setup error, an agent
+        crash), run again after the others, one at a time and paced as the
+        rest, until it ends otherwise or has had ``attempts`` tries. Each try
+        before is moved into the job's ``retried/`` as ``<trial>.attempt-N``
+        (kept whole, its calls and its cost with it, where no reader takes it
+        for a trial of its own); the last is written under the trial's own
+        name and counted (into ``done``, as each ends), its ``result.json``
+        saying which attempt it was. Nothing is run again once the run is
+        stopped or halted; the spending cap goes on counting every call."""
         by_name = {self.trial_name(*iur): iur for iur in work}
-        todo = [by_name[r["trial_name"]] for r in results
-                if (r.get("exception_info") or {}).get("exception_type") == pacing.RATE_LIMITED and r["trial_name"] in by_name]
-        if not todo:
-            return
-        self.progress.emit("units", "start", n=len(todo), detail=f"running {len(todo)} rate-limited again, one at a time")
-        self.say(f"running again, one at a time: {len(todo)} rate-limited")
-        for iur in todo:
-            if self._stopped.is_set() or self._halt.is_set():
-                break
-            name = self.trial_name(*iur)
-            keep = os.path.join(self.job_dir, "retried", name)
-            os.makedirs(os.path.dirname(keep), exist_ok=True)
-            os.replace(os.path.join(self.job_dir, name), keep)
-            self.feed.emit("trial.queued", name, agent=self.other["key"], position=0)
-            res = work_unit(iur)
-            if res is not None:
-                done[name] = res
-            elif not os.path.exists(os.path.join(self.job_dir, name)):
-                os.replace(keep, os.path.join(self.job_dir, name))    # not begun after all: the first attempt stands
+        latest = {r["trial_name"]: r for r in results if r["trial_name"] in by_name}
+        for attempt in range(2, self.attempts + 1):
+            todo = [name for name, res in latest.items() if retryable(res)]
+            if not todo:
+                return
+            self.progress.emit("units", "start", n=len(todo),
+                               detail=f"trying {len(todo)} again, one at a time: attempt {attempt} of {self.attempts}")
+            self.say(f"trying again, one at a time: {len(todo)}, attempt {attempt} of {self.attempts}")
+            for name in todo:
+                if self._stopped.is_set() or self._halt.is_set():
+                    return
+                keep = os.path.join(self.job_dir, "retried", f"{name}.attempt-{attempt - 1}")
+                os.makedirs(os.path.dirname(keep), exist_ok=True)
+                os.replace(os.path.join(self.job_dir, name), keep)
+                self.feed.emit("trial.queued", name, agent=self.other["key"], position=0)
+                res = work_unit((*by_name[name], attempt))
+                if res is not None:
+                    done[name] = latest[name] = res
+                elif not os.path.exists(os.path.join(self.job_dir, name)):
+                    os.replace(keep, os.path.join(self.job_dir, name))    # not begun after all: the try before stands
 
     def ready(self) -> None:
         """What the run needs before its first unit, each a stage said as it
@@ -944,11 +954,15 @@ class Run:
             needs.append("python")
         return needs
 
-    def attempt_kw(self) -> dict:
-        """What the driver is told of the attempt this unit's run is (1, 2, ...), when the benchmark
-        declares that its upstream tells attempts apart (``limits.attempts``: a seed per trial)."""
-        a = getattr(self.local, "attempt", None)
-        return {"attempt": a} if a and (self.bench.get("limits") or {}).get("attempts") else {}
+    def repeat_kw(self) -> dict:
+        """What the driver is told of the repeat this unit's run is (1, 2, ...), when the benchmark
+        declares that its upstream tells repeats apart (``limits.repeats``: a seed per trial) - as
+        ``attempt`` to a definition that still declares the older ``limits.attempts``."""
+        r = getattr(self.local, "repeat", None)
+        lim = self.bench.get("limits") or {}
+        if not r:
+            return {}
+        return {"repeat": r} if lim.get("repeats") else {"attempt": r} if lim.get("attempts") else {}
 
     def trial_name(self, i: int, unit: str, r: int = 1) -> str:
         return f"{_slug(unit)}__u{i:04d}" + (f"r{r}" if self.repeat > 1 else "")
@@ -957,14 +971,14 @@ class Run:
         if self.feed is not None:
             self.feed.emit("trial.phase", name, task=unit, agent=self.other["key"], phase=phase, timeout_sec=timeout)
 
-    def unit(self, i: int, unit: str, r: int = 1) -> Optional[dict]:
+    def unit(self, i: int, unit: str, r: int = 1, attempt: int = 1) -> Optional[dict]:
         if self._stopped.is_set() or (getattr(self, "_halt", None) is not None and self._halt.is_set()):
             return None                          # the endpoint refused the run: nothing more is begun
         if getattr(self, "ledger", None) is not None and self.ledger.closed():
             self._halt.set()                     # the spending cap refused a call: every later one is refused too
             return None
         tag = f"u{i:04d}" + (f"r{r}" if self.repeat > 1 else "")
-        self.local.attempt = r
+        self.local.repeat = r
         trial = os.path.join(self.job_dir, self.trial_name(i, unit, r))
         name = os.path.basename(trial)
         ws, home = os.path.join(trial, "workspace"), os.path.join(trial, ".home")
@@ -985,7 +999,7 @@ class Run:
         try:
             try:
                 # a setup's unit needs none: the upstream's answerer reads its data itself
-                setup = {} if self.upstream else self.driver().request("setup", unit=unit, dir=ws, timeout=DRIVER_SECONDS, **self.attempt_kw())
+                setup = {} if self.upstream else self.driver().request("setup", unit=unit, dir=ws, timeout=DRIVER_SECONDS, **self.repeat_kw())
             except jsonl.Failed as e:
                 raise _Ended("EnvironmentSetupError", str(e))
             environment, env_def = self.unit_environment(setup)
@@ -1106,7 +1120,7 @@ class Run:
                               t0=t0, t1=time.time(), produce=produce, score=score, exception=exc, calls=calls,
                               setup_end=p0 or time.time(), checking=checking,
                               trajectory=traj, extra_logs=dict(logs or {}, **({"container-changes.txt": changes} if changes else {})),
-                              environment=environment or "",
+                              environment=environment or "", attempt=attempt,
                               image=(box.image if box is not None else getattr(rl, "unit_image", "")) or "")
         install.prune(self.other, home)          # its declared caches: the trial is written, no one reads them now
         verdict = "error " + exc[0] if exc else f"reward {score.get('reward')}"
@@ -1120,11 +1134,11 @@ class Run:
         self.note_refusal(exc)
         if exc and exc[0] == ledgers.ERROR and getattr(self, "_halt", None) is not None:
             with self._said:
-                self._cut.append(self.attempt_name(unit, r))
+                self._cut.append(self.repeat_name(unit, r))
             self._halt.set()                     # the cap is reached: nothing more is begun
         elif exc and exc[0] == ledgers.UNIT_ERROR:
             with self._said:
-                self._over.append(self.attempt_name(unit, r))     # its own cap: the others go on
+                self._over.append(self.repeat_name(unit, r))      # its own cap: the others go on
         if getattr(self, "ledger", None) is not None and self.unit_max_usd is not None:
             try:
                 self.ledger.forget(tag)          # the unit ended: its own count goes from the ledger
@@ -1142,9 +1156,9 @@ class Run:
         cuts = [f for f in (relay.failure(rl.calls(t)) for t in (tag, f"{tag}-judge", f"{tag}-simulator")) if f]
         return next((f for f in cuts if f[0] == ledgers.ERROR), None) or next((f for f in cuts if f[0] == ledgers.UNIT_ERROR), None)
 
-    def attempt_name(self, unit: str, r: int = 1) -> str:
-        """A unit as the budget lists it: by its name, and its attempt when the run repeats its units."""
-        return unit if self.repeat <= 1 else f"{unit} (attempt {r})"
+    def repeat_name(self, unit: str, r: int = 1) -> str:
+        """A unit as the budget lists it: by its name, and its repeat when the run repeats its units."""
+        return unit if self.repeat <= 1 else f"{unit} (repeat {r})"
 
     def budget(self, not_run: List[str]) -> Optional[dict]:
         """What ``result.json`` says of the run's spending cap: the cap,
@@ -1760,7 +1774,7 @@ class Run:
                 if self.simulator_model:
                     # The simulated user speaks first: the first turn, asked with nothing said yet,
                     # follows setup's prompt (what the agent is told before anyone speaks).
-                    first = self.driver().request("turn", unit=unit, dir=ws, transcript=[], timeout=600, **sim, **self.attempt_kw())
+                    first = self.driver().request("turn", unit=unit, dir=ws, transcript=[], timeout=600, **sim, **self.repeat_kw())
                     opened = not first.get("done")
                     if opened:
                         prompt = prompt + "\n\n" + first["message"]
@@ -1773,7 +1787,7 @@ class Run:
                     transcript.append({"role": "agent", "text": turn.text, "stop": turn.stop})
                     if "agent.conversation/v1" not in self.bench["needs"]:
                         break
-                    nxt = self.driver().request("turn", unit=unit, dir=ws, transcript=transcript, timeout=600, **sim, **self.attempt_kw())
+                    nxt = self.driver().request("turn", unit=unit, dir=ws, transcript=transcript, timeout=600, **sim, **self.repeat_kw())
                     if nxt.get("done"):
                         break
                     prompt = nxt["message"]
@@ -1868,7 +1882,7 @@ class Run:
         o = self.other
         try:
             # the benchmark's other models reach the upstream's pipeline as they reach a turn or a score: their own routes
-            out = self.driver().request("answer", unit=unit, dir=ws, setup=o["key"], model=self.asked, **self.attempt_kw(),
+            out = self.driver().request("answer", unit=unit, dir=ws, setup=o["key"], model=self.asked, **self.repeat_kw(),
                                         **self.simulator(rl, tag), **self.judge(rl, tag),
                                         base_url=rl.url(tag), key=relay.PLACEHOLDER_KEY, timeout=self.turn_seconds)
         except jsonl.Failed as e:

@@ -50,7 +50,7 @@ Grade-school math word problems that take two to eight steps of basic arithmetic
 ## Nullius limitations
 
 - The prompt asking for the '#### <number>' line is Nullius's wording. The paper's models were fine-tuned to write it.
-- The paper's trained verifier, which picks the best of several answers, is not reproduced. Several attempts per problem report pass@k instead.
+- The paper's trained verifier, which picks the best of several answers, is not reproduced. Several repeats per problem report pass@k instead.
 
 ## Cite
 

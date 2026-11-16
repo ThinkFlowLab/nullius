@@ -310,7 +310,8 @@ class RunRoutes(unittest.TestCase):
     def test_a_flag_the_config_left_out_is_harbors_default(self):
         _, _, out = self.like(self.write_job("defaults", {"agents": [{"name": "my_agent:MyAgent", "model_name": "openai/m"}], "datasets": [{"path": "/tmp/tasks/x"}]}))
         r = out["recipe"]
-        self.assertEqual((r["concurrency"], r["retries"], r["tasks"], r["agents"], r["source"], r["path"]), (4, 0, "", ["custom-0"], "local", "/tmp/tasks/x"))
+        # Harbor's default of no retry: one attempt per repeat
+        self.assertEqual((r["concurrency"], r["attempts"], r["repeat"], r["tasks"], r["agents"], r["source"], r["path"]), (4, 1, "", "", ["custom-0"], "local", "/tmp/tasks/x"))
 
     def test_an_old_link_still_finds_the_agent_by_its_class(self):
         page = self.client.get("/new-run?agent=Tau3LLMAgent&model=openrouter/m"); self.addCleanup(page.close)

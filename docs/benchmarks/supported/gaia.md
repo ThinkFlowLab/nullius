@@ -49,7 +49,7 @@ Real-world questions needing reasoning, web research and file understanding.
 - Accept GAIA's access conditions on Hugging Face, then add a token in Settings → Data providers. Do not redistribute its questions or answers in a crawlable form.
 - Levels 1, 2 and 3 (53, 86 and 26 questions) split the 165 validation questions.
 - The authors' scorer gets the text after the last FINAL ANSWER: marker, or the whole reply without one.
-- Original is the paper's no-tools API baseline; choose an agent for files and web research. The paper ran it 3 times: 3 attempts per question.
+- Original is the paper's no-tools API baseline; choose an agent for files and web research. The paper ran it 3 times: 3 repeats per question.
 
 ## Upstream limitations
 

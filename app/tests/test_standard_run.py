@@ -384,10 +384,10 @@ class RunTest(unittest.TestCase):
         self.assertEqual(result["budget"]["spent_usd"], 0.0)
         self.assertFalse(failed)
 
-    def test_a_repeated_runs_budget_names_each_attempt(self):
+    def test_a_repeated_runs_budget_names_each_repeat(self):
         job_dir, failed, result, said = self.calling(max_usd=0.00011, repeat=2)
-        self.assertEqual(result["budget"]["cut_off"], ["m3 (attempt 1)"])
-        self.assertEqual(result["budget"]["not_run"], [f"m{i} (attempt 1)" for i in range(4, 8)] + [f"m{i} (attempt 2)" for i in range(8)])
+        self.assertEqual(result["budget"]["cut_off"], ["m3 (repeat 1)"])
+        self.assertEqual(result["budget"]["not_run"], [f"m{i} (repeat 1)" for i in range(4, 8)] + [f"m{i} (repeat 2)" for i in range(8)])
         self.assertEqual((result["n_total_trials"], result["stats"]["n_cancelled_trials"]), (16, 12))     # as many as the trials not run
 
     def test_each_threads_driver_has_a_route_of_its_own_on_the_benchmarks_relay(self):
@@ -593,18 +593,72 @@ class RunTest(unittest.TestCase):
         got, j = self.outcomes(job_dir)
         self.assertEqual(len(j.trials), 3)       # one trial per unit: the first attempt is not one of them
         self.assertEqual(got["model"].outcome, classify.FAILED_VERIFICATION)   # its second attempt counts: a verdict, no error
-        (name,) = os.listdir(os.path.join(job_dir, "retried"))
+        (kept,) = os.listdir(os.path.join(job_dir, "retried"))
+        name, _, number = kept.rpartition(".attempt-")
         self.assertTrue(name.startswith("model__"))
-        with open(os.path.join(job_dir, "retried", name, "result.json")) as f:
+        self.assertEqual(number, "1")
+        with open(os.path.join(job_dir, "retried", kept, "result.json")) as f:
             first = json.load(f)                 # the first attempt, kept whole beside the job's trials
         self.assertEqual(first["exception_info"]["exception_type"], "RateLimitError")
         with open(os.path.join(job_dir, name, "result.json")) as f:
             second = json.load(f)
+        self.assertEqual(second["standard"]["attempt"], 2)
         ended, began = (datetime.fromisoformat(x.replace("Z", "+00:00")) for x in (first["finished_at"], second["started_at"]))
         self.assertGreaterEqual((began - ended).total_seconds(), 0.4)       # the pause, before it starts again
         with open(os.path.join(job_dir, "progress.jsonl")) as f:
             said = [json.loads(line) for line in f]
         self.assertTrue(any("rate limited: no unit starts for 0.5 s" in (e.get("detail") or "") for e in said))
+
+    def test_a_repeat_is_tried_up_to_its_attempts_and_never_with_one(self):
+        Echo.status = 429                        # every call refused: each try ends rate-limited
+        real_prompt = acp.Client.prompt
+
+        def prompt(client, sid, text, timeout=600):
+            if text == "model hi":
+                tries.append(text)
+            return real_prompt(client, sid, text, timeout=timeout)
+
+        for attempts in (3, 1):
+            tries = []
+            with self.subTest(attempts=attempts), mock.patch.object(acp.Client, "prompt", prompt):
+                job_dir = self.go("fakebench", "fake", dataset="responding", name=f"attempts-{attempts}", attempts=attempts)
+                got, j = self.outcomes(job_dir)
+                self.assertEqual(len(tries), attempts)
+                self.assertEqual(got["model"].outcome, classify.RATE_LIMITED)
+                kept = sorted(os.listdir(os.path.join(job_dir, "retried"))) if attempts > 1 else []
+                self.assertEqual([k.rpartition(".attempt-")[2] for k in kept if k.startswith("model__")],
+                                 [str(n) for n in range(1, attempts)])
+                self.assertEqual(os.path.exists(os.path.join(job_dir, "retried")), attempts > 1)
+                with open(os.path.join(job_dir, "config.json")) as f:
+                    self.assertEqual(json.load(f)["standard"]["attempts"], attempts)
+
+    def test_an_agent_crash_is_tried_again_and_a_timeout_is_not(self):
+        real_prompt = acp.Client.prompt
+
+        def prompt(client, sid, text, timeout=600):
+            if text == "model hi":
+                tries.append(text)
+                if kind == "timeout":
+                    raise acp.Timeout("no answer in time", client.events)
+                if len(tries) == 1:
+                    raise acp.AgentFailed("the agent's process exited with 1")
+            return real_prompt(client, sid, text, timeout=timeout)
+
+        for kind in ("crash", "timeout"):
+            tries = []
+            with self.subTest(kind=kind), mock.patch.object(acp.Client, "prompt", prompt):
+                job_dir = self.go("fakebench", "fake", dataset="responding", name=f"tried-{kind}")
+                got, _ = self.outcomes(job_dir)
+                if kind == "crash":
+                    self.assertEqual(len(tries), 2)  # the crash, then the try that answered
+                    self.assertEqual(got["model"].outcome, classify.FAILED_VERIFICATION)
+                    (kept,) = os.listdir(os.path.join(job_dir, "retried"))
+                    with open(os.path.join(job_dir, "retried", kept, "result.json")) as f:
+                        self.assertEqual(json.load(f)["exception_info"]["exception_type"], "NonZeroAgentExitCodeError")
+                else:
+                    self.assertEqual(len(tries), 1)  # a timeout is the agent's result: never tried again
+                    self.assertEqual(got["model"].outcome, classify.AGENT_ERROR)
+                    self.assertFalse(os.path.exists(os.path.join(job_dir, "retried")))
 
     def test_a_stopped_run_runs_nothing_again(self):
         Echo.status = 429

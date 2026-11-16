@@ -41,6 +41,7 @@ from typing import Callable, Dict, List, Optional
 from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
 from nullius.standard import hostreq, definitions, ledger, match, ports, prove
+from nullius.standard.attempts import ATTEMPTS, MAX_ATTEMPTS
 
 HARNESS = "standard"
 # The builder's runner card (command-builder-core.js, runners()): not a definition file, so builtin like Harbor's.
@@ -133,7 +134,7 @@ def _bench_page(b: dict) -> dict:
             "simulator": (b.get("simulator") or {}).get("model", ""), "judge": ((b.get("score") or {}).get("judge") or {}).get("model", ""),
             # what the upstream's leaderboard fixes besides the ranked model (Like the leaderboard)
             "leaderboard": b.get("leaderboard") or None,
-            "attempts": (b.get("limits") or {}).get("attempts", ""),
+            "repeats": (b.get("limits") or {}).get("repeats") or (b.get("limits") or {}).get("attempts", ""),
             "options": {n: {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
                             "setups": o.get("setups") or ["yours"],
                             **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {}}
@@ -419,11 +420,16 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         add("model", "Choose a model or enter its ID.")
     if model_choice == "paper" and model in orig.get("models", []) and provider_ in orig.get("providers", {}):
         model = orig["providers"][provider_] + (orig.get("served_as") or {}).get(model, model)
-    # each unit tried K times (the upstream's --num-trials: pass^k); the user simulator's and the judge's models
+    # each unit run K times, each a repeat counted whatever its result (the upstream's --num-trials: pass^k);
+    # each repeat tried up to N times when it ends in a failure a further try may mend (standard.attempts)
     repeat = _int(recipe.get("repeat") or lb.get("repeat") or 1, 1, 32)
     if repeat is None:
-        add("limits", "Attempts per unit: a whole number from 1 to 32.")
+        add("limits", "Repeats per unit: a whole number from 1 to 32.")
         repeat = 1
+    attempts = _int(recipe.get("attempts") or ATTEMPTS, 1, MAX_ATTEMPTS)
+    if attempts is None:
+        add("limits", f"Attempts per repeat: a whole number from 1 to {MAX_ATTEMPTS}.")
+        attempts = ATTEMPTS
     if lb and repeat < lb.get("repeat", 1):
         add("limits", f"Like the leaderboard runs each {(b.get('units') or {}).get('noun', 'unit')} at least {lb['repeat']} times.")
     sim_model = str(recipe.get("simulator_model") or "").strip()
@@ -527,6 +533,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  "--dataset", d["id"], *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
                  *[w for k, v in options_for_pick(d, p).items() for w in ("--bench-option", f"{k}={v}")],
                  *(["--repeat", str(repeat)] if repeat > 1 else []),
+                 *(["--attempts", str(attempts)] if attempts != ATTEMPTS else []),
                  *(["--max-usd", f"{share:.6f}".rstrip("0").rstrip(".")] if share and spends(p) else []),
                  *(["--max-usd-per-unit", f"{per_unit:.6f}".rstrip("0").rstrip(".")] if per_unit and spends(p) else []),
                  *(["--simulator-model", sim_model] if sim_model and not p["control"] else []),
@@ -620,7 +627,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       + (" of each shard" if of > 1 and isinstance(limit, int) else "") + f" · {conc} at a time".replace("  ", " ")
                       + (" of each dataset" if many and isinstance(limit, int) else "")
                       + (f" · {len(pairs)} jobs, one after the other" if len(pairs) > 1 else "")
-                      + (f" · {repeat} attempts each (pass^1 to pass^{repeat})" if repeat > 1 else "")
+                      + (f" · {repeat} repeats each (pass^1 to pass^{repeat})" if repeat > 1 else "")
+                      + (f" · up to {attempts} attempts a repeat" if attempts != ATTEMPTS else "")
                       + (" · a setup counts " + next(p["o"]["units"]["nouns"] for p in picks if p.get("setup"))
                          if any(p.get("setup") for p in picks) and not all(p.get("setup") for p in picks) else "")],
                      *([[STEP["limits"], "Spending cap", f"${ledger.usd(cap)}"

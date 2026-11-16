@@ -403,7 +403,8 @@ def backfill_trace(trial_dir: str, write: bool = False) -> str:
 def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: str, unit: str, t0: float, t1: float,
                 produce: tuple, score: Optional[dict], exception: Optional[tuple], calls: List[dict],
                 trajectory: Optional[dict], extra_logs: Optional[dict] = None, environment: str = "",
-                image: str = "", setup_end: Optional[float] = None, checking: tuple = (None, None)) -> dict:
+                image: str = "", setup_end: Optional[float] = None, checking: tuple = (None, None),
+                attempt: int = 1) -> dict:
     """Write one unit's trial and return its result. ``environment``: the
     benchmark's environment the unit asked for (none: the base image), and
     ``image``, the one it ran in on the container backend - names only.
@@ -426,7 +427,8 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
                             "cost_usd": tot["cost"], "cost_from": tot["cost_from"], "n_model_calls": tot["n_calls"]},
            "standard": {"benchmark": bench["key"], "family": bench["family"], "needs": bench["needs"], "unit": unit,
                         "plugged": other.get("_ref") or other["key"], "job": job, **_version(bench), **_control(other), **_setup(other),
-                        **({"environment": environment} if environment else {}), **({"image": image} if image else {})}}
+                        **({"environment": environment} if environment else {}), **({"image": image} if image else {}),
+                        **({"attempt": attempt} if attempt > 1 else {})}}
     if score is not None:
         value = float(score.get("reward") or 0.0)
         # a pass benchmark leaves a reward, as a verifier does; a score
@@ -463,7 +465,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
 def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str, provider: str, dataset: str, units: List[str],
                  concurrency: int, granted: bool, judge: str = "", backend: str = "local", image: str = "",
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
-                 bench_options: Optional[dict] = None,
+                 attempts: int = 1, bench_options: Optional[dict] = None,
                  simulator: str = "", prices: Optional[dict] = None, units_file: Optional[dict] = None,
                  constraints: Optional[dict] = None):
     """``unsandboxed`` is true for an agent on the local backend only: in a
@@ -473,7 +475,9 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     several machines (``shard``), which ``merge`` reads back. ``units_file``:
     the file a run's units were listed in (``run.units_file``), its name, its
     sha256 and its units, said only for such a run. ``repeat``: how
-    many times each unit was run, said only when more than once. ``judge`` and
+    many times each unit was run, said only when more than once; ``attempts``:
+    the tries each repeat could take when a further try might mend a failure
+    (``run.retryable``), always said. ``judge`` and
     ``simulator``: the models that graded and that played the user, when the
     benchmark has them. ``prices``: the rows its models' costs are
     estimated from and where the user's list came from, when it has any.
@@ -487,7 +491,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"simulator": simulator} if simulator else {}), **({"options": options} if options else {}), **({"benchmark_options": bench_options} if bench_options else {}), **_control(other), **_setup(other),
                                 **({"launch": launch} if launch else {}), **({"shard": shard} if shard else {}),
                                 **({"units_file": units_file} if units_file else {}),
-                                **({"repeat": repeat} if repeat > 1 else {}), **({"prices": prices} if prices else {}),
+                                **({"repeat": repeat} if repeat > 1 else {}), "attempts": attempts, **({"prices": prices} if prices else {}),
                                 **({"constraints": constraints} if constraints else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,

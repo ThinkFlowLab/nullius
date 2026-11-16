@@ -432,14 +432,15 @@ class Attempts(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    def test_attempts_reach_a_driver_only_when_it_says_its_upstream_tells_them_apart(self):
-        b = {"limits": {"attempts": "a seed per trial"}}
+    def test_repeats_reach_a_driver_only_when_it_says_its_upstream_tells_them_apart(self):
         r = run.Run.__new__(run.Run)
-        r.local, r.bench = threading.local(), b
-        r.local.attempt = 2
-        self.assertEqual(r.attempt_kw(), {"attempt": 2})
+        r.local, r.bench = threading.local(), {"limits": {"repeats": "a seed per trial"}}
+        r.local.repeat = 2
+        self.assertEqual(r.repeat_kw(), {"repeat": 2})
+        r.bench = {"limits": {"attempts": "a seed per trial"}}      # the older name: sent as it always was
+        self.assertEqual(r.repeat_kw(), {"attempt": 2})
         r.bench = {}
-        self.assertEqual(r.attempt_kw(), {})
+        self.assertEqual(r.repeat_kw(), {})
 
 if __name__ == "__main__":
     unittest.main()

@@ -243,8 +243,8 @@ class Listed(unittest.TestCase):
         self.assertEqual(self.trials(job), ["good__u0000", "model__u0003", "slow__u0002", "wrong__u0001"])
         self.assertEqual(self.started(job), DATASET)
         cfg = read(os.path.join(job, "config.json"))
-        # the keys a control's run recorded before there were lists, and no other
-        self.assertEqual(sorted(cfg["standard"]), ["backend", "benchmark", "control", "kind", "needs", "permissions_granted",
+        # the keys a control's run recorded before there were lists, the attempts every run now records, and no other
+        self.assertEqual(sorted(cfg["standard"]), ["attempts", "backend", "benchmark", "control", "kind", "needs", "permissions_granted",
                                                    "plugged", "provider", "unsandboxed"])
         self.assertEqual(cfg["datasets"], [{"name": "fakebench/all", "n_tasks": 4}])
         limited = self.go(limit=2, name="limited")
@@ -290,8 +290,8 @@ class RateLimited(unittest.TestCase):
                       jobs_root=os.path.join(self.tmp, "jobs"), concurrency=1, env=self.env, say=lambda s: None,
                       unsandboxed=True, dataset="responding", units_file=run.units_file(path))
         self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "model__u0002"])
-        self.assertEqual(os.listdir(os.path.join(job, "retried")), ["model__u0002"])
-        first = read(os.path.join(job, "retried", "model__u0002", "result.json"))
+        self.assertEqual(os.listdir(os.path.join(job, "retried")), ["model__u0002.attempt-1"])
+        first = read(os.path.join(job, "retried", "model__u0002.attempt-1", "result.json"))
         self.assertEqual(first["exception_info"]["exception_type"], "RateLimitError")
         self.assertFalse(read(os.path.join(job, "model__u0002", "result.json")).get("exception_info"))   # its second counts
         self.assertEqual(read(os.path.join(job, "result.json"))["n_total_trials"], 2)

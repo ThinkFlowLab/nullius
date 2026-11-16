@@ -42,7 +42,7 @@ Python functions written from their signature and docstring, each checked by its
 
 ## Good to know
 
-- One attempt per problem gives pass@1. With n attempts per problem, the run reports pass@1 to pass@n. The paper sampled 200.
+- One repeat per problem gives pass@1. With n repeats per problem, the run reports pass@1 to pass@n. The paper sampled 200.
 
 ## Upstream limitations
 

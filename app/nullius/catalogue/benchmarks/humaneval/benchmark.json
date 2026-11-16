@@ -31,6 +31,6 @@
   "citation": "@article{chen2021codex,\n  title={Evaluating Large Language Models Trained on Code},\n  author={Chen, Mark and Tworek, Jerry and Jun, Heewoo and Yuan, Qiming and Pinto, Henrique Ponde de Oliveira and Kaplan, Jared and others},\n  journal={arXiv preprint arXiv:2107.03374},\n  year={2021}\n}",
   "citation_source": "https://github.com/openai/human-eval",
   "good_to_know": [
-    "One attempt per problem gives pass@1. With n attempts per problem, the run reports pass@1 to pass@n. The paper sampled 200."
+    "One repeat per problem gives pass@1. With n repeats per problem, the run reports pass@1 to pass@n. The paper sampled 200."
   ]
 }

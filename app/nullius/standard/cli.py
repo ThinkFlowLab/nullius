@@ -66,6 +66,7 @@ import signal
 import sys
 import tempfile
 
+from nullius.standard.attempts import ATTEMPTS, MAX_ATTEMPTS
 from nullius import constraints as limits, paths, prices as price_list, progress, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed, just like the unified CLI does.
@@ -472,6 +473,17 @@ def prices(given) -> dict:
     return out
 
 
+def _attempts(value: str) -> int:
+    """``--attempts``: a whole number from 1 to ``MAX_ATTEMPTS``."""
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a whole number")
+    if not 1 <= n <= MAX_ATTEMPTS:
+        raise argparse.ArgumentTypeError(f"{n} is not between 1 and {MAX_ATTEMPTS}")
+    return n
+
+
 def cmd_conform(a):
     o = _other(a.other)
     try:
@@ -522,7 +534,8 @@ def cmd_run(a):
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
                       simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
-                      licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
+                      licences=held, bench_options=options(a.bench_option), repeat=a.repeat, attempts=a.attempts,
+                      remove_images=a.remove_images,
                       prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, constraints=given,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
@@ -679,7 +692,13 @@ def main(argv=None):
             p.add_argument("--judge-model", help="a benchmark scored by a model: this judge instead of its official one")
             p.add_argument("--simulator-model", help="a benchmark whose user a model plays: this model instead of its official one")
             p.add_argument("--repeat", type=int, default=1, metavar="K",
-                           help="run each unit K times, each an attempt of its own (the upstream's --num-trials, pass^k); default 1")
+                           help="run each unit K times, each a repeat of its own counted whatever its result "
+                                "(the upstream's --num-trials, pass^k); default 1")
+            p.add_argument("--attempts", type=_attempts, default=ATTEMPTS, metavar="N",
+                           help="the tries each repeat may take when it ends in a failure a further try may mend "
+                                "(a rate limit, a provider or setup error, an agent crash; never a timeout, a refusal "
+                                "or a task the agent failed): tried again after the other units, one at a time; "
+                                f"1 to {MAX_ATTEMPTS}, default {ATTEMPTS}")
             p.add_argument("--remove-images", action="store_true",
                            help="remove each image this run pulls or builds when its last unit ends (default: kept for the next run)")
             p.add_argument("--name")

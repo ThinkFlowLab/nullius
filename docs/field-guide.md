@@ -32,7 +32,7 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 ## Repeats and attempts {#repeats}
 
-A repeat is one run of a task, counted whatever its result: Harbor's `n_attempts` and the standard's `--repeat` set how many. An attempt is one try within a repeat: a repeat is tried again only when the infrastructure or the agent failed (Harbor's `max_retries`), never because the task was failed, and only its last attempt is kept as its trial. A job therefore records one trial per repeat.
+A repeat is one run of a task, counted whatever its result: Harbor's `n_attempts` and the standard's `--repeat` set how many. An attempt is one try within a repeat: a repeat is tried again only when the infrastructure or the agent failed (Harbor's `max_retries`, the standard's `--attempts`), never because the task was failed, and only its last attempt is kept as its trial. A job therefore records one trial per repeat.
 
 Standard runs with repeated, scored tasks record both measures below in `pass_hat_k`; the job page and Compare show them for any run, Harbor or standard, that ran every task at least twice. They answer different questions.
 
