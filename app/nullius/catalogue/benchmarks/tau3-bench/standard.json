@@ -115,7 +115,7 @@
   "limits": {
     "turn_seconds": 600,
     "turns": 100,
-    "repeats": "The upstream's batch runner draws one seed per trial from its base seed 300 (run_tasks: random.seed(300), then randint(0, 1000000) per trial, in order) and gives it to the agent and the user simulator: repeat N of a unit is its trial N-1 at that seed, as --num-trials runs it, so --repeat 4 is the leaderboard's four trials and pass^k is computed as the upstream's metrics compute it."
+    "attempts": "The upstream's batch runner draws one seed per trial from its base seed 300 (run_tasks: random.seed(300), then randint(0, 1000000) per trial, in order) and gives it to the agent and the user simulator: attempt N of a unit is its trial N-1 at that seed, as --num-trials runs it, so --repeat 4 is the leaderboard's four trials and pass^k is computed as the upstream's metrics compute it."
   },
   "setups": {
     "original": {

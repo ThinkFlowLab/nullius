@@ -243,9 +243,9 @@ class Listed(unittest.TestCase):
         self.assertEqual(self.trials(job), ["good__u0000", "model__u0003", "slow__u0002", "wrong__u0001"])
         self.assertEqual(self.started(job), DATASET)
         cfg = read(os.path.join(job, "config.json"))
-        # the keys a control's run recorded before there were lists, the attempts every run now records, and no other
-        self.assertEqual(sorted(cfg["standard"]), ["attempts", "backend", "benchmark", "control", "kind", "needs", "permissions_granted",
-                                                   "plugged", "provider", "unsandboxed"])
+        # the keys a control's run recorded before there were lists, the retries every run now records, and no other
+        self.assertEqual(sorted(cfg["standard"]), ["backend", "benchmark", "control", "kind", "needs", "permissions_granted",
+                                                   "plugged", "provider", "retries", "unsandboxed"])
         self.assertEqual(cfg["datasets"], [{"name": "fakebench/all", "n_tasks": 4}])
         limited = self.go(limit=2, name="limited")
         self.assertEqual(self.trials(limited), ["good__u0000", "wrong__u0001"])
@@ -253,8 +253,8 @@ class Listed(unittest.TestCase):
 
 
 class RateLimited(unittest.TestCase):
-    """A listed unit that ends rate-limited is run once more after the others, as any unit is: under its own
-    trial's name, its first attempt kept in the job's ``retried/``. A unit the list leaves out is never run."""
+    """A listed unit that ends rate-limited is retried after the others, as any unit is: under its own
+    trial's name, its first try kept in the job's ``retried/``. A unit the list leaves out is never run."""
 
     @classmethod
     def setUpClass(cls):
@@ -288,10 +288,10 @@ class RateLimited(unittest.TestCase):
         b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
         job = run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom",
                       jobs_root=os.path.join(self.tmp, "jobs"), concurrency=1, env=self.env, say=lambda s: None,
-                      unsandboxed=True, dataset="responding", units_file=run.units_file(path))
+                      unsandboxed=True, dataset="responding", units_file=run.units_file(path), retries=1)
         self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "model__u0002"])
-        self.assertEqual(os.listdir(os.path.join(job, "retried")), ["model__u0002.attempt-1"])
-        first = read(os.path.join(job, "retried", "model__u0002.attempt-1", "result.json"))
+        self.assertEqual(os.listdir(os.path.join(job, "retried")), ["model__u0002.try-1"])
+        first = read(os.path.join(job, "retried", "model__u0002.try-1", "result.json"))
         self.assertEqual(first["exception_info"]["exception_type"], "RateLimitError")
         self.assertFalse(read(os.path.join(job, "model__u0002", "result.json")).get("exception_info"))   # its second counts
         self.assertEqual(read(os.path.join(job, "result.json"))["n_total_trials"], 2)

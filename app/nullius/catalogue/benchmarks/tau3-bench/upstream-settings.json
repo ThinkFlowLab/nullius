@@ -46,7 +46,7 @@
     "setting": "--num-trials",
     "values": "an integer from 1",
     "default": "1 (DEFAULT_NUM_TRIALS)",
-    "nullius": "fixed:1 trial per repeat - a run's --repeat K (the builder's Repeats per unit) runs each unit K times, repeat N being the upstream's trial N-1 at the seed run_tasks draws for it (limits.repeats); the job's result.json carries pass^k"
+    "nullius": "fixed:1 trial per attempt - a run's --repeat K (the builder's Attempts per unit) runs each unit K times, attempt N being the upstream's trial N-1 at the seed run_tasks draws for it (limits.attempts); the job's result.json carries pass^k"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",
@@ -606,7 +606,7 @@
     "setting": "trials (4 or more)",
     "values": "an integer",
     "default": "4",
-    "nullius": "fixed:1 a unit's repeat - --repeat 4 runs the leaderboard's four trials (limits.repeats)"
+    "nullius": "fixed:1 a unit's attempt - --repeat 4 runs the leaderboard's four trials (limits.attempts)"
   },
   {
     "entry": "docs/leaderboard-submission.md",

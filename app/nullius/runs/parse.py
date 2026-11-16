@@ -53,6 +53,13 @@ RATE_LIMIT_RE = re.compile(
 GATEWAY_SCAN_BYTES = 8 * 1024 * 1024
 
 
+def _retries_of(res: dict) -> int:
+    """The retries a standard trial says it took (``standard.retries``), 0 otherwise."""
+    std = res.get("standard") if isinstance(res.get("standard"), dict) else {}
+    n = std.get("retries")
+    return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
+
+
 def count_rate_limits(path: str) -> int | None:
     """Rate-limit records in a gateway log, or None when there is no log.
 
@@ -148,6 +155,11 @@ class Trial:
     # the run survived, which no result.json field records (`count_rate_limits`).
     # None when the trial has no `agent/gateway.log`: not measured, not zero.
     n_rate_limited_retries: int | None = None
+    # How many times the runner retried this attempt after an infrastructure or
+    # agent failure before this, its last try (the standard's --retries:
+    # `standard.retries`). 0 when it did not, or does not say: Harbor retries
+    # under the trial's own name and keeps no count in it.
+    n_retries: int = 0
     # A graded verdict (an F1, partial credit), beside the pass or fail the
     # reward says: the runner records it when its benchmark scores that way.
     # A benchmark that gives a score and no pass or fail leaves the reward
@@ -677,6 +689,7 @@ def parse_trial(job_id: str, trial_dir: str) -> Trial | None:
         has_trajectory=os.path.isfile(traj_path),
         has_trace=os.path.isfile(trace_path),
         n_rate_limited_retries=count_rate_limits(os.path.join(trial_dir, "agent", "gateway.log")),
+        n_retries=_retries_of(res),
         env_type=((res.get("config") or {}).get("environment") or {}).get("type", ""),
         started_at=_iso(res.get("started_at")),
         finished_at=_iso(res.get("finished_at")),

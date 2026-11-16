@@ -8,7 +8,7 @@ from collections import OrderedDict
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from markupsafe import Markup, escape
 from nullius.traces import behavior, charts, conversation, trace, trajectory
-from nullius.runs import artifacts, repeats as task_repeats, parse
+from nullius.runs import artifacts, attempts as task_attempts, parse
 
 from .core import app
 from . import shared
@@ -225,18 +225,18 @@ def trial(job_id, trial_name):
         "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_judge=bench_judge, bench_parts=bench_parts,
         trace=tr, charts=ch, viewing=viewing,
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
-        artifacts=records, repeats=task_repeats.of(j, t),
+        artifacts=records, attempts=task_attempts.of(j, t),
         judgement=_judgement_panel(j, t), llm_judgement=_judgement_panel(j, t, "llm"), csrf=shared._csrf_token(),
     )
 
 
-@app.route("/trial/<job_id>/<trial_name>/repeats")
-def trial_repeats(job_id, trial_name):
-    """Every repeat of this trial's task, one line each."""
+@app.route("/trial/<job_id>/<trial_name>/attempts")
+def trial_attempts(job_id, trial_name):
+    """Every attempt at this trial's task, one line each."""
     j, t = _trial_evidence(job_id, trial_name)
     # a task tried once has no tab that leads here; its one line still answers
-    repeats = task_repeats.of(j, t) or task_repeats.Repeats((t,))
-    return render_template("traces/repeats.html", job=j, trial=t, repeats=repeats)
+    attempts = task_attempts.of(j, t) or task_attempts.Attempts((t,))
+    return render_template("traces/attempts.html", job=j, trial=t, attempts=attempts)
 
 
 def _judgement_panel(job, trial, lane="system-one"):

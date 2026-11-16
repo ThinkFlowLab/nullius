@@ -1,5 +1,21 @@
 {
  "artifacts": {},
+ "attempts": {
+  "Attempts": [
+   "endings",
+   "has_verdicts",
+   "mean_score",
+   "n",
+   "n_infra",
+   "n_passed",
+   "n_ran",
+   "n_scored",
+   "ran",
+   "rate",
+   "scores",
+   "trials"
+  ]
+ },
  "behavior": {
   "Behavior": [
    "edit_test_cycles",
@@ -243,11 +259,11 @@
    "workspace_label"
   ],
   "TaskRow": [
+   "attempts",
    "dataset",
    "differs",
    "movement",
    "rate_moved",
-   "repeats",
    "shared",
    "task",
    "trials",
@@ -349,6 +365,7 @@
    "n_output_tokens",
    "n_parts",
    "n_rate_limited_retries",
+   "n_retries",
    "outcome",
    "outcome_label",
    "p2p_fail",
@@ -370,22 +387,6 @@
    "trajectory_path",
    "trial_name",
    "vocab"
-  ]
- },
- "repeats": {
-  "Repeats": [
-   "endings",
-   "has_verdicts",
-   "mean_score",
-   "n",
-   "n_infra",
-   "n_passed",
-   "n_ran",
-   "n_scored",
-   "ran",
-   "rate",
-   "scores",
-   "trials"
   ]
  },
  "trace": {

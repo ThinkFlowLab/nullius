@@ -6,7 +6,7 @@ One benchmark and one agent, capability, control or setup, into a job.
 nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE] [--limit N] [-j N] \
     [--unsandboxed | --backend container] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
     [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE]... \
-    [--repeat K] [--attempts N] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
+    [--attempts K] [--retries N] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
 ```
 
 ```bash title="Examples"
@@ -32,9 +32,9 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
 | `--max-usd USD`, `--max-usd-per-unit USD` | A spending cap for the run, for each unit: [below](#a-spending-cap) |
 | `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). Containers take them as flags, the run's processes on the machine as a systemd scope. A recipe passes each machine's own |
-| `--repeat K` | Each unit K times, each a repeat counted whatever its result; `result.json` carries `pass_hat_k` |
-| `--attempts N` | The tries each repeat may take when it ends in a failure a further try may mend (a rate limit, a provider or setup error, an agent crash; never a timeout, a refusal or a task the agent failed): tried again after the other units, one at a time. 1 to 10, default 2 |
-| `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--repeat`); by default they stay for the next run |
+| `--attempts K` | Each unit K times, each an attempt counted whatever its result (`--repeat K` is its older name); `result.json` carries `pass_hat_k` |
+| `--retries N` | Run an attempt again, up to N times, when it ends in a failure a further try may mend (a rate limit, a provider or setup error, an agent crash; never a timeout, a refusal or a task the agent failed): after the other units, one at a time. 0 to 9, default 0 |
+| `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--attempts`); by default they stay for the next run |
 | `--judge-model` | Instead of the official judge |
 | `--simulator-model` | Instead of the official simulated user |
 | `--name` | The job's name |

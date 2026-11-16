@@ -336,7 +336,7 @@ class Recipe(unittest.TestCase):
                    model_choice="leaderboard")
         out = self.compiled(**tau)
         self.assertEqual(out["errors"], [])
-        for words in ("--model their-model", "--simulator-model gpt-5.2", "--bench-option user_reasoning_effort=low", "--repeat 4"):
+        for words in ("--model their-model", "--simulator-model gpt-5.2", "--bench-option user_reasoning_effort=low", "--attempts 4"):
             self.assertIn(words, out["script"])
         self.assertNotIn("--judge-model", out["script"])
         self.assertIn("--simulator-model openai/gpt-5.2", self.compiled(**{**tau, "provider": "openrouter"})["script"])
@@ -432,15 +432,14 @@ class Attempts(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    def test_repeats_reach_a_driver_only_when_it_says_its_upstream_tells_them_apart(self):
+    def test_attempts_reach_a_driver_only_when_it_says_its_upstream_tells_them_apart(self):
+        b = {"limits": {"attempts": "a seed per trial"}}
         r = run.Run.__new__(run.Run)
-        r.local, r.bench = threading.local(), {"limits": {"repeats": "a seed per trial"}}
-        r.local.repeat = 2
-        self.assertEqual(r.repeat_kw(), {"repeat": 2})
-        r.bench = {"limits": {"attempts": "a seed per trial"}}      # the older name: sent as it always was
-        self.assertEqual(r.repeat_kw(), {"attempt": 2})
+        r.local, r.bench = threading.local(), b
+        r.local.attempt = 2
+        self.assertEqual(r.attempt_kw(), {"attempt": 2})
         r.bench = {}
-        self.assertEqual(r.repeat_kw(), {})
+        self.assertEqual(r.attempt_kw(), {})
 
 if __name__ == "__main__":
     unittest.main()

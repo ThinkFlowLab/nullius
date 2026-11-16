@@ -306,7 +306,8 @@
 .rp .group-pass b { font: 600 12.5px/20px var(--mono); }
 .rp .sqs { display: inline-flex; gap: 3px; }
 .rp .tt tr.in-group td:first-child { padding-left: 39px; }
-.rp .repeat-link { color: var(--text-dim); }
+.rp .attempt-link { color: var(--text-dim); }
+.rp .attempt-retried { display: block; color: var(--text-faint); font-size: 11.5px; }
 .rp .tt td:first-child { min-width: 150px; }
 .rp tr:hover .task { text-decoration: underline; text-decoration-color: var(--hush); text-underline-offset: 4px; }
 .rp .tt .badge { margin-left: 6px; }

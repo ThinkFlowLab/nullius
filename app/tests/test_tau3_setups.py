@@ -1,7 +1,7 @@
 """τ³-bench's setups and settings: the original (the upstream's own agent as
 any model, in its own batch runner), the options that set what tau2 run sets
 - each where it applies, each defaulting to what every earlier run did - the
-repeats told apart by the upstream's seed per trial, and the inventory of
+attempts told apart by the upstream's seed per trial, and the inventory of
 every setting of its evaluation.
 
 The definition checks need nothing installed. The driver's checks need the
@@ -53,8 +53,8 @@ class Definition(unittest.TestCase):
         self.assertEqual(opts("banking_knowledge", "yours"), {"retrieval": "bm25", "user_reasoning_effort": "default"})
         self.assertEqual(opts("banking_knowledge", "original")["retrieval"], "bm25")
 
-    def test_repeats_are_told_apart(self):
-        self.assertIn("seed", BENCH["limits"]["repeats"])
+    def test_attempts_are_told_apart(self):
+        self.assertIn("seed", BENCH["limits"]["attempts"])
 
     def test_every_option_and_dataset_is_in_the_inventory(self):
         with open(os.path.join(BENCH["_here"], definitions.SETTINGS_FILE)) as f:
@@ -185,11 +185,11 @@ class Driver(unittest.TestCase):
         self.assertEqual((by["agent"].get("reasoning_effort"), "temperature" in by["agent"]), ("high", False))
         self.assertEqual((by["user"].get("reasoning_effort"), "temperature" in by["user"]), ("low", False))
 
-    def test_repeat_n_is_the_upstreams_trial_n_minus_1_at_its_seed(self):
+    def test_attempt_n_is_the_upstreams_trial_n_minus_1_at_its_seed(self):
         d = self.driver()
         ws = self.ws("a2")
         Fake.lines = ["Hello.", "Bye. ###STOP###"]
-        d.request("answer", unit="0", dir=ws, setup="original", simulator=self.user, repeat=2,
+        d.request("answer", unit="0", dir=ws, setup="original", simulator=self.user, attempt=2,
                   **{k: self.agent[k] for k in ("model", "base_url", "key")})
         self.assertEqual(Fake.asked[0][1]["seed"], seeds(2)[1])
         dt = d.request("score", unit="0", dir=ws, transcript=[], answer="", setup="original")["detail"]
@@ -197,9 +197,9 @@ class Driver(unittest.TestCase):
         # an ACP agent's run the same way: its first turn opens trial 1 at that trial's seed
         Fake.asked = []
         ws = self.ws("acp2")
-        d.request("setup", unit="0", dir=ws, repeat=2)
+        d.request("setup", unit="0", dir=ws, attempt=2)
         Fake.lines = ["I want to change my flight."]
-        self.assertEqual(d.request("turn", unit="0", dir=ws, transcript=[], simulator=self.user, repeat=2),
+        self.assertEqual(d.request("turn", unit="0", dir=ws, transcript=[], simulator=self.user, attempt=2),
                          {"message": "I want to change my flight."})
         self.assertEqual(Fake.asked[0][1]["seed"], seeds(2)[1])
 

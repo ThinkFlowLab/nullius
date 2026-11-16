@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% from 'traces/_repeats.html' import repeat_tabs, repeat_count %}
-{% block title %}{{ trial.task_base }}, all repeats — Nullius{% endblock %}
+{% from 'traces/_attempts.html' import attempt_tabs, attempt_count, retried %}
+{% block title %}{{ trial.task_base }}, all attempts — Nullius{% endblock %}
 {% block crumb %}/ <a href="{{ url_for('job', job_id=job.job_id) }}">{{ job.job_id }}</a> / {{ trial.task_base }}{% endblock %}
 {% block body %}
 {% set workspace = request.args.get('workspace') %}
@@ -9,25 +9,27 @@
   <span class="mono">{{ job.model_name or trial.model_name }}</span><span class="dot">·</span>
   <span title="{{ trial.source }}">{{ trial.source|dsname }}</span>
 </p>
-<div class="repeat-head">
-  <span class="repeat-count">{{ repeat_count(repeats) }}</span>
-  {{ repeat_tabs(job, repeats, none, workspace) }}
+<div class="attempt-head">
+  <span class="attempt-count">{{ attempt_count(attempts) }}</span>
+  {{ attempt_tabs(job, attempts, none, workspace) }}
 </div>
 
 <div class="table-wrap" style="margin-top:1.2rem">
-<table class="grid repeat-table">
+<table class="grid attempt-table">
   <thead><tr>
-    <th>Repeat</th><th>Outcome</th><th class="num">Reward</th><th class="num">Tokens</th>
+    {%- set any_retried = attempts.trials|selectattr('n_retries')|list %}
+    <th>Attempt</th><th>Outcome</th>{% if any_retried %}<th class="num">Retries</th>{% endif %}<th class="num">Reward</th><th class="num">Tokens</th>
     <th class="num">Agent</th><th class="num">Total</th>
   </tr></thead>
   <tbody>
-  {% for a in repeats.trials %}
+  {% for a in attempts.trials %}
   {% set used = (a.n_input_tokens or 0) + (a.n_output_tokens or 0) %}
   <tr>
-    <td><a href="{{ url_for('trial', job_id=job.job_id, trial_name=a.trial_name, workspace=workspace) }}">Repeat {{ loop.index }}</a></td>
+    <td><a href="{{ url_for('trial', job_id=job.job_id, trial_name=a.trial_name, workspace=workspace) }}">Attempt {{ loop.index }}</a></td>
     <td><span class="tag oc-{{ a.outcome }}">{{ a.outcome_label }}</span>
       {%- if a.score is not none %} <span class="badge trial-score">{{ '%.2f'|format(a.score) }}</span>{% endif %}
       {%- if a.exception_type %} <span class="mono faint small">{{ a.exception_type }}</span>{% endif %}</td>
+    {% if any_retried %}<td class="num">{{ a.n_retries or '—' }}</td>{% endif %}
     <td class="num">{{ '—' if a.reward is none else ('%g'|format(a.reward) if a.reward in (0, 1) else '%.2f'|format(a.reward)) }}</td>
     <td class="num">{{ used|tokens(job.kind) }}</td>
     <td class="num">{{ a.dur_agent|secs }}</td>

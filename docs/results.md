@@ -39,7 +39,7 @@ Foreign results open the same way: [Open existing results](getting-started.md#op
 ## Compare runs
 
 1. Open **Compare**, pick the runs, choose **Matched tasks**.
-2. Start with the tasks whose outcomes differ and open their trials side by side.
+2. Start with the tasks whose outcomes differ and open the attempts side by side.
 3. Check dataset, model, agent and setup before attributing a change.
 
 !!! warning "Different task sets move the aggregate"

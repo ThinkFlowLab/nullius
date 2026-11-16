@@ -66,7 +66,7 @@ Customer service with domain tools and a simulated user: airline, retail, teleco
 - Scores depend on the simulated user's and the evaluator's models: keep both fixed when comparing.
 - Conversations run in the upstream's own runner, release v1.0.1, at its defaults: 200 steps, 10 tool errors, seed 300.
 - Original is the upstream's own agent with your model, as in a leaderboard submission.
-- Several repeats per task report pass^k, as the leaderboard's 4 trials do. Each repeat is a new conversation.
+- Several attempts per task report pass^k, as the leaderboard's 4 trials do. Each attempt is a new conversation.
 - A task whose retries all fail is an infrastructure error, not a score.
 - A tool call after the conversation has ended returns an error. An agent that keeps calling until its time runs out is not scored.
 

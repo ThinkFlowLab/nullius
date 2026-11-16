@@ -63,7 +63,7 @@
   // Like the leaderboard: what the upstream's leaderboard fixes besides the ranked model, when the benchmark declares it.
   const leaderboard = r => (standardBench(r) || {}).leaderboard || null;
   // Choose how the model is chosen: paper or leaderboard keep their fixed models (the leaderboard also its options and
-  // fewest repeats); leaving the leaderboard gives its options back to their defaults.
+  // fewest attempts); leaving the leaderboard gives its options back to their defaults.
   function setModelChoice(r, choice) {
     const lb = leaderboard(r), was = r.model_choice;
     r.model_choice = choice;
@@ -134,9 +134,9 @@
     keepEndpoint(r, raw);
     if ((Number.isInteger(raw.limit) && raw.limit >= 1) || raw.limit === '') r.limit = raw.limit;
     if ((Number.isInteger(raw.concurrency) && raw.concurrency >= 1) || raw.concurrency === '') r.concurrency = raw.concurrency;
-    // repeats per unit, attempts per repeat, and the judge's and user simulator's models: a reopened recipe runs as it was saved
+    // attempts per unit, retries per attempt, and the judge's and user simulator's models: a reopened recipe runs as it was saved
     if (Number.isInteger(raw.repeat) && raw.repeat >= 1 && raw.repeat <= 32) r.repeat = raw.repeat;
-    if (Number.isInteger(raw.attempts) && raw.attempts >= 1 && raw.attempts <= 10) r.attempts = raw.attempts;
+    if (Number.isInteger(raw.retries) && raw.retries >= 0 && raw.retries <= 9) r.retries = raw.retries;
     // the run's spending cap in USD, shared by its jobs (recipe.py): an amount above zero, or none
     if (typeof raw.max_usd === 'number' && Number.isFinite(raw.max_usd) && raw.max_usd > 0) r.max_usd = raw.max_usd;
     // and each unit's own: a unit that reaches it is cut off there, the run going on
@@ -290,11 +290,11 @@
     return r;
   }
   function create() {
-    const r = {version: 2, harness: 'harbor', name: 'harbor-experiment', title: 'Harbor experiment', benchmark: '', source: '', dataset: '', path: '',
+    const r = {version: 1, harness: 'harbor', name: 'harbor-experiment', title: 'Harbor experiment', benchmark: '', source: '', dataset: '', path: '',
       generatorRoot: '', agents: [], harbor: {kind: 'release', version: '', extras: []},
       customAgents: [], model_choice: 'any', provider: firstAvailable(PROVIDERS, providerOf({}, schema.defaultModel || '')), model: '', userModel: '', evalModel: '', keyEnv: (schema.credentialVars && schema.credentialVars.key) || 'API_TOKEN', urlEnv: schema.credentialVars ? (schema.credentialVars.url || '') : 'API_URL',
-      tasks: '', concurrency: 1, attempts: 4,
-      timeoutMultiplier: 1, agentMinutes: '', repeat: '', setupTimeoutMultiplier: '', verifierTimeoutMultiplier: '', buildTimeoutMultiplier: '', harborDev: '', include: '', output: 'jobs',
+      tasks: '', concurrency: 1, retries: 0,
+      timeoutMultiplier: 1, agentMinutes: '', attempts: '', setupTimeoutMultiplier: '', verifierTimeoutMultiplier: '', buildTimeoutMultiplier: '', harborDev: '', include: '', output: 'jobs',
       where: 'local', adapterPaths: {}, params: defaults(), custom: []};
     adoptModel(r, r.provider, schema.defaultModel || '');
     const b = benchmarks().find(b => b.key === 'tau3-bench') || benchmarks()[0];
@@ -430,15 +430,15 @@
     if (callsModel && benchmarkCallsModel(r) && providerOf(r, r.model || r.userModel) !== 'openai' && !r.urlEnv) add(STEP.model, 'A non-OpenAI model needs an endpoint source variable.');
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(r.name)) add(STEP.limits, 'Recipe name may contain letters, numbers, dots, underscores and hyphens.');
     if (!r.output.trim()) add(STEP.limits, 'Enter the output directory.');
-    for (const key of ['tasks','concurrency']) {
+    for (const key of ['tasks','concurrency','retries']) {
+      const min = key === 'retries' ? 0 : 1;
       if (key === 'tasks' && r.tasks === '') continue;                    // empty: every task, no limit written
-      if (!Number.isInteger(Number(r[key])) || Number(r[key]) < 1) add(STEP.limits, key + ' must be an integer of at least 1, or empty for every task.');
+      if (!Number.isInteger(Number(r[key])) || Number(r[key]) < min) add(STEP.limits, key + ' must be an integer of at least ' + min + ', or empty for every task.');
     }
-    if (!Number.isInteger(Number(r.attempts)) || Number(r.attempts) < 1) add(STEP.limits, 'Attempts per repeat must be a whole number of at least 1.');
     if (!Number.isFinite(Number(r.timeoutMultiplier)) || !(Number(r.timeoutMultiplier) > 0)) add(STEP.agent, 'Timeout multiplier must be positive.', 'Common');
     // Common trial settings (Harbor's own per-trial flags): empty means the flag is not written.
     for (const [key, label] of COMMON) if (r[key] !== '' && (!Number.isFinite(Number(r[key])) || !(Number(r[key]) > 0))) add(STEP.agent, label + ' must be a positive number, or empty.', 'Common');
-    if (r.repeat !== '' && (!Number.isInteger(Number(r.repeat)) || Number(r.repeat) < 1)) add(STEP.agent, 'Repeats per task must be a whole number of at least 1, or empty.', 'Common');
+    if (r.attempts !== '' && (!Number.isInteger(Number(r.attempts)) || Number(r.attempts) < 1)) add(STEP.agent, 'Repeats per task must be a whole number of at least 1, or empty.', 'Common');
     if (r.agentMinutes !== '' && r.agentMinutes != null) {
       if (!Number.isFinite(Number(r.agentMinutes)) || !(Number(r.agentMinutes) > 0)) add(STEP.limits, 'Max agent time per trial must be a positive number of minutes.');
       else if (!declaredTimeouts(r)) add(STEP.limits, 'No run has recorded this benchmark\'s declared timeouts, so minutes cannot be turned into a multiplier here; set the multiplier directly.');
@@ -481,10 +481,10 @@
   }
   const customValue = p => p.type === 'number' ? Number(p.value) : p.type === 'boolean' ? String(p.value) === 'true' : p.type === 'JSON' ? JSON.parse(p.value) : p.value;
   // Harbor's per-trial settings every selected agent shares; `timeoutMultiplier`
-  // (the agent phase), attempts, concurrency and the task limit are on Limits.
+  // (the agent phase), retries, concurrency and the task limit are on Limits.
   const COMMON = [['setupTimeoutMultiplier', 'Agent setup timeout multiplier'], ['verifierTimeoutMultiplier', 'Verifier timeout multiplier'], ['buildTimeoutMultiplier', 'Environment build timeout multiplier']];
   const COMMON_FLAGS = {setupTimeoutMultiplier: '--agent-setup-timeout-multiplier', verifierTimeoutMultiplier: '--verifier-timeout-multiplier', buildTimeoutMultiplier: '--environment-build-timeout-multiplier'};
-  const commonFlags = r => [...(r.repeat !== '' ? ['--n-attempts ' + Number(r.repeat)] : []), ...COMMON.filter(([k]) => r[k] !== '').map(([k]) => COMMON_FLAGS[k] + ' ' + Number(r[k]))];
+  const commonFlags = r => [...(r.attempts !== '' ? ['--n-attempts ' + Number(r.attempts)] : []), ...COMMON.filter(([k]) => r[k] !== '').map(([k]) => COMMON_FLAGS[k] + ' ' + Number(r[k]))];
   const agentCustom = (r, id) => r.custom.filter(p => p.scope === 'agent' && (!p.agent || p.agent === id));
   const cliExtras = r => r.custom.filter(p => p.scope === 'harness').map(p => '--' + p.key + (p.type === 'flag' ? '' : '=' + q(textValue(customValue(p)))));
   function compile(r, {runner = false} = {}) {
@@ -514,7 +514,7 @@
         parts.push(...agentCustom(r, id).map(p=>'--ak '+q(p.key+'='+kwargValue(customValue(p)))));
         // The reference agent's tool timeout follows the shared MCP timeout, so both agents wait the same.
         if (id === 'tau3-llm-agent' && r.params.mcp_timeout_s !== '' && r.params.mcp_timeout_s != null) parts.push('--ak '+q('tool_timeout_sec='+Number(r.params.mcp_timeout_s)));
-        parts.push(...(r.tasks === '' ? [] : ['--n-tasks '+r.tasks]),'--n-concurrent '+r.concurrency,'--max-retries '+(Number(r.attempts)-1),
+        parts.push(...(r.tasks === '' ? [] : ['--n-tasks '+r.tasks]),'--n-concurrent '+r.concurrency,'--max-retries '+r.retries,
           '--agent-timeout-multiplier '+r.timeoutMultiplier,'--job-name '+q(r.name+(r.agents.length>1?'-'+id:'')), '--jobs-dir '+(runner ? '"$NULLIUS_JOBS"' : path(r.output)));
         if (r.include) parts.push('--include-task-name '+q(r.include));
         parts.push(...commonFlags(r));
@@ -593,21 +593,17 @@
   const whereLabel = r => whereList(r).map(machineLabel).join(' + ');
   function fromJSON(input) {
     const raw = typeof input === 'string' ? JSON.parse(input) : input;
-    if (raw && [1, 2].includes(raw.version) && isStandard(raw)) return standardFromJSON(raw);
-    if (raw && [1, 2].includes(raw.version) && typeof raw.harness === 'string' && raw.harness && raw.harness !== 'harbor') throw Error(RUNNER_GONE);
-    if (!raw || ![1, 2].includes(raw.version) || raw.harness !== 'harbor') throw Error('Unsupported recipe format.');
-    // version 1 named Harbor's --n-attempts `attempts` and its --max-retries `retries`: read as it was saved
-    const v1 = raw.version === 1;
+    if (raw && raw.version === 1 && isStandard(raw)) return standardFromJSON(raw);
+    if (raw && raw.version === 1 && typeof raw.harness === 'string' && raw.harness && raw.harness !== 'harbor') throw Error(RUNNER_GONE);
+    if (!raw || raw.version !== 1 || raw.harness !== 'harbor') throw Error('Unsupported recipe format.');
     const r=create();
     for (const key of Object.keys(r)) {
-      if (['params','custom','agents','version'].includes(key) || (v1 && ['attempts','repeat'].includes(key))) continue;
+      if (['params','custom','agents'].includes(key)) continue;
       if (typeof r[key] === 'string' && typeof raw[key] === 'string') r[key]=raw[key];
       if (typeof r[key] === 'number' && typeof raw[key] === 'number') r[key]=raw[key];
-      if (['agentMinutes','repeat','setupTimeoutMultiplier','verifierTimeoutMultiplier','buildTimeoutMultiplier'].includes(key) && typeof raw[key] === 'number') r[key]=raw[key];   // '' by default, a number once set
+      if (['agentMinutes','attempts','setupTimeoutMultiplier','verifierTimeoutMultiplier','buildTimeoutMultiplier'].includes(key) && typeof raw[key] === 'number') r[key]=raw[key];   // '' by default, a number once set
       if (key === 'tasks' && typeof raw[key] === 'number') r[key]=raw[key];                             // '' by default (every task), a number once set
     }
-    if (v1 && Number.isInteger(raw.retries) && raw.retries >= 0) r.attempts = raw.retries + 1;
-    if (v1 && typeof raw.attempts === 'number') r.repeat = raw.attempts;
     if (Array.isArray(raw.customAgents)) r.customAgents=raw.customAgents.slice(0,20).map(p=>String(p||''));
     if (raw.adapterPaths && typeof raw.adapterPaths === 'object') for (const [k,v] of Object.entries(raw.adapterPaths)) if (typeof v === 'string' && v) r.adapterPaths[k]=v;
     if (Array.isArray(raw.agents)) r.agents=raw.agents.filter(id=>typeof id==='string');
@@ -671,8 +667,8 @@
     if (Object.keys(L).length) {
       r.tasks = Number(L.n_tasks) > 0 ? Number(L.n_tasks) : '';
       if (Number.isInteger(L.n_concurrent_trials)) r.concurrency = L.n_concurrent_trials;
-      if (Number.isInteger(L.max_retries)) r.attempts = L.max_retries + 1;
-      r.repeat = Number(L.n_attempts) > 1 ? Number(L.n_attempts) : '';
+      if (Number.isInteger(L.max_retries)) r.retries = L.max_retries;
+      r.attempts = Number(L.n_attempts) > 1 ? Number(L.n_attempts) : '';
       const all = Number(L.timeout_multiplier ?? 1);
       r.timeoutMultiplier = L.agent_timeout_multiplier ?? all;
       for (const [k, f] of [['agent_setup_timeout_multiplier', 'setupTimeoutMultiplier'], ['verifier_timeout_multiplier', 'verifierTimeoutMultiplier'], ['environment_build_timeout_multiplier', 'buildTimeoutMultiplier']]) if (L[k] != null) r[f] = L[k];

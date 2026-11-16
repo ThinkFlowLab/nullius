@@ -20,7 +20,7 @@ from markupsafe import Markup, escape
 from nullius import execution
 from nullius import importers as harnesses
 from nullius.redact import redact
-from nullius.runs import repeats, classify, feasibility, launches, live, parse
+from nullius.runs import attempts, classify, feasibility, launches, live, parse
 from nullius import workspace
 
 from .core import app
@@ -474,7 +474,7 @@ def job(job_id):
                            execution=ex, csrf=shared._csrf_token(),
                            judgement=judge.job_summary(j) if j.trials else None,
                            control=feasibility.summary_of(j), ended=execution.ended_for(job_id), own=own,
-                           trial_rows=repeats.grouped(j), pass_k=repeats.for_job(j))
+                           trial_rows=attempts.grouped(j), pass_k=attempts.for_job(j))
 
 
 def _view_of(board, j=None) -> str | None:

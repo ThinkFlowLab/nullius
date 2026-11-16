@@ -404,7 +404,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
                 produce: tuple, score: Optional[dict], exception: Optional[tuple], calls: List[dict],
                 trajectory: Optional[dict], extra_logs: Optional[dict] = None, environment: str = "",
                 image: str = "", setup_end: Optional[float] = None, checking: tuple = (None, None),
-                attempt: int = 1) -> dict:
+                retries: int = 0) -> dict:
     """Write one unit's trial and return its result. ``environment``: the
     benchmark's environment the unit asked for (none: the base image), and
     ``image``, the one it ran in on the container backend - names only.
@@ -428,7 +428,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
            "standard": {"benchmark": bench["key"], "family": bench["family"], "needs": bench["needs"], "unit": unit,
                         "plugged": other.get("_ref") or other["key"], "job": job, **_version(bench), **_control(other), **_setup(other),
                         **({"environment": environment} if environment else {}), **({"image": image} if image else {}),
-                        **({"attempt": attempt} if attempt > 1 else {})}}
+                        **({"retries": retries} if retries else {})}}
     if score is not None:
         value = float(score.get("reward") or 0.0)
         # a pass benchmark leaves a reward, as a verifier does; a score
@@ -465,7 +465,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
 def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str, provider: str, dataset: str, units: List[str],
                  concurrency: int, granted: bool, judge: str = "", backend: str = "local", image: str = "",
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
-                 attempts: int = 1, bench_options: Optional[dict] = None,
+                 retries: int = 0, bench_options: Optional[dict] = None,
                  simulator: str = "", prices: Optional[dict] = None, units_file: Optional[dict] = None,
                  constraints: Optional[dict] = None):
     """``unsandboxed`` is true for an agent on the local backend only: in a
@@ -475,9 +475,10 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     several machines (``shard``), which ``merge`` reads back. ``units_file``:
     the file a run's units were listed in (``run.units_file``), its name, its
     sha256 and its units, said only for such a run. ``repeat``: how
-    many times each unit was run, said only when more than once; ``attempts``:
-    the tries each repeat could take when a further try might mend a failure
-    (``run.retryable``), always said. ``judge`` and
+    many times each unit was run, each an attempt, said only when more than
+    once; ``retries``: how many times an attempt could be tried again after a
+    failure a further try might mend (``retries.retryable``), always said.
+    ``judge`` and
     ``simulator``: the models that graded and that played the user, when the
     benchmark has them. ``prices``: the rows its models' costs are
     estimated from and where the user's list came from, when it has any.
@@ -491,7 +492,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"simulator": simulator} if simulator else {}), **({"options": options} if options else {}), **({"benchmark_options": bench_options} if bench_options else {}), **_control(other), **_setup(other),
                                 **({"launch": launch} if launch else {}), **({"shard": shard} if shard else {}),
                                 **({"units_file": units_file} if units_file else {}),
-                                **({"repeat": repeat} if repeat > 1 else {}), "attempts": attempts, **({"prices": prices} if prices else {}),
+                                **({"repeat": repeat} if repeat > 1 else {}), "retries": retries, **({"prices": prices} if prices else {}),
                                 **({"constraints": constraints} if constraints else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,
@@ -522,13 +523,12 @@ def feed_outcome(kind: str, score: Optional[dict], exception: Optional[tuple]) -
 
 
 def pass_hat(results: List[dict]) -> Optional[dict]:
-    """pass^k of a run that ran each unit several times (``repeat``), as τ-bench defines it: over
-    the units, the chance that k repeats drawn from its n all passed, C(c, k) / C(n, k), averaged -
-    pass^1 is the pass rate; and pass@k (``at``), the chance that one of them did, as HumanEval reads it. A unit with a repeat that ended in an error, with no verdict, is left
-    out, as the upstreams leave an infrastructure error out. None for a run of one repeat each.
-    The estimators are ``nullius.runs.repeats``', the ones the pages use. ``attempts`` in what this
-    returns is the repeat count each unit is read on: the name ``result.json`` has always carried."""
-    from nullius.runs import repeats
+    """pass^k of a run that tried each unit several times (``repeat``), as τ-bench defines it: over
+    the units, the chance that k attempts drawn from its n all passed, C(c, k) / C(n, k), averaged -
+    pass^1 is the pass rate; and pass@k (``at``), the chance that one of them did, as HumanEval reads it. A unit with an attempt that ended in an error, with no verdict, is left
+    out, as the upstreams leave an infrastructure error out. None for a run of one attempt each.
+    The estimators are ``nullius.runs.attempts``', the ones the pages use."""
+    from nullius.runs import attempts
     per: Dict[str, List[bool]] = {}
     broken = set()
     for r in results:
@@ -540,10 +540,10 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
             broken.add(u)
             continue
         per.setdefault(u, []).append(rewards["reward"] == 1.0)
-    got = repeats.estimate(v for u, v in per.items() if u not in broken)
+    got = attempts.estimate(v for u, v in per.items() if u not in broken)
     if got is None:
         return None
-    return {"units": got["units"], "attempts": got["repeats"],
+    return {"units": got["units"], "attempts": got["attempts"],
             **{str(k): round(v, 4) for k, v in got["hat"].items()},
             "at": {str(k): round(v, 4) for k, v in got["at"].items()}}
 

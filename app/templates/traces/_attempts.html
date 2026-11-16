@@ -1,0 +1,28 @@
+{# One tab per attempt at a task, and All attempts. `current` is the trial on
+   screen, or none on the All attempts view. A tab keeps the evidence tab the
+   reader is on (conversation.js rewrites `tab` on every [data-keep-tab]). #}
+{% macro attempt_tabs(job, attempts, current=none, workspace=none) -%}
+<nav class="attempt-tabs" aria-label="Attempts at this task">
+  {%- for a in attempts.trials %}
+  {%- set on = current is not none and a.trial_name == current.trial_name %}
+  <a class="attempt-tab oc-{{ a.outcome }}" data-keep-tab
+     href="{{ url_for('trial', job_id=job.job_id, trial_name=a.trial_name, workspace=workspace) }}"
+     title="Attempt {{ loop.index }}: {{ a.outcome_label }}"{% if on %} aria-current="page"{% endif %}>{{ ('Attempt ' if attempts.n <= 4 else '') ~ loop.index }}</a>
+  {%- endfor %}
+  <a class="attempt-tab all" href="{{ url_for('trial_attempts', job_id=job.job_id, trial_name=(current or attempts.trials[0]).trial_name, workspace=workspace) }}"
+     {% if current is none %} aria-current="page"{% endif %}>All attempts</a>
+</nav>
+{%- endmacro %}
+
+{# How a run did at one task over its attempts, as its adjusted rate reads
+   them: passes over the attempts that ran, infra counted apart. `word` false
+   leaves out "passed", for a row with no room. #}
+{# An attempt its runner tried again after an infrastructure or agent failure. #}
+{% macro retried(n) -%}retried {{ 'once' if n == 1 else (n ~ ' times') }}{%- endmacro %}
+
+{% macro attempt_count(attempts, word=true) -%}
+{%- if attempts.has_verdicts %}<b>{{ attempts.n_passed }}/{{ attempts.n_ran }}</b>{% if word %} passed{% endif %}
+{%- elif attempts.mean_score is not none %}mean <b>{{ '%.2f'|format(attempts.mean_score) }}</b> over {{ attempts.n_scored }}
+{%- else %}{{ attempts.n }} attempts{% endif %}
+{%- if attempts.n_infra %}<span class="faint"> · {{ attempts.n_infra }} infra</span>{% endif %}
+{%- endmacro %}
