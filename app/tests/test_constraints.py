@@ -13,12 +13,12 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import unittest
 from unittest import mock
 
 from nullius import constraints, prerequisites, settings
 from nullius.standard import container, definitions, install, recipe, run
+from tests.execution_support import gone
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 ALL = {"cpus": 2, "memory_mb": 512, "processes": 100, "concurrency": 3, "cpu_set": "0-1", "gpu_ids": [0]}
@@ -502,9 +502,7 @@ class Scope(unittest.TestCase):
             run.run_group(cmd, 1, env=env)
         with open(f"{d}/child") as f:
             child = int(f.read())
-        time.sleep(0.2)
-        with self.assertRaises(ProcessLookupError):                  # the background child went with its group
-            os.kill(child, 0)
+        self.assertTrue(gone(child, 30), "the background child outlived its group")   # under its own 60 s: a child left running fails
 
     def probe(self, values=None, ssh=False, systemctl=0, linger="yes", runs="exit 0", bus=True, booted=True, v2=True, tools=True):
         """``scope_check`` against stand-ins for systemd's programs and files."""
