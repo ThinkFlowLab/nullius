@@ -145,6 +145,8 @@
 {% if traj and traj.error %}
   <div class="panel err"><h3 style="margin-top:0">Trajectory unreadable</h3><pre>{{ traj.error }}</pre></div>
 {% elif traj %}
+  {# usage and tool calls; a trajectory with neither (one answer, no per-step usage) has no panel #}
+  {% if traj.token_series or traj.total_reasoning_tokens is not none or traj.calls %}
   <div class="panel">
     {% set has_growth = traj.token_series|length > 1 %}
     {% if has_growth %}
@@ -239,8 +241,7 @@
     {% endif %}
     {% endif %}
   </div>
-
-
+  {% endif %}
 
   {% if loc %}
   <div class="panel">

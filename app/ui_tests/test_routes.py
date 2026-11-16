@@ -453,6 +453,16 @@ class Routes(unittest.TestCase):
         self.assertNotIn("Agent error", trial_page)
 
 
+    def test_a_trajectory_without_usage_or_tool_calls_draws_no_empty_panel(self):
+        """The synthetic trajectory is messages only: no per-step usage, no
+        tool call. Its overview has nothing to put in that panel."""
+        synthetic_job(self.root, "messages-only")
+        job = parse.parse_job(str(self.root / "messages-only"))
+        with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
+            html = self.get_ok("/trial/messages-only/task-001").get_data(as_text=True)
+        overview = html.split('id="trial-overview"', 1)[1].split('id="trial-judgement"', 1)[0]
+        self.assertNotRegex(overview, r'<div class="panel">\s*</div>')
+
     def test_a_recorded_phase_keeps_its_chip_however_short(self):
         """A check that took no time was still made: its chip stays, with no
         segment to draw. A phase never recorded has neither."""
