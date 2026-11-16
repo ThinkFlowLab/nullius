@@ -69,6 +69,7 @@ Follow the evidence: a recorded rate limit is a provider's failure whatever the 
 | What | Detail |
 | --- | --- |
 | Where | `workspaces/<name>/judgements/<job>/<trial>.json` below the user data directory (`WORKSPACES_DIR` can override it), never in the job tree |
+| Deleted | With the launch they judge (*Delete launch* in Runs, [Run](builder.md#run)) |
 | Version | `judgement.questions.v2`; v1 records marked *earlier* |
 | Cost | A batch button names its calls; each is checked against the token budget (`batch.preflight`) |
 | Noise floors | `app/nullius/judge/floors.json`, each yes/no's run-to-run spread, measured once |

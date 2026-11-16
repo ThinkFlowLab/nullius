@@ -5,7 +5,8 @@
    Stop and Continue answered 403. #}
 {# `own`: this job's own (state, finished) when the run is of several agents - an arm that
    answered everything is done though a later arm failed; the run's state is said beside it. #}
-{% macro execution_strip(ex, csrf, waiting=false, own=none) %}
+{# `deletable`: the key of this job's launch when the Runs page offers its Delete (web/runs._deletable). #}
+{% macro execution_strip(ex, csrf, waiting=false, own=none, deletable=false) %}
 {% set shown = own[0] if own else ex.state %}
 <section class="execution" id="execution" data-run="{{ url_for('run_status', run_id=ex.id) }}" data-stop="{{ url_for('run_stop', run_id=ex.id) }}" data-continue="{{ url_for('run_continue', run_id=ex.id) }}"
          data-live="{{ 'yes' if ex.state in ('preparing', 'running') else 'no' }}" data-waiting="{{ 'yes' if waiting else 'no' }}" data-csrf="{{ csrf }}" data-own="{{ own[0] if own else '' }}">
@@ -15,6 +16,8 @@
     {% if ex.error and not own %}<span class="small bad" id="execution-error">{{ ex.error }}</span>{% endif %}
     <span class="small muted" id="execution-run"{% if not own or ex.state == shown %} hidden{% endif %}>· the run: {{ ex.state }}{% if ex.error %} · {{ ex.error }}{% endif %}</span>
     {% if ex.state in ('preparing', 'running', 'paused') %}<button type="button" class="btn sm ghost" id="execution-stop">Stop</button>{% endif %}
+    {#- a launch goes as one, from the Runs page: never this job alone #}
+    {% if deletable %}<a class="small run-delete" href="{{ url_for('index', view='launch', delete=deletable, _anchor=deletable|replace(':', '-')) }}">Delete its launch…</a>{% endif %}
   </div>
   {# an agent's run failed with more to come: the question, and the answer #}
   <div class="execution-ask" id="execution-ask" {% if ex.state != 'paused' %}hidden{% endif %}>

@@ -1614,6 +1614,8 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 /* what a run is doing: a stepper of its stages, then its units. A step is a mark, the
    line to the next step, its name and its time; done reads filled and checked, the
    running one ringed, the rest numbered. Stacked where a row would crush the names. */
+.execution-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.run-delete { margin-left: auto; color: var(--text-dim); }
 .execution-stages { container: xs / inline-size; margin: 14px 0 8px; }
 .xs-list { --mark: 1.6rem; list-style: none; margin: 0; padding: 0; display: flex; align-items: flex-start; }
 .xs { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; padding-right: .9rem; font-size: .82rem; line-height: 1.3; color: var(--text-dim); }

@@ -106,6 +106,7 @@ a declared model list keeps those published choices.
 | Proofs | Local runs save to the user catalogue. A host uses a writable copy in its run's `catalogue/`, isolated from the host's own entries; that copy and its proofs mirror back alongside `jobs/`, without changing the active user catalogue |
 | Docker or Podman | The engine must answer `ps` (`docker ps`, or `podman ps` for the standard's container backend), or the run stops before it starts |
 | Stop | Ends the current part (exit 130), records `stopped`; the next part never starts |
+| Delete launch | On the launch in Runs, *By launch*, once every run of it has ended; asks first. The job page links to it. Deletes each run's `<RUNS_DIR>/<name>/` (a shard per machine included), every job of the launch, their judgements in every workspace, and each run's copy on its host when ticked. A run still going is refused: stop it first. A launch with jobs from elsewhere has no Delete |
 | Restart of Nullius | `execution.restore` reattaches from `runs/<name>/run.json`; the job goes back into the workspace it started in, while that workspace exists |
 | Cannot run from the page | Generated tasks and custom agents are not supported by Run |
 | Refused | Reads *refused* on the runs page, with why; the job was never written |
