@@ -20,7 +20,7 @@ None of these is a step.
 
 ## Acting
 
-One call is one step.
+One call is one step. Points use `x` and `y` in screenshot pixels at the screen's size, from its top left corner. Look at a screenshot before the first pointing action.
 
 | Tool | Arguments | What the benchmark runs |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ One call is one step.
 | `done` | `message`, optional | The task is complete |
 | `fail` | `reason`, optional | The task cannot be done |
 
-An acting call answers once its actions have run and the benchmark's pause has passed, with `{steps_left, done}`; `done` is true once the task takes no more calls. A pointer or keyboard tool and `wait` add the screen after the pause as an image; `step` adds it when `screenshot` is true. `done` and `fail` answer as the benchmark takes them, before it runs them: the benchmark's loop asks for nothing after them.
+A call of `click`, `move`, `drag`, `scroll`, `type`, `key`, `wait` or `step` answers once its actions have run and their pauses have passed, with `{steps_left, done}`; `done` is true once the task takes no more calls. Each adds the screen as a PNG image; `step` adds it only when `screenshot` is true. `done` and `fail` return `{steps_left, done}` with no image as the benchmark takes them, before it runs them: the benchmark's loop asks for nothing after them.
 
 ## Rules
 
@@ -83,6 +83,8 @@ The shared code is `app/nullius/standard/computer_port.py`, with the standard li
 | `scroll` | skill | Scroll a list to read a code below what it shows at first | The final message holds the code, and the list moved |
 | `recover` | skill | Click a named button; the first acting call, whatever it is, is answered with an error and not run | An acting call sent after the error's answer succeeds, and the button is clicked as in `click` |
 | `batch` | skill | Fill three text fields with a budget of two steps | Each field holds its word |
+
+`see` shows twelve characters from `ACDEFGJKMNPRTWXY34679`, with no equal neighbours. `type` tests typing in a field that already has the focus; no pointing is needed. `limit` needs at least one button pressed within the two-step budget, no input after the last step and no acting call once the steps are used up.
 
 Every check also fails when a pointer or key event came outside an acting call: input sent through `python` fails it. Each check has 8 steps (2 for `limit` and `batch`), a pause of 1 s, 90 s for one `python` call and 600 s for the agent's turn.
 
