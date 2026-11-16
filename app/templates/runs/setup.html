@@ -30,11 +30,11 @@
       <label class="field-label" for="ws-name">Workspace name</label>
       <input type="text" name="name" id="ws-name" placeholder="optional — two random words otherwise" autocomplete="off" spellcheck="false" style="margin-bottom:1rem">
       {% endif %}
-      <label class="field-label" for="path">Run folders</label>
+      <label class="field-label" for="path">Run folders{% if mode == 'new' %} (optional){% endif %}</label>
       <div id="path-list" data-suggestions-url="{{ url_for('folder_suggestions') }}">
         <div class="path-row">
           <input type="text" name="path" id="path" placeholder="/path/to/jobs — or a pattern: …/jobs_*, …/**/jobs"
-                 required autofocus autocomplete="off" spellcheck="false"
+                 {% if mode == 'add' %}required {% endif %}autofocus autocomplete="off" spellcheck="false"
                  aria-describedby="path-error">
           <button type="button" class="row-x" aria-label="Remove this path" hidden>×</button>
           <button type="button" class="add-btn" title="Add another path"
@@ -248,7 +248,7 @@
   parseBtn.addEventListener('click', async () => {
     const paths = typedPaths();
     if (!staged.length) {
-      if (!paths.length) return fieldError('Enter a path, or add a folder below.');
+      if (!paths.length && pathForm.elements.new.value !== '1') return fieldError('Enter a path, or add a folder below.');
       return pathForm.submit();
     }
     const fd = new FormData();
