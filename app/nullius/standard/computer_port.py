@@ -6,15 +6,20 @@ which has the loop's ``reset`` and ``predict``. Standard library alone, so that 
 imports it with the package's folder on its path.
 
 - ``Desktop``: the five operations an entry or a kit gives over its desktop.
+- The tools: one table (``tools``) gives both what ``tools/list`` says and what ``checked`` accepts. A call is checked
+  in full, its upload's data decoded, before it is queued; a call refused there takes no step and never reaches the
+  desktop.
 - ``Bridge``: the loop's agent. Each ``predict`` hands the loop the actions of the agent's next acting call (one
   step), and serves the reading calls that come before it, in the thread of the loop: one desktop operation at a time,
   in the order the calls arrived. An acting call is held until the loop has run its actions and their pause, then
   answered. Once the steps are used up, every call but ``info`` is refused. The turn's end (``end_turn``) ends the
-  wait for the agent's next call; each later ``predict`` gives the loop no action.
+  wait for the agent's next call and the actions of a step not yet run; a ``done`` or ``fail`` already taken still
+  reaches the loop, and each later ``predict`` gives the loop no action.
 - ``Server``: the MCP server over a Unix socket: JSON-RPC 2.0, one message a line; every connection of the unit's
-  session accepted, the task's state kept in the bridge, outside them; one line per tool call in the call log (the
-  tool, its start and end, whether it failed; no argument and no result).
-- ``Held``: content sent once for a run, when the runner is given a folder for it.
+  session accepted, the task's state kept in the bridge, outside them; each connection's answers written by a thread
+  of its own, at most OUT_BYTES waiting, so that a client that stops reading holds up nothing else; one line per tool
+  call in the call log (the tool, its start and end, whether it failed; no argument and no result).
+- ``Held``: whole files kept by their sha256 for a run, when the runner is given a folder for them.
 - What a runner needs around them: the ready file (``ready``), the lifeline (``lifeline``, which also carries the
   turn's end) and the one stop (``Stop``).
 
@@ -27,24 +32,31 @@ import base64
 import binascii
 import collections
 import contextlib
+import functools
 import hashlib
 import json
 import os
+import posixpath
 import re
+import secrets
 import signal
 import socket
 import sys
+import tempfile
 import threading
 import time
 from typing import Optional, Protocol
 
 PROTOCOL = "2025-06-18"
 LINE_BYTES = 24 * 1024 * 1024                        # one message either way, its newline counted
+OUT_BYTES = 2 * LINE_BYTES                           # answers waiting for a connection's client to read them
 CHUNK_BYTES = 4 * 1024 * 1024                        # upload's data, a call
 READ_BYTES = 12 * 1024 * 1024                        # the largest file read returns
+KEEP_BYTES = 256 * 1024 * 1024                       # the largest file kept by its sha256
+LAST_SECONDS = 0.5                                   # what the last resort gives its own callback
 TURN_END = b"turn-end"                               # the lifeline's one message: the agent's turn has ended
-APPEND = ("import os; s = open({part!r}, 'rb'); d = open({path!r}, 'ab'); d.write(s.read()); d.close(); s.close(); "
-          "os.remove({part!r}); print(os.path.getsize({path!r}))")
+APPEND = ("import os\ntry:\n    s = open({part!r}, 'rb'); d = open({path!r}, 'ab'); d.write(s.read()); d.close(); "
+          "s.close()\nfinally:\n    os.remove({part!r})\nprint(os.path.getsize({path!r}))")
 
 
 class Desktop(Protocol):
@@ -68,66 +80,143 @@ class Desktop(Protocol):
         """The desktop user's password."""
 
 
-POINT = {"x": {"type": "integer", "description": "Pixels from the screen's left edge"},
-         "y": {"type": "integer", "description": "Pixels from the screen's top edge"}}
-BUTTON = {"button": {"type": "string", "enum": ["left", "right", "middle"], "description": "Default left"}}
-TOOLS = [
-    ("info", "The screen's size, the steps in all and left, the pause after each action in seconds, the seconds "
-             "python waits for the desktop's reply, and the desktop user's password.", {}, []),
-    ("screenshot", "The screen now, as a PNG image at its own size.", {}, []),
-    ("read", "A file of the desktop: data is its content in base64, or null when there is no such file.",
-     {"path": {"type": "string"}}, ["path"]),
-    ("python", "Runs Python code in the desktop as its user and returns its reply: status, output, error, returncode. "
-               "For reading the desktop and for your own programs there; pointer and keyboard input goes through the "
-               "acting tools.", {"code": {"type": "string"}}, ["code"]),
-    ("upload", "Writes data to a file of the desktop and returns the file's size so far. data is base64, at most 4 MiB "
-               "a call; append false starts the file, true adds to it. sha256, optional, is the whole file's: when "
-               "the run already holds a file of that sha256, data may be left out.",
-     {"path": {"type": "string"}, "data": {"type": "string"}, "append": {"type": "boolean"},
-      "sha256": {"type": "string"}}, ["path"]),
-    ("click", "One step: a click at the point.",
-     dict(POINT, **BUTTON, count={"type": "integer", "minimum": 1, "maximum": 3, "description": "Default 1"}),
-     ["x", "y"]),
-    ("move", "One step: the pointer moved to the point.", dict(POINT), ["x", "y"]),
-    ("drag", "One step: a press at (x, y), a move, and a release at (to_x, to_y).",
-     dict(POINT, to_x={"type": "integer"}, to_y={"type": "integer"}, **BUTTON), ["x", "y", "to_x", "to_y"]),
-    ("scroll", "One step: the wheel turned at the point, dy clicks down (negative: up) and dx clicks right "
-               "(negative: left).", dict(POINT, dy={"type": "integer"}, dx={"type": "integer"}), ["x", "y", "dy"]),
-    ("type", "One step: the text typed key by key.", {"text": {"type": "string"}}, ["text"]),
-    ("key", "One step: the keys pressed together, such as [\"ctrl\", \"s\"].",
-     {"keys": {"type": "array", "items": {"type": "string"}}}, ["keys"]),
-    ("wait", "One step: no action, the pause alone.", {}, []),
-    ("step", "One step of several actions, run in order: each is a line of Python run in the desktop with pyautogui "
-             "and time imported, or WAIT. An empty list is a step with no action. The screen comes back when "
-             "screenshot is true.",
-     {"actions": {"type": "array", "items": {"type": "string"}}, "response": {"type": "string"},
-      "screenshot": {"type": "boolean"}}, ["actions"]),
-    ("done", "The last step: the task is complete.", {"message": {"type": "string"}}, []),
-    ("fail", "The last step: the task cannot be done.", {"reason": {"type": "string"}}, []),
-]
-NAMES = [t[0] for t in TOOLS]
+# -- the tools: one table for what tools/list says and what a call may hold ------------------------------------------
+NAMES = ["info", "screenshot", "read", "python", "upload", "click", "move", "drag", "scroll", "type", "key", "wait",
+         "step", "done", "fail"]
 SCREEN_TOOLS = ("click", "move", "drag", "scroll", "type", "key", "wait")   # answered with the screen after the pause
 ACTING = SCREEN_TOOLS + ("step", "done", "fail")
 FINAL = {"done": "DONE", "fail": "FAIL"}
+B64_CHARS = 4 * -(-CHUNK_BYTES // 3)
+REFUSALS = {("scroll", "anyOf"): "dy or dx is not 0", ("upload", "anyOf"): "upload needs data, or a sha256",
+            ("upload", "if"): "append needs data: a file taken by its sha256 starts the file"}
+PATTERN_WORDS = {"\\S": "is not blank", "^[0-9a-f]{64}$": "is 64 lowercase hexadecimal digits"}
 
 
-def listed() -> list:
-    return [{"name": n, "description": d,
-             "inputSchema": dict({"type": "object", "properties": props}, **({"required": req} if req else {}))}
-            for n, d, props, req in TOOLS]
+@functools.lru_cache(maxsize=8)
+def tools(screen):
+    """The tools for a screen of ``screen`` (width, height) pixels: [(name, description, input schema)]."""
+    w, h = screen
+    x = {"type": "integer", "minimum": 0, "maximum": w - 1, "description": "Pixels from the screen's left edge"}
+    y = {"type": "integer", "minimum": 0, "maximum": h - 1, "description": "Pixels from the screen's top edge"}
+    button = {"type": "string", "enum": ["left", "right", "middle"], "description": "Default left"}
+    clicks = {"type": "integer", "minimum": -100, "maximum": 100}
+    text = {"type": "string", "minLength": 1}
+    obj = lambda props, required=(), **more: dict({"type": "object", "properties": props},
+                                                   **({"required": list(required)} if required else {}), **more)
+    return [
+        ("info", "The screen's size, the steps in all and left, the pause after each action in seconds, the seconds "
+                 "python waits for the desktop's reply, and the desktop user's password.", obj({})),
+        ("screenshot", "The screen now, as a PNG image at its own size.", obj({})),
+        ("read", "A file of the desktop: data is its content in base64, or null when there is no such file.",
+         obj({"path": text}, ["path"])),
+        ("python", "Runs Python code in the desktop as its user and returns its reply: status, output, error, "
+                   "returncode. For reading the desktop and for your own programs there; pointer and keyboard input "
+                   "goes through the acting tools.", obj({"code": text}, ["code"])),
+        ("upload", "Writes data to a file of the desktop and returns the file's size so far. data is base64, at most "
+                   "4 MiB a call; append false starts the file, true adds to it. sha256, optional, is the whole "
+                   "file's: when the run already holds a file of that sha256, it may be given with no data, and it "
+                   "starts the file.",
+         obj({"path": text, "data": {"type": "string", "contentEncoding": "base64", "maxLength": B64_CHARS},
+              "append": {"type": "boolean"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, ["path"],
+             anyOf=[{"required": ["data"]}, {"required": ["sha256"]}],
+             **{"if": {"not": {"required": ["data"]}}, "then": {"properties": {"append": {"const": False}}}})),
+        ("click", "One step: a click at the point.",
+         obj({"x": x, "y": y, "button": button,
+              "count": {"type": "integer", "minimum": 1, "maximum": 3, "description": "Default 1"}}, ["x", "y"])),
+        ("move", "One step: the pointer moved to the point.", obj({"x": x, "y": y}, ["x", "y"])),
+        ("drag", "One step: a press at (x, y), a move, and a release at (to_x, to_y).",
+         obj({"x": x, "y": y, "to_x": x, "to_y": y, "button": button}, ["x", "y", "to_x", "to_y"])),
+        ("scroll", "One step: the wheel turned at the point, dy clicks down (negative: up) and dx clicks right "
+                   "(negative: left); at least one is not 0.",
+         obj({"x": x, "y": y, "dy": clicks, "dx": clicks}, ["x", "y"],
+             anyOf=[{"required": ["dy"], "properties": {"dy": {"not": {"const": 0}}}},
+                    {"required": ["dx"], "properties": {"dx": {"not": {"const": 0}}}}])),
+        ("type", "One step: the text typed key by key.", obj({"text": text}, ["text"])),
+        ("key", "One step: the keys pressed together, such as [\"ctrl\", \"s\"].",
+         obj({"keys": {"type": "array", "minItems": 1, "maxItems": 8,
+                       "items": {"type": "string", "minLength": 1, "maxLength": 32}}}, ["keys"])),
+        ("wait", "One step: no action, the pause alone.", obj({})),
+        ("step", "One step of several actions, run in order: each is a line of Python run in the desktop with "
+                 "pyautogui and time imported, or WAIT. An empty list is a step with no action. The screen comes back "
+                 "when screenshot is true.",
+         obj({"actions": {"type": "array", "items": {
+                 "type": "string", "pattern": "\\S",
+                 "not": {"pattern": "^\\s*(DONE|FAIL)\\s*$",
+                         "description": "the task's end is the tool done or fail, not an action of step"}}},
+              "response": {"type": "string"}, "screenshot": {"type": "boolean"}}, ["actions"])),
+        ("done", "The last step: the task is complete.", obj({"message": {"type": "string"}})),
+        ("fail", "The last step: the task cannot be done.", obj({"reason": {"type": "string"}})),
+    ]
+
+
+def listed(screen) -> list:
+    return [{"name": n, "description": d, "inputSchema": s} for n, d, s in tools(tuple(screen))]
 
 
 class Refused(Exception):
     """A call answered with ``isError`` and these words."""
 
 
+def _passes(value, schema, tool, name):
+    try:
+        _valid(value, schema, tool, name)
+        return True
+    except Refused:
+        return False
+
+
+def _valid(value, schema, tool, name):
+    """``value`` checked against ``schema``, in the part of JSON Schema the tool table uses; the value with integers
+    as int. Refused, naming the argument, when it does not hold."""
+    kind = schema.get("type")
+    if kind == "integer":
+        if isinstance(value, bool) or not (isinstance(value, int) or (isinstance(value, float) and value.is_integer())):
+            raise Refused(f"{name} is an integer")
+        value = int(value)
+        if not schema.get("minimum", value) <= value <= schema.get("maximum", value):
+            raise Refused(f"{name} is from {schema['minimum']} to {schema['maximum']}")
+    elif kind is not None and not isinstance(value, {"string": str, "boolean": bool, "array": list, "object": dict}[kind]):
+        raise Refused(f"{name} is " + {"string": "a text", "boolean": "true or false", "array": "a list",
+                                       "object": "an object"}[kind])
+    if isinstance(value, str):
+        if len(value) < schema.get("minLength", 0):
+            raise Refused(f"{name} is a text, not empty")
+        if len(value) > schema.get("maxLength", len(value)):
+            raise Refused(f"{name} is at most {schema['maxLength']} characters")
+        if "pattern" in schema and not re.search(schema["pattern"], value):
+            raise Refused(f"{name} " + PATTERN_WORDS.get(schema["pattern"], "is not of its form"))
+    if isinstance(value, list):
+        if not schema.get("minItems", 0) <= len(value) <= schema.get("maxItems", len(value)):
+            raise Refused(f"{name} holds {schema.get('minItems', 0)} to {schema['maxItems']} items")
+        value = [_valid(v, schema.get("items", {}), tool, f"{name}[{i}]") for i, v in enumerate(value)]
+    if isinstance(value, dict):
+        for key in schema.get("required", []):
+            if key not in value:
+                raise Refused(f"{key} is missing")
+        props = schema.get("properties", {})
+        value = {k: _valid(v, props[k], tool, k) if k in props else v for k, v in value.items()}
+        if "anyOf" in schema and not any(_passes(value, s, tool, name) for s in schema["anyOf"]):
+            raise Refused(REFUSALS.get((tool, "anyOf"), f"{name} is not of its form"))
+        if "if" in schema and _passes(value, schema["if"], tool, name) and not _passes(value, schema["then"], tool, name):
+            raise Refused(REFUSALS.get((tool, "if"), f"{name} is not of its form"))
+    if "enum" in schema and value not in schema["enum"]:
+        raise Refused(f"{name} is one of {', '.join(map(str, schema['enum']))}")
+    if "const" in schema and (value != schema["const"] or type(value) is not type(schema["const"])):
+        raise Refused(f"{name} is {json.dumps(schema['const'])}")
+    if "not" in schema and _passes(value, schema["not"], tool, name):
+        raise Refused(f"{name}: {schema['not'].get('description', 'not of its form')}")
+    return value
+
+
 class Call:
-    """One tools/call: its tool and arguments, when it came, and how it is answered (once)."""
+    """One tools/call: its tool and arguments, when it came, and how it is answered (once). ``checked`` adds what
+    the call stands for: its arguments as checked, its actions, its response, whether its answer has the screen, and
+    an upload's data, decoded."""
 
     def __init__(self, tool, args, reply):
         self.tool, self.args, self._reply = tool, args, reply
         self.start = time.time()
-        self.actions, self.response, self.screen = [], "", False
+        self.clean, self.actions, self.response, self.screen, self.data = {}, [], "", False, None
         self.answered = False
         self._lock = threading.Lock()
 
@@ -139,118 +228,76 @@ class Call:
         self._reply(self, value, image, error)
 
 
-def _number(args, name, low, high, default=None):
-    v = args.get(name, default)
-    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
-        raise Refused(f"{name} is a number")
-    v = int(round(v))
-    if not low <= v <= high:
-        raise Refused(f"{name} is from {low} to {high}")
-    return v
-
-
-def _text(args, name, default=None, empty=False):
-    v = args.get(name, default)
-    if not isinstance(v, str) or not (v or empty):
-        raise Refused(f"{name} is a text" + ("" if empty else ", not empty"))
-    return v
-
-
 def checked(call, screen) -> None:
-    """The call's arguments checked, and for an acting call the actions it stands for (Python lines run with pyautogui
-    and time imported, or WAIT, DONE, FAIL), its response and whether its answer carries the screen. Refused when an
-    argument is wrong: the call is then answered at once and is no step."""
-    a, (w, h), tool = call.args, screen, call.tool
-    if not isinstance(a, dict):
-        raise Refused("arguments is an object")
-    if tool in ("click", "move", "drag", "scroll"):
-        x, y = _number(a, "x", 0, w - 1), _number(a, "y", 0, h - 1)
-    button = a.get("button", "left")
-    if tool in ("click", "drag") and button not in ("left", "right", "middle"):
-        raise Refused("button is left, right or middle")
+    """The call checked against its tool's schema, in full and before it is queued; for an acting call, the actions
+    it stands for (Python lines run with pyautogui and time imported, or WAIT, DONE, FAIL). Refused when it does not
+    hold: the call is then answered at once, takes no step and never reaches the desktop."""
+    schema = next(s for n, _, s in tools(tuple(screen)) if n == call.tool)
+    a = call.clean = _valid(call.args, schema, call.tool, "arguments")
+    tool, button = call.tool, repr(a.get("button", "left"))
     if tool == "click":
-        call.actions = [f"pyautogui.click({x}, {y}, clicks={_number(a, 'count', 1, 3, 1)}, button={button!r})"]
+        call.actions = [f"pyautogui.click({a['x']}, {a['y']}, clicks={a.get('count', 1)}, button={button})"]
     elif tool == "move":
-        call.actions = [f"pyautogui.moveTo({x}, {y})"]
+        call.actions = [f"pyautogui.moveTo({a['x']}, {a['y']})"]
     elif tool == "drag":
-        to = (_number(a, "to_x", 0, w - 1), _number(a, "to_y", 0, h - 1))
-        call.actions = [f"pyautogui.moveTo({x}, {y}); pyautogui.dragTo({to[0]}, {to[1]}, duration=0.5, "
-                        f"button={button!r})"]
+        call.actions = [f"pyautogui.moveTo({a['x']}, {a['y']}); pyautogui.dragTo({a['to_x']}, {a['to_y']}, "
+                        f"duration=0.5, button={button})"]
     elif tool == "scroll":
-        dy, dx = _number(a, "dy", -100, 100), _number(a, "dx", -100, 100, 0)
-        if not (dy or dx):
-            raise Refused("dy or dx is not 0")
+        dy, dx, x, y = a.get("dy", 0), a.get("dx", 0), a["x"], a["y"]
         call.actions = ["; ".join([f"pyautogui.scroll({-dy}, x={x}, y={y})"] * bool(dy)
                                   + [f"pyautogui.hscroll({dx}, x={x}, y={y})"] * bool(dx))]
     elif tool == "type":
-        call.actions = [f"pyautogui.write({_text(a, 'text')!r})"]
+        call.actions = [f"pyautogui.write({a['text']!r})"]
     elif tool == "key":
-        keys = a.get("keys")
-        if not (isinstance(keys, list) and 1 <= len(keys) <= 8
-                and all(isinstance(k, str) and 0 < len(k) <= 32 for k in keys)):
-            raise Refused("keys is a list of 1 to 8 key names")
-        call.actions = [f"pyautogui.hotkey({', '.join(repr(k if len(k) == 1 else k.lower()) for k in keys)})"]
+        call.actions = [f"pyautogui.hotkey({', '.join(repr(k if len(k) == 1 else k.lower()) for k in a['keys'])})"]
     elif tool == "wait":
         call.actions = ["WAIT"]
     elif tool == "step":
-        actions = a.get("actions")
-        if not (isinstance(actions, list) and all(isinstance(x, str) and x.strip() for x in actions)):
-            raise Refused("actions is a list of texts, each a line of Python or WAIT")
-        if any(x.strip() in FINAL.values() for x in actions):
-            raise Refused("the task's end is the tool done or fail, not an action of step")
-        call.actions, call.response = list(actions), _text(a, "response", "", empty=True)
-        call.screen = a.get("screenshot") is True
+        call.actions, call.response, call.screen = list(a["actions"]), a.get("response", ""), a.get("screenshot", False)
     elif tool in FINAL:
-        call.actions, call.response = [FINAL[tool]], _text(a, "message" if tool == "done" else "reason", "", empty=True)
-    elif tool in ("read", "upload"):
-        _text(a, "path")
-    elif tool == "python":
-        _text(a, "code")
+        call.actions, call.response = [FINAL[tool]], a.get("message" if tool == "done" else "reason", "")
+    elif tool == "upload" and "data" in a:
+        try:
+            call.data = base64.b64decode(a["data"], validate=True)
+        except (binascii.Error, ValueError):
+            raise Refused("data is base64")
+        if len(call.data) > CHUNK_BYTES:
+            raise Refused(f"data is at most {CHUNK_BYTES} bytes a call")
     if tool in SCREEN_TOOLS:
         call.screen = True
-    if tool == "upload":
-        if "data" in a:
-            _text(a, "data", empty=True)
-        if a.get("sha256") is not None and not re.fullmatch(r"[0-9a-f]{64}", str(a.get("sha256"))):
-            raise Refused("sha256 is 64 lowercase hexadecimal digits")
-        if not isinstance(a.get("append", False), bool):
-            raise Refused("append is true or false")
 
 
 class Held:
-    """Content sent once for a run: a file whose chunks, sent in this unit from its start, hash to the sha256 the agent
-    gave is kept in ``folder`` (the run's, the same for each of its units) under that name. A later upload of the same
-    sha256, in any unit of the run, takes it from there, checked again, and the agent sends no bytes; the unit's
-    desktop gets the file at that call, as it would have from the bytes. Nothing else passes from one unit to the
-    next."""
+    """Whole files kept for a run by their sha256, in ``folder`` (the run's, the same for each of its units): a file
+    is kept once the chunks a unit sent for it from its start hash to the sha256 given with the first (the bridge
+    holds those chunks, for its unit alone). A later upload of that sha256 with no data, in any unit of the run, takes
+    the file from here, checked again, and the agent sends no bytes. Nothing else passes from one unit to the next."""
 
     def __init__(self, folder):
-        self.folder, self.open = folder, {}
+        self.folder = folder
 
     def get(self, digest):
         try:
-            with open(os.path.join(self.folder, digest), "rb") as f:
-                data = f.read()
+            fd = os.open(os.path.join(self.folder, digest), os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as f:
+                data = f.read(KEEP_BYTES + 1)
         except OSError:
             return None
         return data if hashlib.sha256(data).hexdigest() == digest else None
 
-    def add(self, path, digest, data, append):
-        if not append:
-            self.open.pop(path, None)
-            if digest:
-                self.open[path] = (digest, hashlib.sha256(), bytearray())
-        kept = self.open.get(path)
-        if kept is None:
+    def keep(self, digest, data):
+        """``data`` kept under its sha256 ``digest``, through a temporary file of its own in the folder (created
+        anew, the user's alone), removed on every path."""
+        if hashlib.sha256(data).hexdigest() != digest:
             return
-        kept[1].update(data)
-        kept[2].extend(data)
-        if kept[1].hexdigest() == kept[0]:
-            del self.open[path]
-            part = os.path.join(self.folder, f".{kept[0]}.{os.getpid()}.{threading.get_ident()}")
-            with open(part, "wb") as f:
-                f.write(kept[2])
-            os.replace(part, os.path.join(self.folder, kept[0]))
+        fd, part = tempfile.mkstemp(prefix=".keep-", dir=self.folder)
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            os.replace(part, os.path.join(self.folder, digest))
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(part)
 
 
 class Bridge:
@@ -272,6 +319,7 @@ class Bridge:
         self.ended = None                            # why no call is taken any more
         self.turn_ended = False
         self.first = True
+        self.partial = {}                            # this unit's uploads being kept: path -> [sha256, hash, bytes]
         self.change = threading.Condition()
 
     # -- the loop's agent -------------------------------------------------------------------------------------------
@@ -280,7 +328,7 @@ class Bridge:
 
     def predict(self, instruction, obs):
         """The agent's next acting call, as the loop's (response, actions); reading calls are served until it comes.
-        Once the turn has ended, no action."""
+        Once the turn has ended, no action, but for a done or fail taken before it."""
         if self.first:
             self.first = False
             if self.on_first:
@@ -292,7 +340,7 @@ class Bridge:
             if call.tool not in ACTING:
                 self._serve(call)
                 continue
-            if call.tool in FINAL:
+            if call.tool in FINAL:                   # the loop asks nothing after them: answered as it takes them
                 call.answer({"steps_left": self.steps - self.used, "done": True})
                 return call.response, list(call.actions)
             return call.response, self._run(call)
@@ -316,12 +364,16 @@ class Bridge:
         return call
 
     def _run(self, call):
-        """The call's actions, one at a time as the loop asks; once the loop asks past the last, it has run them all
-        and their pause, and the call is answered."""
+        """The call's actions, one at a time as the loop asks, none once the turn has ended; once the loop asks past
+        the last, it has run them all and their pause, and the call is answered."""
         ran = False
         try:
-            yield from call.actions
-            ran = True
+            for action in call.actions:
+                if self.turn_ended:
+                    break
+                yield action
+            else:
+                ran = True
         finally:
             self._ran(call, ran)
 
@@ -332,7 +384,7 @@ class Bridge:
             value = {"steps_left": self.steps - self.used, "done": self.ended is not None}
             turn_ended = self.turn_ended
         if not ran:
-            call.answer(error="the step was not run to its end")
+            call.answer(error="the agent's turn has ended" if turn_ended else "the step was not run to its end")
         else:
             try:
                 call.answer(value, self.desktop.capture() if call.screen and not turn_ended else None)
@@ -350,7 +402,7 @@ class Bridge:
             call.answer(error=f"the desktop failed {call.tool}: {type(e).__name__}: {e}")
 
     def _reading(self, call):
-        a = call.args
+        a = call.clean
         if call.tool == "screenshot":
             return {"image": self.desktop.capture()}
         if call.tool == "read":
@@ -363,36 +415,54 @@ class Bridge:
             if reply is None:
                 raise Refused(f"the desktop gave no reply within {self.python_seconds:g} s")
             return {"value": reply}
-        return {"value": self._upload(a)}
+        return {"value": self._upload(call)}
 
-    def _upload(self, a):
+    def _upload(self, call):
+        a, data = call.clean, call.data
         path, append, digest = a["path"], a.get("append", False), a.get("sha256")
-        if "data" not in a:
-            data = self.held.get(digest) if self.held is not None and digest else None
+        if not append:
+            self.partial.pop(path, None)             # every start of the file drops what was being kept for it
+        if data is None:                             # the run's file of that sha256: it starts the file
+            data = self.held.get(digest) if self.held is not None else None
             if data is None:
-                raise Refused("upload needs data" + (": the run holds no file of that sha256" if digest else ""))
+                raise Refused("the run holds no file of that sha256: send its data")
             self.desktop.upload(path, data)
             return {"size": len(data)}
-        try:
-            data = base64.b64decode(a["data"], validate=True)
-        except (binascii.Error, ValueError):
-            raise Refused("data is base64")
-        if len(data) > CHUNK_BYTES:
-            raise Refused(f"data is at most {CHUNK_BYTES} bytes a call")
         if not append:
             self.desktop.upload(path, data)
             size = len(data)
-        else:                                        # the chunk beside the file, then added to it in the desktop
-            part = path + ".part"
-            self.desktop.upload(part, data)
-            reply = self.desktop.python(APPEND.format(part=part, path=path))
+            if digest and self.held is not None:
+                self.partial[path] = [digest, hashlib.sha256(), bytearray()]
+        else:
             try:
-                size = int(str(reply.get("output")).strip())
-            except (AttributeError, ValueError):
-                raise Refused(f"the desktop did not add the data to {path}: {json.dumps(reply)[:300]}")
-        if self.held is not None:
-            self.held.add(path, digest, data, append)
+                size = self._append(path, data)
+            except BaseException:
+                self.partial.pop(path, None)
+                raise
+        kept = self.partial.get(path)
+        if kept is not None:
+            kept[1].update(data)
+            kept[2].extend(data)
+            if len(kept[2]) > KEEP_BYTES:
+                del self.partial[path]
+            elif kept[1].hexdigest() == kept[0]:
+                del self.partial[path]
+                self.held.keep(kept[0], bytes(kept[2]))
         return {"size": size}
+
+    def _append(self, path, data):
+        """``data`` added to the file at ``path``: written beside it under a name of the server's own, then added to
+        it in the desktop; that name is removed on every path."""
+        part = posixpath.join(posixpath.dirname(path), f".upload-{secrets.token_hex(8)}")
+        self.desktop.upload(part, data)
+        reply = self.desktop.python(APPEND.format(part=part, path=path))
+        try:
+            return int(str(reply.get("output")).strip())
+        except (AttributeError, ValueError):
+            if reply is None:                        # the desktop gave no reply: the part may still be there
+                with contextlib.suppress(Exception):
+                    self.desktop.python(f"import os; os.remove({part!r})")
+            raise Refused(f"the desktop did not add the data to {path}: {json.dumps(reply)[:300]}")
 
     # -- what the server and the runner call ------------------------------------------------------------------------
     def submit(self, call):
@@ -427,38 +497,55 @@ class Bridge:
                 f"python. A turn that ends with neither done nor fail ends the task as the desktop then is.")
 
     def end_turn(self):
-        """The agent's turn has ended: the wait for its next call ends, and no call is taken any more."""
+        """The agent's turn has ended: the wait for its next call ends, the actions of a step not yet run are not
+        run, and no call is taken any more. A done or fail already taken stays, for the loop."""
         with self.change:
             self.turn_ended = True
-            refused = self._end("the agent's turn has ended")
+            refused = self._end("the agent's turn has ended", keep_final=True)
         for c in refused:
             c.answer(error=self.ended)
 
     def finish(self):
-        """The loop has returned, or failed: every call still waiting, and one the loop was running, is answered."""
+        """The loop has returned, or failed: every call still waiting, and one the loop was running, is answered, and
+        what this unit was keeping of its uploads is dropped."""
         with self.change:
             refused = self._end("the task has ended")
             running, self.running = self.running, None
+            self.partial.clear()
         for c in refused + ([running] if running is not None else []):
             c.answer(error=self.ended)
 
-    def _end(self, why):
-        """No call taken any more (with the condition held); the calls waiting, to refuse once it is let go."""
+    def _end(self, why, keep_final=False):
+        """No call taken any more (with the condition held); the calls waiting, to refuse once it is let go, but the
+        first done or fail when ``keep_final``."""
         if self.ended is None:
             self.ended = why
-        refused = list(self.calls)
+        final = next((c for c in self.calls if c.tool in FINAL), None) if keep_final else None
+        refused = [c for c in self.calls if c is not final]
         self.calls.clear()
+        if final is not None:
+            self.calls.append(final)
         self.change.notify_all()
         return refused
 
 
+def frame(message) -> bytes:
+    return (json.dumps(message) + "\n").encode()
+
+
 class Wire:
     """One connection of the agent's session: JSON-RPC messages, one a line, each at most LINE_BYTES with its newline.
-    Once its input has ended, it is closed when every call it made has been answered."""
+    Its answers are written by a thread of its own; at most OUT_BYTES of them wait for the client to read, past which
+    the connection is closed. ``close`` never waits for a write. Once its input has ended, it is closed when every
+    call it made has been answered and written. ``on_closed`` is called once, when it is closed."""
 
-    def __init__(self, conn):
-        self.conn, self.lock = conn, threading.Lock()
-        self.open_calls, self.input_ended, self.closed = 0, False, False
+    def __init__(self, conn, on_closed=None):
+        self.conn, self.on_closed = conn, on_closed
+        self.lock = threading.Lock()                 # the wire's state; never held across a call on the socket
+        self.ready = threading.Condition(self.lock)
+        self.out, self.out_bytes = collections.deque(), 0
+        self.open_calls, self.input_ended, self.closing, self.closed = 0, False, False, False
+        threading.Thread(target=self._write, name="computer-writer", daemon=True).start()
 
     def lines(self):
         buf, scanned = bytearray(), 0
@@ -475,6 +562,8 @@ class Wire:
                 if i < 0:
                     scanned = len(buf)
                     break
+                if i + 1 > LINE_BYTES:
+                    break
                 line = bytes(buf[:i])
                 del buf[:i + 1]
                 scanned = 0
@@ -485,17 +574,37 @@ class Wire:
                 return
 
     def send(self, message):
-        data = (json.dumps(message) + "\n").encode()
-        if len(data) > LINE_BYTES:
-            data = (json.dumps({"jsonrpc": "2.0", "id": message.get("id"), "error": {
-                "code": -32603, "message": f"the answer is over {LINE_BYTES} bytes"}}) + "\n").encode()
+        """``message`` (an object, or a framed line) queued for the writer; False when the wire is closed, or closed
+        now because its client has left OUT_BYTES unread."""
+        data = message if isinstance(message, bytes) else frame(message)
         with self.lock:
             if self.closed:
-                return
+                return False
+            overflow = self.out_bytes + len(data) > OUT_BYTES
+            if not overflow:
+                self.out.append(data)
+                self.out_bytes += len(data)
+                self.ready.notify_all()
+        if overflow:
+            self.close()
+            return False
+        return True
+
+    def _write(self):
+        while True:
+            with self.lock:
+                while not self.out and not self.closing and not self.closed:
+                    self.ready.wait()
+                if self.closed or not self.out:      # closed, or closing with every answer written
+                    break
+                data = self.out.popleft()
             try:
                 self.conn.sendall(data)
             except OSError:
-                self._close()
+                break
+            with self.lock:
+                self.out_bytes -= len(data)
+        self.close()
 
     def opened(self):
         with self.lock:
@@ -505,24 +614,33 @@ class Wire:
         with self.lock:
             self.open_calls -= 1
             if self.input_ended and not self.open_calls:
-                self._close()
+                self.closing = True
+                self.ready.notify_all()
 
     def ended(self):
         with self.lock:
             self.input_ended = True
             if not self.open_calls:
-                self._close()
+                self.closing = True
+                self.ready.notify_all()
 
     def close(self):
         with self.lock:
-            self._close()
-
-    def _close(self):
-        if not self.closed:
+            if self.closed:
+                return
             self.closed = True
-            with contextlib.suppress(OSError):
-                self.conn.shutdown(socket.SHUT_RDWR)
+            self.out.clear()
+            self.ready.notify_all()
+        with contextlib.suppress(OSError):
+            self.conn.shutdown(socket.SHUT_RDWR)     # also ends a write in progress on a real socket
+        with contextlib.suppress(OSError):
             self.conn.close()
+        if self.on_closed is not None:
+            self.on_closed(self)
+
+
+def _good_id(rid):
+    return isinstance(rid, str) or (isinstance(rid, int) and not isinstance(rid, bool))
 
 
 class Server:
@@ -530,19 +648,26 @@ class Server:
     when given, gets one JSON line per tool call: ``{tool, start, end, isError}``."""
 
     def __init__(self, bridge, path, log=None):
-        self.bridge, self.path, self.log = bridge, path, log
-        self.log_lock = threading.Lock()
-        self.wires = []
+        self._state(bridge, path, log)
         self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.listener.bind(path)
         self.listener.listen(16)
         threading.Thread(target=self._accept, name="computer-accept", daemon=True).start()
 
+    def _state(self, bridge, path, log):
+        self.bridge, self.path, self.log = bridge, path, log
+        self.log_lock, self.lock = threading.Lock(), threading.Lock()
+        self.closing, self.wires = False, set()
+
     def close(self):
+        with self.lock:
+            self.closing = True
+            wires = list(self.wires)
         with contextlib.suppress(OSError):
             self.listener.shutdown(socket.SHUT_RDWR)
-        self.listener.close()
-        for wire in list(self.wires):
+        with contextlib.suppress(OSError):
+            self.listener.close()
+        for wire in wires:
             wire.close()
         with contextlib.suppress(OSError):
             os.unlink(self.path)
@@ -553,35 +678,58 @@ class Server:
                 conn = self.listener.accept()[0]
             except OSError:
                 return
-            wire = Wire(conn)
-            self.wires.append(wire)
+            with self.lock:
+                wire = None if self.closing else Wire(conn, on_closed=self._forget)
+                if wire is not None:
+                    self.wires.add(wire)
+            if wire is None:                         # came as the server closed
+                with contextlib.suppress(OSError):
+                    conn.shutdown(socket.SHUT_RDWR)
+                with contextlib.suppress(OSError):
+                    conn.close()
+                return
             threading.Thread(target=self._serve, args=(wire,), name="computer-connection", daemon=True).start()
 
+    def _forget(self, wire):
+        with self.lock:
+            self.wires.discard(wire)
+
     def _serve(self, wire):
-        for line in wire.lines():
-            try:
-                message = json.loads(line)
-            except ValueError:
-                wire.send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}})
-                continue
-            reply = self.handle(message, wire)
-            if reply is not None:
-                wire.send(reply)
+        try:
+            for line in wire.lines():
+                try:
+                    message = json.loads(line)
+                except (ValueError, RecursionError):
+                    wire.send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}})
+                    continue
+                reply = self.handle(message, wire)
+                if reply is not None:
+                    wire.send(reply)
+        except Exception as e:                       # a failure of this handler: its connection is closed
+            sys.stderr.write(f"computer: a connection's handler failed: {type(e).__name__}: {e}\n")
+            wire.close()
+            return
         wire.ended()
 
     def handle(self, m, wire):
         """One message in; its reply out, None for a notification or a tool call answered on the wire later."""
         if not isinstance(m, dict):
             return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "a message is a JSON object"}}
+        rid, method, params = m.get("id"), m.get("method"), m.get("params", {})
+        if m.get("jsonrpc") != "2.0" or not isinstance(method, str) or not isinstance(params, dict) or (
+                "id" in m and not _good_id(rid)):
+            if "id" not in m:
+                return None
+            return {"jsonrpc": "2.0", "id": rid if _good_id(rid) else None,
+                    "error": {"code": -32600, "message": "not a JSON-RPC 2.0 request: jsonrpc \"2.0\", a method, an "
+                                                         "id that is a text or an integer, params an object"}}
         if "id" not in m:
             return None
-        rid, method, params = m["id"], m.get("method"), m.get("params")
-        params = params if isinstance(params, dict) else {}
         if method == "initialize":
             result = {"protocolVersion": params.get("protocolVersion") or PROTOCOL, "capabilities": {"tools": {}},
                       "serverInfo": {"name": "computer", "version": "1"}, "instructions": self.bridge.instructions()}
         elif method == "tools/list":
-            result = {"tools": listed()}
+            result = {"tools": listed(self.bridge.screen)}
         elif method == "tools/call":
             self.call(rid, params, wire)
             return None
@@ -595,7 +743,7 @@ class Server:
 
     def call(self, rid, params, wire):
         name = params.get("name")
-        if name not in NAMES:
+        if not isinstance(name, str) or name not in NAMES:
             self.record({"tool": None, "start": time.time(), "end": time.time(), "isError": True})
             wire.send({"jsonrpc": "2.0", "id": rid, "error": {"code": -32602, "message": f"no tool {str(name)[:100]!r}"}})
             return
@@ -608,19 +756,27 @@ class Server:
                 content.append({"type": "text", "text": json.dumps(value)})
             if image is not None:
                 content.append({"type": "image", "data": base64.b64encode(image).decode(), "mimeType": "image/png"})
-            self.record({"tool": call.tool, "start": call.start, "end": time.time(), "isError": error is not None})
-            wire.send({"jsonrpc": "2.0", "id": rid, "result": {"content": content, "isError": error is not None}})
+            data = frame({"jsonrpc": "2.0", "id": rid, "result": {"content": content, "isError": error is not None}})
+            failed = error is not None
+            if len(data) > LINE_BYTES:               # the answer's size is known before its outcome is recorded
+                data, failed = frame({"jsonrpc": "2.0", "id": rid, "error": {
+                    "code": -32603, "message": f"the answer is over {LINE_BYTES} bytes"}}), True
+            self.record({"tool": call.tool, "start": call.start, "end": time.time(), "isError": failed})
+            wire.send(data)
             wire.answered()
 
         wire.opened()
-        call = Call(name, params.get("arguments") or {}, reply)
-        if name == "info":
-            call.answer(self.bridge.info())
-            return
+        call = Call(name, params.get("arguments", {}), reply)
         try:
             checked(call, self.bridge.screen)
+            if name == "info":
+                call.answer(self.bridge.info())
+                return
         except Refused as e:
             call.answer(error=str(e))
+            return
+        except Exception as e:                       # checked failed: the call is refused, and recorded
+            call.answer(error=f"the arguments could not be checked: {type(e).__name__}")
             return
         self.bridge.submit(call)
 
@@ -666,7 +822,7 @@ def lifeline(fd, bridge=None):
 class Stop:
     """The runner's one stop: SIGTERM, or the lifeline's end, taken once; a second does not cut the clean-up. While a
     part that must not be cut runs (``deferred``), a stop waits for its end. ``seconds`` after the stop, a runner still
-    there calls ``last`` (its last resort) and exits 1."""
+    there calls ``last`` (its last resort), gives it LAST_SECONDS at most, and exits 1."""
 
     def __init__(self, seconds, last=None):
         self.seconds, self.last = seconds, last
@@ -704,7 +860,12 @@ class Stop:
         self.taken.wait()
         time.sleep(self.seconds)
         if self.last is not None:
-            with contextlib.suppress(Exception):
-                self.last()
+            last = threading.Thread(target=self._quietly, name="last-resort-callback", daemon=True)
+            last.start()
+            last.join(LAST_SECONDS)
         sys.stderr.write(f"runner: the clean-up did not end within {self.seconds:g} s of the stop\n")
         os._exit(1)
+
+    def _quietly(self):
+        with contextlib.suppress(Exception):
+            self.last()

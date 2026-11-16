@@ -38,6 +38,8 @@ class FakeDesktop:
     def __init__(self, root):
         self.root, self.events, self.busy, self.overlaps = root, [], 0, 0
         self.fail, self.silent = set(), False
+        self.gate = threading.Event()                            # the loop's actions wait while it is clear
+        self.gate.set()
         self.lock = threading.Lock()
 
     @contextlib.contextmanager
@@ -89,6 +91,7 @@ class FakeDesktop:
         return "password"
 
     def act(self, action):                                       # the loop's own run of an action
+        self.gate.wait(30)
         with self.op("action", action=action):
             pass
 
@@ -291,9 +294,9 @@ class Tools(Port):
     def test_wrong_arguments_are_refused_at_once_and_take_no_step(self):
         c = self.start(steps=3)
         for tool, args, words in [("click", {"x": 1920, "y": 0}, "x is from 0 to 1919"),
-                                  ("click", {"x": 1, "y": 1, "button": "side"}, "button is left, right or middle"),
-                                  ("click", {"x": True, "y": 1}, "x is a number"),
-                                  ("key", {"keys": []}, "keys is a list"),
+                                  ("click", {"x": 1, "y": 1, "button": "side"}, "button is one of left, right, middle"),
+                                  ("click", {"x": True, "y": 1}, "x is an integer"),
+                                  ("key", {"keys": []}, "keys holds 1 to 8 items"),
                                   ("type", {"text": ""}, "text is a text, not empty"),
                                   ("scroll", {"x": 1, "y": 1, "dy": 0}, "dy or dx is not 0"),
                                   ("step", {"actions": ["DONE"]}, "the task's end is the tool done or fail"),
@@ -330,10 +333,13 @@ class Budget(Port):
         self.assertEqual(len(self.desktop.events), touched)
 
     def test_acting_calls_sent_together_past_the_budget_are_refused_at_once(self):
-        c = self.start(steps=2, pause=0.3)
+        c = self.start(steps=2)
+        self.desktop.gate.clear()                                # the first click is held in the loop
         ids = [c.start("click", x=i, y=i) for i in (1, 2, 3)]
-        third = c.result(ids[2], 0.25)                           # before the first has been answered
-        self.assertEqual(error(third), "the steps are used up")
+        self.assertEqual(error(c.result(ids[2])), "the steps are used up")
+        self.assertEqual(c.got, {}, "a click was answered while the first was held")
+        self.assertNotIn("action", self.desktop.kinds())
+        self.desktop.gate.set()
         self.assertEqual([value(c.result(i))["steps_left"] for i in ids[:2]], [1, 0])
         self.assertEqual(self.evaluated(), 2)
         self.assertEqual(len(self.ran), 3)
@@ -509,7 +515,7 @@ class Upload(Port):
     def test_with_no_folder_for_the_run_an_upload_by_sha256_alone_is_refused(self):
         c = self.start()
         self.assertEqual(error(c.call("upload", path="t.bin", sha256="0" * 64)),
-                         "upload needs data: the run holds no file of that sha256")
+                         "the run holds no file of that sha256: send its data")
 
 
 class Connections(Port):
@@ -584,6 +590,11 @@ elif mode == "hung":
     with stop.deferred():
         os.kill(os.getpid(), signal.SIGTERM)
         time.sleep(30)
+elif mode == "stalled-last":
+    stop.last = lambda: time.sleep(30)
+    with stop.deferred():
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(30)
 """
 
 
@@ -631,6 +642,335 @@ class Runner(unittest.TestCase):
         self.assertEqual((p.returncode, out), (1, b"last resort\n"))
         self.assertLess(time.monotonic() - t0, 5)
         self.assertIn(b"did not end within 0.3 s of the stop", err)
+
+    def test_a_last_resort_whose_own_callback_hangs_still_exits(self):
+        p = self.child("stalled-last", "0.05")
+        t0 = time.monotonic()
+        try:
+            p.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.fail("the last resort waited for its callback")
+        self.assertEqual(p.returncode, 1)
+        self.assertLess(time.monotonic() - t0, 3)
+
+
+class FakeConnection:
+    """A socket of the test's for a Wire: ``chunks`` to read, then the end; what is sent, parsed."""
+
+    def __init__(self, chunks=()):
+        self.chunks, self.sent, self.closed = iter(chunks), [], False
+
+    def recv(self, n):
+        return next(self.chunks, b"")
+
+    def sendall(self, data):
+        self.sent.append(json.loads(data))
+
+    def shutdown(self, how):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+def until(condition, seconds=5.0):
+    deadline = time.monotonic() + seconds
+    while not condition():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.01)
+    return True
+
+
+class Bare(unittest.TestCase):
+    """A bridge and a server with no socket and no loop: the calls are made and served by the test."""
+
+    def bridge(self, steps=5, held=None):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        self.desktop = FakeDesktop(tmp)
+        b = cp.Bridge(self.desktop, steps, 0.01, (100, 100), 30, held=held)
+        self.addCleanup(b.finish)
+        return b
+
+    def server(self, b):
+        s = cp.Server.__new__(cp.Server)                         # no socket bound
+        s._state(b, os.path.join(tempfile.gettempdir(), "no-such-socket"), None)
+        s.records = []
+        s.record = s.records.append
+        return s
+
+    def call(self, b, tool, **args):
+        answers = []
+        call = cp.Call(tool, args, lambda c, v, i, e: answers.append((v, i, e)))
+        call.answers = answers
+        cp.checked(call, b.screen)
+        b.submit(call)
+        return call
+
+    def upload(self, b, **args):
+        call = cp.Call("upload", args, None)
+        cp.checked(call, b.screen)
+        return b._upload(call)
+
+
+class Wires(Bare):
+    def test_a_client_that_stops_reading_holds_up_neither_the_loop_nor_the_close(self):
+        entered, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+
+        class Stalled(FakeConnection):
+            def sendall(self, data):
+                entered.set()
+                release.wait(10)
+                raise OSError("let go")
+
+        b = self.bridge()
+        wire = cp.Wire(Stalled())
+        self.server(b).call(1, {"name": "screenshot"}, wire)
+        served = threading.Thread(target=b._serve, args=(b.calls.popleft(),), daemon=True)
+        served.start()
+        served.join(2)
+        self.assertFalse(served.is_alive(), "the loop's thread waited for the client to read")
+        self.assertTrue(entered.wait(5))
+        closer = threading.Thread(target=wire.close, daemon=True)
+        closer.start()
+        closer.join(2)
+        self.assertFalse(closer.is_alive(), "the close waited for a write in progress")
+
+    def test_answers_left_unread_past_the_bound_close_the_connection(self):
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        class Stalled(FakeConnection):
+            def sendall(self, data):
+                release.wait(10)
+
+        wire = cp.Wire(Stalled())
+        with mock.patch.object(cp, "OUT_BYTES", 1000):
+            self.assertTrue(wire.send({"x": "a" * 400}))           # taken by the writer, which stalls
+            self.assertTrue(until(lambda: not wire.out))
+            self.assertTrue(wire.send({"x": "b" * 400}))
+            self.assertFalse(wire.send({"x": "c" * 400}))
+        self.assertTrue(wire.closed and wire.conn.closed)
+
+    def test_a_connection_accepted_as_the_server_closes_is_closed(self):
+        accepted, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        conn = FakeConnection()
+
+        class Listener:
+            closed = False
+
+            def accept(self):
+                if self.closed:
+                    raise OSError("closed")
+                accepted.set()
+                release.wait(10)                                 # a connection taken in, not yet registered
+                return conn, None
+
+            def shutdown(self, how):
+                self.closed = True
+
+            def close(self):
+                self.closed = True
+
+        s = self.server(self.bridge())
+        s.listener = Listener()
+        acceptor = threading.Thread(target=s._accept, daemon=True)
+        acceptor.start()
+        self.assertTrue(accepted.wait(5))
+        s.close()
+        release.set()
+        acceptor.join(5)
+        self.assertTrue(conn.closed, "a connection accepted as the server closed outlived it")
+        self.assertEqual(s.wires, set())
+
+    def test_a_complete_message_over_the_bound_is_refused(self):
+        conn = FakeConnection([b" " * 127, b"{}\n"])
+        with mock.patch.object(cp, "LINE_BYTES", 128):
+            self.assertEqual(list(cp.Wire(conn).lines()), [])
+        self.assertTrue(until(lambda: conn.sent))
+        self.assertEqual(conn.sent[0]["error"]["code"], -32600)
+
+    def test_json_too_deep_to_read_is_answered_and_the_connection_closed(self):
+        s = self.server(self.bridge())
+        conn = FakeConnection([b"[" * 100000 + b"]" * 100000 + b"\n"])
+        s._serve(cp.Wire(conn))
+        self.assertTrue(until(lambda: conn.closed), "the connection stayed open")
+        self.assertEqual(conn.sent[0]["error"]["code"], -32700)
+
+
+class Envelope(Bare):
+    VALID = {"info": {}, "screenshot": {}, "read": {"path": "a"}, "python": {"code": "pass"},
+             "upload": {"path": "a", "data": "YQ=="}, "click": {"x": 1, "y": 2}, "move": {"x": 1, "y": 2},
+             "drag": {"x": 1, "y": 2, "to_x": 3, "to_y": 4}, "scroll": {"x": 1, "y": 2, "dy": 1},
+             "type": {"text": "a"}, "key": {"keys": ["a"]}, "wait": {}, "step": {"actions": ["WAIT"]}, "done": {},
+             "fail": {}}
+
+    def test_a_number_past_any_integer_is_refused_and_recorded(self):
+        b = self.bridge()
+        s = self.server(b)
+        s.handle(json.loads('{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "click", '
+                            '"arguments": {"x": 1e999, "y": 1}}}'), cp.Wire(FakeConnection()))
+        self.assertEqual([(r["tool"], r["isError"]) for r in s.records], [("click", True)])
+        self.assertEqual(b.booked, 0)
+
+    def test_a_request_that_is_not_json_rpc_2_takes_no_step(self):
+        b = self.bridge()
+        s = self.server(b)
+        for m in [{"jsonrpc": "1.0", "id": 1, "method": "tools/call", "params": {"name": "wait"}},
+                  {"jsonrpc": "2.0", "id": [], "method": "tools/call", "params": {"name": "wait"}},
+                  {"jsonrpc": "2.0", "id": True, "method": "tools/call", "params": {"name": "wait"}},
+                  {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": [{"name": "wait"}]},
+                  {"id": 1, "method": "tools/call", "params": {"name": "wait"}}]:
+            self.assertEqual(s.handle(m, cp.Wire(FakeConnection()))["error"]["code"], -32600, m)
+        self.assertEqual((b.booked, len(b.calls), s.records), (0, 0, []))
+
+    def test_calls_against_their_schema_are_refused_before_they_are_queued(self):
+        for tool, args in [("click", {"x": 1.5, "y": 1}), ("step", {"actions": [], "screenshot": "yes"}),
+                           ("wait", []), ("upload", {"path": "a", "data": "!!"}), ("info", [])]:
+            with self.subTest(tool=tool, args=args):
+                b = self.bridge()
+                s = self.server(b)
+                s.call(1, {"name": tool, "arguments": args}, cp.Wire(FakeConnection()))
+                self.assertEqual((b.booked, len(b.calls)), (0, 0))
+                self.assertEqual(s.records[0]["isError"], True)
+
+    def test_each_listed_schema_is_what_the_calls_are_checked_against(self):
+        listed = {t["name"]: t["inputSchema"] for t in cp.listed((100, 100))}
+        self.assertEqual(sorted(listed), sorted(self.VALID))
+        wrong = {"integer": "1", "string": 1, "boolean": "true", "array": "a"}
+        for tool, schema in listed.items():
+            cp.checked(cp.Call(tool, dict(self.VALID[tool]), None), (100, 100))   # the valid call holds
+            for name in schema.get("required", []):
+                with self.subTest(tool=tool, missing=name), self.assertRaises(cp.Refused):
+                    cp.checked(cp.Call(tool, {k: v for k, v in self.VALID[tool].items() if k != name}, None), (100, 100))
+            for name, prop in schema["properties"].items():
+                with self.subTest(tool=tool, wrong=name), self.assertRaises(cp.Refused):
+                    cp.checked(cp.Call(tool, dict(self.VALID[tool], **{name: wrong[prop["type"]]}), None), (100, 100))
+                if "maximum" in prop:
+                    with self.subTest(tool=tool, over=name), self.assertRaises(cp.Refused):
+                        cp.checked(cp.Call(tool, dict(self.VALID[tool], **{name: prop["maximum"] + 1}), None), (100, 100))
+                    cp.checked(cp.Call(tool, dict(self.VALID[tool], **{name: prop["maximum"]}), None), (100, 100))
+
+    def test_an_answer_over_the_bound_is_recorded_as_failed(self):
+        b = self.bridge()
+        s, conn = self.server(b), FakeConnection()
+        s.call(1, {"name": "python", "arguments": {"code": "print('x' * 2000)"}}, cp.Wire(conn))
+        with mock.patch.object(cp, "LINE_BYTES", 512):
+            b._serve(b.calls.popleft())
+        self.assertTrue(until(lambda: conn.sent))
+        self.assertIn("error", conn.sent[0])
+        self.assertTrue(s.records[0]["isError"])
+
+
+class TurnEndAndSteps(Bare):
+    def test_the_turn_end_stops_the_actions_of_a_step_not_yet_run(self):
+        b = self.bridge()
+        call = self.call(b, "step", actions=["first()", "second()"])
+        _, actions = b.predict("", {})
+        self.assertEqual(next(actions), "first()")
+        b.end_turn()
+        self.assertEqual(list(actions), [])
+        self.assertEqual(call.answers, [(None, None, "the agent's turn has ended")])
+
+    def test_a_done_or_fail_taken_before_the_turn_end_reaches_the_loop(self):
+        for tool, action in (("done", "DONE"), ("fail", "FAIL")):
+            with self.subTest(tool=tool):
+                b = self.bridge()
+                click, final = self.call(b, "click", x=1, y=1), self.call(b, tool)
+                b.end_turn()
+                self.assertEqual(click.answers, [(None, None, "the agent's turn has ended")])
+                _, actions = b.predict("", {})
+                self.assertEqual(list(actions), [action])
+                self.assertEqual(final.answers[0][0]["done"], True)
+                self.assertEqual(b.predict("", {}), ("", []))
+
+
+class Uploads(Bare):
+    def test_an_append_leaves_a_file_named_like_its_scratch_alone(self):
+        b = self.bridge()
+        b64 = lambda d: base64.b64encode(d).decode()
+        self.upload(b, path="file", data=b64(b"A"))
+        self.upload(b, path="file.part", data=b64(b"unrelated"))
+        self.assertEqual(self.upload(b, path="file", data=b64(b"B"), append=True), {"size": 2})
+        with open(os.path.join(self.desktop.root, "file.part"), "rb") as f:
+            self.assertEqual(f.read(), b"unrelated")
+        self.assertEqual(sorted(os.listdir(self.desktop.root)), ["file", "file.part"])
+
+    def held(self):
+        run = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, run, True)
+        return cp.Held(run)
+
+    def test_a_file_taken_by_its_sha256_starts_the_file_and_append_is_refused(self):
+        held = self.held()
+        digest = hashlib.sha256(b"B").hexdigest()
+        held.keep(digest, b"B")
+        b = self.bridge(held=held)
+        self.upload(b, path="f", data=base64.b64encode(b"A").decode())
+        with self.assertRaisesRegex(cp.Refused, "append needs data"):
+            self.upload(b, path="f", sha256=digest, append=True)
+        self.assertEqual(self.upload(b, path="f", sha256=digest), {"size": 1})
+        with open(os.path.join(self.desktop.root, "f"), "rb") as f:
+            self.assertEqual(f.read(), b"B")
+
+    def test_a_file_taken_by_its_sha256_drops_what_was_being_kept_for_its_path(self):
+        held = self.held()
+        hash_b, hash_ac = hashlib.sha256(b"B").hexdigest(), hashlib.sha256(b"AC").hexdigest()
+        held.keep(hash_b, b"B")
+        b = self.bridge(held=held)
+        self.upload(b, path="f", data=base64.b64encode(b"A").decode(), sha256=hash_ac)
+        self.upload(b, path="f", sha256=hash_b)
+        self.upload(b, path="f", data=base64.b64encode(b"C").decode(), append=True)
+        with open(os.path.join(self.desktop.root, "f"), "rb") as f:
+            self.assertEqual(f.read(), b"BC")
+        self.assertIsNone(held.get(hash_ac))
+
+    def test_what_a_unit_was_keeping_does_not_pass_to_the_next(self):
+        held = self.held()
+        digest = hashlib.sha256(b"AB").hexdigest()
+        first = self.bridge(held=held)
+        self.upload(first, path="f", data=base64.b64encode(b"A").decode(), sha256=digest)
+        first.finish()
+        second = self.bridge(held=held)
+        self.upload(second, path="f", data=base64.b64encode(b"B").decode(), append=True)
+        self.assertIsNone(held.get(digest))
+        self.assertEqual(os.listdir(held.folder), [])
+
+    def test_a_file_over_the_bound_is_not_kept(self):
+        held = self.held()
+        digest = hashlib.sha256(b"ABC").hexdigest()
+        b = self.bridge(held=held)
+        with mock.patch.object(cp, "KEEP_BYTES", 2):
+            self.upload(b, path="f", data=base64.b64encode(b"AB").decode(), sha256=digest)
+            self.upload(b, path="f", data=base64.b64encode(b"C").decode(), append=True)
+        self.assertEqual(os.listdir(held.folder), [])
+
+    def test_a_stop_while_a_file_is_kept_leaves_no_temporary_file(self):
+        held = self.held()
+        digest = hashlib.sha256(b"content").hexdigest()
+        with mock.patch.object(cp.os, "replace", side_effect=SystemExit(1)), self.assertRaises(SystemExit):
+            held.keep(digest, b"content")
+        self.assertEqual(os.listdir(held.folder), [])
+
+    def test_a_link_in_place_of_a_kept_file_is_not_followed(self):
+        held = self.held()
+        elsewhere = os.path.join(self.held().folder, "content")
+        with open(elsewhere, "wb") as f:
+            f.write(b"content")
+        digest = hashlib.sha256(b"content").hexdigest()
+        os.symlink(elsewhere, os.path.join(held.folder, digest))
+        self.assertIsNone(held.get(digest))
+
+
+class ConnectionsList(Port):
+    def test_a_closed_connection_leaves_the_servers_list(self):
+        c = self.start()
+        self.assertTrue(until(lambda: len(self.server.wires) == 1))
+        c.close()
+        self.assertTrue(until(lambda: not self.server.wires), "the closed connection stayed in the list")
 
 
 OSWORLD = os.environ.get("OSWORLD_DIR", "")
