@@ -543,7 +543,11 @@ class StandardPieces(unittest.TestCase):
         self.assertIn("<b>stable</b>", panel); self.assertIn("<b>no leak</b>", panel)
         self.assertIn('action="/benchmarks/gsm8k/prove"', panel)
         self.assertIn("No model calls or key required.", panel)
-        self.assertIn('type="hidden" name="dataset" value="test"', panel)
+        self.assertIn('<select name="dataset"><option value="">All datasets</option><option value="test">GSM8K test</option>'
+                      '<option value="platinum">GSM8K-Platinum</option></select>', panel)      # two datasets: a choice
+        html = self.get("/benchmarks/humaneval").get_data(as_text=True)
+        panel = html[html.index('id="standard"'):html.index('id="datasets"')]
+        self.assertIn('type="hidden" name="dataset" value="humaneval"', panel)                # a single one: a fixed value
         self.assertNotIn('<select name="dataset">', panel)
 
     def test_prove_it_starts_cli_prove_here_handed_no_key(self):

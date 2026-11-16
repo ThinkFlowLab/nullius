@@ -23,12 +23,25 @@
       "hub": "",
       "verifier": "The upstream's extract_answer and is_correct, applied to the agent's last message and the problem's reference answer.",
       "notes": "1,319 problems. MIT License."
+    },
+    {
+      "key": "platinum",
+      "title": "GSM8K-Platinum",
+      "tasks": 1209,
+      "official": "https://huggingface.co/datasets/madrylab/gsm8k-platinum",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "The upstream's extract_answer and is_correct, applied to the agent's last message and the problem's reference answer.",
+      "notes": "The test split cleaned by Vendrow et al. (2025): 110 problems removed, 10 answers corrected. MIT License."
     }
   ],
-  "citation": "@article{cobbe2021gsm8k,\n  title={Training Verifiers to Solve Math Word Problems},\n  author={Cobbe, Karl and Kosaraju, Vineet and Bavarian, Mohammad and Chen, Mark and Jun, Heewoo and Kaiser, Lukasz and Plappert, Matthias and Tworek, Jerry and Hilton, Jacob and Nakano, Reiichiro and Hesse, Christopher and Schulman, John},\n  journal={arXiv preprint arXiv:2110.14168},\n  year={2021}\n}",
+  "task_count": 1319,
+  "citation": "@article{cobbe2021gsm8k,\n  title={Training Verifiers to Solve Math Word Problems},\n  author={Cobbe, Karl and Kosaraju, Vineet and Bavarian, Mohammad and Chen, Mark and Jun, Heewoo and Kaiser, Lukasz and Plappert, Matthias and Tworek, Jerry and Hilton, Jacob and Nakano, Reiichiro and Hesse, Christopher and Schulman, John},\n  journal={arXiv preprint arXiv:2110.14168},\n  year={2021}\n}\n\n@misc{vendrow2025largelanguagemodelbenchmarks,\n  title={Do Large Language Model Benchmarks Test Reliability?},\n  author={Joshua Vendrow and Edward Vendrow and Sara Beery and Aleksander Madry},\n  year={2025},\n  eprint={2502.03461},\n  archivePrefix={arXiv},\n  primaryClass={cs.LG},\n  url={https://arxiv.org/abs/2502.03461}\n}",
   "citation_source": "https://github.com/openai/grade-school-math",
   "good_to_know": [
     "Answers must end with a line '#### <number>'. The number is compared as text, so 18.00 does not match 18.",
-    "The test split is run. The Socratic variant has the same questions and answers, with different worked explanations."
+    "The test split is run. The Socratic variant has the same questions and answers, with different worked explanations.",
+    "GSM8K-Platinum is the test split with its errors cleaned. A problem has the same number in both, so the two runs compare problem by problem."
   ]
 }
