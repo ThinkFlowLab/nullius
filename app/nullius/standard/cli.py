@@ -57,7 +57,9 @@ read: the key is the one the run was handed, ``OPENAI_API_KEY``, and the
 endpoint ``OPENAI_BASE_URL`` when it names one (``run_env``). The licences a
 benchmark's environments declare are never in either: the run reads them from
 the benchmark's store (``nullius.secrets``) on this machine, or, on a host, from
-the one line its launcher handed it (``licences``).
+the one line its launcher handed it (``licences``). A data provider's token the
+benchmark declares is the exception: a run without ``--from-run`` takes the
+provider's variable (``HF_TOKEN``) from the environment first.
 """
 from __future__ import annotations
 
@@ -69,7 +71,7 @@ import signal
 import sys
 import tempfile
 
-from nullius import constraints as limits, paths, prices as price_list, progress, secrets, settings
+from nullius import constraints as limits, paths, prices as price_list, progress, providers, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed, just like the unified CLI does.
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
@@ -100,25 +102,26 @@ def run_env(provider: str, env=os.environ) -> dict:
     ``execution``'s launcher hands every run its one key as ``OPENAI_API_KEY``
     and its endpoint as ``OPENAI_BASE_URL`` (empty for OpenAI's own), so they
     are named here as the provider's own settings and nothing else is."""
-    p = run.PROVIDERS[provider]
     out = {k: v for k, v in env.items() if k in run.KEEP}
     if env.get("OPENAI_API_KEY"):
-        out[p["key"]] = env["OPENAI_API_KEY"]
-    if "base_var" in p and env.get("OPENAI_BASE_URL"):
-        out[p["base_var"]] = env["OPENAI_BASE_URL"]
+        out[providers.key_setting(provider)] = env["OPENAI_API_KEY"]
+    if provider == "custom" and env.get("OPENAI_BASE_URL"):
+        out["MODEL_API_URL"] = env["OPENAI_BASE_URL"]
     return out
 
 
-def licences(bench: dict, env=os.environ):
+def licences(bench: dict, env=os.environ, from_run: bool = False):
     """(``run.Licences``, the folder to remove after) for a run on a host,
     whose launcher handed it the benchmark's licences as one line
     (``secrets.HANDED``, ``execution``): a licence file is written to
     ``NULLIUS_LICENCE_DIR`` - in memory, ``/dev/shm`` - and nowhere else.
-    The line leaves this process's environment once read. (None, None) on
-    this machine: the run reads the benchmark's own store."""
+    The line leaves this process's environment once read. On this machine
+    the run reads the benchmark's own store; a headless run (not
+    ``from_run``) first takes a data provider's token the benchmark declares
+    from ``env``, under the provider's variable (``HF_TOKEN``)."""
     line = env.pop(secrets.HANDED, None)
     if not line:
-        return None, None
+        return (None if from_run else run.Licences(bench, environ=env)), None
     shm = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
     spill = env.get("NULLIUS_LICENCE_DIR") or os.path.join(shm, f"nullius-{os.getpid()}")
     return run.Licences.handed(bench, secrets.unpack(line), spill), spill
@@ -520,7 +523,7 @@ def cmd_run(a):
     if why:
         print("refused: constraints:", why)
         return 2
-    held, spill = licences(b)
+    held, spill = licences(b, from_run=a.from_run)
     try:
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
@@ -600,7 +603,7 @@ def cmd_fidelity(a):
 
 def cmd_prove(a):
     b = _bench(a.benchmark)
-    held, spill = licences(b)
+    held, spill = licences(b, from_run=a.from_run)
     try:
         got = prove.prove(b, dataset=a.dataset, limit=a.limit, jobs_root=a.jobs, provider=a.provider, judge_model=a.judge_model,
                           stamp=a.stamp, concurrency=a.concurrency, say=print, shard=_shard(a.shard), launch=a.launch,
@@ -655,7 +658,7 @@ def main(argv=None):
                        + ("; or nop, oracle: a control the benchmark declares; or original, model: one of its setups" if name == "run" else ""))
         p.add_argument("--model", required=name == "conform",
                        help="the model (a control needs none; original takes one of the paper's, its first by default)" if name == "run" else None)
-        p.add_argument("--provider", default="openai", choices=sorted(run.PROVIDERS))
+        p.add_argument("--provider", default="openai", choices=sorted(providers.PROVIDERS))
         p.add_argument("--jobs", default="jobs_standard", help="where jobs are written (default jobs_standard/, gitignored)")
         p.add_argument("--unsandboxed", action="store_true",
                        help="allow an agent, or a setup check without Docker, to execute code on this machine as you")
@@ -707,7 +710,7 @@ def main(argv=None):
     v.add_argument("benchmark")
     v.add_argument("--dataset", help="one dataset (default: each)")
     v.add_argument("--limit", type=int, help="the first N units of each dataset (the record says so)")
-    v.add_argument("--provider", default="openai", choices=sorted(run.PROVIDERS), help="a judged benchmark's: the judge's provider")
+    v.add_argument("--provider", default="openai", choices=sorted(providers.PROVIDERS), help="a judged benchmark's: the judge's provider")
     v.add_argument("--judge-model", help="a judged benchmark: this judge instead of its official one")
     v.add_argument("-j", "--concurrency", type=int, default=4)
     v.add_argument("--jobs", default="jobs_standard", help="where the control jobs are written (default jobs_standard/)")

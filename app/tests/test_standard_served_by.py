@@ -481,7 +481,7 @@ class TheRun(WithUpstream):
 
     def test_a_pinned_run_records_its_pin_and_says_who_served_each_unit(self):
         b = dict(self.b, datasets=[{"id": "responding", "units": 3}])
-        with mock.patch.dict(run.PROVIDERS, {"openrouter": dict(run.PROVIDERS["openrouter"], base=self.base)}):
+        with mock.patch.dict(run.providers.PRESETS, {"openrouter": dict(run.providers.PRESETS["openrouter"], base=self.base)}):
             job_dir = run.run(b, self.a, model="m-1", provider="openrouter", env={"OPENROUTER_API_KEY": "or-test"}, unsandboxed=True,
                               jobs_root=os.path.join(self.tmp, "jobs"), say=lambda s: None, dataset="responding",
                               served_by={"m-1": ["prov-a"]})

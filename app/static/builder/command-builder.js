@@ -642,7 +642,7 @@
     if (step === S.model) {
       const lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
       return `<div class="nb-sectionhead"><h2>Choose the model.</h2></div>` + modelChoiceCards(rec)
-        + providerField(rec, C.PROVIDERS)
+        + providerField(rec, C.providersOf(rec))
         + field('Model', 'model', rec.model, {list:'nb-models', placeholder:paper && C.paperListed(rec) ? 'Choose a paper model' : 'Search or enter a model ID'})
         + servedField(rec, 'model')
         // the benchmark's other models: the user simulator its conversations need, the judge that grades - each its official one
@@ -712,7 +712,7 @@
       if(C.needsCredentials(rec)){
         const controlOnly=!rec.agents.some(id=>!schema.agents.find(a=>a.id===id)?.control);
         const tau3=rec.benchmark==='tau3-bench';
-        html+=providerField(rec,C.PROVIDERS);
+        html+=providerField(rec,C.providersOf(rec));
         if(tau3&&controlOnly)html+=`<div class="nb-two">${field('Model · customer','userModel',rec.userModel,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'})}${field('Model · evaluator','evalModel',rec.evalModel,{list:'nb-models',placeholder:'same as the customer'})}</div>`;
         else if(tau3)html+=field('Model · agent','model',rec.model,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'})+`<div class="nb-two">${field('Model · customer','userModel',rec.userModel,{list:'nb-models',placeholder:'same as the agent'})}${field('Model · evaluator','evalModel',rec.evalModel,{list:'nb-models',placeholder:'same as the customer'})}</div>`;
         else html+=field('Model','model',rec.model,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'});

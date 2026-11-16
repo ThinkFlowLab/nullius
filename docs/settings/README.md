@@ -20,13 +20,14 @@ changes save automatically; data providers and benchmark credentials use **Save*
 
 | Variable | Used by |
 | --- | --- |
-| `MODEL_API_KEY`, `MODEL_API_URL` | The OpenAI-compatible endpoint recipes use when they name none; the URL required, the key optional |
-| `MODEL_<ID>_NAME`, `MODEL_<ID>_API_URL`, `MODEL_<ID>_API_KEY` | Each further [OpenAI-compatible endpoint](model-providers.md#openai-compatible-endpoints) |
+| `MODEL_API_KEY`, `MODEL_API_URL` | The custom provider recipes use when they name none; the URL required, the key optional |
+| `MODEL_<ID>`, `MODEL_<ID>_API_KEY` | Each further [custom provider](model-providers.md#custom-providers): its record as JSON, and its key |
+| `OPENROUTER`, `OPENAI`, `ANTHROPIC`, `TYPESAFE` | Endpoints added to a preset, as JSON ([file and environment](model-providers.md#settings-file-and-environment)) |
 | `OPENAI_API_KEY` | Runs on OpenAI |
 | `OPENROUTER_API_KEY` | Runs on OpenRouter |
-| `ANTHROPIC_API_KEY` | Standard runs on Anthropic; the relay alone holds it |
-| `SYSTEM_ONE_PROVIDER`, `SYSTEM_ONE_MODEL`, `TYPESAFE_API_KEY` | [System One](system-one.md) |
-| `LLM_JUDGE_PROVIDER`, `LLM_JUDGE_MODEL` | [LLM judge](llm-judge.md) |
+| `ANTHROPIC_API_KEY` | Standard runs whose agent speaks `messages`, and the LLM judge on Anthropic |
+| `SYSTEM_ONE_PROVIDER`, `SYSTEM_ONE_PROTOCOL`, `SYSTEM_ONE_MODEL`, `TYPESAFE_API_KEY` | [System One](system-one.md) |
+| `LLM_JUDGE_PROVIDER`, `LLM_JUDGE_PROTOCOL`, `LLM_JUDGE_MODEL` | [LLM judge](llm-judge.md) |
 | `AGENT_KEYS` | Comma-separated agent key names; Harbor runs only |
 | `HOSTS` | The run hosts |
 | `HOST_CONSTRAINTS` | What Nullius may use on each machine: [constraints](run-hosts.md#constraints) |

@@ -652,8 +652,10 @@ class Relay:
             text = text.replace(k, "[REDACTED]")
         return redact(text)[:200]
 
-    def _headers(self, caller, facts: bool = False) -> Dict[str, str]:
-        """``facts``: a pinned Chat Completions or Responses request to
+    def _headers(self, caller, tag: str = "", facts: bool = False) -> Dict[str, str]:
+        """The headers sent on: the key as ``key_header`` says on the agent's own routes; a route pinned
+        to a model of the benchmark's (a judge, a simulator, embeddings) speaks chat, so a bearer header.
+        ``facts``: a pinned Chat Completions or Responses request to
         OpenRouter, sent asking for its routing facts whatever the caller
         said of them."""
         out = forwarded(caller)
@@ -661,11 +663,12 @@ class Relay:
             out = {k: v for k, v in out.items() if k.lower() != "x-openrouter-metadata"}
             out["X-OpenRouter-Metadata"] = "enabled"
         has = {k.lower() for k in out}           # a name in any case is the same header: never send it twice
+        x_api_key = self.key_header == "x-api-key" and tag not in self.models and tag not in self.embedding_models
         for name, value in (("Content-Type", "application/json"), ("Accept", "*/*")) + \
-                (("anthropic-version", ANTHROPIC_VERSION),) * (self.key_header == "x-api-key"):
+                (("anthropic-version", ANTHROPIC_VERSION),) * x_api_key:
             if name.lower() not in has:
                 out[name] = value
-        if self.key_header == "x-api-key":
+        if x_api_key:
             out["x-api-key"] = self.key
         else:
             out["Authorization"] = "Bearer " + self.key
@@ -727,7 +730,7 @@ class Relay:
         try:
             # a Responses reply names its provider in the routing facts alone; a Messages reply names it of itself
             facts = bool(pinned) and self.facts and rest.split("?")[0].endswith(("/chat/completions", "/responses"))
-            conn, r = self.pool.send(h.command, rest, raw if h.command == "POST" else None, self._headers(h.headers, facts))
+            conn, r = self.pool.send(h.command, rest, raw if h.command == "POST" else None, self._headers(h.headers, tag, facts))
             status, kind, back = r.status, r.getheader("Content-Type") or "application/json", returned(r.headers)
         except Exception as e:
             status, kind = 502, "application/json"

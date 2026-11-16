@@ -224,17 +224,7 @@
 .settings-dialog .dialog-status:empty { display: none; }
 .settings-dialog [data-cancel] { margin-left: auto; }
 
-/* the judge in use: two cards, one checked once JUDGE is set; the one in use says so either way */
-.st-judges { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px; margin: 0 0 16px; }
-.st-judge { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
-.st-judge:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
-.st-judge input { margin-top: 3px; }
-.st-judge b { font-weight: 500; }
-.st-judge small { display: block; color: var(--text-dim); font-size: 12px; margin-top: 3px; }
-
 [data-when][hidden] { display: none; }
-.st-judge small { overflow-wrap: anywhere; }
-.st-judge > span { min-width: 0; }
 
 /* Grouped settings navigation, shared by the modal and direct page. */
 .st-index .st-nav-group { display: flex; flex-direction: column; gap: 2px; }
@@ -312,12 +302,12 @@
 .st-provider-summary { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .st-provider-summary > div { flex: 1; min-width: 0; }
 .st-provider-summary h3 { overflow-wrap: anywhere; }
+.st-endpoints { margin-top: 4px; }
+.st-endpoint-rows { display: flex; flex-direction: column; gap: 18px; padding-top: 8px; }
+.st-endpoints > summary { display: flex; align-items: center; padding: 10px 0; font-size: 13px; }
 .st-provider-summary .st-about { margin-top: 3px; }
 .st-provider-done { align-self: flex-end; }
 .st-provider-ask { position: static; width: 420px; max-width: 100%; box-sizing: border-box; margin: 12px 0 0 auto; }
-.st-judge-single { margin-bottom: 0; }
-.st-judge-single .st-judge { border: 0; padding: 0; background: transparent; }
-.st-judge-single input { display: none; }
 
 /* Labels follow the action row, not the combined action and status height. */
 .st-guidance .st-row { align-items: start; }

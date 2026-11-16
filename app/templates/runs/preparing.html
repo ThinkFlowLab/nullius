@@ -10,5 +10,5 @@
   {% elif ex.plan.runner == 'standard' %}<p class="subtitle">Started from the builder with Nullius. This page becomes the live board as soon as the install is done and the run starts.</p>
   {% else %}<p class="subtitle">Started from the builder with the {{ ex.plan.runner }} runner. This page becomes the live board as soon as this arm's questions are chosen, after the install.</p>{% endif %}
 </header>
-{{ execution_strip(ex, csrf, waiting=true, own=own) }}
+{{ execution_strip(ex, csrf, waiting=true, own=own, deletable=deletable) }}
 {% endblock %}

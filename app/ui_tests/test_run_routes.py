@@ -17,7 +17,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-from nullius import execution, workspace
+from nullius import execution, hosts, workspace
 from nullius.runs import parse
 from .test_routes import web
 
@@ -506,6 +506,149 @@ class WorkspaceDelete(unittest.TestCase):
         self.assertIsNone(web.shared.STATE["workspace"])                                                       # the open one closed
         again = self.client.post(f"/workspaces/delete/{self.ws.name}", data={"csrf": self.csrf}, headers={"Origin": "http://localhost"}, follow_redirects=True); self.addCleanup(again.close)
         self.assertIn("No workspace called", again.get_data(as_text=True))
+
+
+class RunDelete(unittest.TestCase):
+    """Delete on a launch in Runs: asked in a dialog, with every run of the launch
+    and what else goes, its shards with it; the job page only links to it; a
+    form token and runs that have ended are needed; the launch leaves every page."""
+    def setUp(self):
+        from nullius.judge import store
+        from tests.test_workspace import _job_dir, _write_json
+        self._job_dir, self._write_json = _job_dir, _write_json
+        self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        self.tmp = Path(tempfile.mkdtemp(prefix="nullius-rundel-")); self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = str(self.tmp / "ws")
+        self.stack.enter_context(patch.dict(os.environ, {"RUNS_DIR": str(self.tmp / "runs")}))
+        self.stack.enter_context(patch.dict(web.app.config, TESTING=True))
+        self.stack.enter_context(patch.dict(execution.EXECUTIONS, clear=True))
+        self.stack.enter_context(patch.object(web.shared, "WS_HOME", self.home))
+        self.stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}))
+        self.run_dir = self.tmp / "runs" / "r1"
+        _write_json(str(self.run_dir / "run.json"), {"plan": execution.Plan(name="r1", script="true", jobs=[{"name": "r1-a"}, {"name": "r1-b"}]).to_dict(), "state": "done", "step": "run"})
+        _job_dir(str(self.run_dir / "jobs"), "r1-a"); _job_dir(str(self.run_dir / "jobs"), "r1-b")
+        execution.restore()
+        self.ex = next(iter(execution.EXECUTIONS.values()))
+        self.ws = workspace.create(self.home, [str(self.run_dir / "jobs")], label="witty pelican")
+        workspace.create(self.home, [str(self.run_dir / "jobs")], label="sharp lemur")
+        store.save(self.ws.dir, "r1-a", "t0", {"questions": "v", "answers": {}})
+        web.shared.open_workspace(self.ws)
+        self.client = web.app.test_client()
+        r = self.client.get("/workspaces"); self.addCleanup(r.close)
+        with self.client.session_transaction() as s:
+            self.csrf = s["csrf"]
+
+    def delete(self, key=None, csrf=None, hosts=()):
+        r = self.client.post(f"/launch/{key or 'run:' + self.ex.id}/delete", data={"csrf": self.csrf if csrf is None else csrf, "host": list(hosts)},
+                             headers={"Origin": "http://localhost"})
+        self.addCleanup(r.close)
+        return r
+
+    def get(self, path):
+        r = self.client.get(path); self.addCleanup(r.close)
+        return r
+
+    def sharded(self, foreign=False):
+        """A launch of two shards, each a run of its own on a host of its own; with *foreign*, a third shard from elsewhere."""
+        from tests.test_standard_shard import write_shard
+        roots = []
+        for i in (1, 2):
+            d = self.tmp / "runs" / f"s{i}"
+            plan = execution.Plan(name=f"s{i}", script="true", host=hosts.parse(f"ubuntu@10.0.0.{3 + i}"), jobs=[{"name": f"L1-shard-{i}of3"}])
+            self._write_json(str(d / "run.json"), {"plan": plan.to_dict(), "state": "done", "step": "run"})
+            write_shard(str(d / "jobs"), f"L1-shard-{i}of3", [f"u-{i}"], i, 3, total=3)
+            roots.append(str(d / "jobs"))
+        if foreign:
+            write_shard(str(self.tmp / "elsewhere"), "L1-shard-3of3", ["u-3"], 3, 3, total=3)
+            roots.append(str(self.tmp / "elsewhere"))
+        execution.restore()
+        key = "run:" + next(e.id for e in execution.EXECUTIONS.values() if e.plan.name == "s1")
+        web.shared.open_workspace(workspace.create(self.home, roots, label="calm otter"))
+        return key
+
+    def test_the_launch_asks_what_goes(self):
+        html = self.get("/runs?view=launch").get_data(as_text=True)
+        self.assertIn(f'action="/launch/run:{self.ex.id}/delete"', html)
+        self.assertIn(f'<input type="hidden" name="csrf" value="{self.csrf}">', html)
+        self.assertIn('<button type="button" class="btn sm ghost danger launch-delete-btn" aria-haspopup="dialog">Delete launch</button>', html)
+        self.assertEqual(html.count('<dialog class="std-how launch-delete" id="launch-delete" aria-labelledby="launch-delete-h"></dialog>'), 1)
+        said = re.sub(r"<[^>]+>", " ", re.search(r'<template class="launch-ask">(.*?)</template>', html, re.S).group(1))
+        self.assertRegex(" ".join(said.split()), r"^Delete launch r1-\* \S+ \S+ 1 folder · \d+(\.\d)? (Bytes|kB) · 1 judgement · "
+                                                 r"workspaces (witty pelican, sharp lemur|sharp lemur, witty pelican) Keep it Delete launch$")
+        self.assertIn('<button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete launch</button>', html)
+        self.assertNotIn('name="host"', html)                                              # ran here: no host copy
+        self.assertNotIn("Delete launch", self.get("/runs?view=all").get_data(as_text=True).split('id="view-all"')[1])   # rows there are jobs
+
+    def test_the_job_page_links_to_its_launch_and_the_link_opens_the_question(self):
+        html = self.get("/job/r1-a").get_data(as_text=True)
+        link = f"/runs?view=launch&amp;delete=run:{self.ex.id}#run-{self.ex.id}"
+        self.assertIn(f'href="{link}">Delete its launch…</a>', html)
+        self.assertNotIn("/delete\"", html)                                                # never this job alone
+        runs = self.get(link.replace("&amp;", "&").split("#")[0]).get_data(as_text=True)
+        self.assertIn(f'id="run-{self.ex.id}"', runs)
+        self.assertIn("launch-delete-btn", runs.split(f'id="run-{self.ex.id}"')[1].split("</section>")[0])   # the button ?delete= opens the dialog from
+
+    def test_a_sharded_launch_goes_whole_each_copy_from_its_own_host(self):
+        key = self.sharded()
+        html = self.get("/runs?view=launch").get_data(as_text=True)
+        self.assertEqual(html.count('class="launch"'), 1)
+        said = re.sub(r"<[^>]+>", " ", re.search(r'<template class="launch-ask">(.*?)</template>', html, re.S).group(1))
+        self.assertRegex(" ".join(said.split()), r"^Delete launch L1 \S+ \(2 shards\) 2 folders · [^·]+ · workspace calm otter Its copy on")
+        for h in ("ubuntu@10.0.0.4", "ubuntu@10.0.0.5"):
+            self.assertIn(f'<input type="checkbox" name="host" value="{h}" checked> Its copy on <b>{h}</b>', html)
+        self.assertIn(f"delete={key}", self.get("/job/L1-shard-2of3").get_data(as_text=True))
+        calls = []
+        with patch.object(execution, "subprocess_run", lambda argv, timeout: calls.append(argv[-2]) or (0, "")):
+            r = self.delete(key, hosts=["ubuntu@10.0.0.4", "ubuntu@10.0.0.5"])
+        self.assertEqual(sorted(calls), ["ubuntu@10.0.0.4", "ubuntu@10.0.0.5"])
+        self.assertFalse((self.tmp / "runs" / "s1").exists()); self.assertFalse((self.tmp / "runs" / "s2").exists())
+        self.assertIn('Deleted launch <span class="mono">L1</span>.', self.get(r.headers["Location"]).get_data(as_text=True))
+
+    def test_a_host_that_does_not_answer_is_said_in_the_notice(self):
+        key = self.sharded()
+        with patch.object(execution, "subprocess_run", lambda argv, timeout: (255, "ssh: connect to host: No route") if argv[-2].endswith(".5") else (0, "")):
+            r = self.delete(key, hosts=["ubuntu@10.0.0.4", "ubuntu@10.0.0.5"])
+        self.assertIn('Deleted launch <span class="mono">L1</span>; the copy of s2 on ubuntu@10.0.0.5 stays: ssh: connect to host: No route.',
+                      self.get(r.headers["Location"]).get_data(as_text=True))
+
+    def test_a_launch_with_a_job_from_elsewhere_has_no_delete(self):
+        key = self.sharded(foreign=True)
+        html = self.get("/runs?view=launch").get_data(as_text=True)
+        self.assertEqual(html.count('class="launch"'), 1)
+        self.assertNotIn("Delete launch", html)
+        self.assertNotIn("Delete its launch", self.get("/job/L1-shard-1of3").get_data(as_text=True))
+        r = self.delete(key)
+        self.assertIn("L1 has jobs Nullius did not run: it cannot be deleted here.", self.get(r.headers["Location"]).get_data(as_text=True))
+        self.assertTrue((self.tmp / "runs" / "s1").is_dir())
+
+    def test_a_launch_with_a_run_still_going_has_no_delete_and_is_refused(self):
+        key = self.sharded()
+        next(e for e in execution.EXECUTIONS.values() if e.plan.name == "s2").state = "running"
+        self.assertNotIn("Delete launch", self.get("/runs?view=launch").get_data(as_text=True))
+        self.assertNotIn("Delete its launch", self.get("/job/L1-shard-1of3").get_data(as_text=True))
+        r = self.delete(key)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("s2 is running: stop it before you delete it", self.get(r.headers["Location"]).get_data(as_text=True))
+        self.assertTrue((self.tmp / "runs" / "s1").is_dir())
+
+    def test_a_form_token_is_needed(self):
+        self.assertEqual(self.delete(csrf="").status_code, 403)
+        self.assertEqual(self.delete(csrf="stale").status_code, 403)
+        self.assertTrue(self.run_dir.is_dir())
+
+    def test_delete_removes_the_launch_from_every_page(self):
+        r = self.delete()
+        self.assertEqual((r.status_code, r.headers["Location"]), (302, "/runs?view=launch"))
+        notice = self.client.get(r.headers["Location"], follow_redirects=True); self.addCleanup(notice.close)
+        self.assertIn('Deleted launch <span class="mono">r1-*</span>.', notice.get_data(as_text=True))
+        self.assertFalse(self.run_dir.exists())
+        self.assertEqual(web.shared.STATE["workspace"].roots, []); self.assertEqual(web.shared.STATE["job_roots"], [])
+        self.assertTrue(all(w.roots == [] for w in workspace.list_all(self.home)))
+        self.assertFalse((Path(self.ws.dir) / "judgements" / "r1-a").exists())
+        self.assertEqual(self.get("/job/r1-a").status_code, 404)
+        self.assertEqual(self.delete().status_code, 404)                                    # gone from every launch too
+        runs = self.client.get("/runs?view=launch", follow_redirects=True); self.addCleanup(runs.close)
+        self.assertEqual(runs.status_code, 200); self.assertNotIn("r1-a", runs.get_data(as_text=True))
 
 
 if __name__ == "__main__":

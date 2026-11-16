@@ -1,7 +1,8 @@
 {% from 'runs/_runtime.html' import what_ran %}
 {% extends "base.html" %}
 {% block title %}Runs — Nullius{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
 
 {# Value filter for one column: a caret in the header opening a checkbox list.
    Values start all-checked; unchecking hides the matching rows. #}
@@ -21,6 +22,9 @@
 </span>
 {% endmacro %}
 
+{#- A row's name as the launch's table shows it: the control, the agent, else its job id past the launch's prefix. #}
+{% macro row_name(r, L) %}{% set j = r.job %}{{ r.control or (j.agent_label if j and j.agent_label else r.job_id[L.prefix|length - 1:] if L.prefix.endswith('*') and r.job_id.startswith(L.prefix[:-1]) else r.job_id) }}{% endmacro %}
+
 {#- One row of a launch's table: a task check (`kind` 'control') or an agent; `part` 'fold' for a participant's
     shards as one row, 'shard' for one of them, '' for a run of one job. #}
 {% macro launch_row(r, g, kind, part='', first=False) %}{% set L = g.launch %}{% set j = r.job %}{% set v = r.verdict %}
@@ -34,7 +38,7 @@
           {%- if kind == 'control' %}
           {%- if part == 'fold' %}{{ r.control }}{% else %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ r.control }}</a>{% endif %} <span class="la-kind">task check</span>
           {%- else %}
-          {%- set name = j.agent_label if j and j.agent_label else r.job_id[L.prefix|length - 1:] if L.prefix.endswith('*') and r.job_id.startswith(L.prefix[:-1]) else r.job_id %}
+          {%- set name = row_name(r, L) %}
           {%- if part == 'fold' %}{{ name }}{% else %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ name }}</a>{% endif %}
           {%- if j and j.runner %} {{ what_ran(j) }}{% elif j and j.agent_version %} <span class="la-ver mono">{{ j.agent_version }}</span>{% endif %}
           {%- endif %}</span>
@@ -127,7 +131,7 @@
     controls), then its agents on one 0-100% scale, then the runs its record named that Harbor has not written yet. -#}
 <div id="view-launch" class="launches"{% if view != 'launch' %} hidden{% endif %}>
   {% for g in launches %}{% set L = g.launch %}
-  <section class="launch" data-launch="{{ L.key }}" aria-label="Launch {{ L.title }}">
+  <section class="launch" data-launch="{{ L.key }}" id="{{ L.key|replace(':', '-') }}" aria-label="Launch {{ L.title }}">
     {% set by_runner = g.agents|map(attribute='job')|select|map(attribute='runner')|select|first %}
     {% set words = g.agents|map(attribute='job')|select|map(attribute='runner_items')|select|first %}
     <header class="launch-head">
@@ -162,10 +166,46 @@
       {% if g.recipe %}<a href="{{ url_for('new_run', run=g.recipe) }}">Open this launch's recipe</a>{% endif %}
       {% if g.compare|length >= 2 %}<a class="btn sm" href="{{ url_for('compare', job=g.compare) }}">Compare these {{ g.compare|length }}</a>
       {% elif g.agents %}<span class="faint" title="Two finished agents with a verdict are needed">Compare needs two finished agents</span>{% endif %}
+      {#- every row is of runs Nullius made: the launch goes as one, its shards with it, asked first in the dialog below #}
+      {% if g.gone %}{% set gone, rows = g.gone, g.controls + g.agents %}{% set n, wss, k = gone.judgements, gone.workspaces, gone.runs|length %}
+      <button type="button" class="btn sm ghost danger launch-delete-btn" aria-haspopup="dialog">Delete launch</button>
+      <template class="launch-ask">
+        <div class="std-how-head"><h2 id="launch-delete-h">Delete launch {{ L.title }}</h2></div>
+        <form method="post" action="{{ url_for('launch_delete', key=L.key) }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+          <ul>{% for r in rows %}<li>{{ row_name(r, L) }}{% if r.shards %} ({{ r.shards|length }} shards){% endif %}</li>{% endfor %}</ul>
+          <p>{{ k }} folder{{ '' if k == 1 else 's' }} · {{ gone.bytes|filesizeformat }}{% if n %} · {{ n }} judgement{{ '' if n == 1 else 's' }}{% endif %}{% if wss %} · workspace{{ '' if wss|length == 1 else 's' }} {{ wss|join(', ') }}{% endif %}</p>
+          {% for h, c in gone.hosts.items() %}<label><input type="checkbox" name="host" value="{{ h }}" checked> Its cop{{ 'y' if c == 1 else 'ies' }} on <b>{{ h }}</b></label>{% endfor %}
+          <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete launch</button></div>
+        </form>
+      </template>{% endif %}
     </footer>
   </section>
   {% endfor %}
+  {#- one dialog for every launch: its Delete fills it from the launch's template; ?delete=<key> opens it on load #}
+  <dialog class="std-how launch-delete" id="launch-delete" aria-labelledby="launch-delete-h"></dialog>
 </div>
+<script>
+(() => {
+  const d = document.getElementById('launch-delete');
+  const btn = key => document.querySelector(`.launch[data-launch="${CSS.escape(key)}"] .launch-delete-btn`);
+  let key = '';
+  const open = b => {
+    const l = b.closest('.launch');
+    key = l.dataset.launch;
+    d.replaceChildren(l.querySelector('template.launch-ask').content.cloneNode(true));
+    d.showModal();
+  };
+  document.addEventListener('click', e => { const b = e.target.closest('.launch-delete-btn'); if (b) open(b); });
+  d.addEventListener('click', e => {   // the backdrop, not the dialog's own padding
+    const r = d.getBoundingClientRect();
+    if (e.target === d && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) d.close();
+  });
+  d.addEventListener('close', () => btn(key)?.focus());   // the button again, though a refresh replaced its block
+  const b = btn(new URLSearchParams(location.search).get('delete') || '');
+  if (b) { b.focus(); open(b); }
+})();
+</script>
 
 <div id="view-all"{% if view != 'all' %} hidden{% endif %}>
 <div class="table-tools">

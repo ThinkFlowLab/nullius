@@ -227,6 +227,34 @@ def delete(home_dir: str, name: str) -> bool:
     return True
 
 
+def holding(home_dir: str, folder: str) -> list:
+    """Every workspace with a root in *folder*: [(workspace, those roots)]."""
+    inside = os.path.join(os.path.realpath(folder), "")
+    found = []
+    for ws in list_all(home_dir):
+        roots = [r for r in ws.roots if os.path.join(os.path.realpath(r), "").startswith(inside)]
+        if roots:
+            found.append((ws, roots))
+    return found
+
+
+def forget(ws: Workspace, roots, job_dirs) -> None:
+    """*ws* without *roots*, and without its parsed jobs of *job_dirs*."""
+    ws.roots = [r for r in ws.roots if r not in roots]
+    ws.job_roots = [r for r in ws.job_roots if r not in roots]
+    save(ws)
+    index = job_index(ws)
+    for d in job_dirs:
+        path = _cache_file(ws, d)
+        with _DECODED_LOCK:
+            _DECODED.pop(path, None)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        index.pop(d, None)
+    _write_index(ws, index)
+
 
 def signature(job_dir: str) -> str:
     """What the parse of *job_dir* depends on: the files it reads, by size

@@ -22,7 +22,6 @@ from nullius import providers
 from nullius.standard import container
 
 CONTROLS = ("nop", "oracle")
-PROVIDER_KEYS = ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "MODEL_API_URL")
 
 SECTIONS = [
     {"id": "setup", "name": "Set up", "page": "settings_page", "where": "Settings", "subs": [
@@ -85,7 +84,7 @@ def facts(env, jobs: Iterable[dict] = (), judged: bool = False, docker: Optional
     agents = [(j.get("agent") or "").lower() for j in jobs]
     found = (docker or docker_answers)()
     return {
-        "provider": any((env.get(k) or "").strip() for k in PROVIDER_KEYS) or bool(providers.endpoints(env)),
+        "provider": bool(providers.available(env)),            # a run provider: a TypeSafe key serves the judge only
         "where": bool((env.get("HOSTS") or "").strip()) or found,
         "judge": bool(client.system_one(env)) or bool(client.llm_judge(env)),
         "control_run": any(a in CONTROLS for a in agents),

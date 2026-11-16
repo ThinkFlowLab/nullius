@@ -54,13 +54,13 @@ If the recipe's provider failed its last [test in Settings](settings/model-provi
 
 ### Which providers
 
-A provider is *set* when Settings holds `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or the URL of an OpenAI-compatible endpoint, for both runners. Each OpenAI-compatible endpoint is a choice of its own, listed by its name.
+A provider is *set* when Settings holds its key (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`), or the base URL of a custom provider. Each custom provider is a choice of its own, listed by its name. The Model step offers a provider only where it serves what the recipe's agents speak ([protocols](settings/model-providers.md#protocols)): Anthropic for an agent of the standard that speaks `messages`, never for a Harbor recipe.
 
 | Set in Settings | Model stage | Run |
 | --- | --- | --- |
 | One | That provider, nothing to choose | Open |
 | Several | A choice among them | Open |
-| None | All three | Disabled until a provider is configured |
+| None | Every provider that fits | Disabled until a provider is configured |
 | A recipe naming one that is not set | Kept, marked *not set in Settings* | Disabled until another is chosen |
 
 A recipe of controls alone needs no key unless the benchmark uses a judge or embedding model.
@@ -68,17 +68,18 @@ A recipe of controls alone needs no key unless the benchmark uses a judge or emb
 | Provider | Key | Endpoint |
 | --- | --- | --- |
 | OpenRouter | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1`, fixed |
-| OpenAI | `OPENAI_API_KEY` | api.openai.com |
-| OpenAI-compatible | The endpoint's key, optional (placeholder `local` without it) | The endpoint's URL, required |
+| OpenAI | `OPENAI_API_KEY` | `https://api.openai.com/v1`, fixed |
+| Anthropic | `ANTHROPIC_API_KEY` | `https://api.anthropic.com/v1`, fixed |
+| Custom | The provider's key, optional (placeholder `local` without it) | The provider's base URL, required |
 
-A recipe on an OpenAI-compatible endpoint records `"provider": "custom"` and
+A recipe on a custom provider records `"provider": "custom"` and
 the endpoint's id, `"endpoint": "GPU_BOX"`. The id does not change when the
 endpoint is renamed. A recipe without an `endpoint` uses the one at
 `MODEL_API_URL`. A recipe on an endpoint that was removed keeps it, marked
 *not set in Settings*, and Run stays disabled until another is chosen.
 
 The Model step searches the selected provider's model catalogue: OpenRouter,
-OpenAI, or the `/models` endpoint of the selected OpenAI-compatible endpoint.
+OpenAI, Anthropic, or the `/models` endpoint of the selected custom provider.
 Keys stay on the Nullius host. Choose a result to use its exact model ID, or
 enter an ID manually if the catalogue is unavailable. An Original setup with
 a declared model list keeps those published choices.
@@ -105,6 +106,7 @@ a declared model list keeps those published choices.
 | Proofs | Local runs save to the user catalogue. A host uses a writable copy in its run's `catalogue/`, isolated from the host's own entries; that copy and its proofs mirror back alongside `jobs/`, without changing the active user catalogue |
 | Docker or Podman | The engine must answer `ps` (`docker ps`, or `podman ps` for the standard's container backend), or the run stops before it starts |
 | Stop | Ends the current part (exit 130), records `stopped`; the next part never starts |
+| Delete launch | On the launch in Runs, *By launch*, once every run of it has ended; asks first. The job page links to it. Deletes each run's `<RUNS_DIR>/<name>/` (a shard per machine included), every job of the launch, their judgements in every workspace, and each run's copy on its host when ticked. A run still going is refused: stop it first. A launch with jobs from elsewhere has no Delete |
 | Restart of Nullius | `execution.restore` reattaches from `runs/<name>/run.json`; the job goes back into the workspace it started in, while that workspace exists |
 | Cannot run from the page | Generated tasks and custom agents are not supported by Run |
 | Refused | Reads *refused* on the runs page, with why; the job was never written |
