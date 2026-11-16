@@ -105,8 +105,10 @@ PATTERN_WORDS = {NOT_BLANK: "is not blank", SHA256: "is 64 lowercase hexadecimal
 def tools(screen):
     """The tools for a screen of ``screen`` (width, height) pixels: [(name, description, input schema)]."""
     w, h = screen
-    x = {"type": "integer", "minimum": 0, "maximum": w - 1, "description": "Pixels from the screen's left edge"}
-    y = {"type": "integer", "minimum": 0, "maximum": h - 1, "description": "Pixels from the screen's top edge"}
+    x = {"type": "integer", "minimum": 0, "maximum": w - 1,
+         "description": "Pixels of the screenshot at the screen's size, from its left edge"}
+    y = {"type": "integer", "minimum": 0, "maximum": h - 1,
+         "description": "Pixels of the screenshot at the screen's size, from its top edge"}
     button = {"type": "string", "enum": ["left", "right", "middle"], "description": "Default left"}
     clicks = {"type": "integer", "minimum": -100, "maximum": 100}
     text = {"type": "string", "minLength": 1}
@@ -118,7 +120,7 @@ def tools(screen):
     return [
         ("info", "The screen's size, the steps in all and left, the pause after each action in seconds, the seconds "
                  "python waits for the desktop's reply, and the desktop user's password.", obj({})),
-        ("screenshot", "The screen now, as a PNG image at its own size.", obj({})),
+        ("screenshot", "The screen now, as a PNG image at its own size. Look at it before the first pointing action.", obj({})),
         ("read", "A file of the desktop: data is its content in base64, or null when there is no such file.",
          obj({"path": text}, ["path"])),
         ("python", "Runs Python code in the desktop as its user and returns its reply: status, output, error, "
@@ -132,32 +134,38 @@ def tools(screen):
               "append": {"type": "boolean"}, "sha256": {"type": "string", "pattern": SHA256}}, ["path"],
              anyOf=[{"required": ["data"]}, {"required": ["sha256"]}],
              **{"if": {"not": {"required": ["data"]}}, "then": {"properties": {"append": {"const": False}}}})),
-        ("click", "One step: a click at the point.",
+        ("click", "One step: a click at the point. Returns the screen as a PNG image after the pause.",
          obj({"x": x, "y": y, "button": button,
               "count": {"type": "integer", "minimum": 1, "maximum": 3, "description": "Default 1"}}, ["x", "y"])),
-        ("move", "One step: the pointer moved to the point.", obj({"x": x, "y": y}, ["x", "y"])),
-        ("drag", "One step: a press at (x, y), a move, and a release at (to_x, to_y).",
+        ("move", "One step: the pointer moved to the point. Returns the screen as a PNG image after the pause.",
+         obj({"x": x, "y": y}, ["x", "y"])),
+        ("drag", "One step: a press at (x, y), a move, and a release at (to_x, to_y). "
+                 "Returns the screen as a PNG image after the pause.",
          obj({"x": x, "y": y, "to_x": x, "to_y": y, "button": button}, ["x", "y", "to_x", "to_y"])),
         ("scroll", "One step: the wheel turned at the point, dy clicks down (negative: up) and dx clicks right "
-                   "(negative: left); at least one is not 0.",
+                   "(negative: left); at least one is not 0. Returns the screen as a PNG image after the pause.",
          obj({"x": x, "y": y, "dy": clicks, "dx": clicks}, ["x", "y"],
              anyOf=[{"required": ["dy"], "properties": {"dy": {"not": {"const": 0}}}},
                     {"required": ["dx"], "properties": {"dx": {"not": {"const": 0}}}}])),
-        ("type", "One step: the text typed key by key.", obj({"text": text}, ["text"])),
-        ("key", "One step: the keys pressed together, such as [\"ctrl\", \"s\"].",
+        ("type", "One step: the text typed key by key. Returns the screen as a PNG image after the pause.",
+         obj({"text": text}, ["text"])),
+        ("key", "One step: the keys pressed together, such as [\"ctrl\", \"s\"]. "
+                "Returns the screen as a PNG image after the pause.",
          obj({"keys": {"type": "array", "minItems": 1, "maxItems": 8,
                        "items": {"type": "string", "minLength": 1, "maxLength": 32}}}, ["keys"])),
-        ("wait", "One step: no action, the pause alone.", obj({})),
+        ("wait", "One step: no action, the pause alone. Returns the screen as a PNG image after the pause.", obj({})),
         ("step", "One step of several actions, run in order: each is a line of Python run in the desktop with "
-                 "pyautogui and time imported, or WAIT. An empty list is a step with no action. The screen comes back "
-                 "when screenshot is true.",
+                 "pyautogui and time imported, or WAIT. An empty list is a step with no action. Returns the screen "
+                 "as a PNG image after the actions and pauses when screenshot is true.",
          obj({"actions": {"type": "array", "items": {
                  "type": "string", "pattern": NOT_BLANK,
                  "not": {"pattern": f"^{BLANK}*(DONE|FAIL){BLANK}*$",
                          "description": "the task's end is the tool done or fail, not an action of step"}}},
               "response": {"type": "string"}, "screenshot": {"type": "boolean"}}, ["actions"])),
-        ("done", "The last step: the task is complete.", obj({"message": {"type": "string"}})),
-        ("fail", "The last step: the task cannot be done.", obj({"reason": {"type": "string"}})),
+        ("done", "The last step: the task is complete. Returns {steps_left, done}, with no image.",
+         obj({"message": {"type": "string"}})),
+        ("fail", "The last step: the task cannot be done. Returns {steps_left, done}, with no image.",
+         obj({"reason": {"type": "string"}})),
     ]
 
 
@@ -528,9 +536,12 @@ class Bridge:
     def instructions(self):
         w, h = self.screen
         return (f"A desktop seen in screenshots and driven by pointer and keyboard actions. The screen is {w} by {h} "
-                f"pixels, counted from its top left corner. Each call of click, move, drag, scroll, type, key, wait, "
-                f"step, done or fail is one step, answered once its actions have run and a pause of {self.pause:g} s "
-                f"has passed; there are {self.steps} steps in all, and steps_left in each answer. Once they are used "
+                f"pixels. Points use x and y in screenshot pixels at the screen's size, from its top left corner. "
+                f"Look at a screenshot before the first pointing action. Each call of click, move, drag, scroll, "
+                f"type, key, wait, step, done or fail is one step. After the actions and their {self.pause:g} s pauses, "
+                f"click, move, drag, scroll, type, key and wait return the screen as a PNG image; step does when "
+                f"screenshot is true. done and fail answer before they run, with no image. "
+                f"There are {self.steps} steps in all, and steps_left in each acting answer. Once they are used "
                 f"up, every call but info is refused. Pointer and keyboard input goes through those tools, not through "
                 f"python. A turn that ends with neither done nor fail ends the task as the desktop then is.")
 

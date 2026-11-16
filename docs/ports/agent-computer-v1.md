@@ -20,7 +20,7 @@ None of these is a step.
 
 ## Acting
 
-One call is one step.
+One call is one step. Points use `x` and `y` in screenshot pixels at the screen's size, from its top left corner. Look at a screenshot before the first pointing action.
 
 | Tool | Arguments | What the benchmark runs |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ One call is one step.
 | `done` | `message`, optional | The task is complete |
 | `fail` | `reason`, optional | The task cannot be done |
 
-An acting call answers once its actions have run and the benchmark's pause has passed, with `{steps_left, done}`; `done` is true once the task takes no more calls. A pointer or keyboard tool and `wait` add the screen after the pause as an image; `step` adds it when `screenshot` is true. `done` and `fail` answer as the benchmark takes them, before it runs them: the benchmark's loop asks for nothing after them.
+A call of `click`, `move`, `drag`, `scroll`, `type`, `key`, `wait` or `step` answers once its actions have run and their pauses have passed, with `{steps_left, done}`; `done` is true once the task takes no more calls. Each adds the screen as a PNG image; `step` adds it only when `screenshot` is true. `done` and `fail` return `{steps_left, done}` with no image as the benchmark takes them, before it runs them: the benchmark's loop asks for nothing after them.
 
 ## Rules
 
