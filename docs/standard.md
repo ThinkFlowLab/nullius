@@ -422,7 +422,7 @@ use the source folders and repository checks.
 | `limits.turns` | At most this many agent turns in a conversation (default 20) |
 | `limits.setup_seconds` | How long `setup` may take, in seconds, for a unit an agent runs (a setup that starts a machine of its own for an agent); every other unit keeps 600 |
 | `driver.participant` | `true`: `setup` is also sent `participant`, the kind of what runs the unit, for a driver that starts something only an agent uses. A driver whose `setup` takes `unit` and `dir` alone leaves it out |
-| `driver.unit_end` | `true`: the driver is sent `end` (`unit`, `dir`) once each unit an agent ran has ended, scored or not, so that what its setup started for the agent ends with the unit. Only a unit whose `setup` was sent gets it, and only while that driver still runs: a driver closed after a request got no reply in its time (its process group ended with it) is not asked, nor is one whose request a stop left unanswered. A control's or a setup's unit gets none, nor does any other driver |
+| `driver.unit_end` | `true`: the driver is sent `end` (`unit`, `dir`) once each unit an agent ran has ended, scored or not, so that what its setup started for the agent ends with the unit. Only a unit whose `setup` was sent gets it, and only while that driver still runs: a driver closed after a request got no reply in its time is not asked, nor is one whose request a stop left unanswered. A control's or a setup's unit gets none, nor does any other driver |
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
 
