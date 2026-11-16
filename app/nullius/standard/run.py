@@ -837,6 +837,7 @@ class Run:
             todo = [name for name, res in latest.items() if retryable(res)]
             if not todo:
                 return
+            self.n_units = (self.n_units or 0) + len(todo)    # the progress counts every try: the i-th to end of n
             self.progress.emit("units", "start", n=len(todo),
                                detail=f"trying {len(todo)} again, one at a time: attempt {attempt} of {self.attempts}")
             self.say(f"trying again, one at a time: {len(todo)}, attempt {attempt} of {self.attempts}")
