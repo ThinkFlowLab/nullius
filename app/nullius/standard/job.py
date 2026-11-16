@@ -403,15 +403,20 @@ def backfill_trace(trial_dir: str, write: bool = False) -> str:
 def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: str, unit: str, t0: float, t1: float,
                 produce: tuple, score: Optional[dict], exception: Optional[tuple], calls: List[dict],
                 trajectory: Optional[dict], extra_logs: Optional[dict] = None, environment: str = "",
-                image: str = "", setup_end: Optional[float] = None, checking: tuple = (None, None)) -> dict:
+                image: str = "", setup_end: Optional[float] = None, agent_ready: Optional[float] = None,
+                checking: tuple = (None, None)) -> dict:
     """Write one unit's trial and return its result. ``environment``: the
     benchmark's environment the unit asked for (none: the base image), and
     ``image``, the one it ran in on the container backend - names only.
     ``setup_end``: when the unit's environment was ready and the agent began
-    (its setup, relay and container from ``t0``); ``checking``: the check's
+    (its setup, relay and container from ``t0``); ``agent_ready``: when the
+    agent, started and in its session, was first asked - its setup from
+    ``setup_end``, its run from there; ``checking``: the check's
     start and end (its own step in the container, then the driver's score)."""
     os.makedirs(os.path.join(trial_dir, "agent"), exist_ok=True)
     os.makedirs(os.path.join(trial_dir, "verifier"), exist_ok=True)
+    if produce and produce[0] and agent_ready:   # its run starts once it is set up: the trace's window too
+        produce = (agent_ready, produce[1])
     tot = _usage_total(calls)
     # the pages read a task's name after its last slash: a unit's own slashes
     # (a unit id like "set/12") would leave only its last part
@@ -420,6 +425,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
            "agent_info": {"name": other["key"], "version": str((other.get("upstream") or {}).get("version") or ""),
                           "model_info": {"name": model}},
            "environment_setup": {"started_at": iso(t0), "finished_at": iso(setup_end)} if setup_end else None,
+           "agent_setup": {"started_at": iso(setup_end), "finished_at": iso(agent_ready)} if setup_end and agent_ready else None,
            "agent_execution": {"started_at": iso(produce[0]), "finished_at": iso(produce[1])} if produce and produce[0] else None,
            "verifier": {"started_at": iso(checking[0]), "finished_at": iso(checking[1])} if checking and checking[0] and checking[1] else None,
            "agent_result": {"n_input_tokens": tot["input"], "n_output_tokens": tot["output"], "n_cache_tokens": tot["cached"],

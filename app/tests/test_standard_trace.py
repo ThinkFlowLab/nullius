@@ -136,6 +136,29 @@ class Written(unittest.TestCase):
                               exception=("UnitSpendingCapError", "its own spending cap"), calls=[call(1, 2), refused, failed], trajectory=None)
         self.assertEqual((res["agent_result"]["n_model_calls"], res["agent_result"]["n_input_tokens"]), (2, 10))
 
+    def test_the_agent_s_setup_is_its_own_phase_and_its_run_starts_after_it(self):
+        """Started and in its session at T+3: its setup is T+1 to T+3, its run
+        and its trace's window from T+3, as Harbor's agent_setup and
+        agent_execution are."""
+        d = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
+        traj = job.trajectory_from_events(list(EVENTS), [call(5, 6)], AGENT, "m", "j/u")
+        res = job.write_trial(d, job="j", bench=BENCH, other=AGENT, model="m", unit="u", t0=T, t1=T + 40, produce=(T + 1, T + 30),
+                              score={"reward": 1.0}, exception=None, calls=[call(5, 6)], trajectory=traj,
+                              setup_end=T + 1, agent_ready=T + 3)
+        self.assertEqual(res["agent_setup"], {"started_at": job.iso(T + 1), "finished_at": job.iso(T + 3)})
+        self.assertEqual(res["agent_execution"], {"started_at": job.iso(T + 3), "finished_at": job.iso(T + 30)})
+        with open(os.path.join(d, "agent", "trace.json")) as f:
+            session = json.load(f)["spans"][0]
+        self.assertLessEqual(session["start_ns"], int((T + 3) * 10**9))
+        self.assertEqual(session["end_ns"], int((T + 30) * 10**9))
+
+    def test_without_a_session_there_is_no_setup_phase(self):
+        d = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
+        res = job.write_trial(d, job="j", bench=BENCH, other=AGENT, model="m", unit="u", t0=T, t1=T + 40, produce=(T + 1, T + 30),
+                              score={"reward": 1.0}, exception=None, calls=[], trajectory=None, setup_end=T + 1)
+        self.assertIsNone(res["agent_setup"])
+        self.assertEqual(res["agent_execution"]["started_at"], job.iso(T + 1))
+
     def test_a_control_writes_none(self):
         self.assertFalse(os.path.exists(self.write({"key": "nop", "_kind": "control"}, None)))
 

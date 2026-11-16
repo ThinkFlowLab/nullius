@@ -993,6 +993,7 @@ class Run:
         self.phase(name, unit, "env_setup", None if self.upstream else DRIVER_SECONDS)
         produce, score, exc, traj, logs = (None, None), None, None, None, {}
         p0, checking = None, (None, None)        # when the agent began; the check's start and end
+        ready: List[float] = []                  # when the agent, started and in its session, was first asked
         setup: dict = {}
         transcript: List[dict] = []
         rl, environment, box, changes = None, None, None, None
@@ -1042,9 +1043,9 @@ class Run:
                     elif self.upstream:
                         answer, traj = self.drive_upstream(unit, ws, tag, transcript, rl)
                     elif self.other["_kind"] == "agent":
-                        answer, traj, logs = self.drive_agent(unit, ws, home, tag, setup, transcript, rl, box, name)
+                        answer, traj, logs = self.drive_agent(unit, ws, home, tag, setup, transcript, rl, box, name, ready=ready)
                     else:
-                        answer, traj = self.drive_feature(unit, ws, home, tag, setup, transcript, rl)
+                        answer, traj = self.drive_feature(unit, ws, home, tag, setup, transcript, rl, ready=ready)
             finally:
                 produce = (p0, time.time())
                 if box is not None:              # what the agent (or the control) left in the container, before the check
@@ -1118,7 +1119,7 @@ class Run:
             traj["extra"] = dict(traj.get("extra") or {}, mcp_servers=[str(m.get("name")) for m in setup["mcp"] if m.get("name")])
         res = job.write_trial(trial, job=self.name, bench=self.bench, other=self.other, model=self.model, unit=unit,
                               t0=t0, t1=time.time(), produce=produce, score=score, exception=exc, calls=calls,
-                              setup_end=p0 or time.time(), checking=checking,
+                              setup_end=p0 or time.time(), agent_ready=ready[0] if ready else None, checking=checking,
                               trajectory=traj, extra_logs=dict(logs or {}, **({"container-changes.txt": changes} if changes else {})),
                               environment=environment or "",
                               image=(box.image if box is not None else getattr(rl, "unit_image", "")) or "")
@@ -1739,13 +1740,14 @@ class Run:
             return float(own)
         return self.turn_seconds
 
-    def drive_agent(self, unit, ws, home, tag, setup, transcript, rl, box=None, name=""):
+    def drive_agent(self, unit, ws, home, tag, setup, transcript, rl, box=None, name="", ready=None):
         """The agent over ACP, its session's ``cwd`` the unit's workspace - in
         an own image (``box``), the container's working directory, which this
         machine does not see. Files are served (``acp.Client(fs=)``) only to an
         agent running here: one in a container has its workspace mounted, and
         serving it from this machine would let it swap a folder for a link
-        between the check and the open and reach any file of the user's."""
+        between the check and the open and reach any file of the user's.
+        ``ready`` gets the time its session opened: its setup ends there."""
         a = self.other
         env = agent_env(a, self.inst, home, rl.unit_url, self.model, self.options)
         log = os.path.join(os.path.dirname(ws), "agent", "agent.log")
@@ -1763,6 +1765,8 @@ class Run:
                 try:
                     c.start()
                     sid = c.new_session(box.workdir if box is not None else ws, setup.get("mcp") or [])
+                    if ready is not None:
+                        ready.append(time.time())
                 except TimeoutError as e:
                     # the agent never answered its start: this unit's setup failed, not the run
                     raise _Ended("AgentSetupTimeoutError", f"the agent did not answer {e} in time ({c.tail()})")
@@ -1833,7 +1837,7 @@ class Run:
         return r.stdout.strip(), job.trajectory_from_events(events, rl.calls(tag), a, self.model, f"{self.name}/{unit}"), {}
 
     # -- a capability, through its port -------------------------------------------
-    def drive_feature(self, unit, ws, home, tag, setup, transcript, rl):
+    def drive_feature(self, unit, ws, home, tag, setup, transcript, rl, ready=None):
         f = self.other
         cmd = install.words(f["start"]["command"], {"here": f["_here"], "install": self.inst})
         env = agent_env(f, self.inst, home, rl.unit_url, self.model, self.options)
@@ -1854,6 +1858,8 @@ class Run:
         try:
             try:
                 proc.start()
+                if ready is not None:
+                    ready.append(time.time())
                 plan = setup.get("memory") or {}
                 for s in plan.get("add") or []:
                     send("add", session=s)
