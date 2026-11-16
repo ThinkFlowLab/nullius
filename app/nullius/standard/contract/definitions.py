@@ -82,7 +82,7 @@ import re
 from typing import Callable, Dict, List, Optional, Tuple
 
 from nullius.standard.contract import ports
-from nullius import paths
+from nullius import ondisk, paths
 from nullius.catalogue import storage
 from . import names
 
@@ -1591,15 +1591,10 @@ def path_of(d: dict) -> str:
 def _locked(path: str):
     """One writer of a definition file at a time, across processes (two
     proofs, a conformance check and the user's own edit through the app)."""
-    import fcntl
     where = os.path.join(paths.cache_dir(), "locks")
     os.makedirs(where, exist_ok=True)
-    with open(os.path.join(where, hashlib.sha256(os.path.realpath(path).encode()).hexdigest()[:24]), "w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+    with ondisk.locked(os.path.join(where, hashlib.sha256(os.path.realpath(path).encode()).hexdigest()[:24])):
+        yield
 
 
 def save(d: dict, change: Optional[Callable[[dict], None]] = None) -> None:
@@ -1645,7 +1640,4 @@ def save(d: dict, change: Optional[Callable[[dict], None]] = None) -> None:
                         d[k] = clean[k]
         else:
             clean = {k: v for k, v in d.items() if not k.startswith("_")}
-        with open(path + ".part", "w") as f:
-            json.dump(clean, f, indent=2)
-            f.write("\n")
-        os.replace(path + ".part", path)
+        ondisk.write_whole(path, json.dumps(clean, indent=2) + "\n")

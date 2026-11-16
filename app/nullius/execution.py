@@ -122,7 +122,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
-from nullius import hosts, paths, prices as price_list, progress, redact, secrets, settings
+from nullius import hosts, ondisk, paths, prices as price_list, progress, redact, secrets, settings
 from nullius.harbor import source as harbor_source
 from nullius.standard.containers import container
 from nullius.standard.runner import payload as standard_payload
@@ -485,11 +485,7 @@ class Execution:
                     "catalogue_on_target": self.catalogue_on_target, "workspace": self.workspace,
                     "launched": self.launched, "seen_trials": [list(k) for k in sorted(self._seen_trials, key=str)]}
             try:
-                os.makedirs(self.dir, exist_ok=True)
-                tmp = os.path.join(self.dir, RECORD + ".tmp")
-                with open(tmp, "w", encoding="utf-8") as fh:
-                    json.dump(data, fh, indent=1)
-                os.replace(tmp, os.path.join(self.dir, RECORD))
+                ondisk.write_whole(os.path.join(self.dir, RECORD), json.dumps(data, indent=1))
             except OSError:
                 pass
 

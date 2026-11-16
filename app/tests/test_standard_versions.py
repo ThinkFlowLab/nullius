@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from nullius import ondisk
 from nullius.standard import cli
 from nullius.standard.contract import definitions, match
 from nullius.standard.proofs import conform
@@ -372,10 +373,10 @@ class ForkVersion(unittest.TestCase):
         self.assertNotEqual(a, b)
         with open(os.path.join(a, "data", "tasks.json")) as f1, open(os.path.join(b, "data", "tasks.json")) as f2:
             self.assertEqual((f1.read(), f2.read()), ("[1, 2]\n", "[1, 2, 3]\n"))
-        right = install.sha256_of(os.path.join(b, "data", "tasks.json"))
+        right = ondisk.sha256_of(os.path.join(b, "data", "tasks.json"))
         self.assertTrue(install.dataset(fork, dict(fork["datasets"][0], sha256=right), b))
         with self.assertRaises(install.InstallFailed):                              # the published digest does not hold for the fork
-            install.dataset(fork, dict(fork["datasets"][0], sha256=install.sha256_of(os.path.join(a, "data", "tasks.json"))), b)
+            install.dataset(fork, dict(fork["datasets"][0], sha256=ondisk.sha256_of(os.path.join(a, "data", "tasks.json"))), b)
         drv = {"command": ["{install}/.venv/bin/python", "{here}/driver.py"], "install": {"python": "3.12", "project": "."}}
         self.assertNotEqual(install.driver_dir(dict(one, driver=drv), self.home), install.driver_dir(dict(fork, driver=drv), self.home))
 

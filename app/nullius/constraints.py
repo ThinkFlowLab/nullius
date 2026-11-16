@@ -61,14 +61,13 @@ import re
 import shlex
 import stat
 import subprocess
-import tempfile
 import textwrap
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from nullius import paths
+from nullius import ondisk, paths
 
 SETTING = "HOST_CONSTRAINTS"
 LOCAL = "local"                       # this machine, as a recipe's Where names it
@@ -628,16 +627,7 @@ def rekey(text: str, old: str, new: Optional[str]) -> Optional[str]:
 
 def _write(doc: dict, env=None) -> None:
     """The store, written whole to a file of its own, then renamed."""
-    out = store_path(env)
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    fd, part = tempfile.mkstemp(dir=os.path.dirname(out), prefix="capacity.json.", suffix=".part")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(doc, f, indent=1, sort_keys=True)
-        os.replace(part, out)
-    except BaseException:
-        os.unlink(part)
-        raise
+    ondisk.write_whole(store_path(env), json.dumps(doc, indent=1, sort_keys=True), mode=0o600)
 
 
 def engine_less(found: Optional[dict]) -> bool:

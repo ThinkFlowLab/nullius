@@ -221,7 +221,7 @@ class Cache(unittest.TestCase):
         gate = threading.Barrier(2, timeout=5)
         stamp = workspace._now
         def held_now():
-            gate.wait()                                   # both are inside the write, temp file open, nothing renamed yet
+            gate.wait()                                   # both are about to write: neither has renamed yet
             return stamp()
         results, errors = [], []
         def load():
@@ -237,7 +237,7 @@ class Cache(unittest.TestCase):
         self.assertEqual([from_cache for _, from_cache in results], [False, False])
         job, from_cache = workspace.load_job(self.ws, self.job_dir)
         self.assertTrue(from_cache); self.assertEqual(job, results[0][0])
-        self.assertEqual([n for n in os.listdir(self.ws.jobs_dir) if n.endswith(".tmp")], [])
+        self.assertEqual([n for n in os.listdir(self.ws.jobs_dir) if n.endswith(".part")], [])
 
     def test_load_jobs_matches_load_all(self):
         _job_dir(self.root, "job-b", n=1)

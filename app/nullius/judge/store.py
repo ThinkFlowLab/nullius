@@ -16,6 +16,8 @@ import os
 import re
 from typing import Optional
 
+from nullius import ondisk
+
 from . import client, questions as Q
 
 _SAFE = re.compile(r"[^A-Za-z0-9._@+-]")
@@ -64,7 +66,6 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "s
     record's answers merge over the version's earlier answers, so judging
     one question later does not drop the others."""
     path = _path(ws_dir, job_id, trial_name, lane)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh) or {}
@@ -75,10 +76,7 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "s
     merged = dict(record)
     merged["answers"] = {**(earlier.get("answers") or {}), **(record.get("answers") or {})}
     data[version] = merged
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=1)
-    os.replace(tmp, path)
+    ondisk.write_whole(path, json.dumps(data, indent=1))
 
 
 def for_job(ws_dir: str, job_id: str, version: Optional[str] = None, lane: str = "system-one") -> dict:

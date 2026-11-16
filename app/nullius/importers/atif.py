@@ -62,7 +62,6 @@ place, and a trial the tree no longer holds is removed.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -70,6 +69,7 @@ import shlex
 import shutil
 from datetime import timezone
 
+from nullius import ondisk
 from nullius.redact import redact
 from nullius.traces.trajectory import parse_ts
 
@@ -273,14 +273,6 @@ def _usage(doc: dict) -> dict:
     }
 
 
-def _sha256(path: str) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 16), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 # ── one document = one trial ────────────────────────────────────────────────
 
 def convert_document(path: str, doc: dict, trial: str, job_dir: str) -> dict:
@@ -311,7 +303,7 @@ def convert_document(path: str, doc: dict, trial: str, job_dir: str) -> dict:
         "agent_result": _usage(doc),
         "source_document": {
             "path": os.path.abspath(path),
-            "sha256": _sha256(path),
+            "sha256": ondisk.sha256_of(path),
             "schema_version": doc["schema_version"],
             "session_id": doc.get("session_id"),
         },

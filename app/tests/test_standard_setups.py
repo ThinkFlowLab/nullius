@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from nullius import ondisk
 from nullius.standard.contract import definitions, match
 from nullius.standard.pages import recipe
 from nullius.standard.requirements import hostreq, install
@@ -253,7 +254,7 @@ class SetupRun(unittest.TestCase):
         data = os.path.join(here, "data.txt")
         with open(data, "w") as f:
             f.write("fixture data")
-        self.b["datasets"][0].update(path="data.txt", sha256=install.sha256_of(data), environment="data")
+        self.b["datasets"][0].update(path="data.txt", sha256=ondisk.sha256_of(data), environment="data")
         credential = os.path.join(self.tmp, "tool.lic")
         with open(credential, "w") as f:
             f.write("fixture licence")

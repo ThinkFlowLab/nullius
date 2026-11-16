@@ -120,7 +120,7 @@ class Store(unittest.TestCase):
         self.assertTrue(secrets.delete("b", "A"))
         self.assertFalse(secrets.delete("b", "A"))
         self.assertEqual(secrets.status("b"), {})
-        self.assertEqual([n for n in os.listdir(os.path.join(self.tmp, "secrets", "b")) if n.startswith(".tmp")], [])
+        self.assertEqual([n for n in os.listdir(os.path.join(self.tmp, "secrets", "b")) if n.endswith(".part")], [])
 
     def test_unpack_decodes_a_host_payload_and_preserves_binary_bytes(self):
         payload = {"A": base64.b64encode(KEY.encode()).decode(), "F": base64.b64encode(FILE).decode()}

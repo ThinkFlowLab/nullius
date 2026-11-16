@@ -126,7 +126,7 @@ import urllib.request
 from secrets import compare_digest, token_hex
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from nullius import constraints, paths
+from nullius import constraints, ondisk, paths
 from nullius.standard.contract import definitions
 from nullius.standard.requirements import install
 
@@ -1410,7 +1410,7 @@ def own_context(path: str) -> Dict[str, str]:
         dirs.sort()
         for f in sorted(files):
             p = os.path.join(d, f)
-            out[os.path.relpath(p, path)] = "link:" + os.readlink(p) if os.path.islink(p) else install.sha256_of(p)
+            out[os.path.relpath(p, path)] = "link:" + os.readlink(p) if os.path.islink(p) else ondisk.sha256_of(p)
     return out
 
 
@@ -1508,7 +1508,7 @@ def node_runtime(machine: Optional[str] = None) -> str:
             with urllib.request.urlopen(f"https://nodejs.org/dist/v{NODE_VERSION}/{name}.tar.xz", timeout=60) as r, \
                     open(tarball, "wb") as f:
                 shutil.copyfileobj(r, f)
-            if install.sha256_of(tarball) != NODE_SHA256[arch]:
+            if ondisk.sha256_of(tarball) != NODE_SHA256[arch]:
                 raise Unavailable(f"{name}.tar.xz is not the one pinned (sha256)")
             with tarfile.open(tarball, "r:xz") as t:
                 t.extractall(tmp, filter="data")

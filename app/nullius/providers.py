@@ -26,7 +26,7 @@ import urllib.parse
 import urllib.request
 from typing import List
 
-from nullius import paths, settings
+from nullius import ondisk, paths, settings
 
 # The builder's steps (command-builder-core.js, STEP): an error names the step that edits it.
 STEP = {"benchmark": 0, "runner": 1, "dataset": 2, "setup": 3, "agent": 4, "model": 5, "limits": 6, "where": 7, "review": 8}
@@ -305,12 +305,7 @@ def remember(results: dict, env=None) -> None:
     """Set (a result) or forget (None) the last test of each choice, the file written whole and renamed."""
     with _TESTS_LOCK:
         kept = {k: v for k, v in {**tests(env), **results}.items() if v is not None}
-        out = _tests_file(env)
-        os.makedirs(os.path.dirname(out), exist_ok=True)
-        part = f"{out}.{os.getpid()}.part"
-        with open(part, "w", encoding="utf-8") as f:
-            json.dump(kept, f, indent=1, sort_keys=True)
-        os.replace(part, out)
+        ondisk.write_whole(_tests_file(env), json.dumps(kept, indent=1, sort_keys=True))
 
 
 def mark(result: dict) -> str:
