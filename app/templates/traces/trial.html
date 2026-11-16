@@ -112,12 +112,11 @@
 </div>
 {% endif %}
 
-<h2>Shape of the run</h2>
-
 {# The phase bar reads only trial.*, so it renders whether or not a trajectory
    was recorded: a trial that failed before writing one still shows its timing. #}
 {% set total = trial.dur_phases + trial.dur_other %}
 {% if total %}
+<div class="overview-tiles">
 <div class="panel">
   <h3 style="margin-top:0">Where the time went <b class="total">{{ trial.dur_total|secs }}</b></h3>
   {# All four phases Harbor records, and the same four on a standard run: Env
@@ -139,6 +138,7 @@
     {% for key, label, dur, title in phases if (dur is not none and key != 'other') or dur|phase %}<span class="chip ph-{{ key }}" title="{{ title }}">{{ label }} <b>{{ dur|secs }}</b></span>
     {% endfor %}
   </div>
+</div>
 </div>
 {% endif %}
 

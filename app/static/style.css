@@ -615,6 +615,13 @@ button.seg:hover { filter: brightness(1.25); }
       color-mix(in srgb, var(--text-faint) 85%, transparent) 0 3px,
       color-mix(in srgb, var(--text-faint) 35%, transparent) 3px 6px);
 }
+/* the trial's overview: small tiles side by side, the time one among them */
+.overview-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: 12px; margin-bottom: 1rem; }
+.overview-tiles > .panel { margin: 0; padding: .85rem 1rem; }
+.overview-tiles h3 { margin: 0 0 .6rem; }
+.overview-tiles .bar.phases { height: 8px; }
+.overview-tiles .legend { gap: .3rem; margin-top: .6rem; }
+.overview-tiles .legend .chip { font-size: .72rem; padding: .12rem .5rem; }
 .chip.ph-other { color: var(--text-dim); }
 .chip.ph-other::before { background: var(--text-faint); }
 .chip.ph-env::before { background: var(--rate_limited); }
