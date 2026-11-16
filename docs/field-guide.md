@@ -22,7 +22,7 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 - **Proven: 2/2.** Passed basic checks out of required basic checks. All must pass to prove the port. Skills are additional checks, required only by benchmarks that ask for them. Open the kit to inspect its checks and shared source.
 
-- **Original procedure, chosen participant and model.** The builder lists reference agents first, or No agent · Original for direct model evaluation. Memory benchmarks offer Original memory alongside compatible capabilities. Like the paper filters documented models and keeps the official user simulator and judge; Like the leaderboard, where a benchmark declares one, runs its simulator, judge, options and repeats; Any of your choice opens the provider catalogue.
+- **Original procedure, chosen participant and model.** The builder lists reference agents first, or No agent · Original for direct model evaluation. Memory benchmarks offer Original memory alongside compatible capabilities. Like the paper filters documented models and keeps the official user simulator and judge; Like the leaderboard, where a benchmark declares one, runs its simulator, judge, options and attempts; Any of your choice opens the provider catalogue.
 
 - **Native and combined setups.** A capability's proof does not prove an agent uses it. Native, augmented and replacement setups need separate evidence. A replacement must disable or redirect the native path; an extra tool alone is not a swap. General agent-plus-capability recipes are not supported yet.
 
@@ -30,27 +30,27 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 - **Isolation matters.** Local agents run as your user and can read accessible scorer files. Docker conformance keeps the driver and oracle outside the agent's mounts. Public kit checks remain compatibility checks, not evidence of resistance to cheating.
 
-## Repeats and attempts {#repeats}
+## Attempts and retries {#attempts}
 
-A repeat is one run of a task, counted whatever its result: Harbor's `n_attempts` and the standard's `--repeat` set how many. An attempt is one try within a repeat: a repeat is tried again only when the infrastructure or the agent failed (Harbor's `max_retries`), never because the task was failed, and only its last attempt is kept as its trial. A job therefore records one trial per repeat.
+An attempt is one run of a task, counted whatever its result: Harbor's `n_attempts` and the standard's `--repeat` set how many, 1 by default. A retry runs an attempt again after the infrastructure or the agent failed, never because the task was failed (Harbor's `max_retries`, 0 by default; the standard runs a rate-limited attempt once more), and only the attempt's last try is kept as its trial: a job records one trial per attempt, and the pages number a task's attempts by the run's own number when its trials carry one, else by when they started.
 
-Standard runs with repeated, scored tasks record both measures below in `pass_hat_k`; the job page and Compare show them for any run, Harbor or standard, that ran every task at least twice. They answer different questions.
+Standard runs with repeated, scored attempts record both measures in `pass_hat_k`; the job page and Compare show them for any run, Harbor or standard, that tried every task at least twice. They answer different questions.
 
 ### pass@k
 
-Chance that at least one of k sampled repeats passes: `1 − C(n−c,k) / C(n,k)`.
+Chance that at least one of k sampled attempts passes: `1 − C(n−c,k) / C(n,k)`.
 
 ### pass^k
 
-Chance that all k sampled repeats pass: `C(c,k) / C(n,k)`.
+Chance that all k sampled attempts pass: `C(c,k) / C(n,k)`.
 
-Here n is the repeat count and c the passed count per task; results are averaged across eligible tasks, each read on its first n repeats, n the smallest repeat count among them, and there is no series below two repeats. The pages read every repeat that ran as a pass when resolved and a fail otherwise: an agent's timeout or crash is its own result, and an unknown outcome stays in, as in the adjusted rate. A task with an infra repeat is left out, as τ-bench leaves out an infrastructure error, and so is a task with a scored repeat, which has no pass or fail. With every task run equally often and no infra, pass^1 is the adjusted rate. The standard's own `pass_hat_k` leaves out a unit with any error instead. Compare lists k from 1 to the smallest repeat count across its runs, over the same tasks as its rows; the job page lists k = 1 to 3 and the largest k.
+Here n is the attempt count and c the passed count per task; results are averaged across eligible tasks, each read on its first n attempts, n the smallest attempt count among them, and there is no series below two attempts. The pages read every attempt that ran as a pass when resolved and a fail otherwise: an agent's timeout or crash is its own result, and an unknown outcome stays in, as in the adjusted rate. A task with an infra attempt is left out, as τ-bench leaves out an infrastructure error, and so is a task with a scored attempt, which has no pass or fail. With every task tried equally often and no infra, pass^1 is the adjusted rate. The standard's own `pass_hat_k` leaves out a unit with any error instead. Compare lists k from 1 to the smallest attempt count across its runs, over the same tasks as its rows; the job page lists k = 1 to 3 and the largest k.
 
-A task's repeats are counted as the adjusted rate counts trials: its passes over the repeats that ran, infra repeats apart ("2/2 passed · 1 infra"); a task nothing passed or failed shows its mean score instead. A trial page shows the repeats as tabs, numbered by start time, with that count and an All repeats table. The job page groups them under one row per task with the instruction score once and the mean tokens and times over the repeats that ran; an agent's token count of 0 was not captured and is left out of the mean.
+A task's attempts are counted as the adjusted rate counts trials: its passes over the attempts that ran, infra attempts apart ("2/2 passed · 1 infra"); a task nothing passed or failed shows its mean score instead. A trial page shows the attempts as tabs, numbered by start time, with that count and an All attempts table. The job page groups them under one row per task with the instruction score once and the mean tokens and times over the attempts that ran; an agent's token count of 0 was not captured and is left out of the mean.
 
 ## Compare like with like {#compare}
 
-Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every repeat of a matched task contributes to rates, tokens and costs. A comparison row counts every repeat the same way, infra apart. It disagrees when the pass rate (for a scored task, the mean score) differs or the repeats that ran ended differently, one failing verification where another timed out; a run none of whose repeats ran disagrees with one that ran. Rows whose pass rate moved most come first, each rate read as if the run had one more pass and one more fail, so one flipped repeat (1/1 against 0/1) ranks below a steady gap (2/3 against 0/3); a pass rate is never set against a mean score. Then come the rows whose rate moved by less than that reading shows (1/1 against 3/4), then the other rows that disagree. A row's outcome is the last indexed repeat, and its side-by-side page opens on that repeat with a tab for each of the others.
+Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs. A comparison row counts every attempt the same way, infra apart. It disagrees when the pass rate (for a scored task, the mean score) differs or the attempts that ran ended differently, one failing verification where another timed out; a run none of whose attempts ran disagrees with one that ran. Rows whose pass rate moved most come first, each rate read as if the run had one more pass and one more fail, so one flipped attempt (1/1 against 0/1) ranks below a steady gap (2/3 against 0/3); a pass rate is never set against a mean score. Then come the rows whose rate moved by less than that reading shows (1/1 against 3/4), then the other rows that disagree. A row's outcome is the last indexed attempt, and its side-by-side page opens on that attempt with a tab for each of the others.
 
 Check dataset, model, provider, agent version, limits and execution backend before attributing a difference to the agent. Matched views omit whole-run wall time because it does not measure just the selected tasks.
 
@@ -148,10 +148,10 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `agent_version` | The version the trial's `agent_info` reports. | measured | any |
 | `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. An imported runner's arm without that declaration is not a control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |
 | `is_running` | The job records running or pending trials. Numbers are partial; a managed execution's terminal status takes precedence on the page. | measured | any |
-| `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Each repeat is its own trial; a retry is another attempt within one, not a trial. | measured | any |
+| `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
 
-## Trial metrics, one row per trial {#trials}
+## Trial metrics, one row per task attempt {#trials}
 
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |

@@ -9,7 +9,7 @@ several, or an imported tree; ``parse.load_all`` walks it. The jobs are
 resolved and the cohort built by ``nullius.compare.comparison`` — the page's
 own computation, not a second one — so ``--matched`` keeps exactly the
 trials the page keeps (the intersection of exact dataset/task identifiers,
-every recorded repeat), and the totals printed per column are the ``Job``
+every recorded attempt), and the totals printed per column are the ``Job``
 properties the page's summary table reads over that cohort: trials, the
 mean score and its breakdown when the benchmark scores, solved, the two
 solve rates, infra errors, regressions, the token block, the
@@ -17,7 +17,7 @@ estimated cost and, for whole runs only, the wall-clock interval. A matched
 cohort has no truthful interval, so none is printed for it — as on the page.
 
 The task rows below the totals are the page's: one per dataset/task, the
-outcome recorded in each column with its score, the repeats each column made, the rows
+outcome recorded in each column with its score, the attempts each column made, the rows
 that differ first. A development build (source or unknown runtime) is
 compared when named, with a note on stderr; the page asks for a tick.
 
@@ -135,7 +135,7 @@ def document(view: comparison.Comparison) -> dict:
         "n_differing": view.n_differing,
         "tasks": [{
             "dataset": row.dataset, "task": row.task, "differs": row.differs,
-            "shared": row.shared, "repeats": list(row.repeats),
+            "shared": row.shared, "attempts": list(row.attempts),
             "trials": [t.trial_name if t else None for t in row.trials],
             "outcomes": [t.outcome if t else None for t in row.trials],
             "scores": [t.score if t else None for t in row.trials],
@@ -167,7 +167,7 @@ def _print(view: comparison.Comparison) -> None:
     if view.cohort == "matched":
         print(f"  shared tasks {view.shared_tasks} · excluded trials "
               + ", ".join(str(n) for n in view.excluded_trials)
-              + (" · repeated trials " + ", ".join(str(n) for n in view.repeated_trials)
+              + (" · repeated attempts " + ", ".join(str(n) for n in view.repeated_trials)
                  if any(view.repeated_trials) else ""))
     if not view.datasets_match:
         print("  note: the runs record different datasets; task rows are kept apart by dataset")
@@ -202,12 +202,12 @@ def _print(view: comparison.Comparison) -> None:
     task_width = max(len(row["task"]) for row in doc["tasks"])
     for row in doc["tasks"]:
         cells = []
-        for outcome, score, repeats in zip(row["outcomes"], row["scores"], row["repeats"]):
+        for outcome, score, attempts in zip(row["outcomes"], row["scores"], row["attempts"]):
             cell = outcome or "—"
             if score is not None:
                 cell += f" {score:.2f}"
-            if repeats > 1:
-                cell += f" ×{repeats}"
+            if attempts > 1:
+                cell += f" ×{attempts}"
             cells.append(cell)
         mark = "≠" if row["differs"] else " "
         print(f"    {mark} {row['task']:<{task_width}}  " + "  ".join(f"{c:>{width}}" for c in cells))

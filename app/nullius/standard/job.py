@@ -518,13 +518,12 @@ def feed_outcome(kind: str, score: Optional[dict], exception: Optional[tuple]) -
 
 
 def pass_hat(results: List[dict]) -> Optional[dict]:
-    """pass^k of a run that ran each unit several times (``repeat``), as τ-bench defines it: over
-    the units, the chance that k repeats drawn from its n all passed, C(c, k) / C(n, k), averaged -
-    pass^1 is the pass rate; and pass@k (``at``), the chance that one of them did, as HumanEval reads it. A unit with a repeat that ended in an error, with no verdict, is left
-    out, as the upstreams leave an infrastructure error out. None for a run of one repeat each.
-    The estimators are ``nullius.runs.repeats``', the ones the pages use. ``attempts`` in what this
-    returns is the repeat count each unit is read on: the name ``result.json`` has always carried."""
-    from nullius.runs import repeats
+    """pass^k of a run that tried each unit several times (``repeat``), as τ-bench defines it: over
+    the units, the chance that k attempts drawn from its n all passed, C(c, k) / C(n, k), averaged -
+    pass^1 is the pass rate; and pass@k (``at``), the chance that one of them did, as HumanEval reads it. A unit with an attempt that ended in an error, with no verdict, is left
+    out, as the upstreams leave an infrastructure error out. None for a run of one attempt each.
+    The estimators are ``nullius.runs.attempts``', the ones the pages use."""
+    from nullius.runs import attempts
     per: Dict[str, List[bool]] = {}
     broken = set()
     for r in results:
@@ -536,10 +535,10 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
             broken.add(u)
             continue
         per.setdefault(u, []).append(rewards["reward"] == 1.0)
-    got = repeats.estimate(v for u, v in per.items() if u not in broken)
+    got = attempts.estimate(v for u, v in per.items() if u not in broken)
     if got is None:
         return None
-    return {"units": got["units"], "attempts": got["repeats"],
+    return {"units": got["units"], "attempts": got["attempts"],
             **{str(k): round(v, 4) for k, v in got["hat"].items()},
             "at": {str(k): round(v, 4) for k, v in got["at"].items()}}
 

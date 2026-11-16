@@ -1,20 +1,22 @@
-"""A task's repeats in one job.
+"""A task's attempts in one job.
 
-A repeat is one run of a task, counted whatever its result: Harbor's
-``n_attempts`` and the standard's ``--repeat`` say how many. An attempt is one
-try within a repeat: a repeat is tried again only when the infrastructure or
-the agent failed (Harbor's ``max_retries``), never because the task was failed,
-and only its last try is kept as its trial - Harbor deletes the others, the
-standard moves them into the job's ``retried/``. So a job records one trial per
-repeat, and nothing in a trial says which repeat it was. Two trials are repeats
-of the same task when they carry the same ``task_name``; they are numbered by
-when they started, a trial with no
-recorded start after every one that has, ties by trial name. The number is
-this module's, not the producer's: it is stable for one job tree and says
-nothing about the order Harbor indexed them in.
+An attempt is one run of a task, counted whatever its result: Harbor's
+``n_attempts`` and the standard's ``--repeat`` say how many. A retry runs an
+attempt again after the infrastructure or the agent failed, never because the
+task was failed, and only its last try is kept as the attempt's trial: Harbor
+deletes the others, the standard moves them into the job's ``retried/``. So a
+job records one trial per attempt.
 
-The repeats of a task are read as the run's adjusted rate reads its trials:
-an infra repeat (a rate limit, a provider or setup error, the spending cap, a
+Two trials are attempts at the same task when they carry the same
+``task_name``. They are numbered by the run's own number when every one carries
+it - the standard names attempt 2 of unit 42 ``..._u0042r2`` - so an attempt
+retried after the others keeps its place; otherwise by when they started, a
+trial with no recorded start after every one that has, ties by trial name.
+Harbor's names carry no number, and that order says nothing about the one
+Harbor indexed them in.
+
+The attempts at a task are read as the run's adjusted rate reads its trials:
+an infra attempt (a rate limit, a provider or setup error, the spending cap, a
 cancellation) never got a fair try, so it is left out of the pass count, the
 rate and the means and counted apart; an unknown outcome stays in once anything
 at the task was passed or failed. ``has_verdict`` is that rule, for every page.
@@ -27,6 +29,7 @@ Nothing here reads a file: it takes the parsed job.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import cached_property
@@ -45,33 +48,47 @@ def _start(trial) -> datetime:
     return at if at.tzinfo else at.replace(tzinfo=timezone.utc)
 
 
+# the run's own number of an attempt, as the standard names its trials: ..._u0042r2 is attempt 2
+_NUMBERED = re.compile(r"__u\d+r(\d+)$")
+
+
+def _number(trial) -> int | None:
+    m = _NUMBERED.search(trial.trial_name)
+    return int(m.group(1)) if m else None
+
+
 def ordered(trials) -> list:
-    """Repeats in the order they are numbered."""
+    """Attempts in the order they are numbered: the run's own numbers when
+    every one carries a different one, else their start."""
+    trials = list(trials)
+    numbers = [_number(t) for t in trials]
+    if trials and None not in numbers and len(set(numbers)) == len(numbers):
+        return [t for _, t in sorted(zip(numbers, trials), key=lambda p: p[0])]
     return sorted(trials, key=lambda t: (_start(t), t.trial_name))
 
 
-# Outcomes that are neither a pass nor a fail: nothing scored the repeat, or
+# Outcomes that are neither a pass nor a fail: nothing scored the attempt, or
 # the benchmark gives a score and no pass or fail.
 NO_VERDICT = frozenset({classify.UNKNOWN, classify.SCORED})
 
-# The numbers a task's row shows as a mean over its repeats.
+# The numbers a task's row shows as a mean over its attempts.
 MEANS = ("tokens", "dur_total", "dur_env", "dur_agent", "dur_verifier")
 
 
 def ran(trials) -> tuple:
-    """The repeats that got a fair try: every one but infra."""
+    """The attempts that got a fair try: every one but infra."""
     return tuple(t for t in trials if t.outcome not in classify.INFRA_OUTCOMES)
 
 
 def has_verdict(trials) -> bool:
-    """Whether a repeat that ran was passed or failed, so a pass count over
+    """Whether an attempt that ran was passed or failed, so a pass count over
     them means something."""
     return any(t.outcome not in NO_VERDICT for t in ran(trials))
 
 
 @dataclass(frozen=True)
-class Repeats:
-    """Every repeat of one task in one job, numbered from 1."""
+class Attempts:
+    """Every attempt at one task in one job, numbered from 1."""
     trials: tuple
 
     @property
@@ -96,7 +113,7 @@ class Repeats:
 
     @property
     def has_verdicts(self) -> bool:
-        """False when no repeat that ran was passed or failed (all unknown,
+        """False when no attempt that ran was passed or failed (all unknown,
         scored or infra), so a pass count would say nothing."""
         return has_verdict(self.trials)
 
@@ -114,7 +131,7 @@ class Repeats:
 
     @property
     def rate(self) -> float | None:
-        """The share of the repeats that ran which passed, when one was passed
+        """The share of the attempts that ran which passed, when one was passed
         or failed; else their mean score; else None (nothing ran, or nothing
         scored it)."""
         if self.has_verdicts:
@@ -123,16 +140,16 @@ class Repeats:
 
     @property
     def endings(self) -> frozenset:
-        """How the repeats that ran ended, each way once: an outcome and its
+        """How the attempts that ran ended, each way once: an outcome and its
         score. Empty when none ran."""
         return frozenset((t.outcome, None if t.score is None else round(t.score, 3)) for t in self.ran)
 
     def spread(self, field: str, kind: str = "agent") -> dict | None:
-        """The mean of one number over the repeats that ran and recorded it,
+        """The mean of one number over the attempts that ran and recorded it,
         with its lowest and highest: ``field`` a trial attribute, or ``tokens``
         for input and output together. An agent's 0 tokens is a count that was
         not captured, as the token column reads it; a control's is real
-        (``kind`` is the job's). None when no repeat that ran recorded it."""
+        (``kind`` is the job's). None when no attempt that ran recorded it."""
         if field == "tokens":
             values = [(t.n_input_tokens or 0) + (t.n_output_tokens or 0) for t in self.ran
                       if t.n_input_tokens is not None or t.n_output_tokens is not None]
@@ -154,28 +171,28 @@ class Repeats:
 
 def _by_task_name(job) -> dict[str, list]:
     """The job's trials by task name, the tasks in the order they first appear:
-    what makes two trials repeats of one task, for every page of one run."""
+    what makes two trials attempts at one task, for every page of one run."""
     groups: dict[str, list] = {}
     for t in job.trials:
         groups.setdefault(t.task_name, []).append(t)
     return groups
 
 
-def by_task(job) -> dict[str, Repeats]:
-    """Every task of the job that was run more than once, by task name."""
-    return {task: Repeats(tuple(ordered(ts))) for task, ts in _by_task_name(job).items() if len(ts) > 1}
+def by_task(job) -> dict[str, Attempts]:
+    """Every task of the job that was attempted more than once, by task name."""
+    return {task: Attempts(tuple(ordered(ts))) for task, ts in _by_task_name(job).items() if len(ts) > 1}
 
 
-def of(job, trial) -> Repeats | None:
-    """The repeats of this trial's task, or None when it was run once."""
+def of(job, trial) -> Attempts | None:
+    """The attempts at this trial's task, or None when it was attempted once."""
     same = [t for t in job.trials if t.task_name == trial.task_name]
-    return Repeats(tuple(ordered(same))) if len(same) > 1 else None
+    return Attempts(tuple(ordered(same))) if len(same) > 1 else None
 
 
 def grouped(job) -> list[tuple]:
-    """``(trial, repeats)`` for every trial, each task's repeats together and in
-    number order, the tasks in the order they first appear. ``repeats`` is None
-    for a task run once."""
+    """``(trial, attempts)`` for every trial, each task's attempts together and in
+    number order, the tasks in the order they first appear. ``attempts`` is None
+    for a task attempted once."""
     groups = by_task(job)
     out, seen = [], set()
     for t in job.trials:
@@ -189,7 +206,7 @@ def grouped(job) -> list[tuple]:
 
 
 def pass_at(n: int, c: int, k: int) -> float:
-    """pass@k, as HumanEval's estimator reads n repeats with c passed: the
+    """pass@k, as HumanEval's estimator reads n attempts with c passed: the
     chance that at least one of k drawn from them passed."""
     return 1 - comb(n - c, k) / comb(n, k)
 
@@ -201,26 +218,26 @@ def pass_hat(n: int, c: int, k: int) -> float:
 
 def estimate(per_task: Iterable[Sequence[bool]]) -> dict | None:
     """pass^k (``hat``) and pass@k (``at``) for k from 1 to n, averaged over the
-    tasks, n the smallest repeat count among them and each task read on its
-    first n repeats. None below two repeats."""
+    tasks, n the smallest attempt count among them and each task read on its
+    first n attempts. None below two attempts."""
     tasks = [list(v) for v in per_task]
     n = min((len(v) for v in tasks), default=0)
     if n < 2:
         return None
     passed = [sum(v[:n]) for v in tasks]
-    return {"units": len(tasks), "repeats": n,
+    return {"units": len(tasks), "attempts": n,
             "hat": {k: sum(pass_hat(n, c, k) for c in passed) / len(tasks) for k in range(1, n + 1)},
             "at": {k: sum(pass_at(n, c, k) for c in passed) / len(tasks) for k in range(1, n + 1)}}
 
 
 def for_tasks(tasks: Iterable[Sequence]) -> dict | None:
-    """``estimate`` over a run's tasks, each the trials of its repeats. Every
-    repeat that ran counts: a pass when resolved, else a fail - an agent's
+    """``estimate`` over a run's tasks, each the trials of its attempts. Every
+    attempt that ran counts: a pass when resolved, else a fail - an agent's
     timeout or crash is its own result, and an unknown outcome stays in, as in
-    the adjusted rate. A task with an infra repeat is left out, as τ-bench
-    leaves out an infrastructure error, and so is one with a scored repeat,
+    the adjusted rate. A task with an infra attempt is left out, as τ-bench
+    leaves out an infrastructure error, and so is one with a scored attempt,
     which has no pass or fail. None when nothing left was passed or failed, or
-    below two repeats."""
+    below two attempts."""
     whole = [ordered(ts) for ts in tasks
              if not any(t.outcome in classify.INFRA_OUTCOMES or t.outcome == classify.SCORED for t in ts)]
     if not any(t.outcome != classify.UNKNOWN for ts in whole for t in ts):

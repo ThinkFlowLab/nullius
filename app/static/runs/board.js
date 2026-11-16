@@ -1,7 +1,7 @@
 // The run page's board and trials. Every number and row is rendered by the server; this adds the filters (outcome, judge
 // cause and status, flag - ANDed, carried in the query string so a link reproduces the view), the linked hover between the
 // board and the rows, Tokens/Total sorting, Esc, the live count, and one tooltip for hover and keyboard focus alike.
-// A task run more than once is one row that opens onto its repeats; a filter opens the groups it matches, and
+// A task attempted more than once is one row that opens onto its attempts; a filter opens the groups it matches, and
 // clearing it brings back the groups the reader had opened.
 (() => {
   const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -17,7 +17,7 @@
   const hits = (d, r) => { const x = F.get(r);
     return (!('o' in d) || x.o === d.o) && (!('c' in d) || x.c === d.c) && (!('s' in d) || x.s === d.s) && (!('f' in d) || x.f.includes(d.f)) && (!('t' in d) || x.t === d.t); };
   const fxs = $$('.fx', page), hls = board ? $$('.hl', board) : [];
-  // groups: the task's row, its repeats, whether it is open, and whether the reader opened it
+  // groups: the task's row, its attempts, whether it is open, and whether the reader opened it
   const members = new Map(); rows.forEach(r => { const k = r.dataset.group; if (k) { if (!members.has(k)) members.set(k, []); members.get(k).push(r); } });
   const groups = new Map($$('#trial-rows tr.task-group').map(h => [h.dataset.group,
     { head: h, rows: members.get(h.dataset.group) || [], open: false, chosen: false, btn: $('.group-toggle', h) }]));
@@ -115,7 +115,7 @@
     const all = [...groups.values()].map(g => g.head).concat(rows);
     const before = new Map(all.map(r => [r, r.getBoundingClientRect().top])), v = r => +r.dataset[k];
     const cmp = (x, y) => (!dir ? 0 : dir === 'ascending' ? v(x) - v(y) : v(y) - v(x)) || x.dataset.i - y.dataset.i;
-    // a group sorts by its mean over the repeats, and its repeats sort among themselves
+    // a group sorts by its mean over the attempts, and its attempts sort among themselves
     const units = [], placed = new Set();
     rows.forEach(r => { const g = groupOf(r); if (!g) units.push({ lead: r, list: [r] });
       else if (!placed.has(g)) { placed.add(g); const list = [...g.rows].sort(cmp); units.push({ lead: g.head, list: [g.head, ...list] }); } });

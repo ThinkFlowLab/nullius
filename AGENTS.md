@@ -47,7 +47,7 @@ and its resources. The source layout stays under `app/`.
 - `app/nullius/` — its backend, one package per purpose: `runs/` (reading one
   Harbor job tree: `parse`, `classify`, `live`, `artifacts`,
   `feasibility`, `launches`, `verifier` - a verifier's report read by its
-  benchmark's report block - `repeats`, a task's repeats in one job with
+  benchmark's report block - `attempts`, a task's attempts in one job with
   their pass count and pass@k, and the `cli`), `traces/` (`trace`, `trajectory`,
   `conversation`, `charts`, `behavior`, `otel`), `compare/` (`comparison` and its `cli`),
   `catalogue/` (`catalog`, which loads one folder per benchmark

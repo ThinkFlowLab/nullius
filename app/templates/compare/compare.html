@@ -1,5 +1,5 @@
 {% from 'runs/_runtime.html' import what_ran %}
-{% from 'traces/_repeats.html' import repeat_count %}
+{% from 'traces/_attempts.html' import attempt_count %}
 {% extends "base.html" %}
 {% block title %}Compare {{ jobs|length }} runs — Nullius{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">{% endblock %}
@@ -25,14 +25,14 @@
 </div>
 <div class="cohort-note">
   {% if cohort == 'matched' %}
-  <p><strong>{{ n_shared }} matched task{{ '' if n_shared == 1 else 's' }}.</strong> Rates, cost and tokens include every repeat of those tasks. The full run’s wall time is omitted.</p>
+  <p><strong>{{ n_shared }} matched task{{ '' if n_shared == 1 else 's' }}.</strong> Rates, cost and tokens include every attempt on those tasks. The full run’s wall time is omitted.</p>
   {% else %}
   <p>These numbers describe each full run, including tasks the other runs did not cover. Switch to matched tasks to compare the same recorded task IDs.</p>
   {% endif %}
   {% if not comparison.datasets_known %}<p>A run has no recorded dataset identity. Its task names are kept separate because their identity cannot be verified.</p>
   {% elif not comparison.datasets_match %}<p>The recorded datasets differ. Matching requires exact dataset names and versions; identical task names from different datasets are kept separate.</p>{% endif %}
   {% if cohort == 'matched' and not n_shared %}<p>No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
-  {% if comparison.repeated_trials|sum %}<p>Some tasks were repeated. A task row counts every repeat, infra apart, and disagrees when its pass rate or how its repeats ended differs; its outcome is the last indexed repeat.</p>{% endif %}
+  {% if comparison.repeated_trials|sum %}<p>Some tasks have repeated attempts. A task row counts every attempt, infra apart, and disagrees when its pass rate or how its attempts ended differs; its outcome is the last indexed attempt.</p>{% endif %}
   <p>Adjusted rate excludes only rate limits, API errors, setup errors and spending caps. Unknown outcomes stay in its denominator. Controls are never ranked.</p>
 </div>
 
@@ -111,12 +111,12 @@
     {% endfor %}
     {% set pk = comparison.pass_k %}
     {% if pk and pk|select|list|length == pk|length %}
-    {% set top = pk|map(attribute='repeats')|min %}
-    {% for name, key, hint in [('pass@', 'at', 'The chance that at least one of k repeats passed, averaged over the tasks'), ('pass^', 'hat', 'The chance that all k repeats passed, averaged over the tasks')] %}
+    {% set top = pk|map(attribute='attempts')|min %}
+    {% for name, key, hint in [('pass@', 'at', 'The chance that at least one of k attempts passed, averaged over the tasks'), ('pass^', 'hat', 'The chance that all k attempts passed, averaged over the tasks')] %}
     {% for k in range(1, top + 1) %}
     <tr class="pass-k">
       <th class="rowhead" title="{{ hint }}">{{ name }}{{ k }}</th>
-      {% for p in pk %}<td class="mono" title="{{ p.units }} task{{ '' if p.units == 1 else 's' }}, each read on its first {{ p.repeats }} repeats">{{ '%.0f'|format(p[key][k] * 100) }}%</td>{% endfor %}
+      {% for p in pk %}<td class="mono" title="{{ p.units }} task{{ '' if p.units == 1 else 's' }}, each read on its first {{ p.attempts }} attempts">{{ '%.0f'|format(p[key][k] * 100) }}%</td>{% endfor %}
     </tr>
     {% endfor %}
     {% endfor %}
@@ -198,7 +198,7 @@
           </div>
           </div>
           {%- set tried = taskrow.tried[loop.index0] %}
-          {% if tried.n > 1 %}<span class="compare-repeats">{{ repeat_count(tried) }}</span>{% endif %}
+          {% if tried.n > 1 %}<span class="compare-attempts">{{ attempt_count(tried) }}</span>{% endif %}
         {% else %}
           <span class="faint">—</span>
         {% endif %}

@@ -49,7 +49,7 @@ Importing results needs no runner.
 | Recipe | Runner, benchmark, dataset, agents, models, limits, machines | The builder; saved in the browser or exported as JSON |
 | Launch | The jobs one press of **Run** starts | Runs, *By launch* |
 | Job | One benchmark, one dataset, one agent or capability | Runs |
-| Trial | One run of one task: a repeat | A job's page |
+| Trial | One attempt at one task | A job's page |
 
 ## Evidence
 

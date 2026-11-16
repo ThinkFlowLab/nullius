@@ -1006,24 +1006,24 @@ tr.control-row td { color: var(--text-dim); }
 .oc-cancelled::before, .seg.oc-cancelled, .tag.oc-cancelled::before { background: var(--cancelled); }
 .seg.oc-unknown { background: var(--unknown); }
 
-/* a task's repeats: one tab each (traces/_repeats.html), on the trial page,
-   its All repeats view and each side of a compared task */
-.repeat-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .9rem; margin: .9rem 0 0; }
-.repeat-count { color: var(--text-dim); font-size: .85rem; }
-.repeat-count b { color: var(--text); font-weight: 600; }
-.repeat-tabs { display: flex; flex-wrap: wrap; gap: .35rem; }
-.repeat-tab {
+/* a task's attempts: one tab each (traces/_attempts.html), on the trial page,
+   its All attempts view and each side of a compared task */
+.attempt-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .9rem; margin: .9rem 0 0; }
+.attempt-count { color: var(--text-dim); font-size: .85rem; }
+.attempt-count b { color: var(--text); font-weight: 600; }
+.attempt-tabs { display: flex; flex-wrap: wrap; gap: .35rem; }
+.attempt-tab {
   display: inline-flex; align-items: center; gap: .45rem; padding: .3rem .7rem;
   border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim);
   font-size: .8rem; text-decoration: none; white-space: nowrap;
 }
-.repeat-tab:not(.all)::before { content: ""; width: 8px; height: 8px; border-radius: 2px; flex: none; }
-.repeat-tab.oc-unknown::before { background: var(--unknown); }
-.repeat-tab:hover { color: var(--text); border-color: var(--text-faint); }
-.repeat-tab[aria-current="page"] { color: var(--text); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
-.repeat-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.repeat-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-.repeat-table tr[aria-current="true"] td { background: var(--accent-soft); }
+.attempt-tab:not(.all)::before { content: ""; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.attempt-tab.oc-unknown::before { background: var(--unknown); }
+.attempt-tab:hover { color: var(--text); border-color: var(--text-faint); }
+.attempt-tab[aria-current="page"] { color: var(--text); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+.attempt-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.attempt-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.attempt-table tr[aria-current="true"] td { background: var(--accent-soft); }
 
 /* outcome tag inside a table row */
 .tag {
