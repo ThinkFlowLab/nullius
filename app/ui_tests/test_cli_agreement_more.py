@@ -97,7 +97,6 @@ class Agreement(unittest.TestCase):
         self.assertIn(f'<h3 style="margin-top:0">{doc["trial"]["exception_type"]}</h3>', page)
         self.assertIn(f"<pre>{html.escape(doc['trial']['exception_message'])}</pre>", page)
         self.assertEqual(doc["trial"]["exception_message"], "401 for api_key=[REDACTED]")
-        self.assertIn("Trajectory · absent", page)
         self.assertIsNone(doc["trajectory"])
 
     def test_an_unknown_trial_is_404_on_the_page_and_3_from_the_shell(self):

@@ -311,8 +311,7 @@ class LiveBoard(unittest.TestCase):
             trial = self.client.get("/trial/lme-arm/q0"); self.addCleanup(trial.close)
             html = trial.get_data(as_text=True)
             self.assertEqual(trial.status_code, 200)
-            self.assertIn("1 rate-limited call retried", html)
-            self.assertIn("“Other” is the wait for the judge", html); self.assertNotIn("Harbor", html.split("<main", 1)[1])   # a reader's run, in its own words
+            self.assertIn("After the check: the container", html); self.assertNotIn("Harbor", html.split("<main", 1)[1])   # a reader's run, in its own words
             self.assertNotIn("How it worked", html); self.assertNotIn(">Tool calls</h3>", html)                    # edits and tests are an agent's, not one call's
             self.assertIn("LongMemEval's judge", html); self.assertIn("Said <b class=\"mono\">no</b>", html)   # the judge that gave the outcome
             self.assertIn("official gpt-4o · evaluate_qa.py", html)

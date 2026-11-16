@@ -261,6 +261,7 @@ h1 { font-size: clamp(1.75rem, 2.5vw, 2.15rem); font-weight: 500; line-height: 1
 h2 { font-size: 1.05rem; margin: 2rem 0 .75rem; }
 h3 { font-size: .72rem; margin: 1.25rem 0 .6rem; color: var(--text-dim);
      text-transform: uppercase; letter-spacing: .09em; font-weight: 500; }
+h3 .total { margin-left: .15rem; color: var(--text); font-weight: 600; text-transform: none; letter-spacing: normal; }
 .subtitle { color: var(--text-dim); font-size: .9rem; line-height: 1.75; margin: .75rem 0 1.75rem; max-width: 105ch; }
 .subtitle .mono { color: var(--text); }
 .muted { color: var(--text-dim); }

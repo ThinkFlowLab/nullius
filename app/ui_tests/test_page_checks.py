@@ -87,11 +87,10 @@ class Pages(unittest.TestCase):
     # --- views.md ---------------------------------------------------------
 
 
-    def test_a_degenerate_clock_says_unattributable_and_keeps_the_totals(self):
+    def test_a_degenerate_clock_keeps_the_totals_and_draws_no_empty_phase(self):
         control = self.page("trial-oracle-control")
-        self.assertIn("No per-step clock is available", control)
+        self.assertNotIn("Setup <b>", control)                               # a phase that took no time has no chip
         self.assertIn("Agent 0.2s", control)                                  # the all-call total stays
-        self.assertIn("Trajectory · absent", control)
 
 
 

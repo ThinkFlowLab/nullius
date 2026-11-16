@@ -453,11 +453,10 @@ class Routes(unittest.TestCase):
         self.assertNotIn("Agent error", trial_page)
 
 
-    def test_retried_rate_limits_reach_the_job_table_and_the_trial_head(self):
+    def test_retried_rate_limits_reach_the_job_table(self):
         """A 429 the agent's SDK retried is in agent/gateway.log and nowhere
-        else: the outcome is untouched. The job table marks the row,
-        the trial head counts them, and a trial with no gateway log says the
-        count is not recorded rather than showing a clean zero. The manifest
+        else: the outcome is untouched. The job table marks the row, and a
+        trial with no gateway log is not marked as if it were clean. The manifest
         Harbor writes beside them is listed on the Artifacts tab."""
         job_dir = self.root / "rate-limited-run"
         synthetic_job(self.root, "rate-limited-run")
@@ -479,7 +478,6 @@ class Routes(unittest.TestCase):
             self.assertIn('<span class="badge rate-limits" title="3 rate-limited calls retried by the agent', html)
             self.assertIn(">429 ×3</span>", html)
             html = self.get_ok("/trial/rate-limited-run/task-001").get_data(as_text=True)
-            self.assertIn('<b class="warn">3 rate-limited calls retried</b>', html)
             self.assertIn("Artifact manifest", html)
             self.assertIn("/trial/rate-limited-run/task-001/artifact/manifest", html)
             manifest = self.get_ok("/trial/rate-limited-run/task-001/artifact/manifest").get_data(as_text=True)
@@ -488,9 +486,6 @@ class Routes(unittest.TestCase):
         self.assertIsNone(self.active_job.trials[0].n_rate_limited_retries)
         html = self.get_ok("/job/active-run").get_data(as_text=True)
         self.assertNotIn("rate-limits", html)
-        html = self.get_ok("/trial/active-run/task-001").get_data(as_text=True)
-        self.assertIn("Rate limits · not recorded", html)
-        self.assertNotIn("rate-limited call", html)
 
 
 if __name__ == "__main__":

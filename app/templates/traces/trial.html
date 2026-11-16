@@ -79,21 +79,6 @@
   {% endif %}
 </div>
 
-<div class="evidence-strip" aria-label="Evidence recorded">
-  <span>Trajectory · {{ 'recorded' if trial.has_trajectory else 'absent' }}</span>
-  <span>Trace · {{ 'recorded' if trial.has_trace else 'absent' }}</span>
-  <span>Reward · {{ 'recorded' if trial.reward is not none else 'absent' }}</span>
-  {# Rate limits the agent's SDK retried and the run survived. They are in the
-     gateway log and nowhere else — result.json records only the 429 that
-     killed a run — so a trial without that log reads as unmeasured, not clean. #}
-  {% if trial.n_rate_limited_retries is none %}
-  <span class="rate-limits" title="No agent/gateway.log in this trial, so retried rate limits cannot be counted">Rate limits · not recorded</span>
-  {% elif trial.n_rate_limited_retries %}
-  <span class="rate-limits" title="Rate-limit records in agent/gateway.log — 429s the agent's SDK retried below the harness. The run survived them; the outcome does not show them."><b class="warn">{{ trial.n_rate_limited_retries }} rate-limited call{{ '' if trial.n_rate_limited_retries == 1 else 's' }} retried</b></span>
-  {% else %}
-  <span class="rate-limits" title="agent/gateway.log carries no rate-limit record">Rate limits · none logged</span>
-  {% endif %}
-</div>
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
   {% for name, label in [('overview', 'Overview'), ('judgement', 'System One judge'), ('llm-judge', 'LLM judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] %}
   <button id="tab-{{ name }}" role="tab" type="button" data-tab="{{ name }}" aria-controls="trial-{{ name }}" aria-selected="{{ 'true' if name == 'overview' else 'false' }}" tabindex="{{ '0' if name == 'overview' else '-1' }}">{{ label }}</button>
@@ -134,35 +119,24 @@
 {% set total = trial.dur_phases + trial.dur_other %}
 {% if total %}
 <div class="panel">
-  <h3 style="margin-top:0">Where the time went</h3>
-  {# All four phases Harbor records. Leaving agent_setup out understated the
-     bar by a third on some agents, and it is the most actionable number in
-     the set — installing the agent can cost more than solving the task. #}
+  <h3 style="margin-top:0">Where the time went <b class="total">{{ trial.dur_total|secs }}</b></h3>
+  {# All four phases Harbor records, and the same four on a standard run: Env
+     its environment, Setup the agent's start, Verify its check and score (a
+     model judge included). A phase that took no time draws neither a segment
+     nor a chip, so the bar and the chips always match. #}
+  {%- if job.runner %}
+  {%- set says = {'env': "The unit's environment: the driver's setup, the relay, its image", 'setup': "The agent's start and session, its MCP servers included", 'verify': "The unit's check and its score, a model judge included", 'other': 'After the check: the container, the relay and the trial written'} %}
+  {%- else %}
+  {%- set says = {'env': 'Environment build', 'setup': 'Installing the agent', 'verify': 'Verifier', 'other': 'Time Harbor does not attribute to a phase: image pull, container start and teardown, artifact collection'} %}
+  {%- endif %}
+  {%- set phases = [('env', 'Env', trial.dur_env, says.env), ('setup', 'Setup', trial.dur_agent_setup, says.setup), ('agent', 'Agent', trial.dur_agent, 'The agent working'), ('verify', 'Verify', trial.dur_verifier, says.verify), ('other', 'Other', trial.dur_other, says.other)] %}
   <div class="bar phases">
-    {# A 0s phase emits no segment at all, so a control's empty setup leaves
-       no stray sliver. #}
-    {% if trial.dur_env|phase %}<span class="seg ph-env" style="flex:{{ trial.dur_env|phase }}" title="Environment build: {{ trial.dur_env|secs }}"></span>{% endif %}
-    {% if trial.dur_agent_setup|phase %}<span class="seg ph-setup" style="flex:{{ trial.dur_agent_setup|phase }}" title="Agent setup (installing the agent): {{ trial.dur_agent_setup|secs }}"></span>{% endif %}
-    {% if trial.dur_agent|phase %}<span class="seg ph-agent" style="flex:{{ trial.dur_agent|phase }}" title="Agent working: {{ trial.dur_agent|secs }}"></span>{% endif %}
-    {% if trial.dur_verifier|phase %}<span class="seg ph-verify" style="flex:{{ trial.dur_verifier|phase }}" title="Verifier: {{ trial.dur_verifier|secs }}"></span>{% endif %}
-    {% set items = job.runner_items[1] if job.runner_items else 'items' %}
-    {% set other_is = 'the wait between the answer and its judgement: the judge reads the answers once its share of the ' ~ items ~ ' is answered' if job.runner else 'time Harbor does not attribute to a phase: image pull, container start and teardown, artifact collection' %}
-    {% if trial.dur_other|phase %}<span class="seg ph-other" style="flex:{{ trial.dur_other|phase }}" title="Other: {{ trial.dur_other|secs }} — {{ other_is }}"></span>{% endif %}
+    {% for key, label, dur, title in phases if dur|phase %}<span class="seg ph-{{ key }}" style="flex:{{ dur|phase }}" title="{{ label }}: {{ dur|secs }}. {{ title }}"></span>{% endfor %}
   </div>
   <div class="legend" style="margin-bottom:0">
-    <span class="chip ph-env">Env <b>{{ trial.dur_env|secs }}</b></span>
-    <span class="chip ph-setup">Setup <b>{{ trial.dur_agent_setup|secs }}</b></span>
-    <span class="chip ph-agent">Agent <b>{{ trial.dur_agent|secs }}</b></span>
-    <span class="chip ph-verify">Verify <b>{{ trial.dur_verifier|secs }}</b></span>
-    <span class="chip ph-other"
-          title="{{ other_is|capitalize }}">Other <b>{{ trial.dur_other|secs }}</b></span>
+    {% for key, label, dur, title in phases if dur|phase %}<span class="chip ph-{{ key }}" title="{{ title }}">{{ label }} <b>{{ dur|secs }}</b></span>
+    {% endfor %}
   </div>
-  <p class="muted small">The bar spans the trial's full {{ trial.dur_total|secs }}.
-    {% if job.runner %}“Other” is the wait for the judge, which reads the answers once its share of the {{ items }} is answered.{% else %}“Other” is harness overhead Harbor doesn't break out — the same tax for every agent.{% endif %}
-    {% if trace and trace.has_spans %}The Trace tab shows recorded span timing and its
-    measured or inferred provenance.{% elif traj and traj.has_step_clock %}Conversation
-    reports time between source steps; these are not per-tool durations.{% else %}No
-    per-step clock is available. Conversation preserves the recorded order.{% endif %}</p>
 </div>
 {% endif %}
 
@@ -317,7 +291,7 @@
   <p class="small muted">{{ bench_judge.judge or job.runner_judge }}{% if bench_judge.model %} · sent as <span class="mono">{{ bench_judge.model }}</span>{% endif %}</p>
   <p>Said <b class="mono">{{ (bench_judge.said or '—')[:200] }}</b>: {{ 'resolved' if trial.outcome == 'resolved' else trial.outcome|replace('_', ' ') }}.</p>
   <details class="tc"><summary class="small">What it was asked</summary><pre class="wrap">{{ bench_judge.asked }}</pre></details>
-  {% else %}
+  {%- else %}
   <p class="small muted">{% if job.runner_judge %}{{ job.runner_judge }}. {% endif %}No record of its call for this one{% if trial.outcome not in ('resolved', 'failed_verification') %}: it never got to judge it{% endif %}.</p>
   {% endif %}
   <p class="small muted" style="margin-bottom:0">Below, Nullius's own trajectory judge: experimental, asked on a click.</p>
@@ -484,7 +458,7 @@
     {% endfor %}
   </div>
   <p class="muted small">Categories, not a sequence. Reported by the trace, never summed from the bars below: spans nest.{% if trace.totals.unaccounted_ns %} Unaccounted is wall clock outside the instrumented spans.{% endif %}</p>
-  {% else %}
+  {%- else %}
   <p class="muted" style="margin:0">The trace reports no totals.</p>
   {% endif %}
 
@@ -517,7 +491,7 @@
     the call it ran inside), because summing spans that nest or overlap attributes more than the run.
     So hiding a span moves its time into “Unaccounted” rather than out of the total: the run took just
     as long.</p>
-  {% else %}
+  {%- else %}
   <p class="muted" style="margin:0">Nothing is left to break down.</p>
   {% endif %}
   {% endif %}
@@ -644,7 +618,7 @@
   <div class="legend" style="margin:0">
     {% for q in trace.qualities_present %}<span class="chip q-{{ q }}">{{ q }}</span>{% endfor %}
   </div>
-  {% else %}
+  {%- else %}
   <h3>Waterfall</h3>
   <p class="muted" style="margin:0">Every span is filtered out — nothing left to draw.</p>
   {% endif %}
