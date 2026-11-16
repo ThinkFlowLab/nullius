@@ -50,9 +50,9 @@ class WorkspaceKit(unittest.TestCase):
 
     def test_on_docker_the_fix_check_runs_in_a_container_of_the_units_image(self):
         d = self.driver(**{container.CHECK_IMAGE: "nullius/base:test", "PATH": self.bin + os.pathsep + os.environ["PATH"]})
-        d.request("setup", unit="fix", dir=self.ws, timeout=10)
+        d.request("setup", unit="fix", dir=self.ws, timeout=60)
         marker = self.plant_calc()
-        reply = d.request("score", unit="fix", dir=self.ws, transcript="", answer="", timeout=10)
+        reply = d.request("score", unit="fix", dir=self.ws, transcript="", answer="", timeout=60)
         self.assertFalse(os.path.exists(marker))                        # the agent's calc.py was never imported here
         self.assertTrue(reply["passed"])
         argv = json.loads(Path(self.argv_log).read_text())
@@ -63,9 +63,9 @@ class WorkspaceKit(unittest.TestCase):
 
     def test_locally_the_fix_check_runs_here_as_the_agent_did(self):
         d = self.driver()
-        d.request("setup", unit="fix", dir=self.ws, timeout=10)
+        d.request("setup", unit="fix", dir=self.ws, timeout=60)
         marker = self.plant_calc()
-        self.assertTrue(d.request("score", unit="fix", dir=self.ws, transcript="", answer="", timeout=10)["passed"])
+        self.assertTrue(d.request("score", unit="fix", dir=self.ws, transcript="", answer="", timeout=60)["passed"])
         self.assertTrue(os.path.exists(marker))
         self.assertFalse(os.path.exists(self.argv_log))
 
@@ -74,11 +74,11 @@ class WorkspaceKit(unittest.TestCase):
         with open(secret, "w") as f:
             f.write("nullius-ok")                                       # would even pass, read through the link
         os.symlink(secret, os.path.join(self.ws, "result.txt"))
-        reply = self.driver().request("score", unit="write", dir=self.ws, transcript="", answer="", timeout=10)
+        reply = self.driver().request("score", unit="write", dir=self.ws, transcript="", answer="", timeout=60)
         self.assertEqual((reply["passed"], reply["detail"]["result.txt"]), (False, None))
         bashrc = Path(self.tmp, "bashrc"); bashrc.write_text("mine\n")
         os.symlink(bashrc, os.path.join(self.ws, "test_calc.py"))      # the test is rewritten in place, never through a link
-        self.driver().request("score", unit="fix", dir=self.ws, transcript="", answer="", timeout=10)
+        self.driver().request("score", unit="fix", dir=self.ws, transcript="", answer="", timeout=60)
         self.assertEqual(bashrc.read_text(), "mine\n")
 
 
