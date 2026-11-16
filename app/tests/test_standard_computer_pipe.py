@@ -192,11 +192,11 @@ class Pipe(unittest.TestCase):
         code = p.wait(timeout=10)
         p.stdin.close()
         self.assertEqual(code, 1)
-        self.assertIn(b"8 bytes of input not sent", p.stderr.read())
+        self.assertIn(b"8 bytes of input not sent, its input not read to its end", p.stderr.read())
 
-    def test_input_waiting_for_a_stalled_socket_is_bounded_and_drained_once_it_takes_more(self):
-        # The socket takes the first chunk, then stalls until the test lets it go: the input is held back meanwhile,
-        # and all of it reaches the socket once the socket takes more.
+    def queue_scenario(self, extra=""):
+        """The socket takes its first send, then stalls until the test lets it go: the input is held back meanwhile,
+        and all of it reaches the socket once the socket takes more. No read's size is assumed."""
         p = self.stand_in("class Connected:\n"
                           "    def connect(self, path): pass\n"
                           "    def sendall(self, data):\n"
@@ -205,15 +205,16 @@ class Pipe(unittest.TestCase):
                           "    def shutdown(self, how):\n        open(sys.argv[2] + '.shut', 'w').close()\n"
                           "    def recv(self, size):\n"
                           "        while not os.path.exists(sys.argv[2] + '.shut'):\n            time.sleep(0.05)\n"
-                          "        return b''\n")
+                          "        return b''\n", extra)
         chunk, written = b"q" * 65536, [0]
         p.stdin.write(chunk)
         p.stdin.flush()
         written[0] += len(chunk)
         deadline = time.monotonic() + 10
-        while self.sent() < len(chunk) and time.monotonic() < deadline:   # the pipe runs and passes data on
+        while not self.sent() and time.monotonic() < deadline:  # the pipe runs and passes data on
             time.sleep(0.05)
-        self.assertEqual(self.sent(), len(chunk), "nothing reached the socket")
+        first = self.sent()
+        self.assertGreater(first, 0, "nothing reached the socket")
         stop = threading.Event()
 
         def feed():
@@ -232,13 +233,44 @@ class Pipe(unittest.TestCase):
             time.sleep(0.5)
         bound = 65536 * (3 + pipe_module().QUEUE_CHUNKS) + 4 * 1024 * 1024   # queued, one in each hand, the OS pipe
         self.assertLess(written[0], bound, "the pipe read on with nothing taken by the socket")
-        self.assertEqual(self.sent(), len(chunk))
+        self.assertEqual(self.sent(), first, "the stalled socket took more")
         stop.set()
         open(self.tmp_file() + ".go", "w").close()               # the socket takes more
         feeder.join(10)
         p.stdin.close()
         self.assertEqual(p.wait(timeout=20), 0)
         self.assertEqual(self.sent(), written[0])
+
+    def test_input_waiting_for_a_stalled_socket_is_bounded_and_drained_once_it_takes_more(self):
+        self.queue_scenario()
+
+    def test_the_bounded_queue_holds_with_reads_of_any_size(self):
+        self.queue_scenario("real_read = module.os.read\nmodule.os.read = lambda fd, n: real_read(fd, min(n, 4096))\n")
+
+    def test_input_the_pipe_never_read_is_sent_or_its_exit_is_not_0(self):
+        # The server's side ends at once; the input, a file, is read only after a delay. The pipe reads on to the
+        # input's end and sends it, or does not exit 0.
+        request = b"request that the half-closed server can still receive\n"
+        with open(self.tmp_file("input"), "wb") as f:
+            f.write(request)
+        with open(self.tmp_file("input"), "rb") as src:
+            p = self.stand_in("class Connected:\n"
+                              "    def connect(self, path): pass\n"
+                              "    def sendall(self, data):\n        open(sys.argv[2], 'ab').write(data)\n"
+                              "    def recv(self, size): return b''\n"
+                              "    def shutdown(self, how): pass\n",
+                              "real_select = module.select.select\n"
+                              "def delayed(*args):\n    time.sleep(0.2)\n    return real_select(*args)\n"
+                              "module.select.select = delayed\n", stdin=src)
+            code = p.wait(timeout=10)
+        self.assertTrue(code != 0 or self.sent_bytes() == request, f"exit {code}, sent {self.sent_bytes()!r}")
+
+    def sent_bytes(self):
+        try:
+            with open(self.tmp_file(), "rb") as f:
+                return f.read()
+        except OSError:
+            return b""
 
     def sent(self):
         try:
@@ -321,11 +353,10 @@ class Pipe(unittest.TestCase):
                           "    return data\n"
                           "module.os.read = slow\n")
         p.stdin.write(b"request\n")
-        p.stdin.flush()
+        p.stdin.close()                                           # the input ends once the request is read
         code = p.wait(timeout=10)
-        p.stdin.close()
         err = p.stderr.read()
-        sent = open(self.tmp_file(), "rb").read() if os.path.exists(self.tmp_file()) else b""
+        sent = self.sent_bytes()
         self.assertEqual((code, sent), (0, b"request\n"), f"what was read was not sent: {err!r}")
 
     def test_the_end_after_the_inputs_end_has_one_deadline(self):

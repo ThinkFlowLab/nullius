@@ -17,8 +17,9 @@ counted as it is taken, under the lock that the decision to exit takes, so that 
   the pipe's end counts to it.
 - Once the input ended and all it read is sent, the socket's writing side is closed; when the socket's side then ends,
   the pipe exits 0.
-- When the socket's side ends first, the pipe reads no more input, and what it holds is sent by the deadline (the
-  input's, else END_SECONDS from then). What is left unsent is an exit 1, its count on stderr.
+- When the socket's side ends first, the pipe reads on to its input's end and sends what it reads, by the deadline
+  (the input's, else END_SECONDS from then). It exits 0 only when it saw its input's end and sent all of it; else it
+  exits 1, the bytes left unsent on stderr.
 - At the deadline with the socket's side still open, the pipe takes no more of the socket, sends no more to it, and
   exits 3: its end was cut with the server still connected. The bytes left either way are counted on stderr.
 
@@ -140,19 +141,18 @@ def main():
             sys.stderr.write(f"computer_pipe: cut {END_SECONDS:g} s after the input's end, the server still connected: "
                              f"{unwritten} bytes from the server not written, {unsent} bytes of input not sent\n")
             return CUT
-    with lock:                                       # the socket's side ended: no more input is taken
-        quiet.set()
     until = deadline if deadline is not None else time.monotonic() + END_SECONDS
-    while left()[0] and not failed and time.monotonic() < until:
-        time.sleep(0.05)
-    if input_ended.is_set():
-        sent_all.wait(max(0.0, until - time.monotonic()))
+    while not failed and time.monotonic() < until and not (input_ended.is_set() and sent_all.is_set()):
+        time.sleep(0.05)                             # the socket's side ended: the input is read on to its end, and sent
+    with lock:                                       # no more input is taken
+        quiet.set()
     if failed:
         sys.stderr.write(f"computer_pipe: {type(failed[0]).__name__}: {failed[0]}\n")
         return 1
     unsent = left()[0]
-    if unsent or (input_ended.is_set() and not sent_all.is_set()):
-        sys.stderr.write(f"computer_pipe: the server's side ended with {unsent} bytes of input not sent\n")
+    if unsent or not input_ended.is_set() or not sent_all.is_set():
+        sys.stderr.write(f"computer_pipe: the server's side ended with {unsent} bytes of input not sent"
+                         + ("" if input_ended.is_set() else ", its input not read to its end") + "\n")
         return 1
     return 0
 
