@@ -9,6 +9,7 @@ and given start times here; nothing is run.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -206,6 +207,53 @@ class RunsByLaunch(unittest.TestCase):
             page = self.get("/job/exp-1008-codex")                                     # its own page, before Harbor writes it
         self.assertIn('id="execution-state">queued</span>', page)
         self.assertIn("· the run: running", page)
+
+    def test_a_standard_launch_draws_its_controls_whatever_their_state(self):
+        # A standard job carries a runner; its declared controls are still task checks, before and after they are written.
+        def standard(job, control=""):
+            path = Path(job.dir) / "config.json"
+            cfg = json.loads(path.read_text())
+            cfg.update(runner="standard", runner_label="Nullius",
+                       standard={"control": {"name": control, "source": "nullius"}} if control else {})
+            path.write_text(json.dumps(cfg))
+            return parse.parse_job(job.dir)
+        agents = ("my-agent", "nop", "oracle")
+        plan = execution.Plan(name="std-1113", script="", runner="standard", jobs=[{"name": f"std-1113-{a}", "agent": a} for a in agents],
+                              parts=[{"id": a, "label": a, "script": "true"} for a in agents])
+        done = {"rc": 0, "at": 2.0, "label": "done"}
+        cases = (  # record, controls written with their trials, the states drawn, the task-check line
+            ({"state": "running", "launched": "nop", "part": 1, "ends": {"my-agent": done}}, {"nop": {"a": 0}},
+             ["running", "queued"], "Not checked yet: a control has not finished."),
+            ({"state": "stopped", "launched": "nop", "part": 1, "ends": {"my-agent": done}}, {"nop": {"a": 0, "b": 0}},
+             ["stopped", "not run"], "Task checks incomplete: nop stopped, oracle not run."),
+            ({"state": "failed", "launched": "oracle", "part": 2, "ends": {"my-agent": done, "nop": done, "oracle": dict(done, rc=1)}},
+             {"nop": {t: 0 for t in "abcd"}, "oracle": {"a": 1}}, ["finished", "failed"], "Task checks incomplete: oracle failed."),
+            ({"state": "done", "launched": "oracle", "part": 2, "ends": {a: done for a in agents}},
+             {"nop": {t: 0 for t in "abcd"}, "oracle": {"a": 1, "b": 1}}, ["finished", "finished"], "Task checks incomplete: oracle ran 2 of 4."),
+            ({"state": "done", "launched": "oracle", "part": 2, "ends": {a: done for a in agents}},
+             {"nop": {t: 0 for t in "abcd"}, "oracle": {t: 1 for t in "abcd"}}, ["finished", "finished"], "Every task is feasible"),
+        )
+        for record, written, states, line in cases:
+            with self.subTest(record["state"], line=line), tempfile.TemporaryDirectory() as root:
+                self.jobs = [standard(write_job(root, "std-1113-my-agent", "my-agent", {t: 1 for t in "abcd"}, n_tasks=4))]
+                for c, trials in written.items():
+                    job = write_job(root, f"std-1113-{c}", c, trials, n_tasks=4)
+                    if len(trials) < 4:
+                        os.remove(Path(job.dir) / "result.json")       # cut short: no job-level result
+                    self.jobs.append(standard(job, c))
+                ex = execution.Execution(plan, root=root, record={"id": "r5", "started": 1.0, "finished": 3.0, **record})
+                ex.jobs = root
+                with patch.dict(execution.EXECUTIONS, {"r5": ex}, clear=True):
+                    html = self.get("/runs")
+                block = next(b for b in blocks(html) if 'data-launch="run:r5"' in b)
+                self.assertIn("· 3 runs</span>", block)
+                self.assertEqual(block.count("<tr class="), 3)                       # every run counted is drawn
+                self.assertEqual(re.findall(r'<tr class="la-control st-([^"]+)" data-control="(\w+)"', block),
+                                 list(zip(states, ("nop", "oracle"))))
+                self.assertIn(line, text_of(block))
+                if record["state"] != "running":
+                    self.assertNotIn("· running", text_of(block))              # the run's record wins over a result left "running"
+                self.assertNotIn("std-1113-nop&", block); self.assertNotIn("Compare these", block)   # never offered to Compare
 
     def test_a_run_record_from_another_workspace_is_not_a_launch_here(self):
         def ex_of(key, name, jobs_dir, state="running"):

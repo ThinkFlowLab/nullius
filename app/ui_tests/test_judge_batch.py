@@ -7,7 +7,6 @@ of an hour.
 from __future__ import annotations
 
 import threading
-import time
 import unittest
 
 from nullius.judge import client
@@ -18,22 +17,17 @@ from web import judge
 
 class RunBatch(unittest.TestCase):
     def test_calls_overlap_and_the_count_and_order_hold(self):
-        live, most = [0], [0]
-        lock = threading.Lock()
+        # Each call waits until CONCURRENCY calls are in flight at once, twice over n items.
+        # Serial calls break the barrier at its timeout, which only bounds a hang.
+        n = 2 * judge.CONCURRENCY
+        in_flight = threading.Barrier(judge.CONCURRENCY, timeout=10)
 
         def ask(i):
-            with lock:
-                live[0] += 1; most[0] = max(most[0], live[0])
-            time.sleep(0.1)
-            with lock:
-                live[0] -= 1
+            in_flight.wait()
             if i == 3:
                 raise client.JudgeError(500, "busy")
-        t0 = time.monotonic()
-        done, failed = judge.run_batch(list(range(16)), ask, lambda i: f"t{i}")
-        self.assertEqual((done, failed), (15, ["t3: busy"]))
-        self.assertGreater(most[0], 1)
-        self.assertLess(time.monotonic() - t0, 16 * 0.1 / 2)
+        done, failed = judge.run_batch(list(range(n)), ask, lambda i: f"t{i}")
+        self.assertEqual((done, failed), (n - 1, ["t3: busy"]))
 
     def test_a_refused_key_starts_no_further_call(self):
         asked = []

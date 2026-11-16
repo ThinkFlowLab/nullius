@@ -105,7 +105,7 @@ a declared model list keeps those published choices.
 | Proofs | Local runs save to the user catalogue. A host uses a writable copy in its run's `catalogue/`, isolated from the host's own entries; that copy and its proofs mirror back alongside `jobs/`, without changing the active user catalogue |
 | Docker or Podman | The engine must answer `ps` (`docker ps`, or `podman ps` for the standard's container backend), or the run stops before it starts |
 | Stop | Ends the current part (exit 130), records `stopped`; the next part never starts |
-| Restart of Nullius | `execution.restore` reattaches from `runs/<name>/run.json` |
+| Restart of Nullius | `execution.restore` reattaches from `runs/<name>/run.json`; the job goes back into the workspace it started in, while that workspace exists |
 | Cannot run from the page | Generated tasks and custom agents are not supported by Run |
 | Refused | Reads *refused* on the runs page, with why; the job was never written |
 | Files | `<RUNS_DIR>/<name>/`: script, log, `run.json`, `jobs/`; default `runs/` under the user data directory (`nullius paths`) |

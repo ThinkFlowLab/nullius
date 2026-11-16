@@ -37,6 +37,19 @@ class Definitions(unittest.TestCase):
             self.assertEqual(b["options"]["temperature"]["setups"], ["original"], key)
             self.assertEqual(b["options"]["temperature"]["default"], "default", key)
 
+    def test_gsm8k_offers_platinum_beside_its_test_split_pinned_and_proven(self):
+        b = definitions.get("benchmark", "gsm8k")
+        test, platinum = b["datasets"]
+        self.assertEqual((test["id"], test["units"], platinum["id"], platinum["units"]), ("test", 1319, "platinum", 1209))
+        self.assertRegex(platinum["url"], r"^https://huggingface\.co/datasets/madrylab/gsm8k-platinum/resolve/[0-9a-f]{40}/")
+        self.assertRegex(platinum["sha256"], r"^[0-9a-f]{64}$")
+        for ds in (test, platinum):
+            self.assertEqual(sorted(b["proven"][ds["id"]]), ["leak", "nop", "oracle", "units"], ds["id"])
+            self.assertEqual(b["proven"][ds["id"]]["oracle"]["units"], ds["units"])
+        cat = catalog.load()
+        self.assertEqual([(d.key, d.tasks) for d in cat.datasets_of(cat.benchmark("gsm8k"))], [("test", 1319), ("platinum", 1209)])
+        self.assertEqual(cat.tasks_of(cat.benchmark("gsm8k")), ("1,319", "tasks"))       # one set of problems, not their sum
+
     def test_a_setup_that_says_comparable_must_say_it_as_a_boolean(self):
         b = definitions.get("benchmark", "gsm8k")
         with open(os.path.join(b["_here"], "standard.json")) as f:

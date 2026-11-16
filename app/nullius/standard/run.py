@@ -64,7 +64,7 @@ import time
 import traceback
 import tempfile
 from collections import Counter
-from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_EXCEPTION, CancelledError, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from typing import Callable, Dict, List, Optional
 
@@ -185,6 +185,15 @@ def driver_secrets(bench: dict, licences) -> dict:
     for e in (bench.get("environments") or {}).values():
         out.update(definitions.secret_values(e, licences, "driver"))
     return out
+
+
+def data_env() -> dict:
+    """Where a driver's dataset downloads go: the Hugging Face endpoint
+    (``settings.hf_endpoint``), in its process's environment from its start,
+    so ``huggingface_hub`` reads it when first imported. Nothing for the default."""
+    from nullius import settings
+    endpoint = settings.hf_endpoint()
+    return {"HF_ENDPOINT": endpoint} if endpoint else {}
 
 
 def option_env(values: dict) -> dict:
@@ -610,7 +619,7 @@ class Run:
                 os.makedirs(cwd, exist_ok=True)
                 env = {"HOME": home, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                        "NULLIUS_DATASET_ID": self.ds["id"], "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
-                       **option_env(self.bench_options), **self.file_env, **self.embeddings_env(), **self.driver_secrets()}
+                       **option_env(self.bench_options), **data_env(), **self.file_env, **self.embeddings_env(), **self.driver_secrets()}
                 files = [h["path"] for s in definitions.secrets_of(self.bench)
                          if s.get("to") == "driver" and s.get("kind") == "file"
                          for h in [self.licences.get(s["name"])] if h] + list(self.file_env.values())
@@ -630,7 +639,7 @@ class Run:
                             "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                             "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
                             **({container.CHECK_IMAGE: self.image, **container.check_env()} if self.image else {}),
-                            **option_env(getattr(self, "bench_options", {})), **self.file_env, **self.embeddings_env(), **self.driver_secrets(),
+                            **option_env(getattr(self, "bench_options", {})), **data_env(), **self.file_env, **self.embeddings_env(), **self.driver_secrets(),
                             **limits.environment(getattr(self, "constraints", {}))})
             os.makedirs(env["HOME"], exist_ok=True)
             # its working directory is the job's, never its catalogue folder: an upstream that writes
@@ -765,10 +774,14 @@ class Run:
                 self.loopback = container.Loopback(self.base, image=self.image, job=self.name).start()
             for iur in work:
                 futures.append(pool.submit(work_unit, iur))
-            for future in as_completed(futures):
-                res = future.result()
-                if res is not None:              # None: a unit not begun once the endpoint refused the run
-                    results.append(res)
+            pending = set(futures)
+            while pending:
+                # timed: Python runs signal handlers only in this thread, and Stop's SIGTERM can reach another thread
+                done, pending = wait(pending, timeout=0.5, return_when=FIRST_EXCEPTION)
+                for future in done:
+                    res = future.result()
+                    if res is not None:          # None: a unit not begun once the endpoint refused the run
+                        results.append(res)
             self.run_again(results, work, work_unit, again)
         except BaseException:
             self._stopped.set()
@@ -1410,7 +1423,7 @@ class Run:
         extra = install.process_env(definitions.driver_install(self.bench), drv, home) if drv else {}
         return base_env(home, {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                                "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONDONTWRITEBYTECODE": "1",
-                               **option_env(getattr(self, "bench_options", {})), **self.embeddings_env(),
+                               **option_env(getattr(self, "bench_options", {})), **data_env(), **self.embeddings_env(),
                                **limits.environment(getattr(self, "constraints", {}))})
 
     def embeddings_env(self) -> dict:

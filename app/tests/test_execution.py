@@ -675,6 +675,13 @@ class OnHost(HostBase):
         self.assertIn("harbor: starting", ex.lines); self.assertNotIn("sk-verysecretkey12345", "\n".join(ex.lines))
         self.assertEqual(json.loads((self.tmp / "runs" / "tau3-x3" / "run.json").read_text())["plan"]["host"], "bench")
 
+    def test_a_host_s_run_is_sent_this_machine_s_hugging_face_endpoint(self):
+        with mock.patch.dict(os.environ, {"HF_ENDPOINT": "https://hf-mirror.com/"}):
+            ex = self.wait(execution.Execution(self.plan, root=str(self.tmp / "runs"), run=self.answer, key="k" * 20).start())
+        self.assertEqual(ex.state, "done", ex.lines)
+        launch = next(c for c, _ in self.calls if c[0] == "ssh" and "setsid nohup" in c[-1])
+        self.assertIn("HF_ENDPOINT=https://hf-mirror.com;", launch[-1])
+
     def test_no_tasks_nothing_sent(self):
         self.plan.tasks = ""
         ex = self.wait(execution.Execution(self.plan, root=str(self.tmp / "runs"), run=self.answer, key="k" * 20).start())

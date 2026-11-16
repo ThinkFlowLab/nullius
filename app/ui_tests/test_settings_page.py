@@ -1010,11 +1010,41 @@ class SettingsPage(unittest.TestCase):
             self.assertEqual(gaia.get("HF_TOKEN"), {"kind": "value", "value": "synthetic-data-token"})
             with patch.object(sandbox, "login_user", return_value=None):
                 state = self.client.get("/settings/data-providers").json
-            self.assertEqual(state, {"huggingface": True, "dockerhub": None})
+            self.assertEqual(state, {"huggingface": True, "huggingface_endpoint": "", "huggingface_endpoint_env": False,
+                                     "huggingface_endpoint_default": "https://huggingface.co", "dockerhub": None})
             self.assertIsNone(self.file())
             response = self.client.post(url, data={"action": "remove"}, headers=headers)
             self.assertTrue(response.json["ok"])
             self.assertIsNone(gaia.get("HF_TOKEN"))
+
+    def test_the_hugging_face_endpoint_is_saved_apart_from_the_token(self):
+        from nullius import secrets
+        self.stack.enter_context(patch.dict(os.environ, {"SECRETS_DIR": str(self.tmp / "secrets")}))
+        headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
+        url = "/settings/data-providers/huggingface"
+        state = lambda: self.client.get("/settings/data-providers").json
+        with patch.object(sandbox, "login_user", return_value=None):
+            self.assertEqual(self.client.post(url, data={}, headers=headers).status_code, 400)       # neither: nothing to save
+            r = self.client.post(url, data={"endpoint": "ftp://mirror"}, headers=headers)
+            self.assertEqual((r.status_code, r.json["ok"]), (400, False))
+            r = self.client.post(url, data={"endpoint": "https://hf-mirror.com/"}, headers=headers)   # the endpoint alone
+            self.assertTrue(r.json["ok"])
+            self.assertEqual(settings.in_file(self.env_file)["HF_ENDPOINT"], "https://hf-mirror.com")
+            self.assertIsNone(secrets.value(secrets.HUGGINGFACE, "HF_TOKEN"))
+            self.assertEqual((state()["huggingface"], state()["huggingface_endpoint"]), (False, "https://hf-mirror.com"))
+            r = self.client.post(url, data={"token": "synthetic-data-token", "endpoint": "https://hf-mirror.com"}, headers=headers)
+            self.assertTrue(r.json["ok"])
+            self.assertEqual(secrets.value(secrets.HUGGINGFACE, "HF_TOKEN"), b"synthetic-data-token")
+            self.assertNotIn("synthetic-data-token", json.dumps(settings.in_file(self.env_file)))     # the token is never a setting
+            r = self.client.post(url, data={"endpoint": "https://huggingface.co"}, headers=headers)   # the default: removed, token kept
+            self.assertTrue(r.json["ok"])
+            self.assertNotIn("HF_ENDPOINT", settings.in_file(self.env_file))
+            self.assertEqual((state()["huggingface"], state()["huggingface_endpoint"]), (True, ""))
+            # the environment wins: shown, marked, never written over
+            with patch.dict(os.environ, {"HF_ENDPOINT": "https://env-mirror.example"}):
+                self.assertEqual((state()["huggingface_endpoint"], state()["huggingface_endpoint_env"]), ("https://env-mirror.example", True))
+                self.assertTrue(self.client.post(url, data={"endpoint": "https://other.example"}, headers=headers).json["ok"])
+                self.assertNotIn("HF_ENDPOINT", settings.in_file(self.env_file))
 
     def test_the_price_list_is_updated_and_priced_only_from_this_machines_browser(self):
         self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_PRICES": str(self.tmp / "prices.json")}))

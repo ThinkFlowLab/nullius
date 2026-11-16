@@ -20,6 +20,7 @@ Grade-school math word problems that take two to eight steps of basic arithmetic
 | Dataset | Key | Tasks | From | Verifier |
 |---|---|---|---|---|
 | GSM8K test | `test` | 1319 | GitHub [openai/grade-school-math](https://github.com/openai/grade-school-math/tree/3101c7d5072418e28b9008a6636bde82a006892c) | The upstream's extract_answer and is_correct, applied to the agent's last message and the problem's reference answer. |
+| GSM8K-Platinum | `platinum` | 1209 | Hugging Face [madrylab/gsm8k-platinum](https://huggingface.co/datasets/madrylab/gsm8k-platinum/tree/e762492455a1cf7967de89f05b6bef72fc713b66) | The upstream's extract_answer and is_correct, applied to the agent's last message and the problem's reference answer. |
 
 ## On the standard
 
@@ -44,6 +45,7 @@ Grade-school math word problems that take two to eight steps of basic arithmetic
 
 - Answers must end with a line '#### <number>'. The number is compared as text, so 18.00 does not match 18.
 - The test split is run. The Socratic variant has the same questions and answers, with different worked explanations.
+- GSM8K-Platinum is the test split with its errors cleaned. A problem has the same number in both, so the two runs compare problem by problem.
 
 ## Nullius limitations
 
@@ -60,5 +62,15 @@ Grade-school math word problems that take two to eight steps of basic arithmetic
       author={Cobbe, Karl and Kosaraju, Vineet and Bavarian, Mohammad and Chen, Mark and Jun, Heewoo and Kaiser, Lukasz and Plappert, Matthias and Tworek, Jerry and Hilton, Jacob and Nakano, Reiichiro and Hesse, Christopher and Schulman, John},
       journal={arXiv preprint arXiv:2110.14168},
       year={2021}
+    }
+    
+    @misc{vendrow2025largelanguagemodelbenchmarks,
+      title={Do Large Language Model Benchmarks Test Reliability?},
+      author={Joshua Vendrow and Edward Vendrow and Sara Beery and Aleksander Madry},
+      year={2025},
+      eprint={2502.03461},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2502.03461}
     }
     ```

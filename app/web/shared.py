@@ -317,22 +317,35 @@ def close_workspace():
     STATE.update({"workspace": None, "roots": [], "label": "", "job_roots": []})
 
 
-def adopt_roots(roots, label="", new=False):
+def adopt_roots(roots, label="", new=False, into=""):
     """Roots the user just pointed at: into the open workspace, or a new one.
 
     Without a label, roots that already have a workspace reopen it — so a
     restart with the same argv lands in the same place, cache and all.
+    ``into``: the workspace to add them to while it exists, opened only
+    when none is open.
     """
     ws = STATE["workspace"]
+    if into and not (ws and ws.name == into):
+        ws = workspace.load(WS_HOME, into) or ws
     if ws and not new:
         ws.roots = list(ws.roots) + [r for r in roots if r not in ws.roots]
         workspace.save(ws)
-        open_workspace(ws)
+        if STATE["workspace"] in (None, ws):
+            open_workspace(ws)
         return ws
     ws = None if label else workspace.find_by_roots(WS_HOME, roots, besides=execution.runs_root())
     ws = ws or workspace.create(WS_HOME, roots, label)
     open_workspace(ws)
     return ws
+
+
+def adopt_runs(runs):
+    """Runs just started: their jobs into a workspace as ``adopt_roots`` puts
+    them, each record naming it for a restart to put them back."""
+    ws = adopt_roots([ex.jobs for ex in runs])
+    for ex in runs:
+        ex.file_under(ws.name)
 
 
 def _load_jobs():

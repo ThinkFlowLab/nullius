@@ -63,6 +63,13 @@
   "nullius": "not offered - not in the repository's code"
  },
  {
+  "entry": "madrylab/gsm8k-platinum (Hugging Face)",
+  "setting": "cleaned test split",
+  "values": "main/test-00000-of-00001.parquet (1,209 problems)",
+  "default": "",
+  "nullius": "dataset:platinum"
+ },
+ {
   "entry": "driver (ours)",
   "setting": "prompt",
   "values": "the question, asked to end with '#### <number>'",

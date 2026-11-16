@@ -168,6 +168,37 @@ class Gsm8k(unittest.TestCase):
         self.assertEqual(said, theirs)
         self.assertTrue(said[0][0] and said[1][1] and not said[0][3])
 
+    def test_a_platinum_problem_keeps_its_number_in_the_test_file(self):
+        got = _installed("gsm8k")
+        if not got:
+            self.skipTest("GSM8K's upstream and driver environment are not installed (cli prove gsm8k)")
+        b, up, drv = got
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        with open(os.path.join(up, "grade_school_math", "data", "test.jsonl")) as f:
+            test = [json.loads(line) for line in f]
+
+        def platinum(name, rows):
+            """A file in Platinum's format, written by the driver's own pyarrow."""
+            path = os.path.join(tmp, name)
+            _upstream_says(drv, up, "import json, sys, pyarrow as pa, pyarrow.parquet as pq\npath, rows = json.loads(sys.argv[1])\n"
+                                    "pq.write_table(pa.Table.from_pylist(rows), path)\nprint(1)", [path, rows])
+            return path
+
+        kept = [{"question": test[2]["question"], "answer": "revised\n#### 77", "cleaning_status": "revised"},
+                {"question": test[4]["question"], "answer": test[4]["answer"], "cleaning_status": "consensus"}]
+        p = _driver(self, b, up, platinum("kept.parquet", kept), NULLIUS_DATASET_ID="platinum")
+        self.assertEqual(p.request("units", dataset="platinum")["units"], ["0003", "0005"])      # the test file's numbers, gaps and all
+        self.assertIn(test[2]["question"], p.request("setup", unit="0003", dir=tmp)["prompt"])
+        self.assertTrue(p.request("score", unit="0003", dir=tmp, transcript=[], answer="#### 77")["passed"])     # Platinum's answer, not the test file's
+        self.assertEqual(p.request("oracle", unit="0003", dir=tmp)["answer"], "revised\n#### 77")
+        with self.assertRaises(jsonl.Failed):                                                    # a problem Platinum removed is not a unit
+            p.request("score", unit="0001", dir=tmp, transcript=[], answer="#### 18")
+        other = _driver(self, b, up, platinum("other.parquet", [dict(kept[0], question="a question the test file lacks")]),
+                        NULLIUS_DATASET_ID="platinum")
+        with self.assertRaises(jsonl.Failed):                                                    # never a number of its own
+            other.request("units", dataset="platinum")
+
 
 class HumanEvalNotTested(unittest.TestCase):
     """The workspace files solution.py imports are named beside the verdict, which stays the check's on

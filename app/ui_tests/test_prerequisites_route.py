@@ -29,7 +29,7 @@ class PrerequisitesRoute(unittest.TestCase):
         self.started = []
         self.stack.enter_context(patch.object(execution, "start", lambda plan: self.started.append(plan) or SimpleNamespace(
             jobs=str(self.tmp), summary=lambda: {"id": "x", "state": "preparing"})))
-        self.stack.enter_context(patch.object(web.shared, "adopt_roots", lambda roots, **kw: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
         self.client = web.app.test_client()
         r = self.client.get("/new-run"); self.addCleanup(r.close)
         with self.client.session_transaction() as s:

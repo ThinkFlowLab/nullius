@@ -92,7 +92,9 @@ class Driver:
         container.make_bridge()
         home = os.path.join(self.work, ".work", "setup-install-home")
         os.makedirs(home, exist_ok=True)
-        argv, env, name = self.command({"HOME": home}, self.work, prepare=True)
+        from nullius import settings              # its install may fetch data: from the run's Hugging Face endpoint
+        endpoint = settings.hf_endpoint()
+        argv, env, name = self.command({"HOME": home, **({"HF_ENDPOINT": endpoint} if endpoint else {})}, self.work, prepare=True)
         try:
             result = container._docker(argv[1:], env=env, timeout=1800, check=False)
         finally:

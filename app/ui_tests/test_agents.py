@@ -48,7 +48,7 @@ class Tabs(unittest.TestCase):
             self.started.append(plan)
             return SimpleNamespace(jobs=str(self.tmp / "runs" / plan.name / "jobs"), summary=lambda: {})
         self.stack.enter_context(patch.object(execution, "start", start))
-        self.stack.enter_context(patch.object(web.shared, "adopt_roots", lambda roots, **kw: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
         self.client = web.app.test_client()
 
     def test_examples_lead_catalogue_and_sidebar(self):
@@ -338,7 +338,7 @@ class BuilderStandard(unittest.TestCase):
             self.started.append(plan)
             return SimpleNamespace(jobs=str(self.tmp / "runs" / plan.name / "jobs"), summary=lambda: {"id": plan.name + "-1"})
         self.stack.enter_context(patch.object(execution, "start", start))
-        self.stack.enter_context(patch.object(web.shared, "adopt_roots", lambda roots, **kw: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
         self.client = web.app.test_client()
         r = self.client.get("/new-run"); self.addCleanup(r.close)
         self.schema = json.loads(re.search(r'<script id="nb-schema" type="application/json">(.*?)</script>', r.get_data(as_text=True), re.S).group(1))
@@ -428,7 +428,7 @@ class StandardPieces(unittest.TestCase):
             self.started.append(plan)
             return SimpleNamespace(jobs=str(self.tmp / "runs" / plan.name / "jobs"), summary=lambda: {"id": plan.name})
         self.stack.enter_context(patch.object(execution, "start", start))
-        self.stack.enter_context(patch.object(web.shared, "adopt_roots", lambda roots, **kw: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
         self.client = web.app.test_client()
 
     def get(self, url):
@@ -543,7 +543,11 @@ class StandardPieces(unittest.TestCase):
         self.assertIn("<b>stable</b>", panel); self.assertIn("<b>no leak</b>", panel)
         self.assertIn('action="/benchmarks/gsm8k/prove"', panel)
         self.assertIn("No model calls or key required.", panel)
-        self.assertIn('type="hidden" name="dataset" value="test"', panel)
+        self.assertIn('<select name="dataset"><option value="">All datasets</option><option value="test">GSM8K test</option>'
+                      '<option value="platinum">GSM8K-Platinum</option></select>', panel)      # two datasets: a choice
+        html = self.get("/benchmarks/humaneval").get_data(as_text=True)
+        panel = html[html.index('id="standard"'):html.index('id="datasets"')]
+        self.assertIn('type="hidden" name="dataset" value="humaneval"', panel)                # a single one: a fixed value
         self.assertNotIn('<select name="dataset">', panel)
 
     def test_prove_it_starts_cli_prove_here_handed_no_key(self):

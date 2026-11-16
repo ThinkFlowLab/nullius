@@ -43,7 +43,7 @@ class Table(unittest.TestCase):
 
     def test_the_page_offers_what_a_person_sets_and_no_more(self):
         self.assertEqual([v.name for v in settings.VARIABLES],
-                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "SYSTEM_ONE_PROVIDER", "SYSTEM_ONE_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_MODEL", "AGENT_KEYS", "HOSTS", "HOST_CONSTRAINTS"])
+                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "SYSTEM_ONE_PROVIDER", "SYSTEM_ONE_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_MODEL", "AGENT_KEYS", "HOSTS", "HF_ENDPOINT", "HOST_CONSTRAINTS"])
         self.assertEqual(sorted(v.name for v in settings.VARIABLES if v.secret), ["ANTHROPIC_API_KEY", "MODEL_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"])
         self.assertEqual(settings.BY_NAME["MODEL_API_URL"].kind, "endpoint")                         # shown, so it may hold no credential
         for name in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"):
@@ -61,7 +61,7 @@ class Table(unittest.TestCase):
         for old in ("HOST", "PORT"):
             self.assertNotIn(old, settings.BY_NAME); self.assertNotIn(old, settings.STARTUP)
         self.assertEqual((settings.INSTEAD["HOST"], settings.INSTEAD["PORT"]), ("APP_HOST", "APP_PORT"))
-        self.assertEqual(settings.GROUPS, ["Model credentials", "Run hosts", "Custom keys"])
+        self.assertEqual(settings.GROUPS, ["Model credentials", "Run hosts", "Custom keys", "Data providers"])
         example = settings.example()
         self.assertIn("#   APP_PORT: ", example); self.assertNotIn("\nAPP_PORT=", example); self.assertNotIn("\nPORT=", example)
 

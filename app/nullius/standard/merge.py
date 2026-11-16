@@ -157,8 +157,9 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
     names: Dict[str, List[str]] = {}
     for s in shards:
         s["trials"] = _trials(s["dir"])
-        for t in s["trials"]:
-            unit = _at(_read(os.path.join(s["dir"], t, "result.json")), ("standard", "unit")) or t
+        s["results"] = [_read(os.path.join(s["dir"], t, "result.json")) for t in s["trials"]]
+        for t, res in zip(s["trials"], s["results"]):
+            unit = _at(res, ("standard", "unit")) or t
             by_unit.setdefault(str(unit), []).append((s["name"], t))
             names.setdefault(t, []).append(s["name"])
     twice = {u: w for u, w in by_unit.items() if len(w) > 1}
@@ -227,6 +228,27 @@ def _budget(budgets: list) -> Optional[dict]:
             **({"unit_max_usd": each, "over_unit": [u for x in budgets for u in x.get("over_unit") or []]} if number(each) else {})}
 
 
+def result_of(shards: list, results: List[dict]) -> dict:
+    """The merged job's ``result.json``, but its ``id`` and its ``served`` (``_served``, which ``merge`` adds):
+    ``shards`` as ``check`` reads them, ``results`` every trial's record. The runs page folds a launch's shards
+    with it (``runs.launches.fold``)."""
+    planned = sum(int(s["result"].get("n_total_trials") or len(s["trials"])) for s in shards)
+    starts = [s["result"].get("started_at") for s in shards if s["result"].get("started_at")]
+    ends = [s["result"].get("finished_at") for s in shards if s["result"].get("finished_at")]
+    errored = sum(1 for r in results if r.get("exception_info"))
+    rewards = [(r.get("verifier_result") or {}).get("rewards") or {} for r in results]
+    scores = [w["score"] for w in rewards if "score" in w]
+    budget = _budget([s["result"].get("budget") for s in shards])
+    # ISO stamps in UTC sort as their instants
+    return {"started_at": min(starts) if starts else None, "finished_at": max(ends) if ends else None,
+            "n_total_trials": planned,
+            "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
+                      "n_cancelled_trials": max(0, planned - len(results)), "n_running_trials": 0, "n_pending_trials": 0},
+            "standard": {"passed": sum(1 for w in rewards if w.get("reward") == 1.0),
+                         "scored": len(scores), "mean_score": job.mean_score(results)},
+            **({"budget": budget} if budget else {})}
+
+
 def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
     """Merge the shard jobs ``job_dirs`` into the new job ``out``.
     {out, trials, merged_from, notes, missing}."""
@@ -250,23 +272,10 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
             with open(os.path.join(dest, "result.json"), "w", encoding="utf-8") as f:
                 json.dump(res, f, indent=1)
             results.append(res)
-    planned = sum(int(s["result"].get("n_total_trials") or len(s["trials"])) for s in shards)
-    starts = [s["result"].get("started_at") for s in shards if s["result"].get("started_at")]
-    ends = [s["result"].get("finished_at") for s in shards if s["result"].get("finished_at")]
-    errored = sum(1 for r in results if r.get("exception_info"))
-    rewards = [(r.get("verifier_result") or {}).get("rewards") or {} for r in results]
-    scores = [w["score"] for w in rewards if "score" in w]
-    budget = _budget([s["result"].get("budget") for s in shards])
+    summary = result_of(shards, results)
+    planned = summary["n_total_trials"]
     with open(os.path.join(out, "result.json"), "w", encoding="utf-8") as f:
-        # ISO stamps in UTC sort as their instants
-        json.dump({"id": name, "started_at": min(starts) if starts else None, "finished_at": max(ends) if ends else None,
-                   "n_total_trials": planned,
-                   "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
-                             "n_cancelled_trials": max(0, planned - len(results)), "n_running_trials": 0, "n_pending_trials": 0},
-                   "standard": {"passed": sum(1 for w in rewards if w.get("reward") == 1.0),
-                                "scored": len(scores), "mean_score": job.mean_score(results)},
-                   **({"budget": budget} if budget else {}),
-                   **({"served": who} if (who := _served(shards, results)) else {})}, f, indent=1)
+        json.dump({"id": name, **summary, **({"served": who} if (who := _served(shards, results)) else {})}, f, indent=1)
     cfg = json.loads(json.dumps(shards[0]["config"]))
     cfg["job_name"] = name
     std = cfg.setdefault("standard", {})
