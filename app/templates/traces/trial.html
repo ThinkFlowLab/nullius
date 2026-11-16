@@ -27,7 +27,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
 
 
-<div class="page-title">
+<div class="page-title trial-title">
   <h1>{{ trial.task_base }}</h1>
   <span class="tag oc-{{ trial.outcome }}">{{ trial.outcome_label }}</span>
   {# The recorded exception type, beside the label that came from it. For an
@@ -41,42 +41,34 @@
    provider-qualified one ("openai/gpt-5.6-luna"). Prefer the fuller id. #}
 {% set model = job.model_name if job.model_name and job.model_name.endswith(trial.model_name or '~')
                else (trial.model_name or job.model_name) %}
-<p class="subtitle">
-  <span class="mono">{{ model }}</span><span class="dot">·</span>
-  <span title="{{ trial.source }}">{{ trial.source|dsname }}</span>
-  {%- if trial.agent_version %}<span class="dot">·</span><span class="mono faint"
-    title="The agent's version as the trial's agent_info reports it">v{{ trial.agent_version }}</span>{% endif %}
-  {%- if job.runner %}<span class="dot">·</span>{{ what_ran(job) }}{% endif %}
-</p>
-
-<div class="cards">
-  {# The check cards speak the dataset's language: labels come from its
-     Vocabulary, and a category it doesn't have (a verifier with no
-     regression guard and no patches; a session-derived trial has neither)
-     is not drawn at all rather than dashed under a foreign name. The dash
-     inside a drawn card still means "this trial reported nothing". #}
-  {% set vocab = trial.vocab %}
-  {% if vocab.gained %}
-  <div class="card"><div class="k">{{ vocab.gained }}</div><div class="v">{% if trial.f2p_pass or trial.f2p_fail %}<span class="ok">{{ trial.f2p_pass }}</span><small>/{{ trial.f2p_fail }}</small>{% else %}—{% endif %}</div></div>
-  {% endif %}
-  {% if vocab.held %}
-  <div class="card"><div class="k">{{ vocab.held }}</div><div class="v">{% if trial.p2p_pass or trial.p2p_fail %}<span class="ok">{{ trial.p2p_pass }}</span><small>/{{ trial.p2p_fail }}</small>{% else %}—{% endif %}</div></div>
-  {% endif %}
-  {% if vocab.has_patch %}
-  <div class="card"><div class="k">Patch applied</div><div class="v">{% if trial.patch_exists is none %}—{% else %}{{ 'Yes' if trial.patch_applied else 'No' }}{% endif %}</div></div>
-  {% endif %}
-  {# The verifier's numeric score. Mostly redundant with the outcome tag on
-     a pass/fail verifier (0 or 1), but it's the number Harbor's mean is built from, and
-     partial-credit verifiers make it a real scalar. #}
-  <div class="card" title="{{ "The judge's verdict on this answer: 1 when it said the answer is right" if job.runner else "The verifier's reward for this trial — what Harbor's headline mean averages" }}">
-    <div class="k">Reward</div>
-    <div class="v">{{ trial.reward if trial.reward is not none else '—' }}</div>
+<div class="trial-head">
+  {# What ran (the benchmark and its runner; the agent, its mark, and the model that answered),
+     then how it went: the dataset's own checks, the reward, the agent's time and its steps.
+     A value the trial does not have is left out, never shown as a dash. #}
+  <div class="th-card" title="The benchmark the task is from, and what ran it">
+    <div><span class="k">Benchmark</span><span class="v" title="{{ trial.source }}">{{ trial.source|dsname }}</span></div>
+    <span class="th-sep" aria-hidden="true"></span>
+    <div><span class="k">Runner</span><span class="v">{% if job.runner %}{{ what_ran(job) }}{% else %}Harbor{% endif %}</span></div>
   </div>
-  <div class="card"><div class="k">Agent time</div><div class="v">{{ trial.dur_agent|secs }}</div></div>
-  {% if traj and not traj.error %}
-  <div class="card"><div class="k">Steps</div><div class="v">{{ traj.n_steps }}</div></div>
-  <div class="card"><div class="k">Tool calls</div><div class="v">{{ traj.n_tool_calls }}</div></div>
+  {% set agent = trial.agent_info_name or job.agent_label %}
+  {% if agent or model %}
+  <div class="th-card">
+    {% if agent %}<span class="th-mark">{{ agent_mark('agent', agent, agent) }}</span>{% endif %}
+    <div>
+      {% if agent %}<span class="v">{{ agent }}{% if trial.agent_version %} <span class="mono faint" title="The agent's version as the trial's agent_info reports it">{{ trial.agent_version }}</span>{% endif %}</span>{% endif %}
+      {% if model %}<span class="th-model mono">{{ model }}</span>{% endif %}
+    </div>
+  </div>
   {% endif %}
+  <div class="th-strip">
+    {% set vocab = trial.vocab %}
+    {% if vocab.gained %}<div><span class="k">{{ vocab.gained }}</span><span class="n">{% if trial.f2p_pass or trial.f2p_fail %}<span class="ok">{{ trial.f2p_pass }}</span><small>/{{ trial.f2p_fail }}</small>{% else %}—{% endif %}</span></div>{% endif %}
+    {% if vocab.held %}<div><span class="k">{{ vocab.held }}</span><span class="n">{% if trial.p2p_pass or trial.p2p_fail %}<span class="ok">{{ trial.p2p_pass }}</span><small>/{{ trial.p2p_fail }}</small>{% else %}—{% endif %}</span></div>{% endif %}
+    {% if vocab.has_patch and trial.patch_exists is not none %}<div><span class="k">Patch applied</span><span class="n">{{ 'Yes' if trial.patch_applied else 'No' }}</span></div>{% endif %}
+    <div title="{{ "The judge's verdict on this answer: 1 when it said the answer is right" if job.runner else "The verifier's reward for this trial, what Harbor's headline mean averages" }}"><span class="k">Reward</span><span class="n">{{ trial.reward if trial.reward is not none else '—' }}</span></div>
+    {% if trial.dur_agent is not none %}<div><span class="k">Agent time</span><span class="n">{{ trial.dur_agent|secs }}</span></div>{% endif %}
+    {% if traj and not traj.error %}<div><span class="k">Steps</span><span class="n">{{ traj.n_steps }}</span></div>{% endif %}
+  </div>
 </div>
 
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">

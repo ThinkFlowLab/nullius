@@ -446,7 +446,7 @@ class Routes(unittest.TestCase):
             self.assertRegex(page, r'data-o="unknown" href="\?outcome=unknown"\s+data-tip="[^"]*"><i class="sw"></i><b>1</b><span>Unknown')
             self.assertIn('<span class="oc oc-unknown"><i></i>Unknown</span><details class="exd"><summary><span class="tw"></span>SomethingNobodyHasWrittenYetError</summary><code>the reader fell over</code>', page)
             trial_page = self.get_ok("/trial/crash-run/task-crash").get_data(as_text=True)
-        head = trial_page.split("<p class=\"subtitle\">", 1)[0]
+        head = trial_page.split("<div class=\"trial-head\">", 1)[0]
         self.assertIn('<span class="tag oc-unknown">Unknown</span>', head)
         self.assertIn('class="mono faint exception-type"', head)
         self.assertIn('classify.py.">SomethingNobodyHasWrittenYetError</span>', head)
