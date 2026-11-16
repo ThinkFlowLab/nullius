@@ -285,6 +285,21 @@ class Wiring(FakeUnits):
         self.assertEqual([l.split()[0] for l in self.told], ["+container", "=container", "+folder", "-container", "-folder"])
         self.assertNotIn("click", driver.OPEN)
 
+    def test_the_units_record_keeps_the_fixtures_events_and_where_its_targets_were(self):
+        ws, s = self.unit("click")
+        u = driver.OPEN["click"]
+        c = driver.Client(s["mcp"][0]["args"][0])
+        c.call("click", dict(zip("xy", driver.centre(u.boxes[u.expected["target"]]))))
+        c.close()
+        driver.score("click", ws, [], "done")
+        verifier = os.path.join(os.path.dirname(ws), "verifier")
+        with open(os.path.join(verifier, "computer-events.jsonl")) as f:
+            events = [json.loads(line) for line in f]
+        self.assertEqual(events, FakeDesktop.made[-1].events())
+        self.assertEqual([e["hit"] for e in events if e["kind"] == "press"], [u.expected["target"]])
+        with open(os.path.join(verifier, "computer-boxes.json")) as f:
+            self.assertEqual(json.load(f), u.boxes)
+
     def test_the_turns_end_at_score_ends_the_loop_and_judges_what_is_there(self):
         ws, s = self.unit("click")
         u = driver.OPEN["click"]

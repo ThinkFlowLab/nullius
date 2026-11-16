@@ -285,6 +285,15 @@ class Unit:
             self.server.close()
             self.server = None
 
+    def keep(self, events):
+        """A copy of the fixture's events and of where its targets were drawn, beside the call log: what a reader
+        of a failed check needs once the desktop is gone."""
+        folder = os.path.dirname(self.log)
+        with open(os.path.join(folder, "computer-events.jsonl"), "w", encoding="utf-8") as f:
+            f.writelines(json.dumps(e) + "\n" for e in events)
+        with open(os.path.join(folder, "computer-boxes.json"), "w", encoding="utf-8") as f:
+            json.dump(self.boxes or {}, f)
+
     def calls(self):
         out = []
         try:
@@ -376,6 +385,7 @@ def score(unit, dir, transcript, answer, **_):
         events = u.desktop.events()
         actions = list(u.desktop.actions)
         calls = u.calls()
+        u.keep(events)
     finally:
         u.remove()
     message = "\n".join(x for x in (answer or "", u.final) if x)
