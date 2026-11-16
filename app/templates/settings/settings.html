@@ -221,7 +221,7 @@
     {% set srow = by.get('SYSTEM_ONE_PROVIDER') %}
     {% if srow and by.get('SYSTEM_ONE_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not s1 }}" data-judge-card>
-      <legend><svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v18M7 21h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/></svg>System One</legend>
+      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-gavel"/></svg>System One</legend>
       {{ judge_rows('SYSTEM_ONE', s1_providers, s1, 'Where System One is asked') }}
       {{ field(by['SYSTEM_ONE_MODEL'], 'Model', writable, s1_providers[s1.provider].models) }}
     </fieldset>
@@ -229,7 +229,7 @@
     {% set prow = by.get('LLM_JUDGE_PROVIDER') %}
     {% if prow and by.get('LLM_JUDGE_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not llm }}" data-judge-card>
-      <legend><svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01M9 15c1.5 1.2 4.5 1.2 6 0"/></svg>LLM judge</legend>
+      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-text"/></svg>LLM judge</legend>
       {{ judge_rows('LLM_JUDGE', llm_providers, llm, "The LLM judge's provider") }}
       {{ field(by['LLM_JUDGE_MODEL'], 'Model', writable, []) }}
     </fieldset>
