@@ -111,16 +111,24 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
     jobs before they exist. ``backend``: where the kits run (``run.Run``).
     ``options``: the agent's options for the kits'
     runs; a record proven with any of them off its default says which.
-    ``repeat``: how many times each check runs (:func:`outcome`). A benchmark-specific
-    refusal is reported and skipped when checking all candidates. An explicit
-    ``which`` or a refusal of the whole command still ends the check."""
+    ``repeat``: how many times each check runs (:func:`outcome`).
+
+    A kit refused for a reason of its own (``run.BenchmarkRefused``: what its
+    benchmark needs of this machine) is said and passed over when checking all
+    candidates: the others' proofs are written, its record stays as it was, and
+    it is returned as ``{ok: False, refused: why}``. When every kit is refused,
+    nothing is written and the check is refused. An explicit ``which``, or a
+    refusal of the whole command (the agent, its options, the key), still ends
+    the check with nothing written."""
     import os
     env = env if env is not None else os.environ
     repeat = max(1, int(repeat or 1))
-    run.provider_endpoint(provider, env)
-    got = {}
-    for p in which or candidates(other):
-        kit = definitions.kit(p)
+    kits = [(p, definitions.kit(p)) for p in which or candidates(other)]
+    if any(kit for _, kit in kits):
+        run.provider_endpoint(provider, env)    # the key is the whole command's: missing, no kit is begun
+    got: Dict[str, dict] = {}
+    refused: Dict[str, str] = {}
+    for p, kit in kits:
         if kit is None:
             say(f"{p}: no kit yet")
             continue
@@ -134,6 +142,7 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
             if which:
                 raise
             say(f"{p}: refused: {e}")
+            refused[p] = str(e)
             continue
         o = outcome(kit, _runs(parse.parse_job(job_dir)), repeat)
         got[p] = {"passed": o["passed"], "ok": o["ok"], "on": time.strftime("%Y-%m-%d"), "model": model, "provider": provider,
@@ -145,6 +154,8 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
             got[p]["options"] = changed
         for line in said(p, got[p]):
             say("  " + line)
+    if refused and not got:
+        raise run.Refused("every kit was refused here: " + ", ".join(refused))
     if write:
         def change(cur):                 # on the definition as it is now: another proof or an edit since the start stays
             offers = [p for p in cur.get("offers") or [] if not (p in got and not got[p]["ok"])]
@@ -155,4 +166,4 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
             cur["offers"] = [p for p in ports.PORTS if p in offers]
             cur["proven"] = proven
         definitions.save(other, change)
-    return got
+    return {**got, **{p: {"ok": False, "refused": why} for p, why in refused.items()}}

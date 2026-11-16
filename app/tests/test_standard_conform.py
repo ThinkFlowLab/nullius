@@ -104,7 +104,7 @@ class ConformTest(unittest.TestCase):
                 mock.patch.object(container, "unenforced", side_effect=container.Unavailable("no container engine")), \
                 mock.patch.object(conform.parse, "parse_job", return_value=passed):
             status, said = self.invoke(other)
-        self.assertEqual(status, 0, said)
+        self.assertEqual(status, 1, said)                           # a kit was refused: not every port is proven
         self.assertEqual(started, ports)
         self.assertIn("agent.workspace/v1: refused: no container engine", said)
         saved = definitions.get("agent", "fake", self.root)
@@ -114,6 +114,40 @@ class ConformTest(unittest.TestCase):
             self.assertIn(port, saved["offers"])
         self.assertEqual(saved["proven"][ports[1]], old)
         self.assertIn(ports[1], saved["offers"])
+
+    def test_a_refused_kit_is_returned_as_refused_beside_the_proofs(self):
+        other = definitions.get("agent", "fake", self.root)
+        passed = SimpleNamespace(trials=[SimpleNamespace(task_name="kit/check", reward=1.0)])
+        with mock.patch.object(conform, "candidates", return_value=["agent.task/v1", "agent.workspace/v1"]), \
+                mock.patch.object(run, "run", side_effect=["passed-job", run.BenchmarkRefused("no engine")]), \
+                mock.patch.object(conform.parse, "parse_job", return_value=passed):
+            got = conform.check(other, model="m", provider="custom", jobs_root=os.path.join(self.tmp, "jobs"),
+                                say=lambda s: None, env={"MODEL_API_URL": "http://127.0.0.1:9/v1"}, unsandboxed=True)
+        self.assertTrue(got["agent.task/v1"]["ok"])
+        self.assertEqual(got["agent.workspace/v1"], {"ok": False, "refused": "no engine"})
+
+    def test_every_kit_refused_saves_nothing_and_exits_two(self):
+        other = definitions.get("agent", "fake", self.root)
+        ports = ["agent.task/v1", "agent.workspace/v1"]
+        with mock.patch.object(conform, "candidates", return_value=ports), \
+                mock.patch.object(run, "run", side_effect=run.BenchmarkRefused("no engine")) as attempt, \
+                mock.patch.object(definitions, "save") as save:
+            status, said = self.invoke(other)
+        self.assertEqual(status, 2, said)
+        self.assertEqual(attempt.call_count, 2)                     # each kit was tried, each refusal said
+        for port in ports:
+            self.assertIn(f"{port}: refused: no engine", said)
+        save.assert_not_called()
+
+    def test_ports_without_a_kit_need_no_key(self):
+        other = definitions.get("agent", "fake", self.root)
+        lines = []
+        with mock.patch.object(definitions, "kit", return_value=None), mock.patch.object(run, "run") as attempt:
+            got = conform.check(other, model="m", provider="openai", which=["agent.workspace/v1"], env={},
+                                jobs_root=os.path.join(self.tmp, "jobs"), say=lines.append, unsandboxed=True)
+        self.assertEqual(got, {})
+        self.assertEqual(lines, ["agent.workspace/v1: no kit yet"])
+        attempt.assert_not_called()
 
     def test_an_explicit_port_refusal_keeps_exit_status_two(self):
         other = definitions.get("agent", "fake", self.root)
