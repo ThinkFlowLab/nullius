@@ -1006,6 +1006,25 @@ tr.control-row td { color: var(--text-dim); }
 .oc-cancelled::before, .seg.oc-cancelled, .tag.oc-cancelled::before { background: var(--cancelled); }
 .seg.oc-unknown { background: var(--unknown); }
 
+/* a task's attempts: one tab each (traces/_attempts.html), on the trial page,
+   its All attempts view and each side of a compared task */
+.attempt-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .9rem; margin: .9rem 0 0; }
+.attempt-count { color: var(--text-dim); font-size: .85rem; }
+.attempt-count b { color: var(--text); font-weight: 600; }
+.attempt-tabs { display: flex; flex-wrap: wrap; gap: .35rem; }
+.attempt-tab {
+  display: inline-flex; align-items: center; gap: .45rem; padding: .3rem .7rem;
+  border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim);
+  font-size: .8rem; text-decoration: none; white-space: nowrap;
+}
+.attempt-tab:not(.all)::before { content: ""; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.attempt-tab.oc-unknown::before { background: var(--unknown); }
+.attempt-tab:hover { color: var(--text); border-color: var(--text-faint); }
+.attempt-tab[aria-current="page"] { color: var(--text); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+.attempt-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.attempt-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.attempt-table tr[aria-current="true"] td { background: var(--accent-soft); }
+
 /* outcome tag inside a table row */
 .tag {
   font-size: .74rem; padding: .2rem .55rem; border-radius: 6px;
@@ -1777,15 +1796,17 @@ select.ui-select-native { display: none !important; }
 .nav::-webkit-scrollbar-track { background: transparent; }
 .nav::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text-faint) 28%, var(--bg)); border-radius: 8px; box-shadow: inset 0 0 2px #0005; }
 
-/* Shared disclosure controls; popovers and filter menus keep their own behavior. */
+/* Shared disclosure controls; popovers and filter menus keep their own behavior.
+   A control that cannot be a <details> (a table row's) takes the same chevron as
+   .disclosure-chevron, turned by its aria-expanded. */
 :root .slide-disclosure { box-sizing: border-box; }
 :root .slide-disclosure > summary { cursor: pointer; list-style: none; color: var(--text-dim); }
 :root .slide-disclosure > summary::-webkit-details-marker { display: none; }
-:root .slide-disclosure > summary::before { content: ''; display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin: 0 10px 0 3px; transition: transform .24s ease; }
-:root .slide-disclosure[open]:not([data-expanded=false]) > summary::before { transform: rotate(45deg); }
+:root .slide-disclosure > summary::before, :root .disclosure-chevron::before { content: ''; display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin: 0 10px 0 3px; transition: transform .24s ease; }
+:root .slide-disclosure[open]:not([data-expanded=false]) > summary::before, :root .disclosure-chevron[aria-expanded="true"]::before { transform: rotate(45deg); }
 :root .slide-disclosure > summary > .tw { display: none; }
 :root .slide-disclosure > summary:hover { color: var(--text); }
 :root .slide-disclosure > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tree-kids { box-sizing: border-box; }
 @media (prefers-reduced-motion: no-preference) { .shell { transition: grid-template-columns .24s ease; } .tree-caret .ic { transition: transform .24s ease; } }
-@media (prefers-reduced-motion: reduce) { :root .slide-disclosure > summary, :root .slide-disclosure > summary::before, .tree-caret .ic, .side { transition: none; } }
+@media (prefers-reduced-motion: reduce) { :root .slide-disclosure > summary, :root .slide-disclosure > summary::before, :root .disclosure-chevron::before, .tree-caret .ic, .side { transition: none; } }

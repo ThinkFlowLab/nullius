@@ -23,6 +23,7 @@
 {%- endmacro %}
 
 {% from 'traces/_judgement.html' import judgement_panel %}
+{% from 'traces/_attempts.html' import attempt_tabs, attempt_count %}
 {% block body %}
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
 
@@ -48,6 +49,12 @@
     title="The agent's version as the trial's agent_info reports it">v{{ trial.agent_version }}</span>{% endif %}
   {%- if job.runner %}<span class="dot">·</span>{{ what_ran(job) }}{% endif %}
 </p>
+{% if attempts %}
+<div class="attempt-head">
+  <span class="attempt-count">{{ attempt_count(attempts) }}</span>
+  {{ attempt_tabs(job, attempts, trial, request.args.get('workspace')) }}
+</div>
+{% endif %}
 
 <div class="cards">
   {# The check cards speak the dataset's language: labels come from its

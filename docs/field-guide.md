@@ -32,7 +32,7 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 ## Repeated attempts {#attempts}
 
-Standard runs with repeated, scored attempts record both measures in `pass_hat_k`. They answer different questions.
+Standard runs with repeated, scored attempts record both measures in `pass_hat_k`; the job page and Compare show them for any run, Harbor or standard, that tried every task at least twice. They answer different questions.
 
 ### pass@k
 
@@ -42,11 +42,13 @@ Chance that at least one of k sampled attempts passes: `1 − C(n−c,k) / C(n,k
 
 Chance that all k sampled attempts pass: `C(c,k) / C(n,k)`.
 
-Here n is the attempt count and c the passed count per unit; results are averaged across eligible units. Units with an exception or missing verdict are excluded. The writer uses the smallest available attempt count across eligible units and emits no series below two attempts. This is separate from the trial-level adjusted solve rate.
+Here n is the attempt count and c the passed count per task; results are averaged across eligible tasks, each read on its first n attempts, n the smallest attempt count among them, and there is no series below two attempts. The pages read every attempt that ran as a pass when resolved and a fail otherwise: an agent's timeout or crash is its own result, and an unknown outcome stays in, as in the adjusted rate. A task with an infra attempt is left out, as τ-bench leaves out an infrastructure error, and so is a task with a scored attempt, which has no pass or fail. With every task tried equally often and no infra, pass^1 is the adjusted rate. The standard's own `pass_hat_k` leaves out a unit with any error instead. Compare lists k from 1 to the smallest attempt count across its runs, over the same tasks as its rows; the job page lists k = 1 to 3 and the largest k.
+
+A task's attempts are counted as the adjusted rate counts trials: its passes over the attempts that ran, infra attempts apart ("2/2 passed · 1 infra"); a task nothing passed or failed shows its mean score instead. A trial page shows the attempts as tabs, numbered by start time, with that count and an All attempts table. The job page groups them under one row per task with the instruction score once and the mean tokens and times over the attempts that ran; an agent's token count of 0 was not captured and is left out of the mean.
 
 ## Compare like with like {#compare}
 
-Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs; its comparison row shows the last indexed attempt.
+Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs. A comparison row counts every attempt the same way, infra apart. It disagrees when the pass rate (for a scored task, the mean score) differs or the attempts that ran ended differently, one failing verification where another timed out; a run none of whose attempts ran disagrees with one that ran. Rows whose pass rate moved most come first, each rate read as if the run had one more pass and one more fail, so one flipped attempt (1/1 against 0/1) ranks below a steady gap (2/3 against 0/3); a pass rate is never set against a mean score. Then come the rows whose rate moved by less than that reading shows (1/1 against 3/4), then the other rows that disagree. A row's outcome is the last indexed attempt, and its side-by-side page opens on that attempt with a tab for each of the others.
 
 Check dataset, model, provider, agent version, limits and execution backend before attributing a difference to the agent. Matched views omit whole-run wall time because it does not measure just the selected tasks.
 
