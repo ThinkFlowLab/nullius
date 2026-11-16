@@ -86,10 +86,19 @@ NAMES = ["info", "screenshot", "read", "python", "upload", "click", "move", "dra
 SCREEN_TOOLS = ("click", "move", "drag", "scroll", "type", "key", "wait")   # answered with the screen after the pause
 ACTING = SCREEN_TOOLS + ("step", "done", "fail")
 FINAL = {"done": "DONE", "fail": "FAIL"}
-B64_CHARS = 4 * -(-CHUNK_BYTES // 3)
-REFUSALS = {("scroll", "anyOf"): "dy or dx is not 0", ("upload", "anyOf"): "upload needs data, or a sha256",
-            ("upload", "if"): "append needs data: a file taken by its sha256 starts the file"}
-PATTERN_WORDS = {"\\S": "is not blank", "^[0-9a-f]{64}$": "is 64 lowercase hexadecimal digits"}
+# The patterns use explicit classes alone, which Python's re and the regular expressions of JSON Schema read alike;
+# a final $ is the text's end (Python's \Z)
+BLANK = "[\\t\\n\\v\\f\\r ]"
+NOT_BLANK = "[^\\t\\n\\v\\f\\r ]"
+BASE64 = "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+SHA256 = "^[0-9a-f]{64}$"
+B64_CHARS = 4 * -(-CHUNK_BYTES // 3)                 # the longest base64 of CHUNK_BYTES; at that length, its padding
+B64_LAST = "=" * (3 - CHUNK_BYTES % 3) + "$" if CHUNK_BYTES % 3 else None   # says the last group is not too full
+REFUSALS = {("scroll", "arguments", "anyOf"): "dy or dx is not 0",
+            ("upload", "arguments", "anyOf"): "upload needs data, or a sha256",
+            ("upload", "arguments", "if"): "append needs data: a file taken by its sha256 starts the file",
+            ("upload", "data", "anyOf"): f"data is at most {CHUNK_BYTES} bytes a call"}
+PATTERN_WORDS = {NOT_BLANK: "is not blank", SHA256: "is 64 lowercase hexadecimal digits", BASE64: "is base64"}
 
 
 @functools.lru_cache(maxsize=8)
@@ -101,8 +110,11 @@ def tools(screen):
     button = {"type": "string", "enum": ["left", "right", "middle"], "description": "Default left"}
     clicks = {"type": "integer", "minimum": -100, "maximum": 100}
     text = {"type": "string", "minLength": 1}
-    obj = lambda props, required=(), **more: dict({"type": "object", "properties": props},
+    obj = lambda props, required=(), **more: dict({"type": "object", "properties": props, "additionalProperties": False},
                                                    **({"required": list(required)} if required else {}), **more)
+    data = {"type": "string", "contentEncoding": "base64", "pattern": BASE64, "maxLength": B64_CHARS}
+    if B64_LAST:
+        data["anyOf"] = [{"maxLength": B64_CHARS - 4}, {"pattern": B64_LAST}]
     return [
         ("info", "The screen's size, the steps in all and left, the pause after each action in seconds, the seconds "
                  "python waits for the desktop's reply, and the desktop user's password.", obj({})),
@@ -116,8 +128,8 @@ def tools(screen):
                    "4 MiB a call; append false starts the file, true adds to it. sha256, optional, is the whole "
                    "file's: when the run already holds a file of that sha256, it may be given with no data, and it "
                    "starts the file.",
-         obj({"path": text, "data": {"type": "string", "contentEncoding": "base64", "maxLength": B64_CHARS},
-              "append": {"type": "boolean"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, ["path"],
+         obj({"path": text, "data": data,
+              "append": {"type": "boolean"}, "sha256": {"type": "string", "pattern": SHA256}}, ["path"],
              anyOf=[{"required": ["data"]}, {"required": ["sha256"]}],
              **{"if": {"not": {"required": ["data"]}}, "then": {"properties": {"append": {"const": False}}}})),
         ("click", "One step: a click at the point.",
@@ -140,8 +152,8 @@ def tools(screen):
                  "pyautogui and time imported, or WAIT. An empty list is a step with no action. The screen comes back "
                  "when screenshot is true.",
          obj({"actions": {"type": "array", "items": {
-                 "type": "string", "pattern": "\\S",
-                 "not": {"pattern": "^\\s*(DONE|FAIL)\\s*$",
+                 "type": "string", "pattern": NOT_BLANK,
+                 "not": {"pattern": f"^{BLANK}*(DONE|FAIL){BLANK}*$",
                          "description": "the task's end is the tool done or fail, not an action of step"}}},
               "response": {"type": "string"}, "screenshot": {"type": "boolean"}}, ["actions"])),
         ("done", "The last step: the task is complete.", obj({"message": {"type": "string"}})),
@@ -165,6 +177,16 @@ def _passes(value, schema, tool, name):
         return False
 
 
+def _python_pattern(pattern):
+    """A pattern of the table as Python's re reads it alike: a final $ is the text's end, never before a newline."""
+    return pattern[:-1] + "\\Z" if pattern.endswith("$") and not pattern.endswith("\\$") else pattern
+
+
+def _no_constant(name):
+    """json.loads's parse_constant: NaN, Infinity and -Infinity are no JSON."""
+    raise ValueError(f"{name} is not JSON")
+
+
 def _valid(value, schema, tool, name):
     """``value`` checked against ``schema``, in the part of JSON Schema the tool table uses; the value with integers
     as int. Refused, naming the argument, when it does not hold."""
@@ -183,7 +205,7 @@ def _valid(value, schema, tool, name):
             raise Refused(f"{name} is a text, not empty")
         if len(value) > schema.get("maxLength", len(value)):
             raise Refused(f"{name} is at most {schema['maxLength']} characters")
-        if "pattern" in schema and not re.search(schema["pattern"], value):
+        if "pattern" in schema and not re.search(_python_pattern(schema["pattern"]), value):
             raise Refused(f"{name} " + PATTERN_WORDS.get(schema["pattern"], "is not of its form"))
     if isinstance(value, list):
         if not schema.get("minItems", 0) <= len(value) <= schema.get("maxItems", len(value)):
@@ -194,11 +216,15 @@ def _valid(value, schema, tool, name):
             if key not in value:
                 raise Refused(f"{key} is missing")
         props = schema.get("properties", {})
+        if schema.get("additionalProperties") is False:
+            for key in value:
+                if key not in props:
+                    raise Refused(f"{key} is no argument of {tool}")
         value = {k: _valid(v, props[k], tool, k) if k in props else v for k, v in value.items()}
-        if "anyOf" in schema and not any(_passes(value, s, tool, name) for s in schema["anyOf"]):
-            raise Refused(REFUSALS.get((tool, "anyOf"), f"{name} is not of its form"))
-        if "if" in schema and _passes(value, schema["if"], tool, name) and not _passes(value, schema["then"], tool, name):
-            raise Refused(REFUSALS.get((tool, "if"), f"{name} is not of its form"))
+    if "anyOf" in schema and not any(_passes(value, s, tool, name) for s in schema["anyOf"]):
+        raise Refused(REFUSALS.get((tool, name, "anyOf"), f"{name} is not of its form"))
+    if "if" in schema and _passes(value, schema["if"], tool, name) and not _passes(value, schema["then"], tool, name):
+        raise Refused(REFUSALS.get((tool, name, "if"), f"{name} is not of its form"))
     if "enum" in schema and value not in schema["enum"]:
         raise Refused(f"{name} is one of {', '.join(map(str, schema['enum']))}")
     if "const" in schema and (value != schema["const"] or type(value) is not type(schema["const"])):
@@ -290,14 +316,19 @@ class Held:
         anew, the user's alone), removed on every path."""
         if hashlib.sha256(data).hexdigest() != digest:
             return
-        fd, part = tempfile.mkstemp(prefix=".keep-", dir=self.folder)
+        fd = part = None
         try:
-            with os.fdopen(fd, "wb") as f:
+            fd, part = tempfile.mkstemp(prefix=".keep-", dir=self.folder)
+            f, fd = os.fdopen(fd, "wb"), None
+            with f:
                 f.write(data)
             os.replace(part, os.path.join(self.folder, digest))
         finally:
-            with contextlib.suppress(OSError):
-                os.unlink(part)
+            if fd is not None:
+                os.close(fd)
+            if part is not None:
+                with contextlib.suppress(OSError):
+                    os.unlink(part)
 
 
 class Bridge:
@@ -454,15 +485,22 @@ class Bridge:
         """``data`` added to the file at ``path``: written beside it under a name of the server's own, then added to
         it in the desktop; that name is removed on every path."""
         part = posixpath.join(posixpath.dirname(path), f".upload-{secrets.token_hex(8)}")
-        self.desktop.upload(part, data)
-        reply = self.desktop.python(APPEND.format(part=part, path=path))
+        try:
+            self.desktop.upload(part, data)
+            reply = self.desktop.python(APPEND.format(part=part, path=path))
+        except BaseException:                        # the part may be there: removed, as far as the desktop answers
+            self._drop(part)
+            raise
         try:
             return int(str(reply.get("output")).strip())
         except (AttributeError, ValueError):
             if reply is None:                        # the desktop gave no reply: the part may still be there
-                with contextlib.suppress(Exception):
-                    self.desktop.python(f"import os; os.remove({part!r})")
+                self._drop(part)
             raise Refused(f"the desktop did not add the data to {path}: {json.dumps(reply)[:300]}")
+
+    def _drop(self, part):
+        with contextlib.suppress(Exception):
+            self.desktop.python(f"import os\ntry:\n    os.remove({part!r})\nexcept OSError:\n    pass")
 
     # -- what the server and the runner call ------------------------------------------------------------------------
     def submit(self, call):
@@ -533,6 +571,19 @@ def frame(message) -> bytes:
     return (json.dumps(message) + "\n").encode()
 
 
+def bounded(message) -> tuple:
+    """``message`` framed, at most LINE_BYTES with its newline, and whether it had to be replaced: one over the bound
+    becomes an error with the same id, or with none when even that is over it."""
+    data = frame(message)
+    if len(data) <= LINE_BYTES:
+        return data, False
+    error = {"code": -32603, "message": f"the answer is over {LINE_BYTES} bytes"}
+    data = frame({"jsonrpc": "2.0", "id": message.get("id") if isinstance(message, dict) else None, "error": error})
+    if len(data) > LINE_BYTES:
+        data = frame({"jsonrpc": "2.0", "id": None, "error": error})
+    return data, True
+
+
 class Wire:
     """One connection of the agent's session: JSON-RPC messages, one a line, each at most LINE_BYTES with its newline.
     Its answers are written by a thread of its own; at most OUT_BYTES of them wait for the client to read, past which
@@ -576,7 +627,10 @@ class Wire:
     def send(self, message):
         """``message`` (an object, or a framed line) queued for the writer; False when the wire is closed, or closed
         now because its client has left OUT_BYTES unread."""
-        data = message if isinstance(message, bytes) else frame(message)
+        data = message if isinstance(message, bytes) else bounded(message)[0]
+        if len(data) > LINE_BYTES:                   # a framed line over the bound, from a caller that did not bound it
+            data = frame({"jsonrpc": "2.0", "id": None,
+                          "error": {"code": -32603, "message": f"the answer is over {LINE_BYTES} bytes"}})
         with self.lock:
             if self.closed:
                 return False
@@ -698,7 +752,7 @@ class Server:
         try:
             for line in wire.lines():
                 try:
-                    message = json.loads(line)
+                    message = json.loads(line, parse_constant=_no_constant)
                 except (ValueError, RecursionError):
                     wire.send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}})
                     continue
@@ -756,11 +810,9 @@ class Server:
                 content.append({"type": "text", "text": json.dumps(value)})
             if image is not None:
                 content.append({"type": "image", "data": base64.b64encode(image).decode(), "mimeType": "image/png"})
-            data = frame({"jsonrpc": "2.0", "id": rid, "result": {"content": content, "isError": error is not None}})
-            failed = error is not None
-            if len(data) > LINE_BYTES:               # the answer's size is known before its outcome is recorded
-                data, failed = frame({"jsonrpc": "2.0", "id": rid, "error": {
-                    "code": -32603, "message": f"the answer is over {LINE_BYTES} bytes"}}), True
+            data, over = bounded({"jsonrpc": "2.0", "id": rid, "result": {"content": content,
+                                                                          "isError": error is not None}})
+            failed = error is not None or over       # the answer's size is known before its outcome is recorded
             self.record({"tool": call.tool, "start": call.start, "end": time.time(), "isError": failed})
             wire.send(data)
             wire.answered()
@@ -863,8 +915,14 @@ class Stop:
             last = threading.Thread(target=self._quietly, name="last-resort-callback", daemon=True)
             last.start()
             last.join(LAST_SECONDS)
-        sys.stderr.write(f"runner: the clean-up did not end within {self.seconds:g} s of the stop\n")
+        said = threading.Thread(target=self._say, name="last-resort-word", daemon=True)
+        said.start()
+        said.join(0.1)                               # stderr may be a pipe nobody reads: the exit never waits on it
         os._exit(1)
+
+    def _say(self):
+        with contextlib.suppress(OSError):
+            os.write(2, f"runner: the clean-up did not end within {self.seconds:g} s of the stop\n".encode())
 
     def _quietly(self):
         with contextlib.suppress(Exception):

@@ -231,12 +231,20 @@ class Pipe(unittest.TestCase):
         while time.monotonic() < deadline + 10 and written[0] != last:   # until the input is held back
             last = written[0]
             time.sleep(0.5)
-        bound = 65536 * (3 + pipe_module().QUEUE_CHUNKS) + 4 * 1024 * 1024   # queued, one in each hand, the OS pipe
-        self.assertLess(written[0], bound, "the pipe read on with nothing taken by the socket")
-        self.assertEqual(self.sent(), first, "the stalled socket took more")
-        stop.set()
-        open(self.tmp_file() + ".go", "w").close()               # the socket takes more
-        feeder.join(10)
+        try:
+            bound = 65536 * (3 + pipe_module().QUEUE_CHUNKS) + 4 * 1024 * 1024   # queued, one in each hand, the OS pipe
+            self.assertLess(written[0], bound, "the pipe read on with nothing taken by the socket")
+            self.assertEqual(self.sent(), first, "the stalled socket took more")
+            stop.set()
+            open(self.tmp_file() + ".go", "w").close()           # the socket takes more
+            feeder.join(10)
+            self.assertFalse(feeder.is_alive(), "the input was not drained once the socket took more")
+        except BaseException:
+            stop.set()
+            p.kill()                                             # the feeder's write ends with the pipe's end
+            p.wait()
+            feeder.join(10)
+            raise
         p.stdin.close()
         self.assertEqual(p.wait(timeout=20), 0)
         self.assertEqual(self.sent(), written[0])
