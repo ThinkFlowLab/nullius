@@ -10,7 +10,6 @@ import subprocess
 import tempfile
 import sys
 import threading
-import time
 import unittest
 
 from unittest import mock
@@ -357,12 +356,12 @@ class ThroughARun(unittest.TestCase):
         stopped = threading.Event()
         r = self.ending()
         d = r.local.driver = self.driver_proc(late, ops, stopped=stopped).start()
-        threading.Timer(0.3, stopped.set).start()
         try:
-            with self.assertRaises(CancelledError):
-                d.request("setup", unit="a", dir=here, timeout=60)  # its reply comes after the stop
+            with self.assertRaises(CancelledError):                 # stopped once setup is written: its reply comes late
+                d.request("setup", unit="a", dir=here, timeout=60, on_sent=stopped.set)
             r.unit_ended("a", here)
-            time.sleep(1.5)                                         # the setup's late reply, then anything after it
+            d.p.stdin.close()                                       # the driver reads all it was sent, then ends
+            d.p.wait(timeout=30)
         finally:
             d.close()
         with open(ops) as f:
