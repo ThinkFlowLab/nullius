@@ -40,7 +40,7 @@ class HarborRoutes(unittest.TestCase):
             self.started.append(plan)
             return SimpleNamespace(jobs=str(self.tmp / "runs" / plan.name / "jobs"), summary=lambda: {"id": plan.name + "-1", "state": "preparing"})
         self.stack.enter_context(patch.object(execution, "start", start))
-        self.stack.enter_context(patch.object(web.shared, "adopt_roots", lambda roots, **kw: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
         self.client = web.app.test_client()
         r = self.client.get("/new-run"); self.addCleanup(r.close)
         with self.client.session_transaction() as s:

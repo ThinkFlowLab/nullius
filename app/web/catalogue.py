@@ -98,7 +98,7 @@ def benchmark_prove(key):
         flash(problem, "error")
         return redirect(back)
     ex = execution.start(plan)
-    shared.adopt_roots([ex.jobs])
+    shared.adopt_runs([ex])
     flash(f"Proving {got['label']}: its units and the leak check, then " + (f"{len(got['jobs'])} control runs." if got["jobs"] else "no control: it declares none."), "ok")
     return redirect(url_for("job", job_id=got["jobs"][0]["name"]) if got["jobs"] else back)
 
