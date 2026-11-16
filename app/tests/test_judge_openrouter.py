@@ -95,6 +95,7 @@ class OpenRouterJudge(unittest.TestCase):
         self.assertEqual(rec["answers"]["failure_cause"]["probabilities"], {"agent_error": 0.75, "environment_error": 0.25})   # normalised
         self.assertIsNone(rec["answers"]["failure_cause"]["confidence"])                                   # stated, not calibrated
         self.assertEqual(rec["answers"]["transcript_quality"]["legend"], Q.QUESTIONS["transcript_quality"]["criteria"])
+        self.assertGreaterEqual(rec["usage"].pop("seconds"), 0)
         self.assertEqual(rec["usage"], {"input_tokens": 1200, "output_tokens": 80, "cost_usd": 0.0012})
         self.assertEqual(rec["states"]["trial"]["input_tokens"], 1200)
         self.assertNotIn("sk-or-1", json.dumps(rec))

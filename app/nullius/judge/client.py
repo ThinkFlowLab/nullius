@@ -432,6 +432,7 @@ def ask(state: str, ids, key: str, truncated: bool = False, post: Optional[Calla
     body = {"model": model, "input": state, "questions": openai_questions(asked)} if openai else {"state": state, "model": model, "questions": asked}
     post = post or http_post
     status, data = 0, {}
+    started = time.monotonic()
     for attempt in range(retries + 1):
         status, data = post(url, body, key)
         if status in (429, 503, 529) and attempt < retries:
@@ -455,6 +456,7 @@ def ask(state: str, ids, key: str, truncated: bool = False, post: Optional[Calla
         rec = {"questions": Q.VERSION, "judge": {"provider": provider, "model": str(data.get("model") or model)},
                "asked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "state_chars": len(state), "truncated": bool(truncated),
                "answers": answers, "usage": {"input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens"),
+                                             "seconds": round(time.monotonic() - started, 2),
                                              **({"cost_usd": float(usage["cost"])} if _number(usage.get("cost")) is not None else {})}}
     except (AttributeError, KeyError, TypeError, ValueError) as e:      # a reply of another shape: said, never a crash of the batch
         raise JudgeError(502, f"the judge's reply could not be read: {e.__class__.__name__}") from e
@@ -521,6 +523,7 @@ def ask_chat(state: str, ids, judge: Judge, truncated: bool = False, post: Optio
                 "response_format": {"type": "json_object"}, **({"usage": {"include": True}} if judge.provider == "openrouter" else {})}
     post = post or http_post
     status, data = 0, {}
+    started = time.monotonic()
     for attempt in range(retries + 1):
         status, data = post(judge.url, body, judge.key, auth=providers.auth("messages", judge.key)) if messages else post(judge.url, body, judge.key)
         if status in (429, 502, 503, 529) and attempt < retries:
@@ -563,6 +566,7 @@ def ask_chat(state: str, ids, judge: Judge, truncated: bool = False, post: Optio
     rec = {"questions": Q.VERSION, "judge": {"provider": judge.provider, "model": str(data.get("model") or judge.model)},
            "asked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "state_chars": len(state), "truncated": bool(truncated),
            "answers": answers, "usage": {"input_tokens": usage.get(tokens_in), "output_tokens": usage.get(tokens_out),
+                                         "seconds": round(time.monotonic() - started, 2),
                                          **({"cost_usd": usage["cost"]} if isinstance(usage.get("cost"), (int, float)) else {})}}
     if kind is not None:
         rec["states"] = {kind: {"chars": len(state), "truncated": bool(truncated), "input_tokens": usage.get(tokens_in),
@@ -589,7 +593,7 @@ def merge(records) -> Optional[dict]:
         if rec.get("refusals"):
             merged["refusals"] = {**(merged.get("refusals") or {}), **rec["refusals"]}
         merged["asked_at"] = rec["asked_at"]; merged["judge"] = rec["judge"]
-        for k in ("input_tokens", "output_tokens", "cost_usd"):
+        for k in ("input_tokens", "output_tokens", "cost_usd", "seconds"):     # the calls run one after another: their times add up
             if rec["usage"].get(k) is not None:
                 merged["usage"][k] = (merged["usage"].get(k) or 0) + rec["usage"][k]
     return merged

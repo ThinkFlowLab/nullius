@@ -1818,3 +1818,7 @@ select.ui-select-native { display: none !important; }
 .tree-kids { box-sizing: border-box; }
 @media (prefers-reduced-motion: no-preference) { .shell { transition: grid-template-columns .24s ease; } .tree-caret .ic { transition: transform .24s ease; } }
 @media (prefers-reduced-motion: reduce) { :root .slide-disclosure > summary, :root .slide-disclosure > summary::before, .la-fold-btn::before, :root .disclosure-chevron::before, .tree-caret .ic, .side { transition: none; } }
+
+/* the judge's button under its badge, what its last call took beside it */
+.judge-actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin: .6rem 0 1rem; }
+.judge-actions .header-form { margin: 0; }
