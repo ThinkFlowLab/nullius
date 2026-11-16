@@ -38,6 +38,7 @@ Nullius runs AI evaluations on your machines and opens every score into the evid
 | Path | Holds |
 | --- | --- |
 | `settings/`, `cli/`, `benchmarks/`, `agents/`, `capabilities/` | The sections above |
+| `ports/` | A port's tools and rules, a page each, linked from the standard's table of ports |
 | `releases/` | Reviewed notes for each release |
 | `examples/new-benchmark/` | A worked Harbor entry to copy |
 | `assets/` | The screenshots these pages use |

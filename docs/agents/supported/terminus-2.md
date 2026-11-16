@@ -16,9 +16,9 @@ Harbor's terminal agent, used by Terminal-Bench.
 ## Versions
 
 <table>
-<thead><tr><th rowspan="2">Version</th><th rowspan="2">Upstream</th><th colspan="5" class="group">Ports</th><th colspan="3" class="group">Tools</th></tr><tr><th>One task</th><th>Workspace files</th><th>MCP tools</th><th>Conversation</th><th>Search</th><th>decoys</th><th>chain</th><th>retry</th></tr></thead>
+<thead><tr><th rowspan="2">Version</th><th rowspan="2">Upstream</th><th colspan="6" class="group">Ports</th><th colspan="3" class="group">Tools</th></tr><tr><th>One task</th><th>Workspace files</th><th>MCP tools</th><th>Conversation</th><th>Search</th><th>Computer use</th><th>decoys</th><th>chain</th><th>retry</th></tr></thead>
 <tbody>
-<tr><td><code>terminus-2</code></td><td><code>0.24.0</code></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td></tr>
+<tr><td><code>terminus-2</code></td><td><code>0.24.0</code></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td></tr>
 </tbody></table>
 
 ## Options
