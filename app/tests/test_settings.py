@@ -255,13 +255,26 @@ class File(unittest.TestCase):
         with self.assertRaises(ValueError):
             settings.save_many(self.path, {"LLM_JUDGE_PROVIDER": "local:gpu"})
 
-    def test_saving_a_decision_setting_takes_its_old_name_out_of_the_file(self):
+    def test_a_decision_setting_saved_under_its_old_name_reads_as_the_new_one(self):
+        """Saved before the rename: the page shows it set, nothing calls it unread, and a save of
+        another setting keeps it and writes it under the new name."""
         self.write("SYSTEM_ONE_MODEL=typesafe/jev-1.14\nSYSTEM_ONE_PROVIDER=openrouter\nHOSTS=bench\n")
         settings.load(self.path)
-        self.assertEqual([u["instead"] for u in settings.unread(self.path)], ["DECISION_MODEL", "DECISION_PROVIDER"])
-        settings.save_many(self.path, {"DECISION_MODEL": "typesafe/jev-2"})
-        self.assertEqual(settings.in_file(self.path), {"SYSTEM_ONE_PROVIDER": "openrouter", "HOSTS": "bench", "DECISION_MODEL": "typesafe/jev-2"})
-        self.assertNotIn("SYSTEM_ONE_MODEL", os.environ); self.assertEqual(os.environ["DECISION_MODEL"], "typesafe/jev-2")
+        by = {st["name"]: st for st in settings.states(self.path)}
+        self.assertEqual((by["DECISION_MODEL"]["source"], by["DECISION_MODEL"]["shown"]), ("file", "typesafe/jev-1.14"))
+        self.assertEqual(settings.unread(self.path), [])
+        settings.save_many(self.path, {"DECISION_PROVIDER": "typesafe"})          # the provider alone: the model stays
+        with open(self.path) as fh:
+            self.assertEqual(fh.read(), "DECISION_MODEL=typesafe/jev-1.14\nDECISION_PROVIDER=typesafe\nHOSTS=bench\n")
+        self.assertEqual(os.environ["DECISION_MODEL"], "typesafe/jev-1.14")
+
+    def test_with_both_names_in_the_file_the_new_one_is_read_and_a_save_removes_the_old(self):
+        self.write("SYSTEM_ONE_MODEL=old\nDECISION_MODEL=new\n")
+        settings.load(self.path)
+        self.assertEqual(os.environ["DECISION_MODEL"], "new")
+        self.assertEqual([u["instead"] for u in settings.unread(self.path)], ["DECISION_MODEL"])
+        settings.save_many(self.path, {"DECISION_MODEL": "newer"})
+        self.assertEqual(settings.in_file(self.path), {"DECISION_MODEL": "newer"})
 
     def test_an_endpoint_url_is_shown_so_it_holds_no_credential(self):
         """An endpoint's URL is shown on the page: an http(s) URL with a host,

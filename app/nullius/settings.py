@@ -287,7 +287,7 @@ def parse(path: str) -> List[Tuple[str, Optional[str], Optional[str]]]:
                 for k, v in values.items()
             ):
                 raise ValueError("Settings must be an object of variable names and single-line strings.")
-            return [(f"{key}={value}", key, value) for key, value in values.items()]
+            return _renamed([(f"{key}={value}", key, value) for key, value in values.items()])
         for raw in fh:
             line = raw.rstrip("\n")
             s = line.strip()
@@ -296,6 +296,20 @@ def parse(path: str) -> List[Tuple[str, Optional[str], Optional[str]]]:
                 continue
             key, _, value = s.partition("=")
             out.append((line, key.strip(), value.strip().strip('"').strip("'")))
+    return _renamed(out)
+
+
+def _renamed(entries: List[Tuple[str, Optional[str], Optional[str]]]) -> List[Tuple[str, Optional[str], Optional[str]]]:
+    """A setting written under its old name (``RENAMED``) read as its new one, its line too, so the page
+    shows it set and the next save writes the new name. A file that holds both keeps the new name's
+    value; the old line stays unread until a save of the new one takes it out."""
+    present = {k for _, k, _ in entries if k}
+    out = []
+    for line, key, value in entries:
+        new = RENAMED.get(key or "")
+        if new and new not in present:
+            line, key = line.replace(key, new, 1), new
+        out.append((line, key, value))
     return out
 
 
