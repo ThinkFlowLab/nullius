@@ -136,16 +136,13 @@ def _phase(value):
 
 @app.template_filter("secs")
 def _secs(value):
-    """Seconds with the precision the clock behind them has.
-
-    Show tenths below ten seconds, whole seconds below a minute, and tenths
-    of minutes above that.
+    """Seconds to two decimals, minutes to two decimals from a minute on:
+    the clock behind them is finer than that, so rounding further would
+    hide a difference it measured.
     """
     if value is None:
         return "—"
-    if value < 9.95:                       # what .1f would still show as one digit
-        return f"{value:.1f}s"
-    return f"{value:.0f}s" if value < 60 else f"{value / 60:.1f}m"
+    return f"{value:.2f}s" if value < 59.995 else f"{value / 60:.2f}m"
 
 
 @app.template_filter("nsround")

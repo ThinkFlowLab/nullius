@@ -253,9 +253,9 @@ class Routes(unittest.TestCase):
         trial.dur_env, trial.dur_agent, trial.dur_verifier = 1, 2, 3
         with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
             for agent, duration, usage, total, tokens in (
-                ("fixture-agent", 135, (1000, 500, 900), "2.2m", "1.5k"),
+                ("fixture-agent", 135, (1000, 500, 900), "2.25m", "1.5k"),
                 ("fixture-agent", None, (0, 0, 0), "—", "—"),
-                ("oracle", 0, (0, 0, 0), "0.0s", "0"),
+                ("oracle", 0, (0, 0, 0), "0.00s", "0"),
             ):
                 with self.subTest(agent=agent, duration=duration):
                     job.agent_name = agent
