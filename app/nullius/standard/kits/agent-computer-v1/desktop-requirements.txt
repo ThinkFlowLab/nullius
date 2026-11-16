@@ -1,0 +1,27 @@
+# The desktop's Python packages: pyautogui and Pillow, and what pyautogui needs on Linux,
+# each pinned by version and by the sha256 of its file on PyPI.
+pyautogui==0.9.54 \
+    --hash=sha256:dd1d29e8fd118941cb193f74df57e5c6ff8e9253b99c7b04f39cfc69f3ae04b2
+pillow==12.0.0 \
+    --hash=sha256:b87843e225e74576437fd5b6a4c2205d422754f84a06942cfaf1dc32243e45a8 \
+    --hash=sha256:82240051c6ca513c616f7f9da06e871f61bfd7805f566275841af15015b8f98d \
+    --hash=sha256:55f818bd74fe2f11d4d7cbc65880a843c4075e0ac7226bc1a23261dbea531953 \
+    --hash=sha256:2fa5f0b6716fc88f11380b88b31fe591a06c6315e955c096c35715788b339e3f
+python3-xlib==0.15 \
+    --hash=sha256:dc4245f3ae4aa5949c1d112ee4723901ade37a96721ba9645f2bfa56e5b383f8
+pymsgbox==2.0.1 \
+    --hash=sha256:5de8ec19bca2ca7e6c09d39c817c83f17c75cee80275235f43a9931db699f73b \
+    --hash=sha256:98d055c49a511dcc10fa08c3043e7102d468f5e4b3a83c6d3c61df722c7d798d
+pytweening==1.2.0 \
+    --hash=sha256:243318b7736698066c5f362ec5c2b6434ecf4297c3c8e7caa8abfe6af4cac71b
+pyscreeze==1.0.1 \
+    --hash=sha256:cf1662710f1b46aa5ff229ee23f367da9e20af4a78e6e365bee973cad0ead4be
+pygetwindow==0.0.9 \
+    --hash=sha256:17894355e7d2b305cd832d717708384017c1698a90ce24f6f7fbf0242dd0a688
+pyrect==0.2.0 \
+    --hash=sha256:f65155f6df9b929b67caffbd57c0947c5ae5449d3b580d178074bffb47a09b78
+mouseinfo==0.1.3 \
+    --hash=sha256:2c62fb8885062b8e520a3cce0a297c657adcc08c60952eb05bc8256ef6f7f6e7
+pyperclip==1.11.0 \
+    --hash=sha256:299403e9ff44581cb9ba2ffeed69c7aa96a008622ad0c46cb575ca75b5b84273 \
+    --hash=sha256:244035963e4428530d9e3a6101a1ef97209c6825edab1567beac148ccc1db1b6
