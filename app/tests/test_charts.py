@@ -20,6 +20,7 @@ import pathlib
 
 import nullius
 from nullius.traces import trace
+from nullius.traces.waterfall import MAX_ROWS
 from nullius.traces import charts
 
 from .tracedata import DEGRADED, RICH, doc, raw, span
@@ -298,11 +299,11 @@ class TheRenderCapDoesNotLeak(unittest.TestCase):
     def test_the_charts_see_spans_the_waterfall_stops_drawing(self):
         # `rows` is capped at MAX_ROWS; `roots` is not. A chart built off the
         # rows would describe a subset while the panel above says otherwise.
-        many = [span(f"s{i}", 0, (i % 50 + 1) * MS) for i in range(trace.MAX_ROWS + 25)]
+        many = [span(f"s{i}", 0, (i % 50 + 1) * MS) for i in range(MAX_ROWS + 25)]
         tr = trace.parse(doc(*many))
         cs = charts.charts_for(tr.roots)
-        self.assertEqual(len(tr.rows), trace.MAX_ROWS)
-        self.assertEqual(cs.total, trace.MAX_ROWS + 25)
+        self.assertEqual(len(tr.rows), MAX_ROWS)
+        self.assertEqual(cs.total, MAX_ROWS + 25)
         self.assertEqual(sum(b.count for b in chart(cs, "kind-hist").bars), cs.total)
 
 

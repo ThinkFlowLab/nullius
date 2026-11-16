@@ -1,7 +1,8 @@
 ## Traces, as this application renders them
 
-The reader itself — folding, grouping, normalisation — is
-`app/nullius/traces/trace.py`. What
+The reader itself is `app/nullius/traces/trace.py`, with the span tree and its
+grouping in `spans.py`, the folding in `fold.py`, the time accounting in
+`breakdown.py` and the waterfall's layout in `waterfall.py`. What
 this rule keeps is what the **pages** do with it, and these are the parts a plausible change
 breaks silently.
 

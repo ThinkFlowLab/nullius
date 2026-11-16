@@ -32,6 +32,7 @@ from unittest.mock import patch
 from nullius import workspace
 from nullius.catalogue import catalog, harbor_entry
 from nullius.traces import trace as trace_mod
+from nullius.traces.spans import all_spans
 
 try:                    # a repository's refs listed by `git ls-remote`, where that has landed
     from nullius import gitrefs
@@ -118,7 +119,7 @@ class EveryRoute(unittest.TestCase):
             if not trial.has_trace:
                 continue
             loaded = trace_mod.load(trial.trace_path)
-            for span in trace_mod.all_spans(loaded.roots):
+            for span in all_spans(loaded.roots):
                 if span.span_id:
                     return span.span_id
         return ""

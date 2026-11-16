@@ -30,7 +30,8 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from nullius.standard.calls import ledger
-from nullius.traces import otel, trace
+from nullius.traces import otel
+from nullius.traces.breakdown import breakdown
 
 
 def iso(t: Optional[float]) -> Optional[str]:
@@ -341,7 +342,7 @@ def trace_from_run(trajectory: dict, calls: List[dict], other: dict, produce: tu
             "session_id": trajectory.get("session_id") or "", "agent": trajectory.get("agent") or {},
             "clock": {"source": "this machine's clock, as the relay and the ACP client saw each call",
                       "note": "wall_ns is the agent's window; a tool call's time is what the agent reported"},
-            "spans": [session], "totals": trace.breakdown([session], finish - begin).as_totals()}
+            "spans": [session], "totals": breakdown([session], finish - begin).as_totals()}
 
 
 def _jsonl(path: str) -> List[dict]:

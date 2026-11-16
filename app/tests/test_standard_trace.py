@@ -9,6 +9,7 @@ import unittest
 
 from nullius.standard.runner import job
 from nullius.traces import trace
+from nullius.traces.spans import raw_spans_of
 
 T = 1_800_000_000.0
 AGENT = {"key": "codex", "_kind": "agent"}
@@ -183,7 +184,7 @@ class Backfill(unittest.TestCase):
             json.dump(kept, f)
         self.assertEqual(job.backfill_trace(trial, write=True), "partial")
         with open(path) as f:
-            spans = list(trace.raw_spans_of(json.load(f)["spans"]))
+            spans = list(raw_spans_of(json.load(f)["spans"]))
         self.assertEqual(next(s for s in spans if s["kind"] == "llm_request")["duration_ns"], 10**9)
         self.assertTrue(all("duration_ns" not in s for s in spans if s["kind"] == "tool"))
 

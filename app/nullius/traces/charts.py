@@ -11,7 +11,7 @@ Spans nest and overlap — a tool call sits inside the LLM call that asked for i
 and background subagents run alongside the main thread — so adding durations up
 overshoots the run, sometimes by a lot. That is exactly why the strips next to
 these charts never sum spans: ``Totals`` is the producer's, displayed verbatim,
-and ``Breakdown`` *partitions* the timeline instead (see :func:`trace.partition`).
+and ``Breakdown`` *partitions* the timeline instead (see :func:`breakdown.partition`).
 So the weighted axis here is a share of *summed span time*, never a share of the
 run, :class:`Charts` carries no ``wall_ns``, and no percentage is ever taken
 against one. A chart that looked like the breakdown strip and disagreed with it
@@ -38,7 +38,7 @@ Two more things are load-bearing:
   every headline.
 
 Geometry is computed here, in SVG user units against :data:`BOX`, for the same
-reason :func:`trace.place` computes the waterfall's: the arithmetic runs on
+reason :func:`waterfall.place` computes the waterfall's: the arithmetic runs on
 nanosecond magnitudes that overflow a JS double, and staying in Python int/float
 keeps it exact. Values that need formatting leave as integer nanoseconds and get
 ``|nsdur`` in the template — this module emits numbers, not presentation. The
@@ -78,7 +78,7 @@ from dataclasses import dataclass, replace
 
 from nullius.traces.trace import clean as _clean
 from nullius.traces.trace import toggled as _toggled
-from nullius.traces.trace import KIND_ORDER, all_spans, is_instant
+from nullius.traces.spans import KIND_ORDER, all_spans, is_instant
 
 # The SVG coordinate system every chart is drawn in. One viewBox for all four so
 # they line up visually across the grid, with room on the left for value labels
@@ -418,7 +418,7 @@ def log_edges(lo_ns: int, hi_ns: int, target: int = _TARGET_BINS) -> tuple:
     every sample rather than clipping the extremes.
 
     Never degenerate. A trace whose spans all took the same time still gets a
-    decade of width — the same stance :func:`trace.extent_of` takes when every
+    decade of width — the same stance :func:`waterfall.extent_of` takes when every
     span is an instant, and for the same reason: a zero-width range makes every
     position NaN.
     """
@@ -811,7 +811,7 @@ def charts_of(samples: tuple, total: int, excluded: int,
     """The same four charts over an already-extracted population.
 
     Split out from :func:`charts_for` so that several traces could be pooled
-    without merging their span *trees*. :func:`trace.all_spans` deduplicates by
+    without merging their span *trees*. :func:`spans.all_spans` deduplicates by
     span id to guard against a parent cycle — right within one document, and
     quietly wrong across several, where two traces reusing an id would lose the
     duplicates without saying so. Extract each trace's samples on its own, then
