@@ -70,6 +70,9 @@
     <symbol id="i-sort" viewBox="0 0 24 24"><path d="M8 19V5M4.5 8.5 8 5l3.5 3.5M16 5v14M12.5 15.5 16 19l3.5-3.5"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.5 20h19zM12 10v4.5M12 17.5h.01"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16zM13.5 6.5l4 4"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-unlink" viewBox="0 0 24 24"><path d="M18.8 12.3l1.7-1.7a5 5 0 0 0-7.1-7.1l-1.7 1.7M5.2 11.7l-1.7 1.7a5 5 0 0 0 7.1 7.1l1.7-1.7M8 2v3M2 8h3M16 22v-3M22 16h-3"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
     <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></symbol>
     <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
@@ -205,47 +208,7 @@
       </div>
       <div class="nav-group">
         <div class="nav-label">Manage</div>
-        {# A tree: every workspace as a folder, the open one expanded to its
-           runs. Clicking a closed one switches; the caret folds the tree and
-           the fold is remembered. #}
-        <div class="nav-tree folded" data-tree="nav-ws">
-          <div class="nav-row">
-            <a class="nav-item {{ 'on' if ep.startswith('workspace') }}" href="{{ url_for('workspaces_page') }}" data-label="Workspaces" aria-label="Workspaces"><svg class="ic"><use href="#i-ws"/></svg><span class="lbl">Workspaces</span></a>
-            <button class="tree-caret" type="button" aria-expanded="false"
-                    aria-label="Fold the workspace list"><svg class="ic"><use href="#i-chev"/></svg></button>
-          </div>
-          <div class="tree-kids" hidden>
-            {% for ws in workspaces %}
-            {% set cur = workspace and ws.name == workspace.name %}
-            {% if cur %}
-            <a class="tree-item ws-item cur {{ 'on' if ep in ('index',) }}" href="{{ url_for('index') }}">
-              <span class="ws-avatar sm" style="--hue:{{ ws_hue(ws.name) }}">{{ ws.label[:2]|upper }}</span>
-              <span class="lbl">{{ ws.label }}</span><svg class="ic tree-check"><use href="#i-check"/></svg>
-            </a>
-            <div class="tree-runs">
-              {% for r in nav_runs %}
-              <a class="tree-item run-item {{ 'on' if (ep in ('job', 'trial', 'save_trace') and request.view_args.get('job_id') == r.job_id) }}"
-                 href="{{ url_for('job', job_id=r.job_id) }}">
-                <span class="tree-guide"></span><span class="lbl mono">{{ r.job_id }}</span><span class="tree-n">{{ r.n_trials }}</span>
-              </a>
-              {% else %}
-              <span class="tree-item run-item faint"><span class="tree-guide"></span><span class="lbl">no runs read yet</span></span>
-              {% endfor %}
-            </div>
-            {% else %}
-            <form method="post" action="{{ url_for('workspace_open', name=ws.name) }}" class="tree-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
-              <button class="tree-item ws-item" type="submit">
-                <span class="ws-avatar sm" style="--hue:{{ ws_hue(ws.name) }}">{{ ws.label[:2]|upper }}</span>
-                <span class="lbl">{{ ws.label }}</span>
-              </button>
-            </form>
-            {% endif %}
-            {% endfor %}
-            <a class="tree-item ws-item add" href="{{ url_for('import_page', new=1) }}">
-              <span class="ws-avatar sm ws-avatar-empty"><svg class="ic"><use href="#i-plus"/></svg></span><span class="lbl">New workspace</span>
-            </a>
-          </div>
-        </div>
+        <a class="nav-item {{ 'on' if ep.startswith('workspace') }}" href="{{ url_for('workspaces_page') }}" data-label="Workspaces" aria-label="Workspaces"><svg class="ic"><use href="#i-ws"/></svg><span class="lbl">Workspaces</span></a>
         <a class="nav-item {{ 'on' if ep == 'launches_page' }}" href="{{ url_for('launches_page') }}" data-label="Launches" aria-label="Launches"><svg class="ic"><use href="#i-launches"/></svg><span class="lbl">Launches</span></a>
         <a class="nav-item {{ 'on' if ep.startswith('settings') }}" href="{{ url_for('settings_page') }}" data-label="Settings" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg><span class="lbl">Settings</span></a>
       </div>

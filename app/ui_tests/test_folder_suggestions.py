@@ -76,4 +76,4 @@ class FolderSuggestions(unittest.TestCase):
             response = self.client.post("/use-path", data={"csrf": "folder-test", "path": str(alias / "jobs"), "new": "1"})
         self.addCleanup(response.close)
         self.assertEqual(response.status_code, 302)
-        adopt.assert_called_once_with([str(alias / "jobs")], label="", new=True)
+        adopt.assert_called_once_with([str(alias / "jobs")], label="", new=True, into="")

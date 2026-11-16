@@ -39,7 +39,7 @@
     </div>
   </div>
   {%- set filters = [] %}{% for col, label in cols if col in choices %}{% set _ = filters.append((col, label, choices[col])) %}{% endfor %}
-  {{ tools(filters, cols|rejectattr(0, 'in', unsorted)|list) }}
+  {{ tools(filters, cols|rejectattr(0, 'in', unsorted)|list, only) }}
 </div>
 <div class="table-wrap">
 <table class="grid sortable tools inventory" id="launches">
@@ -102,6 +102,9 @@
   let pages = () => {};
   const tools = NulliusTable.toolbar(table, document.getElementById('launch-tools'), () => pages());
   pages = NulliusTable.pager(table, 'launches.per', tools.passes, document.getElementById('empty-note'));
+  // ?ws= ticked its workspace alone at load; from here the filter lives in the page, as the others do
+  const url = new URL(location.href);
+  if (url.searchParams.has('ws')) { url.searchParams.delete('ws'); history.replaceState(history.state, '', url); }
   // off until a viewer chooses: the table fits 1280 px without them
   const colBtn = document.getElementById('col-btn'), colMenu = document.getElementById('col-menu');
   NulliusTable.columns(table, null, colMenu, 'launches.cols', ['checks', 'machines', 'size']);
