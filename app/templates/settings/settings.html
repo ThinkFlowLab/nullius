@@ -106,7 +106,7 @@
       <p>Manage the providers available for runs and judges.</p>
     </div>
 
-    {% macro provider_logo(key) %}{% if key == 'typesafe' %}<img class="st-logo" src="{{ url_for('static', filename='brand/typesafe.png') }}" alt="" width="28" height="28">{% elif key.startswith('custom') %}<svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>{% else %}<svg class="st-logo" aria-hidden="true"><use href="{{ marks }}#{{ key }}"/></svg>{% endif %}{% endmacro %}
+    {% macro provider_logo(key, title='Custom') %}{% if key == 'typesafe' %}<img class="st-logo" src="{{ url_for('static', filename='brand/typesafe.png') }}" alt="" width="28" height="28">{% elif key.startswith('custom') %}<span class="ws-avatar st-logo" aria-hidden="true">{{ title[:2]|upper }}</span>{% else %}<svg class="st-logo" aria-hidden="true"><use href="{{ marks }}#{{ key }}"/></svg>{% endif %}{% endmacro %}
     <button type="button" class="btn ghost st-provider-back" data-provider-back hidden>← Model providers</button>
     <p class="st-about" data-provider-empty hidden>No providers added yet.</p>
     <div class="st-provider-catalogue" hidden>
@@ -124,7 +124,7 @@
     {% for c in provider_cards %}
     <div class="st-card st-provider-card" data-provider-card="{{ c.key }}" data-configured="{{ 'true' if c.configured else 'false' }}" data-ready="{{ 'true' if c.ready else 'false' }}">
       <div class="st-provider-summary">
-        {{ provider_logo(c.key) }}
+        {{ provider_logo(c.key, c.title) }}
         {% set removable = writable and c.configured %}
         {#- Test asks the saved settings at no cost (providers.test); TypeSafe has no such request -#}
         {% set last = tested.get(c.key) %}
