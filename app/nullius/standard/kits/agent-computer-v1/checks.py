@@ -6,16 +6,17 @@ clock), the actions' times (``desktop.Desktop.act``: one dict an action,
 ``start`` and ``end`` on the same clock) and the agent's last message.
 
 - ``see``: the last message holds the code the window drew;
-- ``click``: the log holds a left press on the named button and on none of
-  the five others;
+- ``click``: the log holds a left press on the named button and no press,
+  of any mouse button, on the five others;
 - ``type``: the field held exactly the word at the last Enter.
 
-``click`` and ``type`` pass only when every pointer and key event lies
-inside an action's time: input sent any other way, through the desktop's
-Python for one, fails them. An event counts as inside from the action's start
-to ``SLACK`` seconds after its end, the time the fixture may take to take an
-event in once the action has sent it. The kit's pause after each action is
-longer, so nothing sent after an action has answered falls in it.
+``click`` and ``type`` pass only when every pointer and key event, Enter in
+the field included, lies inside an action's time: input sent any other way,
+through the desktop's Python for one, fails them. An event counts as inside
+from the action's start to ``SLACK`` seconds after its end, the time the
+fixture may need to receive an event the action sent. An action answers only
+once that time has passed on the desktop (``desktop.SETTLE``): nothing sent
+after it has answered falls in it.
 """
 import re
 import secrets
@@ -27,7 +28,7 @@ LABELS = ("APPLE", "BRICK", "CLOUD", "DELTA", "EMBER", "FROST", "GRAPE", "HONEY"
           "KNOT", "LEMON", "MAPLE", "NORTH", "OCEAN", "PIANO", "QUILT", "RIVER", "STONE", "TIGER",
           "UMBRA", "VELVET", "WHEAT", "YEAST")
 POINTER = ("press", "release", "scroll")
-KEYS = ("key", "keyup")
+KEYS = ("key", "keyup", "enter")
 CHECKS = ("see", "click", "type")
 
 
@@ -86,11 +87,10 @@ def see(expected, events, actions, message):
 
 def click(expected, events, actions, message):
     target = expected["target"]
-    presses = [e for e in events if e.get("kind") == "press" and e.get("button") == 1]
-    hits = {e.get("hit") for e in presses}
-    if target not in hits:
+    presses = [e for e in events if e.get("kind") == "press"]
+    if not any(e.get("hit") == target and e.get("button") == 1 for e in presses):
         return _verdict(f"no left press on the button {target}")
-    others = sorted(h for h in hits if h != target and h in expected.get("labels", ()))
+    others = sorted({e.get("hit") for e in presses} & set(expected.get("labels", ())) - {target})
     if others:
         return _verdict(f"a press on another button as well: {', '.join(others)}")
     return _verdict(_input_rule(events, actions))

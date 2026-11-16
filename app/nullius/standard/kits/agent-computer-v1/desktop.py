@@ -18,16 +18,20 @@ ready once the window manager holds the display. Everything after is
   answers ``{status, output, error, returncode}``, or None when it did not
   end within its bound (it is killed then);
 - :meth:`Desktop.upload` and :meth:`Desktop.read` write and read a file as
-  ``user``; :meth:`Desktop.capture` is the screen as PNG bytes;
+  ``user``, a read bounded at 12 MiB and of a regular file alone;
+  :meth:`Desktop.capture` is the screen as PNG bytes;
   :meth:`Desktop.password` is ``""``: ``user`` has no password and no sudo;
 - :meth:`Desktop.act` runs one action, Python text with ``pyautogui`` and
   ``time`` imported, as ``user``, and keeps its start and end, read on the
-  desktop's clock by the root process that runs it: the agent's code never
-  writes them.
+  desktop's monotonic clock (the fixture's) by the root process that runs it:
+  the agent's code never writes them. It answers only :data:`SETTLE` seconds
+  after the action's end, by that clock, so no later request falls in the
+  time a verdict grants the action.
 
 The kit's own reads go apart: :meth:`Desktop.start_fixture` and
 :meth:`Desktop.events` run as ``fixture``, whose folder ``user`` cannot read.
-Standard library only, and the engine's program.
+A start that fails removes what it made; :meth:`Desktop.remove` checks that
+the container is gone. Standard library only, and the engine's program.
 """
 from __future__ import annotations
 
@@ -53,6 +57,8 @@ FIXTURE_LOG = "/var/lib/fixture/events.jsonl"
 PYTHON_SECONDS = 90
 START_SECONDS = 60
 OUTPUT_LIMIT = 4 * 1024 * 1024          # of each of output and error, as the reply gives them
+READ_LIMIT = 12 * 1024 * 1024           # the largest file `read` gives
+SETTLE = 0.5                            # an action answers this long after its end: at least the verdicts' slack
 ACTION_PREFIX = "import pyautogui\nimport time\npyautogui.FAILSAFE = False\n"
 
 # Run as root in the desktop: the request on stdin, the code as `user`, the times around it.
@@ -63,7 +69,7 @@ env = {"HOME": "/home/user", "USER": "user", "LOGNAME": "user", "SHELL": "/bin/b
        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "DISPLAY": ":0",
        "XDG_RUNTIME_DIR": "/run/user/1000", "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus"}
 out, err = tempfile.TemporaryFile(), tempfile.TemporaryFile()
-start = time.time()
+start = time.monotonic()
 p = subprocess.Popen(["python3", "-c", req["code"]], user=1000, group=1000, extra_groups=[], env=env,
                      cwd="/home/user", stdin=subprocess.DEVNULL, stdout=out, stderr=err, start_new_session=True)
 try:
@@ -71,7 +77,10 @@ try:
 except subprocess.TimeoutExpired:
     os.killpg(p.pid, signal.SIGKILL)
     rc, late = p.wait(), True
-end = time.time()
+end = time.monotonic()
+rest = end + req.get("settle", 0) - time.monotonic()
+if rest > 0:
+    time.sleep(rest)
 def text(f):
     f.seek(0)
     return f.read(req["limit"]).decode("utf-8", "replace")
@@ -89,13 +98,19 @@ print(os.path.getsize(path))
 """
 
 _READ = r"""
-import os, sys
+import os, stat, sys
+limit = int(sys.argv[2])
 try:
-    f = open(os.path.join(os.path.expanduser("~"), sys.argv[1]), "rb")
+    fd = os.open(os.path.join(os.path.expanduser("~"), sys.argv[1]), os.O_RDONLY | os.O_NONBLOCK)
 except OSError:
     sys.exit(3)
-with f:
-    sys.stdout.buffer.write(f.read())
+if not stat.S_ISREG(os.fstat(fd).st_mode):
+    sys.exit(4)
+with os.fdopen(fd, "rb") as f:
+    data = f.read(limit + 1)
+if len(data) > limit:
+    sys.exit(5)
+sys.stdout.buffer.write(data)
 """
 
 _CAPTURE = r"""
@@ -111,6 +126,11 @@ _READY = "i=0; while [ ! -e /run/desktop/ready ]; do i=$((i+1)); [ $i -gt {n} ] 
 
 class DesktopError(Exception):
     """The desktop failed a request: it is gone, or answered nothing a request answers."""
+
+
+class Refused(Exception):
+    """A request the desktop does not serve: a read of a file that is not a regular one, or of one past
+    :data:`READ_LIMIT`. The agent's error, never the desktop's."""
 
 
 def image(log_dir: Optional[str] = None) -> str:
@@ -135,6 +155,11 @@ def _said(r: subprocess.CompletedProcess) -> str:
     return (r.stderr or r.stdout or b"").decode("utf-8", "replace").strip()[-300:]
 
 
+def _absent(r: subprocess.CompletedProcess) -> bool:
+    """Whether the engine said the container does not exist."""
+    return "no such container" in (r.stderr or b"").decode("utf-8", "replace").lower()
+
+
 class Desktop:
     """One running desktop, by its container's name."""
 
@@ -149,18 +174,30 @@ class Desktop:
         labels the container as a unit's are, so a sweep of the job removes it."""
         d = cls(name or f"nullius-desktop-{secrets.token_hex(4)}")
         label = ["--label", f"{container.LABEL}={job}"] if job else []
-        r = _engine(["run", "-d", "--init", "--name", d.name, "--network", "none", "--security-opt", "no-new-privileges",
-                     "--shm-size", "256m", *label, *container.capped(), image], timeout=120)
-        if r.returncode != 0:
-            raise DesktopError(f"starting the desktop {d.name}: {_said(r)}")
         try:
-            r = _engine(["exec", d.name, "sh", "-c", _READY.format(n=int(seconds * 10))], timeout=seconds + 30)
-        except subprocess.TimeoutExpired:
-            r = None
-        if r is None or r.returncode != 0:
-            logs = _engine(["logs", "--tail", "20", d.name], timeout=30)
-            d.remove()
-            raise DesktopError(f"the desktop {d.name} was not ready in {seconds:.0f} s: {_said(logs)}")
+            try:
+                r = _engine(["run", "-d", "--init", "--name", d.name, "--network", "none", "--security-opt",
+                             "no-new-privileges", "--shm-size", "256m", *label, *container.capped(), image], timeout=120)
+            except subprocess.TimeoutExpired:
+                raise DesktopError(f"starting the desktop {d.name}: {container.DOCKER} run did not answer in 120 s")
+            if r.returncode != 0:
+                raise DesktopError(f"starting the desktop {d.name}: {_said(r)}")
+            try:
+                r = _engine(["exec", d.name, "sh", "-c", _READY.format(n=int(seconds * 10))], timeout=seconds + 30)
+            except subprocess.TimeoutExpired:
+                r = None
+            if r is None or r.returncode != 0:
+                try:
+                    said = _said(_engine(["logs", "--tail", "20", d.name], timeout=30))
+                except (subprocess.TimeoutExpired, DesktopError):
+                    said = "its log could not be read"
+                raise DesktopError(f"the desktop {d.name} was not ready in {seconds:.0f} s: {said}")
+        except BaseException:                  # an error or an interrupt: what this start made goes
+            try:
+                d.remove()
+            except (DesktopError, subprocess.TimeoutExpired):
+                pass
+            raise
         return d
 
     def _exec(self, user: str, argv: List[str], *, input: Optional[bytes] = None, timeout: float,
@@ -170,11 +207,12 @@ class Desktop:
             flags += ["-e", f"{k}={v}"]
         return _engine(["exec", *flags, "-u", user, self.name, *argv], input=input, timeout=timeout)
 
-    def _run(self, code: str, seconds: float) -> Optional[dict]:
-        """``code`` run as ``user`` by the desktop's root: the times and the reply, or None past ``seconds``."""
-        req = json.dumps({"code": code, "seconds": seconds, "limit": OUTPUT_LIMIT}).encode()
+    def _run(self, code: str, seconds: float, settle: float = 0.0) -> Optional[dict]:
+        """``code`` run as ``user`` by the desktop's root: the times and the reply, or None past ``seconds``.
+        The reply comes ``settle`` seconds after the code's end, on the desktop's clock."""
+        req = json.dumps({"code": code, "seconds": seconds, "limit": OUTPUT_LIMIT, "settle": settle}).encode()
         try:
-            r = self._exec(ROOT, ["python3", "-I", "-c", _RUN], input=req, timeout=seconds + 30)
+            r = self._exec(ROOT, ["python3", "-I", "-c", _RUN], input=req, timeout=seconds + settle + 30)
         except subprocess.TimeoutExpired:
             return None
         try:
@@ -193,10 +231,11 @@ class Desktop:
 
     def act(self, code: str, seconds: float = PYTHON_SECONDS) -> dict:
         """Run one action, ``code`` with ``pyautogui`` and ``time`` imported:
-        ``{start, end, reply}``, the times on the desktop's clock, ``reply`` as
-        :meth:`python` gives it. The times are kept in :attr:`actions`, also
-        for an action that ran past its bound."""
-        said = self._run(ACTION_PREFIX + code, seconds)
+        ``{start, end, reply}``, the times on the desktop's monotonic clock,
+        ``reply`` as :meth:`python` gives it. It answers :data:`SETTLE` seconds
+        after ``end``. The times are kept in :attr:`actions`, also for an
+        action that ran past its bound."""
+        said = self._run(ACTION_PREFIX + code, seconds, SETTLE)
         if said is None:                       # the desktop did not answer: it gave no time to keep
             return {"start": None, "end": None, "reply": None}
         self.actions.append({"start": said["start"], "end": said["end"]})
@@ -214,10 +253,15 @@ class Desktop:
         return int(r.stdout.decode().strip())
 
     def read(self, path: str) -> Optional[bytes]:
-        """The bytes of ``path`` as ``user`` reads them, or None when it cannot."""
-        r = self._exec(USER, ["python3", "-I", "-c", _READ, path], timeout=120, env={"HOME": HOME})
+        """The bytes of ``path`` as ``user`` reads them, or None when it cannot open it. A path that is
+        not a regular file, or a file past :data:`READ_LIMIT`, is :class:`Refused`."""
+        r = self._exec(USER, ["python3", "-I", "-c", _READ, path, str(READ_LIMIT)], timeout=120, env={"HOME": HOME})
         if r.returncode == 3:
             return None
+        if r.returncode == 4:
+            raise Refused(f"{path} is not a regular file")
+        if r.returncode == 5:
+            raise Refused(f"{path} is over {READ_LIMIT // (1024 * 1024)} MiB")
         if r.returncode != 0:
             raise DesktopError(f"read of {path}: {_said(r)}")
         return r.stdout
@@ -240,18 +284,34 @@ class Desktop:
             raise DesktopError(f"the fixture did not start: {_said(r)}")
 
     def events(self) -> List[dict]:
-        """The fixture's log, an event a dict; lines that are not JSON are left out."""
+        """The fixture's log, an event a dict. A log that cannot be read, or a line that is not an
+        event, is a :class:`DesktopError`: a verdict is never given on part of the log."""
         r = self._exec(FIXTURE, ["cat", FIXTURE_LOG], timeout=60)
         if r.returncode != 0:
-            return []
+            raise DesktopError(f"the fixture's log could not be read: {_said(r)}")
         out = []
-        for line in r.stdout.decode("utf-8", "replace").splitlines():
+        for i, line in enumerate(r.stdout.decode("utf-8", "replace").splitlines(), 1):
             try:
-                out.append(json.loads(line))
+                e = json.loads(line)
             except ValueError:
-                pass
+                e = None
+            if not isinstance(e, dict) or not isinstance(e.get("kind"), str) or not isinstance(e.get("t"), (int, float)):
+                raise DesktopError(f"line {i} of the fixture's log is not an event")
+            out.append(e)
         return out
 
     def remove(self) -> None:
-        """Remove the desktop's container, running or not."""
-        _engine(["rm", "-f", self.name], timeout=120)
+        """Remove the desktop's container, running or not, and check that it is gone. A container that
+        was gone already is no error; one that stays is a :class:`DesktopError`."""
+        try:
+            r = _engine(["rm", "-f", self.name], timeout=120)
+        except subprocess.TimeoutExpired:
+            raise DesktopError(f"removing the desktop {self.name}: {container.DOCKER} rm did not answer in 120 s")
+        if r.returncode != 0 and not _absent(r):
+            raise DesktopError(f"removing the desktop {self.name}: {_said(r)}")
+        try:
+            r = _engine(["container", "inspect", "--format", "{{.Id}}", self.name], timeout=60)
+        except subprocess.TimeoutExpired:
+            raise DesktopError(f"the desktop {self.name}'s removal could not be checked")
+        if r.returncode == 0 or not _absent(r):
+            raise DesktopError(f"the desktop {self.name} is still there after its removal: {_said(r)}")

@@ -13,9 +13,11 @@ but from the screen. The window fills the screen, so every press lands on it.
 
 Each press, release, scroll and key goes to ``events.jsonl`` in the fixture's
 home, a folder only ``fixture`` reads, one JSON object a line: ``kind``, the
-time ``t`` on the desktop's clock, the point or the key, and ``hit``, what it
+time ``t`` on the desktop's monotonic clock (the one an action's times are read
+on), the point or the key, and ``hit``, what it
 landed on (a button's label, ``field`` or ``background``). The first line is
-``ready``, with where each target is on the screen; Enter in the field writes
+``ready``, with where each target is on the screen, written once the window is
+mapped at the screen's size and holds the focus; Enter in the field writes
 ``enter`` with the field's text.
 
 The program leaves the caller once its window is up: it prints ``ready`` and
@@ -134,7 +136,7 @@ class Fixture:
         self.field.focus_set()
 
     def write(self, kind, **fields):
-        self.log_file.write(json.dumps({"kind": kind, "t": round(time.time(), 6), **fields}) + "\n")
+        self.log_file.write(json.dumps({"kind": kind, "t": round(time.monotonic(), 6), **fields}) + "\n")
         self.log_file.flush()
 
     def on_event(self, e):
@@ -159,22 +161,31 @@ class Fixture:
     def box(self, w):
         return [w.winfo_rootx(), w.winfo_rooty(), w.winfo_rootx() + w.winfo_width(), w.winfo_rooty() + w.winfo_height()]
 
+    def is_up(self):
+        """Mapped, at the screen's size, and with the keyboard's focus where the screen wants it."""
+        r = self.root
+        if not (r.winfo_viewable() and r.winfo_width() == r.winfo_screenwidth()
+                and r.winfo_height() == r.winfo_screenheight()):
+            return False
+        focus = r.focus_get()
+        return focus is not None and (self.field is None or focus == self.field)
+
     def up(self, seconds=10.0):
-        """Wait until the window fills the screen, then write ``ready`` with where each target is."""
+        """Wait until the window is up (:meth:`is_up`), then write ``ready`` with where each target is.
+        Past ``seconds`` it raises, and writes nothing."""
         end = time.monotonic() + seconds
         self.root.update()
-        while time.monotonic() < end and (self.root.winfo_width() < self.root.winfo_screenwidth()
-                                          or not self.root.winfo_viewable()):
+        while not self.is_up():
+            if time.monotonic() >= end:
+                raise RuntimeError("the fixture's window was not up in time")
+            self.root.focus_force()
+            if self.field is not None:
+                self.field.focus_set()
             time.sleep(0.05)
             self.root.update()
-        self.root.focus_force()
-        if self.field is not None:
-            self.field.focus_set()
-        self.root.update()
         boxes = {label: self.box(self.root.nametowidget(path)) for path, label in self.names.items()}
         self.write("ready", screen=self.values["screen"], size=[self.root.winfo_width(), self.root.winfo_height()],
                    boxes=boxes)
-
 
 def main():
     values = json.loads(sys.stdin.read())
