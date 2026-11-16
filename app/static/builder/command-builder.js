@@ -641,7 +641,7 @@
       } catch (e) { out = {errors: [{step: REVIEW, message: 'The recipe could not be compiled here: ' + e}], notes: [], review: []}; }
       if (key !== runnerKey) return;
       runnerOut = out; runnerOutKey = key;
-      if (step === S.model) fillServed();
+      if (step === S.model) syncServed();
       if (step === REVIEW) renderForm();
       refreshPlan();
     }, 120);
@@ -667,6 +667,21 @@
       servedCache.set(model, entry);
     }
     return entry.promise.then(x => { if (!x.ok) servedCache.delete(model); return x; });
+  }
+  // the model a Served by is for, as the step shows it: the field's, else the leaderboard's or the official one
+  const servedShown = (rec, role) => {
+    if (role === 'model') return rec.model || '';
+    const b = C.standardBench(rec) || {}, lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
+    return (!paper && rec[role + '_model']) || lb && lb[role] || b[role] || '';
+  };
+  // each Served by drawn again in place, as the recipe holds it now: its slugs (but the one being typed in), and its
+  // list of the model it is for. The rest of the form stays as it is: the keyboard stays where it is, and an open
+  // menu stays open.
+  function syncServed() {
+    const rec = r();
+    root.querySelectorAll('input[data-served-by]').forEach(f => { if (f !== document.activeElement) f.value = ((rec.served_by || {})[f.dataset.servedBy] || []).join(', '); });
+    root.querySelectorAll('select[data-served-add]').forEach(select => { select.dataset.servedShown = servedShown(rec, select.dataset.servedAdd); });
+    fillServed();
   }
   function fillServed() {
     root.querySelectorAll('select[data-served-add]').forEach(async select => {
@@ -998,7 +1013,7 @@
       else if(!d.providerModel&&['model','userModel','evalModel'].includes(d.field)&&/^(openrouter|openai)\//.test(String(value))){rec.provider=C.providerOf(rec,value);rec[d.field]=C.bareModel(value);
         renderForm();refreshPlan();const f=root.querySelector(`[data-field="${d.field}"]`);if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);}return;}   // the provider the prefix named, and whether it is set
       else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
-      else if(['model','simulator_model','judge_model'].includes(d.field))C.setModelOf(rec,d.field,value);   // the field's pin goes with its model
+      else if(['model','simulator_model','judge_model'].includes(d.field)){C.setModelOf(rec,d.field,value);syncServed();}   // the field's pin goes with its model; its Served by follows, in place
       else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
     }else if(d.minutes){C.setPhaseMinutes(rec,d.minutes,el.value===''?'':Number(el.value));const row=el.closest('tr');if(row){const m=row.querySelector('.nb-mono');const t=C.effectiveTimeouts(rec);const p=t&&t.phases.find(x=>x.key===d.minutes);if(m&&p)m.textContent='×'+p.multiplier;}refreshPlan();return;}
@@ -1022,9 +1037,6 @@
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
     // a provider added to a Served by, after the ones already there; the field shows the list, in its order
     else if(d.servedAdd!==undefined){const rec=r(),role=d.servedAdd,now=(rec.served_by||{})[role]||[];if(el.value&&!now.includes(el.value))C.setServed(rec,role,[...now,el.value]);el.value='';const f=root.querySelector(`[data-served-by="${role}"]`);if(f)f.value=((r().served_by||{})[role]||[]).join(', ');refreshPlan();}
-    // a model chosen: its Served by lists that model's providers; the keyboard stays on the field the new form holds
-    else if(['model','simulator_model','judge_model'].includes(d.field)&&C.servedRoles(r()).length){renderForm();refreshPlan();
-      requestAnimationFrame(()=>{const f=root.querySelector(`[data-field="${d.field}"]`);if(f&&document.activeElement!==f)f.focus();});}
     else if(d.stdVersion!==undefined){C.setStandardBenchmark(r(),el.value);render();}
     // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
     // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the

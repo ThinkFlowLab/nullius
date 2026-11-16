@@ -79,9 +79,13 @@ class TheStep(unittest.TestCase):
         response = client.post('/new-run/runner', json={'recipe': recipe}, headers={'X-CSRF-Token': 'served-test-token'})
         self.assertEqual(response.json['served_models']['model'], 'openai/gpt-4o-2024-08-06')
 
-    def test_the_keyboard_stays_on_the_model_field_once_the_form_is_drawn_again(self):
-        self.assertIn("requestAnimationFrame(()=>{const f=root.querySelector(`[data-field=\"${d.field}\"]`);if(f&&document.activeElement!==f)f.focus();})",
-                      self.SCRIPT)
+    def test_a_model_changed_draws_its_served_by_in_place_and_no_form(self):
+        """A model typed or chosen clears its field's pin and draws that Served by again where it is: the form is not
+        drawn again, so the model's menu does not open again, and a click on Served by lands there."""
+        self.assertIn("else if(['model','simulator_model','judge_model'].includes(d.field)){C.setModelOf(rec,d.field,value);syncServed();}", self.SCRIPT)
+        changed = self.SCRIPT[self.SCRIPT.index("root.addEventListener('change'"):]
+        self.assertNotIn("'model','simulator_model','judge_model'", changed)
+        self.assertNotIn('requestAnimationFrame', changed)
 
 
 class ServedInTheCore(CompilerCase):
