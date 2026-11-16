@@ -9,18 +9,23 @@ public address, no DNS. Its model calls reach the unit's relay through a
 reverse tunnel on the same port (``ssh -R``), so the address it is given is
 the one the local backend gives, and the relay records every call here.
 
-One unit, one VM (:class:`VM`): created when the unit's agent is about to
+One unit, one VM (:class:`VM`) of the run's size (``SIZES``, ``small`` by
+default; :func:`size_problem` says when the account cannot start it): created when the unit's agent is about to
 start, deleted once its workspace is copied back. A run's concurrency is
 therefore the number of VMs at once, never more than the account allows at
 once (:func:`slots`); a VM the account cannot start yet (its limit, its rate
 of starts) is waited for, and the wait ends with the run's Stop. Every VM
-carries the job's name as a label, so whatever a crash left behind is
-deleted by :func:`sweep` when the job ends.
+carries the run's label, so whatever an interrupted unit left is deleted by
+:func:`sweep` when the run ends; a VM of a run whose process was killed stops
+at its auto-stop: as long as its unit may take, at least ``TTL``, and ``TTL``
+at most on a free trial, which allows no more.
 
 What the VM is given, each at the same absolute path it has here so every
 path in the agent's configuration still holds: the agent's install, its
 definition, the runtimes the install links to outside itself (a ``uv``
-Python), its home and the unit's workspace. The workspace comes back with
+Python, never a folder holding this user's home, keys or Nullius's own
+storage), sent before the agent's time starts; then, as the agent starts, its
+home and the unit's workspace, which its setup writes up to then. The workspace comes back with
 links that leave it dropped (``rsync --safe-links``): the driver reads it to
 score, and a link the agent left must not reach a file of this machine.
 Nothing of this machine's environment goes with it but its locale.
@@ -45,20 +50,23 @@ import urllib.request
 from contextlib import contextmanager
 from typing import Callable, Dict, Iterable, List, Optional, Sequence
 
-from nullius import secrets
+from nullius import paths, secrets
 from nullius.standard import install
 
 API = "https://boat.dev/api/v1"
 STORE, NAME = "sandbox-provider-boat", "BOAT_API_KEY"
-SIZE = "small"                       # 2 vCPU, 4 GB: an agent's process, not its model
-TTL = 2 * 3600                       # the longest a VM lives, whatever happens here (the trial's maximum)
-USER = "agent"                       # the VM's user the agent runs as
+# the VM runs the agent's process, never its model: the smallest is enough
+SIZES = {"small": "2 vCPU, 4 GB", "default": "4 vCPU, 8 GB", "large": "", "xlarge": ""}
+SIZE = "small"
+TTL = 2 * 3600                       # a VM's auto-stop at least, and a free trial's at most
+USER = "agent"
 LABEL = "nullius-job"
 VM_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 KEEP = ("LANG", "LC_ALL", "TERM")    # of the local environment, what makes sense on another machine
-WAIT_SECONDS = 1800                  # how long a unit waits for the account to start its VM
+WAIT_SECONDS = 3600                  # an account's starts an hour come back within one
 READY_SECONDS = 300
 SSH_SECONDS = 900
+DRIVER = 1800                        # a unit's time beyond its agent's: sending, bringing back
 
 # The agent's user reaches the VM's loopback and nothing else: no public address, no DNS. Inserted
 # first in OUTPUT, before the chains boat's own firewall accepts in.
@@ -95,8 +103,8 @@ def unusable(env=os.environ, which: Callable = shutil.which) -> Optional[str]:
 class Client:
     """boat.dev's API, with one account's key."""
 
-    def __init__(self, api_key: str, base: str = API, opener: Callable = urllib.request.urlopen):
-        self.key, self.base, self.opener = api_key, base, opener
+    def __init__(self, api_key: str, base: str = API, opener: Callable = urllib.request.urlopen, timeout: float = 60):
+        self.key, self.base, self.opener, self.timeout = api_key, base, opener, timeout
 
     def call(self, method: str, path: str, body: Optional[dict] = None, headers: Optional[dict] = None) -> dict:
         req = urllib.request.Request(self.base + path, method=method,
@@ -104,7 +112,7 @@ class Client:
                                      headers={"Authorization": "Bearer " + self.key, "Content-Type": "application/json",
                                               "Accept": "application/json", **(headers or {})})
         try:
-            with self.opener(req, timeout=60) as r:
+            with self.opener(req, timeout=self.timeout) as r:
                 return json.loads(r.read() or b"{}")
         except urllib.error.HTTPError as e:
             try:
@@ -145,6 +153,36 @@ def slots(client: Client) -> Optional[int]:
     return n if isinstance(n, int) and n > 0 else None
 
 
+def starts_problem(client: Client, n: int) -> Optional[str]:
+    """What the account's starts left say of a run of ``n`` VMs, one per unit, or None."""
+    left = client.limits().get("starts") or {}
+    day, hour = ((left.get(k) or {}).get("remaining") for k in ("day", "hour"))
+    if isinstance(day, int) and n > day:
+        return (f"Boat can start {day} more VMs today on this account: {n - day} of the {n} units "
+                "will end without running")
+    if isinstance(hour, int) and n > hour:
+        return (f"Boat can start {hour} more VMs this hour on this account: the other units wait "
+                "for the next hour")
+    return None
+
+
+def machine_types(client: Client) -> Dict[str, Optional[str]]:
+    """Each machine type the account knows: None when it may start one, else boat's reason why not
+    ("not during the free trial"). Empty when its API does not say."""
+    out = {}
+    for t in client.limits().get("machineTypes") or []:
+        if isinstance(t, dict) and isinstance(t.get("type"), str):
+            out[t["type"]] = None if t.get("available") else str(t.get("reason") or "not available on this account")
+    return out
+
+
+def size_problem(client: Client, size: str) -> Optional[str]:
+    """Why this account cannot start a VM of ``size``, or None."""
+    if size not in SIZES:
+        return f"{size!r} is not one of Boat's sizes: {', '.join(SIZES)}"
+    return machine_types(client).get(size)
+
+
 def sweep(job: str, client: Optional[Client] = None) -> int:
     """Deletes every VM labelled with ``job``: what a crash or a kill left. The number deleted."""
     if client is None:
@@ -159,10 +197,19 @@ def sweep(job: str, client: Optional[Client] = None) -> int:
     return gone
 
 
-def outside_roots(where: str) -> List[str]:
+def _private(env=os.environ) -> tuple:
+    """What a folder sent to a VM may not hold, and what it may not be inside of."""
+    home = os.path.realpath(os.path.expanduser("~"))
+    keys = [os.path.join(home, d) for d in (".ssh", ".gnupg", ".aws")] + [os.path.realpath(paths.config_dir(env))]
+    return [home, os.path.realpath(paths.data_dir(env)), os.path.realpath(paths.cache_dir(env)), *keys], keys
+
+
+def outside_roots(where: str, env=os.environ) -> List[str]:
     """The folders an install links to outside itself and outside the system's own: a ``uv``
-    environment's Python, kept in uv's folder of this user. Each must reach the VM too."""
-    roots = set()
+    environment's Python, kept in uv's folder of this user. Each must reach the VM too. A link
+    whose folder would hold this user's home, keys or Nullius's storage is the install's
+    ``Unavailable``: none of it may leave this machine."""
+    roots = {}
     real_where = os.path.realpath(where)
     for top, dirs, files in os.walk(where):
         for n in dirs + files:
@@ -172,8 +219,16 @@ def outside_roots(where: str) -> List[str]:
             t = os.path.realpath(p)
             if t == real_where or t.startswith(real_where + os.sep) or t.startswith(_SYSTEM) or not os.path.exists(t):
                 continue
-            d = os.path.dirname(t)
-            roots.add(os.path.dirname(d) if os.path.basename(d) == "bin" else d)
+            if os.path.isdir(t):
+                r = t
+            else:
+                d = os.path.dirname(t)
+                r = os.path.dirname(d) if os.path.basename(d) == "bin" else d
+            roots.setdefault(r, p)
+    holds, inside = _private(env)
+    for r, link in roots.items():
+        if any(r == s or s.startswith(r.rstrip(os.sep) + os.sep) for s in holds) or any(r.startswith(s + os.sep) for s in inside):
+            raise Unavailable(f"{link} links to {r}, which would send this user's own files to a Boat VM")
     out: List[str] = []
     for r in sorted(roots, key=len):           # a root inside another is sent with it
         if not any(r == o or r.startswith(o + os.sep) for o in out):
@@ -197,17 +252,21 @@ class Keys:
 
 class VM:
     """One unit's VM, ready: created, its host key pinned, the agent's user made and locked in.
-    ``stopped``: the run's Stop, which ends a wait for the account to start it."""
+    ``stopped``: the run's Stop, which ends a wait for the account to start it. ``ttl``: its
+    auto-stop, asked for; ``self.ttl`` the one it has, ``TTL`` on a free trial."""
 
-    def __init__(self, client: Client, keys: Keys, job: str, *, stopped: Optional[threading.Event] = None,
-                 wait: float = WAIT_SECONDS, sleep: Callable[[float], None] = time.sleep):
-        self.client, self.keys, self.id = client, keys, None
+    def __init__(self, client: Client, keys: Keys, job: str, *, size: str = SIZE, stopped: Optional[threading.Event] = None,
+                 wait: float = WAIT_SECONDS, sleep: Callable[[float], None] = time.sleep, ttl: int = TTL):
+        self.client, self.keys, self.id, self.size, self.ttl = client, keys, None, size, max(int(ttl), TTL)
         t0 = time.time()
         pause = 5.0
         while True:
-            d = client.create({LABEL: job})
+            d = client.create({LABEL: job}, size=size, ttl=self.ttl)
             if d.get("ok"):
                 break
+            if d.get("code") == "trial_auto_stop_required" and self.ttl > TTL:
+                self.ttl = TTL
+                continue
             # the account's limit of VMs at once, or of starts a minute: another unit's VM ends, a minute passes
             if d.get("status") != 429 and d.get("code") not in ("limit_reached", "rate_limited"):
                 raise Unavailable("Boat refused a VM: " + said(d))
@@ -247,14 +306,20 @@ class VM:
                     "-o", f"HostKeyAlias={self.id}", "-o", "ServerAliveInterval=30", "-o", "LogLevel=ERROR",
                     "-o", "ConnectTimeout=20"]
         self.target = f"{self.user}@{self.host}"
-        for _ in range(30):                     # sshd answers a moment after the key is in
-            if subprocess.run(self.ssh + [self.target, "true"], capture_output=True, timeout=60).returncode == 0:
-                return
+        for _ in range(30):                     # sshd answers a moment after the key is in, or hangs while it boots
+            try:
+                if subprocess.run(self.ssh + [self.target, "true"], capture_output=True, timeout=60).returncode == 0:
+                    return
+            except subprocess.TimeoutExpired:
+                pass
             sleep(2)
         raise Unavailable(f"Boat VM {self.id} did not answer over SSH")
 
     def sh(self, cmd: str, stdin=None) -> str:
-        r = subprocess.run(self.ssh + [self.target, cmd], stdin=stdin, capture_output=True, timeout=SSH_SECONDS)
+        try:
+            r = subprocess.run(self.ssh + [self.target, cmd], stdin=stdin, capture_output=True, timeout=SSH_SECONDS)
+        except subprocess.TimeoutExpired:
+            raise Unavailable(f"Boat VM {self.id}: {cmd.split(' ', 3)[:3]}: no answer in {SSH_SECONDS} s") from None
         if r.returncode:
             raise Unavailable(f"Boat VM {self.id}: {cmd.split(' ', 3)[:3]}: "
                               + r.stderr.decode(errors="replace").strip()[-300:])
@@ -265,29 +330,42 @@ class VM:
         may read, ``owned`` it owns (its home, its workspace)."""
         read, owned = [p.rstrip("/") for p in read if p], [p.rstrip("/") for p in owned if p]
         rel = [os.path.relpath(p, "/") for p in dict.fromkeys(read + owned)]
-        tar = subprocess.Popen(["tar", "-C", "/", "-czf", "-", "--", *rel], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        try:
-            # every parent of each folder made traversable, the agent's own folders its own
-            q = " ".join(shlex.quote("/" + r) for r in rel)
-            mine = " ".join(shlex.quote(p) for p in owned)
-            self.sh("sudo -n tar -C / -xzpf - --no-same-owner && "
-                    f"for p in {q}; do while [ \"$p\" != / ]; do sudo -n chmod o+rx \"$p\"; p=$(dirname \"$p\"); done; done"
-                    + (f" && sudo -n chown -R {USER}:{USER} {mine}" if mine else "")
-                    + f" && sudo -n chmod -R o+rX {q}", stdin=tar.stdout)
-        finally:
-            tar.stdout.close()
-            err = tar.stderr.read().decode(errors="replace")
-            if tar.wait():
-                raise Unavailable(f"could not pack what Boat VM {self.id} needs: {err.strip()[-300:]}")
+        q = " ".join(shlex.quote("/" + r) for r in rel)
+        mine = " ".join(shlex.quote(p) for p in owned)
+        failed = None
+        with tempfile.TemporaryFile() as err:      # a file, never a pipe: tar's warnings cannot stall the stream
+            tar = subprocess.Popen(["tar", "-C", "/", "-czf", "-", "--", *rel], stdout=subprocess.PIPE, stderr=err)
+            try:
+                self.sh("sudo -n tar -C / -xzpf - --no-same-owner && "
+                        f"for p in {q}; do while [ \"$p\" != / ]; do sudo -n chmod o+rx \"$p\"; p=$(dirname \"$p\"); done; done"
+                        + (f" && sudo -n chown -R {USER}:{USER} {mine}" if mine else "")
+                        + f" && sudo -n chmod -R o+rX {q}", stdin=tar.stdout)
+            except Unavailable as e:
+                failed = e
+            finally:
+                tar.stdout.close()
+                code = tar.wait()
+            err.seek(0)
+            said = err.read().decode(errors="replace").strip()[-300:]
+        # tar's 1 is a file that changed as it was read: what the VM received still stands; a stream the
+        # VM stopped reading is the VM's failure, said by the VM
+        cut = "status 141" in said or "Broken pipe" in said
+        if (code > 1 and not (failed and cut)) or (code and failed and not cut):
+            raise Unavailable(f"could not pack what Boat VM {self.id} needs: {said}")
+        if failed:
+            raise failed
 
     def fetch(self, path: str) -> None:
         """The folder back from the VM, as it is there: what the agent removed is removed here, a link
         leaving the folder is not copied, nor a device or a pipe."""
         path = path.rstrip("/")
         rsh = " ".join(shlex.quote(w) for w in self.ssh)
-        r = subprocess.run(["rsync", "-rlt", "--delete", "--safe-links", "--no-devices", "--no-specials",
-                            "--rsync-path=sudo -n rsync", "-e", rsh, f"{self.target}:{path}/", path + "/"],
-                           capture_output=True, timeout=SSH_SECONDS)
+        try:
+            r = subprocess.run(["rsync", "-rlt", "--delete", "--safe-links", "--no-devices", "--no-specials",
+                                "--rsync-path=sudo -n rsync", "-e", rsh, f"{self.target}:{path}/", path + "/"],
+                               capture_output=True, timeout=SSH_SECONDS)
+        except subprocess.TimeoutExpired:
+            raise Unavailable(f"the workspace did not come back from Boat VM {self.id} in {SSH_SECONDS} s") from None
         if r.returncode:
             raise Unavailable(f"the workspace did not come back from Boat VM {self.id}: "
                               + r.stderr.decode(errors="replace").strip()[-300:])
@@ -338,37 +416,57 @@ class Backend:
     job's name may be used again), its SSH key, made with its first VM, and the VM each unit's thread
     holds while its agent runs (:meth:`unit`, :meth:`place`). :meth:`close` deletes what is left."""
 
-    def __init__(self, job: str, env=os.environ, client: Optional[Client] = None):
+    def __init__(self, job: str, env=os.environ, client: Optional[Client] = None, size: str = SIZE,
+                 say: Callable[[str], None] = lambda s: None):
         self.client = client or Client(key(env) or "")
+        self.size, self.say, self._cut = size, say, False
         self.label = f"{job}.{os.urandom(4).hex()}"
         self._keys: Optional[Keys] = None
         self._roots: Dict[str, List[str]] = {}
         self._lock = threading.Lock()
         self._held = threading.local()
 
+    def starts(self, n: int) -> Optional[str]:
+        return starts_problem(self.client, n)
+
     def most(self) -> Optional[int]:
         """How many units may run at once: the VMs the account runs at once."""
         return slots(self.client)
 
     @contextmanager
-    def unit(self, trial: str, ws: str, home: str, stopped: Optional[threading.Event] = None):
-        """The unit's VM while its agent or capability runs (``agent/boat.json`` says which, and how long
-        it took to come up); its workspace and home brought back from it, then the VM deleted. A
-        failure to bring them back after the agent ended is the unit's ``Unavailable``; after the
-        agent failed, its own failure stands."""
+    def unit(self, trial: str, ws: str, home: str, stopped: Optional[threading.Event] = None, *,
+             inst: Optional[str] = None, here: Optional[str] = None, seconds: float = 0):
+        """The unit's VM while its agent or capability runs, given before it starts, each at its own
+        path: the install (``inst``) and the runtimes it links to outside itself, and the definition
+        (``here``). ``agent/boat.json`` says which VM, and how long it took to come up and be sent
+        all that. Its workspace and home (sent by :meth:`place`) are brought back
+        from it, then the VM deleted. A failure to bring them back after the agent ended is the
+        unit's ``Unavailable``; after the agent failed, its own failure stands, and after a Stop
+        nothing is brought back. ``seconds``: the longest the unit may take, its VM's auto-stop
+        with the sending and the bringing back (``DRIVER``); a trial's shorter one is said once."""
         with self._lock:
             if self._keys is None:
                 self._keys = Keys()
-        vm = VM(self.client, self._keys, self.label, stopped=stopped)
+            if inst and inst not in self._roots:
+                self._roots[inst] = outside_roots(inst) if os.path.isdir(inst) else []
+        read = [p for p in [inst, here, *self._roots.get(inst or "", [])] if p and os.path.isdir(p)]
+        t0 = time.time()
+        vm = VM(self.client, self._keys, self.label, size=self.size, stopped=stopped, ttl=seconds + DRIVER)
         try:
+            if vm.ttl < seconds + DRIVER and not self._cut:
+                self._cut = True
+                self.say(f"Boat stops a free trial's VMs after {TTL // 3600} hours: a unit still running then ends there")
+            vm.send(read)
             os.makedirs(os.path.join(trial, "agent"), exist_ok=True)
             with open(os.path.join(trial, "agent", "boat.json"), "w") as f:
-                json.dump({"vm": vm.id, "size": SIZE, "ready_seconds": vm.seconds}, f)
+                json.dump({"vm": vm.id, "size": self.size, "ttl_seconds": vm.ttl, "ready_seconds": vm.seconds,
+                           "sent_seconds": round(time.time() - t0, 1)}, f)
             self._held.vm = vm
             try:
                 yield vm
-            except BaseException:
-                for d in (ws, home):             # what it left, for the evidence
+            except BaseException as e:
+                stop = isinstance(e, KeyboardInterrupt) or (stopped is not None and stopped.is_set())
+                for d in () if stop else (ws, home):     # what it left, for the evidence
                     try:
                         vm.fetch(d)
                     except Unavailable:
@@ -380,19 +478,15 @@ class Backend:
             self._held.vm = None
             vm.delete()
 
-    def place(self, cmd: List[str], env: Dict[str, str], workdir: str, *, inst: Optional[str], here: Optional[str],
-              owned: List[str], relay_url: Optional[str], local: Sequence[str] = ()) -> tuple:
+    def place(self, cmd: List[str], env: Dict[str, str], workdir: str, *, inst: Optional[str], owned: List[str],
+              relay_url: Optional[str], local: Sequence[str] = ()) -> tuple:
         """``cmd`` and the environment to start it with here: ``ssh`` to this thread's VM, where it runs as
-        its locked user. Sent first, each at its own path: the install (``inst``) and the runtimes it
-        links to outside itself, the definition (``here``), and ``owned`` - its home and workspace."""
+        its locked user, the install's programs (``inst``) first on its ``PATH``. ``owned``, its home and
+        workspace as its setup left them, are sent first and become its user's."""
         vm = getattr(self._held, "vm", None)
         if vm is None:
             raise Unavailable("the unit has no Boat VM")
-        if inst and inst not in self._roots:
-            with self._lock:
-                self._roots[inst] = outside_roots(inst) if os.path.isdir(inst) else []
-        read = [p for p in [inst, here, *self._roots.get(inst or "", [])] if p and os.path.isdir(p)]
-        vm.send(read, owned)
+        vm.send([], owned)
         port = urllib.parse.urlsplit(relay_url).port if relay_url else None
         env = remote_env(env, install.bin_dirs(inst) if inst else [], local)
         return vm.argv(list(cmd), env, workdir, port), {k: os.environ[k] for k in ("PATH", "HOME", "LANG") if k in os.environ}

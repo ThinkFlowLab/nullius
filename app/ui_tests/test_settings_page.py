@@ -1093,13 +1093,12 @@ class SettingsPage(unittest.TestCase):
         self.assertNotIn('name="value:', section)                                       # outside Save: nothing of it lands in the file
         for login in ("Docker Hub", "data-login", "data-logout"):                          # signed in once, under Data providers
             self.assertNotIn(login, section)
-        # the one secret asked here: boat.dev's key, outside Save
         self.assertEqual(section.count('type="password"'), 1)
         self.assertIn('name="key" type="password"', section)
-        # a provider card like Data providers': its mark, its name, Edit and Remove, the key asked only on Edit
         self.assertIn('<h3>Boat</h3>', section)
         self.assertIn('brand/boat.svg', section)
-        for control in ("data-boat-edit", "data-boat-remove", "data-boat-cancel", "data-boat-form autocomplete=\"off\" hidden"):
+        self.assertIn('brand/boat-dark.svg', section)                                   # its own mark on a dark background
+        for control in ("data-boat-edit", "data-boat-remove", "data-boat-remove-yes", "data-boat-remove-keep", "data-boat-cancel", "data-boat-form autocomplete=\"off\" hidden"):
             self.assertIn(control, section)
         self.assertNotIn('data-data-form', section)
         providers = html[html.index('id="data-providers"'):html.index('id="sandbox"')]
@@ -1143,7 +1142,7 @@ class SettingsPage(unittest.TestCase):
                 state = self.client.get("/settings/sandbox").json
             self.assertEqual(state["boat"], {"set": True, "env": False})
             self.assertNotIn("boat_synthetic", json.dumps(state))
-            self.assertIsNone(self.file())                                                    # never in the settings file
+            self.assertIsNone(self.file())
             self.assertTrue(self.client.post(url, data={"action": "remove"}, headers=headers).json["ok"])
             self.assertIsNone(boat.key({}))
 

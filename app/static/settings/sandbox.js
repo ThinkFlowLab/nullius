@@ -4,7 +4,7 @@
   if (!section) return;
   const $ = s => section.querySelector(s);
   const state = $('[data-boat-state]'), form = $('[data-boat-form]');
-  const edit = $('[data-boat-edit]'), remove = $('[data-boat-remove]'), cancel = $('[data-boat-cancel]');
+  const edit = $('[data-boat-edit]'), remove = $('[data-boat-remove]'), cancel = $('[data-boat-cancel]'), removeAsk = $('[data-boat-ask]');
   const notify = (message, error = false) => window.nulliusNotify?.(message, {error});
   let boat = {set: false, env: false}, editing = false;
 
@@ -13,6 +13,13 @@
     if (form) form.hidden = !editing;
     if (edit) { edit.hidden = editing; edit.textContent = boat.set ? 'Edit' : 'Add key'; }
     if (remove) remove.hidden = editing || !boat.set;
+    if (remove?.hidden) asking(false, false);
+  };
+  const asking = (open, focus = true) => {
+    if (!removeAsk) return;
+    removeAsk.hidden = !open;
+    remove.setAttribute('aria-expanded', String(open));
+    if (focus) (open ? $('[data-boat-remove-keep]') : remove).focus({preventScroll: true});
   };
 
   let asked = false;
@@ -49,7 +56,10 @@
   if (edit) edit.addEventListener('click', () => { editing = true; render(); form.querySelector('input').focus(); });
   if (cancel) cancel.addEventListener('click', () => { form.reset(); editing = false; render(); edit.focus(); });
   if (form) form.addEventListener('submit', e => { e.preventDefault(); change('save'); });
-  if (remove) remove.addEventListener('click', () => change('remove'));
+  if (remove) remove.addEventListener('click', () => asking(removeAsk.hidden));
+  $('[data-boat-remove-keep]')?.addEventListener('click', () => asking(false));
+  $('[data-boat-remove-yes]')?.addEventListener('click', () => { asking(false, false); change('remove'); });
+  removeAsk?.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); asking(false); } });
 
   // Asked the first time the section is shown, not on every visit to Settings.
   const ask = () => { if (!asked && !section.hidden) load(); };

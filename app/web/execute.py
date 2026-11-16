@@ -127,7 +127,8 @@ def _start_standard(recipe: dict):
     one checked before any starts."""
     if len(json.dumps(recipe)) > 200_000:
         return jsonify(ok=False, error="the recipe is too large to keep with the run"), 400
-    out = standard_recipe.compile(recipe, docker_unusable=docker_problem, boat_unusable=boat.unusable, unpriced=unpriced)
+    out = standard_recipe.compile(recipe, docker_unusable=docker_problem, boat_unusable=boat.unusable,
+                                  boat_size_problem=boat_size_problem, unpriced=unpriced)
     if out["errors"]:
         return jsonify(ok=False, error=" ".join(e["message"] for e in out["errors"])), 400
     # a run of controls calls no model: it is handed no key, so none need be set
@@ -162,6 +163,25 @@ def unpriced(models: list) -> list:
     if time.monotonic() - _PRICED["at"] > 5:     # the builder asks at every keystroke: the list is read at most every five seconds
         _PRICED.update(at=time.monotonic(), rows=prices.table())
     return [m for m in models if m not in _PRICED["rows"]]
+
+
+_BOAT_SIZES = {"at": 0.0, "key": None, "sizes": {}}
+
+
+def boat_sizes() -> dict:
+    """{size: why this account cannot start it}, from Boat's limits, kept a minute for the same key;
+    asked briefly: a Boat that does not answer leaves every size offered, and Run says the rest."""
+    k = boat.key()
+    if not k:
+        return {}
+    if time.time() - _BOAT_SIZES["at"] > 60 or _BOAT_SIZES["key"] != hash(k):
+        types = boat.machine_types(boat.Client(k, timeout=5))
+        _BOAT_SIZES.update(at=time.time(), key=hash(k), sizes={t: why for t, why in types.items() if why})
+    return _BOAT_SIZES["sizes"]
+
+
+def boat_size_problem(size: str):
+    return boat_sizes().get(size)
 
 
 def docker_problem():

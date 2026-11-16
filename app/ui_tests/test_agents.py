@@ -495,8 +495,9 @@ class StandardPieces(unittest.TestCase):
         ds = schema["standard"]["benchmarks"][0]["datasets"][0]
         self.assertEqual([(c["key"], c["source"], c["proven"], c["failed"]) for c in ds["controls"]],
                          [("nop", "nullius", None, None), ("oracle", "adapter", None, None)])
-        # no benchmark here needs a machine setup; boat says why it cannot run, never its key
+        # no benchmark here needs a machine setup
         self.assertEqual(schema["standardHere"], {"docker": None, "boat": "no Boat API key: set it in Settings → Sandbox",
+                                                  "boatSizes": {}, "boatSpecs": {"small": "2 vCPU, 4 GB", "default": "4 vCPU, 8 GB"},
                                                   "licences": {}, "host": {}})
 
     def test_docker_is_refused_on_the_where_step_with_this_machines_reason(self):

@@ -395,13 +395,15 @@ class Run:
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
                  max_usd_per_unit: Optional[float] = None, units_file: Optional[dict] = None,
                  constraints: Optional[dict] = None,
-                 served_by: Optional[Dict[str, List[str]]] = None):
+                 served_by: Optional[Dict[str, List[str]]] = None, boat_size: str = boat.SIZE):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
         local agents, and for setup checks that run code without Docker.
-        ``backend``: ``local`` or ``container`` (``docker``, its earlier name), which needs
-        no such yes and is refused when docker is missing or not usable.
+        ``backend``: ``local``, ``container`` (``docker``, its earlier name), which needs
+        no such yes and is refused when docker is missing or not usable, or ``boat``;
+        ``boat_size``: its VMs' machine type (``boat.SIZES``), refused when the
+        account cannot start it.
         ``options``: the
         agent's or capability's options set for this run, by name; the rest keep
         their defaults, and the job's config records every value.
@@ -619,9 +621,11 @@ class Run:
         # each stage said as it goes, on the cli's stderr and in the job's progress.jsonl (nullius/progress.py)
         self.progress = progress.Reporter(self.job_dir)
         self._said = threading.Lock()
-        self.boat = boat.Backend(self.name, env) if backend == "boat" else None
+        self.boat = boat.Backend(self.name, env, size=boat_size, say=say) if backend == "boat" else None
         if self.boat is not None:
-            # one VM per unit: never more units at once than the account runs VMs
+            why = boat.size_problem(self.boat.client, boat_size)
+            if why:
+                raise Refused(f"Boat cannot start a {boat_size} VM: {why}")
             most = self.boat.most()
             if most is not None and self.concurrency > most:
                 say(f"Boat runs {most} VMs at once on this account: {most} units at a time, not {self.concurrency}")
@@ -747,10 +751,15 @@ class Run:
         mine = mine[: self.limit] if self.limit else mine
         units = [u for _, u in mine]
         self.n_units = len(units)
+        if getattr(self, "boat", None) is not None:
+            why = self.boat.starts(len(units) * self.repeat)
+            if why:
+                self.say(why)
         p.emit("units", "start", n=len(units), of=len(everything), noun=self.bench["units"]["nouns"])
         job.write_config(self.job_dir, job=self.name, bench=self.bench, other=self.other, model=self.model,
                          provider=self.provider, dataset=self.ds["id"], units=units, concurrency=self.concurrency,
                          granted=self.other["_kind"] == "agent", judge=self.judge_model or "", backend=self.backend,
+                         boat_size=self.boat.size if getattr(self, "boat", None) is not None else "",
                          image=self.setup_driver.image if self.setup_driver else self.image,
                          options=self.options, launch=self.launch or "", bench_options=self.bench_options,
                          # a shard of a list splits the listed units: they are its whole
@@ -830,7 +839,7 @@ class Run:
             if self.backend == "container":
                 container.sweep(self.name)          # whatever an interrupted unit left
             if getattr(self, "boat", None) is not None:
-                self.boat.close()                   # whatever an interrupted unit left
+                self.boat.close()
             if self.loopback is not None:
                 self.loopback.stop()
             budget = self.budget([self.attempt_name(u, r) for n, (_, u, r) in enumerate(work) if n >= len(begun) or not begun[n]])
@@ -1088,23 +1097,24 @@ class Run:
                 box = self.own_box(tag, setup, rl, home)
                 if setup.get("prepare") is not None:
                     self.prepare(setup["prepare"], box, trial)
-            p0 = time.time()
-            self.phase(name, unit, "agent_run", self.turn_limit(setup) if self.other["_kind"] != "control"
-                       else DRIVER_SECONDS if self.other["key"] == "oracle" else None)
-            try:
-                with self.agent_internet(setup, box, rl, trial), self.unit_vm(ws, home, trial):
-                    if self.other["_kind"] == "control":
-                        answer = self.control_answer(unit, ws, box, name)
-                    elif self.upstream:
-                        answer, traj = self.drive_upstream(unit, ws, tag, transcript, rl)
-                    elif self.other["_kind"] == "agent":
-                        answer, traj, logs = self.drive_agent(unit, ws, home, tag, setup, transcript, rl, box, name)
-                    else:
-                        answer, traj = self.drive_feature(unit, ws, home, tag, setup, transcript, rl)
-            finally:
-                produce = (p0, time.time())
-                if box is not None:              # what the agent (or the control) left in the container, before the check
-                    changes = self.box_changes(box)
+            with self.unit_vm(ws, home, trial, setup):     # boat: the VM up and given its files before the agent's time starts
+                p0 = time.time()
+                self.phase(name, unit, "agent_run", self.turn_limit(setup) if self.other["_kind"] != "control"
+                           else DRIVER_SECONDS if self.other["key"] == "oracle" else None)
+                try:
+                    with self.agent_internet(setup, box, rl, trial):
+                        if self.other["_kind"] == "control":
+                            answer = self.control_answer(unit, ws, box, name)
+                        elif self.upstream:
+                            answer, traj = self.drive_upstream(unit, ws, tag, transcript, rl)
+                        elif self.other["_kind"] == "agent":
+                            answer, traj, logs = self.drive_agent(unit, ws, home, tag, setup, transcript, rl, box, name)
+                        else:
+                            answer, traj = self.drive_feature(unit, ws, home, tag, setup, transcript, rl)
+                finally:
+                    produce = (p0, time.time())
+                    if box is not None:          # what the agent (or the control) left in the container, before the check
+                        changes = self.box_changes(box)
             cut = self.cap_reached(rl, tag)
             if cut:                              # cut off at a spending cap: nothing of it is checked, and its judge is asked nothing
                 raise _Ended(cut[0], cut[1], traj)
@@ -1532,8 +1542,7 @@ class Run:
         ws = os.path.join(os.path.dirname(home), "workspace")
         if self.backend == "boat":
             try:
-                return self.boat.place(cmd, env, workdir, inst=self.inst, here=self.other.get("_here"), owned=[ws, home],
-                                       relay_url=rl.unit_url if rl is not None else None, local=KEEP)
+                return self.boat.place(cmd, env, workdir, inst=self.inst, owned=[ws, home], relay_url=rl.unit_url if rl is not None else None, local=KEEP)
             except boat.Unavailable as e:
                 raise _Ended("EnvironmentSetupError", str(e))
         # What the agent's container sees: its workspace and home, its own
@@ -1577,13 +1586,16 @@ class Run:
 
     # -- an own image: the unit's container ------------------------------------
     @contextmanager
-    def unit_vm(self, ws: str, home: str, trial: str):
-        """On the boat backend, the unit's VM while its agent or capability runs (``boat.Backend.unit``)."""
+    def unit_vm(self, ws: str, home: str, trial: str, setup: dict):
+        """On the boat backend, the unit's VM while its agent or capability runs (``boat.Backend.unit``),
+        living as long as its every turn may take."""
         if getattr(self, "boat", None) is None:
             yield
             return
+        turns = self.max_turns if "agent.conversation/v1" in self.bench["needs"] else 1
         try:
-            with self.boat.unit(trial, ws, home, stopped=self._stopped):
+            with self.boat.unit(trial, ws, home, stopped=self._stopped, inst=self.inst, here=self.other.get("_here"),
+                                seconds=self.turn_limit(setup) * turns):
                 yield
         except boat.Unavailable as e:
             raise _Ended("EnvironmentSetupError", str(e))

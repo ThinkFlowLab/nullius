@@ -42,7 +42,7 @@ from typing import Callable, Dict, List, Optional
 
 from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
-from nullius.standard import hostreq, definitions, ledger, match, ports, prove, relay
+from nullius.standard import boat, hostreq, definitions, ledger, match, ports, prove, relay
 
 CHOOSE_PROVIDER = "Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider."
 HARNESS = "standard"
@@ -265,6 +265,7 @@ def _int(v, low: int, high: Optional[int] = None) -> Optional[int]:
 def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             docker_unusable: Optional[Callable[[], Optional[str]]] = None,
             boat_unusable: Optional[Callable[[], Optional[str]]] = None,
+            boat_size_problem: Optional[Callable[[str], Optional[str]]] = None,
             unpriced: Optional[Callable[[List[str]], List[str]]] = None) -> dict:
     """{errors, notes, review, jobs, confirm, script, parts, model}
     for one recipe; errors name the step
@@ -278,7 +279,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     is the Where step's error. Not given, it is not asked: compiling stays a
     function of the definitions alone, and the routes that preview or start
     a run pass it. ``boat_unusable``: the same for the boat backend
-    (``boat.unusable``): its key, and the programs that reach a VM.
+    (``boat.unusable``): its key, and the programs that reach a VM;
+    ``boat_size_problem``, why the account cannot start a VM of the size.
 
     ``max_usd``: the run's spending cap (``standard.ledger``), one amount for
     the whole run: its jobs that call a model - each dataset with each
@@ -504,10 +506,16 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             add("where", f"The container backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman.")
     elif backend == "boat" and targets != ["local"]:
         add("where", "Boat VMs are started from this machine, with its key: choose This machine alone.")
-    elif backend == "boat" and boat_unusable is not None:
-        why = boat_unusable()
+    elif backend == "boat" and boat_unusable is not None and (why := boat_unusable()):
+        add("where", f"Boat cannot run from this machine: {why}.")
+    elif backend == "boat" and boat_size_problem is not None and str(recipe.get("boat_size") or boat.SIZE) in boat.SIZES:
+        why = boat_size_problem(str(recipe.get("boat_size") or boat.SIZE))
         if why:
-            add("where", f"Boat cannot run from this machine: {why}.")
+            add("where", f"Boat cannot start a {recipe.get('boat_size') or boat.SIZE} VM on this account: {why}. Choose another size.")
+    boat_size = str(recipe.get("boat_size") or boat.SIZE)
+    if backend == "boat" and boat_size not in boat.SIZES:
+        add("where", f"Choose a Boat size: {', '.join(boat.SIZES)}.")
+        boat_size = boat.SIZE
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
     spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"])
     paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])
@@ -611,6 +619,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
                  *(["--backend", backend] if backend != "local" else []),
+                 *(["--boat-size", boat_size] if backend == "boat" and not control and not p.get("setup") else []),
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
                  *(["--shard", f"{index}/{of}", "--launch", launch_of(d, p)] if of > 1 else []),
                  *limits.cli_words(limits.of(targets[index - 1])),
@@ -709,7 +718,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                          + (f" in all · ${ledger.usd(share)} for each of {paying} jobs" if paying > 1 else "")]] if share else []),
                      *([[STEP["limits"], f"Spending cap per {noun}", f"${ledger.usd(per_unit)}"]] if per_unit else []),
                      [STEP["where"], "Where", (f"{of} shards, one per machine: " if of > 1 else "")
-                      + ", ".join(where_label(t) for t in targets) + f" · {backend} backend"]]
+                      + ", ".join(where_label(t) for t in targets) + f" · {backend} backend"
+                      + (f" · {boat_size} VMs" if backend == "boat" else "")]]
     if agents_local:
         notes.append(f"{', '.join(agents_local)} {'run' if len(agents_local) > 1 else 'runs'} as you on {'each machine' if of > 1 else where_label(targets[0])}, with its permission requests granted: "
                      "the local backend is no sandbox.")

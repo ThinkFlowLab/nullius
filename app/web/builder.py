@@ -54,7 +54,9 @@ def new_run():
     gpus = constraints.of(constraints.LOCAL, strict=False).get("gpu_ids")
     host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"]), gpu_ids=gpus).items()}
             for b in definitions.load("benchmark", every=True)[0] if b.get("host")}
-    data["standardHere"] = {"docker": execute.docker_problem(), "boat": boat.unusable(), "licences": _licence_states(), "host": host}
+    boat_why = boat.unusable()
+    data["standardHere"] = {"docker": execute.docker_problem(), "boat": boat_why, "boatSizes": {} if boat_why else execute.boat_sizes(),
+                            "boatSpecs": {k: v for k, v in boat.SIZES.items() if v}, "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
     data["local"] = shared_local_client()
     # ?run=<job id>: the recipe a run of this application was started from,
@@ -92,7 +94,8 @@ def new_run_runner():
     if len(json.dumps(recipe)) > 200_000:
         abort(413)
     if recipe.get("harness") == standard_recipe.HARNESS:
-        out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, boat_unusable=boat.unusable, unpriced=execute.unpriced)
+        out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, boat_unusable=boat.unusable,
+                                      boat_size_problem=execute.boat_size_problem, unpriced=execute.unpriced)
         # served_models: each model field's model as the run sends it, which Served by lists the providers of
         return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models")}
     return {"errors": [{"step": providers.STEP["runner"], "message": providers.GONE}],

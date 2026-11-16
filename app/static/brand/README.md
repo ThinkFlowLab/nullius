@@ -19,4 +19,4 @@ third-party brand asset, not a Nullius mark or part of Nullius's font licensing.
 
 `huggingface.svg` is Hugging Face’s official mark, copied from https://huggingface.co/front/assets/huggingface_logo-noborder.svg. It identifies the data provider; its trademark belongs to Hugging Face.
 
-`boat.svg` is Boat's official mark, copied unchanged from https://boat.dev/icon.svg. It identifies the Boat sandbox provider in Settings and the builder's Where step; its trademark belongs to Boat.
+`boat.svg` is Boat's official mark, copied unchanged from https://boat.dev/icon.svg, and `boat-dark.svg` its version for dark backgrounds, from https://boat.dev/icon-dark.svg. They identify the Boat sandbox provider in Settings and the builder's Where step; its trademark belongs to Boat.

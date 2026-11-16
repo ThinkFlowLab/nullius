@@ -525,7 +525,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
 
 
 def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str, provider: str, dataset: str, units: List[str],
-                 concurrency: int, granted: bool, judge: str = "", backend: str = "local", image: str = "",
+                 concurrency: int, granted: bool, judge: str = "", backend: str = "local", image: str = "", boat_size: str = "",
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
                  bench_options: Optional[dict] = None,
                  simulator: str = "", prices: Optional[dict] = None, units_file: Optional[dict] = None,
@@ -550,7 +550,8 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                    "standard": {"benchmark": bench["key"], **_version(bench), "plugged": other.get("_ref") or other["key"], "kind": other["_kind"], "provider": provider,
                                 "needs": bench["needs"], "permissions_granted": granted,
                                 "unsandboxed": granted and backend == "local", "backend": backend,
-                                **({"image": image} if image else {}), **({"judge": judge} if judge else {}),
+                                **({"image": image} if image else {}), **({"boat_size": boat_size} if boat_size else {}),
+                                **({"judge": judge} if judge else {}),
                                 **({"simulator": simulator} if simulator else {}), **({"options": options} if options else {}), **({"benchmark_options": bench_options} if bench_options else {}), **_control(other), **_setup(other),
                                 **({"launch": launch} if launch else {}), **({"shard": shard} if shard else {}),
                                 **({"units_file": units_file} if units_file else {}),
