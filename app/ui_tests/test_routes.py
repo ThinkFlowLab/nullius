@@ -299,7 +299,7 @@ class Routes(unittest.TestCase):
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-route-test", "LLM_JUDGE_MODEL": "vendor/m"}):
             html = self.get_ok("/trial/active-run/task-001").get_data(as_text=True)
         self.assertIn('<input type="hidden" name="lane" value="llm">', html)
-        self.assertIn("asked of OpenRouter · vendor/m", html)
+        self.assertIn('title="Asks OpenRouter · vendor/m">experimental</span>', html)    # who will answer, on the badge
         self.assertNotIn("sk-or-route-test", html)
 
     def test_a_judgement_names_its_provider_from_the_registry(self):

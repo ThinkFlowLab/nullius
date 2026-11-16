@@ -300,7 +300,7 @@ h3 .total { margin-left: .15rem; color: var(--text); font-weight: 600; text-tran
 .jflags th { text-align: left; font-weight: 500; color: var(--text-dim); font-size: .8rem; padding: .7rem 1rem; border-bottom: 1px solid var(--border-soft); }
 .jflags td { padding: .9rem 1rem; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
 .jflags tr:last-child td, .jflags tr.jflag-detail td { border-bottom: none; }
-.jflags tr.jflag-detail td { padding-top: 0; border-bottom: 1px solid var(--border-soft); }
+.jflags tr.jflag-detail td { padding-top: 0; padding-left: calc(1rem + 7px + .5rem); border-bottom: 1px solid var(--border-soft); }
 .jflags tr.tone-good > td { background: rgba(46, 160, 67, 0.08); }
 .jflags tr.tone-warn > td { background: rgba(212, 167, 44, 0.10); }
 .jflags tr.tone-bad > td { background: rgba(220, 53, 69, 0.09); }

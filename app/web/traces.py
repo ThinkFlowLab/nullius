@@ -203,13 +203,8 @@ def trial(job_id, trial_name):
     j, t = _trial_evidence(job_id, trial_name)
     traj = trajectory.load(t.trajectory_path) if t.has_trajectory else None
     ok = traj is not None and not traj.error
-    bench_judge = bench_parts = None
-    if j.runner:                                   # the benchmark's own judge: what it was asked, what it said
-        try:
-            with open(os.path.join(t.dir, "verifier", "judge.json"), encoding="utf-8") as fh:
-                bench_judge = json.load(fh)
-        except (OSError, ValueError):
-            pass
+    bench_parts = None
+    if j.runner:
         try:                                       # an item scored part by part: each part's text, answer and score
             with open(os.path.join(t.dir, "verifier", "parts.json"), encoding="utf-8") as fh:
                 got = json.load(fh)
@@ -241,7 +236,7 @@ def trial(job_id, trial_name):
         record["download"] = url_for("artifact_download", job_id=job_id, trial_name=trial_name,
                                      key=record["key"], workspace=request.args.get("workspace"))
     return render_template(
-        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_judge=bench_judge, bench_parts=bench_parts,
+        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts,
         trace=tr, charts=ch, viewing=viewing,
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
         artifacts=records,

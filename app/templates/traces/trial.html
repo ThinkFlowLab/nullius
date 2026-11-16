@@ -285,19 +285,6 @@
     {% endfor %}
     </tbody>
   </table></details>
-  <p class="small muted" style="margin-bottom:0">Below, Nullius's own trajectory judge: experimental, asked on a click.</p>
-</div>
-{% elif job.runner %}
-<div class="panel" id="runner-verdict">
-  <h3 style="margin-top:0">{{ job.runner }}'s judge <span class="badge">gives the outcome</span></h3>
-  {% if bench_judge %}
-  <p class="small muted">{{ bench_judge.judge or job.runner_judge }}{% if bench_judge.model %} · sent as <span class="mono">{{ bench_judge.model }}</span>{% endif %}</p>
-  <p>Said <b class="mono">{{ (bench_judge.said or '—')[:200] }}</b>: {{ 'resolved' if trial.outcome == 'resolved' else trial.outcome|replace('_', ' ') }}.</p>
-  <details class="tc"><summary class="small">What it was asked</summary><pre class="wrap">{{ bench_judge.asked }}</pre></details>
-  {%- else %}
-  <p class="small muted">{% if job.runner_judge %}{{ job.runner_judge }}. {% endif %}No record of its call for this one{% if trial.outcome not in ('resolved', 'failed_verification') %}: it never got to judge it{% endif %}.</p>
-  {% endif %}
-  <p class="small muted" style="margin-bottom:0">Below, Nullius's own trajectory judge: experimental, asked on a click.</p>
 </div>
 {% endif %}
 {{ judgement_panel(judgement, job, trial, csrf) }}
@@ -643,7 +630,6 @@
 {% include 'traces/_conversation.html' %}
 </section>
 <section class="trial-tab" id="trial-artifacts" role="tabpanel" aria-labelledby="tab-artifacts">
-  <div class="reader-heading"><div><h2>Artifacts</h2><p class="muted small">Read the recorded source files. Content is redacted and paged; source files remain intact.</p></div></div>
   {% if artifacts %}
   <div class="panel">
     <table class="grid"><thead><tr><th>Record</th><th class="num">Size</th><th></th></tr></thead><tbody>
