@@ -371,13 +371,15 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             add("dataset", f"Like the leaderboard sets {(b.get('options') or {})[k].get('label') or k.replace('_', ' ')} to {v}: choose Any of your choice for {chosen_opts[k]}.")
     chosen_opts = {**(lb.get("bench_options") or {}), **chosen_opts}
     per_ds, needs = {}, {"embeddings": [], "reranker": [], "host": []}
-    scopes = list(dict.fromkeys(p["o"]["key"] if p.get("setup") else "yours" for p in picks)) or ["yours"]
+    # each participant's scope and kind: an option an agent's run alone takes (setups: agent) is an agent's
+    scopes = list(dict.fromkeys((p["o"]["key"], None) if p.get("setup") else ("yours", p["o"].get("_kind"))
+                                for p in picks)) or [("yours", None)]
     for x in dss:
         # Original's retrievers have machine requirements too; collect the
         # options of every participant that the compiled commands will run.
         vals, bad = {}, []
-        for scope in scopes:
-            chosen, problems = definitions.bench_options_of(b, x["id"], chosen_opts, scope)
+        for scope, kind in scopes:
+            chosen, problems = definitions.bench_options_of(b, x["id"], chosen_opts, scope, kind=kind)
             vals.update(chosen)
             bad.extend(problems)
         for why_not in dict.fromkeys(bad):
@@ -517,7 +519,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
 
     def options_for_pick(d: dict, p: dict) -> dict:
         """The benchmark's options for this dataset and this pick: a setup's own, or those of the port."""
-        return definitions.bench_options_of(b, d["id"], chosen_opts, p["o"]["key"] if p.get("setup") else "yours")[0]
+        return definitions.bench_options_of(b, d["id"], chosen_opts, p["o"]["key"] if p.get("setup") else "yours",
+                                            kind=None if p.get("setup") else p["o"].get("_kind"))[0]
 
     def command_for(d: dict, p: dict, index: int) -> str:
         o, control, given = p["o"], p["control"], p["given"]

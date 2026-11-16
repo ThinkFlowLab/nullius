@@ -105,8 +105,9 @@ PROVIDERS = {
     "custom": {"base_var": "MODEL_API_URL", "key": "MODEL_API_KEY"},
 }
 TURN_SECONDS = 900
-DRIVER_SECONDS = 600                  # a driver's setup, oracle and score requests, each
+DRIVER_SECONDS = 600                  # a driver's setup, oracle and score requests, each; limits.setup_seconds for setup
 IMAGE_SECONDS = 3600                  # an own image's pull or build (container.own_image)
+END_SECONDS = 120                     # a driver's answer to a unit's end (driver.unit_end)
 MAX_AGENT_SECONDS = 6 * 3600          # the longest a unit's own agent limit (setup's agent_seconds) may ask
 MAX_TURNS = 20
 BACKENDS = definitions.names.BACKENDS
@@ -115,6 +116,19 @@ _PROBED = threading.Lock()                # a run's first unit, claimed once (Ru
 
 class Refused(Exception):
     """The run cannot start: the pair does not fit, or a setting is missing."""
+
+
+def setup_request(bench: dict, kind: str, attempt: Optional[int] = None) -> tuple:
+    """What a unit's ``setup`` is sent besides the unit and its folder, and how long it may take, for a unit that
+    ``kind`` runs (agent, capability, control): ``attempt`` when the benchmark tells attempts apart
+    (``limits.attempts``), ``participant`` when its driver asks (``driver.participant``); the benchmark's
+    ``limits.setup_seconds`` for an agent's unit,
+    ``DRIVER_SECONDS`` for any other. A run and a proof's checks build the request here, the one way."""
+    limits, drv = bench.get("limits") or {}, bench.get("driver") or {}
+    sent = {"attempt": attempt} if attempt and limits.get("attempts") else {}
+    if drv.get("participant"):
+        sent["participant"] = kind
+    return sent, float((limits.get("setup_seconds") if kind == "agent" else None) or DRIVER_SECONDS)
 
 
 def provider_endpoint(provider: str, env=os.environ) -> tuple:
@@ -483,7 +497,8 @@ class Run:
         # calls through a relay of the run's own (bench_relay), programs on this machine.
         # each option where it applies: a setup's own (a retriever, a top-k), or those of the benchmark's port
         self.bench_options, bad = definitions.bench_options_of(bench, self.ds["id"], bench_options,
-                                                               other["key"] if self.upstream else "yours")
+                                                               other["key"] if self.upstream else "yours",
+                                                               kind=other.get("_kind"))
         if bad:
             raise Refused("; ".join(bad))
         needs = definitions.option_needs(bench, self.bench_options)
@@ -946,6 +961,29 @@ class Run:
         a = getattr(self.local, "attempt", None)
         return {"attempt": a} if a and (self.bench.get("limits") or {}).get("attempts") else {}
 
+    def setup_kw(self) -> dict:
+        """What ``setup`` is told besides the unit (:func:`setup_request`)."""
+        return setup_request(self.bench, self.other["_kind"], getattr(self.local, "attempt", None))[0]
+
+    def setup_seconds(self) -> float:
+        """How long a unit's ``setup`` may take (:func:`setup_request`)."""
+        return setup_request(self.bench, self.other["_kind"])[1]
+
+    def unit_ended(self, unit: str, ws: str) -> None:
+        """A driver that asks for it (``driver.unit_end``) is told that a unit an agent ran has ended, scored or not -
+        also when the run was stopped - so that what its setup started for the agent ends now. The driver the unit
+        used is asked, never a new one; its answer is waited for ``END_SECONDS`` at most, and a failure is no
+        unit's."""
+        if self.other.get("_kind") != "agent" or not (self.bench.get("driver") or {}).get("unit_end"):
+            return
+        d = getattr(self.local, "driver", None)
+        if d is None or d.p is None or d.p.poll() is not None:
+            return
+        try:
+            d.request("end", unit=unit, dir=ws, timeout=END_SECONDS, force=True)
+        except Exception:                        # noqa: BLE001 - the unit's result is written; its clean-up is not its result
+            pass
+
     def trial_name(self, i: int, unit: str, r: int = 1) -> str:
         return f"{_slug(unit)}__u{i:04d}" + (f"r{r}" if self.repeat > 1 else "")
 
@@ -954,6 +992,17 @@ class Run:
             self.feed.emit("trial.phase", name, task=unit, agent=self.other["key"], phase=phase, timeout_sec=timeout)
 
     def unit(self, i: int, unit: str, r: int = 1) -> Optional[dict]:
+        """One unit (:meth:`_unit`); once its setup was asked, whatever happened after, the driver is told its end
+        (:meth:`unit_ended`)."""
+        self.local.set_up = None
+        try:
+            return self._unit(i, unit, r)
+        finally:
+            asked, self.local.set_up = self.local.set_up, None
+            if asked is not None:
+                self.unit_ended(*asked)
+
+    def _unit(self, i: int, unit: str, r: int = 1) -> Optional[dict]:
         if self._stopped.is_set() or (getattr(self, "_halt", None) is not None and self._halt.is_set()):
             return None                          # the endpoint refused the run: nothing more is begun
         if getattr(self, "ledger", None) is not None and self.ledger.closed():
@@ -972,7 +1021,7 @@ class Run:
         os.makedirs(home, exist_ok=True)
         t0 = time.time()
         self.progress.emit("unit", "start", unit=unit)
-        self.phase(name, unit, "env_setup", None if self.upstream else DRIVER_SECONDS)
+        self.phase(name, unit, "env_setup", None if self.upstream else self.setup_seconds())
         produce, score, exc, traj, logs = (None, None), None, None, None, {}
         p0, checking = None, (None, None)        # when the agent began; the check's start and end
         setup: dict = {}
@@ -981,7 +1030,8 @@ class Run:
         try:
             try:
                 # a setup's unit needs none: the upstream's answerer reads its data itself
-                setup = {} if self.upstream else self.driver().request("setup", unit=unit, dir=ws, timeout=DRIVER_SECONDS, **self.attempt_kw())
+                self.local.set_up = None if self.upstream else (unit, ws)
+                setup = {} if self.upstream else self.driver().request("setup", unit=unit, dir=ws, timeout=self.setup_seconds(), **self.setup_kw())
             except jsonl.Failed as e:
                 raise _Ended("EnvironmentSetupError", str(e))
             environment, env_def = self.unit_environment(setup)

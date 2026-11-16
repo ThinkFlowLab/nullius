@@ -46,8 +46,9 @@ class Proc:
             self.lines.put(line)
         self.lines.put(None)
 
-    def request(self, op: str, timeout: float = 600, **kw) -> dict:
-        if self.stopped is not None and self.stopped.is_set():
+    def request(self, op: str, timeout: float = 600, force: bool = False, **kw) -> dict:
+        """``force``: sent and waited for (up to ``timeout``) also once the run is stopped - a unit's clean-up."""
+        if self.stopped is not None and self.stopped.is_set() and not force:
             raise CancelledError("the run was stopped")
         if self.p is None:
             self.start()
@@ -57,7 +58,7 @@ class Proc:
         except (BrokenPipeError, OSError):
             raise Failed(f"{op}: the program had already ended ({self._tail()})")
         try:
-            line = wait_reply(self.lines, timeout, self.stopped)
+            line = wait_reply(self.lines, timeout, None if force else self.stopped)
         except queue.Empty:
             self.close()
             raise Failed(f"{op}: no reply in {int(timeout)} s")
