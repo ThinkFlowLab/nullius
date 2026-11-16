@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import io
+import json
 import shutil
 import tempfile
 import unittest
@@ -125,6 +126,26 @@ class ConformTest(unittest.TestCase):
                                 say=lambda s: None, env={"MODEL_API_URL": "http://127.0.0.1:9/v1"}, unsandboxed=True)
         self.assertTrue(got["agent.task/v1"]["ok"])
         self.assertEqual(got["agent.workspace/v1"], {"ok": False, "refused": "no engine"})
+
+    def test_a_refused_ports_record_stays_also_without_its_offer(self):
+        path = os.path.join(self.root, "agents", "fake", "agent.json")
+        with open(path) as f:
+            raw = json.load(f)
+        raw["offers"].remove("agent.workspace/v1")              # a record kept without its offer
+        kept = dict(raw["proven"]["agent.workspace/v1"])
+        with open(path, "w") as f:
+            json.dump(raw, f)
+        other = definitions.get("agent", "fake", self.root)
+        self.assertEqual(definitions.problems(other, "agent"), [])
+        passed = SimpleNamespace(trials=[SimpleNamespace(task_name="kit/check", reward=1.0)])
+        with mock.patch.object(conform, "candidates", return_value=["agent.task/v1", "agent.workspace/v1"]), \
+                mock.patch.object(run, "run", side_effect=["passed-job", run.BenchmarkRefused("no engine")]), \
+                mock.patch.object(conform.parse, "parse_job", return_value=passed):
+            conform.check(other, model="m", provider="custom", jobs_root=os.path.join(self.tmp, "jobs"),
+                          say=lambda s: None, env={"MODEL_API_URL": "http://127.0.0.1:9/v1"}, unsandboxed=True)
+        saved = definitions.get("agent", "fake", self.root)
+        self.assertEqual(saved["proven"].get("agent.workspace/v1"), kept)
+        self.assertIn("job", saved["proven"]["agent.task/v1"])
 
     def test_every_kit_refused_saves_nothing_and_exits_two(self):
         other = definitions.get("agent", "fake", self.root)

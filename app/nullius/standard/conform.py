@@ -160,8 +160,10 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
         def change(cur):                 # on the definition as it is now: another proof or an edit since the start stays
             offers = [p for p in cur.get("offers") or [] if not (p in got and not got[p]["ok"])]
             offers += [p for p, r in got.items() if r["ok"] and p not in offers]
-            # a port's record goes with its offer; another proof (fidelity) is not this run's to take back
-            proven = {p: r for p, r in (cur.get("proven") or {}).items() if p in offers or not ports.known(p)}
+            # a port's record goes with its offer; another proof (fidelity), or the record of a port whose kit
+            # was refused here, is not this run's to take back
+            proven = {p: r for p, r in (cur.get("proven") or {}).items()
+                      if p in offers or p in refused or not ports.known(p)}
             proven.update({p: {k: v for k, v in r.items() if k != "ok"} for p, r in got.items() if r["ok"]})
             cur["offers"] = [p for p in ports.PORTS if p in offers]
             cur["proven"] = proven
