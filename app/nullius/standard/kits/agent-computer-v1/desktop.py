@@ -57,6 +57,11 @@ HOME = "/home/user"
 FIXTURE_LOG = "/var/lib/fixture/events.jsonl"
 PYTHON_SECONDS = 90
 START_SECONDS = 60
+RUN_SECONDS = 120
+ENGINE_GRACE = 30
+FIXTURE_SECONDS = 60
+CAPTURE_SECONDS = 60
+EVENTS_SECONDS = 60
 OUTPUT_LIMIT = 4 * 1024 * 1024          # of each of output and error, as the reply gives them
 READ_LIMIT = 12 * 1024 * 1024           # the largest file `read` gives
 SETTLE = 0.5                            # an action answers this long after its end: at least the verdicts' slack
@@ -146,17 +151,20 @@ def tag() -> str:
 
 _CLIENTS: set = set()                   # the engine's clients running now, for end_clients
 _CLIENTS_LOCK = threading.Lock()
+_CLIENTS_CLOSED = False
 
 
 def _engine(args: List[str], *, input: Optional[bytes] = None, timeout: float) -> subprocess.CompletedProcess:
     """One call of the engine's program, its stdin the request's bytes or nothing, killed past ``timeout``
     (``subprocess.TimeoutExpired``, as ``subprocess.run`` raises it)."""
-    try:
-        p = subprocess.Popen([container.DOCKER, *args], stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=container.client_env())
-    except FileNotFoundError:
-        raise DesktopError(f"{container.DOCKER} is not installed on this machine")
     with _CLIENTS_LOCK:
+        if _CLIENTS_CLOSED:
+            raise DesktopError("the desktop engine clients have been closed")
+        try:
+            p = subprocess.Popen([container.DOCKER, *args], stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=container.client_env())
+        except FileNotFoundError:
+            raise DesktopError(f"{container.DOCKER} is not installed on this machine")
         _CLIENTS.add(p)
     try:
         try:
@@ -171,10 +179,12 @@ def _engine(args: List[str], *, input: Optional[bytes] = None, timeout: float) -
     return subprocess.CompletedProcess([container.DOCKER, *args], p.returncode, out, err)
 
 
-def end_clients() -> int:
+def end_clients(*, closing: bool = True) -> int:
     """Every client of the engine still running, from any thread, killed and waited for; how many there were.
-    A process that ends while a request of its waits leaves none behind."""
+    A shutdown also prevents further launches; between units, only the current clients are ended."""
+    global _CLIENTS_CLOSED
     with _CLIENTS_LOCK:
+        _CLIENTS_CLOSED = _CLIENTS_CLOSED or closing
         running = list(_CLIENTS)
     for p in running:
         try:
@@ -211,13 +221,13 @@ class Desktop:
         try:
             try:
                 r = _engine(["run", "-d", "--init", "--name", d.name, "--network", "none", "--security-opt",
-                             "no-new-privileges", "--shm-size", "256m", *label, *container.capped(), image], timeout=120)
+                             "no-new-privileges", "--shm-size", "256m", *label, *container.capped(), image], timeout=RUN_SECONDS)
             except subprocess.TimeoutExpired:
-                raise DesktopError(f"starting the desktop {d.name}: {container.DOCKER} run did not answer in 120 s")
+                raise DesktopError(f"starting the desktop {d.name}: {container.DOCKER} run did not answer in {RUN_SECONDS:g} s")
             if r.returncode != 0:
                 raise DesktopError(f"starting the desktop {d.name}: {_said(r)}")
             try:
-                r = _engine(["exec", d.name, "sh", "-c", _READY.format(n=int(seconds * 10))], timeout=seconds + 30)
+                r = _engine(["exec", d.name, "sh", "-c", _READY.format(n=int(seconds * 10))], timeout=seconds + ENGINE_GRACE)
             except subprocess.TimeoutExpired:
                 r = None
             if r is None or r.returncode != 0:
@@ -246,7 +256,7 @@ class Desktop:
         The reply comes ``settle`` seconds after the code's end, on the desktop's clock."""
         req = json.dumps({"code": code, "seconds": seconds, "limit": OUTPUT_LIMIT, "settle": settle}).encode()
         try:
-            r = self._exec(ROOT, ["python3", "-I", "-c", _RUN], input=req, timeout=seconds + settle + 30)
+            r = self._exec(ROOT, ["python3", "-I", "-c", _RUN], input=req, timeout=seconds + settle + ENGINE_GRACE)
         except subprocess.TimeoutExpired:
             return None
         try:
@@ -302,7 +312,7 @@ class Desktop:
 
     def capture(self) -> bytes:
         """The screen, as PNG bytes."""
-        r = self._exec(ROOT, ["python3", "-I", "-c", _CAPTURE], timeout=60)
+        r = self._exec(ROOT, ["python3", "-I", "-c", _CAPTURE], timeout=CAPTURE_SECONDS)
         if r.returncode != 0 or not r.stdout.startswith(b"\x89PNG\r\n\x1a\n"):
             raise DesktopError(f"the capture: {_said(r)}")
         return r.stdout
@@ -310,7 +320,7 @@ class Desktop:
     def password(self) -> str:
         return ""
 
-    def start_fixture(self, values: dict, seconds: float = 60) -> None:
+    def start_fixture(self, values: dict, seconds: float = FIXTURE_SECONDS) -> None:
         """Start the fixture as ``fixture``, ``values`` on its stdin; returns once its window is up."""
         r = self._exec(FIXTURE, ["python3", "-I", "/opt/desktop/fixture.py"], input=json.dumps(values).encode(),
                        timeout=seconds, env={"DISPLAY": ":0", "HOME": "/var/lib/fixture"})
@@ -320,7 +330,7 @@ class Desktop:
     def events(self) -> List[dict]:
         """The fixture's log, an event a dict. A log that cannot be read, or a line that is not an
         event, is a :class:`DesktopError`: a verdict is never given on part of the log."""
-        r = self._exec(FIXTURE, ["cat", FIXTURE_LOG], timeout=60)
+        r = self._exec(FIXTURE, ["cat", FIXTURE_LOG], timeout=EVENTS_SECONDS)
         if r.returncode != 0:
             raise DesktopError(f"the fixture's log could not be read: {_said(r)}")
         out = []

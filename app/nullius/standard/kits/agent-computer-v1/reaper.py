@@ -5,12 +5,12 @@
 The kit's driver starts it at its first unit, in a session of its own (a run that kills the driver's process
 group does not kill it), and keeps its stdin open. Each line names what the driver is making, made or let go:
 
-- ``+container NAME`` before the container's start, ``=container NAME`` once that start has ended (the
-  container is there, or the start failed and its removal was asked), ``-container NAME`` once it is removed;
+- ``+container NAME`` before the container's start, ``=container NAME`` once that start has succeeded,
+  ``-container NAME`` once it is removed;
 - ``+folder PATH`` before the folder is made, ``-folder PATH`` once it is removed.
 
 Once its stdin ends (the driver ended, closed it, or was killed), it removes each container still named, with
-ENGINE (``docker`` or ``podman``), and each folder still named, then exits. A container whose start had not ended
+ENGINE (``docker`` or ``podman``), and each folder still named, then exits. A container whose start had not succeeded
 may still be created by the engine after the driver's death: the reaper looks for it again until it has removed
 it or START_SECONDS (60 by default) have passed. Standard library only.
 """
@@ -25,7 +25,7 @@ START_SECONDS = 60.0
 
 def held(lines):
     """What the lines leave named: {"container": [...], "folder": [...], "started": [...]}, in the order made;
-    ``started`` holds the containers whose start had ended."""
+    ``started`` holds the containers whose start had succeeded."""
     out = {"container": [], "folder": [], "started": []}
     for line in lines:
         sign, _, what = line.rstrip("\n").partition(" ")
@@ -61,7 +61,7 @@ def there(engine, name):
 
 
 def remove(engine, name, pending, seconds):
-    """The container removed. One whose start had not ended is looked for until it is gone after being there,
+    """The container removed. One whose start had not succeeded is looked for until it is gone after being there,
     or ``seconds`` have passed."""
     end = time.monotonic() + seconds
     seen = False

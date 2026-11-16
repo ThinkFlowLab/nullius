@@ -142,36 +142,67 @@ class KitDesktop:
 
 
 class KitBridge(port.Bridge):
-    """The port's bridge, counting the acting calls sent once every step was taken (``past``). A call that holds
-    is counted and its step taken in one hold of the bridge's lock (a reentrant one): two calls sent together
-    for the last step are one taken and one counted."""
+    """The port's bridge, with the kit's budget count and first acting call's recover error."""
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         self.past = 0
+        self.reject_first = False
 
-    def submit(self, call):
+    def _next(self):
+        if not self.reject_first:
+            return super()._next()
         with self.change:
-            if call.tool in port.ACTING and self.booked >= self.steps:
-                self.past += 1
-            super().submit(call)
+            while not self.calls and self.ended is None:
+                self.change.wait(0.5)
+            if not self.calls or self.calls[0].tool not in port.ACTING:
+                return super()._next()
+            call = self.calls.popleft()
+            self.reject_first = False
+            self.used += 1
+        call.answer(error=NOT_RUN)                  # before done or fail can end the task
+        self._ran(call, False)
+        return None                                # this step ran no action; the next predict goes on
 
 
 class KitServer(port.Server):
-    """The port's server, counting also an acting call sent once every step was taken whose arguments do not hold:
-    the server refuses it before the bridge sees it."""
+    """Count, timestamp, check and reserve in one admission, including calls whose arguments do not hold."""
 
     def call(self, rid, params, wire):
-        name = params.get("name") if isinstance(params, dict) else None
-        if name in port.ACTING:
-            probe = port.Call(name, params.get("arguments", {}), lambda *a: None)
+        start = time.time()
+        name = params.get("name")
+        if name not in port.ACTING:
+            return super().call(rid, params, wire)
+
+        def reply(call, value, image, error):
+            content = []
+            if error is not None:
+                content.append({"type": "text", "text": str(error)})
+            if value is not None:
+                content.append({"type": "text", "text": json.dumps(value)})
+            if image is not None:
+                content.append({"type": "image", "data": base64.b64encode(image).decode(), "mimeType": "image/png"})
+            data, over = port.bounded({"jsonrpc": "2.0", "id": rid, "result": {"content": content,
+                                                                                "isError": error is not None}})
+            self.record({"tool": call.tool, "start": call.start, "end": time.time(), "isError": error is not None or over})
+            wire.send(data)
+            wire.answered()
+
+        with self.bridge.change:
+            wire.opened()
+            call = port.Call(name, params.get("arguments", {}), reply)
+            call.start = start                     # includes time waiting for admission's lock
+            if self.bridge.booked >= self.bridge.steps:
+                self.bridge.past += 1
             try:
-                port.checked(probe, self.bridge.screen)
-            except Exception:
-                with self.bridge.change:
-                    if self.bridge.booked >= self.bridge.steps:
-                        self.bridge.past += 1
-        super().call(rid, params, wire)
+                port.checked(call, self.bridge.screen)
+            except port.Refused as e:
+                call.answer(error=str(e))
+                return
+            except Exception as e:
+                call.answer(error=f"the arguments could not be checked: {type(e).__name__}")
+                return
+            self.bridge.submit(call)
 
 
 class Unit:
@@ -183,7 +214,7 @@ class Unit:
         self.steps = checks.steps(unit)
         self.log = os.path.join(self.trial, "verifier", "computer-calls.jsonl")
         self.desktop = self.bridge = self.server = self.loop = self.folder = self.boxes = None
-        self.final, self.error, self.failed_one = "", None, False
+        self.final, self.error = "", None
 
     def start(self, job):
         os.makedirs(os.path.dirname(self.log), exist_ok=True)
@@ -192,10 +223,8 @@ class Unit:
         image = desktop.image(os.path.dirname(self.log))
         name = f"nullius-desktop-{os.urandom(6).hex()}"
         REAPER.tell(f"+container {name}")            # before it exists: a kill during the start is covered
-        try:
-            self.desktop = desktop.Desktop.start(image, name, job=job)
-        finally:
-            REAPER.tell(f"=container {name}")        # its start has ended, either way
+        self.desktop = desktop.Desktop.start(image, name, job=job)
+        REAPER.tell(f"=container {name}")            # only a successful start rules out late creation
         self.desktop.start_fixture(self.values)
         self.boxes = self.desktop.events()[0].get("boxes") or {}
         folder = os.path.join(tempfile.gettempdir(), f"nullius-computer-{os.urandom(6).hex()}")
@@ -215,16 +244,10 @@ class Unit:
         loop's. An action the desktop did not end in time leaves its call answered with an error, and the next
         step goes on. ``recover``: the first acting call the loop takes, whatever it is, is answered with an error
         before any part of it runs."""
+        self.bridge.reject_first = self.unit == "recover"
         try:
             for _ in range(self.steps):
                 response, actions = self.bridge.predict("", None)
-                call = self.bridge.running           # the acting call of these actions; None for done, fail or none
-                if call is not None and self.unit == "recover" and not self.failed_one:
-                    self.failed_one = True
-                    call.answer(error=NOT_RUN)
-                    for _ in actions:                # none of it run; the bridge still counts the step
-                        pass
-                    continue
                 actions = iter(actions)
                 stop = False
                 try:
@@ -302,7 +325,7 @@ OPEN = {}                                    # unit -> Unit, while it is set up 
 OPEN_LOCK = threading.Lock()
 
 
-def close_all():
+def close_all(*, shutdown=True):
     """Every unit still open let go, then every client of the engine still running (a loop's call that hangs)
     ended and waited for."""
     with OPEN_LOCK:
@@ -313,8 +336,7 @@ def close_all():
             u.close()
         except Exception as e:
             sys.stderr.write(f"computer kit: {u.unit} could not be let go: {e}\n")
-    if held:
-        desktop.end_clients()
+    desktop.end_clients(closing=shutdown)
 
 
 def job_of(dir):
@@ -329,7 +351,7 @@ def units(dataset, **_):
 def setup(unit, dir, **_):
     if unit not in UNITS:
         raise ValueError(f"no unit {unit!r}")
-    close_all()                                  # one unit at a time in a driver: the one before never reached score
+    close_all(shutdown=False)                    # one unit at a time: the one before never reached score
     u = Unit(unit, dir)
     with OPEN_LOCK:
         OPEN[unit] = u

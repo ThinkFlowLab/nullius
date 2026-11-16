@@ -5,6 +5,8 @@ checks on real desktops, the reference passing each and the null control none.""
 from __future__ import annotations
 
 import importlib.util
+import inspect
+import io
 import json
 import os
 import queue
@@ -23,7 +25,7 @@ import unittest
 import zlib
 from unittest import mock
 
-from nullius.standard import computer_port as port
+from nullius.standard import computer_port as port, computer_pipe
 from nullius.standard import container, definitions, ports
 from tests import docker_tier
 
@@ -253,6 +255,7 @@ class FakeUnits(unittest.TestCase):
         self.enterContext(mock.patch.object(driver.checks, "draw", side_effect=draw))
         self.enterContext(mock.patch.object(driver.REAPER, "tell", side_effect=self.told.append))
         self.enterContext(mock.patch.object(driver, "PAUSE", 0.01))
+        self.enterContext(mock.patch.object(desktop, "_CLIENTS_CLOSED", False))
         self.addCleanup(driver.close_all)
 
     def unit(self, name):
@@ -384,6 +387,117 @@ def send(server, tool, arguments=None, rid=1):
     return wire
 
 
+class Admission(unittest.TestCase):
+    def unit(self, name, steps=2):
+        u = driver.Unit(name, "/unused/workspace")
+        u.desktop = FakeDesktop("fake", {"labels": ["OCEAN"]})
+        u.expected = {"target": "OCEAN", "labels": ["OCEAN"]}
+        u.steps = steps
+        u.bridge = driver.KitBridge(driver.KitDesktop(u.desktop), steps, 0, desktop.SCREEN, 1)
+        s = driver.KitServer.__new__(driver.KitServer)
+        s._state(u.bridge, "/unused/socket", None)
+        calls = []
+        s.record = calls.append
+        self.addCleanup(u.bridge.finish)
+        return u, s, calls
+
+    def test_an_invalid_call_admitted_before_exhaustion_is_not_counted_past_the_budget(self):
+        u, s, _ = self.unit("limit")
+        send(s, "click", {"x": 150, "y": 150})
+        entered, release = threading.Event(), threading.Event()
+        original, seen, wires = port.checked, [], []
+
+        def checking(call, screen):
+            if call.args.get("x") == "bad":
+                seen.append(call)
+                entered.set()
+                if not release.wait(5):
+                    raise RuntimeError("validation was not released")
+            return original(call, screen)
+
+        t = threading.Thread(target=lambda: wires.append(send(s, "click", {"x": "bad", "y": 150})), daemon=True)
+        with mock.patch.object(port, "checked", side_effect=checking):
+            t.start()
+            try:
+                self.assertTrue(entered.wait(5))
+                available = u.bridge.change.acquire(blocking=False)
+                if available:                       # an unlocked validator lets the other connection take the step
+                    try:
+                        send(s, "click", {"x": 150, "y": 150})
+                    finally:
+                        u.bridge.change.release()
+            finally:
+                release.set()
+                t.join(5)
+        self.assertFalse(t.is_alive())
+        if not available:
+            send(s, "click", {"x": 150, "y": 150})
+        self.assertTrue(wires[0].reply["result"]["isError"])
+        self.assertEqual((u.bridge.booked, u.bridge.past), (2, 0))
+        self.assertEqual(len(seen), 1)                # the recorded call itself is checked, once
+
+    def test_validation_cannot_move_a_calls_start_past_the_recovery_error(self):
+        u, s, calls = self.unit("recover")
+        original, checked, wires = port.checked, [], []
+        entered, release = threading.Event(), threading.Event()
+        with mock.patch.object(port.time, "time", return_value=1.0) as clock:
+            first = send(s, "click", {"x": 150, "y": 150})
+            _, actions = u.bridge.predict("", None)
+
+            def checking(call, screen):
+                checked.append(call)
+                entered.set()
+                if not release.wait(5):
+                    raise RuntimeError("validation was not released")
+                return original(call, screen)
+
+            t = threading.Thread(target=lambda: wires.append(send(s, "click", {"x": 150, "y": 150})), daemon=True)
+            with mock.patch.object(port, "checked", side_effect=checking):
+                t.start()
+                try:
+                    self.assertTrue(entered.wait(5))
+                    self.assertFalse(first.ready.is_set())
+                    clock.return_value = 2.0
+                    u.bridge.running.answer(error=driver.NOT_RUN)
+                finally:
+                    release.set()
+                    t.join(5)
+            self.assertFalse(t.is_alive())
+            list(actions)
+            _, actions = u.bridge.predict("", None)
+            for action in actions:
+                u.desktop.act(action)
+        self.assertFalse(wires[0].reply["result"]["isError"])
+        self.assertLess(calls[1]["start"], calls[0]["end"])
+        self.assertEqual(len(checked), 1)
+        got = checks.recover(u.expected, u.desktop.events(), u.desktop.actions, "done", calls)
+        self.assertFalse(got["passed"])
+        self.assertIn("after the error's answer", got["why"])
+
+    def test_recovery_refuses_done_and_fail_before_their_terminal_transition(self):
+        for name in ("done", "fail"):
+            with self.subTest(name=name):
+                u, s, calls = self.unit("recover")
+                first = send(s, name)
+                t = threading.Thread(target=u.run_loop, daemon=True)
+                with mock.patch.object(driver, "PAUSE", 0):
+                    t.start()
+                    try:
+                        self.assertTrue(first.ready.wait(5))
+                        self.assertTrue(first.reply["result"]["isError"])
+                        self.assertIn(driver.NOT_RUN, first.reply["result"]["content"][0]["text"])
+                        self.assertIsNone(u.bridge.ended)
+                        second = send(s, "click", {"x": 150, "y": 150})
+                        self.assertTrue(second.ready.wait(5))
+                        self.assertFalse(second.reply["result"]["isError"])
+                    finally:
+                        u.bridge.finish()
+                        t.join(5)
+                self.assertFalse(t.is_alive())
+                self.assertEqual((u.bridge.used, len(u.desktop.actions)), (2, 1))
+                self.assertTrue(checks.recover(u.expected, u.desktop.events(), u.desktop.actions, "done", calls)["passed"])
+
+
 class EarnedPasses(FakeUnits):
     """What a pass needs, over the fake desktop: every attempt past the budget counted, recover's call sent after
     its error's answer, its error on the first acting call whatever it is, an action not ended in time an error,
@@ -490,6 +604,75 @@ class EarnedPasses(FakeUnits):
 
 
 class Shutdown(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(mock.patch.object(desktop, "_CLIENTS_CLOSED", False, create=True))
+        self.enterContext(mock.patch.object(desktop, "_CLIENTS", set()))
+
+    def test_shutdown_ends_clients_after_every_unit_was_scored(self):
+        p = mock.Mock()
+        with mock.patch.dict(driver.OPEN, {}, clear=True), mock.patch.object(desktop, "_CLIENTS", {p}):
+            driver.close_all()
+        p.kill.assert_called_once_with()
+        p.wait.assert_called_once_with(timeout=10)
+
+    def test_shutdown_waits_for_launch_registration_and_refuses_later_launches(self):
+        launched, release, draining, killed = (threading.Event() for _ in range(4))
+        p = mock.Mock(returncode=-9)
+        p.kill.side_effect = killed.set
+
+        def communicate(*a, **kw):
+            if not killed.wait(5):
+                raise RuntimeError("client was not ended")
+            return b"", b""
+
+        def popen(*a, **kw):
+            launched.set()                           # the child exists before Popen returns
+            if not release.wait(5):
+                raise RuntimeError("launch was not released")
+            return p
+
+        lock = threading.Lock()
+
+        class Lock:
+            def __enter__(self):
+                if threading.current_thread() is drain:
+                    draining.set()
+                if not lock.acquire(timeout=5):
+                    raise RuntimeError("client lock was not released")
+
+            def __exit__(self, *a):
+                lock.release()
+
+        p.communicate.side_effect = communicate
+        replies, counts = [], []
+        launch = threading.Thread(target=lambda: replies.append(desktop._engine(["exec"], timeout=10)), daemon=True)
+        drain = threading.Thread(target=lambda: counts.append(desktop.end_clients()), daemon=True)
+        with mock.patch.object(desktop, "_CLIENTS_LOCK", Lock()), \
+                mock.patch.object(desktop.subprocess, "Popen", side_effect=popen) as start:
+            launch.start()
+            try:
+                self.assertTrue(launched.wait(5))
+                drain.start()
+                self.assertTrue(draining.wait(5))
+                release.set()
+                drain.join(5)
+                self.assertFalse(drain.is_alive())
+                self.assertEqual(counts, [1])
+                p.kill.assert_called_once_with()
+                p.wait.assert_called_once_with(timeout=10)
+                with self.assertRaises(desktop.DesktopError):
+                    desktop._engine(["exec"], timeout=10)
+                start.assert_called_once()
+            finally:
+                release.set()
+                killed.set()
+                launch.join(5)
+                if drain.ident is not None:
+                    drain.join(5)
+        self.assertFalse(launch.is_alive())
+        self.assertEqual(len(replies), 1)
+        self.assertEqual(desktop._CLIENTS, set())
+
     def test_the_engines_clients_still_running_are_ended_and_waited_for(self):
         done = []
         with mock.patch.object(desktop.container, "DOCKER", sys.executable):
@@ -590,6 +773,40 @@ class FixtureRecords(unittest.TestCase):
 
 
 class Reaper(unittest.TestCase):
+    def test_unsuccessful_starts_remain_pending_through_an_absent_container(self):
+        for outcome in ("timeout", "failed"):
+            with self.subTest(outcome=outcome):
+                told, engine_calls = [], []
+
+                def engine(args, **kw):
+                    engine_calls.append(args[0])
+                    if args[0] == "run":
+                        if outcome == "timeout":
+                            raise subprocess.TimeoutExpired(args, kw["timeout"])
+                        return subprocess.CompletedProcess(args, 1, b"", b"start failed")
+                    return subprocess.CompletedProcess(args, 1, b"", b"Error: No such container: late")
+
+                u = driver.Unit("see", "/unused/workspace")
+                with mock.patch.object(driver.os, "makedirs"), \
+                        mock.patch.object(driver.os.path, "exists", return_value=False), \
+                        mock.patch.object(desktop, "image", return_value="image"), \
+                        mock.patch.object(desktop, "_engine", side_effect=engine), \
+                        mock.patch.object(desktop.container, "capped", return_value=[]), \
+                        mock.patch.object(driver.REAPER, "tell", side_effect=told.append):
+                    with self.assertRaises(desktop.DesktopError):
+                        u.start("job")
+                self.assertEqual(engine_calls, ["run", "rm", "container"])
+                held = reaper.held(told)
+                name = held["container"][0]
+                with mock.patch.object(reaper, "there", side_effect=[False, True, False]) as there, \
+                        mock.patch.object(reaper, "_engine") as remove, \
+                        mock.patch.object(reaper.time, "monotonic", return_value=0), \
+                        mock.patch.object(reaper.time, "sleep"):
+                    reaper.remove("docker", name, name not in held["started"], reaper.START_SECONDS)
+                self.assertEqual(there.call_count, 3)
+                remove.assert_called_once_with("docker", "rm", "-f", name)
+                self.assertNotIn(name, held["started"])
+
     def test_a_container_whose_start_had_not_ended_is_looked_for_until_it_is_there_and_removed(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
             engine, said, state = os.path.join(tmp, "engine"), os.path.join(tmp, "said"), os.path.join(tmp, "n")
@@ -657,11 +874,106 @@ esac
                     driver.setup("see", ws)
         self.assertTrue(order[0].startswith("+container nullius-desktop-"))
         self.assertEqual(order[1], "start")
-        self.assertEqual(order[2], "=container " + order[0].split()[1])          # its start ended, failed
+        self.assertEqual(len(order), 2)                 # an unsuccessful start stays pending
         self.assertEqual(driver.OPEN, {})
 
 
 # -- the docker tier: the eight checks on real desktops --------------------------------------------------------------
+MARGIN = 30                                   # process starts, protocol messages and scheduling
+
+
+class DockerTestBounds(unittest.TestCase):
+    """The docker tests' waits and assertions exercised without a container or a socket."""
+
+    def supported(self, setup=False):
+        limits = []
+
+        def engine(args, **kw):
+            limits.append(kw["timeout"])
+            data = b""
+            if desktop._CAPTURE in args:
+                data = b"\x89PNG\r\n\x1a\nfake"
+            elif desktop._RUN in args:
+                data = json.dumps({"start": 1, "end": 2, "timeout": False, "returncode": 0,
+                                   "output": "", "error": ""}).encode()
+            return subprocess.CompletedProcess(args, 0, data, b"")
+
+        with mock.patch.object(desktop, "_engine", side_effect=engine), \
+                mock.patch.object(container, "capped", return_value=[]):
+            if setup:
+                default = inspect.signature(container._docker).parameters["timeout"].default
+
+                def image_engine(args, *, timeout=default, **kw):
+                    limits.append(timeout)
+                    return subprocess.CompletedProcess(args, 0, "", "")
+
+                with mock.patch.object(container, "_built", {}), \
+                        mock.patch.object(container, "_docker", side_effect=image_engine):
+                    desktop.image()                 # a fresh driver inspects both already-built images
+                d = desktop.Desktop.start("image", "fake")
+                d.start_fixture({})
+                d.events()
+            else:
+                d = desktop.Desktop("fake")
+                d.capture()
+                d.act("pass", driver.PYTHON_SECONDS)
+                d.capture()
+        return sum(limits) + (0 if setup else driver.PAUSE + computer_pipe.END_SECONDS)
+
+    def test_the_setup_deadline_covers_start_readiness_fixture_and_events(self):
+        supported = self.supported(setup=True)
+        case = DockerKit("test_a_driver_killed_during_a_unit_leaves_no_container_socket_or_process")
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
+            case.tmp = tmp
+            p = mock.Mock(pid=123, stdin=io.StringIO(), stdout=io.StringIO(json.dumps(
+                {"mcp": [{"args": [os.path.join(tmp, "socket", "s")]}]}) + "\n"))
+
+            def select_reply(read, write, error, seconds):
+                self.assertGreater(seconds, supported)
+                return read, [], []
+
+            def run(args, **kw):
+                return subprocess.CompletedProcess(args, 0, "456 python reaper.py\n" if args[0] == "ps" else "", "")
+
+            with mock.patch.object(subprocess, "Popen", return_value=p), \
+                    mock.patch.object(subprocess, "run", side_effect=run), \
+                    mock.patch.object(select, "select", side_effect=select_reply), \
+                    mock.patch.object(os, "killpg"), mock.patch(__name__ + "._alive", return_value=False):
+                case.test_a_driver_killed_during_a_unit_leaves_no_container_socket_or_process()
+
+    def scripted(self, *, click_error=False, prompt=None, check_timeout=None):
+        case = DockerKit("test_a_session_of_the_scripted_acp_agent_reaches_the_server_through_the_pipe")
+        setup = {"mcp": [{"args": ["/unused/s"]}], "prompt": "click"}
+        case.unit = mock.Mock(return_value=("/unused/workspace", setup))
+        u = mock.Mock()
+        u.calls.return_value = [{"tool": "screenshot", "isError": False}, {"tool": "click", "isError": click_error}]
+        messages = [{"id": 1, "result": {}}, {"id": 2, "result": {"sessionId": "s1"}},
+                    {"method": "session/update", "params": {"update": {"content": {"text": "screenshot taken"}}}},
+                    {"id": 3, **(prompt if prompt is not None else {"result": {"stopReason": "end_turn"}})}]
+        p = mock.Mock(stdin=io.StringIO(), stdout=io.StringIO("".join(json.dumps(m) + "\n" for m in messages)))
+        original = queue.Queue.get
+
+        def get(q, *, timeout):
+            if check_timeout is not None:
+                check_timeout(timeout)
+            return original(q, timeout=timeout)
+
+        with mock.patch.dict(driver.OPEN, {"click": u}, clear=True), \
+                mock.patch.object(subprocess, "Popen", return_value=p), \
+                mock.patch.object(queue.Queue, "get", get):
+            case.test_a_session_of_the_scripted_acp_agent_reaches_the_server_through_the_pipe()
+
+    def test_the_prompt_deadline_covers_both_captures_the_action_and_pipe_exit(self):
+        supported = self.supported()
+        self.scripted(check_timeout=lambda seconds: self.assertGreater(seconds, supported))
+
+    def test_the_scripted_session_rejects_a_failed_click_or_prompt(self):
+        for bad in ({"click_error": True}, {"prompt": {"error": {"code": -32603, "message": "failed"}}},
+                    {"prompt": {"result": {}}}):
+            with self.subTest(bad=bad), self.assertRaises(AssertionError):
+                self.scripted(**bad)
+
+
 def why_no_desktop() -> str:
     if not os.environ.get(docker_tier.VAR):
         return "the docker tier runs with parallel.py --docker"
@@ -679,6 +991,7 @@ class DockerKit(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.enterContext(mock.patch.object(desktop, "_CLIENTS_CLOSED", False))
         self.addCleanup(driver.close_all)
 
     def unit(self, name):
@@ -730,20 +1043,22 @@ class DockerKit(unittest.TestCase):
         try:
             p.stdin.write(json.dumps({"op": "setup", "unit": "see", "dir": ws}) + "\n")
             p.stdin.flush()
-            ready, _, _ = select.select([p.stdout], [], [], 180)                  # the setup's reply, bounded
+            image_seconds = 2 * inspect.signature(container._docker).parameters["timeout"].default
+            seconds = (image_seconds + desktop.RUN_SECONDS + desktop.START_SECONDS + desktop.ENGINE_GRACE
+                       + desktop.FIXTURE_SECONDS + desktop.EVENTS_SECONDS + MARGIN)
+            ready, _, _ = select.select([p.stdout], [], [], seconds)
             line = p.stdout.readline() if ready else ""
             kids = subprocess.run(["ps", "-o", "pid=,args=", "--ppid", str(p.pid)], capture_output=True, text=True, timeout=30)
             reaper_pid = next((int(l.split()[0]) for l in kids.stdout.splitlines() if "reaper.py" in l), None)
         finally:
             os.killpg(p.pid, signal.SIGKILL)                                    # as a run kills a driver's group
-            p.wait()
-        self.assertTrue(line, "no reply to setup within 180 s")
+            p.wait(timeout=MARGIN)
+        self.assertTrue(line, f"no reply to setup within {seconds:g} s")
         sock = json.loads(line)["mcp"][0]["args"][0]
         self.assertTrue(sock.endswith("/s"))
         self.assertIsNotNone(reaper_pid)
-        for _ in range(240):
-            left = subprocess.run([container.DOCKER, "ps", "-aq", "--filter", f"label={container.LABEL}={job}"],
-                                  capture_output=True, text=True, timeout=60)
+        end = time.monotonic() + reaper.START_SECONDS + 2 * reaper.REMOVE_SECONDS + MARGIN
+        while time.monotonic() < end:
             if not _alive(reaper_pid):
                 break
             time.sleep(0.5)
@@ -763,7 +1078,8 @@ class DockerKit(unittest.TestCase):
         server = {"name": "computer", "command": sys.executable, "args": [os.path.join(KIT, "pipe.py"), s["mcp"][0]["args"][0]],
                   "env": []}
         said, lines = [], queue.Queue()
-        threading.Thread(target=lambda: [lines.put(l) for l in p.stdout] + [lines.put(None)], daemon=True).start()
+        reader = threading.Thread(target=lambda: [lines.put(l) for l in p.stdout] + [lines.put(None)], daemon=True)
+        reader.start()
         try:
             for m in ({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": 1}},
                       {"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {"cwd": ws, "mcpServers": [server]}},
@@ -771,22 +1087,33 @@ class DockerKit(unittest.TestCase):
                        "params": {"sessionId": "s1", "prompt": [{"type": "text", "text": s["prompt"]}]}}):
                 p.stdin.write(json.dumps(m) + "\n")
                 p.stdin.flush()
+                seconds = (2 * desktop.CAPTURE_SECONDS + driver.PYTHON_SECONDS + desktop.SETTLE
+                           + desktop.ENGINE_GRACE + driver.PAUSE + computer_pipe.END_SECONDS + MARGIN)
+                end = time.monotonic() + seconds
                 while True:
-                    line = lines.get(timeout=120)                                    # bounded: Empty past it
+                    line = lines.get(timeout=max(0, end - time.monotonic()))
                     self.assertIsNotNone(line, f"the agent ended before it answered {m['method']}")
                     got = json.loads(line)
                     if got.get("method") == "session/update":
                         said.append(got["params"]["update"]["content"]["text"])
                     if got.get("id") == m["id"]:
+                        self.assertNotIn("error", got)
+                        if m["method"] == "session/prompt":
+                            self.assertEqual(got.get("result"), {"stopReason": "end_turn"})
                         break
         finally:
             p.stdin.close()
             try:
                 p.wait(timeout=30)
             except subprocess.TimeoutExpired:
-                p.kill()
-                p.wait()
-        self.assertEqual([c["tool"] for c in u.calls()], ["screenshot", "click"])
+                os.killpg(p.pid, signal.SIGKILL)      # also a pipe still waiting for a desktop reply
+                p.wait(timeout=MARGIN)
+            reader.join(MARGIN)
+            p.stdout.close()
+        self.assertFalse(reader.is_alive())
+        calls = u.calls()
+        self.assertEqual([c["tool"] for c in calls], ["screenshot", "click"])
+        self.assertTrue(all(not c["isError"] for c in calls), calls)
         self.assertIn("screenshot taken", "".join(said))
 
 
