@@ -84,6 +84,8 @@ The shared code is `app/nullius/standard/computer_port.py`, with the standard li
 | `recover` | skill | Click a named button; the first acting call, whatever it is, is answered with an error and not run | An acting call sent after the error's answer succeeds, and the button is clicked as in `click` |
 | `batch` | skill | Fill three text fields with a budget of two steps | Each field holds its word |
 
+`see` shows twelve characters from `ACDEFGJKMNPRTWXY34679`, with no equal neighbours. `type` tests typing in a field that already has the focus; no pointing is needed. `limit` needs at least one button pressed within the two-step budget, no input after the last step and no acting call once the steps are used up.
+
 Every check also fails when a pointer or key event came outside an acting call: input sent through `python` fails it. Each check has 8 steps (2 for `limit` and `batch`), a pause of 1 s, 90 s for one `python` call and 600 s for the agent's turn.
 
 | Piece | Where |

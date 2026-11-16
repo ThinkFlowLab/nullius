@@ -10,6 +10,7 @@ import io
 import json
 import os
 import queue
+import random
 import re
 import secrets
 import shutil
@@ -495,6 +496,22 @@ def _png(code, scale):
         return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xffffffff)
     return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+class Codes(unittest.TestCase):
+    def test_drawn_codes_keep_their_length_without_h_or_equal_neighbours_and_are_read_from_pixels(self):
+        rng = random.Random(7)
+        for check, scale in (("see", driver.fixture.SEE_SCALE), ("scroll", driver.fixture.LIST_SCALE)):
+            with self.subTest(check=check):
+                for _ in range(1000):
+                    values, expected = checks.draw(check, rng)
+                    code = values["code"]
+                    self.assertEqual(code, expected["code"])
+                    self.assertEqual(len(code), 12)
+                    self.assertNotIn("H", code)
+                    self.assertTrue(set(code) <= set(checks.ALPHABET), code)
+                    self.assertTrue(all(a != b for a, b in zip(code, code[1:])), code)
+                self.assertEqual(driver.read_code(_png(code, scale), scale), code)
 
 
 class FakeWire:

@@ -36,7 +36,7 @@ import secrets
 
 SLACK = 0.5
 CODE_LENGTH = 12
-ALPHABET = "ACDEFGHJKMNPRTWXY34679"         # no pair a glance confuses: 0/O, 1/I/L, 5/S, 2/Z, 8/B, U/V
+ALPHABET = "ACDEFGJKMNPRTWXY34679"          # no pair a glance confuses: 0/O, 1/I/L, 5/S, 2/Z, 8/B, U/V, H/N
 LABELS = ("APPLE", "BRICK", "CLOUD", "DELTA", "EMBER", "FROST", "GRAPE", "HONEY", "IVORY", "JUMBO",
           "KNOT", "LEMON", "MAPLE", "NORTH", "OCEAN", "PIANO", "QUILT", "RIVER", "STONE", "TIGER",
           "UMBRA", "VELVET", "WHEAT", "YEAST")
@@ -57,7 +57,10 @@ def steps(check):
 
 
 def code(rng):
-    return "".join(rng.choice(ALPHABET) for _ in range(CODE_LENGTH))
+    text = ""
+    for _ in range(CODE_LENGTH):
+        text += rng.choice(ALPHABET.replace(text[-1:], ""))
+    return text
 
 
 def word(rng=None, length=8):
