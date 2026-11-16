@@ -304,18 +304,23 @@ class Licences:
     On this machine they are read from the benchmark's store
     (``nullius.secrets``) when asked - when a unit starts - and a file is
     used where it is kept; a data provider's token (``provider``) from that
-    provider's store alone. A run on a host is handed them instead
+    provider's store alone, unless ``environ`` - a headless run's own
+    environment, ``standard.cli.licences`` - holds that provider's variable
+    (``HF_TOKEN``), which then wins. A run on a host is handed them instead
     (``handed``): its launcher's stdin, a file written to a folder in memory
     (``/dev/shm``) that the run removes when it ends. Only the names the
     benchmark's environments declare are ever looked up, each as the kind
     it is declared."""
 
-    def __init__(self, bench: dict, given: Optional[Dict[str, dict]] = None):
+    def __init__(self, bench: dict, given: Optional[Dict[str, dict]] = None, environ=None):
+        from nullius.secrets import PROVIDERS
         self.key = bench["key"]
         declared = definitions.secrets_of(bench)
         self.kinds = {s["name"]: s["kind"] for s in declared}
         self.providers = {s["name"]: s.get("provider") or "" for s in declared}
         self.given = given
+        self.environ = {name: v for name, p in self.providers.items() if p in PROVIDERS
+                        for v in [(environ or {}).get(PROVIDERS[p][1], "").strip()] if v}
 
     @classmethod
     def handed(cls, bench: dict, values: Dict[str, bytes], spill: str) -> "Licences":
@@ -345,6 +350,8 @@ class Licences:
             return None
         if self.given is not None:
             return self.given.get(name)
+        if name in self.environ:
+            return {"kind": kind, "value": self.environ[name]}
         from nullius import secrets
         store, kept = secrets.store_of(self.key, name, self.providers.get(name, ""))
         if kind == "file":
