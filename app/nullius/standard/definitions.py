@@ -484,9 +484,11 @@ def _bench_options(d: dict) -> List[str]:
         if ds is not None and (not isinstance(ds, list) or not ds or any(x not in ids for x in ds)):
             bad.append(f"{w}.datasets: some of the benchmark's dataset ids")
         on = o.get("setups")
-        if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours", "agent") for x in on)):
-            bad.append(f"{w}.setups: where it applies - some of original, model, yours (an agent or a capability), "
-                       "agent (an agent alone)")
+        # agent: an agent's run alone, on a benchmark agents run, and never beside another scope
+        if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours", "agent") for x in on)
+                               or "agent" in on and (on != ["agent"] or d.get("family") != "agent")):
+            bad.append(f"{w}.setups: where it applies - some of original, model, yours (an agent or a capability); "
+                       "or agent alone (an agent's run), on a benchmark agents run")
         when = o.get("when") or {}
         if not _when_valid(name, when, opts):
             bad.append(f"{w}.when: another option -> the values of it this one applies under")

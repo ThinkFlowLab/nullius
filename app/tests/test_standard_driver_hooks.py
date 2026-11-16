@@ -100,6 +100,16 @@ class AgentOptions(unittest.TestCase):
                 self.assertTrue(any("options.steps.setups" in p for p in definitions.problems(
                     dict(BENCH, options={"steps": dict(self.option, setups=setups)}), "benchmark")))
 
+    def test_agent_stands_alone_on_a_benchmark_agents_run(self):
+        for setups in (["agent", "original"], ["agent", "yours"], ["model", "agent"]):
+            with self.subTest(setups=setups):
+                self.assertTrue(any("options.steps.setups" in p for p in definitions.problems(
+                    dict(self.bench, options={"steps": dict(self.option, setups=setups)}), "benchmark")))
+        capability = dict(self.bench, family="capability", needs=["cap.memory/v1"])
+        self.assertTrue(any("options.steps.setups" in p for p in definitions.problems(capability, "benchmark")))
+        self.assertFalse(any("options.steps" in p for p in definitions.problems(
+            dict(capability, options={"steps": dict(self.option, setups=["yours"])}), "benchmark")))
+
     def test_only_an_agent_gets_and_validates_the_option(self):
         for kind in ("agent", "capability", "control", "upstream", None):
             for scope in ("yours", "original", "model"):
