@@ -150,6 +150,23 @@ def artifact_page(job_id, trial_name, key):
     return response
 
 
+@app.route("/trial/<job_id>/<trial_name>/artifact/<key>/download")
+def artifact_download(job_id, trial_name, key):
+    """The record whole, redacted as the reader shows it: what Download saves
+    and Copy puts on the clipboard."""
+    _, trial = _trial_evidence(job_id, trial_name)
+    try:
+        text, _ = artifacts.whole(trial.dir, key)
+    except (LookupError, OSError):
+        abort(404)
+    name = os.path.basename(artifacts.FILES[key][1])
+    response = app.response_class(text, mimetype="application/json" if name.endswith(".json") else "text/plain")
+    if not request.args.get("inline"):
+        response.headers["Content-Disposition"] = f'attachment; filename="{name}"'
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/trial/<job_id>/<trial_name>/conversation")
 def conversation_data(job_id, trial_name):
     _, t = _trial_evidence(job_id, trial_name)
@@ -217,10 +234,12 @@ def trial(job_id, trial_name):
     # filtered view by construction, so there is one definition of "which spans
     # are in this view" and it is still the query string.
     ch = charts.charts_for(tr.roots, cfilt) if tr and tr.visible else None
-    records = artifacts.listing(t.dir)
+    records = [r for r in artifacts.listing(t.dir) if r["exists"]]   # a record never written has no row
     for record in records:
         record["url"] = url_for("artifact_page", job_id=job_id, trial_name=trial_name,
                                 key=record["key"], workspace=request.args.get("workspace"))
+        record["download"] = url_for("artifact_download", job_id=job_id, trial_name=trial_name,
+                                     key=record["key"], workspace=request.args.get("workspace"))
     return render_template(
         "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_judge=bench_judge, bench_parts=bench_parts,
         trace=tr, charts=ch, viewing=viewing,

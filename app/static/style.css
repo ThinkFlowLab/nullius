@@ -356,6 +356,8 @@ button.seg:hover { filter: brightness(1.25); }
 
 /* table toolbar + column menu */
 .table-tools { display: flex; align-items: center; gap: .75rem; margin: 0 0 .6rem; }
+.artifact-actions { text-align: right; white-space: nowrap; }
+.artifact-actions .btn + .btn { margin-left: .35rem; }
 .menu-wrap { position: relative; }
 .btn.sm { font-size: .8rem; padding: .42rem .75rem; }
 .menu {

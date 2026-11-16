@@ -644,13 +644,16 @@
 </section>
 <section class="trial-tab" id="trial-artifacts" role="tabpanel" aria-labelledby="tab-artifacts">
   <div class="reader-heading"><div><h2>Artifacts</h2><p class="muted small">Read the recorded source files. Content is redacted and paged; source files remain intact.</p></div></div>
+  {% if artifacts %}
   <div class="panel">
-    <table class="grid"><thead><tr><th>Record</th><th>Availability</th><th class="num">Size</th><th></th></tr></thead><tbody>
+    <table class="grid"><thead><tr><th>Record</th><th class="num">Size</th><th></th></tr></thead><tbody>
     {% for artifact in artifacts %}
-      <tr><td>{{ artifact.label }}</td><td class="muted">{{ 'Recorded' if artifact.exists else 'Not recorded' }}</td><td class="num mono muted">{{ ((artifact.size / 1024)|round(1)) ~ ' KB' if artifact.exists else '—' }}</td><td>{% if artifact.exists %}<a href="{{ artifact.url }}">Read →</a>{% endif %}</td></tr>
+      <tr><td>{{ artifact.label }}</td><td class="num mono muted">{{ '%.2f'|format(artifact.size / 1024) }} KB</td>
+        <td class="artifact-actions"><a class="btn ghost sm" href="{{ artifact.url }}">Read</a> <a class="btn ghost sm" href="{{ artifact.download }}" download>Download</a></td></tr>
     {% endfor %}
     </tbody></table>
   </div>
+  {% endif %}
 </section>
 <script src="{{ url_for('static', filename='traces/conversation.js') }}"></script>
 <script>

@@ -511,8 +511,18 @@ class Routes(unittest.TestCase):
             html = self.get_ok("/trial/rate-limited-run/task-001").get_data(as_text=True)
             self.assertIn("Artifact manifest", html)
             self.assertIn("/trial/rate-limited-run/task-001/artifact/manifest", html)
+            self.assertIn('href="/trial/rate-limited-run/task-001/artifact/manifest/download" download>Download</a>', html)
+            self.assertNotIn("Run configuration", html)          # a record never written has no row
             manifest = self.get_ok("/trial/rate-limited-run/task-001/artifact/manifest").get_data(as_text=True)
             self.assertIn("artifacts/logs/artifacts", unescape(manifest))
+            self.assertIn('href="/trial/rate-limited-run/task-001?tab=artifacts">← Artifacts</a>', manifest)
+            self.assertIn('data-copy-url="/trial/rate-limited-run/task-001/artifact/manifest/download?inline=1"', manifest)
+            saved = self.get_ok("/trial/rate-limited-run/task-001/artifact/manifest/download")
+            self.assertEqual(saved.headers["Content-Disposition"], 'attachment; filename="manifest.json"')
+            self.assertIn("artifacts/logs/artifacts", saved.get_data(as_text=True))
+            copied = self.get_ok("/trial/rate-limited-run/task-001/artifact/manifest/download?inline=1")
+            self.assertNotIn("Content-Disposition", copied.headers)
+            self.assertEqual(self.client.get("/trial/rate-limited-run/task-001/artifact/config/download").status_code, 404)
         # the synthetic job writes no gateway log: unmeasured, not zero
         self.assertIsNone(self.active_job.trials[0].n_rate_limited_retries)
         html = self.get_ok("/job/active-run").get_data(as_text=True)
