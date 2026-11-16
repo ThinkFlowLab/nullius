@@ -221,7 +221,7 @@
     {% set srow = by.get('DECISION_PROVIDER') %}
     {% if srow and by.get('DECISION_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not decision }}" data-judge-card>
-      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-gavel"/></svg>Decision</legend>
+      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-gavel"/></svg>Decision model</legend>
       {{ judge_rows('DECISION', decision_providers, decision, 'Where Decision is asked') }}
       {{ field(by['DECISION_MODEL'], 'Model', writable, decision_providers[decision.provider].models) }}
     </fieldset>
@@ -229,7 +229,7 @@
     {% set prow = by.get('LLM_JUDGE_PROVIDER') %}
     {% if prow and by.get('LLM_JUDGE_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not llm }}" data-judge-card>
-      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-text"/></svg>LLM judge</legend>
+      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-text"/></svg>LLM</legend>
       {{ judge_rows('LLM_JUDGE', llm_providers, llm, "The LLM judge's provider") }}
       {{ field(by['LLM_JUDGE_MODEL'], 'Model', writable, []) }}
     </fieldset>
