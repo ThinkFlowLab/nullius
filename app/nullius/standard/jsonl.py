@@ -30,6 +30,7 @@ class Proc:
         self.stopped = stopped
         self.p: Optional[subprocess.Popen] = None
         self.lines: "queue.Queue[Optional[str]]" = queue.Queue()
+        self.unanswered = False          # a request the stop cut short: its late reply may still come
 
     def start(self) -> "Proc":
         if self.stopped is not None and self.stopped.is_set():
@@ -46,8 +47,10 @@ class Proc:
             self.lines.put(line)
         self.lines.put(None)
 
-    def request(self, op: str, timeout: float = 600, **kw) -> dict:
-        if self.stopped is not None and self.stopped.is_set():
+    def request(self, op: str, timeout: float = 600, force: bool = False, on_sent=None, **kw) -> dict:
+        """``force``: sent and waited for (up to ``timeout``) also once the run is stopped - a unit's clean-up.
+        ``on_sent``: called once the request is written, before its reply is waited for."""
+        if self.stopped is not None and self.stopped.is_set() and not force:
             raise CancelledError("the run was stopped")
         if self.p is None:
             self.start()
@@ -56,11 +59,16 @@ class Proc:
             self.p.stdin.flush()
         except (BrokenPipeError, OSError):
             raise Failed(f"{op}: the program had already ended ({self._tail()})")
+        if on_sent is not None:
+            on_sent()
         try:
-            line = wait_reply(self.lines, timeout, self.stopped)
+            line = wait_reply(self.lines, timeout, None if force else self.stopped)
         except queue.Empty:
             self.close()
             raise Failed(f"{op}: no reply in {int(timeout)} s")
+        except CancelledError:
+            self.unanswered = True
+            raise
         if line is None:
             raise Failed(f"{op}: the program ended without replying ({self._tail()})")
         try:

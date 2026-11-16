@@ -24,6 +24,8 @@ nullius standard conform <other>[@version] --model M [--provider P] [--port PORT
 | Skills | A benchmark's `needs_skills` fits only an agent whose proof shows them |
 | Replaced | A pass on the current kit replaces an older proof; a fail takes the port back; a `fidelity` record stays |
 
+Without `--port`, a kit refused for what its benchmark needs of this machine (a container engine, a program, a connection, its own installs) is said as `PORT: refused: why` and passed over: the other kits still run, their proofs are written, the refused port's record and offer stay as they were, and the command exits 1. When every kit is refused, nothing is written and it exits 2. A refusal of the command itself (the agent, its options, the key) and a refused port named with `--port` end it with 2 and nothing written.
+
 !!! note "A new version runs nothing"
     Until `conform KEY@VERSION` passes; bumping a pin in a file without `versions` asks again. The app's *Prove its ports* is the same.
 
