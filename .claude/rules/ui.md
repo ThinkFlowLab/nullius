@@ -42,5 +42,7 @@ also supports `--only KEY` for a focused benchmark check.
 - Collapsible content uses the shared thin chevron and sliding transition in
   `app/static/disclosures.js`; navigation groups use the same animation. Respect
   reduced motion and keyboard activation. Filter menus and popovers are separate.
+- **One icon, one meaning.** A new kind of thing gets its own icon, never a
+  neighbour's.
 
 - Catalogue Add actions share one dialog with the entry type preselected from the page. Keep generated prompts short and refer to import skills instead of duplicating their instructions.

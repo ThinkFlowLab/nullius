@@ -381,7 +381,7 @@
     const web = agentRun && Object.values((b || {}).environments || {}).some(e => e.network);   // an agent's public web proxy
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
       + `<div class="nb-pick-grid nb-where">${machine('local', 'This machine', 'Nullius runs it here, in runs/' + rec.name + '.')}${H.map(h => machine(h.entry, h.label, 'Over ssh: the standard\'s code at this commit is sent there, uv put there if missing; its job comes back as it runs.')).join('')}</div>`
-      + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Run hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
+      + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
       + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
       + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
       + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
@@ -724,7 +724,7 @@
       const H=schema.hosts||[], rec2=r(), on=v=>rec2.where===v;
       html='<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
         +`<div class="nb-pick-grid nb-where">${[['local','This machine','Nullius runs the script here, in runs/'+esc(rec2.name)+'.'],...H.map(h=>[h.entry,h.label,own?'Over ssh. uv and a snapshot of this runner are put there if missing; results and proofs come back as it runs.':'Over ssh. The tasks are sent there, and a repository’s Harbor as the wheels built here; uv runs the Harbor the recipe pins; the job comes back as it runs.'])].map(([v,t,sub])=>machineTile('where',v,t,sub,on(v))).join('')}</div>`
-        +(H.length?button('Test connection','id="nb-test-host"'+(rec2.where==='local'?' disabled':''))+' <span id="nb-hosttest" class="nb-note"></span>':note('No host yet','Hosts are named in Settings → Run hosts; this machine is the only choice until then.'));
+        +(H.length?button('Test connection','id="nb-test-host"'+(rec2.where==='local'?' disabled':''))+' <span id="nb-hosttest" class="nb-note"></span>':note('No host yet','Hosts are named in Settings → Hosts; this machine is the only choice until then.'));
     }
     if(step===REVIEW){
       // the standard's review names Where itself (recipe.py): its machines and its backend

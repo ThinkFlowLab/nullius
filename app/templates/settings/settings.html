@@ -3,7 +3,7 @@
 {% block crumb %}/ settings{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='settings/settings.css') }}">{% endblock %}
 {% block body %}
-{#- A section per thing a run needs - the model providers, the judge, the run hosts - and the file they
+{#- A section per thing a run needs - the model providers, the judge, the hosts - and the file they
     are kept in, one at a time from the menu beside them; the strip above says what a run can use today.
     The menu's entries are links to the sections, so without a script every section shows. -#}
 {% set by = {} %}{% set held = [] %}
@@ -53,7 +53,7 @@
     {% endfor %}
     <a href="#providers" class="st-ready-i{{ ' on' if ns.custom }}"><span aria-hidden="true">{{ '✓' if ns.custom else '○' }}</span> Custom<span class="sr">{{ ': set' if ns.custom else ': not set' }}</span></a>
     {% for jj, name in [(judges[0], 'System One'), (judges[1], 'LLM judge')] %}<a href="#judge" class="st-ready-i{{ ' on' if jj }}"><span aria-hidden="true">{{ '✓' if jj else '○' }}</span> {{ name }}<span class="sr">{{ ': set' if jj else ': not set' }}</span></a>{% endfor %}
-    {% for item in chosen %}<a href="#HOSTS" class="st-ready-i on"><span aria-hidden="true">✓</span> <span class="mono">{{ item.split('=', 1)[0] if '=' in item.split('@', 1)[0] else item.split(':/')[0].split(':~')[0] }}</span></a>{% else %}<a href="#HOSTS" class="st-ready-i"><span aria-hidden="true">○</span> no run host</a>{% endfor %}
+    {% for item in chosen %}<a href="#HOSTS" class="st-ready-i on"><span aria-hidden="true">✓</span> <span class="mono">{{ item.split('=', 1)[0] if '=' in item.split('@', 1)[0] else item.split(':/')[0].split(':~')[0] }}</span></a>{% else %}<a href="#HOSTS" class="st-ready-i"><span aria-hidden="true">○</span> no host</a>{% endfor %}
   </div>
 </header>
 {% if not writable %}
@@ -78,19 +78,19 @@
       {{ section_link('providers', 'Model providers', 'capability', 'openrouter openai anthropic openai-compatible local endpoint ollama vllm api key model_api_url') }}
       {% set access_search = namespace(words='agent keys agent_keys cursor copilot dataset credentials token licence benchmark access') %}
       {% for b in benchmark_access %}{% set access_search.words = access_search.words ~ ' ' ~ b.title %}{% for s in b.needs %}{% set access_search.words = access_search.words ~ ' ' ~ s.name ~ ' ' ~ s.summary %}{% endfor %}{% endfor %}
-      {{ section_link('data-providers', 'Data providers', 'ws', 'hugging face huggingface hf_token docker hub login registry token dataset pull limit') }}
-      {{ section_link('custom-keys', 'Custom keys', 'agent', access_search.words) }}
-      {{ section_link('judge', 'Judges', 'compare', 'typesafe system one llm model judgement') }}
+      {{ section_link('data-providers', 'Data providers', 'cloud-down', 'hugging face huggingface hf_token docker hub login registry token dataset pull limit') }}
+      {{ section_link('custom-keys', 'Custom keys', 'key', access_search.words) }}
+      {{ section_link('judge', 'Judges', 'scale', 'typesafe system one llm model judgement') }}
       {{ section_link('prices', 'Model prices', 'dollar', 'cost price estimate usd tokens list update') }}
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Execution</div>
-      {{ section_link('hosts', 'Run hosts', 'runs', 'ssh remote machines server hosts') }}
+      {{ section_link('hosts', 'Hosts', 'server', 'ssh remote machines server hosts') }}
       {{ section_link('sandbox', 'Sandbox', 'kit', 'docker container') }}
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Application</div>
-      {{ section_link('storage', 'Local data', 'ws', 'settings.json config catalogue workspaces runs cache licences storage paths file') }}
+      {{ section_link('storage', 'Local data', 'disk', 'settings.json config catalogue workspaces runs cache licences storage paths file') }}
     </div>
     <p class="st-search-empty" role="status" hidden>No settings found.</p>
   </nav>
@@ -106,7 +106,7 @@
       <p>Manage the providers available for runs and judges.</p>
     </div>
 
-    {% macro provider_logo(key) %}{% if key == 'typesafe' %}<img class="st-logo" src="{{ url_for('static', filename='brand/typesafe.png') }}" alt="" width="28" height="28">{% elif key.startswith('custom') %}<svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>{% else %}<svg class="st-logo" aria-hidden="true"><use href="{{ marks }}#{{ key }}"/></svg>{% endif %}{% endmacro %}
+    {% macro provider_logo(key, title='Custom') %}{% if key == 'typesafe' %}<img class="st-logo" src="{{ url_for('static', filename='brand/typesafe.png') }}" alt="" width="28" height="28">{% elif key.startswith('custom') %}<span class="ws-avatar st-logo" aria-hidden="true">{{ title[:2]|upper }}</span>{% else %}<svg class="st-logo" aria-hidden="true"><use href="{{ marks }}#{{ key }}"/></svg>{% endif %}{% endmacro %}
     <button type="button" class="btn ghost st-provider-back" data-provider-back hidden>← Model providers</button>
     <p class="st-about" data-provider-empty hidden>No providers added yet.</p>
     <div class="st-provider-catalogue" hidden>
@@ -124,7 +124,7 @@
     {% for c in provider_cards %}
     <div class="st-card st-provider-card" data-provider-card="{{ c.key }}" data-configured="{{ 'true' if c.configured else 'false' }}" data-ready="{{ 'true' if c.ready else 'false' }}">
       <div class="st-provider-summary">
-        {{ provider_logo(c.key) }}
+        {{ provider_logo(c.key, c.title) }}
         {% set removable = writable and c.configured %}
         {#- Test asks the saved settings at no cost (providers.test); TypeSafe has no such request -#}
         {% set last = tested.get(c.key) %}
@@ -221,7 +221,7 @@
     {% set srow = by.get('SYSTEM_ONE_PROVIDER') %}
     {% if srow and by.get('SYSTEM_ONE_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not s1 }}" data-judge-card>
-      <legend><svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v18M7 21h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/></svg>System One</legend>
+      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-gavel"/></svg>System One</legend>
       {{ judge_rows('SYSTEM_ONE', s1_providers, s1, 'Where System One is asked') }}
       {{ field(by['SYSTEM_ONE_MODEL'], 'Model', writable, s1_providers[s1.provider].models) }}
     </fieldset>
@@ -229,7 +229,7 @@
     {% set prow = by.get('LLM_JUDGE_PROVIDER') %}
     {% if prow and by.get('LLM_JUDGE_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not llm }}" data-judge-card>
-      <legend><svg class="st-logo st-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01M9 15c1.5 1.2 4.5 1.2 6 0"/></svg>LLM judge</legend>
+      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-text"/></svg>LLM judge</legend>
       {{ judge_rows('LLM_JUDGE', llm_providers, llm, "The LLM judge's provider") }}
       {{ field(by['LLM_JUDGE_MODEL'], 'Model', writable, []) }}
     </fieldset>
@@ -241,7 +241,7 @@
   <section class="st-section" id="hosts" aria-labelledby="hosts-h">
     {% set ro = hosts_row and hosts_row.source == 'environment' %}
     <div class="st-section-head">
-      <div class="st-provider-heading"><h2 id="hosts-h">Run hosts</h2>{% if writable and hosts_row %}<span class="st-heading-acts"><button type="button" class="btn sm ghost" data-test-all>Test all</button><button type="button" class="btn sm ghost st-provider-add" data-add-host aria-label="Add a host" aria-expanded="false" aria-controls="add-host"{% if ro %} disabled title="Set in the environment"{% endif %}><span aria-hidden="true">+</span> Add</button></span>{% endif %}</div>
+      <div class="st-provider-heading"><h2 id="hosts-h">Hosts</h2>{% if writable and hosts_row %}<span class="st-heading-acts"><button type="button" class="btn sm ghost" data-test-all>Test all</button><button type="button" class="btn sm ghost st-provider-add" data-add-host aria-label="Add a host" aria-expanded="false" aria-controls="add-host"{% if ro %} disabled title="Set in the environment"{% endif %}><span aria-hidden="true">+</span> Add</button></span>{% endif %}</div>
       <p>Machines a recipe can run on, and what Nullius may use on each.</p>
     </div>
     {% if writable and hosts_row and not ro %}

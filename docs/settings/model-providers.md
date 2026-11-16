@@ -144,7 +144,7 @@ Endpoints row is read-only.
 | Rule | |
 | --- | --- |
 | No key | Leave it empty; Nullius sends the placeholder `local` |
-| Reachable from | The calling machine; loopback on a run host is that host's |
+| Reachable from | The calling machine; loopback on a host is that host's |
 
 ### Older settings
 

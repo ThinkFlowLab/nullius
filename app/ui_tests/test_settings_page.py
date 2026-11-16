@@ -717,7 +717,7 @@ class SettingsPage(unittest.TestCase):
         # in the page below the heading, as the providers' Add is; its fields belong to a form of their own,
         # outside the settings form, so autosave never reads them (a password above all)
         page = self.page()
-        head = re.search(r'<h2 id="hosts-h">Run hosts</h2>.*?</div>', page, re.S).group(0)
+        head = re.search(r'<h2 id="hosts-h">Hosts</h2>.*?</div>', page, re.S).group(0)
         self.assertIn('data-test-all>Test all</button>', head); self.assertIn('class="btn sm ghost st-provider-add" data-add-host aria-label="Add a host"', head)
         for name in ("display_name", "host", "port", "user", "auth", "key_path", "key_file", "password"):
             self.assertIn(f'form="add-host-form"', re.search(rf'<input [^>]*name="{name}"', with_config).group(0), name)

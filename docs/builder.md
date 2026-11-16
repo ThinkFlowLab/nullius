@@ -150,7 +150,7 @@ Chosen on the Runner stage, kept in the recipe's `harbor` field.
 
 - [Settings](settings/README.md)
 
-    Providers, keys and run hosts.
+    Providers, keys and hosts.
 
 - [The standard](standard.md)
 
