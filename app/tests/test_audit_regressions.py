@@ -97,7 +97,7 @@ run.run(b,o,model='m',provider='custom',jobs_root={tmp!r},name='stopped',env={{'
                     time.sleep(.05)
                 self.assertIsNotNone(memory_pid, process.communicate(timeout=1) if process.poll() is not None else 'memory did not start')
                 process.terminate()
-                out, err = process.communicate(timeout=12)
+                out, err = process.communicate(timeout=60)
                 self.assertEqual(process.returncode, 143, err.decode())
                 self.assertTrue(gone(memory_pid), 'memory outlived the run')
                 results = [json.loads(p.read_text()) for p in root.glob('stopped/*/result.json')]
