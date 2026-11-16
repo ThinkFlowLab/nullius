@@ -46,6 +46,7 @@ def _load(name, file):
 
 desktop = _load("nullius_kit_desktop", "desktop.py")
 checks = _load("nullius_kit_checks", "checks.py")
+fixture = _load("nullius_kit_fixture", "fixture.py")
 
 UNITS = checks.CHECKS
 PAUSE = 1.0                                  # after each action
@@ -54,6 +55,7 @@ AGENT_SECONDS = 600                          # the agent's turn
 LOOP_SECONDS = PYTHON_SECONDS + desktop.SETTLE + PAUSE + 30     # the loop's end, once the turn has ended
 USE = "Use the tools of the MCP server named computer, given to this session: they show and drive a desktop. "
 DONE = " Then reply with the word done."
+NOT_RUN = "The desktop could not run this step, and none of it was run. It may be sent again."
 
 
 def prompt(unit, expected):
@@ -140,18 +142,36 @@ class KitDesktop:
 
 
 class KitBridge(port.Bridge):
-    """The port's bridge, counting the acting calls sent once every step was taken (``past``)."""
+    """The port's bridge, counting the acting calls sent once every step was taken (``past``). A call that holds
+    is counted and its step taken in one hold of the bridge's lock (a reentrant one): two calls sent together
+    for the last step are one taken and one counted."""
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         self.past = 0
 
     def submit(self, call):
-        if call.tool in port.ACTING:
-            with self.change:
-                if self.booked >= self.steps:
-                    self.past += 1
-        super().submit(call)
+        with self.change:
+            if call.tool in port.ACTING and self.booked >= self.steps:
+                self.past += 1
+            super().submit(call)
+
+
+class KitServer(port.Server):
+    """The port's server, counting also an acting call sent once every step was taken whose arguments do not hold:
+    the server refuses it before the bridge sees it."""
+
+    def call(self, rid, params, wire):
+        name = params.get("name") if isinstance(params, dict) else None
+        if name in port.ACTING:
+            probe = port.Call(name, params.get("arguments", {}), lambda *a: None)
+            try:
+                port.checked(probe, self.bridge.screen)
+            except Exception:
+                with self.bridge.change:
+                    if self.bridge.booked >= self.bridge.steps:
+                        self.bridge.past += 1
+        super().call(rid, params, wire)
 
 
 class Unit:
@@ -172,13 +192,18 @@ class Unit:
         image = desktop.image(os.path.dirname(self.log))
         name = f"nullius-desktop-{os.urandom(6).hex()}"
         REAPER.tell(f"+container {name}")            # before it exists: a kill during the start is covered
-        self.desktop = desktop.Desktop.start(image, name, job=job)
+        try:
+            self.desktop = desktop.Desktop.start(image, name, job=job)
+        finally:
+            REAPER.tell(f"=container {name}")        # its start has ended, either way
         self.desktop.start_fixture(self.values)
         self.boxes = self.desktop.events()[0].get("boxes") or {}
-        self.folder = tempfile.mkdtemp(prefix="nullius-computer-")
-        REAPER.tell(f"+folder {self.folder}")
+        folder = os.path.join(tempfile.gettempdir(), f"nullius-computer-{os.urandom(6).hex()}")
+        REAPER.tell(f"+folder {folder}")             # named before it is made
+        self.folder = folder
+        os.mkdir(folder, 0o700)
         self.bridge = KitBridge(KitDesktop(self.desktop), self.steps, PAUSE, desktop.SCREEN, PYTHON_SECONDS)
-        self.server = port.Server(self.bridge, self.socket(), log=self.log)
+        self.server = KitServer(self.bridge, self.socket(), log=self.log)
         self.loop = threading.Thread(target=self.run_loop, name=f"kit-loop-{self.unit}", daemon=True)
         self.loop.start()
 
@@ -187,10 +212,19 @@ class Unit:
 
     def run_loop(self):
         """The kit's own loop: a step from the bridge, its actions run, the pause after each; the budget is the
-        loop's. ``recover``: the first acting call with input is answered with an error, not run."""
+        loop's. An action the desktop did not end in time leaves its call answered with an error, and the next
+        step goes on. ``recover``: the first acting call the loop takes, whatever it is, is answered with an error
+        before any part of it runs."""
         try:
             for _ in range(self.steps):
                 response, actions = self.bridge.predict("", None)
+                call = self.bridge.running           # the acting call of these actions; None for done, fail or none
+                if call is not None and self.unit == "recover" and not self.failed_one:
+                    self.failed_one = True
+                    call.answer(error=NOT_RUN)
+                    for _ in actions:                # none of it run; the bridge still counts the step
+                        pass
+                    continue
                 actions = iter(actions)
                 stop = False
                 try:
@@ -201,10 +235,8 @@ class Unit:
                         if action == "WAIT":
                             time.sleep(PAUSE)
                             continue
-                        if self.unit == "recover" and not self.failed_one:
-                            self.failed_one = True
-                            break                    # not run: the call is answered with an error
-                        self.desktop.act(action, PYTHON_SECONDS)
+                        if self.desktop.act(action, PYTHON_SECONDS)["reply"] is None:
+                            break                    # not ended in time: the call is answered with an error
                         time.sleep(PAUSE)
                 finally:
                     close = getattr(actions, "close", None)
@@ -271,6 +303,8 @@ OPEN_LOCK = threading.Lock()
 
 
 def close_all():
+    """Every unit still open let go, then every client of the engine still running (a loop's call that hangs)
+    ended and waited for."""
     with OPEN_LOCK:
         held = list(OPEN.values())
         OPEN.clear()
@@ -279,6 +313,8 @@ def close_all():
             u.close()
         except Exception as e:
             sys.stderr.write(f"computer kit: {u.unit} could not be let go: {e}\n")
+    if held:
+        desktop.end_clients()
 
 
 def job_of(dir):
@@ -377,45 +413,69 @@ def centre(box):
     return (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
 
 
+class ReferenceFailed(Exception):
+    """A call of the reference did not go as a correct agent's would."""
+
+
+def read_code(png, scale):
+    """The code of twelve characters drawn on the screen, read from a screenshot, as an agent reads it."""
+    found = [line for line in fixture.read_lines(png, scale)
+             if len(line) == checks.CODE_LENGTH and set(line) <= set(checks.ALPHABET)]
+    if len(found) != 1:
+        raise ReferenceFailed(f"no one code could be read from the screenshot ({len(found)} found)")
+    return found[0]
+
+
 def oracle(unit, dir, **_):
     """The reference: the calls a correct agent makes, sent to the unit's own server, through its desktop, to the
-    same scorer; the answer they lead to."""
+    same scorer; the answer they lead to. A code is read from the screenshot the server gives, and a call that does
+    not answer as a correct agent's would (the one ``recover`` refuses aside) fails the reference."""
     with OPEN_LOCK:
         u = OPEN.get(unit)
     if u is None:
         raise ValueError(f"{unit} was not set up")
     e, b, answer = u.expected, u.boxes, "done"
     c = Client(u.socket())
+
+    def call(tool, arguments=None, failing=False):
+        failed, value = c.call(tool, arguments)
+        if failed != failing:
+            raise ReferenceFailed(f"{tool} answered {'with' if failed else 'without'} an error: {str(value)[:200]}")
+        return value
+
     try:
-        c.call("info")
+        call("info")
         if unit in ("see", "scroll"):
             if unit == "scroll":
                 x, y = centre(b["list"])
-                c.call("scroll", {"x": x, "y": y, "dy": 100})
-            c.call("screenshot")
-            answer = e["code"]
+                call("scroll", {"x": x, "y": y, "dy": 100})
+            png = call("screenshot")
+            if not isinstance(png, bytes):
+                raise ReferenceFailed("the screenshot held no image")
+            answer = read_code(png, fixture.SEE_SCALE if unit == "see" else fixture.LIST_SCALE)
         elif unit in ("click", "recover"):
             x, y = centre(b[e["target"]])
-            for _ in range(2 if unit == "recover" else 1):         # recover: the first is answered with an error
-                c.call("click", {"x": x, "y": y})
+            if unit == "recover":
+                call("click", {"x": x, "y": y}, failing=True)          # the kit refuses the first acting call
+            call("click", {"x": x, "y": y})
         elif unit == "type":
             x, y = centre(b["field"])
-            c.call("click", {"x": x, "y": y})
-            c.call("type", {"text": e["word"]})
-            c.call("key", {"keys": ["enter"]})
+            call("click", {"x": x, "y": y})
+            call("type", {"text": e["word"]})
+            call("key", {"keys": ["enter"]})
         elif unit == "limit":
             for label in e["labels"][:u.steps]:
                 x, y = centre(b[label])
-                c.call("click", {"x": x, "y": y})
+                call("click", {"x": x, "y": y})
         elif unit == "drag":
             (x, y), (tx, ty) = centre(b["handle"]), centre(b["zone"])
-            c.call("drag", {"x": x, "y": y, "to_x": tx, "to_y": ty})
+            call("drag", {"x": x, "y": y, "to_x": tx, "to_y": ty})
         elif unit == "batch":
             actions = []
             for f in checks.FIELDS:
                 x, y = centre(b[f])
                 actions += [f"pyautogui.click({x}, {y})", f"pyautogui.write({e['words'][f]!r})"]
-            c.call("step", {"actions": actions})
+            call("step", {"actions": actions})
     finally:
         c.close()
     return {"answer": answer}

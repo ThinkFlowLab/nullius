@@ -39,6 +39,7 @@ import json
 import os
 import secrets
 import subprocess
+import threading
 from typing import Dict, List, Optional
 
 from nullius.standard import container
@@ -143,12 +144,45 @@ def tag() -> str:
     return container.env_tag(KIT, ENVIRONMENT, container.base_tag())
 
 
+_CLIENTS: set = set()                   # the engine's clients running now, for end_clients
+_CLIENTS_LOCK = threading.Lock()
+
+
 def _engine(args: List[str], *, input: Optional[bytes] = None, timeout: float) -> subprocess.CompletedProcess:
+    """One call of the engine's program, its stdin the request's bytes or nothing, killed past ``timeout``
+    (``subprocess.TimeoutExpired``, as ``subprocess.run`` raises it)."""
     try:
-        return subprocess.run([container.DOCKER, *args], input=input, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                              timeout=timeout, env=container.client_env())
+        p = subprocess.Popen([container.DOCKER, *args], stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=container.client_env())
     except FileNotFoundError:
         raise DesktopError(f"{container.DOCKER} is not installed on this machine")
+    with _CLIENTS_LOCK:
+        _CLIENTS.add(p)
+    try:
+        try:
+            out, err = p.communicate(input, timeout=timeout)
+        except BaseException:
+            p.kill()
+            p.communicate()
+            raise
+    finally:
+        with _CLIENTS_LOCK:
+            _CLIENTS.discard(p)
+    return subprocess.CompletedProcess([container.DOCKER, *args], p.returncode, out, err)
+
+
+def end_clients() -> int:
+    """Every client of the engine still running, from any thread, killed and waited for; how many there were.
+    A process that ends while a request of its waits leaves none behind."""
+    with _CLIENTS_LOCK:
+        running = list(_CLIENTS)
+    for p in running:
+        try:
+            p.kill()
+            p.wait(timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return len(running)
 
 
 def _said(r: subprocess.CompletedProcess) -> str:

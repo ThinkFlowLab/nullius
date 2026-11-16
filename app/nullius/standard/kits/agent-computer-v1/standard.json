@@ -106,8 +106,8 @@
     },
     "recover": {
       "label": "Recover from an error",
-      "task": "Click a named button; the first acting call is answered with an error.",
-      "passes": "An acting call succeeded after the error, and the button was clicked as in the click check."
+      "task": "Click a named button; the first acting call, whatever it is, is answered with an error and not run.",
+      "passes": "An acting call sent after the error's answer succeeded, and the button was clicked as in the click check."
     },
     "batch": {
       "label": "Several actions in one step",
@@ -137,7 +137,7 @@
           "at_most": 0.0
         },
         "units": 8,
-        "job": "2026-11-16__12-32-36__agent-computer-v1__kit__prove-nop",
+        "job": "2026-11-16__13-07-27__agent-computer-v1__kit__prove-nop",
         "source": "nullius",
         "on": "2026-11-16"
       },
@@ -148,7 +148,7 @@
           "at_least": 1.0
         },
         "units": 8,
-        "job": "2026-11-16__12-32-36__agent-computer-v1__kit__prove-oracle",
+        "job": "2026-11-16__13-07-27__agent-computer-v1__kit__prove-oracle",
         "source": "nullius",
         "on": "2026-11-16"
       }

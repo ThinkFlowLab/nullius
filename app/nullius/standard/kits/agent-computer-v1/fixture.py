@@ -24,8 +24,8 @@ landed on (a button's label, ``field``, a field's label, ``handle``, ``zone``,
 ``list`` or ``background``). The first line is
 ``ready``, with where each target is on the screen, written once the window is
 mapped at the screen's size and holds the focus; Enter in the field writes
-``enter`` with the field's text; each key let go in a labelled field writes
-``value`` with its text; each turn of the wheel that moves the list writes
+``enter`` with the field's text; each change of a labelled field's text writes
+``value`` with that text; each turn of the wheel that moves the list writes
 ``moved`` with the list's top, a fraction of its length.
 
 The program leaves the caller once its window is up: it prints ``ready`` and
@@ -33,13 +33,16 @@ the window lives on, on its own, until the desktop ends.
 """
 import json
 import os
+import struct
 import sys
 import time
+import zlib
 
 HOME = "/var/lib/fixture"
 LOG = os.path.join(HOME, "events.jsonl")
 ERRORS = os.path.join(HOME, "fixture.err")
 TITLE = "Check"
+SEE_SCALE, LIST_SCALE = 9, 4                 # screen pixels a glyph cell: the code alone, the list's lines
 SCREENS = ("see", "click", "type", "drag", "scroll", "batch")
 LIST_WORDS = ("APPLE", "BRICK", "CLOUD", "DELTA", "EMBER", "FROST", "GRAPE", "HONEY", "MAPLE", "NORTH")
 BACKGROUND = "#eceff1"
@@ -96,6 +99,84 @@ def pixels(text):
     return max(len(text) * 6 - 1, 1), 7, cells
 
 
+def png_rows(data, last_row=None):
+    """The rows of a PNG (8 bits a channel, RGB or RGBA, not interlaced) as bytes of RGB pixels, up to
+    ``last_row``; standard library only."""
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("not a PNG")
+    pos, idat, head = 8, [], None
+    while pos < len(data):
+        n, kind = struct.unpack(">I4s", data[pos:pos + 8])
+        body = data[pos + 8:pos + 8 + n]
+        if kind == b"IHDR":
+            head = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            idat.append(body)
+        elif kind == b"IEND":
+            break
+        pos += 12 + n
+    w, h, depth, colour, _, _, interlace = head
+    if depth != 8 or colour not in (2, 6) or interlace:
+        raise ValueError("a PNG of 8-bit RGB or RGBA, not interlaced")
+    bpp = 3 if colour == 2 else 4
+    raw, stride, prev, rows = zlib.decompress(b"".join(idat)), w * bpp, bytearray(w * bpp), []
+    for y in range(h if last_row is None else min(h, last_row + 1)):
+        kind, line = raw[y * (stride + 1)], bytearray(raw[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
+        if kind == 1:
+            for i in range(bpp, stride):
+                line[i] = (line[i] + line[i - bpp]) & 255
+        elif kind == 2:
+            for i in range(stride):
+                line[i] = (line[i] + prev[i]) & 255
+        elif kind == 3:
+            for i in range(stride):
+                line[i] = (line[i] + ((line[i - bpp] if i >= bpp else 0) + prev[i]) // 2) & 255
+        elif kind == 4:
+            for i in range(stride):
+                a, b = (line[i - bpp] if i >= bpp else 0), prev[i]
+                c = prev[i - bpp] if i >= bpp else 0
+                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                line[i] = (line[i] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        rows.append(bytes(line) if bpp == 3 else bytes(v for i, v in enumerate(line) if i % 4 != 3))
+        prev = line
+    return w, rows
+
+
+def read_lines(data, scale, ink=INK):
+    """The lines of glyphs drawn at ``scale`` in ``ink`` on a screen's PNG, top to bottom; a block that is no
+    glyph reads ``?``. What the kit's reference reads from a screenshot, as an agent would from its eyes."""
+    colour = bytes(int(ink[i:i + 2], 16) for i in (1, 3, 5))
+    w, rows = png_rows(data)
+    lit = []
+    for row in rows:
+        xs, i = set(), row.find(colour)
+        while i >= 0:
+            if i % 3 == 0:
+                xs.add(i // 3)
+            i = row.find(colour, i + 1)
+        lit.append(xs)
+    out, y = [], 0
+    while y < len(lit):
+        if not lit[y]:
+            y += 1
+            continue
+        top, cells = y, {}
+        x0 = min(min(lit[r]) for r in range(top, min(top + 7 * scale, len(lit))) if lit[r])
+        for r in range(7):
+            yy = top + r * scale + scale // 2
+            for x in (lit[yy] if yy < len(lit) else ()):
+                if x >= x0 and (x - x0) % scale == scale // 2:
+                    cells[((x - x0) // scale, r)] = True
+        text, c = "", 0
+        while any((c * 6 + dx, r) in cells for dx in range(5) for r in range(7)):
+            block = tuple("".join("#" if (c * 6 + dx, r) in cells else "." for dx in range(5)) for r in range(7))
+            text += next((ch for ch, g in GLYPHS.items() if g == block), "?")
+            c += 1
+        out.append(text)
+        y = top + 7 * scale
+    return out
+
+
 def bitmap(tk, master, text, scale, ink=INK, paper=BACKGROUND):
     """``text`` as a Tk image, ``scale`` screen pixels a glyph cell."""
     cols, rows, cells = pixels(text)
@@ -115,13 +196,13 @@ class Fixture:
         self.root.title(TITLE)
         self.root.configure(background=BACKGROUND)
         self.root.attributes("-fullscreen", True)
-        self.images, self.names, self.field = [], {}, None
+        self.images, self.names, self.field, self.texts = [], {}, None, []
         getattr(self, "_" + values["screen"])()
         for seq in ("<ButtonPress>", "<ButtonRelease>", "<MouseWheel>", "<KeyPress>", "<KeyRelease>"):
             self.root.bind_all(seq, self.on_event, add="+")
 
     def _see(self):
-        img = bitmap(self.tk, self.root, self.values["code"], 9)
+        img = bitmap(self.tk, self.root, self.values["code"], SEE_SCALE)
         self.images.append(img)
         self.tk.Label(self.root, image=img, background=BACKGROUND, borderwidth=0).place(relx=0.5, rely=0.5, anchor="center")
 
@@ -157,7 +238,7 @@ class Fixture:
         handle.bind("<B1-Motion>", follow, add="+")
 
     def _scroll(self):
-        rows, step, scale = 40, 60, 4
+        rows, step, scale = 40, 60, LIST_SCALE
         c = self.tk.Canvas(self.root, width=760, height=540, background="#ffffff", highlightthickness=2,
                            highlightbackground="#90a4ae", yscrollincrement=20)
         c.place(relx=0.5, rely=0.5, anchor="center")
@@ -190,10 +271,14 @@ class Fixture:
             self.images.append(img)
             self.tk.Label(frame, image=img, background=BACKGROUND, borderwidth=0).grid(row=i, column=0, padx=30, pady=30,
                                                                                        sticky="e")
-            field = self.tk.Entry(frame, font=("DejaVu Sans", 24), width=20, relief="sunken", borderwidth=3)
+            text = self.tk.StringVar(master=frame)
+            field = self.tk.Entry(frame, textvariable=text, font=("DejaVu Sans", 24), width=20, relief="sunken",
+                                  borderwidth=3)
             field.grid(row=i, column=1, padx=30, pady=30)
             self.names[str(field)] = label
-            field.bind("<KeyRelease>", lambda e, f=field, n=label: self.write("value", field=n, value=f.get()), add="+")
+            # every change of the field's text, however it came (a key held down included)
+            text.trace_add("write", lambda *_, t=text, n=label: self.write("value", field=n, value=t.get()))
+            self.texts.append(text)
 
     def _type(self):
         self.field = self.tk.Entry(self.root, font=("DejaVu Sans", 28), width=24, relief="sunken", borderwidth=3)

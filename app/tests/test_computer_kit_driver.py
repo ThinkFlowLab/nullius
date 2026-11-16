@@ -7,16 +7,20 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import queue
 import re
 import secrets
 import shutil
+import select
 import signal
+import struct
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import unittest
+import zlib
 from unittest import mock
 
 from nullius.standard import computer_port as port
@@ -84,13 +88,16 @@ class NewVerdicts(unittest.TestCase):
 
     def test_recover_passes_on_a_success_after_the_error_and_the_click(self):
         exp = {"target": "OCEAN", "labels": ["OCEAN", "APPLE"]}
-        calls = [{"tool": "screenshot", "isError": False}, {"tool": "click", "isError": True},
-                 {"tool": "click", "isError": False}]
+        calls = [{"tool": "screenshot", "isError": False, "start": 1.0, "end": 1.5},
+                 {"tool": "click", "isError": True, "start": 2.0, "end": 2.5},
+                 {"tool": "click", "isError": False, "start": 3.0, "end": 4.5}]
         events = press(110.2, "OCEAN")
         self.assertTrue(checks.verdict("recover", exp, events, ACTIONS, "", calls)["passed"])
         self.assertIn("no acting call was answered with an error",
                       checks.verdict("recover", exp, events, ACTIONS, "", calls[2:])["why"])
-        self.assertIn("succeeded after", checks.verdict("recover", exp, events, ACTIONS, "", calls[:2])["why"])
+        self.assertIn("after the error's answer", checks.verdict("recover", exp, events, ACTIONS, "", calls[:2])["why"])
+        sent_before = calls[:2] + [dict(calls[2], start=2.4)]                     # sent before the error's answer came
+        self.assertIn("after the error's answer", checks.verdict("recover", exp, events, ACTIONS, "", sent_before)["why"])
         self.assertFalse(checks.verdict("recover", exp, [], ACTIONS, "", calls)["passed"])
 
     def test_batch_passes_when_each_field_holds_its_word(self):
@@ -110,7 +117,8 @@ class NewVerdicts(unittest.TestCase):
                           ev("release", 100.8, button=1, hit="handle", x=600, y=600)], "", ()),
             "scroll": ({"code": "ACDE34679HJK"}, [ev("moved", 100.3, top=0.5)], "ACDE34679HJK", ()),
             "recover": ({"target": "OCEAN", "labels": ["OCEAN"]}, press(110.2, "OCEAN"), "",
-                        ({"tool": "click", "isError": True}, {"tool": "click", "isError": False})),
+                        ({"tool": "click", "isError": True, "start": 1, "end": 2},
+                         {"tool": "click", "isError": False, "start": 3, "end": 4})),
             "batch": ({"words": {"ONE": "a"}}, [ev("value", 100.2, field="ONE", value="a")], "", ()),
         }
         self.assertEqual(sorted(passing), sorted(checks.CHECKS))
@@ -223,7 +231,9 @@ class FakeDesktop:
         self.removed = True
 
 
-class Wiring(unittest.TestCase):
+class FakeUnits(unittest.TestCase):
+    """Units of the driver over fake desktops, each in a folder of its own."""
+
     def setUp(self):
         self.tmp = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
@@ -246,10 +256,12 @@ class Wiring(unittest.TestCase):
         self.addCleanup(driver.close_all)
 
     def unit(self, name):
-        ws = os.path.join(self.tmp, "job", name, "workspace")
+        ws = os.path.join(self.tmp, "job", f"{name}-{len(FakeDesktop.made)}", "workspace")
         os.makedirs(ws)
         return ws, driver.setup(name, ws)
 
+
+class Wiring(FakeUnits):
     def test_a_unit_is_served_scored_and_let_go(self):
         ws, s = self.unit("click")
         self.assertEqual(s["mcp"], [{"name": "computer", "server": "computer", "args": [s["mcp"][0]["args"][0]]}])
@@ -267,7 +279,7 @@ class Wiring(unittest.TestCase):
         self.assertEqual(got["detail"]["calls"], ["click"])
         self.assertFalse(os.path.exists(sock))                                  # the socket and its folder gone
         self.assertTrue(FakeDesktop.made[-1].removed)
-        self.assertEqual([l.split()[0] for l in self.told], ["+container", "+folder", "-container", "-folder"])
+        self.assertEqual([l.split()[0] for l in self.told], ["+container", "=container", "+folder", "-container", "-folder"])
         self.assertNotIn("click", driver.OPEN)
 
     def test_the_turns_end_at_score_ends_the_loop_and_judges_what_is_there(self):
@@ -324,23 +336,311 @@ class Wiring(unittest.TestCase):
         self.assertEqual(driver.OPEN, {})
 
 
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True,
+                          timeout=30).stdout.strip()[:1] not in ("", "Z")
+
+
+def _png(code, scale):
+    """A screen of 1920 by 1080 with ``code`` drawn as the fixture draws it, as PNG bytes (filter 0)."""
+    w, h = 1920, 1080
+    cols, rows, cells = driver.fixture.pixels(code)
+    x0, y0 = (w - cols * scale) // 2, (h - rows * scale) // 2
+    ink = {(x0 + x * scale + dx, y0 + y * scale + dy) for x, y in cells for dx in range(scale) for dy in range(scale)}
+    paper, mark = bytes.fromhex("eceff1"), bytes.fromhex("111111")
+    raw = b"".join(b"\x00" + b"".join(mark if (x, y) in ink else paper for x in range(w)) for y in range(h))
+
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xffffffff)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+class FakeWire:
+    def __init__(self):
+        self.ready, self.reply = threading.Event(), None
+
+    def opened(self):
+        pass
+
+    def answered(self):
+        pass
+
+    def send(self, data):
+        self.reply = json.loads(data) if isinstance(data, (bytes, str)) else data
+        self.ready.set()
+        return True
+
+
+def send(server, tool, arguments=None, rid=1):
+    wire = FakeWire()
+    server.call(rid, {"name": tool, "arguments": arguments or {}}, wire)
+    return wire
+
+
+class EarnedPasses(FakeUnits):
+    """What a pass needs, over the fake desktop: every attempt past the budget counted, recover's call sent after
+    its error's answer, its error on the first acting call whatever it is, an action not ended in time an error,
+    and a reference that reads the screen."""
+
+    def test_a_wrong_call_past_the_budget_is_counted(self):
+        ws, s = self.unit("limit")
+        u = driver.OPEN["limit"]
+        c = driver.Client(s["mcp"][0]["args"][0])
+        for label in checks.ORDER[:2]:
+            self.assertFalse(c.call("click", dict(zip("xy", driver.centre(u.boxes[label]))))[0])
+        self.assertTrue(c.call("click", {"x": "bad", "y": 100})[0])
+        c.close()
+        self.assertEqual(u.bridge.past, 1)
+        self.assertFalse(driver.score("limit", ws, [], "done")["passed"])
+
+    def test_two_calls_sent_together_for_the_last_step_are_one_taken_and_one_counted(self):
+        ws, s = self.unit("limit")
+        u = driver.OPEN["limit"]
+        x, y = driver.centre(u.boxes["ONE"])
+        self.assertTrue(send(u.server, "click", {"x": x, "y": y}).ready.wait(10))
+        barrier, original, wires = threading.Barrier(2), driver.port.Bridge.submit, []
+
+        def together(bridge, call):                    # both calls reach the bridge at once where the lock lets them
+            try:
+                barrier.wait(timeout=1)
+            except threading.BrokenBarrierError:
+                pass
+            return original(bridge, call)
+        threads = [threading.Thread(target=lambda: wires.append(send(u.server, "click", {"x": x, "y": y}, 2)))
+                   for _ in range(2)]
+        with mock.patch.object(driver.port.Bridge, "submit", together):
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(10)
+        for w in wires:
+            self.assertTrue(w.ready.wait(10))
+        self.assertEqual(sorted(w.reply["result"]["isError"] for w in wires), [False, True])
+        self.assertEqual(u.bridge.past, 1)
+        self.assertFalse(driver.score("limit", ws, [], "done")["passed"])
+
+    def test_recover_needs_a_call_sent_after_the_errors_answer(self):
+        ws, s = self.unit("recover")
+        u = driver.OPEN["recover"]
+        x, y = driver.centre(u.boxes[u.expected["target"]])
+        with u.bridge.change:                            # both queued before either is answered
+            first, second = send(u.server, "click", {"x": x, "y": y}), send(u.server, "click", {"x": x, "y": y}, 2)
+        self.assertTrue(first.ready.wait(10) and second.ready.wait(10))
+        self.assertEqual([c["isError"] for c in u.calls()], [True, False])
+        got = driver.score("recover", ws, [], "done")
+        self.assertFalse(got["passed"])
+        self.assertIn("after the error's answer", got["detail"]["why"])
+
+    def test_recovers_error_goes_to_the_first_acting_call_whatever_it_is(self):
+        for first in ("wait", "step"):
+            with self.subTest(first=first):
+                ws, s = self.unit("recover")
+                u = driver.OPEN["recover"]
+                c = driver.Client(s["mcp"][0]["args"][0])
+                failed, said = c.call(first, {"actions": []} if first == "step" else {})
+                self.assertTrue(failed, said)
+                self.assertIn("none of it was run", said)
+                self.assertFalse(c.call("click", dict(zip("xy", driver.centre(u.boxes[u.expected["target"]]))))[0])
+                c.close()
+                self.assertTrue(driver.score("recover", ws, [], "done")["passed"])
+                driver.close_all()
+
+    def test_an_action_not_ended_in_time_is_answered_with_an_error_and_the_next_goes_on(self):
+        ws, s = self.unit("click")
+        u = driver.OPEN["click"]
+        fake = FakeDesktop.made[-1]
+        late = [True]
+
+        def act(code, seconds=None):
+            if late.pop() if late else False:
+                return {"start": 1.0, "end": 2.0, "reply": None}
+            return FakeDesktop.act(fake, code, seconds)
+        fake.act = act
+        c = driver.Client(s["mcp"][0]["args"][0])
+        self.assertTrue(c.call("step", {"actions": ["time.sleep(1000)"]})[0])
+        self.assertFalse(c.call("click", dict(zip("xy", driver.centre(u.boxes[u.expected["target"]]))))[0])
+        c.close()
+        self.assertEqual([c["isError"] for c in u.calls()], [True, False])
+        self.assertTrue(driver.score("click", ws, [], "done")["passed"])
+
+    def test_the_reference_reads_the_code_from_the_screenshot_and_fails_without_one(self):
+        ws, s = self.unit("see")
+        fake, code = FakeDesktop.made[-1], driver.OPEN["see"].expected["code"]
+        fake.capture = lambda: _png(code, 9)
+        self.assertEqual(driver.oracle("see", ws)["answer"], code)
+        self.assertTrue(driver.score("see", ws, [], code)["passed"])
+        ws, s = self.unit("see")
+
+        def broken():
+            raise desktop.DesktopError("the capture failed")
+        FakeDesktop.made[-1].capture = broken
+        with self.assertRaises(driver.ReferenceFailed):
+            driver.oracle("see", ws)
+        ws, s = self.unit("see")
+        FakeDesktop.made[-1].capture = lambda: _png("ACDE", 9)            # a screen with no code of twelve
+        with self.assertRaises(driver.ReferenceFailed):
+            driver.oracle("see", ws)
+
+
+class Shutdown(unittest.TestCase):
+    def test_the_engines_clients_still_running_are_ended_and_waited_for(self):
+        done = []
+        with mock.patch.object(desktop.container, "DOCKER", sys.executable):
+            t = threading.Thread(target=lambda: done.append(desktop._engine(["-c", "import time; time.sleep(60)"], timeout=120)))
+            t.start()
+            for _ in range(100):
+                if desktop._CLIENTS:
+                    break
+                time.sleep(0.05)
+            self.assertEqual(desktop.end_clients(), 1)
+            t.join(10)
+        self.assertFalse(t.is_alive())
+        self.assertNotEqual(done[0].returncode, 0)                                # killed, not left
+        self.assertEqual(desktop._CLIENTS, set())
+
+    def test_the_drivers_end_lets_the_units_go_then_ends_the_clients(self):
+        u = mock.Mock()
+        with mock.patch.dict(driver.OPEN, {"see": u}, clear=True), mock.patch.object(desktop, "end_clients") as end:
+            driver.close_all()
+        u.close.assert_called_once()
+        end.assert_called_once()
+
+    def test_the_socket_folder_is_named_to_the_reaper_before_it_is_made(self):
+        told, made = [], []
+
+        real = os.mkdir
+
+        def mkdir(path, mode=0o777):
+            real(path, mode)
+            if "nullius-computer-" in os.path.basename(path):
+                made.append(path)
+                raise KeyboardInterrupt("killed just after the folder was made")
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
+            ws = os.path.join(tmp, "job", "see", "workspace")
+            os.makedirs(ws)
+            u = driver.Unit("see", ws)
+            with mock.patch.object(driver.desktop, "image", return_value="img"), \
+                    mock.patch.object(driver.desktop.Desktop, "start", return_value=FakeDesktop("d", {})), \
+                    mock.patch.object(driver.REAPER, "tell", side_effect=told.append), \
+                    mock.patch.object(driver.os, "mkdir", side_effect=mkdir):
+                with self.assertRaises(KeyboardInterrupt):
+                    u.start("job")
+        shutil.rmtree(made[0], ignore_errors=True)
+        self.assertIn(f"+folder {made[0]}", told)
+
+
+class FixtureRecords(unittest.TestCase):
+    def test_every_change_of_a_batch_field_is_recorded(self):
+        fixture = driver.fixture
+        fields, texts = [], []
+
+        class Widget:
+            def __init__(self, *a, **kw):
+                self.kw = kw
+
+            def place(self, **kw):
+                pass
+
+            def grid(self, **kw):
+                pass
+
+            def bind(self, *a, **kw):
+                pass
+
+        class Entry(Widget):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                fields.append(self)
+
+        class StringVar:
+            def __init__(self, master=None):
+                self.value, self.traces = "", []
+                texts.append(self)
+
+            def trace_add(self, mode, fn):
+                self.traces.append(fn)
+
+            def set(self, value):                       # a change by any route: a key held down, a paste
+                self.value = value
+                for fn in self.traces:
+                    fn("", "", "write")
+
+            def get(self):
+                return self.value
+
+        f = fixture.Fixture.__new__(fixture.Fixture)
+        f.tk = mock.Mock(Frame=Widget, Label=Widget, Entry=Entry, StringVar=StringVar)
+        f.root, f.values = object(), {"labels": list(checks.FIELDS)}
+        f.images, f.names, f.texts, f.log_file = [], {}, [], __import__("io").StringIO()
+        with mock.patch.object(fixture, "bitmap", return_value=object()):
+            f._batch()
+        self.assertEqual(len(texts), 3)
+        self.assertIs(fields[0].kw.get("textvariable"), texts[0])
+        texts[2].set("sanepilo")
+        texts[2].set("sanepil")                         # the last key took a letter back
+        last = [json.loads(line) for line in f.log_file.getvalue().splitlines()][-1]
+        self.assertEqual((last["kind"], last["field"], last["value"]), ("value", "THREE", "sanepil"))
+
+
 class Reaper(unittest.TestCase):
+    def test_a_container_whose_start_had_not_ended_is_looked_for_until_it_is_there_and_removed(self):
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
+            engine, said, state = os.path.join(tmp, "engine"), os.path.join(tmp, "said"), os.path.join(tmp, "n")
+            with open(engine, "w") as f:                 # the container appears at the third look, as a late start's
+                f.write(f"""#!/bin/sh
+echo "$@" >> {said}
+n=$(cat {state} 2>/dev/null || echo 0); n=$((n+1)); echo $n > {state}
+case "$1" in
+  container) if [ -e {state}.gone ] || [ $n -lt 3 ]; then echo "Error: No such container: $5" >&2; exit 1; fi; echo id;;
+  rm) touch {state}.gone;;
+esac
+""")
+            os.chmod(engine, 0o755)
+            p = subprocess.run([sys.executable, os.path.join(KIT, "reaper.py"), engine, "20"], input="+container late\n",
+                               text=True, capture_output=True, timeout=60)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            with open(said) as f:
+                lines = f.read().splitlines()
+            self.assertIn("rm -f late", lines)
+            self.assertEqual(lines[-1].split()[:2], ["container", "inspect"])     # and looked again: gone
+            os.remove(said)
+            os.remove(state)
+            os.remove(state + ".gone")
+            p = subprocess.run([sys.executable, os.path.join(KIT, "reaper.py"), engine, "20"],
+                               input="+container done\n=container done\n", text=True, capture_output=True, timeout=60)
+            with open(said) as f:
+                self.assertEqual(f.read().splitlines(), ["container inspect --format {{.Id}} done"])   # started: one look
     def test_what_is_still_named_is_removed_once_the_driver_is_gone(self):
-        self.assertEqual(reaper.held(["+container a\n", "+folder /x\n", "+container b\n", "-container a\n", "junk\n"]),
-                         {"container": ["b"], "folder": ["/x"]})
+        self.assertEqual(reaper.held(["+container a\n", "+folder /x\n", "+container b\n", "=container b\n",
+                                      "-container a\n", "junk\n"]),
+                         {"container": ["b"], "folder": ["/x"], "started": ["b"]})
         with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
             engine, said, folder = os.path.join(tmp, "engine"), os.path.join(tmp, "said"), os.path.join(tmp, "left")
             os.makedirs(folder)
-            with open(engine, "w") as f:
-                f.write(f"#!/bin/sh\necho \"$@\" >> {said}\n")
+            with open(engine, "w") as f:                 # a container is there until it is removed
+                f.write(f"""#!/bin/sh
+echo "$@" >> {said}
+case "$1" in
+  container) if [ -e {tmp}/gone-$5 ]; then echo "Error: No such container: $5" >&2; exit 1; fi; echo id;;
+  rm) touch {tmp}/gone-$3;;
+esac
+""")
             os.chmod(engine, 0o755)
             p = subprocess.Popen([sys.executable, os.path.join(KIT, "reaper.py"), engine], stdin=subprocess.PIPE, text=True,
                                  start_new_session=True)
-            p.stdin.write(f"+container one\n+container two\n-container one\n+folder {folder}\n")
+            p.stdin.write(f"+container one\n=container one\n+container two\n=container two\n-container one\n"
+                          f"+folder {folder}\n")
             p.stdin.close()                                                    # the driver is gone
             self.assertEqual(p.wait(timeout=30), 0)
             with open(said) as f:
-                self.assertEqual(f.read(), "rm -f two\n")
+                self.assertEqual([l for l in f.read().splitlines() if l.startswith("rm")], ["rm -f two"])
             self.assertFalse(os.path.exists(folder))
 
     def test_the_driver_tells_the_reaper_before_the_container_exists(self):
@@ -357,6 +657,7 @@ class Reaper(unittest.TestCase):
                     driver.setup("see", ws)
         self.assertTrue(order[0].startswith("+container nullius-desktop-"))
         self.assertEqual(order[1], "start")
+        self.assertEqual(order[2], "=container " + order[0].split()[1])          # its start ended, failed
         self.assertEqual(driver.OPEN, {})
 
 
@@ -419,31 +720,74 @@ class DockerKit(unittest.TestCase):
         self.assertEqual(got["detail"]["past_budget"], 1)
 
     def test_a_driver_killed_during_a_unit_leaves_no_container_socket_or_process(self):
-        ws = os.path.join(self.tmp, "job", "see-kill", "workspace")
+        job = f"kill-{secrets.token_hex(4)}"                                     # this test's own label
+        ws = os.path.join(self.tmp, job, "see-kill", "workspace")
         os.makedirs(ws)
         env = dict(os.environ, PYTHONPATH=APP, PYTHONDONTWRITEBYTECODE="1")
         p = subprocess.Popen([sys.executable, os.path.join(KIT, "driver.py")], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                              text=True, env=env, start_new_session=True)
+        reaper_pid, line = None, ""
         try:
             p.stdin.write(json.dumps({"op": "setup", "unit": "see", "dir": ws}) + "\n")
             p.stdin.flush()
-            reply = json.loads(p.stdout.readline())
+            ready, _, _ = select.select([p.stdout], [], [], 180)                  # the setup's reply, bounded
+            line = p.stdout.readline() if ready else ""
+            kids = subprocess.run(["ps", "-o", "pid=,args=", "--ppid", str(p.pid)], capture_output=True, text=True, timeout=30)
+            reaper_pid = next((int(l.split()[0]) for l in kids.stdout.splitlines() if "reaper.py" in l), None)
         finally:
             os.killpg(p.pid, signal.SIGKILL)                                    # as a run kills a driver's group
             p.wait()
-        sock = reply["mcp"][0]["args"][0]
+        self.assertTrue(line, "no reply to setup within 180 s")
+        sock = json.loads(line)["mcp"][0]["args"][0]
         self.assertTrue(sock.endswith("/s"))
-        for _ in range(120):
-            left = subprocess.run([container.DOCKER, "ps", "-aq", "--filter", "label=" + container.LABEL + "=job",
-                                   "--filter", "name=nullius-desktop-"], capture_output=True, text=True, timeout=60)
-            if left.returncode == 0 and not left.stdout.split() and not os.path.exists(os.path.dirname(sock)):
+        self.assertIsNotNone(reaper_pid)
+        for _ in range(240):
+            left = subprocess.run([container.DOCKER, "ps", "-aq", "--filter", f"label={container.LABEL}={job}"],
+                                  capture_output=True, text=True, timeout=60)
+            if not _alive(reaper_pid):
                 break
             time.sleep(0.5)
+        self.assertFalse(_alive(reaper_pid), "this driver's reaper did not end")
+        left = subprocess.run([container.DOCKER, "ps", "-aq", "--filter", f"label={container.LABEL}={job}"],
+                              capture_output=True, text=True, timeout=60)
         self.assertEqual(left.returncode, 0, left.stderr)
         self.assertEqual(left.stdout.split(), [])
         self.assertFalse(os.path.exists(os.path.dirname(sock)))
-        procs = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True, timeout=30).stdout
-        self.assertNotIn(os.path.join(KIT, "reaper.py"), procs)
+
+    def test_a_session_of_the_scripted_acp_agent_reaches_the_server_through_the_pipe(self):
+        ws, s = self.unit("click")
+        u = driver.OPEN["click"]
+        agent = os.path.join(APP, "tests", "fixtures", "standard", "fake_computer_agent.py")
+        p = subprocess.Popen([sys.executable, agent], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                             start_new_session=True)
+        server = {"name": "computer", "command": sys.executable, "args": [os.path.join(KIT, "pipe.py"), s["mcp"][0]["args"][0]],
+                  "env": []}
+        said, lines = [], queue.Queue()
+        threading.Thread(target=lambda: [lines.put(l) for l in p.stdout] + [lines.put(None)], daemon=True).start()
+        try:
+            for m in ({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": 1}},
+                      {"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {"cwd": ws, "mcpServers": [server]}},
+                      {"jsonrpc": "2.0", "id": 3, "method": "session/prompt",
+                       "params": {"sessionId": "s1", "prompt": [{"type": "text", "text": s["prompt"]}]}}):
+                p.stdin.write(json.dumps(m) + "\n")
+                p.stdin.flush()
+                while True:
+                    line = lines.get(timeout=120)                                    # bounded: Empty past it
+                    self.assertIsNotNone(line, f"the agent ended before it answered {m['method']}")
+                    got = json.loads(line)
+                    if got.get("method") == "session/update":
+                        said.append(got["params"]["update"]["content"]["text"])
+                    if got.get("id") == m["id"]:
+                        break
+        finally:
+            p.stdin.close()
+            try:
+                p.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait()
+        self.assertEqual([c["tool"] for c in u.calls()], ["screenshot", "click"])
+        self.assertIn("screenshot taken", "".join(said))
 
 
 if __name__ == "__main__":

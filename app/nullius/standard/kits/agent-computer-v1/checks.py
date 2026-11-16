@@ -19,8 +19,8 @@ isError}``; ``past``: the acting calls sent once every step was taken).
 - ``scroll``: the last message holds the code drawn at the list's end, below
   what it shows at first, and the list moved;
 - ``recover``: the kit answers the agent's first acting call with an error,
-  without running it; a later acting call succeeds and the named button is
-  clicked, as for ``click``;
+  without running it; an acting call sent after that answer came succeeds,
+  and the named button is clicked, as for ``click``;
 - ``batch``: each of three fields holds its word, within two steps.
 
 Every check passes only when every pointer and key event, Enter in a field
@@ -192,8 +192,9 @@ def recover(expected, events, actions, message, calls=(), past=0):
     failed = next((i for i, c in enumerate(acting) if c.get("isError")), None)
     if failed is None:
         return _verdict("no acting call was answered with an error")
-    if not any(not c.get("isError") for c in acting[failed + 1:]):
-        return _verdict("no acting call succeeded after the error")
+    answered = acting[failed].get("end", float("inf"))
+    if not any(not c.get("isError") and c.get("start", -1.0) >= answered for c in acting[failed + 1:]):
+        return _verdict("no acting call sent after the error's answer succeeded")
     return click(expected, events, actions, message)
 
 
