@@ -43,14 +43,14 @@ class Table(unittest.TestCase):
 
     def test_the_page_offers_what_a_person_sets_and_no_more(self):
         self.assertEqual([v.name for v in settings.VARIABLES],
-                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "SYSTEM_ONE_PROVIDER", "SYSTEM_ONE_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_MODEL", "AGENT_KEYS", "HOSTS", "HF_ENDPOINT", "HOST_CONSTRAINTS"])
+                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "SYSTEM_ONE_PROVIDER", "SYSTEM_ONE_PROTOCOL", "SYSTEM_ONE_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_PROTOCOL", "LLM_JUDGE_MODEL",
+                          "OPENROUTER", "OPENAI", "ANTHROPIC", "TYPESAFE", "AGENT_KEYS", "HOSTS", "HF_ENDPOINT", "HOST_CONSTRAINTS"])
         self.assertEqual(sorted(v.name for v in settings.VARIABLES if v.secret), ["ANTHROPIC_API_KEY", "MODEL_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"])
         self.assertEqual(settings.BY_NAME["MODEL_API_URL"].kind, "endpoint")                         # shown, so it may hold no credential
         for name in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"):
             self.assertEqual(settings.BY_NAME[name].example, "")                               # no placeholder on a settings field
         self.assertEqual({settings.BY_NAME[n].group for n in ("MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY")}, {"Model credentials"})
-        from nullius import providers
-        self.assertIn(providers.PROVIDER_BASE["openrouter"], settings.BY_NAME["OPENROUTER_API_KEY"].purpose)   # the endpoint is fixed, and said
+        self.assertEqual({settings.BY_NAME[n].kind for n in ("OPENROUTER", "OPENAI", "ANTHROPIC", "TYPESAFE")}, {"provider"})   # a preset's additions
         self.assertIn("OpenAI-compatible", settings.BY_NAME["MODEL_API_KEY"].purpose)
 
     def test_the_servers_address_and_port_are_start_up_options(self):

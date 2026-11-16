@@ -26,6 +26,7 @@ also works.
 | [Storage](../settings/README.md#storage) | `nullius paths [--json]` |
 | [Model prices](../settings/model-prices.md) | `nullius prices [list\|update\|set\|remove]` |
 | [Migration](../getting-started.md#migrate-an-existing-checkout) | `nullius migrate --from CHECKOUT [--secrets PATH] [--apply]` |
+| [Provider records](../settings/model-providers.md#older-settings) | `nullius migrate --providers [--apply]` |
 | [Pages from a shell](pages.md) | |
 | [Exit codes and output](exit-codes.md) | |
 

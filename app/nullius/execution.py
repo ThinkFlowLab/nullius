@@ -122,7 +122,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
-from nullius import hosts, paths, prices as price_list, progress, redact, secrets, settings
+from nullius import hosts, paths, prices as price_list, progress, providers, redact, secrets, settings
 from nullius.harbor import source as harbor_source
 from nullius.standard import container, payload as standard_payload
 
@@ -339,7 +339,7 @@ def withheld() -> List[str]:
     Custom keys - and GitHub tokens from saved settings or the
     shell Nullius was started in. Every named endpoint's settings too, so a
     run gets its own endpoint's key alone. A data provider's token name is not one."""
-    secret = {v.name for v in settings.VARIABLES if v.secret or v.kind == "endpoint"} | set(settings.endpoint_names())
+    secret = {v.name for v in settings.VARIABLES if v.secret or v.kind in ("endpoint", "provider")} | set(settings.endpoint_names())
     return sorted(secret | {old for old, new in settings.INSTEAD.items() if new in secret}
                   | set(KEY_NAMES + URL_NAMES) | {"GITHUB_TOKEN", "GH_TOKEN"} | set(settings.agent_key_names())
                   | set(_licence_names()))
@@ -390,7 +390,7 @@ class Execution:
         self._run = run or (lambda argv, timeout=600.0, stdin=None: subprocess_run(argv, timeout, stdin, stop=self._stop))
         # an endpoint of the run's own (url_var: an OpenAI-compatible one) may check no key: it is sent the placeholder
         self._key = (key if key is not None else env.get(plan.key_var, "")) or (settings.MODEL_KEY_PLACEHOLDER if plan.url_var else "")
-        self._url = url if url is not None else (env.get(plan.url_var, "") if plan.url_var else plan.base_url)
+        self._url = url if url is not None else (providers.base_of(plan.url_var, env) if plan.url_var else plan.base_url)
         if plan.keyless:                          # a run that calls no model is given nothing it could leak
             self._key, self._url = "", ""
         # the agent keys Settings holds (CURSOR_API_KEY, ...): a Harbor run's agent may need its own vendor's; the standard's never gets one

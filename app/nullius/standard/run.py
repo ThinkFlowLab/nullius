@@ -98,12 +98,6 @@ def driver_path() -> str:
         os.replace(part, link)
     return root
 
-PROVIDERS = {
-    "openai": {"base": "https://api.openai.com/v1", "key": "OPENAI_API_KEY"},
-    "openrouter": {"base": "https://openrouter.ai/api/v1", "key": "OPENROUTER_API_KEY"},
-    "anthropic": {"base": "https://api.anthropic.com/v1", "key": "ANTHROPIC_API_KEY", "key_header": "x-api-key"},
-    "custom": {"base_var": "MODEL_API_URL", "key": "MODEL_API_KEY"},
-}
 TURN_SECONDS = 900
 DRIVER_SECONDS = 600                  # a driver's setup, oracle and score requests, each
 IMAGE_SECONDS = 3600                  # an own image's pull or build (container.own_image)
@@ -118,18 +112,20 @@ class Refused(Exception):
 
 
 def provider_endpoint(provider: str, env=os.environ) -> tuple:
-    p = PROVIDERS.get(provider)
-    if not p:
-        raise Refused(f"provider {provider!r} is not one of {list(PROVIDERS)}")
-    base = p.get("base") or env.get(p["base_var"]) or ""
-    key = env.get(p["key"]) or ("local" if provider == "custom" else "")
+    """(base, key) of a run provider (``providers.PROVIDERS``), from its record: ``custom`` is the one at
+    MODEL_API_URL, which a run's launcher fills from the run's own provider (``cli.run_env``)."""
+    if provider not in providers.PROVIDERS:
+        raise Refused(f"provider {provider!r} is not one of {list(providers.PROVIDERS)}")
+    rec = providers.record(provider, env)
+    base = rec["base"]
+    key = env.get(rec["key"]) or ("local" if provider == "custom" else "")
     if not base:
-        raise Refused(f"{p['base_var']} is not set in Settings")
+        raise Refused("MODEL_API_URL is not set in Settings")
     if not key:
-        raise Refused(f"{p['key']} is not set in Settings")
+        raise Refused(f"{rec['key']} is not set in Settings")
     if not key.isprintable() or any(ord(c) > 255 for c in key) or key != key.strip():
         # http.client refuses such a value, and quotes it whole in its error
-        raise Refused(f"{p['key']} holds a character a request header cannot carry (a line break, a space or a "
+        raise Refused(f"{rec['key']} holds a character a request header cannot carry (a line break, a space or a "
                       "byte-order mark around it, or one outside Latin-1): set it again in Settings")
     return base, key
 
@@ -159,6 +155,16 @@ def units_file(path: str) -> dict:
     if twice:
         raise Refused(f"--units {path} lists {', '.join(twice)} more than once: list each unit once (--repeat K runs each K times)")
     return {"name": os.path.basename(path), "sha256": hashlib.sha256(data).hexdigest(), "units": ids}
+
+
+def key_header(provider: str, other: dict, env=os.environ) -> str:
+    """How the agent's relay sends the key: by the protocol the agent (or capability) speaks on this
+    provider. Refused, as ``recipe.compile`` refuses it, on a provider that serves none of them."""
+    apis = (other.get("model") or {}).get("apis") or ["chat"]
+    if provider not in providers.offered(apis, env):
+        raise Refused(f"{providers.label(provider, env)} does not serve what {other.get('key') or 'the agent'} speaks "
+                      f"({', '.join(apis)}): choose another provider")
+    return providers.PROTOCOLS[providers.protocol_for(provider, apis, env)]["auth"]
 
 
 def _slug(s: str) -> str:
@@ -545,6 +551,7 @@ class Run:
         self.bench_relay = None
         keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
+        self.key_header = "authorization" if keyless else key_header(provider, other, env)
         self.limit, self.concurrency = limit, limits.concurrency(max(1, int(concurrency)), self.constraints)
         self.units_file = units_file
         self.repeat = max(1, int(repeat or 1))
@@ -936,8 +943,8 @@ class Run:
         # own, recorded in the job's .work/relay-benchmark beside the units', never counted as the agent's.
         if (self.embed_model or self.rerank_model) and self.bench_relay is None:
             self.bench_relay = relay.Relay(self.base, self.key, os.path.join(self.job_dir, ".work", "relay-benchmark"),
-                                           prices=self.prices, model=self.rerank_model or self.embed_model, ledger=self.ledger_file(), unit_caps=False,
-                                           key_header=PROVIDERS[self.provider].get("key_header", "authorization")).start()
+                                           prices=self.prices, model=self.rerank_model or self.embed_model, ledger=self.ledger_file(),
+                                           unit_caps=False).start()                  # embeddings and rerank: a bearer key
 
     def runtimes_needed(self) -> List[str]:
         """What the agent needs in an own image that the image may not have:
@@ -1319,7 +1326,7 @@ class Run:
             return None                          # a control with no judge: no model is called
         record = os.path.join(trial, ".work", "relay")
         side = tuple((self.other.get("model") or {}).get("side_models") or ())
-        key_header = PROVIDERS[self.provider].get("key_header", "authorization")
+        key_header = self.key_header
         if self.backend == "local":
             rl = relay.Relay(self.base, self.key, record, prices=getattr(self, "prices", None), model=self.model, side_models=side,
                              key_header=key_header, ledger=self.ledger_file()).start()

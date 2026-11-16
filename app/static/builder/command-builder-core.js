@@ -82,7 +82,7 @@
   function createStandard(benchmark = '', other = '') {
     const st = standard(), b = st.benchmarks.find(x => x.key === benchmark) || st.benchmarks[0];
     const r = {version: 1, harness: 'standard', name: 'standard-experiment', title: 'Standard experiment', benchmark: '', datasets: [], others: [],
-      model_choice: 'any', provider: firstAvailable(PROVIDERS, 'openai'), model: bareModel(schema.defaultModel || ''), limit: '', concurrency: '', unsandboxed: false, where: 'local',
+      model_choice: 'any', provider: firstAvailable(providersOf({}), 'openai'), model: bareModel(schema.defaultModel || ''), limit: '', concurrency: '', unsandboxed: false, where: 'local',
       backend: 'local', options: {}};
     return b ? setStandardBenchmark(r, b.key, other) : r;
   }
@@ -172,7 +172,10 @@
   const defaults = () => Object.fromEntries(parameters().map(p => [p.key, p.default]));
   // The provider is a recipe field and the model a bare name. Each consumer gets
   // the prefix matching its credential bindings; a typed model prefix takes precedence.
-  const PROVIDERS = ['openrouter', 'openai', 'custom'];
+  // The providers a run is sent to, from the backend's registry (providers.run_choices): each with its name, the
+  // setting that makes it ready, and the protocols it lists (null: a custom provider, which may serve any).
+  const PROVIDER_INFO = Object.fromEntries((schema.providers || []).map(p => [p.id, p]));
+  const PROVIDERS = Object.keys(PROVIDER_INFO);
   const PROVIDER_PREFIX = /^(openrouter|openai)\//;
   const bareModel = m => String(m || '').replace(PROVIDER_PREFIX, '');
   const providerOf = (r, m) => { if(r.modelFormat === 'provider-id' && PROVIDERS.includes(r.provider))return r.provider; const x = String(m || '').match(PROVIDER_PREFIX); return x ? x[1] : (PROVIDERS.includes(r.provider) ? r.provider : 'openrouter'); };
@@ -201,8 +204,8 @@
   // being optional - is set in Settings (schema.credentials, runners.available), in the order the Model step prefers
   // them. With none, every provider stays visible. A schema that does not say (a test's) is
   // checked by the server alone.
-  const PROVIDER_LABEL = {openrouter: 'OpenRouter', openai: 'OpenAI', custom: 'OpenAI-compatible'};
-  const PROVIDER_NEEDS = {openrouter: 'OPENROUTER_API_KEY', openai: 'OPENAI_API_KEY', custom: 'MODEL_API_URL'};
+  const PROVIDER_LABEL = Object.fromEntries(PROVIDERS.map(p => [p, PROVIDER_INFO[p].label]));
+  const PROVIDER_NEEDS = Object.fromEntries(PROVIDERS.map(p => [p, PROVIDER_INFO[p].needs]));
   // A named OpenAI-compatible endpoint: the recipe keeps provider custom and the endpoint's id, which names its
   // settings (MODEL_<ID>_API_URL); the Model step offers it as the choice custom:<id> (nullius/providers.py).
   const ENDPOINT_ID = /^(?=.{1,32}$)[A-Z0-9]+(?:_[A-Z0-9]+)*$/;
@@ -213,7 +216,17 @@
   const needsOf = c => endpointOf(c) ? 'MODEL_' + endpointOf(c) + '_API_URL' : PROVIDER_NEEDS[c] || PROVIDER_NEEDS.custom;
   const available = () => ((schema.credentials || {}).available || []).filter(p => PROVIDERS.includes(kindOf(p)));
   const firstAvailable = (offered, otherwise) => available().find(p => offered.includes(p)) || otherwise;
-  const providersOf = () => PROVIDERS;
+  // What each part of a run that calls the model speaks: a Harbor run and a benchmark's own scripts or judge
+  // chat, an agent of the standard its definition's apis. A provider is offered when it may serve every part.
+  function consumersOf(r) {
+    if (!isStandard(r)) return [['chat']];
+    const b = standardBench(r), all = standard().agents.concat(standard().capabilities);
+    const out = chosenOf(r).filter(k => !((b && b.controls) || []).some(c => c.key === k)).map(k => (all.find(o => o.key === k) || {}).apis || ['chat']);
+    if (b && b.judged) out.push(['chat']);
+    return out.length ? out : [['chat']];
+  }
+  const serving = (p, apis) => !PROVIDER_INFO[p].protocols || apis.some(a => PROVIDER_INFO[p].protocols.includes(a));
+  const providersOf = r => PROVIDERS.filter(p => !r || consumersOf(r).every(apis => serving(p, apis)));
   const recipeProvider = r => isStandard(r) ? r.provider : providerOf(r, r.model || r.userModel);
   const choiceOf = r => recipeProvider(r) === 'custom' && r.endpoint ? 'custom:' + r.endpoint : recipeProvider(r);
   // The Model step's choice into the recipe: its provider, and for a named endpoint its id.
@@ -227,6 +240,8 @@
     const offered = providersOf(r), have = available().filter(p => offered.includes(kindOf(p))), p = choiceOf(r);
     const or = xs => xs.slice(0, -1).join(', ') + (xs.length > 1 ? ' or ' : '') + xs[xs.length - 1];
     if (have.includes(p)) return '';
+    if (PROVIDERS.includes(kindOf(p)) && !offered.includes(kindOf(p)))
+      return labelOf(p) + ' does not serve what this recipe\'s agent speaks. Choose ' + or(offered.map(labelOf)) + ' on the Model step.';
     if (!have.length) return 'Run needs a model key, and none is set in Settings: set ' + or(offered.map(x => PROVIDER_NEEDS[x])) + ' there.';
     if (((schema.credentials || {}).broken || []).includes(p))
       return 'This recipe runs on ' + labelOf(p) + ', and its URL in Settings holds a credential or is not an http(s) URL. Put the key in the Key field in Settings.';
@@ -291,7 +306,7 @@
   function create() {
     const r = {version: 1, harness: 'harbor', name: 'harbor-experiment', title: 'Harbor experiment', benchmark: '', source: '', dataset: '', path: '',
       generatorRoot: '', agents: [], harbor: {kind: 'release', version: '', extras: []},
-      customAgents: [], model_choice: 'any', provider: firstAvailable(PROVIDERS, providerOf({}, schema.defaultModel || '')), model: '', userModel: '', evalModel: '', keyEnv: (schema.credentialVars && schema.credentialVars.key) || 'API_TOKEN', urlEnv: schema.credentialVars ? (schema.credentialVars.url || '') : 'API_URL',
+      customAgents: [], model_choice: 'any', provider: firstAvailable(providersOf({}), providerOf({}, schema.defaultModel || '')), model: '', userModel: '', evalModel: '', keyEnv: (schema.credentialVars && schema.credentialVars.key) || 'API_TOKEN', urlEnv: schema.credentialVars ? (schema.credentialVars.url || '') : 'API_URL',
       tasks: '', concurrency: 1, retries: 3,
       timeoutMultiplier: 1, agentMinutes: '', attempts: '', setupTimeoutMultiplier: '', verifierTimeoutMultiplier: '', buildTimeoutMultiplier: '', harborDev: '', include: '', output: 'jobs',
       where: 'local', adapterPaths: {}, params: defaults(), custom: []};
@@ -422,7 +437,7 @@
       if (!allowed.includes(r.model)) add(STEP.model, 'Choose one of the paper models on this provider.');
     }
     if (callsModel && !named) add(STEP.model, benchmarkCallsModel(r) ? 'Enter a model for the agent and/or simulated user and evaluator.' : 'Enter a model.');
-    if (callsModel && !PROVIDERS.includes(r.provider)) add(STEP.model, 'Choose a provider: OpenRouter, OpenAI or an OpenAI-compatible endpoint.');
+    if (callsModel && !PROVIDERS.includes(r.provider)) add(STEP.model, 'Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider.');
     for (const [key,label] of [['keyEnv','API key source variable'],['urlEnv','Endpoint source variable']]) {
       if (callsModel && (key !== 'urlEnv' || r[key]) && !/^[A-Z_][A-Z0-9_]*$/.test(r[key])) add(STEP.model, label + ' must be an environment variable name.');
     }
