@@ -149,9 +149,9 @@
   };
   // The standard's recipe as the server compiles it from the definitions (POST
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
-  let runnerOut = null, runnerKey = '', runnerTimer, runnerOutServed = '';
-  // Served by's rows (servedRows above), given the server's last compile and what decided its models (C.servedKey)
-  const {field: servedField, sync: syncServed} = servedRows({C, root, r, esc, button, compiled: () => runnerOut && {out: runnerOut, key: runnerOutServed}});
+  let runnerOut = null, runnerKey = '', runnerTimer, runnerServed = null;
+  // Served by's rows (servedRows above), given the models the server last named and what decided them (C.servedCompiled)
+  const {field: servedField, sync: syncServed} = servedRows({C, root, r, esc, button, compiled: () => runnerServed});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -675,7 +675,7 @@
         out = await res.json();
       } catch (e) { out = {errors: [{step: REVIEW, message: 'The recipe could not be compiled here: ' + e}], notes: [], review: []}; }
       if (key !== runnerKey) return;
-      runnerOut = out; runnerOutServed = C.servedKey(JSON.parse(key));
+      runnerOut = out; runnerServed = C.servedCompiled(runnerServed, out, key);
       if (step === S.model) syncServed();
       if (step === REVIEW) renderForm();
       refreshPlan();

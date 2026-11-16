@@ -103,13 +103,16 @@
   const servedModelOf = (role, shown, compiled) => ((compiled || {}).served_models || {})[role] || shown || '';
   // What decides the models the run sends: the recipe but its pins. A pin added or taken out changes none of them.
   const servedKey = r => JSON.stringify({...r, served_by: undefined});
+  // The models the server last named, and what decided them ({out, key}): a compile that names them (`out`, the
+  // compile route's answer for the recipe `recipeKey`, its JSON) replaces them; one that failed keeps the last ones.
+  const servedCompiled = (last, out, recipeKey) => out && out.served_models && typeof out.served_models === 'object'
+    ? {out, key: servedKey(JSON.parse(recipeKey))} : last;
   // A Served by row as the recipe holds it: the model its providers are listed for, the one the run sends as the
-  // server compiled it for this recipe (`compiled`, null while not known: no model then, and the list is not asked
-  // under a name the run may not send), its slugs in order, and its placeholder.
+  // server compiled it for this recipe (`compiled`; none while not known, and never the name shown: the list is not
+  // asked under a name the run may not send, and the row waits), its slugs in order, and its placeholder.
   function servedRow(r, role, shown, compiled) {
-    const chosen = (r.served_by || {})[role] || [];
-    return {shown, model: compiled ? servedModelOf(role, shown, compiled) : '', pending: !compiled && !!shown, chosen,
-            placeholder: chosen.length ? 'Add a provider' : 'any provider'};
+    const chosen = (r.served_by || {})[role] || [], model = servedModelOf(role, '', compiled);
+    return {shown, model, pending: !model && !!shown, chosen, placeholder: chosen.length ? 'Add a provider' : 'any provider'};
   }
   function setServed(r, role, slugs) {
     const list = Array.isArray(slugs) ? slugs : servedList(slugs);
@@ -812,5 +815,5 @@
         at: String(d.at || '')};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  return {STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });

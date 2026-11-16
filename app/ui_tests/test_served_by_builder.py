@@ -158,6 +158,18 @@ class TheRows(CompilerCase):
         self.assertEqual(out[6], [{'shown': 'gpt-4.1', 'model': '', 'pending': True, 'chosen': [], 'placeholder': 'any provider'}, True])
 
 
+    def test_a_failed_compile_keeps_the_model_the_server_named(self):
+        """A compile that failed names no model: the row keeps the one the server last named for the same recipe (a pin
+        added in between), waits while none is known (a failed first compile, or a compile that names none), and takes
+        the one a later compile names. The name shown is never listed."""
+        out = self.js(self.SETUP + 'const got=[],key=()=>JSON.stringify(r),failed={errors:[{message:"The recipe could not be compiled here"}],notes:[],review:[]};'
+                      'const step=x=>{compiled=C.servedCompiled(compiled,x,key());rows.sync();got.push([seen().model,seen().pending]);};compiled=null;'
+                      'step(failed);step({errors:[],served_models:{model:"openai/gpt-4o-2024-08-06"}});C.addServed(r,"model","openai");step(failed);'
+                      'step({errors:[],served_models:{}});step({errors:[],served_models:{model:"openai/gpt-4o-2024-08-06"}});process.stdout.write(JSON.stringify(got));')
+        sent = 'openai/gpt-4o-2024-08-06'
+        self.assertEqual(out, [['', 'true'], [sent, 'false'], [sent, 'false'], ['', 'true'], [sent, 'false']])
+
+
 class ThePicker(unittest.TestCase):
     """model-picker.js, as the Model row and each Served by use it: what typing keeps, and what Enter takes."""
     PICKER = Path(__file__).resolve().parents[1] / 'static' / 'builder' / 'model-picker.js'
