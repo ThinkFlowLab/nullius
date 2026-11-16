@@ -132,7 +132,7 @@ def setup_request(bench: dict, kind: str, attempt: Optional[int] = None) -> tupl
     sent = {"attempt": attempt} if attempt and limits.get("attempts") else {}
     if drv.get("participant"):
         sent["participant"] = kind
-    return sent, float((limits.get("setup_seconds") if kind == "agent" else None) or DRIVER_SECONDS)
+    return sent, (limits.get("setup_seconds") if kind == "agent" else None) or DRIVER_SECONDS
 
 
 def provider_endpoint(provider: str, env=os.environ) -> tuple:
@@ -975,7 +975,7 @@ class Run:
         """What ``setup`` is told besides the unit (:func:`setup_request`)."""
         return setup_request(self.bench, self.other["_kind"], getattr(self.local, "attempt", None))[0]
 
-    def setup_seconds(self) -> float:
+    def setup_seconds(self) -> int:
         """How long a unit's ``setup`` may take (:func:`setup_request`)."""
         return setup_request(self.bench, self.other["_kind"])[1]
 

@@ -393,6 +393,24 @@ class ThroughARun(unittest.TestCase):
                 self.assertEqual(r.bench_options, {"steps": "10"} if other["_kind"] == "agent" else {})
 
 
+    def env_setup_timeouts(self, other: dict, **bench) -> list:
+        """The ``timeout_sec`` of each unit's ``env_setup`` phase in the job's live feed, as written."""
+        trial = self.trial_of(DRIVER, other, **bench)
+        with open(os.path.join(os.path.dirname(trial), "events.jsonl")) as f:
+            return [e["timeout_sec"] for e in map(json.loads, f) if e.get("phase") == "env_setup"]
+
+    def test_the_setup_phase_takes_the_setup_limit(self):
+        controls = {"nop": {"source": "nullius", "from": "nothing"}}
+        control = definitions.control(dict(BENCH, controls=controls), "nop")
+        for other, limits, expected in ((self.fake_agent(), None, 600), (control, None, 600),
+                                        (self.fake_agent(), {"setup_seconds": 1800}, 1800),
+                                        (control, {"setup_seconds": 1800}, 600)):
+            with self.subTest(kind=other["_kind"], limits=limits):
+                bench = dict(controls=controls, **({"limits": limits} if limits else {}))
+                got = self.env_setup_timeouts(other, **bench)
+                self.assertEqual(got, [expected])
+                self.assertIs(type(got[0]), int)                    # recorded as a whole number, as given
+
     def test_setup_gets_the_benchmarks_own_limit(self):
         r = run.Run.__new__(run.Run)
         r.bench, r.other, r.local = dict(BENCH, limits={"setup_seconds": 1800}), {"_kind": "agent"}, threading.local()
