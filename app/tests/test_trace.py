@@ -22,9 +22,8 @@ from nullius.traces.spans import GROUP_KIND, GROUP_SLACK_NS, mark_groups, MAX_DE
 from nullius.traces.waterfall import Extent, flatten, MAX_ROWS, Tick, ticks_for
 
 from . import FIXTURES
+from .tracedata import DEGRADED, RICH, doc, raw, span
 
-RICH = str(FIXTURES / "trace_rich.json")
-DEGRADED = str(FIXTURES / "trace_degraded.json")
 BAD = str(FIXTURES / "trace_bad.json")
 
 # Ids from the real capture. `block:...:0` is a synthetic log-derived id and is
@@ -37,37 +36,6 @@ TOOL_BLOCKED = "80ab6e382cf0adc7"
 TOOL_WRITE = "b8485ddca72125ef"
 LLM_2 = "bc000785dbfa7ad7"
 OUTPUT = "block:28bda920-a4fa-4918-9e96-4036d44013fe:0"
-
-
-def raw(path=RICH):
-    with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
-
-
-def span(sid, start=1_000, end=2_000, **fields):
-    """A minimal span. Only what the format requires, so tests add what they mean."""
-    out = {
-        "span_id": sid,
-        "trace_id": "t",
-        "name": sid,
-        "kind": "tool",
-        "start_ns": start,
-        "timing_quality": "measured",
-        "source": "otel",
-        "attributes": {},
-        "children": [],
-    }
-    if end is not None:
-        out["end_ns"] = end
-        out["duration_ns"] = end - start
-    out.update(fields)
-    return out
-
-
-def doc(*spans, **top):
-    out = {"schema_version": "harbor-trace-v1", "spans": list(spans)}
-    out.update(top)
-    return out
 
 
 def by_id(tr, span_id):

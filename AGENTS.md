@@ -143,7 +143,7 @@ and migration, and `docs/settings/README.md` for paths and precedence.
 Three dependency rules. Each is load-bearing and each has a test.
 
 - **`app/nullius/` imports no Flask.** The backend is exercisable from a bare
-  shell or a notebook. `test_charts.NoFlask` checks every module in the
+  shell or a notebook. `test_layering.NoFlask` checks every module in the
   package, not one file. If a test in `app/tests` needs Flask, the layering
   has broken, not the test.
 - **One name, one implementation per interpreter.**

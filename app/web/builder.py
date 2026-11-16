@@ -57,7 +57,7 @@ def new_run():
             for b in definitions.load("benchmark", every=True)[0] if b.get("host")}
     data["standardHere"] = {"docker": execute.docker_problem(), "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
-    data["local"] = shared_local_client()
+    data["local"] = shared._local_client()
     # ?run=<job id>: the recipe a run of this application was started from,
     # opened as it was. ?like=<job id>, the job page's "New run like
     # this": that recipe when the run kept one, else what the job recorded -
@@ -107,7 +107,7 @@ def new_run_prerequisites():
     again*, and Run waits for ``ready``; the run asks again as it starts.
     A host is asked over ssh, so this is never asked on a page load."""
     shared._require_csrf()
-    if not shared_local_client():
+    if not shared._local_client():
         abort(403, description="Machines are checked from a browser on the application host only.")
     body = request.get_json(silent=True) or {}
     recipe = body.get("recipe") if isinstance(body.get("recipe"), dict) else {}
@@ -183,7 +183,7 @@ def new_run_harbor_refs():
     """A repository's branches and tags, each at its commit, for a Harbor
     pinned from a repository - a private fork included: git ls-remote with
     this machine's own credentials, for a browser on this machine only."""
-    if not shared_local_client():
+    if not shared._local_client():
         abort(403, description="Repositories are listed for a browser on the application host only.")
     url = gitrefs.url_of(request.args.get("repo", ""))
     if not url:
@@ -204,7 +204,7 @@ def new_run_harbor_agents():
     repository, installs it in a throwaway environment and asks it, once."""
     if request.method == "POST":
         shared._require_csrf()
-        if not shared_local_client():
+        if not shared._local_client():
             abort(403, description="A Harbor is built from a browser on the application host only.")
         raw = (request.get_json(silent=True) or {}).get("harbor")
     else:
@@ -236,15 +236,10 @@ def _kept_recipe(job_id: str) -> bool:
     return bool(ex and ex.plan.recipe)
 
 
-def shared_local_client() -> bool:
-    from . import settings
-    return settings._local_client()
-
-
 def _host_target():
     """The benchmark and its requirements a host check or install is about, and where: 'local' or a host of Settings."""
     shared._require_csrf()
-    if not shared_local_client():
+    if not shared._local_client():
         abort(403, description="Machines are checked and set up from a browser on the application host only.")
     b = definitions.get("benchmark", request.form.get("benchmark", ""))
     if b is None:
@@ -401,7 +396,7 @@ def new_run_registry():
 def new_run_models():
     """Return the selected provider's catalogue, keeping its key on this machine."""
     shared._require_csrf()
-    if not shared_local_client():
+    if not shared._local_client():
         abort(403)
     body = request.get_json(silent=True)
     provider = body.get("provider") if isinstance(body, dict) else None

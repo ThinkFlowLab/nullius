@@ -49,14 +49,14 @@ def benchmark_page(key):
                            editable=entry is not None and not harbor_entry.not_editable(entry), std=std, std_jobs=jobs,
                            deletable=os.path.isfile(os.path.join(paths.catalogue_dir(), catalog.BENCHMARKS, key, catalog.ENTRY)),
                            restore_bundle=storage.can_restore("benchmarks", key, catalog.ROOT),
-                           local=settings_web._local_client(),
+                           local=shared._local_client(),
                            providers=[(p, providers.label(p)) for p in providers.available(os.environ)])
 
 
 @app.route("/catalogue/<group>/<key>/use-bundled", methods=["POST"])
 def catalogue_use_bundled(group, key):
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403, description="Catalogue entries are changed from a browser on the application host only.")
     endpoints = {"benchmarks": "benchmark_page", "agents": "agent_page", "capabilities": "feature_page"}
     if group not in endpoints:
@@ -78,7 +78,7 @@ def benchmark_prove(key):
     controls call no model, so an unjudged benchmark's run is handed no key
     at all (``execution.Plan.keyless``)."""
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403, description="Proofs are started from a browser on the application host only.")
     back = url_for("benchmark_page", key=key) + "#standard"
     limit = request.form.get("limit", "").strip()
@@ -93,12 +93,10 @@ def benchmark_prove(key):
     plan = execution.Plan(name=f"prove-{key}-{time.strftime('%m%d-%H%M%S')}", script=got["script"], runner=standard_recipe.HARNESS,
                           **execute.credentials_for(provider, endpoint), keyless=got["keyless"], jobs=got["jobs"],
                           parts=[{"id": key, "label": got["label"] + "'s proofs", "script": got["script"]}])
-    problem = plan.check() or (execution.name_taken(plan.name) if os.path.exists(os.path.join(execution.runs_root(), plan.name)) else None)
+    _, problem, _ = execute.begin([plan])
     if problem:
         flash(problem, "error")
         return redirect(back)
-    ex = execution.start(plan)
-    shared.adopt_runs([ex])
     flash(f"Proving {got['label']}: its units and the leak check, then " + (f"{len(got['jobs'])} control runs." if got["jobs"] else "no control: it declares none."), "ok")
     return redirect(url_for("job", job_id=got["jobs"][0]["name"]) if got["jobs"] else back)
 
@@ -115,7 +113,7 @@ def benchmark_licence(key):
     store and out of the file - on this click, never by itself. Nothing is
     ever sent back of a value."""
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403, description="Credentials are set from a browser on the application host only.")
     back = settings_web._settings_return() + "#access-" + key
     name, action = request.form.get("name", ""), request.form.get("action", "set")
@@ -168,7 +166,7 @@ def _guard():
     """Every write here: form token, and a browser on this machine - adding a
     benchmark writes into the user's catalogue."""
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403, description="Benchmarks are added from a browser on the application host only.")
 
 
@@ -233,7 +231,7 @@ def _form(values, errors=(), status=200, editing=None):
     cat = shared._catalog_cached()
     return render_template("catalogue/new.html", cat=cat, values=values, errors=list(errors), editing=editing, routable=_routable(),
                            origins=catalog.ORIGINS, catalogue_dir=paths.catalogue_dir(),
-                           writable=settings_web._local_client(), csrf=shared._csrf_token()), status
+                           writable=shared._local_client(), csrf=shared._csrf_token()), status
 
 
 def _back(values, errors, logo, editing=None):

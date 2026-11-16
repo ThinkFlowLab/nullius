@@ -35,7 +35,6 @@ from nullius.standard.proofs import conform
 from .core import app
 from . import shared
 from . import execute
-from . import settings as settings_web
 
 
 def _install_words(o: dict) -> list:
@@ -106,7 +105,7 @@ def _entry(kind: str, key: str):
     return render_template("agents/entry.html", kind=kind, e=e, versions=versions if len(mine) > 1 else [],
                            restore_bundle=storage.can_restore(definitions.KINDS[kind]["dir"], key, definitions.CATALOGUE),
                            title=definitions.title(e["d"]), providers=[(p, providers.label(p)) for p in have],
-                           local=settings_web._local_client(), csrf=shared._csrf_token())
+                           local=shared._local_client(), csrf=shared._csrf_token())
 
 
 @app.route("/agents")
@@ -135,7 +134,7 @@ def _check(kind: str, key: str):
     """Start the conformance kits of one agent or capability, here, as a run;
     then its first kit's job page, which follows the run."""
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403, description="Checks are started from a browser on the application host only.")
     version = request.form.get("version", "")
     back = url_for("agent_page" if kind == "agent" else "feature_page", key=key, **({"v": version} if version else {}))
@@ -154,12 +153,10 @@ def _check(kind: str, key: str):
     plan = execution.Plan(name=f"check-{word}-{time.strftime('%m%d-%H%M%S')}", script=got["script"], runner=standard_recipe.HARNESS, docker=backend == "container",
                           **execute.credentials_for(provider, endpoint), model=request.form.get("model", "").strip(), jobs=got["jobs"],
                           parts=[{"id": word, "label": got["label"] + "'s kits", "script": got["script"]}])
-    problem = plan.check() or (execution.name_taken(plan.name) if os.path.exists(os.path.join(execution.runs_root(), plan.name)) else None)
+    _, problem, _ = execute.begin([plan])
     if problem:
         flash(problem, "error")
         return redirect(back)
-    ex = execution.start(plan)
-    shared.adopt_runs([ex])
     n = len(got["jobs"])
     flash(f"Checking {got['label']}'s ports: " + (f"{n} kits, one after the other." if n > 1 else "its one kit."), "ok")
     return redirect(url_for("job", job_id=got["jobs"][0]["name"]))
