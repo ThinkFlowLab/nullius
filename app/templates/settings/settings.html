@@ -78,19 +78,19 @@
       {{ section_link('providers', 'Model providers', 'capability', 'openrouter openai anthropic openai-compatible local endpoint ollama vllm api key model_api_url') }}
       {% set access_search = namespace(words='agent keys agent_keys cursor copilot dataset credentials token licence benchmark access') %}
       {% for b in benchmark_access %}{% set access_search.words = access_search.words ~ ' ' ~ b.title %}{% for s in b.needs %}{% set access_search.words = access_search.words ~ ' ' ~ s.name ~ ' ' ~ s.summary %}{% endfor %}{% endfor %}
-      {{ section_link('data-providers', 'Data providers', 'ws', 'hugging face huggingface hf_token docker hub login registry token dataset pull limit') }}
-      {{ section_link('custom-keys', 'Custom keys', 'agent', access_search.words) }}
-      {{ section_link('judge', 'Judges', 'compare', 'typesafe system one llm model judgement') }}
+      {{ section_link('data-providers', 'Data providers', 'cloud-down', 'hugging face huggingface hf_token docker hub login registry token dataset pull limit') }}
+      {{ section_link('custom-keys', 'Custom keys', 'key', access_search.words) }}
+      {{ section_link('judge', 'Judges', 'scale', 'typesafe system one llm model judgement') }}
       {{ section_link('prices', 'Model prices', 'dollar', 'cost price estimate usd tokens list update') }}
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Execution</div>
-      {{ section_link('hosts', 'Run hosts', 'runs', 'ssh remote machines server hosts') }}
+      {{ section_link('hosts', 'Run hosts', 'server', 'ssh remote machines server hosts') }}
       {{ section_link('sandbox', 'Sandbox', 'kit', 'docker container') }}
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Application</div>
-      {{ section_link('storage', 'Local data', 'ws', 'settings.json config catalogue workspaces runs cache licences storage paths file') }}
+      {{ section_link('storage', 'Local data', 'disk', 'settings.json config catalogue workspaces runs cache licences storage paths file') }}
     </div>
     <p class="st-search-empty" role="status" hidden>No settings found.</p>
   </nav>
