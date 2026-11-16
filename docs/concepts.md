@@ -67,7 +67,7 @@ Importing results needs no runner.
 
 ## Workspace
 
-The roots you opened, the imports converted and the judgements saved; the same roots reopen the same workspace.
+The roots you opened, the imports converted and the judgements saved; the same roots reopen the same workspace. A start with no root given reopens the workspace left open; a closed one stays closed.
 
 <div class="grid cards" markdown>
 

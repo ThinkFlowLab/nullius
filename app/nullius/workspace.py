@@ -5,7 +5,7 @@ directory, so they survive a restart, so two sets of runs can be kept apart,
 and so the expensive part — parsing a 375-trial job, converting a foreign
 run tree — happens once per change rather than once per page.
 
-    <home>/<name>/workspace.json   name, label, roots, created, opened
+    <home>/<name>/workspace.json   name, label, roots, created, opened, closed
     <home>/<name>/imported/        foreign run trees converted to job dirs
     <home>/<name>/jobs/<id>.json   a parsed Job, keyed by the job dir's signature
 
@@ -83,6 +83,7 @@ class Workspace:
     opened: str
     dir: str
     job_roots: list = field(default_factory=list)   # after imports: what parse walks
+    closed: bool = False                            # closed by the user: a restart leaves it closed
 
     @property
     def imports_dir(self) -> str:
@@ -156,6 +157,12 @@ def list_all(home_dir: str) -> list:
     return sorted(found, key=lambda w: w.opened, reverse=True)
 
 
+def last_open(home_dir: str) -> Workspace | None:
+    """The workspace opened last, unless the user closed it."""
+    last = next(iter(list_all(home_dir)), None)
+    return None if last is None or last.closed else last
+
+
 def find_by_roots(home_dir: str, roots, besides: str = "") -> Workspace | None:
     """The workspace already pointing at exactly these roots, if any; the
     most recently opened. ``besides``: a folder whose roots a workspace may
@@ -213,6 +220,7 @@ def rename(home_dir: str, ws: Workspace, label: str) -> Workspace:
 
 def touch(ws: Workspace) -> None:
     ws.opened = _now()
+    ws.closed = False
     save(ws)
 
 

@@ -314,6 +314,10 @@ def open_workspace(ws, refresh=False):
 
 
 def close_workspace():
+    ws = STATE["workspace"]
+    if ws is not None:
+        ws.closed = True
+        workspace.save(ws)
     STATE.update({"workspace": None, "roots": [], "label": "", "job_roots": []})
 
 

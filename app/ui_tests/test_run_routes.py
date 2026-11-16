@@ -347,6 +347,44 @@ class RunRoutes(unittest.TestCase):
         self.assertEqual(self.client.post(f"/run/{r.json['id']}/stop", headers={"Origin": "http://localhost", "X-CSRF-Token": ""}).status_code, 403)
 
 
+class ReopenAtStart(unittest.TestCase):
+    """A start with no job path given reopens the workspace left open."""
+    def setUp(self):
+        self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        self.tmp = Path(tempfile.mkdtemp(prefix="nullius-reopen-")); self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = str(self.tmp / "ws")
+        self.stack.enter_context(patch.dict(os.environ, {"RUNS_DIR": str(self.tmp / "runs"), "JOB_ROOTS": ""}))
+        self.stack.enter_context(patch.object(web.shared, "WS_HOME", self.home))
+        self.stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}))
+        self.stack.enter_context(patch.object(web.app, "run", lambda **kw: None))
+        self.root = self.tmp / "a"
+        self.root.mkdir()
+
+    def restart(self, argv=()):
+        web.shared.STATE.update({"workspace": None, "roots": [], "label": "", "job_roots": []})
+        web.main(list(argv))
+        return web.shared.STATE["workspace"]
+
+    def test_no_workspace_shows_the_first_steps(self):
+        self.assertIsNone(self.restart())
+        self.assertEqual(workspace.list_all(self.home), [])
+
+    def test_the_workspace_left_open_opens_again(self):
+        ws = workspace.create(self.home, [str(self.root)], label="witty pelican")
+        web.shared.open_workspace(ws)
+        self.assertEqual(self.restart().name, ws.name)
+
+    def test_a_workspace_whose_roots_are_gone_opens_as_the_open_action_does(self):
+        ws = workspace.create(self.home, [str(self.root)], label="witty pelican")
+        web.shared.open_workspace(ws)
+        self.root.rmdir()
+        self.assertEqual(self.restart().roots, [str(self.root)])
+
+    def test_job_paths_given_win(self):
+        workspace.create(self.home, ["/elsewhere"], label="witty pelican")
+        self.assertEqual(self.restart([str(self.root)]).roots, [str(self.root)])
+
+
 class ResumeIntoWorkspace(unittest.TestCase):
     """A restart while a run started from the builder goes on: the run's job goes back into the workspace it started in."""
     def setUp(self):
@@ -383,27 +421,44 @@ class ResumeIntoWorkspace(unittest.TestCase):
         ex = execution.EXECUTIONS[r.json["id"]]
         ex._save = lambda: None                                # the app stops: the old thread writes no record again
         execution.EXECUTIONS.clear()
-        web.shared.close_workspace()
 
     def restart(self):
+        web.shared.STATE.update({"workspace": None, "roots": [], "label": "", "job_roots": []})   # the app stops
         web.main([])
         back = list(execution.EXECUTIONS.values())
         self.addCleanup(lambda: [e.stop() for e in back])
         return web.shared.STATE["workspace"]
 
-    def test_a_restart_puts_the_run_back_into_its_workspace(self):
-        self.assertIsNone(self.restart())                                                  # the run does not open its workspace
-        self.assertEqual([w.name for w in workspace.list_all(self.home)], [self.ws.name])      # no new workspace
+    def test_a_restart_reopens_the_open_workspace_and_puts_the_run_back_into_its_own(self):
+        self.ws.opened = "2000-01-01T00:00:00+00:00"
+        workspace.save(self.ws)
+        other = workspace.create(self.home, [str(self.tmp / "a")], label="quiet otter")
+        web.shared.open_workspace(other)
+        self.assertEqual(self.restart().name, other.name)                                  # the run does not open its workspace
+        self.assertEqual(len(workspace.list_all(self.home)), 2)                                # no new workspace
         self.assertIn(self.jobs, workspace.load(self.home, self.ws.name).roots)
+        self.assertNotIn(self.jobs, workspace.load(self.home, other.name).roots)
         self.assertEqual(json.loads(self.record.read_text())["workspace"], self.ws.name)
+
+    def test_a_restart_leaves_a_closed_workspace_closed(self):
+        r = self.client.post("/change-source", data={"csrf": self.csrf}); self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 302)
+        self.assertIsNone(self.restart())
+        self.assertIn(self.jobs, workspace.load(self.home, self.ws.name).roots)
+
+    def test_an_old_record_goes_into_the_reopened_workspace(self):
+        rec = json.loads(self.record.read_text()); rec.pop("workspace", None); self.record.write_text(json.dumps(rec))
+        self.assertEqual(self.restart().name, self.ws.name)
+        self.assertEqual(len(workspace.list_all(self.home)), 1)
 
     def test_a_run_whose_workspace_is_gone_gets_one_as_before(self):
         workspace.delete(self.home, self.ws.name)
         again = self.restart()
         self.assertEqual(again.roots, [self.jobs])
 
-    def test_an_old_record_without_its_workspace_gets_one_as_before(self):
+    def test_an_old_record_with_no_workspace_open_gets_one_as_before(self):
         rec = json.loads(self.record.read_text()); rec.pop("workspace", None); self.record.write_text(json.dumps(rec))
+        web.shared.close_workspace()
         again = self.restart()
         self.assertNotEqual(again.name, self.ws.name)
         self.assertEqual(again.roots, [self.jobs])
