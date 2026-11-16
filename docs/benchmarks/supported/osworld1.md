@@ -71,9 +71,15 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 - An agent needs the computer port, proven by its conformance kit. The agent side has been checked on a fake desktop alone.
 - Preparing the VM image (its lock and its download) is not bounded by a unit's setup time; the core's own limit on setup ends it.
 - A VM start that hangs holds the start gate until its unit's setup time ends; units waiting for the gate fail at the end of theirs.
+- On the local backend an agent runs as you and can write where you can, the runner's folder included.
+- A runner let go at the end of scoring's time that then ends by itself is scored from its complete result.
+- A stop during the runner's last clean-up keeps the result already written.
+- A driver killed outright leaves the runner to stop on its own; a kill during a VM's start can leave that VM.
+- A reaper checks a runner's start time before it ends the runner's group; a process number reused in between is not caught.
+- The agent's python and upload calls do not mark OSWorld's desktop as used; each unit's desktop is reset once, before the agent's first call.
 - Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.
 - The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.
-- A task still running after 2 hours is stopped and gets no score.
+- A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes; past any of them the task gets no score.
 
 ## Cite
 

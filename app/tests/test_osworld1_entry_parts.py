@@ -53,6 +53,12 @@ def gone(pid: int, seconds: float = 10) -> bool:
     return not alive(pid)
 
 
+def quiet(d) -> None:
+    """The driver's removal of a unit's VMs stubbed: no docker command, no wait for a late create."""
+    d._remove_vms = lambda where, seconds=None: None
+    d._remove_passes = lambda where, seconds, again=True: None
+
+
 def line_of(p: subprocess.Popen, seconds: float = 10) -> bytes:
     """The child's next line on its output, waited for ``seconds`` at most."""
     got = b""
@@ -76,7 +82,7 @@ class Score(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.d = load("driver", self.tmp)
-        self.d._remove_vms = lambda where, seconds=None: None
+        quiet(self.d)
         self.ws = os.path.join(self.tmp, "trial", "workspace")
         os.makedirs(self.ws)
         self.where = self.d._runner_dir(self.ws)
@@ -211,7 +217,7 @@ class StartAndReap(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.d = load("driver", self.tmp)
-        self.d._remove_vms = lambda where, seconds=None: None
+        quiet(self.d)
 
     def test_the_start_lock_is_shared_by_every_run_on_the_machine(self):
         folder = os.path.join(self.tmp, "run-tmp")
@@ -326,12 +332,13 @@ class Bounds(unittest.TestCase):
                     f"open({os.path.join(self.tmp, 'begun')!r}, 'w').close()\n"
                     f"while not os.path.exists({self.go!r}):\n    time.sleep(0.02)\n"
                     "print('INFO: Started container with ports - VNC: 1', flush=True)\n"
-                    "json.dump({'ok': True, 'password': 'pw'}, open(get('--ready'), 'w'))\n"
+                    "json.dump({'ok': True, 'password': 'pw'}, open(get('--ready') + '.part', 'w'))\n"
+                    "os.replace(get('--ready') + '.part', get('--ready'))\n"
                     "os.read(int(get('--lifeline')), 1)\n")
         self.d.RUNNER_FILE = path
         self.d._task = lambda unit: ("os", "a", {"instruction": "x"})
         self.d._workspace = lambda where: "vm"
-        self.d._remove_vms = lambda where, seconds=None: None
+        quiet(self.d)
         self.d.START_LOCK = os.path.join(self.tmp, "start.lock")
         self.addCleanup(lambda: [self.d._reap_runner(w, seconds=0) for w in list(self.d.RUNNERS)])
 
@@ -360,6 +367,26 @@ class Bounds(unittest.TestCase):
         self.assertTrue(got and got[0]["prompt"].startswith("x"))
         self.assertTrue(self.gate_free())
 
+    def test_a_start_line_of_an_earlier_launch_does_not_free_the_gate(self):
+        self.stand_in_runner()
+        ws = os.path.join(self.tmp, "job", "trial", "workspace")
+        where = self.d._runner_dir(ws)
+        os.makedirs(where)
+        with open(os.path.join(where, "runner.log"), "w") as f:
+            f.write("INFO: " + self.d.STARTED + " - VNC: 1\n")      # an earlier launch's
+        got = []
+        worker = threading.Thread(target=lambda: got.append(self.d._start_runner("os__a", ws, "x", time.time() + 30)),
+                                  daemon=True)
+        worker.start()
+        deadline = time.monotonic() + 10
+        while not os.path.exists(os.path.join(self.tmp, "begun")) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        time.sleep(0.5)                               # the driver's wait has read the log more than once
+        self.assertFalse(self.gate_free(), "an earlier launch's start line let the gate go")
+        open(self.go, "w").close()
+        worker.join(15)
+        self.assertTrue(got and self.gate_free())
+
     def test_a_unit_waiting_for_the_gate_fails_at_its_setups_deadline(self):
         self.stand_in_runner()
         held = open(self.d.START_LOCK, "a")
@@ -387,7 +414,7 @@ class Bounds(unittest.TestCase):
         return where, p, kid
 
     def test_the_reap_ends_the_runners_whole_group(self):
-        self.d._remove_vms = lambda where, seconds=None: None
+        quiet(self.d)
         where, p, kid = self.runner_with_child()
         self.d._reap_runner(where, seconds=0.2)
         self.assertTrue(gone(kid), "a process of the runner's group outlived its reap")
@@ -436,6 +463,60 @@ class Bounds(unittest.TestCase):
         self.assertTrue(gone(runner, 15), "the runner outlived its driver's death")
         self.assertTrue(gone(kid, 15), "the runner's group outlived its driver's death")
 
+    def owned_runner(self, code="pass"):
+        where = os.path.join(self.tmp, "trial", ".work", "osworld")
+        os.makedirs(where, exist_ok=True)
+        p = child(code)
+        if code == "pass":
+            p.wait()
+        self.addCleanup(lambda: (p.poll() is None and p.kill(), p.wait()))
+        sock = tempfile.mkdtemp(dir=self.tmp)
+        self.d.RUNNERS[where] = {"p": p, "sock_dir": sock, "life": None, "start": self.d._start_time(p.pid)}
+        return where, p, sock
+
+    def test_a_removal_the_drivers_end_cuts_is_handed_to_a_reaper(self):
+        where, p, sock = self.owned_runner()
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        def removing(dir, seconds=None):              # the core closes the driver's input while docker works
+            self.d.CLOSED.set()
+            release.wait(10)
+
+        self.d._remove_vms = removing
+        t0 = time.monotonic()
+        with mock.patch.object(self.d.shutil, "which", return_value="/usr/bin/docker"), \
+                mock.patch.object(self.d.subprocess, "Popen") as spawn:
+            self.d._reap_runner(where)
+        self.assertLess(time.monotonic() - t0, 3, "the driver waited on the removal after its input ended")
+        argv = spawn.call_args[0][0]
+        self.assertEqual(argv[2:5], ["--reap-runner", "0", "None"])
+        self.assertEqual((argv[5:7], self.d.RUNNERS), ([where, sock], {}))
+
+    def test_the_units_containers_are_looked_for_again_after_a_kill_and_by_the_reaper(self):
+        removals = []
+        self.d._remove_vms = lambda dir, seconds=None: removals.append(dir)
+        with mock.patch.object(self.d.shutil, "which", return_value="/usr/bin/docker"), \
+                mock.patch.object(self.d.time, "sleep"):
+            where, p, sock = self.owned_runner()          # ended by itself: one look
+            self.d._reap_runner(where)
+            self.assertEqual(len(removals), 1)
+            where, p, sock = self.owned_runner("import time; time.sleep(60)")     # killed: looked for again
+            self.d._reap_runner(where, seconds=0.1)
+            self.assertGreaterEqual(len(removals), 1 + 2)
+            removals.clear()
+            self.d.reap_runner(123456789, None, where, os.path.join(self.tmp, "gone"), 0)
+            self.assertGreaterEqual(len(removals), 2, "the reaper looked for the unit's containers once")
+
+    def test_a_reaper_that_cannot_start_leaves_the_runner_reaped_here(self):
+        where, p, sock = self.owned_runner("import time; time.sleep(60)")
+        self.d._remove_vms = lambda dir, seconds=None: None
+        with mock.patch.object(self.d.subprocess, "Popen", side_effect=OSError("no process can start")):
+            self.d._hand_over(where)
+        self.assertEqual(self.d.RUNNERS, {})
+        self.assertTrue(gone(p.pid, 5), "the runner outlived a reaper that could not start")
+        self.assertFalse(os.path.exists(sock))
+
     def test_the_vms_removal_has_its_bound(self):
         bin_dir = os.path.join(self.tmp, "bin")
         os.mkdir(bin_dir)
@@ -446,6 +527,26 @@ class Bounds(unittest.TestCase):
         with mock.patch.dict(os.environ, {"PATH": bin_dir + os.pathsep + os.environ.get("PATH", "")}):
             self.d._remove_vms(self.tmp, 0.5)
         self.assertLess(time.monotonic() - t0, 5)
+
+
+class Texts(unittest.TestCase):
+    """What the definition says of the two ways a task is run, and of each one's time."""
+
+    def test_the_definition_describes_both_ways_a_task_runs_and_each_ones_time(self):
+        with open(os.path.join(ENTRY, "standard.json")) as f:
+            summary = json.load(f)["summary"]
+        self.assertIn("OSWorld's own agents", summary)
+        self.assertIn("computer port", summary)
+        with open(os.path.join(ENTRY, "benchmark.json")) as f:
+            limits = json.load(f)["limitations"]
+        line = next(x for x in limits if x.startswith("A task run by one of OSWorld's own agents"))
+        self.assertIn("the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes", line)
+        self.assertNotIn("A task still running after 2 hours is stopped and gets no score.", limits)
+        page = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(ENTRY))), "..", "..", "docs", "benchmarks",
+                            "supported", "osworld1.md")
+        if os.path.exists(page):
+            with open(page) as f:
+                self.assertIn(line, f.read())
 
 
 class Snapshot(unittest.TestCase):

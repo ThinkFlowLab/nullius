@@ -117,6 +117,7 @@ CORE_DRIVER_SECONDS = 600                            # the core's wait on score,
 CORE_END_SECONDS = 120                               # the core's wait on end
 ANSWER_SECONDS = 10                                  # this driver's own answer once a bound is reached
 REMOVE_SECONDS = 30                                  # the docker commands that remove a unit's VMs, together
+FALLBACK_SECONDS = 2                                 # this driver's removal when no reaper could start: inside the core's 3 s
 RUNNERS = {}                                         # the runner folder of each unit this driver set up -> its process
 
 
@@ -472,6 +473,7 @@ def _start_runner(unit, dir, instruction, until):
                 if CLOSED.wait(min(1.0, left)):
                     raise RuntimeError("the runner was not started: the unit's time ran out")
         with open(log, "a") as f:
+            launched = f.tell()                      # the start line of this launch is read from here on
             p = subprocess.Popen(argv, cwd=where, env=_runner_env(), stdout=f, stderr=subprocess.STDOUT,
                                  stdin=subprocess.DEVNULL, start_new_session=True, pass_fds=(life_r,))
         RUNNERS[where] = {"p": p, "sock_dir": sock_dir, "life": life_w, "start": _start_time(p.pid)}
@@ -492,7 +494,7 @@ def _start_runner(unit, dir, instruction, until):
         with open(os.path.join(where, "runner.json"), "w", encoding="utf-8") as f:
             json.dump({"pid": p.pid}, f)
         # the gate is held until the VM's start has ended, the provider's port lock with it: no bound of its own
-        _wait(lambda: os.path.exists(ready) or _has(log, STARTED), p, where, until, "its VM's start")
+        _wait(lambda: os.path.exists(ready) or _has(log, STARTED, launched), p, where, until, "its VM's start")
     finally:
         lock.close()
     _wait(lambda: os.path.exists(ready), p, where, until, "its task's setup")
@@ -513,10 +515,12 @@ def _start_runner(unit, dir, instruction, until):
             "agent_seconds": AGENT_SECONDS}
 
 
-def _has(log, text):
+def _has(log, text, start=0):
+    """Whether ``text`` is in ``log`` from its byte ``start`` on."""
     try:
-        with open(log, encoding="utf-8", errors="replace") as f:
-            return text in f.read()
+        with open(log, "rb") as f:
+            f.seek(start)
+            return text.encode() in f.read()
     except OSError:
         return False
 
@@ -575,17 +579,48 @@ def _reap_runner(where, seconds=None):
             _hand_over(where)
             return None
     ended = _exited(p)
-    if p.returncode is None and ended != LOST:       # running or a zombie: the group's number is still its own
+    killed = p.returncode is None and ended != LOST
+    if killed:                                       # running or a zombie: the group's number is still its own
         try:
             os.killpg(p.pid, signal.SIGKILL)
         except OSError:
             pass
         p.wait()
-    if shutil.which("docker") is not None:
-        _remove_vms(where, REMOVE_SECONDS)
+    if shutil.which("docker") is not None and not _removed(where, entry["sock_dir"], again=ended is None):
+        RUNNERS.pop(where, None)                     # a reaper of its own has the removal and the socket's folder
+        return ended
     shutil.rmtree(entry["sock_dir"], ignore_errors=True)
     RUNNERS.pop(where, None)
     return ended
+
+
+def _remove_passes(where, seconds, again=True):
+    """The unit's VMs removed within ``seconds``: once, then (``again``: the runner was killed, a create the engine had
+    accepted may still land) once more after each of 2, 8 and 20 s while time is left, as reap does."""
+    until = time.time() + seconds
+    _remove_vms(where, seconds)
+    for wait in (2, 8, 20) if again else ():
+        if until - time.time() <= wait:
+            return
+        time.sleep(wait)
+        _remove_vms(where, until - time.time())
+
+
+def _removed(where, sock_dir, again):
+    """The unit's VMs removed (_remove_passes) in a thread this driver watches: True once done here; False when this
+    driver's input ended meanwhile and the removal and the socket's folder went to a reaper of its own."""
+    worker = threading.Thread(target=_remove_passes, args=(where, REMOVE_SECONDS, again), name="vm-removal",
+                              daemon=True)
+    worker.start()
+    while worker.is_alive():
+        if CLOSED.wait(0.1):
+            try:
+                _spawn_reaper(0, None, where, sock_dir, 0)
+                return False
+            except OSError:                          # no reaper: this driver's removal goes on while it lives
+                worker.join(REMOVE_SECONDS)
+                return True
+    return True
 
 
 def _reap_all():
@@ -595,21 +630,50 @@ def _reap_all():
 
 def _hand_over(where):
     """The runner let go and handed to a reaper in a session of its own (driver.py --reap-runner), which outlives this
-    driver: Nullius kills this driver's group 3 s after closing its stdin."""
-    entry = RUNNERS.pop(where, None)
+    driver: Nullius kills this driver's group 3 s after closing its stdin. The runner stays in RUNNERS until its reaper
+    has started; when none can start, it goes here at once (_reap_now)."""
+    entry = RUNNERS.get(where)
     if entry is None:
         return
     _let_go(entry)
-    subprocess.Popen([sys.executable, os.path.abspath(__file__), "--reap-runner", str(entry["p"].pid),
-                      str(entry.get("start")), where, entry["sock_dir"], str(REAP_SECONDS)],
+    try:
+        _spawn_reaper(entry["p"].pid, entry.get("start"), where, entry["sock_dir"], REAP_SECONDS)
+    except OSError:
+        _reap_now(where)
+        return
+    RUNNERS.pop(where, None)
+
+
+def _spawn_reaper(pid, start, where, sock_dir, seconds):
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), "--reap-runner", str(pid), str(start), where,
+                      sock_dir, str(seconds)],
                      env=dict(os.environ, NULLIUS_UPSTREAM=UP), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, start_new_session=True)
 
 
+def _reap_now(where):
+    """The runner reaped here at once, when no reaper could start: its group killed while its leader is unreaped, the
+    unit's VMs removed within FALLBACK_SECONDS, the socket's folder gone."""
+    entry = RUNNERS.pop(where, None)
+    if entry is None:
+        return
+    p = entry["p"]
+    if p.returncode is None and _exited(p) != LOST:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        p.wait()
+    if shutil.which("docker") is not None:
+        _remove_vms(where, FALLBACK_SECONDS)
+    shutil.rmtree(entry["sock_dir"], ignore_errors=True)
+
+
 def reap_runner(pid, start, where, sock_dir, seconds):
-    """The reaper of a runner handed over (_hand_over): the runner has ``seconds`` to end by itself; then, when it is
-    still the process started (same number, same start time), its group is killed; the unit's VMs removed within
-    REMOVE_SECONDS; the socket's folder gone."""
+    """The reaper of a runner handed over (_hand_over), or of a removal this driver's end cut (_removed, pid 0): the
+    runner has ``seconds`` to end by itself; then, when it is still the process started (same number, same start time),
+    its group is killed; the unit's VMs removed within REMOVE_SECONDS, looked for again as reap does; the socket's
+    folder gone."""
     def same():
         return start is not None and _start_time(pid) == start
 
@@ -628,7 +692,7 @@ def reap_runner(pid, start, where, sock_dir, seconds):
         except OSError:
             pass
     if shutil.which("docker") is not None:
-        _remove_vms(where, REMOVE_SECONDS)
+        _remove_passes(where, REMOVE_SECONDS)       # again, for a create the engine had accepted before the kill
     shutil.rmtree(sock_dir, ignore_errors=True)
 
 
