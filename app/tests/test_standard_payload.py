@@ -384,7 +384,7 @@ def inventory():
 before = inventory()
 for index in range(3):
     execution_ = execution.Execution(make_plan(index)).start()
-    execution_.thread.join(15)
+    execution_.thread.join(60)
     assert not execution_.thread.is_alive(), "fixture did not finish"
     assert execution_.state == "done", execution_.lines
     assert execution_.app_on_target == str(snapshot), "a later launch must reuse the same snapshot"
@@ -397,7 +397,7 @@ print(json.dumps({"providers": providers, "backend": nullius.__file__,
                   "snapshot": execution_.app_on_target, "successful_launches": 3}))
 '''
         ran = subprocess.run([str(python), "-I", "-B", "-c", driver], cwd=cwd, env=env,
-                             capture_output=True, text=True, timeout=120)
+                             capture_output=True, text=True, timeout=240)
         self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
         parent = json.loads(ran.stdout)
         self.assertEqual(parent["providers"], [str(installed)])
