@@ -109,6 +109,15 @@ class TheStep(unittest.TestCase):
         self.assertNotIn("'model','simulator_model','judge_model'", changed)
         self.assertNotIn('requestAnimationFrame', changed)
 
+    def test_a_long_slug_wraps_inside_its_chip(self):
+        """A name is never cut: a slug with no break wraps inside its chip, and the chip stays inside its row."""
+        self.assertIn('<span class="std-served-slug">', self.SCRIPT)
+        rules = {line.split('{')[0].strip(): line for line in self.STYLE.splitlines() if 'std-served' in line and '{' in line}
+        self.assertIn('overflow-wrap: anywhere', rules['#nullius-builder .std-served-slug'])
+        self.assertIn('min-width: 0', rules['#nullius-builder .std-served-slug'])
+        self.assertIn('max-width: 100%', rules['#nullius-builder .std-served-pick'])
+        self.assertIn('min-width: 0', rules['#nullius-builder .std-served-list'])
+
 
 class TheRows(CompilerCase):
     """command-builder.js's servedRows, run under Node with stand-ins for the page's elements: what each Served by row
@@ -123,7 +132,7 @@ class TheRows(CompilerCase):
              'const esc=x=>String(x??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"}[c]));'
              'const rows=servedRows({C,root,r:()=>r,compiled:()=>compiled,esc,button:(t,a,c)=>`<button class="${c}" ${a}>${t}</button>`});'
              'const seen=()=>({model:input.dataset.servedModel,pending:input.dataset.servedPending,chosen:input.dataset.chosen,placeholder:input.placeholder,'
-             'chips:(list.innerHTML.match(/std-served-pick">([^<]*)</g)||[]).map(x=>x.slice(17,-1))});')
+             'chips:(list.innerHTML.match(/std-served-slug">([^<]*)</g)||[]).map(x=>x.slice(17,-1))});')
 
     def test_a_change_draws_each_served_by_again_in_place(self):
         """A pick, a removal and a model change each draw that row's list and field again, in the elements already there,

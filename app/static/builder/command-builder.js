@@ -17,7 +17,7 @@
     // the server's compile, while what decides the models it names has not changed since
     const known = rec => { const c = compiled(); return c && c.out && c.key === C.servedKey(rec) ? c.out : null; };
     const row = (rec, role) => C.servedRow(rec, role, shown(rec, role), known(rec));
-    const chips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick">${esc(slug) || '“”'}`
+    const chips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick"><span class="std-served-slug">${esc(slug) || '“”'}</span>`
       + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
     const field = (rec, role) => { if (!C.servedRoles(rec).includes(role)) return ''; const s = row(rec, role);
       return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any.">Served by<input list="nb-served" aria-label="Served by, ${NAME[role]}" data-served-by="${role}" data-served-model="${esc(s.model)}" data-served-pending="${s.pending}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
