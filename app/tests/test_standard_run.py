@@ -741,7 +741,7 @@ class RunTest(unittest.TestCase):
                 got, j = self.outcomes(r.job_dir)
                 self.assertEqual(len(j.trials), 3)
                 self.assertEqual((got["model"].outcome, got["model"].n_retries), (classify.RATE_LIMITED, 0))
-                self.assertEqual(os.listdir(os.path.join(r.job_dir, "retried")), [])   # the try before is back; nothing beside it
+                self.assertFalse(os.path.exists(os.path.join(r.job_dir, "retried")))   # the try before is back; nothing beside it
                 with open(os.path.join(r.job_dir, "result.json")) as f:
                     self.assertEqual(json.load(f)["stats"]["n_errored_trials"], 1)
 

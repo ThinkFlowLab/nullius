@@ -960,7 +960,7 @@ class Run:
         pause = self.pace.ended((res.get("exception_info") or {}).get("exception_type"),
                                 said=ready - time.time() if ready else None)
         if pause is not None:
-            self.progress.emit("units", "progress", detail=f"rate limited: no unit starts for {pause:g} s; "
+            self.progress.emit("units", "progress", detail=f"rate limited: no unit starts for {pause:.3g} s; "
                                                            f"{self._running} running of {self.concurrency} at once")
 
     def tag_of(self, i: int, r: int = 1) -> str:
@@ -1037,6 +1037,9 @@ class Run:
             left = self.pace.due(ended, ready - ended if ready else None)
             if left > 0:
                 self.progress.emit("units", "progress", detail=f"rate limited: trying again in {left:.0f} s")
+        self.pace.wait()                         # the attempt stands as it is while it waits
+        if self._stopped.is_set() or self._halt.is_set():
+            return None
         os.makedirs(os.path.dirname(keep), exist_ok=True)
         os.replace(here, keep)
         held = self._held_images.pop(name, None)  # the try before's image, kept for this one
@@ -1053,6 +1056,10 @@ class Run:
                     os.replace(here, gone)
                     shutil.rmtree(gone, ignore_errors=True)
                 os.replace(keep, here)
+                try:
+                    os.rmdir(os.path.dirname(keep))  # retried/ holds no try now: it goes
+                except OSError:
+                    pass
         return res
 
     def ready(self) -> None:
