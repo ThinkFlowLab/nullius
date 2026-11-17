@@ -262,3 +262,5 @@
 #nullius-builder .std-served-slug { min-width: 0; overflow-wrap: anywhere; }
 #nullius-builder .std-served-pick .nb-remove { flex: none; padding: 0 6px; font-size: 14px; line-height: 1; }
 @media (max-width: 650px) { #nullius-builder .std-served-list { grid-column: 1; } #nullius-builder label.std-served:has(.std-served-list:not(:empty)) > .ui-field-copy { grid-row: auto; margin-top: 0; } }
+/* a limit the benchmark or the agent declares: its placeholder reads as a value; Nullius's default stays grey */
+#nullius-builder .nb-field input.nb-declared::placeholder { color: var(--nb-text); opacity: 1; }

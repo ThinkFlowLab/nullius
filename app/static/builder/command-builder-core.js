@@ -144,21 +144,10 @@
   const ownOptions = (b, opts) => Object.fromEntries(Object.entries(opts || {}).filter(([k, v]) => {
     const o = ((b || {}).options || {})[k]; return o && (o.values ? o.values.includes(v) : new RegExp('^(?:' + o.pattern + ')$').test(v)); }));
   // key: a benchmark's key, or one of its versions' refs (key@version)
-  // The Original setup is a preset of the time limits: choosing it fills the agent's limit with its own,
-  // forced on every participant of the recipe and editable like any other; dropping it takes the value
-  // back only while it is still the preset's.
-  const originalMinutes = b => { const o = ((b || {}).setups || []).find(s => s.key === 'original'); return o && o.turn_seconds ? o.turn_seconds / 60 : null; };
-  function presetOriginal(r, had, wasBench) {
-    const b = standardBench(r), m = originalMinutes(b), old = originalMinutes(wasBench), has = chosenOf(r).includes('original'), t = Object.assign({}, r.timeouts);
-    if (had && old != null && t.agent === old && (!has || wasBench !== b)) delete t.agent;
-    if (has && m != null && (!had || wasBench !== b) && t.agent == null) t.agent = m;
-    if (Object.keys(t).length) r.timeouts = t; else delete r.timeouts;
-    return r;
-  }
   function setStandardBenchmark(r, key, other = '') {
     const b = standardBench({benchmark: key});
     if (!b) return r;
-    const was = standardBench(r), had = chosenOf(r).includes('original');
+    const was = standardBench(r);
     if (was !== b) { r.model_choice = 'any'; delete r.served_by; }
     r.benchmark = key;
     const kept = was === b ? datasetsOf(r).filter(id => b.datasets.some(d => d.id === id)) : [];
@@ -174,7 +163,7 @@
     r.options = Object.fromEntries(Object.entries(r.options || {}).filter(([k, v]) => r.others.includes(k) && v && typeof v === 'object'));   // options are each agent's own
     if (r.bench_options) r.bench_options = ownOptions(b, r.bench_options);
     if (was !== b || r.name === 'standard-experiment') { r.name = b.key + '-experiment'; r.title = b.label + ' experiment'; }
-    return presetOriginal(r, had, was);
+    return r;
   }
   // A saved standard recipe read back: known fields only, each of its type.
   function standardFromJSON(raw) {
@@ -854,5 +843,5 @@
         at: String(d.at || '')};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {STANDARD_PHASES,presetOriginal,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });
