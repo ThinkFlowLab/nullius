@@ -22,7 +22,7 @@ from unittest import mock
 
 from nullius import secrets, settings
 from nullius.runs import classify, parse
-from nullius.standard import container, definitions, install, run
+from nullius.standard import cli, container, definitions, install, run
 from tests import docker_tier
 
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "envbench")
@@ -86,6 +86,9 @@ class Schema(unittest.TestCase):
         self.assertTrue(any(".to: one of ('agent', 'driver')" in p for p in said), said)
         said = self.problems({"x": dict(tool, needs_secrets=[{"name": "OPENAI_API_KEY", "to": "agent"}])})
         self.assertTrue(any("already the name of something else" in p for p in said), said)
+        for name in ("OPENAI", "MODEL_LICENSE"):                    # a provider record's name: a licence, kept apart, may take it
+            said = self.problems({"x": dict(tool, needs_secrets=[{"name": name, "to": "agent"}])})
+            self.assertFalse(any("already the name" in p for p in said), said)
         said = self.problems({"x": dict(tool, needs_secrets=[{"name": "A", "to": "agent"}, {"name": "A", "to": "driver"}])})
         self.assertTrue(any("each once" in p for p in said), said)
 
@@ -327,10 +330,10 @@ class _Runs(unittest.TestCase):
         secrets.set("envbench", "FAKE_TOOL_LICENSE_FILE", LIC_FILE, kind="file", filename="tool.lic")
         secrets.set("envbench", "FAKE_LICENSE_SERVER", f"{server_host}:{self.server.port}", kind="server")
 
-    def run_it(self, backend, unsandboxed=True, other=None, b=None):
+    def run_it(self, backend, unsandboxed=True, other=None, b=None, licences=None):
         env = {"PATH": os.environ.get("PATH", os.defpath), "MODEL_API_URL": "http://127.0.0.1:9/v1", "MODEL_API_KEY": "sk-test-not-real"}
         job_dir = run.run(b or bench(), other or probe_agent(), model="m", provider="custom", jobs_root=os.path.join(self.tmp, "jobs"),
-                          concurrency=3, env=env, say=lambda s: None, unsandboxed=unsandboxed, backend=backend)
+                          concurrency=3, env=env, say=lambda s: None, unsandboxed=unsandboxed, backend=backend, licences=licences)
         trials = {}
         for name in os.listdir(job_dir):
             p = os.path.join(job_dir, name, "result.json")
@@ -340,6 +343,22 @@ class _Runs(unittest.TestCase):
                 r["_score"] = _load(score) if os.path.isfile(score) else None
                 trials[r["standard"]["unit"]] = r
         return job_dir, trials
+
+    def from_environment(self, server_host="127.0.0.1"):
+        """The fixture with its driver's token declared a data provider's, given only as ``HF_TOKEN`` in a
+        headless run's environment (``standard.cli.licences``), the rest in its store; and the process's own
+        ``HF_TOKEN`` set too, so no child can inherit it."""
+        b = bench()
+        for s in b["environments"]["licensed"]["needs_secrets"]:
+            if s["name"] == "FAKE_SCORER_TOKEN":
+                s["provider"] = "huggingface"
+        self.store(server_host)
+        secrets.delete("envbench", "FAKE_SCORER_TOKEN")
+        shell = mock.patch.dict(os.environ, {"HF_TOKEN": SECRETS["FAKE_SCORER_TOKEN"]})
+        shell.start()
+        self.addCleanup(shell.stop)
+        held, _ = cli.licences(b, env={"HF_TOKEN": SECRETS["FAKE_SCORER_TOKEN"]})
+        return b, held
 
     def assertNoSecretIn(self, job_dir):
         for root, _, files in os.walk(job_dir):
@@ -382,6 +401,15 @@ class LocalRun(_Runs):
         plain = t["plain"]["_score"]["detail"]
         self.assertEqual((plain["secret"], plain["licfile"], plain["server"]), ("no", "no", "no"))   # another environment's stay there
         self.assertNoSecretIn(job_dir)
+
+    def test_a_data_providers_token_from_the_environment_reaches_its_driver_alone(self):
+        b, held = self.from_environment()
+        job_dir, t = self.run_it("local", b=b, licences=held)
+        lic = t["licensed"]
+        self.assertEqual(lic["verifier_result"]["rewards"]["reward"], 1.0, lic.get("exception_info") or lic["_score"])
+        detail = lic["_score"]["detail"]
+        self.assertEqual((detail["scorer"], detail["hf"], detail["driver_has_scorer_token"]), ("no", "no", True))   # the driver's alone
+        self.assertNoSecretIn(job_dir)                                                          # redacted from every log
 
     def test_another_benchmarks_licences_are_not_its_own(self):
         for n, v in SECRETS.items():
@@ -435,6 +463,14 @@ class DockerRun(_Runs):
         left = subprocess.run([container.DOCKER, "ps", "-aq", "--filter", f"label={container.LABEL}={os.path.basename(job_dir)}"],
                               capture_output=True, text=True).stdout.split()
         self.assertEqual(left, [])                                                               # the forwarder went with its unit
+
+    def test_a_data_providers_token_from_the_environment_reaches_its_driver_alone(self):
+        b, held = self.from_environment(server_host="host.docker.internal")
+        job_dir, t = self.run_it("docker", unsandboxed=False, b=b, licences=held)
+        lic = t["licensed"]
+        self.assertEqual(lic["verifier_result"]["rewards"]["reward"], 1.0, lic.get("exception_info") or lic["_score"])
+        self.assertEqual((lic["_score"]["detail"]["scorer"], lic["_score"]["detail"]["hf"]), ("no", "no"))   # not in the agent's container
+        self.assertNoSecretIn(job_dir)
 
 
 if __name__ == "__main__":

@@ -103,6 +103,17 @@ def for_job(ws_dir: str, job_id: str, version: Optional[str] = None, lane: str =
     return out
 
 
+def job_dirs(ws_dir: str, job_ids) -> list:
+    """The folders that hold these jobs' judgements, in every lane."""
+    return [d for lane in ROOTS for j in job_ids if os.path.isdir(d := os.path.join(_root(ws_dir, lane), _SAFE.sub("_", j)))]
+
+
+def count(ws_dir: str) -> int:
+    """The stored judgements of a workspace, every lane: one per trial and
+    lane, its versions inside. What deleting the workspace loses for good."""
+    return sum(n.endswith(".json") for lane in ROOTS for _, _, names in os.walk(_root(ws_dir, lane)) for n in names)
+
+
 def all_records(ws_dir: str, job_id: Optional[str] = None, lane: str = "system-one"):
     """Every stored record, every version: yields (job_id, trial_name,
     version, record). One job's when `job_id` is given."""

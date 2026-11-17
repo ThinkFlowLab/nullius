@@ -5,7 +5,8 @@
    Stop and Continue answered 403. #}
 {# `own`: this job's own (state, finished) when the run is of several agents - an arm that
    answered everything is done though a later arm failed; the run's state is said beside it. #}
-{% macro execution_strip(ex, csrf, waiting=false, own=none) %}
+{# `deletable`: the key of this job's launch when the Runs page offers its Delete (web/runs._deletable). #}
+{% macro execution_strip(ex, csrf, waiting=false, own=none, deletable=false) %}
 {% set shown = own[0] if own else ex.state %}
 <section class="execution" id="execution" data-run="{{ url_for('run_status', run_id=ex.id) }}" data-stop="{{ url_for('run_stop', run_id=ex.id) }}" data-continue="{{ url_for('run_continue', run_id=ex.id) }}"
          data-live="{{ 'yes' if ex.state in ('preparing', 'running') else 'no' }}" data-waiting="{{ 'yes' if waiting else 'no' }}" data-csrf="{{ csrf }}" data-own="{{ own[0] if own else '' }}">
@@ -13,8 +14,10 @@
     <span class="chip {{ 'st-runs' if shown == 'done' else 'st-blocked' if shown == 'failed' else 'st-lane' }}" id="execution-state">{{ shown }}{% if not own and ex.step and ex.state in ('preparing', 'running') %} · {{ ex.step }}{% endif %}</span>
     <span class="small">on <strong>{{ ex.plan.host.label if ex.plan.host else 'this machine' }}</strong></span>
     {% if ex.error and not own %}<span class="small bad" id="execution-error">{{ ex.error }}</span>{% endif %}
-    <span class="small muted" id="execution-run"{% if not own or ex.state == shown %} hidden{% endif %}>· the run: {{ ex.state }}{% if ex.error %} · {{ ex.error }}{% endif %}</span>
+    <span class="small muted" id="execution-run"{% if not own or ex.state == shown %} hidden{% endif %}>· the launch: {{ ex.state }}{% if ex.error %} · {{ ex.error }}{% endif %}</span>
     {% if ex.state in ('preparing', 'running', 'paused') %}<button type="button" class="btn sm ghost" id="execution-stop">Stop</button>{% endif %}
+    {#- a launch goes as one, from the Runs page: never this job alone #}
+    {% if deletable %}<a class="small run-delete" href="{{ url_for('index', view='launch', delete=deletable, _anchor=deletable|replace(':', '-')) }}">Delete its launch…</a>{% endif %}
   </div>
   {# an agent's run failed with more to come: the question, and the answer #}
   <div class="execution-ask" id="execution-ask" {% if ex.state != 'paused' %}hidden{% endif %}>
@@ -34,7 +37,7 @@
   </div>
   {# a part downloading: its file, how much of it, as a bar #}
   <div class="execution-progress" id="execution-progress" hidden><progress id="execution-bar" max="1" value="0"></progress><span class="small mono" id="execution-progress-text"></span></div>
-  <details class="execution-log" {% if waiting %}open{% endif %}><summary class="small">Run log</summary><pre id="execution-lines"></pre></details>
+  <details class="execution-log" {% if waiting %}open{% endif %}><summary class="small">Launch log</summary><pre id="execution-lines"></pre></details>
 </section>
 <script>
 (() => {
@@ -96,7 +99,7 @@
       retry = alive;
       if (own) {        // this arm has ended: its chip stays, the run's state goes beside it
         const run = document.getElementById('execution-run');
-        run.hidden = j.state === own; run.textContent = '· the run: ' + j.state + (alive && j.step && j.state !== 'paused' ? ' · ' + j.step : '') + (j.error ? ' · ' + j.error : '');
+        run.hidden = j.state === own; run.textContent = '· the launch: ' + j.state + (alive && j.step && j.state !== 'paused' ? ' · ' + j.step : '') + (j.error ? ' · ' + j.error : '');
       } else {
         state.textContent = j.state + (alive && j.step && j.state !== 'paused' ? ' · ' + j.step : '');
         state.className = 'chip ' + (j.state === 'done' ? 'st-runs' : j.state === 'failed' ? 'st-blocked' : (j.state === 'paused' || j.state === 'stopping') ? 'st-branch' : 'st-lane');

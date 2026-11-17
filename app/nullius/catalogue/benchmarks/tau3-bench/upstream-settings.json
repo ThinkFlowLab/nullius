@@ -158,21 +158,21 @@
     "setting": "--max-steps",
     "values": "an integer",
     "default": "200 (DEFAULT_MAX_STEPS)",
-    "nullius": "fixed:200 - the upstream's default, the leaderboard's; limits.turns (100) lets its limit be the one met"
+    "nullius": "option:max_steps"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",
     "setting": "--max-errors",
     "values": "an integer",
     "default": "10 (DEFAULT_MAX_ERRORS)",
-    "nullius": "fixed:10 - the upstream's default"
+    "nullius": "option:max_errors"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",
     "setting": "--timeout",
     "values": "seconds",
     "default": "none",
-    "nullius": "fixed:none - the upstream's default; a run's turn limit (600 s an agent turn, 7200 s an original conversation) ends a unit that hangs, as the unit's error"
+    "nullius": "fixed:none - the upstream's default; a run's agent limit (7200 s a conversation, as an original one; run --timeout agent=SECONDS forces another) ends a unit that hangs, as the unit's error"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",

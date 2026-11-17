@@ -202,7 +202,7 @@ class TheRunGetsItsKeyOnly(CompilerCase):
         harbor.write_text('#!/usr/bin/env bash\nenv > "$NULLIUS_JOBS"/../harbor.env\n'); harbor.chmod(0o755)   # what Harbor, and every container it starts, could read
         held = {n: 'sk-held-' + n.lower() for n in execution.withheld()}
         plan = execution.Plan(name='tau3', script=out['script'], model=out['model'], parts=out['parts'], jobs=out['jobs'],
-                              key_var='OPENROUTER_API_KEY', url_var='', base_url=providers.PROVIDER_BASE['openrouter'])
+                              key_var='OPENROUTER_API_KEY', url_var='', base_url=providers.PRESETS['openrouter']['base'])
         with patch.dict(os.environ, dict(held, PATH=str(tmp / 'bin') + os.pathsep + os.environ['PATH'])), patch.object(execution, 'SYNC_EVERY', 0.05):
             ex = execution.Execution(plan, root=str(tmp / 'runs')).start()
             ex.thread.join(60)

@@ -33,7 +33,7 @@
   </div>
 </header>
 
-{% if execution %}{{ execution_strip(execution, csrf, own=own if execution.plan.steps()|length > 1 else none) }}{% endif %}
+{% if execution %}{{ execution_strip(execution, csrf, own=own if execution.plan.steps()|length > 1 else none, deletable=deletable) }}{% endif %}
 {% if job.is_preparing and not live_board and not ended %}
 {# Launched, not started: Harbor has written the configuration and nothing
    else. There is no result record and no feed to fold yet, so this page

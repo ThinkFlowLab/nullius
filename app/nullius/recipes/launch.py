@@ -67,6 +67,8 @@ def payload(cat, jobs, workspace_name=""):
         "runners": [standard.RUNNER, providers.HARBOR],
         # why a saved recipe of a runner no longer offered does not open (a benchmark's own scripts: its Original setup)
         "runnerGone": providers.GONE,
+        # the providers a run is sent to, from the registry: the Model step offers each where its protocols fit
+        "providers": providers.run_choices(),
         # the standard's benchmarks, agents and capabilities, and why a pair does not fit (standard/recipe.py, choices)
         "standard": standard.choices(),
         "parameters": PARAMETERS, "benchmarks": [asdict(b) | {"label": b.label} for b in cat.benchmarks],

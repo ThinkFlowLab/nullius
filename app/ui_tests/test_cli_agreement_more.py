@@ -111,12 +111,11 @@ class Agreement(unittest.TestCase):
         self.assertEqual(code, 0)
         rows = json.loads(out)
         page = self.page("/workspaces")
-        listed = re.findall(r'<td class="mono faint">([^<]+)</td>', page)
-        self.assertEqual([r["name"] for r in rows], listed[::2])   # name cells; the opened stamps between
+        listed = re.findall(r'<tr class="[^"]*" data-ws="([^"]+)"', page)
+        self.assertEqual([r["name"] for r in rows], listed)
         for row in rows:
             with self.subTest(workspace=row["name"]):
-                block = page.split(f'<td class="mono faint">{row["name"]}</td>', 1)[1].split("</tr>", 1)[0]
-                self.assertIn(f'<td class="num">{row["n_cached"]}</td>', block)
+                block = page.split(f'data-ws="{row["name"]}"', 1)[1].split("</tr>", 1)[0]
                 for root in row["roots"]:
                     self.assertIn(f'<span class="mono">{html.escape(root)}</span>', block)
                 self.assertIn(row["opened"][:16].replace("T", " "), block)

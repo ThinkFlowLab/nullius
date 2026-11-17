@@ -121,8 +121,8 @@ benchmark[@version] × agent|capability × model × dataset × its options × li
    │ backend, or --backend container (see Safety); an option that needs the
    │ machine's programs is refused without them, one that embeds gets
    │ the run's own relay, started before the driver
-   ▼ for each unit, N at a time (its agent turn: the unit's agent_seconds,
-   │ else limits.turn_seconds)
+   ▼ for each unit, N at a time (the agent's whole work on it: --timeout agent,
+   │ else the unit's agent_seconds, else limits.turn_seconds)
 setup    driver fills the unit's workspace, returns the prompt (+ MCP servers),
          or for a capability, what to add and what to recall
 produce  agent: an ACP session in the workspace, model via the relay
@@ -142,12 +142,15 @@ record); verifier/reward.txt and score.json
 | --- | --- |
 | Units | Run `-j` at a time, each with its own workspace (a git repository of its own), home and relay |
 | A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost |
-| Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image |
+| Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image. `boat`: each unit's agent or capability in a boat.dev VM of its own (`standard/boat.py`, [The boat backend](#the-boat-backend)) |
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
-| Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate, unless the unit passed; a turn past its limit is the agent's timeout. `"kind": "score"` leaves a score and no pass |
+| Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate, unless the unit passed; an agent past its limit for the unit, every turn included, is the agent's timeout ([time limits](cli/run.md#time-limits)). `"kind": "score"` leaves a score and no pass |
 | Rate limits | After a unit ends `rate_limited`, no unit starts for 5 s, doubling while units keep ending so (up to 300 s) and reset by any other end; `stage=units state=progress` says the pause and how many run. Each `rate_limited` unit is run once more after the others, one at a time: its first attempt moves whole to `retried/<trial>/`, the second is the trial and counts. Not after a Stop, a refused key or the spending cap, which counts both attempts |
-| The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. Provider `anthropic` speaks Anthropic's Messages (`ANTHROPIC_API_KEY` as `x-api-key`) |
+| The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. The key goes as the agent's protocol says: `x-api-key` and `anthropic-version` for `messages`, else a bearer header. Provider `anthropic` serves `messages` only ([protocols](settings/model-providers.md#protocols)) |
 | Constraints (`--constraint KEY=VALUE`) | What the machine allows Nullius, from Settings ([constraints](settings/run-hosts.md#constraints)): flags on every container the run starts on the machine, on either backend; a systemd scope for each process the run starts there (its drivers, and its agents and capabilities on the local backend); the most units at a time; the CPU affinity; the driver's `CUDA_VISIBLE_DEVICES`. Before the first unit, the run checks the container caps on the engine and the scope caps on systemd: the local backend refuses a cap that no scope holds, and the container backend runs its drivers without a scope. `config.json` records the values under `standard.constraints` |
+| A cap on model calls (`--max-calls`) | Agents only. A unit's relay counts its agent route's answered calls and refuses the one past the cap: the agent's error, as a timeout is ([Run a benchmark](cli/run.md#a-cap-on-model-calls)) |
+| Who served a call | Each call's record keeps the routing field it was sent with (`request.routing`), the serving provider its reply names (`reply.served_by`), how the reply ended (`reply.end`: `finish_reason`, `stop_reason` or a Responses status) and an error the reply holds under a 200 (`reply.error`: the top-level one, else that of the first choice that has one), each read apart from the rest of the record and cleaned of credentials. The call keeps its status, and the unit's verdict reads it as before |
+| Serving providers (`--served-by`) | On OpenRouter, the providers that may answer a model, in order and no other: each relay, a container's included, sends `provider: {order, allow_fallbacks: false}` on every request sent as that model, in place of the caller's own (kept as `request.routing_asked`). `config.json` records `standard.served_by`; each trial's `result.json` and the job's say the calls of every route by serving provider and, for each pinned model, `held`, which reads the provider's name alone ([Run a benchmark](cli/run.md#serving-providers)) |
 | A spending cap (`--max-usd`, `--max-usd-per-unit`) | Each relay books a call in the job's ledger (`.work/ledger`, `standard/ledger.py`) before sending it, and refuses the one that does not fit the run's cap or its unit's ([Run a benchmark](cli/run.md#a-spending-cap)) |
 
 ## Safety
@@ -172,6 +175,21 @@ The container backend (`--backend container`) is the isolation, and needs no suc
 Through Podman's Docker API (a docker CLI with `DOCKER_HOST` at `podman system service`'s socket), Nullius runs docker and needs `netns = "bridge"`, a DNS-enabled `default_network`, and `userns` at its default in `containers.conf`: with `keep-id`, a container's root is a sub-uid and cannot write the unit's folders.
 
 A rootful Docker with `userns-remap` maps the uids of each container to sub-uids. There, the containers that use your files (the agent's, the relay, an install, the check, a door and an own image) run with `--userns=host`, as on a default Docker. The licence forwarder and the check's proxy keep the remap.
+
+### The boat backend
+
+`--backend boat`: each unit's agent or capability in its own [boat.dev](https://boat.dev) VM. Driver, relay, spending cap and scoring stay with the run.
+
+| Piece | Rule |
+| --- | --- |
+| Key | Settings → Sandbox, or `BOAT_API_KEY` |
+| VM | One per unit, `--boat-size` (`small` by default). Always deleted. Free trial: 2 hours at most |
+| Units at a time | Capped by the account's VM limit. The run warns when it cannot start every unit |
+| Agent time | Excludes the VM's start-up |
+| Isolation | The agent reaches loopback only: no internet, no DNS, no model key |
+| Files | A link into your home or keys refuses the unit. Links out of the workspace are not copied back |
+| Code checks | A `runs_code` check needs Docker where the run runs |
+| Not run | Units needing the public web, their own image, a licence file or server of this machine, or MCP servers. No GPUs |
 
 ### A benchmark's MCP server on the machine
 
@@ -341,7 +359,7 @@ N machines are N runs of the same command, each with `--shard I/N`, and one merg
 | Shards by the unit's id | `sha256(unit id) mod N` (`standard/shard.py`); changing N moves most units. Order: the driver's `units`, the units `--units FILE` lists, the shard, then `--limit` (`--shard 1/2 --limit 6` is the first six units of shard 1) |
 | A unit keeps its place | `u0042` is the 43rd unit of the whole dataset in every shard |
 | One launch | Each shard's `config.json` records `standard.shard` (`index`, `of`, `units_total`, `partition`, `planned`, `limit`) and `standard.launch` (`--launch`, else the UTC day, benchmark, agent or capability and model). With `--units`, `units_total` counts the listed units. The shards' lists hold the same units; a list's file name, comments and sha256 may differ from shard to shard |
-| `cli merge JOB_DIR... -o OUT` | One job (`standard/merge.py`): trials hard-linked, `result.json` recomputed, `config.json` with `merged_from`. Shards that differ in launch, version, dataset, agent, model, backend or N are refused unless `--force`. Shards whose lists hold different units, and two trials of one unit, are refused always. `merge` compares the units each list holds, in any order; the sha256 is kept in the record only |
+| `cli merge JOB_DIR... -o OUT` | One job (`standard/merge.py`): trials hard-linked, `result.json` recomputed, `config.json` with `merged_from`. Shards that differ in launch, version, dataset, agent, model, serving providers, backend or N are refused unless `--force`. Shards whose lists hold different units, and two trials of one unit, are refused always. `merge` compares the units each list holds, in any order; the sha256 is kept in the record only |
 | `cli prove --shard I/N` | The controls and the leak check on that shard's units; each record says `shard` |
 
 ```bash title="Two machines, one merge"
@@ -418,7 +436,8 @@ use the source folders and repository checks.
 | `score.judge` | `{model, says}`: the official judge. Its route (`<unit>-judge`) is asked as that model, recorded beside the unit's calls, never as the agent's. `cli run --judge-model` asks another |
 | `simulator` | `{model, says}`, only with `agent.conversation/v1`: the user's model, on `<unit>-simulator`. The conversation opens with a `turn` on an empty transcript, its message after `setup`'s prompt and a blank line. A control never asks it. `cli run --simulator-model` asks another |
 | `leaderboard` | `{says, simulator?, judge?, bench_options?, repeat?}`: what the upstream's leaderboard fixes besides the ranked model, from its own submission rules - the user simulator's and judge's models, the benchmark's options it sets and the fewest attempts per unit. The builder then offers **Like the leaderboard** |
-| `limits.turns` | At most this many agent turns in a conversation (default 20) |
+| `limits.turns` | At most this many agent turns in a conversation (default 20; `cli run --max-turns` forces another) |
+| `limits.turn_seconds` | The agent's whole work on a unit, every turn of a conversation included (default 900; a task's `agent_seconds` or `cli run --timeout agent=` before it) |
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
 
@@ -455,6 +474,8 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `about` | A line about each value |
 | `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, or named `files` |
 | `when` | Another option's values that make it apply |
+| `limit` | `true`: a bound of the upstream's own (steps, errors). The builder shows it in Limits, under the benchmark's name |
+| `by` | Its default under each value of another option, e.g. each OSWorld agent's own steps |
 | `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`) |
 
 - **Temperature** in GSM8K and HumanEval's Original setups accepts a non-negative decimal, such as `0.5`. **Provider default** omits the parameter; the provider/model decides. Some models restrict overrides. In the builder, leave the input empty for provider default; the CLI accepts `--bench-option temperature=0.5` or `temperature=default`. This does not override an agent's own sampling settings.

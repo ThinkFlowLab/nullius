@@ -57,12 +57,12 @@ and its resources. The source layout stays under `app/`.
   a Harbor benchmark added from the Benchmarks page's form; `citation`, an entry's
   BibTeX read into the paper its page shows; `storage`, whole-folder user overlays and restoring bundled entries; `sources`, where each dataset's data comes
   from for each way it runs), `recipes/`
-  (`launch`, the builder's vocabulary), `providers` (where a run's model calls go, and the builder's steps),
+  (`launch`, the builder's vocabulary), `providers` (the model provider registry: protocols, presets and each provider's record, read by every consumer; and the builder's steps),
   `harbor/` (`source`: the Harbor a recipe pins - built, kept, scanned for its agents;
   `feed`: the live feed any Harbor writes, from its own trial hooks),
   `importers/` (`atif` ATIF, `otel` OpenTelemetry, and the `cli`), `judge/` (`questions`, `state`, `client`, `store`, `batch`, `reconcile`, `lanes`),
   `standard/` (the Nullius standard, `docs/standard.md`: `ports`, `names` (capability vocabulary and legacy aliases), `definitions` (with an agent's or capability's versions), `match`,
-  `jsonl`, `acp`, `cancellation` (interruptible protocol waits), `relay`, `ledger` (a run's spending cap), `pins` (image digests checked against registry tags), `install`, `run`, `container` (the container backend), `setup_container` (an Original setup's driver and its Linux dependencies in Docker), `forward` (a licence server's one door from it, or a benchmark's MCP server's), `web_services` (HTTP fixtures a driver's setup declares, each behind a unit-local Docker door), `mcp_machine` and `mcp_bridge` (a benchmark's MCP server run on the machine, in its driver's environment, and the agent's bridge to it), `network_requirements` (an environment's declared public web access: the schema and the connectivity check), `hostreq` (what a benchmark's options need of the machine its driver runs on: the check and the install) and `egress` (an own image's check's proxy to public addresses), `job`, `conform`, `fidelity` (ACP against the agent's own CLI), `prove` (a benchmark's controls and proofs), `shard` and `merge` (one run over many machines), `recipe` (the builder's standard recipe), `howto` (the How to add steps) and the `cli`; its
+  `jsonl`, `acp`, `cancellation` (interruptible protocol waits), `relay`, `ledger` (a run's spending cap), `pins` (image digests checked against registry tags), `install`, `run`, `container` (the container backend), `boat` (the boat backend: each unit's agent in a boat.dev VM), `setup_container` (an Original setup's driver and its Linux dependencies in Docker), `forward` (a licence server's one door from it, or a benchmark's MCP server's), `web_services` (HTTP fixtures a driver's setup declares, each behind a unit-local Docker door), `mcp_machine` and `mcp_bridge` (a benchmark's MCP server run on the machine, in its driver's environment, and the agent's bridge to it), `network_requirements` (an environment's declared public web access: the schema and the connectivity check), `hostreq` (what a benchmark's options need of the machine its driver runs on: the check and the install) and `egress` (an own image's check's proxy to public addresses), `job`, `conform`, `fidelity` (ACP against the agent's own CLI), `prove` (a benchmark's controls and proofs), `shard` and `merge` (one run over many machines), `recipe` (the builder's standard recipe), `howto` (the How to add steps) and the `cli`; its
   `payload` snapshots the running backend and effective catalogue for a remote host;
   conformance kits under `standard/kits/`, each a benchmark: a `driver` and, for the
   tools kit, an MCP server `mcp_kit`) - the definitions it reads are in the catalogue:
@@ -294,6 +294,18 @@ one assistant or one benchmark.
 Use `nullius.thinkflowlab@proton.me` for Nullius-owned contact email addresses,
 including security reports.
 
+### Documentation
+
+`docs/` is terse: fragments and tables, the fewest words that change what a
+reader chooses, does or concludes.
+
+- Keep guarantees, requirements, refusals and their fix. Drop the mechanism
+  (flags, files, protocols, how a key travels), interface narration, history
+  and asides.
+- A table cell is a line, not a paragraph. One fact lives on one page; others link.
+- A prerequisite Review already checks is not repeated.
+- `docs/standard.md` headings are never renamed: the import skills cite them.
+
 ### Attribution
 
 **No machine attribution in commit messages or pull request descriptions** — no
@@ -424,7 +436,7 @@ One line each; the code and the pages carry the rest.
   upstream's own code at a pin, its dependencies in its own environment, and
   any code of ours beyond glue is asked about first
 - Settings, its variables and their validation — `app/nullius/settings.py`;
-  run hosts, keys and the connection test — `app/nullius/hosts.py`
+  hosts, keys and the connection test — `app/nullius/hosts.py`
 - Removing a benchmark, agent or capability throughout the app, including
   generated artifacts and requested runtime data — `/remove-integration`
   (`.claude/skills/remove-integration/SKILL.md`)

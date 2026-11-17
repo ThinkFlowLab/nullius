@@ -106,14 +106,14 @@
   },
   "score": {
     "kind": "pass",
-    "says": "the upstream's own batch runner, run_tasks, on the task: its Orchestrator holds the conversation by its rules (max steps 200, max errors 10, the user's stop) at the trial's seed run_tasks draws, an attempt that raises is made again (3 retries) and the last recorded INFRASTRUCTURE_ERROR, which is the unit's error, never a score; its evaluator (evaluate_simulation, ALL) scores the SimulationRun the Orchestrator returns: 0 unless the user ended it (the upstream's agent never does); else the product of the task's reward_basis - the database after the agent's calls, replayed by the upstream's environment, hashes as after the gold actions (DB), each required fact is in one of the agent's messages (COMMUNICATE), the judge finds each NL assertion met (NL_ASSERTION)",
+    "says": "the upstream's own batch runner, run_tasks, on the task: its Orchestrator holds the conversation by its rules (max steps 200 and max errors 10 unless the run sets lower or other ones, the user's stop) at the trial's seed run_tasks draws, an attempt that raises is made again (3 retries) and the last recorded INFRASTRUCTURE_ERROR, which is the unit's error, never a score; its evaluator (evaluate_simulation, ALL) scores the SimulationRun the Orchestrator returns: 0 unless the user ended it (the upstream's agent never does); else the product of the task's reward_basis - the database after the agent's calls, replayed by the upstream's environment, hashes as after the gold actions (DB), each required fact is in one of the agent's messages (COMMUNICATE), the judge finds each NL assertion met (NL_ASSERTION)",
     "judge": {
       "model": "gpt-4.1-2025-04-14",
       "says": "the upstream's NL-assertion evaluator (evaluator_nl_assertions.py, its prompt, its call and its own model name), reached through the judge's route, at temperature 0, asked only for a task whose reward_basis names NL_ASSERTION and that has assertions"
     }
   },
   "limits": {
-    "turn_seconds": 600,
+    "turn_seconds": 7200,
     "turns": 100,
     "attempts": "The upstream's batch runner draws one seed per trial from its base seed 300 (run_tasks: random.seed(300), then randint(0, 1000000) per trial, in order) and gives it to the agent and the user simulator: attempt N of a unit is its trial N-1 at that seed, as --num-trials runs it, so --repeat 4 is the leaderboard's four trials and pass^k is computed as the upstream's metrics compute it."
   },
@@ -310,6 +310,28 @@
       "about": {
         "default": "The upstream's own arguments: temperature 0, no effort sent."
       }
+    },
+    "max_steps": {
+      "label": "Steps per conversation",
+      "summary": "The upstream's --max-steps: the most messages and tool calls of a conversation, the user's and the agent's together, at most 200: its default, the leaderboard's, which limits.turns leaves the one met.",
+      "setups": [
+        "original",
+        "yours"
+      ],
+      "default": "200",
+      "pattern": "[1-9][0-9]?|1[0-9]{2}|200",
+      "limit": true
+    },
+    "max_errors": {
+      "label": "Tool errors per conversation",
+      "summary": "The upstream's --max-errors: the most tool calls that fail before a conversation ends. 10, its default, is the leaderboard's.",
+      "setups": [
+        "original",
+        "yours"
+      ],
+      "default": "10",
+      "pattern": "[1-9][0-9]{0,3}",
+      "limit": true
     },
     "upstream_agent": {
       "summary": "Whether the benchmark's own agent runs normally, receives the reference actions, or works alone with the user's tools.",

@@ -49,6 +49,8 @@ FEED = FIXTURES / "live" / "events.jsonl"
 WORKFLOW_ONLY = {
     "/compare/task/<path:task>": "driven under the comparison workflow with a real two-run cohort",
     "/job/<job_id>/live": "driven under the live-board workflow with a job carrying a feed",
+    "/launch/<key>/ask": "driven under the Launches page workflow with a run record (test_run_routes.LaunchesPage)",
+    "/launch/<key>/open": "driven under the Launches page workflow with a run record (test_run_routes.LaunchesPage)",
 }
 
 # Rules that answer 404 without a query argument by design - the argument names

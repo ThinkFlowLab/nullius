@@ -33,7 +33,7 @@ else:  # python app/app.py, and the source route suite
     from web.core import app
     from web import shared
     from web import filters, runs, traces, compare, builder, catalogue, agents, settings, workspaces, execute, judge, feasibility, reconcile, judge_tasks, onboarding
-from nullius import execution  # noqa: E402  - recorded runs, picked up again at start
+from nullius import execution, workspace  # noqa: E402  - recorded runs, picked up again at start; the workspace left open
 
 
 def _port(value: str) -> int:
@@ -80,7 +80,12 @@ def main(argv=None) -> None:
         for r in ws.roots:
             print(f"  {r}")
     elif not unmatched:
-        print("No job path given — the web page will ask for one, or offer a workspace.")
+        ws = workspace.last_open(shared.WS_HOME)
+        if ws:
+            shared.open_workspace(ws)
+            print(f"Workspace {ws.name!r} ({ws.dir}) reopened")
+        else:
+            print("No job path given — the web page will ask for one, or offer a workspace.")
     # Runs started from the builder before this start: the ones still going
     # are followed again (they run detached on their target), the rest listed.
     back = execution.restore()

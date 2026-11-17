@@ -26,9 +26,9 @@ Then [read its results](results.md).
 | Runner | **Nullius**, [the standard](standard.md#from-the-app), or **Harbor** with its pin ([Which Harbor](#which-harbor)). A choice only when the benchmark runs on both; Nullius is preselected |
 | Dataset | One or more; each dataset with each agent is a job of its own. Each shows its proofs. A missing or expired credential is named once, linked to **Settings → Data providers** (Hugging Face) or **Custom keys** |
 | Agent (*Memory* on a memory benchmark) | Reference agents first, or **No agent · Original** for a direct-model benchmark. Memory benchmarks offer **Original memory** alongside compatible memory capabilities. Controls follow separately; each choice has its own settings tab |
-| Model | **Like the paper** keeps what the paper fixed: the model picker shows only documented paper models when the benchmark lists them (the filter applies to the selected agent or capability too), and the user simulator and judge are their official models. A benchmark that lists no paper models but has an official simulator or judge leaves the model to you. **Like the leaderboard**, on a benchmark that declares its leaderboard's rules, leaves the model to you and fixes what the leaderboard does: its user simulator and judge, the options it sets and at least its attempts per unit. **Any of your choice** opens the provider's full list and lets the simulator and judge be changed. Nothing fixed by the paper: the paper choice is disabled |
-| Limits | Task limit (empty is every task), a task-name glob, concurrency, retries, attempts per unit, timeouts in minutes. On the Nullius runner, a [spending cap](cli/run.md#a-spending-cap) for the run and one per unit; a [list of units](cli/run.md#a-list-of-units) is set only on the command line |
-| Where | This machine, a Settings host, or several machines, one shard each, merged into one job. The backend: *local processes*, as you, with the explicit yes to running unsandboxed; or *Container*, on Docker or Podman. A benchmark option's machine setup is installed on a click (`sudo -n`), or its commands are given |
+| Model | **Like the paper** keeps what the paper fixed: the model picker shows only documented paper models when the benchmark lists them (the filter applies to the selected agent or capability too), and the user simulator and judge are their official models. A benchmark that lists no paper models but has an official simulator or judge leaves the model to you. **Like the leaderboard**, on a benchmark that declares its leaderboard's rules, leaves the model to you and fixes what the leaderboard does: its user simulator and judge, the options it sets and at least its attempts per unit. **Any of your choice** opens the provider's full list and lets the simulator and judge be changed. Nothing fixed by the paper: the paper choice is disabled. **Served by**, a row after each model field's when the provider is OpenRouter, waits for the provider list and stays hidden when it has exactly one entry and the field has no pin; an existing pin always shows, as does an empty or failed list. Two endpoints of one provider count as two entries. It chooses the serving providers that may answer that model, tried in their order and no other ([Run a benchmark](cli/run.md#serving-providers)). Its picker is the model's: typing filters the model's providers, and each pick, or a slug typed and Enter, joins the list under it, each removable. Empty: any of them. Review shows them in its Model row |
+| Limits | Task limit (empty is every task), a task-name glob, concurrency, retries, attempts per unit, timeouts in minutes. On the Nullius runner, a [spending cap](cli/run.md#a-spending-cap) for the run and one per unit, turns per conversation for a benchmark that holds conversations, a [cap on model calls](cli/run.md#a-cap-on-model-calls) per unit, [time limits](cli/run.md#time-limits) per phase in minutes, forced on every participant (empty: the benchmark's or agent's own value in text colour, Nullius's default in grey), then the benchmark's own bounds in a last section of its name (τ³-bench's steps and tool errors per conversation, OSWorld's steps per task); a [list of units](cli/run.md#a-list-of-units) is set only on the command line |
+| Where | This machine, a Settings host, or several machines, one shard each, merged into one job. The backend: *local processes*, as you, with the explicit yes to running unsandboxed; or *Container*, on Docker or Podman; or *Boat*, a VM per unit. A benchmark option's machine setup is installed on a click (`sudo -n`), or its commands are given |
 | Review | One row per decision and the prerequisites. **Run** |
 
 Original setups run on local processes or in Docker; Docker changes isolation only.
@@ -54,13 +54,13 @@ If the recipe's provider failed its last [test in Settings](settings/model-provi
 
 ### Which providers
 
-A provider is *set* when Settings holds `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or the URL of an OpenAI-compatible endpoint, for both runners. Each OpenAI-compatible endpoint is a choice of its own, listed by its name.
+A provider is *set* when Settings holds its key (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`), or the base URL of a custom provider. Each custom provider is a choice of its own, listed by its name. The Model step offers a provider only where it serves what the recipe's agents speak ([protocols](settings/model-providers.md#protocols)): Anthropic for an agent of the standard that speaks `messages`, never for a Harbor recipe.
 
 | Set in Settings | Model stage | Run |
 | --- | --- | --- |
 | One | That provider, nothing to choose | Open |
 | Several | A choice among them | Open |
-| None | All three | Disabled until a provider is configured |
+| None | Every provider that fits | Disabled until a provider is configured |
 | A recipe naming one that is not set | Kept, marked *not set in Settings* | Disabled until another is chosen |
 
 A recipe of controls alone needs no key unless the benchmark uses a judge or embedding model.
@@ -68,17 +68,18 @@ A recipe of controls alone needs no key unless the benchmark uses a judge or emb
 | Provider | Key | Endpoint |
 | --- | --- | --- |
 | OpenRouter | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1`, fixed |
-| OpenAI | `OPENAI_API_KEY` | api.openai.com |
-| OpenAI-compatible | The endpoint's key, optional (placeholder `local` without it) | The endpoint's URL, required |
+| OpenAI | `OPENAI_API_KEY` | `https://api.openai.com/v1`, fixed |
+| Anthropic | `ANTHROPIC_API_KEY` | `https://api.anthropic.com/v1`, fixed |
+| Custom | The provider's key, optional (placeholder `local` without it) | The provider's base URL, required |
 
-A recipe on an OpenAI-compatible endpoint records `"provider": "custom"` and
+A recipe on a custom provider records `"provider": "custom"` and
 the endpoint's id, `"endpoint": "GPU_BOX"`. The id does not change when the
 endpoint is renamed. A recipe without an `endpoint` uses the one at
 `MODEL_API_URL`. A recipe on an endpoint that was removed keeps it, marked
 *not set in Settings*, and Run stays disabled until another is chosen.
 
 The Model step searches the selected provider's model catalogue: OpenRouter,
-OpenAI, or the `/models` endpoint of the selected OpenAI-compatible endpoint.
+OpenAI, Anthropic, or the `/models` endpoint of the selected custom provider.
 Keys stay on the Nullius host. Choose a result to use its exact model ID, or
 enter an ID manually if the catalogue is unavailable. An Original setup with
 a declared model list keeps those published choices.
@@ -105,7 +106,8 @@ a declared model list keeps those published choices.
 | Proofs | Local runs save to the user catalogue. A host uses a writable copy in its run's `catalogue/`, isolated from the host's own entries; that copy and its proofs mirror back alongside `jobs/`, without changing the active user catalogue |
 | Docker or Podman | The engine must answer `ps` (`docker ps`, or `podman ps` for the standard's container backend), or the run stops before it starts |
 | Stop | Ends the current part (exit 130), records `stopped`; the next part never starts |
-| Restart of Nullius | `execution.restore` reattaches from `runs/<name>/run.json`; the job goes back into the workspace it started in, while that workspace exists |
+| Delete launch | On the launch in Runs, *By launch*, once every run of it has ended; asks first. The job page links to it. Deletes each run's `<RUNS_DIR>/<name>/` (a shard per machine included), every job of the launch, their judgements in every workspace, and each run's copy on its host when ticked. A run still going is refused: stop it first. A launch with jobs from elsewhere has no Delete |
+| Restart of Nullius | `execution.restore` reattaches from `runs/<name>/run.json`; the job goes back into the workspace it started in, while that workspace exists, without opening it. The workspace open before the restart opens again |
 | Cannot run from the page | Generated tasks and custom agents are not supported by Run |
 | Refused | Reads *refused* on the runs page, with why; the job was never written |
 | Files | `<RUNS_DIR>/<name>/`: script, log, `run.json`, `jobs/`; default `runs/` under the user data directory (`nullius paths`) |
@@ -148,7 +150,7 @@ Chosen on the Runner stage, kept in the recipe's `harbor` field.
 
 - [Settings](settings/README.md)
 
-    Providers, keys and run hosts.
+    Providers, keys and hosts.
 
 - [The standard](standard.md)
 

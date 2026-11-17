@@ -118,7 +118,8 @@ class SettingsPage(unittest.TestCase):
         settings.load(self.env_file)
         html = self.page()
         for v in settings.VARIABLES:
-            self.assertIn(f'id="{v.name}"', html)
+            added = v.kind == "provider" and next(p for p in providers.PROTOCOLS if p not in providers.PRESETS[v.name.lower()]["endpoints"])
+            self.assertIn(f'id="{v.name}.endpoints.{added}"' if added else f'id="{v.name}"', html)    # a preset's record: a row it may add
         self.assertIn('title="Held by the process', html)                                            # the token, from the process
         self.assertEqual(html.count('<span class="st-shown">********</span>'), 3)                   # the token and the OpenRouter and OpenAI keys: eight stars each,
         self.assertNotIn("characters", html)                                                         # never their length
@@ -133,18 +134,63 @@ class SettingsPage(unittest.TestCase):
         Path(self.env_file).write_text("OPENROUTER_API_KEY=sk-or-fromthefile\n")
         settings.load(self.env_file)
         html = self.page()
-        self.assertIn('name="value:SYSTEM_ONE_PROVIDER" value="openrouter" checked', html)      # the one in use: OpenRouter, the only key
-        self.assertIn('name="value:LLM_JUDGE_PROVIDER" value="openrouter" checked', html)
-        self.assertNotIn('value="typesafe" checked', html)
-        self.assertIn('data-provider="typesafe" data-available="false" hidden', html)
-        self.assertIn('data-provider="openrouter" data-available="true"', html)
-        self.assertIn('data-provider="openai" data-available="false" hidden', html)
         judge_section = html.split('id="judge"')[1].split('id="custom-keys"')[0]
+        for prefix in ("SYSTEM_ONE", "LLM_JUDGE"):                                                     # Provider, Protocol, Model, each labelled
+            labels = [judge_section.index(f'for="value-{prefix}_{part.upper()}">{part}</label>') for part in ("Provider", "Protocol", "Model")]
+            self.assertEqual(labels, sorted(labels))
+            self.assertIn(f'<select class="st-input" id="value-{prefix}_PROVIDER" name="value:{prefix}_PROVIDER"', judge_section)   # the shared select
+        self.assertIn('<option value="openrouter" data-available="true" data-protocol="systemone" data-protocols="systemone|decisions"', html)  # the one in use: OpenRouter, the only key
+        self.assertRegex(judge_section, r'<option value="openrouter" data-available="true" data-protocol="chat" data-protocols="chat"[^>]*selected>OpenRouter</option>')
+        self.assertNotIn('type="radio"', judge_section)
+        self.assertRegex(html, r'<option value="typesafe" data-available="false"[^>]* hidden>TypeSafe AI</option>')
+        self.assertRegex(html, r'<option value="openai" data-available="false"[^>]* hidden>OpenAI</option>')
         self.assertNotIn('id="TYPESAFE_API_KEY"', judge_section)
         self.assertNotIn('type="password"', judge_section)
         self.assertIn('data-provider-card="typesafe"', html)
-        self.assertIn('data-default="~typesafe/jev-latest" data-models="~typesafe/jev-latest|typesafe/jev-1.13|typesafe/jev-router|jaredpalmer/kev-4b"', html)
+        self.assertIn('data-default="~typesafe/jev-latest" data-models="~typesafe/jev-latest|typesafe/jev-1.14|typesafe/jev-1.13|typesafe/jev-router|jaredpalmer/kev-4b"', html)
         self.assertNotIn("data-model-default", html)                       # the default is the model field's placeholder (judges.js)
+
+    def test_system_one_on_openrouter_offers_the_cached_list_and_asks_for_it_only_after_load(self):
+        Path(self.env_file).write_text("OPENROUTER_API_KEY=sk-or-fromthefile\n")
+        settings.load(self.env_file)
+        with patch.object(providers, "decision_models", return_value=["b/decider:free", "typesafe/jev-1.14"]) as live:
+            html = self.page()
+            live.assert_called_with(fetch=False)                                                        # the page never waits on the network
+            self.assertIn('data-models="~typesafe/jev-latest|typesafe/jev-1.14|b/decider:free" data-live', html)
+            post = lambda **kw: self.client.post("/settings/system-one/models", headers={"X-CSRF-Token": self.token(), "Origin": "http://localhost"}, **kw)
+            r = post(); self.addCleanup(r.close)
+            live.assert_called_with(fetch=True)
+            self.assertEqual(r.get_json()["models"], [{"id": m, "name": m} for m in ("~typesafe/jev-latest", "typesafe/jev-1.14", "b/decider:free")])
+            r = post(environ_overrides={"REMOTE_ADDR": "192.0.2.1"}); self.addCleanup(r.close)
+            self.assertEqual(r.status_code, 403)
+            r = self.client.post("/settings/system-one/models"); self.addCleanup(r.close)
+            self.assertEqual(r.status_code, 403)                                                       # no form token
+
+    def test_a_judge_s_protocol_is_a_quiet_line_unless_its_provider_lists_two(self):
+        """One protocol the judge speaks on the chosen provider: a muted line under it, by its format's
+        name. Two: a Protocol select between Provider and Model, named only once a protocol is saved, so
+        a provider change never saves one nobody chose."""
+        Path(self.env_file).write_text("ANTHROPIC_API_KEY=sk-ant-fixture0\nTYPESAFE_API_KEY=ts-fixture0\nLLM_JUDGE_PROVIDER=anthropic\n")
+        settings.load(self.env_file)
+        html = self.page()
+        s1, llm = (html[html.index(f'id="{p}_PROVIDER"'):html.index(f'id="{p}_MODEL"')] for p in ("SYSTEM_ONE", "LLM_JUDGE"))
+        self.assertIn('<p class="st-note" data-judge-via>via TypeSafe System One</p>', s1)
+        self.assertIn('<p class="st-note" data-judge-via>via Anthropic Messages</p>', llm)
+        self.assertIn('id="LLM_JUDGE_PROTOCOL" data-source="unset" data-secret="no" hidden>', llm)
+        self.assertNotIn("messages<", llm); self.assertNotIn(">chat<", llm)                                   # names, never keys
+        self.post({"ANTHROPIC": '{"endpoints": {"chat": "/chat/completions"}}', "LLM_JUDGE_PROTOCOL": "messages"})
+        llm = (html := self.page())[html.index('id="LLM_JUDGE_PROVIDER"'):html.index('id="LLM_JUDGE_MODEL"')]
+        self.assertIn('data-judge-via hidden>via Anthropic Messages</p>', llm)
+        self.assertIn('id="LLM_JUDGE_PROTOCOL" data-source="file" data-secret="no">', llm)
+        self.assertIn('id="value-LLM_JUDGE_PROTOCOL" name="value:LLM_JUDGE_PROTOCOL" data-name="value:LLM_JUDGE_PROTOCOL"', llm)
+        self.assertIn('<option value="chat">OpenAI Chat Completions</option><option value="messages" selected>Anthropic Messages</option>', llm)
+        self.assertIn('data-protocol="messages" data-protocols="chat|messages"', llm)
+        self.post({"LLM_JUDGE_PROTOCOL": "responses"})
+        self.assertIn("LLM_JUDGE_PROTOCOL=messages\n", self.file())                                       # responses: not a protocol this judge speaks
+        self.post(clear=["LLM_JUDGE_PROTOCOL"])
+        llm = (html := self.page())[html.index('id="LLM_JUDGE_PROVIDER"'):html.index('id="LLM_JUDGE_MODEL"')]
+        self.assertIn('id="value-LLM_JUDGE_PROTOCOL" data-name=', llm)                                       # unset: shown, not posted
+        self.assertIn('<option value="chat" selected>', llm)
 
     def test_a_section_per_thing_a_run_needs_with_its_index_and_what_a_run_can_use(self):
         Path(self.env_file).write_text("OPENROUTER_API_KEY=sk-or-fromthefile\nHOSTS=bench\n")
@@ -160,11 +206,11 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('<span class="mono">bench</span>', ready)
         for mark in ("#openrouter", "#openai"):
             self.assertIn(f'brand/marks.svg{mark}"', html)                                          # the providers' own marks
-        self.assertIn('<span class="st-row-label">Endpoint</span><span class="st-row-value mono">https://openrouter.ai/api/v1</span>', html)
+        self.assertIn('<span class="st-row-label">Base</span><span class="st-row-value mono">https://openrouter.ai/api/v1</span>', html)
         self.assertIn('data-provider-card="openrouter" data-configured="true" data-ready="true"', html)
         self.assertIn('data-provider-select="openai"', html)
         self.assertIn('data-provider-add aria-label="Add a provider"', html)
-        self.assertNotIn("<details", html.split('<div id="add-host"')[0])
+        self.assertEqual(set(re.findall(r"<details[^>]*>", html.split('<div id="add-host"')[0])), {'<details class="st-endpoints">'})   # only Endpoints folds
         for section in ("general", "appearance", "providers", "data-providers", "custom-keys", "judge", "hosts", "storage"):
             self.assertIn(f'href="#{section}" data-section="{section}"', html)                      # the menu: a link per section, one shown at a time
 
@@ -179,9 +225,10 @@ class SettingsPage(unittest.TestCase):
             return re.search(r'<article[^>]*id="%s".*?</article>' % name, html, re.S).group(0)
         hosts_row, key = row("HOSTS"), row("MODEL_API_KEY")
         self.assertNotIn(">not set<", hosts_row); self.assertNotIn('data-entry=', hosts_row); self.assertIn('data-add-host aria-label="Add a host"', html)
-        self.assertEqual(re.findall(r'placeholder="([^"]*)"', html.split('<div id="add-host"')[0]), ["Search settings", "Search providers…", "(optional)", "(optional)"])                           # no field suggests anything
+        page = re.sub(r'(?s)<details class="st-endpoints">.*?</details>', '', html.split('<div id="add-host"')[0])   # an endpoint's placeholder is its default
+        self.assertEqual(re.findall(r'placeholder="([^"]*)"', page), ["Search settings", "Search providers…", "(optional)", "(optional)"])                           # no field suggests anything
         self.assertNotIn("agtai", html); self.assertNotIn("10.0.0.4", html)                      # (ssh aliases offered come from this machine's own config)
-        self.assertIn('data-source="unset"', key); self.assertIn('data-provider-card="local" data-configured="false" data-ready="false"', html)
+        self.assertIn('data-source="unset"', key); self.assertIn('data-provider-card="custom" data-configured="false" data-ready="false"', html)
 
     def test_autosave_returns_masked_state_and_keeps_validation_and_guards(self):
         data = {"csrf": self.token(), "value:ANTHROPIC_API_KEY": "synthetic-autosave-secret"}
@@ -313,25 +360,25 @@ class SettingsPage(unittest.TestCase):
         self.assertEqual(save({"value:MODEL_API_URL": "http://default/v1"})[1]["reload"], False)
         status, body = save({"endpoint_name": "GPU box", "endpoint_url": "http://gpu:8000/v1", "endpoint_key": "sk-gpu-0123456789"})
         self.assertEqual((status, body["ok"], body["reload"]), (200, True, True))
-        self.assertEqual(self.file(), "MODEL_API_URL=http://default/v1\nMODEL_GPU_BOX_NAME=GPU box\n"
-                                      "MODEL_GPU_BOX_API_URL=http://gpu:8000/v1\nMODEL_GPU_BOX_API_KEY=sk-gpu-0123456789\n")
+        self.assertEqual(self.file(), 'MODEL_API_URL=http://default/v1\nMODEL_GPU_BOX={"name": "GPU box", "base": "http://gpu:8000/v1"}\n'
+                                      "MODEL_GPU_BOX_API_KEY=sk-gpu-0123456789\n")
         save({"endpoint_name": "GPU box", "endpoint_url": "http://gpu2:8000/v1"})                          # the same name: an id of its own
         self.assertEqual(settings.endpoint_ids(), ["GPU_BOX", "GPU_BOX_2"]); self.assertNotIn("MODEL_GPU_BOX_2_API_KEY", self.file())
         html = self.page()
-        for key, name in (("local", "OpenAI-compatible"), ("local:GPU_BOX", "GPU box"), ("local:GPU_BOX_2", "GPU box")):
+        for key, name in (("custom", "OpenAI-compatible"), ("custom:GPU_BOX", "GPU box"), ("custom:GPU_BOX_2", "GPU box")):
             card = re.search(r'<div class="st-card st-provider-card" data-provider-card="%s".*?<h3>([^<]*)</h3>' % re.escape(key), html, re.S)
             self.assertEqual(card.group(1), name, key)
-        self.assertIn('id="MODEL_GPU_BOX_API_URL"', html); self.assertNotIn("sk-gpu-0123456789", html)
-        self.assertIn('name="value:LLM_JUDGE_PROVIDER" value="local:GPU_BOX"', html)                    # a judge choice too
+        self.assertIn('id="MODEL_GPU_BOX.base"', html); self.assertNotIn("sk-gpu-0123456789", html)
+        self.assertRegex(html, r'<option value="custom:GPU_BOX" data-available="true"')                  # a judge choice too
         self.assertNotIn("Local or self-hosted", html)
         # a rename keeps the id, so a recipe on it keeps running; an empty key field keeps the key
-        self.assertEqual(save({"value:MODEL_GPU_BOX_NAME": "Big GPU", "value:MODEL_GPU_BOX_API_KEY": ""})[1]["reload"], True)
-        self.assertEqual(os.environ["MODEL_GPU_BOX_NAME"], "Big GPU"); self.assertEqual(os.environ["MODEL_GPU_BOX_API_KEY"], "sk-gpu-0123456789")
-        save({"remove_provider": "local:GPU_BOX"})                                                      # removed from its card: the endpoint goes whole
+        self.assertEqual(save({"value:MODEL_GPU_BOX.name": "Big GPU", "value:MODEL_GPU_BOX_API_KEY": ""})[1]["reload"], True)
+        self.assertEqual(json.loads(os.environ["MODEL_GPU_BOX"])["name"], "Big GPU"); self.assertEqual(os.environ["MODEL_GPU_BOX_API_KEY"], "sk-gpu-0123456789")
+        save({"remove_provider": "custom:GPU_BOX"})                                                      # removed from its card: the endpoint goes whole
         self.assertEqual(settings.endpoint_ids(), ["GPU_BOX_2"]); self.assertNotIn("GPU_BOX_API_KEY", self.file())
         self.assertIn("MODEL_API_URL=http://default/v1\n", self.file())
         status, body = save({"endpoint_name": "No URL"})
-        self.assertEqual((status, body["ok"], body["message"]), (400, False, "An endpoint needs its name and its URL."))
+        self.assertEqual((status, body["ok"], body["message"]), (400, False, "A provider needs its name and its base URL."))
         self.assertEqual(save({"endpoint_name": "Bad", "endpoint_url": "has space"})[0], 400)
         self.assertEqual(settings.endpoint_ids(), ["GPU_BOX_2"])
         before = self.file()
@@ -352,31 +399,106 @@ class SettingsPage(unittest.TestCase):
             return re.search(r'data-provider-card="%s".*?<div class="st-provider-fields">(.*?)<button type="button" class="btn ghost st-provider-done"' % re.escape(card), html, re.S).group(1)
         def row(text, name):
             return re.search(r'<article[^>]*id="%s".*?</article>' % name, text, re.S).group(0)
-        gpu = fields("local:GPU")
-        for name, value in (("MODEL_GPU_NAME", "GPU box"), ("MODEL_GPU_API_URL", "http://[::1]:8000/v1")):
-            r = row(gpu, name)
-            self.assertIn(f'name="value:{name}" aria-label="{"Name" if name.endswith("NAME") else "Endpoint"}" value="{value}"', r)
+        gpu = fields("custom:GPU")
+        for name, label, value in (("MODEL_GPU.name", "Name", "GPU box"), ("MODEL_GPU.base", "Base", "http://[::1]:8000/v1")):   # the old settings, read into the record
+            r = row(gpu, re.escape(name))
+            self.assertIn(f'name="value:{name}" aria-label="{label}" value="{value}"', r)
             self.assertNotIn("data-replace", r); self.assertNotIn("data-unset", r)
         key = row(gpu, "MODEL_GPU_API_KEY")
         self.assertIn("data-replace>Replace", key); self.assertIn(">Remove key</button>", key); self.assertNotIn("sk-gpu", html)
         openai = row(fields("openai"), "OPENAI_API_KEY")
         self.assertIn("data-replace>Replace", openai); self.assertNotIn("data-unset", openai); self.assertNotIn("sk-oa", html)
-        old = row(fields("local:OLD"), "MODEL_OLD_API_URL")
+        old = row(fields("custom:OLD"), re.escape("MODEL_OLD.base"))
         self.assertIn('value="https://[REDACTED]@old.example/v1"', old); self.assertNotIn("hunter2", html)
         self.assertIn('aria-invalid="true"', old)
         self.assertIn("This URL must be a URL without a user or password in it: put the key in the Key field.", old)
-        self.assertNotIn('value="local:OLD"', html)                                                      # not a judge choice either
-        self.assertIn('data-provider-card="local:OLD" data-configured="true" data-ready="false"', html)
-        self.assertRegex(html, r'(?s)data-provider-card="local:OLD".*?data-provider-state>Fix the endpoint URL<')
-        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:MODEL_GPU_API_URL": "http://gpu/v1?api_key=abc"},
+        self.assertRegex(html, r'<option value="custom:OLD" data-available="false"[^>]* hidden>')         # not a judge choice either
+        self.assertIn('data-provider-card="custom:OLD" data-configured="true" data-ready="false"', html)
+        self.assertRegex(html, r'(?s)data-provider-card="custom:OLD".*?data-provider-state>Fix the endpoint URL<')
+        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:MODEL_GPU.base": "http://gpu/v1?api_key=abc"},
                              headers={"Origin": "http://localhost", "Accept": "application/json"})
         self.addCleanup(r.close)
         self.assertEqual((r.status_code, r.get_json()["message"]),
-                         (400, "MODEL_GPU_API_URL must be a URL without a key in its query: put the key in the Key field."))
-        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:MODEL_GPU_API_URL": "http://gpu:9000/v2"},
+                         (400, "MODEL_GPU must be a record whose base is a URL without a key in its query: put the key in the Key field."))
+        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:MODEL_GPU.base": "http://gpu:9000/v2"},
                              headers={"Origin": "http://localhost", "Accept": "application/json"})
         self.addCleanup(r.close)
-        self.assertEqual(r.status_code, 200); self.assertEqual(os.environ["MODEL_GPU_API_URL"], "http://gpu:9000/v2")
+        self.assertEqual(r.status_code, 200)                                                             # the old lines move into the record
+        self.assertEqual(json.loads(os.environ["MODEL_GPU"]), {"name": "GPU box", "base": "http://gpu:9000/v2"})
+        self.assertNotIn("MODEL_GPU_API_URL", self.file()); self.assertNotIn("MODEL_GPU_NAME", self.file())
+
+    def test_a_record_s_environment_fields_are_read_only_and_its_endpoints_are_saved(self):
+        """A partial record in the environment locks only its own fields; the
+        Endpoints rows save into the file's record, a preset only adds
+        protocols, and no key ever reaches the page."""
+        self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
+        saved = settings.ENV_PART.copy(); self.addCleanup(lambda: (settings.ENV_PART.clear(), settings.ENV_PART.update(saved)))
+        os.environ["MODEL_GW"] = json.dumps({"base": "https://gw-eu.example/v1"})
+        Path(self.env_file).write_text("MODEL_GW_API_KEY=sk-gw-0123456789\nOPENROUTER_API_KEY=sk-or-0123456789\n")
+        settings.load(self.env_file)
+        html = self.page()
+        base = re.search(r'<article[^>]*id="MODEL_GW\.base".*?</article>', html, re.S).group(0)
+        self.assertIn("Set in the process environment.", base); self.assertNotIn("<input", base)        # locked
+        self.assertIn('name="value:MODEL_GW.name"', html); self.assertIn('name="value:MODEL_GW.endpoints.chat"', html)
+        self.assertIn('placeholder="https://gw-eu.example/v1/chat/completions"', html)                  # the default, as a placeholder
+        self.assertIn('title="chat">OpenAI Chat Completions</label>', html)                              # the format by name, its key as a tooltip
+        self.assertNotIn('name="value:OPENROUTER.endpoints.chat"', html)                                # a preset's own endpoint is fixed
+        self.assertIn('name="value:OPENROUTER.endpoints.messages"', html)
+        self.assertNotIn("sk-gw-0123456789", html); self.assertNotIn("sk-or-0123456789", html)
+        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:MODEL_GW.name": "Gateway",
+                                                     "value:MODEL_GW.endpoints.decisions": "https://gw-eu.example/alpha/decisions",
+                                                     "value:OPENROUTER.endpoints.messages": "/messages"},
+                             headers={"Origin": "http://localhost", "Accept": "application/json"})
+        self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 200, r.get_json())
+        filed = settings.in_file(self.env_file)
+        self.assertEqual(json.loads(filed["MODEL_GW"]), {"name": "Gateway", "endpoints": {"decisions": "https://gw-eu.example/alpha/decisions"}})
+        self.assertEqual(json.loads(filed["OPENROUTER"]), {"endpoints": {"messages": "/messages"}})
+        rec = providers.record("custom:GW")
+        self.assertEqual((rec["name"], rec["base"]), ("Gateway", "https://gw-eu.example/v1"))             # the environment's base still wins
+        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:OPENROUTER.endpoints.messages": ""},
+                             headers={"Origin": "http://localhost", "Accept": "application/json"})
+        self.addCleanup(r.close)
+        self.assertNotIn("OPENROUTER", settings.in_file(self.env_file))                                  # emptied: the record goes
+        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:OPENROUTER.endpoints.chat": "/x"},
+                             headers={"Origin": "http://localhost", "Accept": "application/json"})
+        self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 400); self.assertIn("fixed for OpenRouter", r.get_json()["message"])
+
+    def test_an_edit_moves_the_old_settings_the_record_takes_and_is_never_blocked_by_one(self):
+        self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
+        for old, kept in (("MODEL_GW_NAME=" + "N" * 70 + "\nMODEL_GW_API_URL=https://gw.example/v1\n", {}),
+                          ("MODEL_GW_NAME=\nMODEL_GW_API_URL=https://gw.example/v1\n", {}),
+                          ("MODEL_GW_NAME=G\nMODEL_GW_API_URL=https://u:p@gw.example/v1\n", {"MODEL_GW_API_URL": "https://u:p@gw.example/v1"})):
+            [os.environ.pop(n, None) for n in settings.endpoint_names()]; settings.LOADED_KEYS.clear()
+            Path(self.env_file).write_text(old); settings.load(self.env_file)
+            r = self.client.post("/settings/save", data={"csrf": self.token(), "value:MODEL_GW.endpoints.chat": "/v2/chat"},
+                                 headers={"Origin": "http://localhost", "Accept": "application/json"})
+            self.addCleanup(r.close)
+            self.assertEqual(r.status_code, 200, (old, r.get_json()))
+            filed = settings.in_file(self.env_file)
+            self.assertEqual(json.loads(filed["MODEL_GW"])["endpoints"], {"chat": "/v2/chat"})
+            self.assertEqual({k: v for k, v in filed.items() if k.endswith(("_NAME", "_API_URL"))}, kept, old)
+
+    def test_a_reserved_name_in_agent_keys_is_said_and_the_other_keys_stay(self):
+        Path(self.env_file).write_text("AGENT_KEYS=CURSOR_API_KEY,TYPESAFE\nCURSOR_API_KEY=cur-0123456789\n")
+        settings.load(self.env_file)
+        html = self.page()
+        self.assertIn("AGENT_KEYS lists TYPESAFE, which is now the name of a Nullius setting.", html)
+        self.assertIn('data-key-card="agent-CURSOR_API_KEY"', html)
+
+    def test_a_null_in_the_environment_locks_the_field_and_reads_no_old_setting(self):
+        self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
+        saved = settings.ENV_PART.copy(); self.addCleanup(lambda: (settings.ENV_PART.clear(), settings.ENV_PART.update(saved)))
+        os.environ["MODEL_GW"] = json.dumps({"base": None, "endpoints": None})
+        Path(self.env_file).write_text('MODEL_GW={"name": "GW", "endpoints": {"chat": "/c"}}\nMODEL_GW_API_URL=https://old.example/v1\n')
+        settings.load(self.env_file)
+        rec = providers.record("custom:GW")
+        self.assertEqual((rec["base"], rec["endpoints"], rec["ignored"]), ("", {}, ["MODEL_GW_API_URL"]))   # null: none, not the old URL
+        html = self.page()
+        self.assertNotIn('name="value:MODEL_GW.endpoints.chat"', html)                                  # its parent is the environment's
+        self.assertNotIn('name="value:MODEL_GW.base"', html)
+        self.assertIn('name="value:MODEL_GW.name"', html)
 
     def test_a_provider_card_removes_what_it_holds_unless_the_environment_holds_it(self):
         """Remove on a card: a named endpoint goes whole, a built-in provider's
@@ -393,22 +515,22 @@ class SettingsPage(unittest.TestCase):
             return r.status_code, r.get_json(silent=True)
         html = self.page()
         self.assertEqual(html.count("data-provider-remove-yes="), 3)                                      # OpenAI, the default endpoint, GPU box
-        self.assertIn('Remove <b>GPU box</b> and its URL and key?', html); self.assertIn('Remove <b>OpenAI</b> and its key?', html)
-        card = re.search(r'data-provider-card="local:GPU".*?<div class="st-provider-fields">(.*?)</div>\s*<button type="button" class="btn ghost st-provider-done"', html, re.S)
+        self.assertIn('Remove <b>GPU box</b> and its base and key?', html); self.assertIn('Remove <b>OpenAI</b> and its key?', html)
+        card = re.search(r'data-provider-card="custom:GPU".*?<div class="st-provider-fields">(.*?)</div>\s*<button type="button" class="btn ghost st-provider-done"', html, re.S)
         summary = card.group(0)[:card.group(0).index('<div class="st-provider-fields">')]
-        self.assertIn('data-provider-edit="local:GPU"', summary)                                          # Remove sits beside Edit, in the summary
-        self.assertRegex(summary, r'data-provider-edit="local:GPU"[^>]*>Edit</button>\s*<button [^>]*data-provider-remove-ask aria-label="Remove GPU box"')
+        self.assertIn('data-provider-edit="custom:GPU"', summary)                                          # Remove sits beside Edit, in the summary
+        self.assertRegex(summary, r'data-provider-edit="custom:GPU"[^>]*>Edit</button>\s*<button [^>]*data-provider-remove-ask aria-label="Remove GPU box"')
         self.assertNotIn("data-provider-remove", card.group(1))                                         # and not in the editor
         before = self.file()
-        self.assertEqual(remove("local:GPU", csrf="stale")[0], 403); self.assertEqual(self.file(), before)
-        status, body = remove("local:GPU")
+        self.assertEqual(remove("custom:GPU", csrf="stale")[0], 403); self.assertEqual(self.file(), before)
+        status, body = remove("custom:GPU")
         self.assertEqual((status, body["ok"], body["reload"]), (200, True, True))
         self.assertEqual(settings.endpoint_ids(), []); self.assertNotIn("MODEL_GPU", self.file())
         remove("openai")
         self.assertNotIn("OPENAI_API_KEY", self.file()); self.assertNotIn("OPENAI_API_KEY", os.environ)
         card = re.search(r'data-provider-card="openai" data-configured="(\w+)".*?data-provider-state>([^<]*)<', self.page(), re.S)
         self.assertEqual(card.groups(), ("false", "Not configured"))
-        remove("local")
+        remove("custom")
         self.assertEqual(self.file(), "")
         self.assertEqual(remove("nothing")[0], 400)
         os.environ["OPENROUTER_API_KEY"] = "sk-or-fromtheenvironment"                                       # held by the process: refused
@@ -595,7 +717,7 @@ class SettingsPage(unittest.TestCase):
         # in the page below the heading, as the providers' Add is; its fields belong to a form of their own,
         # outside the settings form, so autosave never reads them (a password above all)
         page = self.page()
-        head = re.search(r'<h2 id="hosts-h">Run hosts</h2>.*?</div>', page, re.S).group(0)
+        head = re.search(r'<h2 id="hosts-h">Hosts</h2>.*?</div>', page, re.S).group(0)
         self.assertIn('data-test-all>Test all</button>', head); self.assertIn('class="btn sm ghost st-provider-add" data-add-host aria-label="Add a host"', head)
         for name in ("display_name", "host", "port", "user", "auth", "key_path", "key_file", "password"):
             self.assertIn(f'form="add-host-form"', re.search(rf'<input [^>]*name="{name}"', with_config).group(0), name)
@@ -969,8 +1091,15 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('data-sandbox="/settings/sandbox"', section)
         self.assertNotIn("data-images", section)                                         # no Images card
         self.assertNotIn('name="value:', section)                                       # outside Save: nothing of it lands in the file
-        for login in ("Docker Hub", 'type="password"', "data-login", "data-logout"):      # signed in once, under Data providers
+        for login in ("Docker Hub", "data-login", "data-logout"):                          # signed in once, under Data providers
             self.assertNotIn(login, section)
+        self.assertEqual(section.count('type="password"'), 1)
+        self.assertIn('name="key" type="password"', section)
+        self.assertIn('<h3>Boat</h3>', section)
+        self.assertIn('brand/boat.svg', section)
+        self.assertIn('brand/boat-dark.svg', section)                                   # its own mark on a dark background
+        for control in ("data-boat-edit", "data-boat-remove", "data-boat-remove-yes", "data-boat-remove-keep", "data-boat-cancel", "data-boat-form autocomplete=\"off\" hidden"):
+            self.assertIn(control, section)
         self.assertNotIn('data-data-form', section)
         providers = html[html.index('id="data-providers"'):html.index('id="sandbox"')]
         self.assertIn('data-data-search', providers)
@@ -980,7 +1109,7 @@ class SettingsPage(unittest.TestCase):
         with patch.object(sandbox, "docker_state", lambda: {"ok": True, "version": "29.0"}), \
                 patch.object(sandbox, "login_user", lambda: self.fail("asked")):
             r = self.client.get("/settings/sandbox"); self.addCleanup(r.close)
-        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"}})
+        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"}, "boat": {"set": False, "env": False}})
         seen = []
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
         with patch.object(sandbox, "login", lambda u, t: seen.append((u, t)) or {"ok": True, "user": u}):
@@ -992,6 +1121,30 @@ class SettingsPage(unittest.TestCase):
                 self.assertEqual(self.client.post("/settings/sandbox/login", data={"username": "x", "token": "y"}, **kw).status_code, 403)
         self.assertEqual(seen, [("someone", "dckr_pat_synthetic")])
         self.assertIsNone(self.file())
+
+    def test_the_boat_key_is_saved_from_this_machines_browser_and_never_echoed(self):
+        from nullius import secrets
+        from nullius.standard import boat
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"SECRETS_DIR": folder}):
+            os.environ.pop(boat.NAME, None)
+            headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
+            url = "/settings/sandbox/boat"
+            for kwargs in ({"headers": {"Origin": "http://localhost"}},
+                           {"headers": headers, "environ_base": {"REMOTE_ADDR": "10.0.0.7"}}):
+                self.assertEqual(self.client.post(url, data={"key": "boat_synthetic"}, **kwargs).status_code, 403)
+            self.assertEqual(self.client.post(url, data={"key": " "}, headers=headers).status_code, 400)
+            response = self.client.post(url, data={"key": "boat_synthetic"}, headers=headers)
+            self.assertTrue(response.json["ok"])
+            self.assertNotIn("boat_synthetic", response.get_data(as_text=True))
+            self.assertEqual(secrets.value(boat.STORE, boat.NAME), b"boat_synthetic")
+            self.assertEqual(boat.key({}), "boat_synthetic")
+            with patch.object(sandbox, "docker_state", lambda: {"ok": True, "version": "29.0"}):
+                state = self.client.get("/settings/sandbox").json
+            self.assertEqual(state["boat"], {"set": True, "env": False})
+            self.assertNotIn("boat_synthetic", json.dumps(state))
+            self.assertIsNone(self.file())
+            self.assertTrue(self.client.post(url, data={"action": "remove"}, headers=headers).json["ok"])
+            self.assertIsNone(boat.key({}))
 
     def test_data_provider_save_is_local_guarded_and_never_echoes_token(self):
         from nullius import secrets

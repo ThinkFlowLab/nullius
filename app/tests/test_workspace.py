@@ -170,6 +170,32 @@ class Lifecycle(unittest.TestCase):
         workspace.touch(a)
         self.assertEqual([w.name for w in workspace.list_all(self.home)][0], "a")
 
+    def test_last_open_is_the_latest_unless_the_user_closed_it(self):
+        self.assertIsNone(workspace.last_open(self.home))
+        a = workspace.create(self.home, ["/r/a"], label="a")
+        a.opened = "2000-01-01T00:00:00+00:00"
+        workspace.save(a)
+        b = workspace.create(self.home, ["/r/b"], label="b")
+        self.assertEqual(workspace.last_open(self.home).name, "b")
+        b.closed = True
+        workspace.save(b)
+        self.assertIsNone(workspace.last_open(self.home))                      # not the one opened before it either
+        workspace.touch(b)
+        self.assertEqual(workspace.last_open(self.home).name, "b")
+
+
+class Holding(unittest.TestCase):
+    def test_each_folder_lists_the_workspaces_with_a_root_in_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home, a, b = (os.path.join(tmp, n) for n in ("ws", "runs/a", "runs/b"))
+            one = workspace.create(home, [os.path.join(a, "jobs"), os.path.join(b, "jobs")], label="one")
+            workspace.create(home, [os.path.join(b, "jobs")], label="two")
+            got = workspace.holding_all(home, [a, b, os.path.join(tmp, "runs/c")])
+            self.assertEqual([(w.label, r) for w, r in got[a]], [("one", [os.path.join(a, "jobs")])])
+            self.assertEqual(sorted(w.label for w, _ in got[b]), ["one", "two"])
+            self.assertEqual(got[os.path.join(tmp, "runs/c")], [])
+            self.assertEqual([w.name for w, _ in workspace.holding(home, a)], [one.name])
+
 
 class Cache(unittest.TestCase):
     def setUp(self):

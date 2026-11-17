@@ -1,4 +1,4 @@
-# Run hosts
+# Hosts
 
 The SSH machines a recipe can run on, chosen in the builder's **Where** step.
 A table shows this machine first, then each host, with its engine and its
