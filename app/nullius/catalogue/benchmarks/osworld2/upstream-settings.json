@@ -450,7 +450,7 @@
  {
   "entry": "scripts/bash/run_multienv_m3.sh",
   "setting": "WEBSITE_HOST_SUFFIX",
-  "values": "the mock websites' host suffix: that of OSWorld-web at the tag osworld-v2.1 served for this machine's VMs (websites.py); none refuses the 40 tasks that need it before they run",
+  "values": "the mock websites' host suffix: that of OSWorld-web at the tag osworld-v2.1 served for this machine's VMs (websites.py); none refuses the 41 tasks that need it before they run",
   "default": "web.hku.icu",
   "nullius": "option:websites"
  },

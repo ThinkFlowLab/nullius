@@ -575,6 +575,7 @@ class Lifecycle(unittest.TestCase):
         self.assertIn(f"docker exec -e {self.g.TOKEN} id-gitlab gitlab-rails", argv[-1])
         self.assertIn("until docker exec id-gitlab gitlab-rails", argv[-1])
         self.assertNotIn("$$", argv[-1])
+        self.assertEqual(argv[:2], ["timeout", str(self.g.START_SECONDS)])
         with mock.patch.object(self.g, "_upstream_script", lambda stack: "echo other"), \
                 self.assertRaises(self.g.GitLabError):
             self.g._make_token(self.stack)
@@ -684,13 +685,26 @@ class Lifecycle(unittest.TestCase):
             for said in ("abc", f"abc {old}", "abc x"):
                 with self.subTest(said), mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(stdout=said)):
                     self.assertIsNone(self.g._made())
-            with mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(1)):
+            run = lambda said: lambda *a, **kw: Fake() if a[0] == "image" else said
+            with mock.patch.object(self.g, "_docker", run(Fake(3))):
                 self.assertIsNone(self.g._made())
-            with mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(125, stderr="daemon\n")), \
+            with mock.patch.object(self.g, "_docker", run(Fake(1, stderr="cat: read error\n"))), \
                     self.assertRaises(self.g.GitLabError):
                 self.g._made()
+            with mock.patch.object(self.g, "_docker", run(Fake(125, stderr="daemon\n"))), \
+                    self.assertRaises(self.g.GitLabError):
+                self.g._made()
+            with mock.patch.object(self.g, "_docker", lambda *a, **kw: self.calls.append(a) or Fake(int(a[0] == "image"))):
+                self.assertIsNone(self.g._made())
+            self.assertEqual(self.calls[-1][:2], ("image", "inspect"))
         with mock.patch.object(self.g, "_snapshot", lambda: False):
             self.assertIsNone(self.g._made())
+        gone = Fake(1, stderr="Error response from daemon: get x: no such volume\n")
+        with mock.patch.object(self.g, "_docker", lambda *a, **kw: gone):
+            self.assertFalse(self.g._snapshot())
+        with mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(1, stderr="Cannot connect to the Docker daemon\n")), \
+                self.assertRaises(self.g.GitLabError):
+            self.g._snapshot()
 
     def test_init_keeps_the_stamp_prepare_reads_and_not_the_token(self):
         self.configure()

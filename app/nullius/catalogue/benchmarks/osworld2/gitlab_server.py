@@ -145,12 +145,12 @@ def _stamp(stack, value):
 def _made():
     """The stamp init left in the snapshot, read read-only; None without one, or once the token is TOKEN_DAYS
     old, since the upstream's token step makes it for a year."""
-    if not _snapshot():
-        return None
     image = GITLAB_IMAGE.search(_override())
+    if not _snapshot() or not image or _docker("image", "inspect", image.group(1)).returncode != 0:
+        return None
     said = _docker("run", "--rm", "--network", "none", "--pull", "never", "-v", f"{SNAPSHOT}:/snapshot:ro",
-                   "--entrypoint", "cat", image.group(1) if image else "", f"/snapshot/{STAMP}")
-    if said.returncode != 1:
+                   "--entrypoint", "sh", image.group(1), "-c", f"[ -e /snapshot/{STAMP} ] || exit 3; cat /snapshot/{STAMP}")
+    if said.returncode != 3:
         _done(said, f"reading the snapshot {SNAPSHOT}")
     found = said.stdout.split() if said.returncode == 0 else []
     fresh = len(found) == 2 and found[1].isdigit() and time.time() - int(found[1]) < TOKEN_DAYS * 86400
@@ -472,7 +472,7 @@ def _make_token(stack):
                               f"against Task-Web/gitlab at {COMMIT}")
         script = script.replace(old, new)
     value = token(stack)
-    done = subprocess.run(["sh", "-c", script.replace("$$", "$")], capture_output=True, text=True,
+    done = subprocess.run(["timeout", str(START_SECONDS), "sh", "-c", script.replace("$$", "$")], capture_output=True, text=True,
                           timeout=START_SECONDS, env=dict(_clean(), **{TOKEN: value}), stdin=subprocess.DEVNULL)
     done.stdout, done.stderr = (x.replace(value, TOKEN) for x in (done.stdout, done.stderr))
     _done(done, "making the root token")
@@ -519,7 +519,10 @@ def _volumes():
 
 
 def _snapshot():
-    return _docker("volume", "inspect", SNAPSHOT).returncode == 0
+    said = _docker("volume", "inspect", SNAPSHOT)
+    if said.returncode and "no such volume" not in said.stderr:
+        _done(said, f"looking for the snapshot {SNAPSHOT}")
+    return said.returncode == 0
 
 
 def init(stack, say=None, closed=None, limits=None):
