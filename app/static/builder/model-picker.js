@@ -8,13 +8,13 @@
   const entered = (items, index, text, several) => items[index] || (several && text.trim() ? {id: text.trim(), typed: true} : null);
   // The row and its menu share one request per model for five minutes, including failures. An in-flight request
   // stays shared until it settles; result is absent while the row is waiting to learn how many entries there are.
-  function servingProviders(fetch, csrf) {
+  function servingProviders(request, csrf) {
     const cache = new Map(), listeners = new Set();
     const providers = model => {
       let entry = cache.get(model);
       if (!entry || (entry.result && Date.now() - entry.at > 300000)) {
         entry = {at: Date.now(), result: null};
-        entry.promise = fetch('/new-run/endpoints', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify({provider: 'openrouter', model})})
+        entry.promise = request('/new-run/endpoints', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify({provider: 'openrouter', model})})
           .then(r => r.json()).then(r => ({...r, models: (Array.isArray(r.endpoints) ? r.endpoints : []).map(e => ({id: e.slug, name: e.name + (e.quantization ? ' · ' + e.quantization : '')}))}))
           .catch(() => ({ok: false, models: [], message: "Provider list unavailable. Enter a provider's slug by hand."}))
           .then(result => { entry.at = Date.now(); entry.result = result; listeners.forEach(listener => listener(model)); return result; });
