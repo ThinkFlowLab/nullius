@@ -96,8 +96,8 @@ require(process.argv[1]);
 const T = window.NulliusTable;
 
 // A table as the table macro writes it: `id`; columns [key, type]; rows, each {search, f-<col>, cells}; `filter`: a
-// column and its values; `search`; `sort`.
-global.build = ({id, cols, rows, filter, search = true, sort = true, check = false}) => {
+// column and its values; `search`; `sort`; `noun`, what the live region counts.
+global.build = ({id, cols, rows, filter, search = true, sort = true, check = false, noun = 'rows'}) => {
   const radio = (k, v) => el('label', {}, el('input', {type: 'radio', name: `${id}-sort-${k}`, [`data-sort-${k}`]: '', value: v}), ' ' + v);
   const tools = el('div', {id: id + '-tools'},
     ...(search ? [el('label', {}, el('input', {type: 'search', 'data-search': ''}))] : []),
@@ -115,7 +115,7 @@ global.build = ({id, cols, rows, filter, search = true, sort = true, check = fal
   const per = el('select', {'data-per': ''}, el('option', {}, '10'), el('option', {}, '25'));
   per.value = '25';
   const pager = el('div', {'data-pager': id}, per, el('button', {'data-prev': ''}), el('span', {'data-note': ''}), el('button', {'data-next': ''}));
-  pager.appendChild(el('span', {'data-live': ''}));
+  pager.appendChild(el('span', {'data-live': '', 'data-noun': noun}));
   const page = el('main', {}, tools, table, el('p', {'data-empty': id, hidden: true}, 'No rows match.'), pager);
   document.appendChild(page);
   T.wire(table);
@@ -139,7 +139,7 @@ def node(program: str) -> object:
 
 LAUNCHES = r'''
 const rows = Array.from({length: 30}, (_, i) => ({search: `L${i} ${i % 2 ? 'Gamma' : 'delta'} agent`, 'f-state': i % 3 ? 'finished' : 'failed', cells: [`L${i}`]}));
-const t = build({id: 'launches', cols: [['launch', 'text']], rows, filter: ['state', ['failed', 'finished']]});
+const t = build({id: 'launches', cols: [['launch', 'text']], rows, filter: ['state', ['failed', 'finished']], noun: 'launches'});
 '''
 
 
@@ -170,18 +170,19 @@ process.stdout.write(JSON.stringify(out));
         self.assertEqual(got["back"], ["1–10 of 10", False])
         self.assertEqual(got["words"], ["L12", "L15", "L18"])                                       # the failed ones, still filtered
 
-    def test_a_screen_reader_hears_once_typing_pauses(self):
+    def test_a_screen_reader_hears_a_change_once_typing_pauses(self):
         got = node(LAUNCHES + r'''
 const out = [];
 setTimeout(() => {
-  out.push(t.live());                                                                     // the first page, once read
+  out.push(t.live());                                                                     // the page's load: nothing
   t.type('g'); t.type('ga'); t.type('gamma'); out.push(t.live());                         // still typing: nothing new
   setTimeout(() => { out.push(t.live()); t.type('zzz'); setTimeout(() => { out.push(t.live()); process.stdout.write(JSON.stringify(out)); }, 350); }, 350);
 }, 350);
 ''')
-        self.assertEqual(got, ["1–25 of 30", "1–25 of 30", "1–15 of 15", "No rows match."])
+        self.assertEqual(got, ["", "", "1–15 of 15 launches", "No rows match."])
         html = Macros().render("{% call(r, c) table('t', [dict(key='x', label='X')], [], none) %}{% endcall %}")
         self.assertEqual(html.count("aria-live"), 1)                                             # one live region a table
+        self.assertIn('data-noun="rows"', html)
         self.assertNotIn('role="status"', html)
 
 

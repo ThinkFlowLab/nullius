@@ -270,14 +270,15 @@ window.NulliusTable = {
 
   /* A table's pages (the pager macro named after its id): the rows `passes`
      lets through, a page of them at a time, the page's size remembered per
-     viewer under `key`; its empty note shows when none passes. A screen
-     reader hears what shows once the changes pause. `drawn` runs after each
+     viewer under `key`; its empty note shows when none passes. After a
+     change, not at load, a screen reader hears what shows once the changes
+     pause, counted in the live region's data-noun. `drawn` runs after each
      page. Returns first(), to run after a filter or a sort: it
      shows the first page. */
   pager(table, key, passes = () => true, drawn = () => {}) {
     const bar = document.querySelector(`[data-pager="${CSS.escape(table.id)}"]`), empty = document.querySelector(`[data-empty="${CSS.escape(table.id)}"]`);
     const [per, note, prev, next, live] = ['[data-per]', '[data-note]', '[data-prev]', '[data-next]', '[data-live]'].map(s => bar.querySelector(s));
-    let page = 0, said;
+    let page = 0, said, loaded = false;
     try { const n = localStorage.getItem(key); if (n !== null && [...per.options].some(o => o.value === n)) per.value = n; } catch {}
     const draw = () => {
       const rows = [...table.tBodies[0].rows], hit = rows.filter(passes), n = +per.value || hit.length || 1;
@@ -289,7 +290,7 @@ window.NulliusTable = {
       next.disabled = (page + 1) * n >= hit.length;
       empty.hidden = hit.length > 0;
       clearTimeout(said);
-      said = setTimeout(() => { live.textContent = hit.length ? note.textContent : empty.textContent; }, 300);
+      if (loaded) said = setTimeout(() => { live.textContent = hit.length ? `${note.textContent} ${live.dataset.noun}` : empty.textContent; }, 300);
       drawn();
     };
     const first = () => { page = 0; draw(); };
@@ -300,6 +301,7 @@ window.NulliusTable = {
     prev.addEventListener('click', () => { page--; draw(); });
     next.addEventListener('click', () => { page++; draw(); });
     draw();
+    loaded = true;
     return first;
   },
 };

@@ -18,7 +18,7 @@
 {% set cols = [dict(key='open', label='Open', blank=true), dict(key='name', label='Name', width='expand'), dict(key='runs', label='Runs', type='num'),
                dict(key='checks', label='Checks', type='num'), dict(key='opened', label='Last opened', type='num', align='left'),
                dict(key='launches', label='Launches', type='num', align='right'), dict(key='roots', label='Roots', type='num', align='right'), dict(key='actions', label='Actions', blank=true)] %}
-{% call(ws, c) table('workspaces', cols, workspaces, ws_tr, class='ws-table', search='Search by name') %}
+{% call(ws, c) table('workspaces', cols, workspaces, ws_tr, class='ws-table', search='Search by name', noun='workspaces') %}
     {%- set current = workspace and ws.name == workspace.name %}{% set rs = roots[ws.name] %}{% set clash = labels.count(ws.label) > 1 %}
     {%- if c.key == 'open' %}{% call cell(c) %}{% if current %}<span class="ok" role="img" aria-label="Open" title="Open">●</span>{% endif %}{% endcall %}
     {%- elif c.key == 'name' %}{% call cell(c, sort=ws.label, class='ws-name') %}

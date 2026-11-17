@@ -34,7 +34,7 @@
                dict(key='runs', label='Runs', type='num'), dict(key='checks', label='Checks', type='num', off=true),
                dict(key='shards', label='Shards', type='num'), dict(key='machines', label='Machines', off=true),
                dict(key='size', label='Size', type='num', off=true), dict(key='ws', label='Workspaces'), dict(key='actions', label='Actions', blank=true)] %}
-{% call(r, c) table('launches', cols, rows, launch_tr, search='Search by launch, agent, benchmark or workspace', columns=true, choices=choices, only=only, empty='No launch matches.') %}
+{% call(r, c) table('launches', cols, rows, launch_tr, search='Search by launch, agent, benchmark or workspace', columns=true, choices=choices, only=only, empty='No launch matches.', noun='launches') %}
   {%- set L = r.launch %}{% set wss = r.workspaces %}
   {%- if c.key == 'state' %}{% call cell(c, sort=telling.index(r.state) if r.state in telling else telling|length) %}{{ state_icon(r.state) }}{% endcall %}
   {%- elif c.key == 'launch' %}{% call cell(c, sort=L.title) %}{% if wss %}{{ open_at(wss[0], L, L.title) }}{% else %}{{ L.title }}{% endif %}{% endcall %}

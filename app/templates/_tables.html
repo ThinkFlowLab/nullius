@@ -47,9 +47,9 @@
 {# A whole table (static/tables.js `wire`): its controls row, its headers from `cols`, a row of `rows` each,
    and its pages. `id` names it, and keys what a viewer chooses; `class` adds to its classes; `tr`: a macro writing a
    row's attributes. The call block writes a cell: it is called with a row and a column, in the order of `cols`, and
-   writes that cell with the cell macro. Opt-ins: `search`, `columns`, `choices`, `only` as controls'; `empty`: the
-   note when no row passes. #}
-{% macro table(id, cols, rows, tr, class='', search='', columns=false, choices={}, only={}, empty='No rows match.') %}
+   writes that cell with the cell macro. Opt-ins: `search`, `columns`, `choices`, `only` as controls'; `empty` and
+   `noun` as pager's. #}
+{% macro table(id, cols, rows, tr, class='', search='', columns=false, choices={}, only={}, empty='No rows match.', noun='rows') %}
 {{ controls(id, cols, search, columns, choices, only) }}
 {%- for c in cols if c.width == 'expand' %}
 <style>#{{ id }} > * > tr > :nth-child({{ cols.index(c) + 1 }}) { width: auto; min-width: var(--expand-min); white-space: normal; overflow-wrap: anywhere; }</style>
@@ -69,7 +69,7 @@
   </tbody>
 </table>
 </div>
-{{ pager(id, empty) }}
+{{ pager(id, empty, noun) }}
 {% endmacro %}
 
 {#- One cell of the column `c`, as the table macro's call block gets it: its data-col, alignment and pinning from
@@ -136,8 +136,9 @@
 {% macro check_cell(label, value) %}<td class="pick-col"><input type="checkbox" data-check value="{{ value }}" aria-label="{{ label }}"></td>{% endmacro %}
 
 {# The pages of the table whose id is `table` (static/tables.js `pager`): how many rows a page shows, 25 at first,
-   and the page before and after; `empty` shows when no row passes. What is shown is read out once typing pauses. #}
-{% macro pager(table, empty='No rows match.') %}
+   and the page before and after; `empty` shows when no row passes. After a change, what is shown is read out once
+   typing pauses, counted in `noun`. #}
+{% macro pager(table, empty='No rows match.', noun='rows') %}
 <p class="empty-note" data-empty="{{ table }}" hidden>{{ empty }}</p>
 <div class="table-tools table-pager" data-pager="{{ table }}">
   <label class="table-note">Show <select data-per><option>10</option><option selected>25</option><option>100</option><option value="0">All</option></select></label>
@@ -145,7 +146,7 @@
   <button type="button" class="btn sm ghost" data-prev aria-label="Previous page">‹</button>
   <span class="table-note" data-note></span>
   <button type="button" class="btn sm ghost" data-next aria-label="Next page">›</button>
-  <span class="sr" data-live aria-live="polite"></span>
+  <span class="sr" data-live data-noun="{{ noun }}" aria-live="polite"></span>
 </div>
 {% endmacro %}
 
