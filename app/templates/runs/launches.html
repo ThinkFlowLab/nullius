@@ -1,4 +1,4 @@
-{% from '_tables.html' import table, greyed %}
+{% from '_tables.html' import table, cell, greyed %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Launches — Nullius{% endblock %}
@@ -13,11 +13,14 @@
 {%- else %}<form method="post" action="{{ url_for('workspace_open', name=ws.name) }}" class="header-form launch-open"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="launch" value="{{ L.key }}"><button class="linkish" type="submit">{{ label }}</button></form>{% endif %}
 {%- endmacro %}
 
-{#- A run state as its icon, the word its tooltip and name; sorted by how telling it is. #}
-{% macro state_cell(state) %}{% set icon = {'running': 'play', 'preparing': 'hourglass', 'stopping': 'stopping', 'paused': 'pause', 'failed': 'alert',
+{#- A run state as its icon, the word its tooltip and name. #}
+{% macro state_icon(state) %}{% set icon = {'running': 'play', 'preparing': 'hourglass', 'stopping': 'stopping', 'paused': 'pause', 'failed': 'alert',
   'refused': 'refused', 'stopped': 'stop', 'finished': 'check'} %}
-<td data-col="state" data-sort="{{ telling.index(state) if state in telling else telling|length }}">{% if state %}<svg class="ic st-{{ state }}" role="img" aria-label="{{ state }}"><title>{{ state }}</title><use href="#i-{{ icon[state] }}"/></svg>{% endif %}</td>
+{%- if state %}<svg class="ic st-{{ state }}" role="img" aria-label="{{ state }}"><title>{{ state }}</title><use href="#i-{{ icon[state] }}"/></svg>{% endif %}
 {%- endmacro %}
+
+{#- A launch's row: what its search and filters read. #}
+{% macro launch_tr(r) %}{% set L = r.launch %}{% set wss = r.workspaces %} data-launch="{{ L.key }}" data-search="{{ ([L.key, L.title, r.bench[0] if r.bench else ''] + r.agents + wss|map(attribute='label')|list)|select|join(' ') }}" data-f-bench="{{ r.bench[0] if r.bench }}" data-f-dataset="{{ r.datasets|map('first')|join('\n') }}" data-f-state="{{ r.state }}" data-f-machines="{{ r.machines|join('\n') }}" data-f-ws="{{ wss|map(attribute='name')|join('\n') }}"{% endmacro %}
 
 {#- A benchmark or a dataset: linked to its catalogue page when it has one. #}
 {% macro entry(e) %}{% if e[1] %}<a href="{{ e[1] }}">{{ e[0] }}</a>{% else %}{{ e[0] }}{% endif %}{% endmacro %}
@@ -26,26 +29,25 @@
 <div class="page-title"><h1>Launches</h1></div>
 
 {% if rows %}
-{% set cols = [dict(key='state', label='State', type='num', sticky=true, sr=true, fixed=true), dict(key='launch', label='Launch', sticky=true, edge=true, menu=false, width='expand'),
-               dict(key='bench', label='Benchmark'), dict(key='dataset', label='Dataset'), dict(key='started', label='Started', type='num'),
-               dict(key='runs', label='Runs', type='num', num=true), dict(key='checks', label='Checks', type='num', num=true, off=true),
-               dict(key='shards', label='Shards', type='num', num=true), dict(key='machines', label='Machines', off=true),
-               dict(key='size', label='Size', type='num', num=true, off=true), dict(key='ws', label='Workspaces')] %}
-{% call table('launches', cols, search='Search by launch, agent, benchmark or workspace', columns=true, choices=choices, only=only, actions='Actions', empty='No launch matches.') %}
-  {% for r in rows %}{% set L = r.launch %}{% set wss = r.workspaces %}
-    <tr data-launch="{{ L.key }}" data-search="{{ ([L.key, L.title, r.bench[0] if r.bench else ''] + r.agents + wss|map(attribute='label')|list)|select|join(' ') }}" data-f-bench="{{ r.bench[0] if r.bench }}" data-f-dataset="{{ r.datasets|map('first')|join('\n') }}" data-f-state="{{ r.state }}" data-f-machines="{{ r.machines|join('\n') }}" data-f-ws="{{ wss|map(attribute='name')|join('\n') }}">
-      {{ state_cell(r.state) }}
-      <td data-col="launch" data-sort="{{ L.title }}">{% if wss %}{{ open_at(wss[0], L, L.title) }}{% else %}{{ L.title }}{% endif %}</td>
-      <td data-col="bench">{% if r.bench %}{{ entry(r.bench) }}{% endif %}</td>
-      <td data-col="dataset">{% for d in r.datasets %}{{ entry(d) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
-      <td data-col="started" data-sort="{{ L.started|ts }}" class="faint">{{ L.started|dt }}</td>
-      <td data-col="runs" class="num">{{ r.n_runs }}</td>
-      <td data-col="checks" class="num">{{ r.n_checks }}</td>
-      <td data-col="shards" class="num">{{ r.shards or 1 }}</td>
-      <td data-col="machines" data-sort="{{ r.machines|sort|join(' ') }}">{{ r.machines|join(', ') }}</td>
-      <td data-col="size" data-sort="{{ r.bytes }}" class="num nowrap">{{ r.bytes|filesizeformat }}</td>
-      <td data-col="ws" data-sort="{{ wss|map(attribute='label')|sort|join(' ') }}">{% for w in wss %}{{ open_at(w, L, w.label) }}{% if not loop.last %}<br>{% endif %}{% else %}<span class="faint">none</span>{% endfor %}</td>
-      <td class="acts-col">
+{% set cols = [dict(key='state', label='State', type='num', align='left', sticky=true, sr=true, fixed=true), dict(key='launch', label='Launch', sticky=true, menu=false, width='expand'),
+               dict(key='bench', label='Benchmark'), dict(key='dataset', label='Dataset'), dict(key='started', label='Started', type='num', align='left'),
+               dict(key='runs', label='Runs', type='num'), dict(key='checks', label='Checks', type='num', off=true),
+               dict(key='shards', label='Shards', type='num'), dict(key='machines', label='Machines', off=true),
+               dict(key='size', label='Size', type='num', off=true), dict(key='ws', label='Workspaces'), dict(key='actions', label='Actions', blank=true)] %}
+{% call(r, c) table('launches', cols, rows, launch_tr, search='Search by launch, agent, benchmark or workspace', columns=true, choices=choices, only=only, empty='No launch matches.') %}
+  {%- set L = r.launch %}{% set wss = r.workspaces %}
+  {%- if c.key == 'state' %}{% call cell(c, sort=telling.index(r.state) if r.state in telling else telling|length) %}{{ state_icon(r.state) }}{% endcall %}
+  {%- elif c.key == 'launch' %}{% call cell(c, sort=L.title) %}{% if wss %}{{ open_at(wss[0], L, L.title) }}{% else %}{{ L.title }}{% endif %}{% endcall %}
+  {%- elif c.key == 'bench' %}{% call cell(c) %}{% if r.bench %}{{ entry(r.bench) }}{% endif %}{% endcall %}
+  {%- elif c.key == 'dataset' %}{% call cell(c) %}{% for d in r.datasets %}{{ entry(d) }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% endcall %}
+  {%- elif c.key == 'started' %}{% call cell(c, sort=L.started|ts, class='faint') %}{{ L.started|dt }}{% endcall %}
+  {%- elif c.key == 'runs' %}{% call cell(c) %}{{ r.n_runs }}{% endcall %}
+  {%- elif c.key == 'checks' %}{% call cell(c) %}{{ r.n_checks }}{% endcall %}
+  {%- elif c.key == 'shards' %}{% call cell(c) %}{{ r.shards or 1 }}{% endcall %}
+  {%- elif c.key == 'machines' %}{% call cell(c, sort=r.machines|sort|join(' ')) %}{{ r.machines|join(', ') }}{% endcall %}
+  {%- elif c.key == 'size' %}{% call cell(c, sort=r.bytes, class='nowrap') %}{{ r.bytes|filesizeformat }}{% endcall %}
+  {%- elif c.key == 'ws' %}{% call cell(c, sort=wss|map(attribute='label')|sort|join(' ')) %}{% for w in wss %}{{ open_at(w, L, w.label) }}{% if not loop.last %}<br>{% endif %}{% else %}<span class="faint">none</span>{% endfor %}{% endcall %}
+  {%- elif c.key == 'actions' %}{% call cell(c, class='acts-col') %}
         {% set others = workspaces|rejectattr('name', 'in', wss|map(attribute='name')|list)|list %}
         <button type="button" class="icon-btn launch-add-btn" aria-haspopup="dialog" aria-label="Add launch {{ L.title }} to a workspace" title="Add to workspace"><svg class="ic"><use href="#i-ws-add"/></svg></button>
         <template class="launch-add">
@@ -59,9 +61,8 @@
         </template>
         {% if not r.why %}{{ delete_ask(L, none, 'launches', icon=true) }}
         {%- else %}{{ greyed('Delete launch ' ~ L.title, 'Delete launch', r.why, 'why-' ~ L.key) }}{% endif %}
-      </td>
-    </tr>
-  {% endfor %}
+      {% endcall %}
+  {%- endif %}
 {% endcall %}
 {{ dialogs({'launch-delete-btn': 'launch-ask', 'launch-add-btn': 'launch-add'}) }}
 <script>

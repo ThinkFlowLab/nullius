@@ -180,7 +180,7 @@ setTimeout(() => {
 }, 350);
 ''')
         self.assertEqual(got, ["1–25 of 30", "1–25 of 30", "1–15 of 15", "No rows match."])
-        html = Macros().render("{% call table('t', [dict(key='x', label='X')]) %}{% endcall %}")
+        html = Macros().render("{% call(r, c) table('t', [dict(key='x', label='X')], [], none) %}{% endcall %}")
         self.assertEqual(html.count("aria-live"), 1)                                             # one live region a table
         self.assertNotIn('role="status"', html)
 
@@ -264,29 +264,52 @@ process.stdout.write(JSON.stringify([a.shown(), b.shown(), b.tools.querySelector
 
 
 class Macros(unittest.TestCase):
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader(APP / "templates"))
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(APP / "templates"), autoescape=True)
+    # a row's attributes, and its cells: each column's key and the row's value
+    PAGE = ("{% macro tr(r) %} data-search=\"{{ r.name }}\"{% endmacro %}"
+            "{% call(r, c) table('t', cols, rows, tr, columns=true) %}{% if c.check %}{{ check_cell('Select ' ~ r.name, r.name) }}"
+            "{% else %}{% call cell(c, sort=r.name if c.key == 'a' else none) %}{{ c.key }}={{ r.name }}{% endcall %}{% endif %}{% endcall %}")
 
-    def render(self, source):
-        return self.env.from_string("{% from '_tables.html' import table, check_cell %}" + source).render()
+    def render(self, source, **data):
+        return self.env.from_string("{% from '_tables.html' import table, cell, check_cell %}" + source).render(**data)
+
+    def page(self, cols, rows=({"name": "x"},)):
+        return re.sub(r">\s+<", "><", self.render(self.PAGE, cols=cols, rows=list(rows)))
 
     def test_two_tables_on_one_page_name_their_own_radios(self):
-        html = self.render("{% for id in ['a', 'b'] %}{% call table(id, [dict(key='x', label='X')], search='Find') %}{% endcall %}{% endfor %}")
+        html = self.render("{% for id in ['a', 'b'] %}{% call(r, c) table(id, [dict(key='x', label='X')], [], none, search='Find') %}{% endcall %}{% endfor %}")
         names = re.findall(r'type="radio" name="([\w-]+)"', html)
         self.assertEqual(sorted(set(names)), ["a-sort-col", "a-sort-dir", "b-sort-col", "b-sort-dir"])
         ids = re.findall(r' id="([\w-]+)"', html)
         self.assertEqual(len(ids), len(set(ids)))
 
     def test_every_named_column_heads_sorts_and_lists(self):
-        cols = "[dict(key='a', label='A', sticky=true, edge=true, menu=false), dict(key='b', label='B', type='num', num=true, off=true), dict(key='c', label='C', sort=false)]"
-        html = self.render("{% call table('t', " + cols + ", columns=true, check='Select all', actions='Actions') %}"
-                           "<tr>{{ check_cell('Select a', 'a') }}</tr>{% endcall %}")
-        self.assertIn('<tr><th scope="col" class="pick-col"><input type="checkbox" data-check-all aria-label="Select all"></th>', html)
-        self.assertIn('<th data-col="a" data-type="text" class="sticky-col sticky-edge">A</th><th data-col="b" data-type="num" class="num">B</th><th data-col="c">C</th>'
-                      '<th scope="col"><span class="sr">Actions</span></th></tr>', re.sub(r">\s+<", "><", html))
-        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', html), ["", "a", "b"])        # c says it does not sort
-        self.assertEqual(re.findall(r'data-col="(\w)"( data-off)?> ', html), [("b", " data-off"), ("c", "")])   # a is not in the menu
-        self.assertIn('<td class="pick-col"><input type="checkbox" data-check value="a" aria-label="Select a"></td>', html)
+        html = self.page([dict(key="pick", label="Select all", check=True), dict(key="a", label="A", sticky=True, menu=False),
+                          dict(key="b", label="B", sticky=True, type="num", off=True), dict(key="c", label="C", align="center"),
+                          dict(key="acts", label="Actions", blank=True)])
+        self.assertIn('<tr><th data-col="pick" scope="col" class="pick-col"><input type="checkbox" data-check-all aria-label="Select all" title="Select all"></th>'
+                      '<th data-col="a" data-type="text" class="sticky-col">A</th><th data-col="b" data-type="num" class="align-right sticky-col sticky-edge">B</th>'
+                      '<th data-col="c" data-type="text" class="align-center">C</th><th data-col="acts" scope="col"><span class="sr">Actions</span></th></tr>', html)
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', html), ["", "a", "b", "c"])        # the check and the actions do not sort
+        self.assertEqual(re.findall(r'data-col="(\w+)"( data-off)?> ', html), [("b", " data-off"), ("c", "")])   # a is not in the menu
+        self.assertIn('<tr data-search="x"><td class="pick-col"><input type="checkbox" data-check value="x" aria-label="Select x"></td>'
+                      '<td data-col="a" data-sort="x" class="sticky-col">a=x</td><td data-col="b" class="align-right sticky-col sticky-edge">b=x</td>'
+                      '<td data-col="c" class="align-center">c=x</td><td data-col="acts">acts=x</td></tr>', html)   # each cell its column's
         self.assertIn('<p class="empty-note" data-empty="t" hidden>No rows match.</p>', html)
+
+    def test_the_cells_follow_the_columns(self):
+        cols = [dict(key=k, label=k.upper()) for k in "abc"]
+        for order in (cols, cols[::-1]):
+            with self.subTest(order=[c["key"] for c in order]):
+                html = self.page(order)
+                self.assertEqual(re.findall(r'<td data-col="(\w)"[^>]*>(\w)=x<', html), [(c["key"], c["key"]) for c in order])
+
+    def test_names_and_values_are_escaped(self):
+        html = self.page([dict(key="a", label='<b>"A"</b>', title="x<y"), dict(key="n", label="N", sr=True)], rows=[{"name": '<i>&"'}])
+        self.assertIn('<th data-col="a" data-type="text" title="x&lt;y">&lt;b&gt;&#34;A&#34;&lt;/b&gt;</th>', html)
+        self.assertIn('<td data-col="a" data-sort="&lt;i&gt;&amp;&#34;">a=&lt;i&gt;&amp;&#34;</td>', html)
+        self.assertIn('data-search="&lt;i&gt;&amp;&#34;"', html)
+        self.assertIn('<label><input type="radio" name="t-sort-col" data-sort-col value="a"> &lt;b&gt;&#34;A&#34;&lt;/b&gt;</label>', html)
 
 
 if __name__ == "__main__":

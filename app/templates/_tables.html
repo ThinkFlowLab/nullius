@@ -18,50 +18,70 @@
 </span>
 {% endmacro %}
 
-{# A table's columns are one list of definitions, dicts that the headers, the Columns menu and Sort by all read:
-   `key` (the data-col), `label`; `type` 'text' (default) or 'num', how it sorts; `sort` false: it does not sort;
-   `num`: right-aligned; `sticky`, `edge`: pinned while the table scrolls, `edge` the last pinned; `sr`: the label
-   for a screen reader only; `title`: its tooltip; `caret`: a filter_button of `choices`[key] in its header;
-   `menu` false: not in the Columns menu; `fixed`: in it, always on; `off`: off until the viewer chooses; `width`
-   in a table macro's table: 'fit' (default), as wide as its widest cell on one line, or 'expand', the rest of
-   the width, wrapping. #}
+{# A table's columns are one list of definitions, dicts that the headers, the cells, the Columns menu and Sort by
+   all read: `key` (the data-col), `label`; `type` 'text' (default) or 'num', how it sorts; `align` 'left', 'center'
+   or 'right' (a 'num' column's default), of its header and cells; `sticky`: pinned while the table scrolls, the last
+   one drawing the edge; `blank`: no visible name (a status, the actions), neither sorted nor in the Columns menu;
+   `check`: blank, a checkbox that ticks every visible row (check_cell in each row); `sr`: the label for a screen
+   reader only; `title`: its tooltip; `caret`: a filter_button of `choices`[key] in its header; `menu` false: not in
+   the Columns menu; `fixed`: in it, always on; `off`: off until the viewer chooses; `width` in a table macro's
+   table: 'fit' (default), as wide as its widest cell on one line, or 'expand', the rest of the width, wrapping. #}
+
+{#- The class attribute of a column's header or cell: its alignment, whether it is pinned, `edge` whether it is the
+    last pinned; `extra` adds to it. #}
+{% macro classes(c, edge, extra='') %}{% set align = c.align or ('right' if c.type == 'num' else 'left') %}
+{%- set cls = ([extra] if extra else []) + (['align-' ~ align] if align != 'left' else []) + (['sticky-col'] if c.sticky else []) + (['sticky-edge'] if c.sticky and edge else []) %}
+{%- if cls %} class="{{ cls|join(' ') }}"{% endif %}{% endmacro %}
+
+{#- The last pinned column's key. #}
+{% macro edge_of(cols) %}{{ (cols|selectattr('sticky')|map(attribute='key')|list)[-1:]|join }}{% endmacro %}
 
 {# The header cells of `cols`; `choices`: what each caret offers. #}
-{% macro heads(cols, choices={}) %}
-{%- for c in cols %}{% set cls = (['num'] if c.num else []) + (['sticky-col'] if c.sticky else []) + (['sticky-edge'] if c.edge else []) %}
-      <th data-col="{{ c.key }}"{% if c.sort is not sameas false %} data-type="{{ c.type or 'text' }}"{% endif %}{% if cls %} class="{{ cls|join(' ') }}"{% endif %}{% if c.title %} title="{{ c.title }}"{% endif %}>
-        {%- if c.sr %}<span class="sr">{{ c.label }}</span>{% else %}{{ c.label }}{% endif %}{% if c.caret %}{{ filter_button(c.key, choices[c.key]) }}{% endif %}</th>
+{% macro heads(cols, choices={}) %}{% set edge = edge_of(cols) %}
+{%- for c in cols %}{% set named = not (c.blank or c.check) %}
+      <th data-col="{{ c.key }}"{% if named %} data-type="{{ c.type or 'text' }}"{% else %} scope="col"{% endif %}{{ classes(c, c.key == edge, 'pick-col' if c.check) }}{% if c.title %} title="{{ c.title }}"{% endif %}>
+        {%- if c.check %}<input type="checkbox" data-check-all aria-label="{{ c.label }}" title="{{ c.label }}">{% elif c.sr or c.blank %}<span class="sr">{{ c.label }}</span>{% else %}{{ c.label }}{% endif %}{% if c.caret %}{{ filter_button(c.key, choices[c.key]) }}{% endif %}</th>
 {%- endfor %}
 {%- endmacro %}
 
-{# A whole table (static/tables.js `wire`): its controls row, its headers from `cols`, the rows the call block
-   writes, and its pages. `id` names it, and keys what a viewer chooses; `class` adds to its classes. Opt-ins:
-   `search`, `columns`, `choices`, `only`, `sort` as controls'; `status`: a headerless column first, `check`: a
-   checkbox column first (check_cell in each row), each the name of its header; `actions`: a last column of
-   actions (a td.acts-col in each row); `empty`: the note when no row passes. #}
-{% macro table(id, cols, class='', search='', columns=false, choices={}, only={}, sort=true, status='', check='', actions='', empty='No rows match.') %}
-{{ controls(id, cols, search, columns, choices, only, sort) }}
-{%- set lead = (1 if check else 0) + (1 if status else 0) %}
+{# A whole table (static/tables.js `wire`): its controls row, its headers from `cols`, a row of `rows` each,
+   and its pages. `id` names it, and keys what a viewer chooses; `class` adds to its classes; `tr`: a macro writing a
+   row's attributes. The call block writes a cell: it is called with a row and a column, in the order of `cols`, and
+   writes that cell with the cell macro. Opt-ins: `search`, `columns`, `choices`, `only` as controls'; `empty`: the
+   note when no row passes. #}
+{% macro table(id, cols, rows, tr, class='', search='', columns=false, choices={}, only={}, empty='No rows match.') %}
+{{ controls(id, cols, search, columns, choices, only) }}
 {%- for c in cols if c.width == 'expand' %}
-<style>#{{ id }} > * > tr > :nth-child({{ lead + cols.index(c) + 1 }}) { width: auto; min-width: var(--expand-min); white-space: normal; overflow-wrap: anywhere; }</style>
+<style>#{{ id }} > * > tr > :nth-child({{ cols.index(c) + 1 }}) { width: auto; min-width: var(--expand-min); white-space: normal; overflow-wrap: anywhere; }</style>
 {%- endfor %}
+{%- set edge = edge_of(cols) %}
 <div class="table-wrap">
 <table class="grid sortable tools snug{{ ' ' ~ class if class }}" id="{{ id }}" data-table>
   <thead>
-    <tr>{% if check %}{{ check_head(check) }}{% endif %}{% if status %}{{ blank(status) }}{% endif %}{{ heads(cols) }}{% if actions %}{{ blank(actions) }}{% endif %}</tr>
+    <tr>{{ heads(cols) }}</tr>
   </thead>
-  <tbody>{{ caller() }}</tbody>
+  <tbody>
+  {%- for r in rows %}
+    <tr{{ tr(r) }}>
+      {%- for c in cols %}{{ caller(r, dict(c, edge=c.key == edge)) }}{% endfor %}
+    </tr>
+  {%- endfor %}
+  </tbody>
 </table>
 </div>
 {{ pager(id, empty) }}
 {% endmacro %}
 
+{#- One cell of the column `c`, as the table macro's call block gets it: its data-col, alignment and pinning from
+    `c`, `sort` its sort key, `class` its own classes; the call block writes what it holds. #}
+{% macro cell(c, sort=none, class='') %}<td data-col="{{ c.key }}"{% if sort is not none %} data-sort="{{ sort }}"{% endif %}{{ classes(c, c.edge, class) }}>{{ caller() }}</td>{% endmacro %}
+
 {# A table's controls row (static/tables.js `toolbar`) over the columns `cols`; each feature on only
    when asked. `search`: the search box's name and placeholder, over each row's data-search text; `columns`: the
    Columns menu; `choices`: column -> its (value, label) pairs, a Filter menu of them; `only`: column -> the one value
-   ticked at load, the others unticked; `sort`: the Sort by menu. The search goes left, the buttons right.
+   ticked at load, the others unticked; then the Sort by menu. The search goes left, the buttons right.
    `id`: the table's. #}
-{% macro controls(id, cols, search='', columns=false, choices={}, only={}, sort=true) %}
+{% macro controls(id, cols, search='', columns=false, choices={}, only={}) %}
 <div class="table-tools table-controls" id="{{ id }}-tools">
   {% if search %}<label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-search placeholder="{{ search }}" aria-label="{{ search }}" autocomplete="off" spellcheck="false"></label>{% endif %}
   <div class="table-buttons">
@@ -80,13 +100,13 @@
     </div>
   </div>
   {% endif %}
-  {% if sort %}<div class="menu-wrap">
+  <div class="menu-wrap">
     <button class="btn ghost sm" type="button" data-tools-btn="sort" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-sort"/></svg>Sort by</button>
     <div class="menu tools-menu" data-tools="sort" hidden>
       <fieldset>
         <legend>Column</legend>
         <label><input type="radio" name="{{ id }}-sort-col" data-sort-col value="" checked> Default</label>
-        {% for c in cols if c.sort is not sameas false %}<label><input type="radio" name="{{ id }}-sort-col" data-sort-col value="{{ c.key }}"> {{ c.label }}</label>{% endfor %}
+        {% for c in cols if not (c.blank or c.check) %}<label><input type="radio" name="{{ id }}-sort-col" data-sort-col value="{{ c.key }}"> {{ c.label }}</label>{% endfor %}
       </fieldset>
       <fieldset>
         <legend>Order</legend>
@@ -95,7 +115,6 @@
       </fieldset>
     </div>
   </div>
-  {% endif %}
   </div>
 </div>
 {% endmacro %}
@@ -106,17 +125,14 @@
 {% macro columns_button(id='col-btn') %}<button class="btn ghost sm" type="button"{% if id %} id="{{ id }}"{% endif %} data-tools-btn="columns" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-table"/></svg>Columns</button>{% endmacro %}
 {% macro columns_menu(cols, id='col-menu') %}
 <div class="menu"{% if id %} id="{{ id }}"{% endif %} data-tools="columns" hidden>
-  {% for c in cols if c.menu is not sameas false %}<label><input type="checkbox" data-col="{{ c.key }}"{% if c.fixed %} disabled{% endif %}{% if c.off %} data-off{% endif %}> {{ c.label }}</label>{% endfor %}
+  {% for c in cols if c.menu is not sameas false and not (c.blank or c.check) %}<label><input type="checkbox" data-col="{{ c.key }}"{% if c.fixed %} disabled{% endif %}{% if c.off %} data-off{% endif %}> {{ c.label }}</label>{% endfor %}
 </div>
 {% endmacro %}
 
-{#- A header with no visible name (a status, the actions): `label` its name for a screen reader. The actions cell
-    under it is a td.acts-col. #}
+{#- A header with no visible name, outside a table macro's table: `label` its name for a screen reader. #}
 {% macro blank(label='') %}<th scope="col">{% if label %}<span class="sr">{{ label }}</span>{% endif %}</th>{% endmacro %}
 
-{#- A checkbox column on the left (static/tables.js `checks`): its header ticks every visible row, `label` its name;
-    a row's box is `label` for that row, `value` its value. #}
-{% macro check_head(label) %}<th scope="col" class="pick-col"><input type="checkbox" data-check-all aria-label="{{ label }}"></th>{% endmacro %}
+{#- A row's box in a `check` column (static/tables.js `checks`): `label` its name, `value` its value. #}
 {% macro check_cell(label, value) %}<td class="pick-col"><input type="checkbox" data-check value="{{ value }}" aria-label="{{ label }}"></td>{% endmacro %}
 
 {# The pages of the table whose id is `table` (static/tables.js `pager`): how many rows a page shows, 25 at first,

@@ -143,19 +143,19 @@ def dataset_info(name):
 
 # The runs table's columns, in render order, as _tables.html defines a column: its headers and Columns menu.
 COLUMNS = [
-    dict(key="run", label="Run", sticky=True, edge=True), dict(key="agent", label="Agent", caret=True),
+    dict(key="run", label="Run", sticky=True), dict(key="agent", label="Agent", caret=True),
     dict(key="version", label="Version", title="The agent's version as the run recorded it, or the runner and its commit"),
-    dict(key="start", label="Start", type="num"), dict(key="end", label="End", type="num", off=True),
-    dict(key="time", label="Time", type="num", num=True), dict(key="model", label="Model", caret=True, off=True),
-    dict(key="dataset", label="Dataset", caret=True, off=True), dict(key="mix", label="Mix", type="num"),
-    dict(key="trials", label="Trials", type="num", num=True), dict(key="solved", label="Solved", type="num", num=True),
-    dict(key="raw", label="Raw", type="num", num=True, title="Solved ÷ all trials", off=True),
-    dict(key="adjusted", label="Adjusted", type="num", num=True, title="Solved ÷ trials that actually ran (excludes infra failures)"),
-    dict(key="infra", label="Infra errors", type="num", num=True,
+    dict(key="start", label="Start", type="num", align="left"), dict(key="end", label="End", type="num", align="left", off=True),
+    dict(key="time", label="Time", type="num"), dict(key="model", label="Model", caret=True, off=True),
+    dict(key="dataset", label="Dataset", caret=True, off=True), dict(key="mix", label="Mix", type="num", align="left"),
+    dict(key="trials", label="Trials", type="num"), dict(key="solved", label="Solved", type="num"),
+    dict(key="raw", label="Raw", type="num", title="Solved ÷ all trials", off=True),
+    dict(key="adjusted", label="Adjusted", type="num", title="Solved ÷ trials that actually ran (excludes infra failures)"),
+    dict(key="infra", label="Infra errors", type="num",
          title="Trials that never got a fair attempt — rate limits and setup failures. Excluded from Adjusted."),
-    dict(key="broke", label="Broke tests", type="num", num=True, title="Trials whose patch broke previously-passing tests"),
-    dict(key="tokens", label="Tokens", type="num", num=True, title="Input + output tokens across the run"),
-    dict(key="cost", label="Cost", type="num", num=True, title="Only recorded by agents that report it"),
+    dict(key="broke", label="Broke tests", type="num", title="Trials whose patch broke previously-passing tests"),
+    dict(key="tokens", label="Tokens", type="num", title="Input + output tokens across the run"),
+    dict(key="cost", label="Cost", type="num", title="Only recorded by agents that report it"),
 ]
 
 

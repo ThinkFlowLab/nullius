@@ -211,7 +211,7 @@
       <td data-col="version">{% if j.runner %}{{ what_ran(j) }}{% elif j.agent_version %}<span class="mono small">{{ j.agent_version }}</span>{% else %}<span class="faint">—</span>{% endif %}</td>
       <td data-col="start" data-sort="{{ j.started_at|ts }}" class="faint nowrap">{{ j.started_at|dt }}</td>
       <td data-col="end" data-sort="{{ j.finished_at|ts }}" class="faint nowrap">{{ j.finished_at|dt }}</td>
-      <td data-col="time" data-sort="{{ j.duration_min or -1 }}" class="num faint">
+      <td data-col="time" data-sort="{{ j.duration_min or -1 }}" class="align-right faint">
         {%- if j.duration_min %}{{ j.duration_min|runtime }}{% else %}—{% endif -%}
       </td>
       <td data-col="model" class="mono faint">{{ j.model_name }}</td>
@@ -235,7 +235,7 @@
       {% endif %}
       {# present/planned exposes a partial run; the tooltip carries Harbor's
          retry and error counters, which have nowhere else to live. #}
-      <td data-col="trials" data-sort="{{ j.trials|length }}" class="num"
+      <td data-col="trials" data-sort="{{ j.trials|length }}" class="align-right"
           title="{{ j.trials|length }} on disk{% if j.n_planned %} of {{ j.n_planned }} planned{% endif %}{% if j.n_retries %} · {{ j.n_retries }} retried{% endif %}{% if j.n_errored_trials %} · {{ j.n_errored_trials }} errored{% endif %}">
         {{- j.trials|length }}{% if j.n_planned and j.n_planned != j.trials|length %}<small class="faint">/{{ j.n_planned }}</small>{% endif -%}
       </td>
@@ -245,41 +245,41 @@
          All three sort at -2 — below the agents and below a run nothing
          scored (-1) — so the columns keep the controls apart. #}
       {% set ctl_title = v.control ~ " is a Harbor control: it must be " ~ v.expected ~ " on every task — " ~ v.label ~ ". Not a score." %}
-      <td data-col="solved" data-sort="-2" class="control-verdict {{ v.state }}" title="{{ ctl_title }}">{{ v.label }}</td>
-      <td data-col="raw" data-sort="-2" class="num faint" title="{{ ctl_title }}">—</td>
-      <td data-col="adjusted" data-sort="-2" class="num faint" title="{{ ctl_title }}">—</td>
+      <td data-col="solved" data-sort="-2" class="align-right control-verdict {{ v.state }}" title="{{ ctl_title }}">{{ v.label }}</td>
+      <td data-col="raw" data-sort="-2" class="align-right faint" title="{{ ctl_title }}">—</td>
+      <td data-col="adjusted" data-sort="-2" class="align-right faint" title="{{ ctl_title }}">—</td>
       {% elif j.scored_only %}
       {# A benchmark that gives a score and no pass or fail: the mean score where the rate would be, and nothing solved #}
       {% set score_title = "This benchmark gives a score and no pass or fail: the mean score" ~ (" over its " ~ j.n_scored_parts ~ " scored" if j.n_scored_parts else "") ~ ", no solve rate" %}
-      <td data-col="solved" data-sort="-1" class="num faint" title="{{ score_title }}">—</td>
-      <td data-col="raw" data-sort="-1" class="num faint" title="{{ score_title }}">—</td>
-      <td data-col="adjusted" data-sort="{{ j.mean_score }}" class="num strong" title="{{ score_title }}">{{ '%.2f'|format(j.mean_score) }}</td>
+      <td data-col="solved" data-sort="-1" class="align-right faint" title="{{ score_title }}">—</td>
+      <td data-col="raw" data-sort="-1" class="align-right faint" title="{{ score_title }}">—</td>
+      <td data-col="adjusted" data-sort="{{ j.mean_score }}" class="align-right strong" title="{{ score_title }}">{{ '%.2f'|format(j.mean_score) }}</td>
       {% else %}
-      <td data-col="solved" data-sort="{{ j.n_resolved }}" class="num">{{ j.n_resolved }}</td>
+      <td data-col="solved" data-sort="{{ j.n_resolved }}" class="align-right">{{ j.n_resolved }}</td>
       {# A run nothing scored (a standalone trajectory, a span export) has no
          rate, not a rate of zero: it shows absence and sorts below a measured 0%. #}
-      <td data-col="raw" data-sort="{{ -1 if j.raw_solve_rate is none else j.raw_solve_rate }}" class="num faint"
+      <td data-col="raw" data-sort="{{ -1 if j.raw_solve_rate is none else j.raw_solve_rate }}" class="align-right faint"
           {%- if j.raw_solve_rate is none %} title="No trial in this run carries a verdict"{% endif %}>{{ j.raw_solve_rate|pct }}</td>
-      <td data-col="adjusted" data-sort="{{ -1 if j.adjusted_solve_rate is none else j.adjusted_solve_rate }}" class="num {{ 'faint' if j.adjusted_solve_rate is none else 'strong' }}"
+      <td data-col="adjusted" data-sort="{{ -1 if j.adjusted_solve_rate is none else j.adjusted_solve_rate }}" class="align-right {{ 'faint' if j.adjusted_solve_rate is none else 'strong' }}"
           {%- if j.adjusted_solve_rate is none %} title="No trial in this run carries a verdict"{% endif %}>{{ j.adjusted_solve_rate|pct }}</td>
       {% endif %}
       {# Zero infra errors is a measured fact, and a good one — every trial has
          an outcome, so the count is always knowable. #}
-      <td data-col="infra" data-sort="{{ j.n_infra }}" class="num {% if j.n_infra %}warn{% else %}faint{% endif %}">{{ j.n_infra }}</td>
+      <td data-col="infra" data-sort="{{ j.n_infra }}" class="align-right {% if j.n_infra %}warn{% else %}faint{% endif %}">{{ j.n_infra }}</td>
       {# Zero regressions is only a fact for a benchmark that checks for them.
          Where none were reported the column shows absence, not a reassuring 0. #}
-      <td data-col="broke" data-sort="{{ j.n_regressions }}" class="num">
+      <td data-col="broke" data-sort="{{ j.n_regressions }}" class="align-right">
         {%- if j.n_regressions %}<span class="badge danger" title="Broke previously-passing tests">⚠ {{ j.n_regressions }}</span>
         {%- elif j.reports_regressions %}<span class="faint">0</span>
         {%- else %}<span class="faint" title="This benchmark does not report previously-passing tests">—</span>{% endif -%}
       </td>
       <td data-col="tokens" data-sort="{{ j.total_input_tokens + j.total_output_tokens }}"
-          class="num faint"
+          class="align-right faint"
           title="in {{ j.total_input_tokens }} · cached {{ j.total_cache_tokens }} · out {{ j.total_output_tokens }}">
         {{ (j.total_input_tokens + j.total_output_tokens)|tokens(j.kind) }}</td>
       {# A control's real $0.00 sorts as zero; an unmeasured agent sorts last. #}
       <td data-col="cost" data-sort="{{ j.total_cost_usd if j.total_cost_usd is not none else (0 if j.is_control else -1) }}"
-          class="num {{ '' if (j.total_cost_usd or j.is_control) else 'faint' }}">{{ j.total_cost_usd|usd(j.kind) }}</td>
+          class="align-right {{ '' if (j.total_cost_usd or j.is_control) else 'faint' }}">{{ j.total_cost_usd|usd(j.kind) }}</td>
     </tr>
     {% endfor %}
   </tbody>

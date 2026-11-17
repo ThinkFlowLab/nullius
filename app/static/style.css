@@ -472,6 +472,9 @@ button.seg:hover { filter: brightness(1.25); }
 .grid.snug th { position: relative; }
 .grid td.acts-col { position: relative; white-space: nowrap; }
 .count-btn { font-variant-numeric: tabular-nums; }   /* an icon and a count, as one button */
+/* a column's alignment (its `align`), header and cells */
+.grid .align-right { text-align: right; }
+.grid .align-center { text-align: center; }
 .tools-count { margin-left: .4rem; padding: 0 .4em; border-radius: 99px; background: var(--accent-soft); color: var(--text); font-size: .72rem; font-variant-numeric: tabular-nums; }
 .menu-head { display: flex; gap: .75rem; padding: .15rem .45rem .4rem; border-bottom: 1px solid var(--border-soft); margin-bottom: .25rem; }
 .chip.clear { border-style: dashed; }

@@ -51,14 +51,11 @@ def core(schema, code):
 
 
 
-def named_heads(html) -> list:
-    """The table's headers with a name (data-col), in order: every one but the headerless edges."""
-    return re.findall(r'<th data-col="(\w+)"', html.split("<thead>", 1)[1].split("</thead>", 1)[0])
-
-
-def sort_keys(html) -> list:
-    """The columns its Sort by offers, Default aside."""
-    return re.findall(r'data-sort-col value="(\w+)"', html)
+def columns_of(html) -> tuple:
+    """The table's header columns (data-col), and each body row's cell columns, in order ('' a cell without one)."""
+    head, body = html.split("<thead>", 1)[1].split("</thead>", 1)
+    rows = re.sub(r"<template.*?</template>", "", body.split("</tbody>", 1)[0], flags=re.S).split("<tr")[1:]
+    return re.findall(r'<th data-col="(\w+)"', head), [re.findall(r'<td(?: data-col="(\w+)")?', r) for r in rows]
 
 class RunRoutes(unittest.TestCase):
     def setUp(self):
@@ -780,7 +777,7 @@ class LaunchesPage(unittest.TestCase):
         failed.launched = "run"                                                              # got as far as its launch: failed, not refused
         rows = self.rows()
         first = {e.plan.name: re.search(r'^[^>]*>\s*(<td.*?</td>)', rows[f"run:{e.id}"], re.S).group(1) for e in (finished, refused, failed, paused)}
-        self.assertEqual(first["r4"], '<td data-col="state" data-sort="6"><svg class="ic st-refused" role="img" aria-label="refused"><title>refused</title><use href="#i-refused"/></svg></td>')
+        self.assertEqual(first["r4"], '<td data-col="state" data-sort="6" class="sticky-col"><svg class="ic st-refused" role="img" aria-label="refused"><title>refused</title><use href="#i-refused"/></svg></td>')
         self.assertEqual([re.search(r'aria-label="([^"]+)"><title>\1</title><use href="#i-(\w+)"', first[n]).groups() for n in ("r3", "r5", "r6")],
                          [("finished", "check"), ("failed", "alert"), ("paused", "pause")])
         sort = {n: int(re.search(r'data-sort="(\d+)"', c).group(1)) for n, c in first.items()}
@@ -838,7 +835,8 @@ class LaunchesPage(unittest.TestCase):
                          [("state", "State"), ("bench", "Benchmark"), ("dataset", "Dataset"), ("machines", "Machines"), ("ws", "Workspaces")])
         self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools),
                          ["", "state", "launch", "bench", "dataset", "started", "runs", "checks", "shards", "machines", "size", "ws"])     # "": the order the page came in
-        self.assertEqual(named_heads(html), sort_keys(html))                                      # every column but the headerless edges sorts
+        heads, rows = columns_of(html)
+        self.assertTrue(rows); self.assertEqual(rows, [heads] * len(rows))                        # each cell under its column's header
         self.assertNotIn("filter-btn", html)                                                     # no caret in a header
         self.assertNotIn("data-sorted", html)                                                    # no sort, no arrow, until one is chosen
         self.assertIn('<table class="grid sortable tools snug" id="launches" data-table>', html)
@@ -1143,7 +1141,9 @@ class WorkspacesPage(unittest.TestCase):
         tools = html.split('<div class="table-tools table-controls" id="workspaces-tools">', 1)[1].split('<div class="table-wrap">', 1)[0]
         self.assertNotIn('data-tools-btn="filter"', tools)                                        # Sort by alone: nothing to filter
         self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools), ["", "name", "runs", "checks", "opened", "launches", "roots"])
-        self.assertEqual(named_heads(html), sort_keys(html))
+        heads, rows = columns_of(html)
+        self.assertEqual(heads, ["open", "name", "runs", "checks", "opened", "launches", "roots", "actions"])
+        self.assertTrue(rows); self.assertEqual(rows, [heads] * len(rows))
         self.assertIn('<table class="grid sortable tools snug ws-table" id="workspaces" data-table>', html)
         self.assertIn('placeholder="Search by name"', tools)
         heads = re.findall(r'<th( data-col="\w+" data-type="\w+")?[^>]*>', html.split("<thead>", 1)[1].split("</thead>", 1)[0])
@@ -1151,9 +1151,9 @@ class WorkspacesPage(unittest.TestCase):
         self.assertNotIn("data-sorted", html)                                                     # no arrow until a sort is chosen
         self.assertRegex(html, r'<div class="table-tools table-pager" data-pager="workspaces">\s*<label class="table-note">Show <select data-per><option>10</option><option selected>25</option>')
         row = self.row(self.ws, html)
-        self.assertIn('<td class="ws-name" data-sort="witty pelican">', row)
-        self.assertIn('<td data-sort="1">', row)                                                  # its roots
-        self.assertRegex(row, r'data-sort="\d{14}">\d{4}-\d\d-\d\d \d\d:\d\d</td>')                 # last opened, as digits
+        self.assertIn('<td data-col="name" data-sort="witty pelican" class="ws-name">', row)
+        self.assertIn('<td data-col="roots" data-sort="1" class="align-right">', row)
+        self.assertRegex(row, r'data-sort="\d{14}" class="mono faint nowrap">\d{4}-\d\d-\d\d \d\d:\d\d</td>')   # last opened, as digits
 
     def test_delete_workspace_says_what_is_lost(self):
         from nullius.judge import store
