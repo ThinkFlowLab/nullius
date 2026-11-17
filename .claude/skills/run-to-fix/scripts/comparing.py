@@ -57,6 +57,22 @@ def predictions_of(predictions: List[dict], new: List[TrialRow]) -> List[dict]:
     return out
 
 
+def spent_in_round(round_dir: str, record: dict, new_dir: str, new_cost: Optional[float]) -> Optional[float]:
+    """What the round's runs cost: its trial run, when there was one, and the new run unless it is the round's own
+    run. None when a run reports no cost."""
+    total = 0.0
+    trial_path = os.path.join(round_dir, "trial.json")
+    if os.path.isfile(trial_path):
+        trial_run = read_json(trial_path)
+        if trial_run["job_dir"] != new_dir:
+            total += trial_run["cost_usd"]
+    if new_dir != record["run"]["job_dir"]:
+        if new_cost is None:
+            return None
+        total += new_cost
+    return total
+
+
 def stop_rule(result_verdict: str, groups: List[dict], budget: float, spent: Optional[float],
               cost_per_trial: Optional[float]) -> dict:
     big = [g for g in groups if g["trials"] >= GROUP_MIN_TRIALS]
@@ -112,7 +128,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
     entry = ledger_round(ledger, os.path.basename(round_dir))
     classes, signatures = classes_of(new_rows, adapter.limits)
     groups = failure_groups(new_rows, classes, signatures, None)
-    spent = 0.0 if new_dir == record["run"]["job_dir"] else runs["new"]["cost_total"]
+    spent = spent_in_round(round_dir, record, new_dir, runs["new"]["cost_total"])
     rule = stop_rule(result_verdict, groups, float(record["budget_usd"]), spent, runs["new"]["cost_mean"])
     result = {
         "schema": "run-to-fix.result/v1", "created": now(), "round": os.path.basename(round_dir),
