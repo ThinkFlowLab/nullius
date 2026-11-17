@@ -35,6 +35,33 @@ def a_recipe(**kw):
 
 
 class Compile(unittest.TestCase):
+    def test_time_limits_are_forced_in_seconds_on_every_job_and_turns_only_on_a_conversation(self):
+        out = recipe.compile(a_recipe(timeouts={"agent": 30, "verify": 1.5, "setup": ""}, turns=40), defs())
+        self.assertEqual(out["errors"], [])
+        self.assertIn("--timeout agent=1800 --timeout verify=90 ", out["script"])
+        self.assertNotIn("--timeout setup", out["script"])
+        self.assertNotIn("--max-turns", out["script"])                          # fakebench holds no conversation
+        self.assertIn(["Time limits", "agent 30 min · verify 1.5 min"], [row[1:] for row in out["review"]])
+        for bad in ({"agent": 0}, {"agent": -1}, {"lunch": 5}, {"agent": True}, {"agent": 24 * 60 + 1}, {"agent": 0.0001}):   # the last rounds to no time
+            errors = recipe.compile(a_recipe(timeouts=bad), defs())["errors"]
+            self.assertEqual([e["step"] for e in errors], [recipe.STEP["limits"]], bad)
+        talk = dict(next(x for x in defs()["benchmark"] if x["key"] == "fakebench"), needs=["agent.task/v1", "agent.conversation/v1"])
+        real = recipe.definitions.find
+        with patch.object(recipe.definitions, "find", lambda items, key: talk if key == "fakebench" else real(items, key)), \
+                patch.object(recipe.match, "fit", lambda b, o: None):
+            out = recipe.compile(a_recipe(turns=40), defs())
+            self.assertIn("--max-turns 40 ", out["script"])
+            self.assertEqual(recipe.compile(a_recipe(turns=0), defs())["errors"][0]["step"], recipe.STEP["limits"])
+
+    def test_a_cap_on_model_calls_reaches_every_job_that_calls_a_model(self):
+        out = recipe.compile(a_recipe(max_calls=60), defs())
+        self.assertEqual(out["errors"], [])
+        self.assertIn("--max-calls 60 ", out["script"])
+        self.assertIn(["Model calls per task", "60"], [row[1:] for row in out["review"]])
+        for bad in (0, -3, 1.5, True, "x"):
+            errors = recipe.compile(a_recipe(max_calls=bad), defs())["errors"]
+            self.assertEqual([e["step"] for e in errors], [recipe.STEP["limits"]], bad)
+
     def test_a_fitting_pair_is_one_command_and_one_job(self):
         out = recipe.compile(a_recipe(), defs())
         self.assertEqual(out["errors"], [])

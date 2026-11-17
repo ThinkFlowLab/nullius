@@ -60,7 +60,7 @@
   "setting": "--max_steps",
   "values": "a number",
   "default": "100",
-  "nullius": "fixed:100 - its default and its documented invocation"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_multienv_m3.py",
@@ -340,7 +340,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "50",
-  "nullius": "fixed:50 - its default"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_autoglm.py",
@@ -501,7 +501,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "50",
-  "nullius": "fixed:50 - its default"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_autoglm_v.py",
@@ -676,7 +676,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "15",
-  "nullius": "fixed:15 - its documented invocation, and its default"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_multienv.py",
@@ -914,7 +914,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "15",
-  "nullius": "fixed:50 - its documented invocation"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_multienv_claude.py",
@@ -1131,7 +1131,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "50",
-  "nullius": "fixed:50 - its documented invocation, and its default"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_multienv_evocua.py",
@@ -1348,7 +1348,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "15",
-  "nullius": "fixed:50 - its documented invocation"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_multienv_gpt54.py",
@@ -1565,7 +1565,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "15",
-  "nullius": "fixed:15 - its default"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_multienv_mano.py",
@@ -1824,7 +1824,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "100",
-  "nullius": "fixed:100 - its documented invocation, and its default"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_multienv_muse_spark.py",
@@ -2125,7 +2125,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "15",
-  "nullius": "fixed:50 - its documented invocation"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_multienv_openaicua.py",
@@ -2342,7 +2342,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "15",
-  "nullius": "fixed:50 - its documented invocation"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_multienv_os_symphony.py",
@@ -2748,7 +2748,7 @@
   "setting": "--max_steps",
   "values": "int",
   "default": "50",
-  "nullius": "fixed:50 - its default"
+  "nullius": "option:max_steps"
  },
  {
   "entry": "scripts/python/run_multienv_qwen.py",

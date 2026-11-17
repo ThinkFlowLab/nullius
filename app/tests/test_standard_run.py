@@ -8,6 +8,7 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime
@@ -35,6 +36,24 @@ def turn(unit, dir, transcript, simulator=None):
 serve({"units": lambda dataset: {"units": ["a", "b"]}, "setup": lambda unit, dir: {"prompt": "intro"}, "turn": turn,
        "score": lambda unit, dir, transcript, answer: {"reward": 1.0, "passed": True,
                  "detail": {"said": [t["text"] for t in transcript if t["role"] == "agent"], "routes": ROUTES}}})
+'''
+
+SLOW_CHAT_DRIVER = '''import time
+from nullius.standard.jsonl import serve
+def turn(unit, dir, transcript):
+    time.sleep(0.6)                          # each reply quick, the user slow: the conversation never ends by itself
+    return {"message": "more"}
+serve({"units": lambda dataset: {"units": ["a"]}, "setup": lambda unit, dir: {"prompt": "intro"}, "turn": turn,
+       "score": lambda unit, dir, transcript, answer: {"reward": 1.0, "passed": True, "detail": {}}})
+'''
+
+CALLING_CHAT_DRIVER = '''from nullius.standard.jsonl import serve
+def turn(unit, dir, transcript):
+    if sum(1 for t in transcript if t["role"] == "user") >= 4:
+        return {"done": True}
+    return {"message": "swallow more"}           # each turn, one model call of the agent's
+serve({"units": lambda dataset: {"units": ["a", "b"]}, "setup": lambda unit, dir: {"prompt": "swallow hi"}, "turn": turn,
+       "score": lambda unit, dir, transcript, answer: {"reward": 1.0, "passed": True, "detail": {}}})
 '''
 
 JUDGED_DRIVER = '''import json, urllib.request
@@ -636,6 +655,28 @@ class RunTest(unittest.TestCase):
         self.assertEqual(names, ["fakemem.add"] * 3 + ["fakemem.recall"])
         self.assertIn("green", t["steps"][-1]["message"])
 
+    def test_a_capabilitys_agent_limit_bounds_each_add_and_recall_not_the_whole(self):
+        """A memory adds a unit's sessions one by one: three adds of 0.6 s each pass an agent limit of
+        1 s, which each fits and their sum does not. A cap on model calls is an agent's alone: a
+        capability's route carries the benchmark's reader too, so a capability run refuses it."""
+        here = os.path.join(self.tmp, "slowmem")
+        os.makedirs(here)
+        src = definitions.get("capability", "fakemem", ROOT)
+        with open(os.path.join(src["_here"], "capability.py")) as f:
+            code = f.read()
+        with open(os.path.join(here, "capability.py"), "w") as f:
+            f.write("import time\n" + code.replace('    if req["op"] == "add":\n', '    if req["op"] == "add":\n        time.sleep(0.6)\n'))
+        slow = dict(src, _here=here)
+        b = definitions.get("benchmark", "fakememo", ROOT)
+        jobs = os.path.join(self.tmp, "jobs")
+        job_dir = run.run(b, slow, model="m-1", provider="custom", jobs_root=jobs, concurrency=2, env=self.env,
+                          say=lambda s: None, unsandboxed=True, timeouts={"agent": 1})
+        got, _ = self.outcomes(job_dir)
+        self.assertTrue(all(t.outcome == classify.SCORED for t in got.values()), {u: t.outcome for u, t in got.items()})
+        with self.assertRaisesRegex(run.Refused, "max-calls"):
+            run.run(b, src, model="m-1", provider="custom", jobs_root=jobs, env=self.env, say=lambda s: None,
+                    unsandboxed=True, max_calls=5)
+
     def test_a_pair_that_does_not_fit_is_refused_before_anything_starts(self):
         with self.assertRaisesRegex(run.Refused, "takes a capability"):
             self.go("fakememo", "fake")
@@ -750,6 +791,53 @@ class RunTest(unittest.TestCase):
         self.assertEqual(os.listdir(here), ["driver.py"])
         self.assertTrue(os.path.isfile(os.path.join(job_dir, ".work", "driver", "data", ".cache")))
 
+    def test_the_agents_limit_is_its_whole_conversation_and_a_run_may_force_it(self):
+        """``--timeout agent`` bounds the agent's whole work on a unit: every
+        turn of a conversation and the user's between them, though no one
+        reply comes near it. The config records what the run forced."""
+        here = os.path.join(self.tmp, "slow")
+        os.makedirs(here)
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(SLOW_CHAT_DRIVER)
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), _here=here,
+                 needs=["agent.task/v1", "agent.conversation/v1"], driver={"command": ["python3", "{here}/driver.py"]})
+        t0 = time.time()
+        job_dir = run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                          concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True, proving=True, limit=1,
+                          timeouts={"agent": 2, "score": 30}, max_turns=50)
+        self.assertLess(time.time() - t0, 30)                    # 50 turns of 0.6 s would be 30 s
+        by_unit, _ = self.outcomes(job_dir)
+        self.assertEqual(by_unit["a"].exception_type, "AgentTimeoutError")
+        self.assertIn("did not end its work in 2 s", by_unit["a"].exception_message)
+        with open(os.path.join(job_dir, "config.json")) as f:
+            std = json.load(f)["standard"]
+        self.assertEqual((std["timeouts"], std["max_turns"]), ({"agent": 2.0, "score": 30.0}, 50))
+        for bad in ({"agent": 0}, {"agent": run.MAX_TIMEOUT_SECONDS + 1}, {"lunch": 5}, {"agent": True}, {"agent": "x"}):
+            with self.assertRaises(run.Refused, msg=bad):
+                run.forced_timeouts(bad)
+
+    def test_a_units_agent_past_its_cap_on_model_calls_is_the_agents_and_is_not_checked(self):
+        """``max_calls`` counts the whole unit: four turns of one call each pass a cap of
+        three in the fourth, though no turn alone comes near it. The unit is the agent's
+        error, never scored; the next unit has calls of its own."""
+        here = os.path.join(self.tmp, "calling")
+        os.makedirs(here)
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(CALLING_CHAT_DRIVER)
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), _here=here,
+                 needs=["agent.task/v1", "agent.conversation/v1"], driver={"command": ["python3", "{here}/driver.py"]})
+        job_dir = run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                          concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True, proving=True, max_calls=3)
+        by_unit, _ = self.outcomes(job_dir)
+        for u in ("a", "b"):
+            self.assertEqual((by_unit[u].exception_type, by_unit[u].outcome), (relay.CALLS_ERROR, classify.AGENT_ERROR), u)
+            self.assertIsNone(by_unit[u].reward, u)
+        with open(os.path.join(job_dir, "config.json")) as f:
+            self.assertEqual(json.load(f)["standard"]["max_calls"], 3)
+        with self.assertRaises(run.Refused):
+            run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                    env=self.env, say=lambda s: None, unsandboxed=True, proving=True, max_calls=0)
+
     def test_a_simulated_user_opens_the_conversation_and_speaks_through_its_route(self):
         """A benchmark whose user a model plays (``simulator``): its first
         turn, asked with nothing said, follows setup's prompt; every turn is
@@ -773,7 +861,8 @@ class RunTest(unittest.TestCase):
         self.assertEqual(detail["routes"], ["another-user"] * 2)
         with open(os.path.join(job_dir, "events.jsonl")) as f:
             clocks = [e for e in map(json.loads, f) if e["event"] == "trial.phase" and e["phase"] == "agent_run"]
-        self.assertEqual(len(clocks), len(detail["said"]))                   # the limit is each turn's: its clock starts with it
+        self.assertEqual(len(detail["said"]), 2)
+        self.assertEqual(len(clocks), 1)                 # one limit for the whole conversation: one clock, never restarted
         self.assertTrue(all(e["timeout_sec"] for e in clocks))
         with open(os.path.join(trial, ".work", "relay", "u0000-simulator.jsonl")) as f:
             self.assertEqual([json.loads(l)["model"] for l in f], ["another-user"] * 2)

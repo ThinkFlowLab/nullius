@@ -80,6 +80,8 @@
     }
     return r;
   }
+  // the phases of a unit whose time limit a standard recipe may force (run.py TIMEOUT_PHASES)
+  const STANDARD_PHASES = [['setup', 'Environment setup'], ['image', 'Image pull or build'], ['agent', 'Agent'], ['verify', 'Verifier'], ['score', 'Score']];
   // Served by (recipe.py, served_by): on OpenRouter, the serving providers each model field pins, in the order they are
   // tried; a field per model the run calls - the model, the user simulator's and the judge's when the benchmark has them.
   const SERVED_ROLES = ['model', 'simulator', 'judge'];
@@ -193,6 +195,14 @@
     if (typeof raw.max_usd === 'number' && Number.isFinite(raw.max_usd) && raw.max_usd > 0) r.max_usd = raw.max_usd;
     // and each unit's own: a unit that reaches it is cut off there, the run going on
     if (typeof raw.max_usd_per_unit === 'number' && Number.isFinite(raw.max_usd_per_unit) && raw.max_usd_per_unit > 0) r.max_usd_per_unit = raw.max_usd_per_unit;
+    // the time limits it forces, in minutes by phase (recipe.py: run --timeout), and a conversation's most turns
+    delete r.timeouts;
+    if (raw.timeouts && typeof raw.timeouts === 'object' && !Array.isArray(raw.timeouts)) {
+      const t = Object.fromEntries(Object.entries(raw.timeouts).filter(([k, v]) => STANDARD_PHASES.some(([p]) => p === k) && typeof v === 'number' && Number.isFinite(v) && v > 0));
+      if (Object.keys(t).length) r.timeouts = t;
+    }
+    if (Number.isInteger(raw.turns) && raw.turns >= 1) r.turns = raw.turns;
+    if (Number.isInteger(raw.max_calls) && raw.max_calls >= 1) r.max_calls = raw.max_calls;   // the most model calls of a unit's agent
     for (const key of ['judge_model', 'simulator_model']) if (typeof raw[key] === 'string' && raw[key].trim()) r[key] = raw[key].trim();
     // Served by: each field's serving providers, slugs in their order (the server checks them as --served-by)
     if (raw.served_by && typeof raw.served_by === 'object' && !Array.isArray(raw.served_by))
@@ -833,5 +843,5 @@
         at: String(d.at || '')};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });

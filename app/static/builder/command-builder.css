@@ -99,6 +99,7 @@
 #nullius-builder .nb-customagent input { font: 12.5px/1.4 var(--mono); padding: 5px 9px; border: 1px solid var(--nb-line); border-radius: 7px; background: var(--nb-surface); color: var(--nb-text); width: 26ch; }
 #nullius-builder .nb-agentline { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--nb-muted); margin-top: 4px; }
 #nullius-builder .nb-timelimits input { width: 10ch; color: var(--nb-text); border: 1px solid var(--nb-line); border-radius: 6px; background: var(--nb-surface); padding: 5px 8px; font-size: 13px; }
+#nullius-builder .nb-sectionnext { margin-top: 36px; }
 #nullius-builder .nb-timelimits td { vertical-align: middle; }
 #nullius-builder .nb-timelimits .nb-mono { font: 12px var(--mono); color: var(--nb-muted); }
 #nullius-builder .nb-note code, #nullius-builder .nb-categoryhead code { font: 12px var(--mono); background: var(--nb-soft); border: 1px solid var(--nb-line); border-radius: 5px; padding: 2px 6px; color: var(--nb-text); white-space: nowrap; }
@@ -261,3 +262,5 @@
 #nullius-builder .std-served-slug { min-width: 0; overflow-wrap: anywhere; }
 #nullius-builder .std-served-pick .nb-remove { flex: none; padding: 0 6px; font-size: 14px; line-height: 1; }
 @media (max-width: 650px) { #nullius-builder .std-served-list { grid-column: 1; } #nullius-builder label.std-served:has(.std-served-list:not(:empty)) > .ui-field-copy { grid-row: auto; margin-top: 0; } }
+/* a limit the benchmark or the agent declares: its placeholder reads as a value; Nullius's default stays grey */
+#nullius-builder .nb-field input.nb-declared::placeholder { color: var(--nb-text); opacity: 1; }

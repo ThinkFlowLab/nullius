@@ -92,6 +92,37 @@ class RelayTest(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return e.code, e.read()
 
+    def test_a_units_agent_is_refused_past_its_cap_on_model_calls(self):
+        """``max_calls`` counts the answered calls of a unit's agent route alone: a refused
+        call (a 429) is not one, its judge's and simulated user's never are, and past the cap
+        the next call is the relay's own 402, which the unit ends with as the agent's."""
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        r = relay.Relay(f"http://127.0.0.1:{self.up.server_address[1]}/v1", "sk-real", tmp, max_calls=2).start()
+        self.addCleanup(r.stop)
+
+        def post(tag, body):
+            req = urllib.request.Request(r.url(tag) + "/chat/completions", data=json.dumps(body).encode(),
+                                         headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req) as got:
+                    return got.status, got.read()
+            except urllib.error.HTTPError as e:
+                return e.code, e.read()
+        ask = {"model": "m", "messages": [{"role": "user", "content": "hi"}]}
+        self.assertEqual(post("u0007", dict(ask, mode="429"))[0], 429)          # refused upstream: not counted
+        self.assertEqual([post("u0007", ask)[0] for _ in range(2)], [200, 200])
+        for side in ("u0007-judge", "u0007-simulator"):                          # never the agent's
+            self.assertEqual(post(side, ask)[0], 200)
+        status, body = post("u0007", ask)
+        self.assertEqual(status, 402)
+        self.assertEqual(json.loads(body)["error"]["code"], "unit_call_cap")
+        self.assertEqual(post("u0008", ask)[0], 200)                             # another unit counts its own
+        kind, said = relay.failure(r.calls("u0007"))
+        self.assertEqual(kind, relay.CALLS_ERROR)
+        self.assertIn("cap of 2 model calls", said)
+        self.assertEqual(classify.from_verdict(kind, None), classify.AGENT_ERROR)
+
     def test_plain_reply_passes_through_and_the_real_key_goes_out(self):
         status, body = self.post("u1", "/chat/completions", {"model": "m", "messages": [{"role": "user", "content": "hi"}]})
         self.assertEqual((status, json.loads(body)), (200, CHAT))

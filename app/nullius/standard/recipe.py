@@ -43,7 +43,7 @@ from typing import Callable, Dict, List, Optional
 
 from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
-from nullius.standard import boat, hostreq, definitions, ledger, match, ports, prove, relay
+from nullius.standard import boat, hostreq, definitions, ledger, match, ports, prove, relay, run
 
 CHOOSE_PROVIDER = "Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider."
 HARNESS = "standard"
@@ -129,7 +129,7 @@ def _bench_page(b: dict) -> dict:
             "controls": controls,
             # One Original procedure, with separate reference-participant and paper-model metadata.
             "setups": [{"key": k, "label": definitions.setup_label(b, k), "summary": x["summary"],
-                        "reference_agent": x.get("reference_agent", ""),
+                        "reference_agent": x.get("reference_agent", ""), "turn_seconds": x.get("turn_seconds"),
                         "comparable": k == "original" and b["setups"]["original"].get("comparable", True), "units": (b["setups"]["original"].get("units") or b.get("units") or {}),
                         **({"models": x["models"], "default": x["default"], "providers": list(x["providers"]),
                             "sent": {p: {m: pre + (x.get("served_as") or {}).get(m, m) for m in x["models"]} for p, pre in x["providers"].items()}}
@@ -140,9 +140,15 @@ def _bench_page(b: dict) -> dict:
             # what the upstream's leaderboard fixes besides the ranked model (Like the leaderboard)
             "leaderboard": b.get("leaderboard") or None,
             "attempts": (b.get("limits") or {}).get("attempts", ""),
+            # what a unit's time limits and a conversation's length are when the recipe forces none
+            "timeouts": {"setup": run.DRIVER_SECONDS, "image": run.IMAGE_SECONDS, "score": run.DRIVER_SECONDS,
+                         "agent": (b.get("limits") or {}).get("turn_seconds") or run.TURN_SECONDS,
+                         "turns": (b.get("limits") or {}).get("turns") or run.MAX_TURNS,
+                         "catalogue": [k for k, f in (("agent", "turn_seconds"), ("turns", "turns")) if (b.get("limits") or {}).get(f)]},
             "options": {n: {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
                             "setups": o.get("setups") or ["yours"],
-                            **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {}}
+                            **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
+                            "limit": bool(o.get("limit")), "by": o.get("by") or {}}
                         for n, o in (b.get("options") or {}).items()},
             "host": {n: {"summary": r["summary"], "check": r["check"], "install": hostreq.install_lines(b, [n]), "needed_by": r["needed_by"]}
                      for n, r in hostreq.all_of(b).items()},
@@ -288,6 +294,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     the whole run: its jobs that call a model - each dataset with each
     participant, on each machine - take equal shares (``--max-usd``), so
     none spends another's and the amount typed is the most the run spends.
+    ``timeouts``: {phase: minutes}, each phase's time limit forced on every
+    job (``--timeout``), empty for the default; ``turns``: the most agent
+    turns in a conversation (``--max-turns``); ``max_calls``: the most model
+    calls a unit's agent may make (``--max-calls``).
     ``max_usd_per_unit``: each unit's own cap (``--max-usd-per-unit``), given
     whole to every job that calls a model: a unit is a unit wherever it runs.
     ``unpriced``: asked, for a recipe with a cap, which of the models it
@@ -493,6 +503,29 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     elif per_unit < 1e-6:                                     # what the command line can say: a millionth of a dollar
         add("limits", f"The spending cap per {noun} is too small.")
         per_unit = None
+    # the time limits the recipe forces, in minutes by phase (run --timeout, in seconds), and a conversation's length
+    forced: Dict[str, float] = {}
+    given_t = recipe.get("timeouts") if isinstance(recipe.get("timeouts"), dict) else {}
+    for k, v in given_t.items():
+        if v in ("", None):
+            continue
+        if k not in run.TIMEOUT_PHASES or isinstance(v, bool) or not isinstance(v, (int, float)) \
+                or not 0 < round(v * 60, 1) <= run.MAX_TIMEOUT_SECONDS:
+            add("limits", f"A time limit is a number of minutes above zero, at most {run.MAX_TIMEOUT_SECONDS // 60}, or empty for the default.")
+            continue
+        forced[k] = round(v * 60, 1)
+    calls = recipe.get("max_calls")              # the most model calls a unit's agent may make (run --max-calls)
+    if calls in ("", None):
+        calls = None
+    elif _int(calls, 1, 1000000) is None:
+        add("limits", "Model calls per unit: a whole number of at least 1, or empty for no cap.")
+        calls = None
+    turns = recipe.get("turns")
+    if turns in ("", None) or "agent.conversation/v1" not in (b.get("needs") or []):     # only a conversation has turns
+        turns = None
+    elif _int(turns, 1, 100000) is None:
+        add("limits", "Turns per conversation: a whole number of at least 1, or empty for the default.")
+        turns = None
     limit = recipe.get("limit")
     if limit not in ("", None) and _int(limit, 1) is None:
         add("limits", "The number of units is a whole number of at least 1, or empty for all of them.")
@@ -615,6 +648,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--repeat", str(repeat)] if repeat > 1 else []),
                  *(["--max-usd", f"{share:.6f}".rstrip("0").rstrip(".")] if share and spends(p) else []),
                  *(["--max-usd-per-unit", f"{per_unit:.6f}".rstrip("0").rstrip(".")] if per_unit and spends(p) else []),
+                 *[w for k, v in forced.items() for w in ("--timeout", f"{k}={v:g}")],
+                 *(["--max-turns", str(turns)] if turns else []),
+                 *(["--max-calls", str(calls)] if calls and spends(p) and o.get("_kind") != "capability" else []),
                  *(["--simulator-model", sim_model] if sim_model and not p["control"] else []),
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
@@ -719,6 +755,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                      *([[STEP["limits"], "Spending cap", f"${ledger.usd(cap)}"
                          + (f" in all · ${ledger.usd(share)} for each of {paying} jobs" if paying > 1 else "")]] if share else []),
                      *([[STEP["limits"], f"Spending cap per {noun}", f"${ledger.usd(per_unit)}"]] if per_unit else []),
+                     *([[STEP["limits"], "Time limits", " · ".join(f"{k} {v / 60:g} min" for k, v in forced.items())]] if forced else []),
+                     *([[STEP["limits"], "Turns per conversation", str(turns)]] if turns else []),
+                     *([[STEP["limits"], f"Model calls per {noun}", str(calls)]] if calls else []),
                      [STEP["where"], "Where", (f"{of} shards, one per machine: " if of > 1 else "")
                       + ", ".join(where_label(t) for t in targets) + f" · {backend} backend"
                       + (f" · {boat_size} VMs" if backend == "boat" else "")]]

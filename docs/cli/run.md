@@ -5,7 +5,8 @@ One benchmark and one agent, capability, control or setup, into a job.
 ```bash title="Run"
 nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE] [--limit N] [-j N] \
     [--unsandboxed | --backend container|boat] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
-    [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE]... \
+    [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS]... [--max-turns N] [--max-calls N] \
+    [--constraint KEY=VALUE]... \
     [--served-by [MODEL=]SLUG[,SLUG...]]... \
     [--repeat K] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
 ```
@@ -33,6 +34,8 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--bench-option NAME=VALUE` | A benchmark's option (repeatable), read as `NULLIUS_OPTION_<NAME>` |
 | `--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
 | `--max-usd USD`, `--max-usd-per-unit USD` | A spending cap for the run, for each unit: [below](#a-spending-cap) |
+| `--timeout PHASE=SECONDS`, `--max-turns N` | A unit's time limit for a phase, a conversation's most turns, forced: [below](#time-limits) |
+| `--max-calls N` | The most model calls a unit's agent may make: [below](#a-cap-on-model-calls) |
 | `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). Containers take them as flags, the run's processes on the machine as a systemd scope. A recipe passes each machine's own |
 | `--served-by [MODEL=]SLUG[,SLUG...]` | On OpenRouter, the serving providers that may answer a model (repeatable): [below](#serving-providers) |
 | `--repeat K` | Each unit K times; `result.json` carries `pass_hat_k` |
@@ -53,6 +56,32 @@ nullius standard run locomo model --model gpt-4o-mini
 | Machine programs | An option needing them is refused without them |
 | Progress | stderr, one line per stage (`[nullius] stage=install ...`, `stage=units n=10`, `stage=done`, `stage=refused`), also `progress.jsonl` |
 | The job | Opens in the app; `events.jsonl` feeds the live board |
+
+## Time limits
+
+Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) forces one, the same for every participant, over the task's, the setup's, the benchmark's and the default.
+
+| Phase | Default | A unit past it |
+| --- | --- | --- |
+| `setup` | 600 s for the driver's `setup`; an own image's `prepare` step its `seconds` | Environment setup error |
+| `image` | 3600 s: an own image's pull or build | Environment setup error |
+| `agent` | The task's `agent_seconds`, else the Original setup's `turn_seconds`, else `limits.turn_seconds`, else 900 s: the agent's whole work on the unit, every turn of a conversation and the simulated user's between them; each add and each recall of a capability (its reader has `limits.turn_seconds`); an Original setup's answerer; the oracle | Agent timeout |
+| `verify` | The verify step's `seconds`, else the agent's default | Verifier error |
+| `score` | 600 s: the driver's `score` | Verifier error |
+
+`--max-turns N` caps a conversation's agent turns over `limits.turns` (default 20); the conversation is scored as it stands. `config.json` records what was forced under `standard.timeouts` and `standard.max_turns`. From the builder, *Limits* takes them in minutes.
+
+## A cap on model calls
+
+`--max-calls 60` lets a unit's agent make at most 60 model calls, the whole unit through, every turn of a conversation. Agents only: a capability's route carries the benchmark's reader too, so a capability run refuses it. Most agents make one call per step, so it bounds a looping agent where nothing else counts steps, and where a model with no price leaves no spending cap.
+
+| Rule | Detail |
+| --- | --- |
+| What is counted | Each call the provider answered on the unit's agent route. A refused call (a 429, an error) is not one; the judge's and the simulated user's never are |
+| Past it | The relay answers the next call itself (HTTP 402, `unit_call_cap`); the unit ends as `UnitCallCapError`, an Agent error, as a timeout is, and is not checked. The run goes on |
+| Not exact | Calls in flight together may pass it by the few already sent |
+| The upstream's own | A step limit of the benchmark's (τ³-bench's `--max-steps`, an OSWorld agent's `--max_steps`) still holds; this cap is on top |
+| The result | `config.json` records it under `standard.max_calls`; from the builder, *Limits* → *Model calls per unit* |
 
 ## A spending cap
 

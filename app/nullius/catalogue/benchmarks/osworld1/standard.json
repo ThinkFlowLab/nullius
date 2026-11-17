@@ -176,6 +176,33 @@
         ]
       }
     },
+    "max_steps": {
+      "label": "Steps per task",
+      "summary": "The agent script's --max_steps: the most actions it takes on a task. default: each agent's own, as its documented invocation runs it.",
+      "setups": [
+        "original",
+        "model"
+      ],
+      "default": "default",
+      "pattern": "default|[1-9][0-9]{0,3}",
+      "limit": true,
+      "by": {
+        "agent": {
+          "m3": "100",
+          "prompt": "15",
+          "claude": "50",
+          "gpt54": "50",
+          "openai_cua": "50",
+          "qwen": "50",
+          "os_symphony": "50",
+          "evocua": "50",
+          "autoglm": "50",
+          "autoglm_v": "50",
+          "mano": "15",
+          "muse_spark": "100"
+        }
+      }
+    },
     "vm_provider": {
       "label": "VM provider",
       "summary": "--provider_name: where the task's VM runs. docker only: the upstream's other providers need cloud accounts or a hypervisor of their own.",
