@@ -64,12 +64,33 @@ CLICK = {"target": "OCEAN", "labels": ["APPLE", "BRICK", "OCEAN", "RIVER", "STON
 
 
 class Verdicts(unittest.TestCase):
-    def test_see_passes_on_the_code_in_any_case_and_spacing_and_fails_without_it(self):
-        exp = {"code": "ACDE34679HJK"}
-        self.assertTrue(checks.verdict("see", exp, [], [], "The code is acde-3467 9hjk.")["passed"])
-        self.assertFalse(checks.verdict("see", exp, [], [], "The code is ACDE34679HJ.")["passed"])
-        self.assertFalse(checks.verdict("see", exp, [], [], "")["passed"])
-        self.assertFalse(checks.verdict("see", exp, [], [], None)["passed"])
+    def test_reading_passes_with_spaces_commas_and_quotes_case_or_lines(self):
+        for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
+            answers = [" ".join(words), ", ".join(words), " and ".join(words),
+                       ", ".join(words[:-1]) + " and " + words[-1],
+                       " ".join(f'"{w}"' for w in words), " ".join(words).lower(), "\n".join(words),
+                       "I see " + "; then ".join(words) + "."]
+            for answer in answers:
+                with self.subTest(check=check, answer=answer):
+                    got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS, answer)
+                    self.assertEqual(got, {"passed": True, "why": ""})
+
+    def test_reading_fails_with_missing_reordered_extra_or_all_words(self):
+        for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
+            answers = [(" ".join(words[:-1]), "missing words: " + words[-1]),
+                       (" ".join(words[::-1]), "out of order"),
+                       (" ".join(words + ["ZEBRA"]), "extra words: ZEBRA"),
+                       (" ".join(checks.WORDS), "extra words:"),
+                       (" ".join(words + words), "repeated"),
+                       (" ".join(["ACORNS", *words[1:]]), "missing words: ACORN"),
+                       (" ".join(["xACORN", *words[1:]]), "missing words: ACORN"),
+                       (" ".join(words[:-1] + ["ZEBRA"]), "missing words: " + words[-1] + "; extra words: ZEBRA"),
+                       ("", "missing words:"), (None, "missing words:")]
+            for answer, why in answers:
+                with self.subTest(check=check, answer=answer):
+                    got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS, answer)
+                    self.assertFalse(got["passed"])
+                    self.assertIn(why, got["why"])
 
     def test_click_passes_on_a_left_press_on_the_named_button_inside_an_action(self):
         events = [ev("ready", 99.0)] + press(100.5, "OCEAN")
@@ -130,9 +151,9 @@ class Draw(unittest.TestCase):
     def test_each_check_draws_from_its_own_values_and_expects_what_the_screen_shows(self):
         rng = random.Random(7)
         values, exp = checks.draw("see", rng)
-        self.assertEqual(len(exp["code"]), checks.CODE_LENGTH)
-        self.assertTrue(set(exp["code"]) <= set(checks.ALPHABET))
-        self.assertEqual(values, {"screen": "see", "code": exp["code"]})
+        self.assertEqual(len(exp["words"]), 3)
+        self.assertTrue(set(exp["words"]) <= set(checks.WORDS))
+        self.assertEqual(values, {"screen": "see", "words": exp["words"]})
         values, exp = checks.draw("click", rng)
         self.assertEqual(len(set(values["labels"])), 6)
         self.assertIn(exp["target"], values["labels"])
@@ -143,7 +164,7 @@ class Draw(unittest.TestCase):
             checks.draw("hover")
 
     def test_every_character_drawn_has_a_glyph_of_five_by_seven(self):
-        for ch in checks.ALPHABET + "".join(checks.LABELS):
+        for ch in "".join(checks.WORDS + checks.LABELS):
             self.assertIn(ch, fixture.GLYPHS)
         for ch, rows in fixture.GLYPHS.items():
             self.assertEqual((len(rows), {len(r) for r in rows}), (7, {5}), ch)
@@ -151,6 +172,70 @@ class Draw(unittest.TestCase):
         self.assertEqual((cols, rows), (11, 7))
         self.assertIn((0, 3), cells)                                      # A's bar
         self.assertNotIn((5, 3), cells)                                   # the blank column
+
+    def test_reading_words_are_distinct_nouns_apart_from_each_other_and_the_labels(self):
+        self.assertGreaterEqual(len(checks.WORDS), 64)
+        self.assertEqual(len(checks.WORDS), len(set(checks.WORDS)))
+        labels = set(checks.LABELS + checks.ORDER + checks.FIELDS + fixture.LIST_WORDS + ("MOVE", "HERE", fixture.TITLE.upper()))
+        self.assertFalse(set(checks.WORDS) & labels)
+        for i, word in enumerate(checks.WORDS):
+            self.assertRegex(word, r"^[A-Z]{4,6}$")
+            for other in checks.WORDS[i + 1:]:
+                if len(word) == len(other):
+                    self.assertGreaterEqual(sum(a != b for a, b in zip(word, other)), 3, (word, other))
+
+    def test_reading_draws_distinct_words_in_the_right_count_over_many_draws(self):
+        rng = random.Random(7)
+        for check, count in (("see", 3), ("scroll", 2)):
+            seen, draws = set(), set()
+            for _ in range(1000):
+                values, expected = checks.draw(check, rng)
+                words = expected["words"]
+                self.assertEqual(values, {"screen": check, "words": words})
+                self.assertEqual(len(words), count)
+                self.assertEqual(len(set(words)), count)
+                self.assertTrue(set(words) <= set(checks.WORDS))
+                seen.update(words)
+                draws.add(tuple(words))
+            self.assertEqual(seen, set(checks.WORDS))
+            self.assertGreater(len(draws), 900)
+
+    def test_word_gaps_are_blank_cells_and_the_largest_phrases_fit(self):
+        cols, rows, cells = fixture.pixels("ACORN BASKET")
+        self.assertEqual((cols, rows), (71, 7))
+        self.assertFalse(any(29 <= x < 36 for x, y in cells))
+        self.assertTrue(any(x == 36 for x, y in cells))
+        longest = sorted(checks.WORDS, key=len, reverse=True)
+        for count, scale, width in ((3, fixture.SEE_SCALE, 1920), (2, fixture.SCROLL_SCALE, 760 - 2 * 40)):
+            cols, rows, _ = fixture.pixels(" ".join(longest[:count]))
+            self.assertLessEqual(cols * scale, width)
+        self.assertGreater(fixture.SCROLL_SCALE, fixture.LIST_SCALE)
+
+    def test_the_fixture_draws_reading_words_as_images_and_keeps_scroll_words_below_the_edge(self):
+        for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
+            with self.subTest(check=check):
+                f = fixture.Fixture.__new__(fixture.Fixture)
+                f.tk, f.root = mock.Mock(), mock.Mock()
+                f.values, f.images, f.names = {"words": words}, [], {}
+                with mock.patch.object(fixture, "bitmap", return_value=mock.sentinel.image) as bitmap:
+                    getattr(f, "_" + check)()
+                self.assertEqual(bitmap.call_args.args[2], " ".join(words))
+                self.assertEqual(f.images[-1], mock.sentinel.image)
+                if check == "see":
+                    self.assertEqual(bitmap.call_args.args[3], fixture.SEE_SCALE)
+                    self.assertEqual(f.names, {})
+                    self.assertEqual(f.tk.Label.call_args.kwargs,
+                                     {"image": mock.sentinel.image, "background": fixture.BACKGROUND, "borderwidth": 0})
+                else:
+                    self.assertEqual(bitmap.call_args.args[3], fixture.SCROLL_SCALE)
+                    self.assertEqual(set(f.names.values()), {"list"})
+                    canvas = f.tk.Canvas.return_value
+                    canvas.create_text.assert_not_called()
+                    x, y = canvas.create_image.call_args.args
+                    width = fixture.pixels(" ".join(words))[0] * fixture.SCROLL_SCALE
+                    self.assertGreater(y, f.tk.Canvas.call_args.kwargs["height"])
+                    self.assertLessEqual(x + width, f.tk.Canvas.call_args.kwargs["width"])
+                    self.assertLessEqual(y + 7 * fixture.SCROLL_SCALE, canvas.configure.call_args.kwargs["scrollregion"][3])
 
 
 class Image(unittest.TestCase):
@@ -541,9 +626,9 @@ class DockerDesktop(unittest.TestCase):
         self.assertIn("PermissionError", said["error"])
         seen = self.d.python(_READ_INK)
         self.assertEqual(seen["returncode"], 0, seen["error"])
-        _, _, cells = fixture.pixels(exp["code"])
+        _, _, cells = fixture.pixels(" ".join(exp["words"]))
         self.assertEqual(_from_corner(json.loads(seen["output"])), _from_corner(cells))
-        self.assertTrue(checks.verdict("see", exp, self.d.events(), self.d.actions, exp["code"])["passed"])
+        self.assertTrue(checks.verdict("see", exp, self.d.events(), self.d.actions, " ".join(exp["words"]))["passed"])
 
     def test_a_click_by_an_action_passes_and_the_same_click_by_python_fails(self):
         values, exp = checks.draw("click")

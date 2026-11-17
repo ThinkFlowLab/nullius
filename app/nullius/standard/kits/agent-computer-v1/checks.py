@@ -8,7 +8,7 @@ same clock), the agent's last message, and what the server kept of the
 agent's calls (``calls``: the call log's lines, ``{tool, start, end,
 isError}``; ``past``: the acting calls sent once every step was taken).
 
-- ``see``: the last message holds the code the window drew;
+- ``see``: the last message holds the words the window drew, in order;
 - ``click``: the log holds a left press on the named button and no press,
   of any mouse button, on the five others;
 - ``type``: the field held exactly the word at the last Enter;
@@ -16,7 +16,7 @@ isError}``; ``past``: the acting calls sent once every step was taken).
   them, no input after the last action, and no acting call sent once the
   steps were taken;
 - ``drag``: a left press on the handle, then a release inside the zone;
-- ``scroll``: the last message holds the code drawn at the list's end, below
+- ``scroll``: the last message holds the words drawn at the list's end, in order, below
   what it shows at first, and the list moved;
 - ``recover``: the kit answers the agent's first acting call with an error,
   without running it; an acting call sent after that answer came succeeds,
@@ -35,8 +35,20 @@ import re
 import secrets
 
 SLACK = 0.5
-CODE_LENGTH = 12
-ALPHABET = "ACDEFGJKMNPRTWXY34679"          # no pair a glance confuses: 0/O, 1/I/L, 5/S, 2/Z, 8/B, U/V, H/N
+# Everyday nouns, separate from the fixture's labels. Equal-length words
+# differ in at least three positions, giving the glyphs the context of a word.
+WORDS = ("ACORN", "ANCHOR", "ANKLE", "APRON", "BADGE", "BASKET", "BEACH", "BEETLE", "BERRY", "BOWL",
+         "BREAD", "BROOM", "BUTTER", "CABIN", "CACTUS", "CAMERA", "CANDLE", "CANOE", "CARPET", "CELERY",
+         "CHAIR", "CHERRY", "CLOCK", "COFFEE", "COOKIE", "CORN", "COTTON", "CRAYON", "CROWN", "DESK",
+         "DINNER", "DONKEY", "DOOR", "DRUM", "EAGLE", "EARTH", "ENGINE", "FABRIC", "FARM", "FENCE",
+         "FLOWER", "FOLDER", "FOREST", "FROG", "GARDEN", "GARLIC", "GATE", "GLOVE", "GOAT", "GUITAR",
+         "HAMMER", "HELMET", "HORSE", "IGLOO", "INSECT", "LADDER", "LAMP", "LEAF", "LIZARD", "LUNCH",
+         "MAGNET", "MARBLE", "MEADOW", "MELON", "MIRROR", "MITTEN", "NOODLE", "ONION", "ORANGE", "OTTER",
+         "PANDA", "PAPER", "PARROT", "PEANUT", "PENCIL", "PEPPER", "PILLOW", "PIZZA", "PLANT", "POCKET",
+         "POTATO", "RABBIT", "RADIO", "RAISIN", "RIBBON", "ROPE", "SALAD", "SALMON", "SAND", "SANDAL",
+         "SCARF", "SCHOOL", "SHEEP", "SHIRT", "SHOE", "SHOVEL", "SOCK", "SPRING", "SQUARE", "STAMP",
+         "STAR", "STREAM", "SUGAR", "TEAPOT", "THUMB", "TOWEL", "TRAIN", "TRAY", "TURTLE", "WINDOW",
+         "WOLF", "ZEBRA")
 LABELS = ("APPLE", "BRICK", "CLOUD", "DELTA", "EMBER", "FROST", "GRAPE", "HONEY", "IVORY", "JUMBO",
           "KNOT", "LEMON", "MAPLE", "NORTH", "OCEAN", "PIANO", "QUILT", "RIVER", "STONE", "TIGER",
           "UMBRA", "VELVET", "WHEAT", "YEAST")
@@ -56,13 +68,6 @@ def steps(check):
     return STEPS.get(check, DEFAULT_STEPS)
 
 
-def code(rng):
-    text = ""
-    for _ in range(CODE_LENGTH):
-        text += rng.choice(ALPHABET.replace(text[-1:], ""))
-    return text
-
-
 def word(rng=None, length=8):
     """A pronounceable word that is no word: consonant, vowel, and again."""
     rng = rng or secrets.SystemRandom()
@@ -75,8 +80,8 @@ def draw(check, rng=None):
     values but what the screen shows."""
     rng = rng or secrets.SystemRandom()
     if check in ("see", "scroll"):
-        c = code(rng)
-        return {"screen": check, "code": c}, {"code": c}
+        words = rng.sample(WORDS, 3 if check == "see" else 2)
+        return {"screen": check, "words": words}, {"words": words}
     if check in ("click", "recover"):
         labels = rng.sample(LABELS, 6)
         return {"screen": "click", "labels": labels}, {"target": rng.choice(labels), "labels": labels}
@@ -103,8 +108,22 @@ def outside(events, actions, slack=SLACK):
     return [e for e in events if e.get("kind") in POINTER + KEYS and not inside(e.get("t", -1.0), actions, slack)]
 
 
-def _flat(text):
-    return re.sub(r"[^A-Za-z0-9]", "", str(text or "")).upper()
+def _read_words(expected, message):
+    """Read whole vocabulary words in order, allowing other prose between them."""
+    words = expected["words"]
+    found = [w for w in re.findall(r"\b\w+\b", str(message or "").upper()) if w in WORDS]
+    missing = [w for w in words if w not in found]
+    extra = list(dict.fromkeys(w for w in found if w not in words))
+    why = []
+    if missing:
+        why.append("missing words: " + ", ".join(missing))
+    if extra:
+        why.append("extra words: " + ", ".join(extra))
+    if why:
+        return "; ".join(why)
+    if found != words:
+        return "the words are out of order or repeated; expected " + ", ".join(words)
+    return ""
 
 
 def _verdict(why):
@@ -134,8 +153,7 @@ def _in(box, e):
 
 
 def see(expected, events, actions, message, calls=(), past=0):
-    return _verdict(_first("" if expected["code"] in _flat(message) else "the last message does not hold the code",
-                           _input_rule(events, actions)))
+    return _verdict(_first(_read_words(expected, message), _input_rule(events, actions)))
 
 
 def click(expected, events, actions, message, calls=(), past=0):
@@ -186,7 +204,7 @@ def drag(expected, events, actions, message, calls=(), past=0):
 
 def scroll(expected, events, actions, message, calls=(), past=0):
     moved = any(e.get("kind") == "moved" and e.get("top", 0) > 0 for e in events)
-    return _verdict(_first("" if expected["code"] in _flat(message) else "the last message does not hold the code",
+    return _verdict(_first(_read_words(expected, message),
                            "" if moved else "the list never moved", _input_rule(events, actions)))
 
 

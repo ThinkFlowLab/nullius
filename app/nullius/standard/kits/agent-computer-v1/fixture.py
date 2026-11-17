@@ -3,16 +3,16 @@ desktop as ``fixture``.
 
 It reads what to draw from the kit on its stdin, as one JSON object:
 
-- ``{"screen": "see", "code": "..."}``: the code, drawn large;
+- ``{"screen": "see", "words": [three words]}``: the words, drawn large;
 - ``{"screen": "click", "labels": [six words]}``: six buttons, each labelled;
 - ``{"screen": "type"}``: a text field;
 - ``{"screen": "drag"}``: a handle labelled MOVE and a zone labelled HERE;
-- ``{"screen": "scroll", "code": "..."}``: a list of words with the code at
+- ``{"screen": "scroll", "words": [two words]}``: a list with the words at
   its end, below what the list shows at first;
 - ``{"screen": "batch", "labels": [three words]}``: three text fields, each
   labelled.
 
-Codes and labels are drawn as bitmaps from the glyphs below: no widget holds
+Words and labels are drawn as bitmaps from the glyphs below: no widget holds
 their text, and Tk's ``send`` is removed, so no other program can read them
 but from the screen. The window fills the screen, so every press lands on it.
 
@@ -42,7 +42,8 @@ HOME = "/var/lib/fixture"
 LOG = os.path.join(HOME, "events.jsonl")
 ERRORS = os.path.join(HOME, "fixture.err")
 TITLE = "Check"
-SEE_SCALE, LIST_SCALE = 9, 4                 # screen pixels a glyph cell: the code alone, the list's lines
+SEE_SCALE, LIST_SCALE = 9, 4                 # screen pixels a glyph cell: the words alone, the list's lines
+SCROLL_SCALE = 8                            # two six-letter words fit inside the list's 760 pixels
 SCREENS = ("see", "click", "type", "drag", "scroll", "batch")
 LIST_WORDS = ("APPLE", "BRICK", "CLOUD", "DELTA", "EMBER", "FROST", "GRAPE", "HONEY", "MAPLE", "NORTH")
 BACKGROUND = "#eceff1"
@@ -94,6 +95,8 @@ def pixels(text):
     """The lit cells of ``text`` in glyph units, a blank column between characters: (columns, rows, cells)."""
     cells = []
     for i, ch in enumerate(text):
+        if ch == " ":
+            continue
         for y, row in enumerate(GLYPHS[ch]):
             cells += [(i * 6 + x, y) for x, c in enumerate(row) if c == "#"]
     return max(len(text) * 6 - 1, 1), 7, cells
@@ -143,8 +146,8 @@ def png_rows(data, last_row=None):
 
 
 def read_lines(data, scale, ink=INK):
-    """The lines of glyphs drawn at ``scale`` in ``ink`` on a screen's PNG, top to bottom; a block that is no
-    glyph reads ``?``. What the kit's reference reads from a screenshot, as an agent would from its eyes."""
+    """The lines of glyphs drawn at ``scale`` in ``ink`` on a screen's PNG, top to bottom; an unreadable line
+    reads ``?``. What the kit's reference reads from a screenshot, as an agent would from its eyes."""
     colour = bytes(int(ink[i:i + 2], 16) for i in (1, 3, 5))
     w, rows = png_rows(data)
     lit = []
@@ -167,11 +170,19 @@ def read_lines(data, scale, ink=INK):
             for x in (lit[yy] if yy < len(lit) else ()):
                 if x >= x0 and (x - x0) % scale == scale // 2:
                     cells[((x - x0) // scale, r)] = True
-        text, c = "", 0
-        while any((c * 6 + dx, r) in cells for dx in range(5) for r in range(7)):
-            block = tuple("".join("#" if (c * 6 + dx, r) in cells else "." for dx in range(5)) for r in range(7))
-            text += next((ch for ch, g in GLYPHS.items() if g == block), "?")
-            c += 1
+        # I (and 1) has a blank left column; try both possible origins.
+        # A blank character is a word gap, not the end of the line.
+        text = "?"
+        for inset in (0, 1):
+            decoded = ""
+            for c in range((max((x for x, r in cells), default=-1) + inset) // 6 + 1):
+                block = tuple("".join("#" if (c * 6 + dx - inset, r) in cells else "." for dx in range(5))
+                              for r in range(7))
+                decoded += (" " if block == (".....",) * 7 else
+                            next((ch for ch, g in GLYPHS.items() if g == block), "?"))
+            if "?" not in decoded:
+                text = decoded
+                break
         out.append(text)
         y = top + 7 * scale
     return out
@@ -202,7 +213,7 @@ class Fixture:
             self.root.bind_all(seq, self.on_event, add="+")
 
     def _see(self):
-        img = bitmap(self.tk, self.root, self.values["code"], SEE_SCALE)
+        img = bitmap(self.tk, self.root, " ".join(self.values["words"]), SEE_SCALE)
         self.images.append(img)
         self.tk.Label(self.root, image=img, background=BACKGROUND, borderwidth=0).place(relx=0.5, rely=0.5, anchor="center")
 
@@ -246,7 +257,7 @@ class Fixture:
             img = bitmap(self.tk, c, LIST_WORDS[i % len(LIST_WORDS)], scale, paper="#ffffff")
             self.images.append(img)
             c.create_image(40, 40 + i * step, image=img, anchor="nw")
-        img = bitmap(self.tk, c, self.values["code"], scale, paper="#ffffff")
+        img = bitmap(self.tk, c, " ".join(self.values["words"]), SCROLL_SCALE, paper="#ffffff")
         self.images.append(img)
         c.create_image(40, 40 + rows * step + 40, image=img, anchor="nw")
         c.configure(scrollregion=(0, 0, 760, 40 + rows * step + 160))
