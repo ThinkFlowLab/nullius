@@ -446,7 +446,8 @@
   function benchOptions(rec, b, scope = 'yours') {
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
     const chosen = C.chosenOf(rec);
-    return Object.entries(b.options || {}).filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
+    return Object.entries(b.options || {}).filter(([, o]) => !o.limit)   // a bound of the upstream's own is with the limits
+      .filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
       // one that applies only under another's values (a top-k, only with a retrieval) is left out otherwise
       .filter(([, o]) => Object.entries(o.when || {}).every(([k, vs]) => vs.includes((rec.bench_options || {})[k] ?? (b.options[k] || {}).default)))
       .filter(([, o]) => {
@@ -619,11 +620,49 @@
         + field('Number of ' + u.nouns, 'limit', rec.limit, {type: 'number', min: 1, placeholder: all, hint: 'The first ones' + per + ', in its order.'})
         + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: '1'}) + '</div>'
         + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
+        // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
+        + ((b.needs || []).includes('agent.conversation/v1')
+          ? field('Turns per conversation', 'turns', rec.turns ?? '', {type: 'number', min: 1, placeholder: String((b.timeouts || {}).turns || '')}) : '')
+        // the most model calls a unit's agent may make, the whole unit through (recipe.py: run --max-calls); none calls no model
+        // an agent's alone: a capability's route carries the benchmark's reader too (run.py refuses it)
+        + (C.standardKeyless(rec) || (b.needs || []).some(n => n.startsWith('cap.')) ? '' : field('Model calls per ' + u.noun, 'max_calls', rec.max_calls ?? '', {type: 'number', min: 1, placeholder: 'none'}))
         // the whole run's, shared by its jobs (recipe.py); a run that calls no model spends nothing: no cap to offer
         + (C.standardKeyless(rec) ? '' : field('Spending cap (USD)', 'max_usd', rec.max_usd ?? '', {type: 'number', min: 0, placeholder: 'none'})
-          + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'}));
+          + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'}))
+        + standardTimeLimits(rec, b, u) + benchLimits(rec, b);
     }
     return '';
+  }
+  // The bounds the benchmark's upstream has of its own (its steps, its errors: options with ``limit``), in a section
+  // of the benchmark's name after the run's scope and its time limits: those the chosen datasets and participants
+  // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).
+  function benchLimits(rec, b) {
+    const chosen = C.chosenOf(rec), yours = chosen.some(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k));
+    const given = rec.bench_options || {}, of = k => given[k] ?? (b.options[k] || {}).default;
+    const rows = Object.entries(b.options || {}).filter(([, o]) => o.limit).sort(([, x], [, y]) => x.label.localeCompare(y.label))
+      .filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
+      .filter(([, o]) => (o.setups || ['yours']).some(s => s === 'yours' ? yours : chosen.includes(s)))
+      .map(([n, o]) => {
+        const [k, by] = Object.entries(o.by || {})[0] || [];
+        const def = (k && by[of(k)]) || o.default;
+        return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
+      });
+    return rows.length ? `<div class="nb-sectionhead nb-sectionnext"><h2>${esc(b.label)}</h2></div>` + rows.join('') : '';
+  }
+  // a time limit's row, laid out as every other field of the step: its name and its unit
+  const LIMIT_TIPS = {agent: 'A task that declares its own limit keeps it unless one is typed here.', verify: 'Each task\'s own check limit unless one is typed here.'};
+  const minutesRow = (k, name, value, placeholder) => `<label class="nb-field"${LIMIT_TIPS[k] ? ` title="${esc(LIMIT_TIPS[k])}"` : ''}>${esc(name)} (min)`
+    + `<input aria-label="${esc(name)}" type="number" min="0.1" step="any" data-std-minutes="${k}" value="${value ?? ''}" placeholder="${esc(placeholder)}" autocomplete="off"></label>`;
+  // A unit's time limit for each phase, in minutes, forced on every participant (recipe.py: run --timeout);
+  // empty keeps the default: the task's own when it declares one, else the benchmark's, else Nullius's.
+  function standardTimeLimits(rec, b, u) {
+    const d = b.timeouts || {}, t = rec.timeouts || {};
+    // each field shows, greyed, the value used while it is empty; a task that declares its own keeps it
+    const m = s => String(+(s / 60).toFixed(2));
+    const def = {setup: m(d.setup), image: m(d.image), agent: m(d.agent), verify: 'per task', score: m(d.score)};
+    const label = (k, l) => k === 'agent' ? 'Agent, whole ' + u.noun : l;
+    return '<div class="nb-sectionhead nb-sectionnext"><h2>Time limits</h2></div>'
+      + C.STANDARD_PHASES.map(([k, l]) => minutesRow(k, label(k, l), t[k], def[k])).join('');
   }
   function compileRunner() {
     const rec = r(), key = JSON.stringify(rec);
@@ -910,7 +949,7 @@
     else if(d.bench){toRunner(C.runnerFor(r(),d.bench),d.bench);}
     else if(d.stdBench){C.setStandardBenchmark(r(),d.stdBench);}
     else if(d.stdDataset){const rec=r(),c=C.datasetsOf(rec);rec.datasets=c.includes(d.stdDataset)?(c.length>1?c.filter(k=>k!==d.stdDataset):c):[...c,d.stdDataset];delete rec.dataset;}
-    else if(d.stdOther){const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(d.stdOther)?c.filter(k=>k!==d.stdOther):[...c,d.stdOther];delete rec.other;if(rec.options)delete rec.options[d.stdOther];}
+    else if(d.stdOther){const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(d.stdOther)?c.filter(k=>k!==d.stdOther):[...c,d.stdOther];delete rec.other;if(rec.options)delete rec.options[d.stdOther];C.presetOriginal(rec,c.includes('original'),C.standardBench(rec));}
     // the standard's machines: each a toggle, one at least; several split the run into shards
     else if(d.stdWhere){const rec=r(),list=C.whereList(rec),on=list.includes(d.stdWhere),next=on?list.filter(w=>w!==d.stdWhere):[...list,d.stdWhere];if(!next.length)return;rec.where=next.length>1?next:next[0];}
     else if(d.stdBackend){r().backend=d.stdBackend;}
@@ -960,6 +999,7 @@
       else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
       else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
+    }else if(d.stdMinutes){const t=Object.assign({},rec.timeouts);if(el.value===''||!(Number(el.value)>0))delete t[d.stdMinutes];else t[d.stdMinutes]=Number(el.value);if(Object.keys(t).length)rec.timeouts=t;else delete rec.timeouts;refreshPlan();return;
     }else if(d.minutes){C.setPhaseMinutes(rec,d.minutes,el.value===''?'':Number(el.value));const row=el.closest('tr');if(row){const m=row.querySelector('.nb-mono');const t=C.effectiveTimeouts(rec);const p=t&&t.phases.find(x=>x.key===d.minutes);if(m&&p)m.textContent='×'+p.multiplier;}refreshPlan();return;}
     else if(d.customAgent!==undefined){rec.customAgents[Number(d.customAgent)]=el.value;refreshPlan();return;}
     else if(d.harborRepo!==undefined){const h=rec.harbor;h.repo=el.value;h.commit='';h.revision='';applyScan();}
@@ -973,7 +1013,7 @@
   // no cap, unsaid. It is said, and the field emptied, so that it shows what the recipe holds
   root.addEventListener('focusout',event=>{
     const el=event.target;
-    if(el.type==='number'&&el.dataset.field&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
+    if(el.type==='number'&&(el.dataset.field||el.dataset.stdMinutes||el.dataset.benchOptSelect)&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
   });
   root.addEventListener('change',async event=>{
     const el=event.target,d=el.dataset;

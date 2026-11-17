@@ -7,7 +7,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE ...] [--unsandboxed | --backend container]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS ...] [--max-turns N] [--max-calls N] [--constraint KEY=VALUE ...] [--unsandboxed | --backend container]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -439,15 +439,20 @@ def cmd_new(a):
     return 0
 
 
-def options(pairs) -> dict:
+def options(pairs, flag: str = "--option", form: str = "NAME=VALUE") -> dict:
     """``--option name=value``, repeatable, as {name: value}."""
     out = {}
     for p in pairs or []:
         name, eq, value = p.partition("=")
         if not eq or not name:
-            sys.exit(f"--option {p!r}: NAME=VALUE")
+            sys.exit(f"{flag} {p!r}: {form}")
         out[name.strip()] = value.strip()
     return out
+
+
+def timeouts(pairs) -> dict:
+    """``--timeout PHASE=SECONDS``, repeatable, as {phase: seconds}; ``run`` checks the phases and the values."""
+    return options(pairs, "--timeout", "PHASE=SECONDS")
 
 
 def constraint_values(pairs) -> dict:
@@ -528,6 +533,7 @@ def cmd_run(a):
                       simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
                       licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
                       prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, constraints=given,
+                      timeouts=timeouts(a.timeout), max_turns=a.max_turns, max_calls=a.max_calls,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
@@ -700,6 +706,14 @@ def main(argv=None):
                                 "containers and, through a systemd scope, on its processes here; concurrency; gpu_ids (empty for none)")
             p.add_argument("--max-usd-per-unit", type=float, metavar="USD",
                            help="each unit's own spending cap: a unit that reaches it is cut off there, and the run goes on")
+            p.add_argument("--timeout", action="append", metavar="PHASE=SECONDS",
+                           help="a unit's time limit for one phase, forced over the task's, the benchmark's and the default "
+                                "(repeatable): setup, image, agent (its whole work on the unit), verify, score")
+            p.add_argument("--max-turns", type=int, metavar="N",
+                           help="the most agent turns in a conversation, over the benchmark's limits.turns")
+            p.add_argument("--max-calls", type=int, metavar="N",
+                           help="the most model calls a unit's agent may make, the whole unit through: past it the relay refuses "
+                                "the next call and the unit is the agent's error, as a timeout is")
     v = sub.add_parser("prove", help="prove a benchmark: its controls, its units, no leak; record what passed")
     v.add_argument("benchmark")
     v.add_argument("--dataset", help="one dataset (default: each)")

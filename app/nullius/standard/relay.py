@@ -24,6 +24,14 @@ the provider's headers come back the same way (its request id, its rate
 limits). It never answers for the provider: a 429 reaches the caller and the
 record as it was sent, which is what makes rate limits measurable.
 
+Another is a run's cap on a unit's model calls (``max_calls``): the agent's
+own route (the unit's tag alone, never its judge's or its simulated user's)
+counts each call the provider answered, and once the count reaches the cap
+the next call is refused with a 402 the record says ``refused: calls``. A
+call the provider refused (a 429, an error) is not counted, so a rate limit
+never reads as the agent's steps. Calls in flight together may pass it by
+the few that were already sent.
+
 One answer is the relay's own: a run with a spending cap (``ledger``) books
 each call before it goes out, and a call that does not fit is not sent. Its
 caller gets a 402 that names the relay and the cap, and the record says
@@ -355,7 +363,7 @@ class _Pool:
 class Relay:
     def __init__(self, base: str, key: str, record_dir: str, prices: Optional[Dict[str, dict]] = None,
                  model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False,
-                 ledger: Optional[str] = None, unit_caps: bool = True):
+                 ledger: Optional[str] = None, unit_caps: bool = True, max_calls: Optional[int] = None):
         """``base``: the provider's endpoint (``https://api.openai.com/v1``).
         ``model``: when given, every call is sent as this model, whatever the
         caller named - the run's model is the recipe's, not the agent's. A
@@ -373,8 +381,12 @@ class Relay:
         (:func:`request_fields`) - ``fidelity``'s, never a normal run's.
         ``ledger``: the file of the run's spending cap (``ledger``), shared
         by every relay of the job: a call is booked there before it is sent,
-        and not sent when it does not fit."""
+        and not sent when it does not fit.
+        ``max_calls``: the most model calls the agent's own route of a unit
+        may make (:func:`agent_route`), each answered call counted."""
         self.fields = fields
+        self.max_calls = max_calls
+        self.answered: Dict[str, int] = {}       # the calls each agent route had answered, for max_calls
         self.ledger = ledgers.Ledger(ledger) if ledger else None
         # False for the benchmark's own relay: its calls (an option's embeddings) are no one unit's, so only the run's cap holds them
         self.unit_caps = unit_caps
@@ -478,6 +490,13 @@ class Relay:
             if req.get("stream") and rest.split("?")[0].endswith("/chat/completions"):
                 req.setdefault("stream_options", {})["include_usage"] = True
             raw = json.dumps(req).encode()
+        if self.max_calls and agent_route(tag) and h.command == "POST" and isinstance(req, dict) and req.get("model") and not _free(rest):
+            with self.lock:
+                made = self.answered.get(tag, 0)
+            if made >= self.max_calls:
+                self._refuse(h, tag, rest, req, asked, f"the unit's cap of {self.max_calls} model calls was reached: "
+                             "no further call of its agent is sent", "calls")
+                return
         booking = booked = None
         # a call that names its model is booked, whatever its route, but a token count, which costs nothing and
         # reports no usage; one that names none (a cancellation, a body that is no request) has no price to book
@@ -527,6 +546,9 @@ class Relay:
                 rec["fields"] = request_fields(req)
             cost = None
             if status == 200:
+                if self.max_calls and agent_route(tag) and isinstance(req, dict) and req.get("model") and not _free(rest):
+                    with self.lock:
+                        self.answered[tag] = self.answered.get(tag, 0) + 1
                 rec["reply"] = read_reply(rest, body, streamed)
                 cost, how = self._cost(rec["model"], rec["reply"].get("usage"))
                 if cost is not None:
@@ -632,7 +654,9 @@ class Relay:
         with self.lock:
             with open(os.path.join(self.dir, tag + ".jsonl"), "a") as f:
                 f.write(json.dumps(rec) + "\n")
-        body = json.dumps({"type": "error", "error": {"type": "spending_cap", "code": {"unit": "unit_spending_cap", "price": "unpriced_model", "ledger": "ledger_unavailable"}.get(by, "spending_cap"),
+        body = json.dumps({"type": "error", "error": {"type": "call_cap" if by == "calls" else "spending_cap",
+                                                      "code": {"unit": "unit_spending_cap", "price": "unpriced_model", "ledger": "ledger_unavailable",
+                                                               "calls": "unit_call_cap"}.get(by, "spending_cap"),
                                                       "message": "nullius relay: " + why}}).encode()
         h.send_response(402)
         for n, v in (("Content-Type", "application/json"), ("X-Nullius-Refused", by), ("Content-Length", str(len(body)))):
@@ -678,6 +702,12 @@ class Relay:
         self.pool.close()
 
 
+def agent_route(tag: str) -> bool:
+    """Whether a route is a unit's agent's own (``u0042``, ``u0042r2``): its
+    judge's and its simulated user's carry a suffix (``-judge``, ``-simulator``)."""
+    return "-" not in tag
+
+
 def _free(rest: str) -> bool:
     """A route that names a model and is not billed: a token count."""
     return rest.split("?")[0].rstrip("/").endswith("/count_tokens")
@@ -693,6 +723,11 @@ def _gone(h: Optional[BaseHTTPRequestHandler]) -> bool:
         return True
 
 
+# what a unit whose agent reached the run's cap on model calls carries (``max_calls``): an agent error, counted
+# against the agent, as a timeout is (runs.classify)
+CALLS_ERROR = "UnitCallCapError"
+
+
 def failure(calls: List[dict]) -> Optional[tuple]:
     """When a unit's model calls ended failing, the exception a trial carries
     for it - named so ``nullius.runs.classify`` sorts it as the
@@ -706,6 +741,9 @@ def failure(calls: List[dict]) -> Optional[tuple]:
     over = next((c for c in calls if c.get("refused") == "unit"), None)
     if over:                                     # its own cap: the unit's doing, and the run goes on
         return ledgers.UNIT_ERROR, over.get("error") or ""
+    many = next((c for c in calls if c.get("refused") == "calls"), None)
+    if many:                                     # its agent made the calls it was allowed: the agent's, as its time running out is
+        return CALLS_ERROR, many.get("error") or ""
     if not calls or calls[-1].get("status") == 200:
         return None
     last = calls[-1]
@@ -747,6 +785,7 @@ def serve(argv=None) -> int:
     ap.add_argument("--public", help="the address url() hands out, when not the listening one")
     ap.add_argument("--prices", help="a JSON object: model -> USD per million tokens, for a cost estimate")
     ap.add_argument("--ledger", help="the file of the run's spending cap: a call is booked there before it is sent")
+    ap.add_argument("--max-calls", type=int, help="the most model calls a unit's agent route may make")
     a = ap.parse_args(argv)
     try:
         with open(a.key_file) as f:
@@ -759,7 +798,7 @@ def serve(argv=None) -> int:
         return 2
     host, _, port = a.listen.rpartition(":")
     r = Relay(a.base, key, a.record, prices=json.loads(a.prices) if a.prices else None, model=a.model,
-              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger)
+              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger, max_calls=a.max_calls)
     for route in a.route:
         tag, _, model = route.partition("=")
         if not _TAG.match(tag) or not model:

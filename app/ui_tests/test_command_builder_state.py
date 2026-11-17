@@ -16,6 +16,21 @@ class StandardBenchmarkSwitch(CompilerCase):
         for key, others in out:
             self.assertEqual(others, ["original"], key)
 
+    def test_the_original_presets_the_agents_time_limit_and_the_user_may_change_it(self):
+        out = self.js('const r=C.createStandard("tau3-bench");const a=r.timeouts.agent;'
+                      'const off=JSON.parse(JSON.stringify(r));off.others=[];C.presetOriginal(off,true,C.standardBench(off));'
+                      'const mine=JSON.parse(JSON.stringify(r));mine.timeouts.agent=45;mine.others=[];C.presetOriginal(mine,true,C.standardBench(mine));'
+                      'const on=C.createStandard("tau3-bench");on.others=[];delete on.timeouts;on.others=["original"];C.presetOriginal(on,false,C.standardBench(on));'
+                      'const saved=JSON.parse(JSON.stringify(r));delete saved.timeouts;'
+                      'process.stdout.write(JSON.stringify([a,"timeouts" in off,mine.timeouts,on.timeouts,"timeouts" in C.fromJSON(JSON.stringify(saved)),'
+                      'C.createStandard("gaia").timeouts||null]));')
+        self.assertEqual(out[0], 120)                        # its own 7200 s, in minutes
+        self.assertFalse(out[1])                             # dropped with it while still the preset's
+        self.assertEqual(out[2], {"agent": 45})              # the user's own value stays
+        self.assertEqual(out[3], {"agent": 120})             # chosen again: preset again
+        self.assertFalse(out[4])                             # a saved recipe keeps exactly what it was saved with
+        self.assertIsNone(out[5])                            # no Original limit: nothing preset
+
     def test_explicit_agent_is_preserved(self):
         out = self.js('const r=C.createStandard("gsm8k");'
                       'const agent=C.standardOthers(r).find(o=>!o.setup&&!o.control&&!o.why.length);'
