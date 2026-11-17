@@ -141,14 +141,21 @@ def dataset_info(name):
     }
 
 
-# Runs-table columns, in render order. Drives the show/hide menu; the template
-# tags every th/td with the matching data-col.
+# The runs table's columns, in render order, as _tables.html defines a column: its headers and Columns menu.
 COLUMNS = [
-    ("run", "Run"), ("agent", "Agent"), ("version", "Version"), ("start", "Start"), ("end", "End"), ("time", "Time"),
-    ("model", "Model"), ("dataset", "Dataset"), ("mix", "Mix"),
-    ("trials", "Trials"), ("solved", "Solved"), ("raw", "Raw"),
-    ("adjusted", "Adjusted"), ("infra", "Infra errors"), ("broke", "Broke tests"),
-    ("tokens", "Tokens"), ("cost", "Cost"),
+    dict(key="run", label="Run", sticky=True, edge=True), dict(key="agent", label="Agent", caret=True),
+    dict(key="version", label="Version", title="The agent's version as the run recorded it, or the runner and its commit"),
+    dict(key="start", label="Start", type="num"), dict(key="end", label="End", type="num", off=True),
+    dict(key="time", label="Time", type="num", num=True), dict(key="model", label="Model", caret=True, off=True),
+    dict(key="dataset", label="Dataset", caret=True, off=True), dict(key="mix", label="Mix", type="num"),
+    dict(key="trials", label="Trials", type="num", num=True), dict(key="solved", label="Solved", type="num", num=True),
+    dict(key="raw", label="Raw", type="num", num=True, title="Solved ÷ all trials", off=True),
+    dict(key="adjusted", label="Adjusted", type="num", num=True, title="Solved ÷ trials that actually ran (excludes infra failures)"),
+    dict(key="infra", label="Infra errors", type="num", num=True,
+         title="Trials that never got a fair attempt — rate limits and setup failures. Excluded from Adjusted."),
+    dict(key="broke", label="Broke tests", type="num", num=True, title="Trials whose patch broke previously-passing tests"),
+    dict(key="tokens", label="Tokens", type="num", num=True, title="Input + output tokens across the run"),
+    dict(key="cost", label="Cost", type="num", num=True, title="Only recorded by agents that report it"),
 ]
 
 

@@ -2,9 +2,12 @@
 (static/tables.js) run under Node on a small stand-in DOM."""
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import unittest
+
+import jinja2
 
 APP = Path(__file__).resolve().parents[1]
 
@@ -131,6 +134,56 @@ def node(program: str) -> object:
     return json.loads(out.stdout)
 
 
+LAUNCHES = r'''
+const rows = Array.from({length: 30}, (_, i) => ({search: `L${i} ${i % 2 ? 'Gamma' : 'delta'} agent`, 'f-state': i % 3 ? 'finished' : 'failed', cells: [`L${i}`]}));
+const t = build({id: 'launches', cols: [['launch', 'text']], rows, filter: ['state', ['failed', 'finished']]});
+'''
+
+
+class Search(unittest.TestCase):
+    def test_search_with_filters_and_pages(self):
+        got = node(LAUNCHES + r'''
+const out = {start: t.note()};
+t.type('GAMMA'); out.typed = [t.note(), t.shown().length];                                // any case: 15 odd rows
+t.per.value = '10'; t.per.dispatch('change'); out.per = t.note();
+t.pager.querySelector('[data-next]').click(); out.next = [t.note(), t.shown()];
+t.type('gamma agent'); out.again = t.note();                                              // a new query: page 1
+t.tools.querySelector('[data-value="finished"]').click(); out.filtered = [t.note(), t.shown()];
+t.tools.querySelector('[data-search]').dispatch('keydown', {key: 'Escape'});              // Escape clears the query, not the filter
+out.cleared = [t.tools.querySelector('[data-search]').value, t.note()];
+t.type('zzz'); out.none = [t.note(), t.shown(), t.empty()];
+t.type(''); out.back = [t.note(), t.empty()];
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got["start"], "1–25 of 30")
+        self.assertEqual(got["typed"], ["1–15 of 15", 15])
+        self.assertEqual(got["per"], "1–10 of 15")
+        self.assertEqual(got["next"], ["11–15 of 15", ["L21", "L23", "L25", "L27", "L29"]])
+        self.assertEqual(got["again"], "1–10 of 15")
+        self.assertEqual(got["filtered"], ["1–5 of 5", ["L3", "L9", "L15", "L21", "L27"]])   # only the failed ones left
+        self.assertEqual(got["cleared"], ["", "1–10 of 10"])
+        self.assertEqual(got["none"], ["", [], True])
+        self.assertEqual(got["back"], ["1–10 of 10", False])
+
+
+class Checks(unittest.TestCase):
+    def test_the_header_follows_the_visible_rows(self):
+        got = node(r'''
+const rows = ['a', 'b', 'c'].map(x => ({search: x, cells: [x]}));
+const t = build({id: 't', cols: [['x', 'text']], rows, check: true, filter: null});
+const all = t.table.querySelector('[data-check-all]'), boxes = t.table.querySelectorAll('[data-check]');
+const state = () => [all.checked, all.indeterminate, boxes.map(b => b.checked)];
+const out = [state()];
+all.click(); out.push(state());                                     // every row ticked
+boxes[1].click(); out.push(state());                                // some: the header is mixed
+t.type('a'); out.push(state());                                     // only a shows, ticked: all
+all.click(); out.push(state());                                     // unticks a alone
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got, [[False, False, [False, False, False]], [True, False, [True, True, True]], [False, True, [True, False, True]],
+                               [True, False, [True, False, True]], [False, False, [False, False, True]]])
+
+
 class Sticky(unittest.TestCase):
     def test_each_offset_is_the_widths_before_it(self):
         got = node(r'''
@@ -146,6 +199,66 @@ process.stdout.write(JSON.stringify(out));
 ''')
         self.assertEqual(got, [["0px", "35.2px", None, "155.2px"] * 2, ["0px", "40px", None, "160px"] * 2])
 
+
+class Menus(unittest.TestCase):
+    def test_a_label_click_toggles_and_keeps_its_menu_open(self):
+        got = node(LAUNCHES + r'''
+const cols = el('div', {'data-tools': 'columns', hidden: true}, el('label', {}, el('input', {type: 'checkbox', 'data-col': 'launch', checked: true}), ' Launch'));
+const cbtn = el('button', {});
+t.page.appendChild(el('div', {}, cbtn, cols));
+T.menu(cbtn, cols);
+const out = {};
+const pair = k => [t.tools.querySelector(`[data-tools-btn="${k}"]`), t.tools.querySelector(`[data-tools="${k}"]`)];
+for (const [name, btn, menu] of [['filter', ...pair('filter')], ['sort', ...pair('sort')], ['columns', cbtn, cols]]) {
+  btn.click();
+  // a box, or a radio not chosen yet
+  const input = menu.querySelectorAll('input').find(i => !i.disabled && !(i.getAttribute('type') === 'radio' && i.checked)), was = input.checked;
+  // a press on the label's text moves the focus to the page's <main>, then the label clicks its input
+  (document.activeElement || btn).dispatch('focusout', {relatedTarget: t.page});
+  input.click();
+  const kept = !menu.hidden;
+  (document.activeElement).dispatch('focusout', {relatedTarget: el('a', {})});            // Tab out of it: closed
+  out[name] = [was !== input.checked, kept, menu.hidden];
+}
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got, {"filter": [True, True, True], "sort": [True, True, True], "columns": [True, True, True]})
+
+    def test_two_toolbars_on_one_page_sort_their_own_table(self):
+        got = node(r'''
+const make = id => build({id, cols: [['n', 'num']], rows: [1, 3, 2].map(n => ({search: '', cells: [n]})), filter: null});
+const a = make('a'), b = make('b');
+a.tools.querySelector('[data-sort-col][value="n"]').click();
+b.type('');
+process.stdout.write(JSON.stringify([a.shown(), b.shown(), b.tools.querySelector('[data-sort-col]:checked').value]));
+''')
+        self.assertEqual(got, [["3", "2", "1"], ["1", "3", "2"], ""])
+
+
+class Macros(unittest.TestCase):
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(APP / "templates"))
+
+    def render(self, source):
+        return self.env.from_string("{% from '_tables.html' import table, check_cell %}" + source).render()
+
+    def test_two_tables_on_one_page_name_their_own_radios(self):
+        html = self.render("{% for id in ['a', 'b'] %}{% call table(id, [dict(key='x', label='X')], search='Find') %}{% endcall %}{% endfor %}")
+        names = re.findall(r'type="radio" name="([\w-]+)"', html)
+        self.assertEqual(sorted(set(names)), ["a-sort-col", "a-sort-dir", "b-sort-col", "b-sort-dir"])
+        ids = re.findall(r' id="([\w-]+)"', html)
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_every_named_column_heads_sorts_and_lists(self):
+        cols = "[dict(key='a', label='A', sticky=true, edge=true, menu=false), dict(key='b', label='B', type='num', num=true, off=true), dict(key='c', label='C', sort=false)]"
+        html = self.render("{% call table('t', " + cols + ", columns=true, check='Select all', actions='Actions') %}"
+                           "<tr>{{ check_cell('Select a', 'a') }}</tr>{% endcall %}")
+        self.assertIn('<tr><th scope="col" class="pick-col"><input type="checkbox" data-check-all aria-label="Select all"></th>', html)
+        self.assertIn('<th data-col="a" data-type="text" class="sticky-col sticky-edge">A</th><th data-col="b" data-type="num" class="num">B</th><th data-col="c">C</th>'
+                      '<th scope="col"><span class="sr">Actions</span></th></tr>', re.sub(r">\s+<", "><", html))
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', html), ["", "a", "b"])        # c says it does not sort
+        self.assertEqual(re.findall(r'data-col="(\w)"( data-off)?> ', html), [("b", " data-off"), ("c", "")])   # a is not in the menu
+        self.assertIn('<td class="pick-col"><input type="checkbox" data-check value="a" aria-label="Select a"></td>', html)
+        self.assertIn('<p class="empty-note" data-empty role="status" hidden>No rows match.</p>', html)
 
 
 if __name__ == "__main__":

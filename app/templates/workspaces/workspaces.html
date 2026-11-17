@@ -1,9 +1,9 @@
-{% from '_tables.html' import tools, pager, greyed, blank %}
+{% from '_tables.html' import table, greyed %}
 {% extends "base.html" %}
 {% block title %}Workspaces — Nullius{% endblock %}
 {% block crumb %}/ workspaces{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">{# its dialog #}
 <link rel="stylesheet" href="{{ url_for('static', filename='workspaces/workspaces.css') }}">
 <script src="{{ url_for('static', filename='tables.js') }}"></script>{% endblock %}
 {% block body %}
@@ -12,16 +12,13 @@
 
 {% if workspaces %}
 {% set labels = workspaces|map(attribute='label')|list %}
-<div class="table-tools inv-cols" id="ws-tools">{{ tools([], [('name', 'Name'), ('roots', 'Roots'), ('runs', 'Runs'), ('checks', 'Checks'), ('launches', 'Launches'), ('opened', 'Last opened')]) }}</div>
-<div class="table-wrap">
-<table class="grid sortable tools inventory ws-table" id="ws-table">
-  <thead>
-    <tr>{{ blank('Open') }}<th data-col="name" data-type="text">Name</th><th data-col="roots" data-type="num">Roots</th><th data-col="runs" data-type="num" class="num">Runs</th><th data-col="checks" data-type="num" class="num">Checks</th><th data-col="launches" data-type="num" class="num">Launches</th><th data-col="opened" data-type="num">Last opened</th>{{ blank('Actions') }}</tr>
-  </thead>
-  <tbody>
+{% set cols = [dict(key='name', label='Name', width='expand'), dict(key='runs', label='Runs', type='num', num=true),
+               dict(key='checks', label='Checks', type='num', num=true), dict(key='opened', label='Last opened', type='num'),
+               dict(key='launches', label='Launches', type='num', num=true), dict(key='roots', label='Roots', type='num')] %}
+{% call table('workspaces', cols, class='ws-table', search='Search by name or folder', status='Open', actions='Actions') %}
     {% for ws in workspaces %}
     {% set current = workspace and ws.name == workspace.name %}{% set rs = roots[ws.name] %}{% set clash = labels.count(ws.label) > 1 %}
-    <tr class="{{ 'ws-current' if current }}" data-ws="{{ ws.name }}" data-holder>
+    <tr class="{{ 'ws-current' if current }}" data-ws="{{ ws.name }}" data-search="{{ ws.label }} {{ ws.name }}" data-holder>
       <td class="ws-mark">{% if current %}<span class="ok" role="img" aria-label="Open" title="Open">●</span>{% endif %}</td>
       <td class="ws-name" data-sort="{{ ws.label }}">
         {#- the label; the name on disk too where two labels are alike #}
@@ -33,8 +30,13 @@
           <button class="btn sm" type="submit">Save</button><button class="btn sm ghost ws-cancel" type="button">Cancel</button>
         </form>
       </td>
+      <td class="num">{{ counts[ws.name].runs }}</td>
+      <td class="num">{{ counts[ws.name].checks }}</td>
+      {#- the time as digits, UTC as every workspace records it; never opened sorts last, newest first #}
+      <td class="mono faint nowrap" data-sort="{{ ws.opened[:19]|replace('-', '')|replace(':', '')|replace('T', '') or 0 }}">{{ ws.opened[:16]|replace('T', ' ') }}</td>
+      <td class="num">{% set n = n_launches[ws.name] %}{% if n %}<a class="btn ghost sm count-btn" href="{{ url_for('launches_page', ws=ws.name) }}" aria-label="Launches of {{ ws.label }}: {{ n }}" title="Launches of {{ ws.label }}"><svg class="ic" aria-hidden="true"><use href="#i-launches"/></svg>{{ n }}</a>{% else %}0{% endif %}</td>
       <td data-sort="{{ rs|length }}">
-        <button type="button" class="btn ghost sm ws-roots-btn" data-ask="ws-roots" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ rs|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ rs|length }}</button>
+        <button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="ws-roots" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ rs|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ rs|length }}</button>
         <template class="ws-roots">
           <div class="std-how-head"><h2 id="ws-dialog-h"{% if clash %} title="{{ ws.name }}"{% endif %}>Roots of {{ ws.label }}</h2>
             <a class="btn sm" href="{{ url_for('import_page', into=ws.name) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a root</a></div>
@@ -59,12 +61,7 @@
           </ul>
         </template>
       </td>
-      <td class="num">{{ counts[ws.name].runs }}</td>
-      <td class="num">{{ counts[ws.name].checks }}</td>
-      <td class="num">{% set n = n_launches[ws.name] %}{% if n %}<a href="{{ url_for('launches_page', ws=ws.name) }}" aria-label="Launches of {{ ws.label }}: {{ n }}">{{ n }}</a>{% else %}0{% endif %}</td>
-      {#- the time as digits, UTC as every workspace records it; never opened sorts last, newest first #}
-      <td class="mono faint nowrap" data-sort="{{ ws.opened[:19]|replace('-', '')|replace(':', '')|replace('T', '') or 0 }}">{{ ws.opened[:16]|replace('T', ' ') }}</td>
-      <td class="inv-acts">
+      <td class="acts-col">
         <button type="button" class="icon-btn danger" data-ask="ws-ask-delete" aria-haspopup="dialog" aria-label="Delete workspace {{ ws.label }}" title="Delete workspace"><svg class="ic"><use href="#i-trash"/></svg></button>
         <template class="ws-ask-delete">
           <div class="std-how-head"><h2 id="ws-dialog-h">Delete workspace {{ ws.label }}</h2></div>
@@ -77,10 +74,7 @@
       </td>
     </tr>
     {% endfor %}
-  </tbody>
-</table>
-</div>
-{{ pager('ws-table') }}
+{% endcall %}
 <dialog class="std-how launch-delete" id="ws-dialog" aria-labelledby="ws-dialog-h"></dialog>
 <script>
 (() => {
@@ -120,8 +114,6 @@
     }
   });
   d.addEventListener('close', () => opener?.focus());
-  const table = document.getElementById('ws-table');
-  NulliusTable.paged(table, document.getElementById('ws-tools'), 'workspaces.per');
 
   // Rename in place: the pencil opens the field; Escape or Cancel puts the name back.
   document.querySelectorAll('.ws-name').forEach(cell => {

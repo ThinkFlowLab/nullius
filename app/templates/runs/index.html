@@ -1,5 +1,5 @@
 {% from 'runs/_runtime.html' import what_ran %}
-{% from '_tables.html' import filter_button, columns_button, columns_menu %}
+{% from '_tables.html' import heads, columns_button, columns_menu %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Runs — Nullius{% endblock %}
@@ -185,32 +185,7 @@
         <input type="checkbox" id="pick-all" aria-label="Select all runs for comparison"
                title="Select / unselect all">
       </th>
-      <th data-col="run" data-type="text" class="sticky-col sticky-edge">Run</th>
-      <th data-col="agent" data-type="text">Agent{{ filter_button('agent', choices.agent) }}</th>
-      <th data-col="version" data-type="text" title="The agent's version as the run recorded it, or the runner and its commit">Version</th>
-      <th data-col="start" data-type="num">Start</th>
-      <th data-col="end" data-type="num">End</th>
-      <th data-col="time" data-type="num" class="num">Time</th>
-      <th data-col="model" data-type="text">
-        Model{{ filter_button('model', choices.model) }}
-      </th>
-      <th data-col="dataset" data-type="text">
-        Dataset{{ filter_button('dataset', choices.dataset) }}
-      </th>
-      <th data-col="mix" data-type="num">Mix</th>
-      <th data-col="trials" data-type="num" class="num">Trials</th>
-      <th data-col="solved" data-type="num" class="num">Solved</th>
-      <th data-col="raw" data-type="num" class="num" title="Solved ÷ all trials">Raw</th>
-      <th data-col="adjusted" data-type="num" class="num"
-          title="Solved ÷ trials that actually ran (excludes infra failures)">Adjusted</th>
-      <th data-col="infra" data-type="num" class="num"
-          title="Trials that never got a fair attempt — rate limits and setup failures. Excluded from Adjusted.">Infra errors</th>
-      <th data-col="broke" data-type="num" class="num"
-          title="Trials whose patch broke previously-passing tests">Broke tests</th>
-      <th data-col="tokens" data-type="num" class="num"
-          title="Input + output tokens across the run">Tokens</th>
-      <th data-col="cost" data-type="num" class="num"
-          title="Only recorded by agents that report it">Cost</th>
+      {{ heads(COLUMNS, choices) }}
     </tr>
   </thead>
   <tbody>
@@ -344,9 +319,8 @@
   const note = document.getElementById('filter-note');
   const emptyNote = document.getElementById('empty-note');
   const clearBtn = document.getElementById('clear-filter');
-  const HIDDEN_BY_DEFAULT = ['end', 'model', 'dataset', 'raw'];
 
-  const showCols = NulliusTable.columns(table, document.getElementById('col-btn'), document.getElementById('col-menu'), 'runs.cols', HIDDEN_BY_DEFAULT);
+  const showCols = NulliusTable.columns(table, document.getElementById('col-btn'), document.getElementById('col-menu'), 'runs.cols');
   const densityBtn = document.getElementById('density-btn');
   const setDensity = on => {
     table.classList.toggle('compact', on);

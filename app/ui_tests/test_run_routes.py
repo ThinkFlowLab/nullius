@@ -50,6 +50,16 @@ def core(schema, code):
     return json.loads(subprocess.run([node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
 
 
+
+def named_heads(html) -> list:
+    """The table's headers with a name (data-col), in order: every one but the headerless edges."""
+    return re.findall(r'<th data-col="(\w+)"', html.split("<thead>", 1)[1].split("</thead>", 1)[0])
+
+
+def sort_keys(html) -> list:
+    """The columns its Sort by offers, Default aside."""
+    return re.findall(r'data-sort-col value="(\w+)"', html)
+
 class RunRoutes(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
@@ -761,8 +771,9 @@ class LaunchesPage(unittest.TestCase):
         self.assertEqual(cells(f"run:{bare.id}"), {"bench": "", "dataset": "tau3-bench"})     # no recipe: the dataset its job recorded
         html = self.get("/launches").get_data(as_text=True)
         self.assertRegex(html, r'<th data-col="launch" data-type="text" class="sticky-col sticky-edge">Launch</th>\s*<th data-col="bench" data-type="text">Benchmark</th>\s*<th data-col="dataset" data-type="text">Dataset</th>')
-        self.assertEqual(re.findall(r'<input type="checkbox" data-col="(\w+)"( disabled)?>', html),
-                         [("state", " disabled")] + [(c, "") for c in ("bench", "dataset", "started", "runs", "checks", "shards", "machines", "size", "ws")])   # the launch, its state and its actions always show
+        self.assertEqual(re.findall(r'<input type="checkbox" data-col="(\w+)"( disabled)?( data-off)?>', html),
+                         [("state", " disabled", "")] + [(c, "", " data-off" if c in ("checks", "machines", "size") else "")
+                                                         for c in ("bench", "dataset", "started", "runs", "checks", "shards", "machines", "size", "ws")])   # the launch, its state and its actions always show
 
     def test_state_is_the_first_column_an_icon_in_the_runs_page_words(self):
         finished, refused, failed, paused = self.record("r3"), self.record("r4", "failed"), self.record("r5", "failed"), self.record("r6", "paused")
@@ -818,16 +829,19 @@ class LaunchesPage(unittest.TestCase):
     def test_filter_and_sort_by_are_menus_beside_columns(self):
         self.record("r3")
         html = self.get("/launches").get_data(as_text=True)
-        tools = re.search(r'<div class="table-tools inv-cols" id="launch-tools">(.*?)<div class="table-wrap">', html, re.S).group(1)
-        self.assertEqual(re.findall(r'<button class="btn ghost sm" type="button" (?:id|data-tools-btn)="([\w-]+)" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-(\w+)"/></svg>([^<]+)', tools),
-                         [("col-btn", "table", "Columns"), ("filter", "filter", "Filter"), ("sort", "sort", "Sort by")])   # each its own icon, the text its name
+        tools = re.search(r'<div class="table-tools table-controls" id="launches-tools">(.*?)<div class="table-wrap">', html, re.S).group(1)
+        self.assertEqual(re.findall(r'<button class="btn ghost sm" type="button" data-tools-btn="([\w-]+)" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-(\w+)"/></svg>([^<]+)', tools),
+                         [("columns", "table", "Columns"), ("filter", "filter", "Filter"), ("sort", "sort", "Sort by")])   # each its own icon, the text its name
+        self.assertIn('<input type="search" data-search placeholder="Search by launch, agent, benchmark or workspace" aria-label="Search by launch, agent, benchmark or workspace"', tools)
+        self.assertLess(tools.index("data-search"), tools.index('class="table-buttons"'))       # the search first, the buttons after it
         self.assertEqual(re.findall(r'data-filter-menu="(\w+)">\s*<legend>([^<]+)', tools),
                          [("state", "State"), ("bench", "Benchmark"), ("dataset", "Dataset"), ("machines", "Machines"), ("ws", "Workspaces")])
         self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools),
-                         ["", "state", "launch", "bench", "dataset", "started", "runs", "checks", "shards", "size"])     # "": the order the page came in
+                         ["", "state", "launch", "bench", "dataset", "started", "runs", "checks", "shards", "machines", "size", "ws"])     # "": the order the page came in
+        self.assertEqual(named_heads(html), sort_keys(html))                                      # every column but the headerless edges sorts
         self.assertNotIn("filter-btn", html)                                                     # no caret in a header
         self.assertNotIn("data-sorted", html)                                                    # no sort, no arrow, until one is chosen
-        self.assertIn('<table class="grid sortable tools inventory" id="launches">', html)
+        self.assertIn('<table class="grid sortable tools snug" id="launches" data-table>', html)
         pager = re.search(r'<div class="table-tools table-pager" data-pager="launches">(.*?)</div>', html, re.S).group(1)   # the shared pages, after the table
         self.assertEqual(re.findall(r"<option(?: value=\"(\w+)\")?(?: selected)?>(\w+)</option>", pager), [("", "10"), ("", "25"), ("", "100"), ("0", "All")])
         self.assertIn("<option selected>25</option>", pager)
@@ -983,11 +997,11 @@ class WorkspacesPage(unittest.TestCase):
     def test_one_name_column_and_no_open(self):
         html = self.get("/workspaces").get_data(as_text=True)
         heads = re.findall(r"<th[^>]*>(.*?)</th>", html.split("<thead>", 1)[1].split("</thead>", 1)[0])
-        self.assertEqual([re.sub(r"<[^>]+>", "", h) for h in heads], ["Open", "Name", "Roots", "Runs", "Checks", "Launches", "Last opened", "Actions"])
+        self.assertEqual([re.sub(r"<[^>]+>", "", h) for h in heads], ["Open", "Name", "Runs", "Checks", "Last opened", "Launches", "Roots", "Actions"])
         row = self.row(self.ws, html)
         self.assertIn(f'<span class="ws-title" title="{self.ws.name}">witty pelican</span>', row)   # the name on disk a tooltip
         self.assertNotIn('<small class="mono faint">', row)                                          # no two labels alike
-        self.assertNotIn("workspaces/open", html.split('id="ws-table">', 1)[1])   # no Open, no "runs →"
+        self.assertNotIn("workspaces/open", html.split('id="workspaces" data-table>', 1)[1])   # no Open, no "runs →"
         self.assertNotIn("runs →", html)
         self.assertRegex(html, r'<div class="page-title ws-head"><h1>Workspaces</h1>\s*<a class="btn sm" href="/import\?new=1">.*?New workspace</a>')
 
@@ -1095,7 +1109,7 @@ class WorkspacesPage(unittest.TestCase):
             write_job(str(d / "jobs"), job, agent, {"a": reward})
         execution.restore()
         web.shared.adopt_roots([str(d / "jobs")])
-        listed = self.cell(self.ws, 3), self.cell(self.ws, 4)
+        listed = self.cell(self.ws, 2), self.cell(self.ws, 3)
         page = self.get("/runs").get_data(as_text=True)
         header = re.search(r'data-runs="(\d+)"', page).group(1), re.search(r"(\d+) checks\s*</p>", page).group(1)
         rows = [LaunchesPage.cells(self, r) for r in re.findall(r'<tr data-launch="[^"]+"(.*?)</tr>', self.get("/launches").get_data(as_text=True), re.S)
@@ -1112,7 +1126,8 @@ class WorkspacesPage(unittest.TestCase):
             with self.subTest(ws=ws.label):
                 n = sum(ws.name in r.split("\n") for r in rows)
                 self.assertEqual(n, 1)
-                self.assertIn(f'<a href="/launches?ws={ws.name}" aria-label="Launches of {ws.label}: 1">1</a>', self.row(ws))
+                self.assertIn(f'<a class="btn ghost sm count-btn" href="/launches?ws={ws.name}" aria-label="Launches of {ws.label}: 1" title="Launches of {ws.label}">'
+                              '<svg class="ic" aria-hidden="true"><use href="#i-launches"/></svg>1</a>', self.row(ws))   # the sidebar's icon, as Roots' button
         self.assertEqual(self.cell(bare, 5), "0"); self.assertNotIn("/launches?ws=", self.row(bare))   # none: plain text
 
     def test_ws_presets_the_launches_filter(self):
@@ -1125,14 +1140,16 @@ class WorkspacesPage(unittest.TestCase):
 
     def test_sort_by_alone_and_every_sort_key(self):
         html = self.get("/workspaces").get_data(as_text=True)
-        tools = html.split('<div class="table-tools inv-cols" id="ws-tools">', 1)[1].split('<div class="table-wrap">', 1)[0]
+        tools = html.split('<div class="table-tools table-controls" id="workspaces-tools">', 1)[1].split('<div class="table-wrap">', 1)[0]
         self.assertNotIn('data-tools-btn="filter"', tools)                                        # Sort by alone: nothing to filter
-        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools), ["", "name", "roots", "runs", "checks", "launches", "opened"])
-        self.assertIn('<table class="grid sortable tools inventory ws-table" id="ws-table">', html)
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools), ["", "name", "runs", "checks", "opened", "launches", "roots"])
+        self.assertEqual(named_heads(html), sort_keys(html))
+        self.assertIn('<table class="grid sortable tools snug ws-table" id="workspaces" data-table>', html)
+        self.assertIn('placeholder="Search by name or folder"', tools)
         heads = re.findall(r'<th( data-col="\w+" data-type="\w+")?[^>]*>', html.split("<thead>", 1)[1].split("</thead>", 1)[0])
         self.assertEqual([bool(h) for h in heads], [False, True, True, True, True, True, True, False])  # Open and the actions do not sort
         self.assertNotIn("data-sorted", html)                                                     # no arrow until a sort is chosen
-        self.assertRegex(html, r'<div class="table-tools table-pager" data-pager="ws-table">\s*<label class="table-note">Show <select data-per><option>10</option><option selected>25</option>')
+        self.assertRegex(html, r'<div class="table-tools table-pager" data-pager="workspaces">\s*<label class="table-note">Show <select data-per><option>10</option><option selected>25</option>')
         row = self.row(self.ws, html)
         self.assertIn('<td class="ws-name" data-sort="witty pelican">', row)
         self.assertIn('<td data-sort="1">', row)                                                  # its roots
