@@ -34,6 +34,7 @@ from nullius.standard import recipe as standard_recipe
 from .core import app
 from . import shared
 from . import execute
+from .filters import AGENT_MARKS
 from . import settings as settings_web
 
 
@@ -87,8 +88,28 @@ def _entries(kind: str, every: bool = False) -> dict:
 def _page(kind: str):
     example = os.path.join(definitions.CATALOGUE, "agents", "reference") if kind == "agent" else \
         os.path.join(definitions.CATALOGUE, "capabilities", "keyword-memory")
+    found = _entries(kind)
     return render_template("agents/standard.html", kind=kind, how=howto.steps(kind), prompts=howto.prompts(),
-                           catalogue_dir=paths.catalogue_dir(), example_dir=example, **_entries(kind))
+                           catalogue_dir=paths.catalogue_dir(), example_dir=example, problems=found["problems"],
+                           items=[_card(kind, e) for e in found["entries"]])
+
+
+def _card(kind: str, e: dict) -> dict:
+    """An agent's or a capability's card on its list (templates/_cards.html)."""
+    d = e["d"]
+    version, n = (d.get("upstream") or {}).get("version"), len(d.get("_versions") or ())
+    mark = AGENT_MARKS.get(d["key"].split("@")[0]) if kind == "agent" else None
+    path, _, frag = (mark or "").partition("#")
+    return {"href": url_for("agent_page" if kind == "agent" else "feature_page", key=d["key"]), "id": d["key"],
+            "search": " ".join([d["label"], d["key"], d.get("kind", ""), e["protocol"], d.get("summary", "")]),
+            "kind": d.get("kind") if kind == "capability" else None, "protocol": e["protocol"],
+            "example": {"text": "example", "title": "Nullius's own, to read or copy - not an agent to compare"} if d.get("example") else None,
+            "version": ("v" + str(version) if version else "") + (f" · {n} versions" if n > 1 else ""),
+            "icon": mark and url_for("static", filename=path) + ("#" + frag if frag else ""), "title": d["label"],
+            "summary": d.get("summary"),
+            "ports": "{}/{}".format(sum(p["state"] == "proven" for p in e["ports"]), len(e["ports"])),
+            "runs": "{}/{}".format(sum(not f["why"] for f in e["fits"]), len(e["fits"])),
+            "installs": "yes" if e["install"] else "no"}
 
 
 def _entry(kind: str, key: str):
@@ -184,7 +205,17 @@ def _kit_entries():
 
 @app.route("/kits")
 def kits_page():
-    return render_template("agents/kits.html", entries=_kit_entries(), entry=None)
+    return render_template("agents/kits.html", items=[_kit_card(e) for e in _kit_entries()], entry=None)
+
+
+def _kit_card(e: dict) -> dict:
+    """A kit's card on its list (templates/_cards.html)."""
+    d = e["d"]
+    checks = d.get("check_details", {})
+    return {"href": url_for("kit_page", key=d["key"]), "keys": d["key"],
+            "search": " ".join([e["label"], e["port"], d["summary"], *checks, *(str(v) for c in checks.values() for v in c.values())]),
+            "family": d["family"], "version": f"v{e['version']}", "title": e["label"], "port": e["port"],
+            "checks": sum(x["units"] for x in d["datasets"])}
 
 
 def _python_tokens(code):
@@ -227,4 +258,4 @@ def kit_page(key):
                         for source in sorted(folder.glob("*.py"))]
     for source in entry["sources"]:
         source["tokens"] = _python_tokens(source["code"])
-    return render_template("agents/kits.html", entry=entry, entries=[])
+    return render_template("agents/kits.html", entry=entry)

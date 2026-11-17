@@ -4,19 +4,8 @@
 .bench-index-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .bench-index-head h1 { margin: 0; font-size: 30px; font-weight: 500; letter-spacing: -.01em; }
 .bench-count { margin: 6px 0 0; color: var(--text-dim); font-size: 14px; }
-.bench-find { display: flex; flex-direction: column; gap: 6px; flex: 0 1 280px; font-size: 12px; color: var(--text-dim); }
-.bench-find input { width: 100%; }
-.bench-find input { font: inherit; font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; min-height: 44px; box-sizing: border-box; }
-.bench-find input:focus { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-/* the category chips, then the origin chips after a rule, on one line while they fit */
-.bench-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 30px; }
-.bench-filters .bench-cats + .bench-cats { padding-left: 16px; border-left: 1px solid var(--border); }
-@media (max-width: 640px) { .bench-filters .bench-cats + .bench-cats { padding-left: 0; border-left: 0; } }
-.bench-cats { display: flex; flex-wrap: wrap; gap: 8px; }
-.bench-cat { font: inherit; font-size: 13px; cursor: pointer; color: var(--text-dim); background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; min-height: 40px; }
-.bench-cat:hover { border-color: var(--accent); color: var(--text); }
-.bench-cat.on { background: var(--accent); border-color: var(--accent); color: var(--btn-fg); font-weight: 500; }
-.bench-cat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* the cards' controls row, under the title */
+.bench-index > .table-controls { margin: 0 0 24px; }
 .bench-shelf { margin: 0 0 34px; }
 .bench-shelf[hidden], .bench-card[hidden] { display: none; }
 .bench-shelf h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 13px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--text); }
@@ -27,12 +16,10 @@
 .bench-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 1180px) { .bench-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .bench-grid { grid-template-columns: minmax(0, 1fr); } }
-.bench-card { display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-soft); color: var(--text); transition: border-color .13s ease; }
-.bench-card:hover { border-color: var(--accent); text-decoration: none; }
-.bench-card:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
-/* a card of the card toolkit (templates/_cards.html): its title's link stretched over it, so the whole card opens it;
-   a checkbox, a button or a value with a tooltip sits above that link */
-article.bench-card { position: relative; }
+/* a card (templates/_cards.html): its title's link stretched over it, so the whole card opens it; a checkbox, a
+   button or a value with a tooltip sits above that link */
+.bench-card { position: relative; display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-soft); color: var(--text); transition: border-color .13s ease; }
+.bench-card:hover { border-color: var(--accent); }
 .card-link, .card-link:hover { color: inherit; text-decoration: none; }
 .card-link::after { content: ""; position: absolute; inset: -1px; border-radius: 12px; }
 .card-link:focus-visible { outline: none; }
@@ -50,13 +37,9 @@ article.bench-card { position: relative; }
 .bench-head h1 { display: flex; align-items: center; gap: 14px; }
 .bench-head h1 .bench-mark { width: 32px; height: 32px; }
 .bench-card-domain { margin-top: -6px; font-size: 14px; line-height: 1.5; color: var(--text-dim); }
-.bench-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+/* up to three stats in columns of one width, each its label then its value */
+.bench-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: auto 0 0; padding-top: 14px; border-top: 1px solid var(--border-soft); }
 .bench-stats > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.bench-stats b { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.bench-stats b.word { font-size: 14px; font-weight: 500; line-height: 1.35; padding-top: 3px; }
-.bench-stats span { font-size: 12px; color: var(--text-faint); }
-/* the card toolkit's stats: each its label, then its value */
-.bench-stats:is(dl) { margin: auto 0 0; }
 .bench-stats dd { margin: 0; font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .bench-stats dd.word { font-size: 14px; line-height: 1.35; padding-top: 3px; }
 .bench-stats dt { font-size: 12px; color: var(--text-faint); }
@@ -152,11 +135,10 @@ article.bench-card { position: relative; }
 .settings-page .settings-test.bad { color: var(--bad); }
 
 /* Add a Harbor benchmark: two steps, the dataset read from Harbor, then the entry. */
-/* Find and Add side by side at the right of the title, the button the height of the box */
+/* Add at the right of the title */
 .bench-head-tools { display: flex; align-items: flex-end; gap: 12px; flex: 0 1 auto; }
-.bench-head-tools .bench-find { flex: 0 1 300px; min-width: 180px; }
 .bench-head-tools .btn { min-height: 44px; white-space: nowrap; flex: none; }
-@media (max-width: 640px) { .bench-head-tools { flex-wrap: wrap; width: 100%; } .bench-head-tools .bench-find { flex: 1 1 100%; } }
+@media (max-width: 640px) { .bench-head-tools { flex-wrap: wrap; width: 100%; } }
 .bench-new { max-width: 860px; }
 .nb-step { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px; padding: 20px; margin: 0 0 18px; }
 .nb-step h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; font-size: 16px; font-weight: 500; }
