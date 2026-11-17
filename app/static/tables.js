@@ -239,8 +239,9 @@ window.NulliusTable = {
     return sync;
   },
 
-  /* Sticky columns (.sticky-col): each at the summed widths of those before
-     it, again as they resize, hide or rows come in. */
+  /* Sticky columns, those whose header is a .sticky-col: each cell under it
+     pinned at the summed widths of the sticky columns before it, again as
+     they resize, hide or rows come in. */
   sticky(table) {
     const heads = [...table.tHead.rows[0].cells], pinned = heads.filter(th => th.classList.contains('sticky-col'));
     const place = () => {
@@ -248,7 +249,9 @@ window.NulliusTable = {
       pinned.forEach(th => {
         for (const row of table.rows) {
           const cell = row.cells[th.cellIndex];
-          if (cell?.classList.contains('sticky-col')) cell.style.setProperty('--sticky-left', left + 'px');
+          cell.classList.add('sticky-col');
+          cell.classList.toggle('sticky-edge', th.classList.contains('sticky-edge'));
+          cell.style.setProperty('--sticky-left', left + 'px');
         }
         left += th.getBoundingClientRect().width;
       });

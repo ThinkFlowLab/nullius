@@ -291,7 +291,7 @@ class RunsByLaunch(unittest.TestCase):
         self.assertEqual(between.count("<div"), between.count("</div>"))           # a sibling, never inside the hidden view
         self.assertIn('aria-pressed="true">All runs</a>', html)
         for job in self.jobs:
-            self.assertIn(f'<td data-col="run" class="sticky-col sticky-edge"><a href="/job/{job.job_id}">', html)   # every run, one row
+            self.assertIn(f'<td data-col="run"><a href="/job/{job.job_id}">', html)   # every run, one row
         self.assertIn("Tick two or more runs to compare", html)
 
 

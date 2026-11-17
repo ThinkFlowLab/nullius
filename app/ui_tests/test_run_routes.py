@@ -780,7 +780,7 @@ class LaunchesPage(unittest.TestCase):
         failed.launched = "run"                                                              # got as far as its launch: failed, not refused
         rows = self.rows()
         first = {e.plan.name: re.search(r'^[^>]*>\s*(<td.*?</td>)', rows[f"run:{e.id}"], re.S).group(1) for e in (finished, refused, failed, paused)}
-        self.assertEqual(first["r4"], '<td data-col="state" class="sticky-col" data-sort="6"><svg class="ic st-refused" role="img" aria-label="refused"><title>refused</title><use href="#i-refused"/></svg></td>')
+        self.assertEqual(first["r4"], '<td data-col="state" data-sort="6"><svg class="ic st-refused" role="img" aria-label="refused"><title>refused</title><use href="#i-refused"/></svg></td>')
         self.assertEqual([re.search(r'aria-label="([^"]+)"><title>\1</title><use href="#i-(\w+)"', first[n]).groups() for n in ("r3", "r5", "r6")],
                          [("finished", "check"), ("failed", "alert"), ("paused", "pause")])
         sort = {n: int(re.search(r'data-sort="(\d+)"', c).group(1)) for n, c in first.items()}

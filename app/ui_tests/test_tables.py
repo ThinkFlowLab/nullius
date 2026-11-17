@@ -187,17 +187,18 @@ process.stdout.write(JSON.stringify(out));
 class Sticky(unittest.TestCase):
     def test_each_offset_is_the_widths_before_it(self):
         got = node(r'''
-const sticky = (tag, w) => Object.assign(el(tag, {class: 'sticky-col'}), {width: w});
-const head = el('tr', {}, sticky('th', 35.2), sticky('th', 120), el('th', {}), sticky('th', 50));
-const row = el('tr', {}, sticky('td'), sticky('td'), el('td', {}), sticky('td'));
+const sticky = (w, edge) => Object.assign(el('th', {class: 'sticky-col' + (edge ? ' sticky-edge' : '')}), {width: w});
+const head = el('tr', {}, sticky(35.2), sticky(120), el('th', {}), sticky(50, true));
+const row = el('tr', {}, el('td', {}), el('td', {}), el('td', {}), el('td', {}));        // a page writes its cells plain
 const table = el('table', {}, el('thead', {}, head), el('tbody', {}, row));
 T.sticky(table);
 const at = () => [...head.cells, ...row.cells].map(c => c.style['--sticky-left'] ?? null);
-const out = [at()];
+const out = [at(), row.cells.map(c => ['sticky-col', 'sticky-edge'].filter(k => c.classList.contains(k)))];
 head.cells[0].width = 40; resized(); out.push(at());                // a column grows: those after it move
 process.stdout.write(JSON.stringify(out));
 ''')
-        self.assertEqual(got, [["0px", "35.2px", None, "155.2px"] * 2, ["0px", "40px", None, "160px"] * 2])
+        self.assertEqual(got, [["0px", "35.2px", None, "155.2px"] * 2, [["sticky-col"], ["sticky-col"], [], ["sticky-col", "sticky-edge"]],
+                               ["0px", "40px", None, "160px"] * 2])
 
 
 class Menus(unittest.TestCase):

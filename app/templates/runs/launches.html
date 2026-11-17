@@ -16,7 +16,7 @@
 {#- A run state as its icon, the word its tooltip and name; sorted by how telling it is. #}
 {% macro state_cell(state) %}{% set icon = {'running': 'play', 'preparing': 'hourglass', 'stopping': 'stopping', 'paused': 'pause', 'failed': 'alert',
   'refused': 'refused', 'stopped': 'stop', 'finished': 'check'} %}
-<td data-col="state" class="sticky-col" data-sort="{{ telling.index(state) if state in telling else telling|length }}">{% if state %}<svg class="ic st-{{ state }}" role="img" aria-label="{{ state }}"><title>{{ state }}</title><use href="#i-{{ icon[state] }}"/></svg>{% endif %}</td>
+<td data-col="state" data-sort="{{ telling.index(state) if state in telling else telling|length }}">{% if state %}<svg class="ic st-{{ state }}" role="img" aria-label="{{ state }}"><title>{{ state }}</title><use href="#i-{{ icon[state] }}"/></svg>{% endif %}</td>
 {%- endmacro %}
 
 {#- A benchmark or a dataset: linked to its catalogue page when it has one. #}
@@ -35,7 +35,7 @@
   {% for r in rows %}{% set L = r.launch %}{% set wss = r.workspaces %}
     <tr data-launch="{{ L.key }}" data-search="{{ ([L.key, L.title, r.bench[0] if r.bench else ''] + r.agents + wss|map(attribute='label')|list)|select|join(' ') }}" data-f-bench="{{ r.bench[0] if r.bench }}" data-f-dataset="{{ r.datasets|map('first')|join('\n') }}" data-f-state="{{ r.state }}" data-f-machines="{{ r.machines|join('\n') }}" data-f-ws="{{ wss|map(attribute='name')|join('\n') }}">
       {{ state_cell(r.state) }}
-      <td data-col="launch" data-sort="{{ L.title }}" class="sticky-col sticky-edge">{% if wss %}{{ open_at(wss[0], L, L.title) }}{% else %}{{ L.title }}{% endif %}</td>
+      <td data-col="launch" data-sort="{{ L.title }}">{% if wss %}{{ open_at(wss[0], L, L.title) }}{% else %}{{ L.title }}{% endif %}</td>
       <td data-col="bench">{% if r.bench %}{{ entry(r.bench) }}{% endif %}</td>
       <td data-col="dataset">{% for d in r.datasets %}{{ entry(d) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
       <td data-col="started" data-sort="{{ L.started|ts }}" class="faint">{{ L.started|dt }}</td>
