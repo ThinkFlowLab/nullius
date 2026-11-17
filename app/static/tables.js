@@ -51,7 +51,7 @@ window.NulliusTable = {
   },
 
   /* The value lists (data-filter-menu) under `scope`: the filter_button
-     macro's, each opened by its caret, or the tools macro's. `allowed`:
+     macro's, each opened by its caret, or the controls macro's. `allowed`:
      column -> the Set of values ticked, or null when all are. A row passes
      when, for each column, one of its values (data-f-<col>, one per line) is
      ticked; a box unticked at load filters from the start. `changed` runs
@@ -156,7 +156,7 @@ window.NulliusTable = {
 
   /* A table's search box, Filter and Sort by menus (the controls macro),
      under `tools`; each optional. Search keeps the rows whose data-search
-     holds the query, any case; Escape clears it. Filter counts the columns it
+     holds every word of the query, in any order and case; Escape clears it. Filter counts the columns it
      narrows; Sort by sets the sort, and follows a header click. `changed`
      runs after any of them. Returns {passes, resort}, as filters and sortable
      do. */
@@ -168,7 +168,10 @@ window.NulliusTable = {
       q.addEventListener('input', changed);
       q.addEventListener('keydown', e => { if (e.key === 'Escape' && q.value) { e.preventDefault(); q.value = ''; changed(); } });
     }
-    const found = row => !q || (row.dataset.search ?? '').toLowerCase().includes(q.value.trim().toLowerCase());
+    const found = row => {
+      const text = (row.dataset.search ?? '').toLowerCase();
+      return !q || q.value.toLowerCase().split(/\s+/).every(w => text.includes(w));
+    };
     const count = fbtn?.querySelector('.tools-count');
     const mark = () => {
       const n = Object.values(f.allowed).filter(Boolean).length;
@@ -204,22 +207,23 @@ window.NulliusTable = {
   },
 
   /* A table of the table macro (data-table): its controls row (id
-     <table id>-tools), Columns menu, checkbox column and pages, each when it
-     has one; choices kept per viewer under <table id>.cols and .per. */
+     <table id>-tools), its Columns menu and checkbox column when it has
+     them, and its pages; choices kept per viewer under <table id>.cols and
+     .per. */
   wire(table) {
     const tools = document.getElementById(table.id + '-tools');
-    const cmenu = tools?.querySelector('[data-tools="columns"]');
+    const cmenu = tools.querySelector('[data-tools="columns"]');
     if (cmenu) {
       this.columns(table, null, cmenu, table.id + '.cols');
       this.menu(tools.querySelector('[data-tools-btn="columns"]'), cmenu);
     }
     const ticks = table.querySelector('[data-check-all]') ? this.checks(table) : () => {};
     let first = () => {};
-    const t = tools ? this.toolbar(table, tools, () => first()) : {passes: () => true};
+    const t = this.toolbar(table, tools, () => first());
     first = this.pager(table, table.id + '.per', t.passes, ticks);
   },
 
-  /* A checkbox column (the check_head and check_cell macros): the header
+  /* A checkbox column (a `check` column, check_cell in each row): the header
      ticks or unticks every visible row, and shows all, none or some of them
      ticked. Returns sync(), to run when rows show or hide. */
   checks(table) {
@@ -241,13 +245,15 @@ window.NulliusTable = {
 
   /* Sticky columns, those whose header is a .sticky-col: each cell under it
      pinned at the summed widths of the sticky columns before it, again as
-     they resize, hide or rows come in. */
+     they resize, hide or rows come in. A row without a cell under each
+     header (a colspan, an empty row) is left as it is. */
   sticky(table) {
     const heads = [...table.tHead.rows[0].cells], pinned = heads.filter(th => th.classList.contains('sticky-col'));
     const place = () => {
       let left = 0;
       pinned.forEach(th => {
         for (const row of table.rows) {
+          if (row.cells.length !== heads.length) continue;
           const cell = row.cells[th.cellIndex];
           cell.classList.add('sticky-col');
           cell.classList.toggle('sticky-edge', th.classList.contains('sticky-edge'));
@@ -264,13 +270,14 @@ window.NulliusTable = {
 
   /* A table's pages (the pager macro named after its id): the rows `passes`
      lets through, a page of them at a time, the page's size remembered per
-     viewer under `key`; its empty note shows when none passes. `drawn` runs
-     after each page. Returns first(), to run after a filter or a sort: it
+     viewer under `key`; its empty note shows when none passes. A screen
+     reader hears what shows once the changes pause. `drawn` runs after each
+     page. Returns first(), to run after a filter or a sort: it
      shows the first page. */
   pager(table, key, passes = () => true, drawn = () => {}) {
-    const bar = document.querySelector(`[data-pager="${CSS.escape(table.id)}"]`), empty = bar.previousElementSibling;
-    const [per, note, prev, next] = ['[data-per]', '[data-note]', '[data-prev]', '[data-next]'].map(s => bar.querySelector(s));
-    let page = 0;
+    const bar = document.querySelector(`[data-pager="${CSS.escape(table.id)}"]`), empty = document.querySelector(`[data-empty="${CSS.escape(table.id)}"]`);
+    const [per, note, prev, next, live] = ['[data-per]', '[data-note]', '[data-prev]', '[data-next]', '[data-live]'].map(s => bar.querySelector(s));
+    let page = 0, said;
     try { const n = localStorage.getItem(key); if (n !== null && [...per.options].some(o => o.value === n)) per.value = n; } catch {}
     const draw = () => {
       const rows = [...table.tBodies[0].rows], hit = rows.filter(passes), n = +per.value || hit.length || 1;
@@ -281,6 +288,8 @@ window.NulliusTable = {
       prev.disabled = page === 0;
       next.disabled = (page + 1) * n >= hit.length;
       empty.hidden = hit.length > 0;
+      clearTimeout(said);
+      said = setTimeout(() => { live.textContent = hit.length ? note.textContent : empty.textContent; }, 300);
       drawn();
     };
     const first = () => { page = 0; draw(); };

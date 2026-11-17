@@ -452,7 +452,7 @@ button.seg:hover { filter: brightness(1.25); }
   right: 0; left: auto; text-transform: none; letter-spacing: 0;
   font-weight: 400; max-height: 18rem; overflow-y: auto; min-width: 200px;
 }
-/* a table's Filter and Sort by menus (the tools macro): no header carets, an arrow on the sorted column only */
+/* a table's Filter and Sort by menus (the controls macro): no header carets, an arrow on the sorted column only */
 .grid.sortable.tools thead th:not([data-sorted])::after { content: none; }
 .tools-menu { min-width: 220px; max-height: min(70vh, 34rem); overflow-y: auto; }
 .tools-menu fieldset { margin: 0; padding: .3rem 0; border: 0; border-top: 1px solid var(--border-soft); min-width: 0; }

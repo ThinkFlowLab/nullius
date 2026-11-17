@@ -1145,7 +1145,7 @@ class WorkspacesPage(unittest.TestCase):
         self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools), ["", "name", "runs", "checks", "opened", "launches", "roots"])
         self.assertEqual(named_heads(html), sort_keys(html))
         self.assertIn('<table class="grid sortable tools snug ws-table" id="workspaces" data-table>', html)
-        self.assertIn('placeholder="Search by name or folder"', tools)
+        self.assertIn('placeholder="Search by name"', tools)
         heads = re.findall(r'<th( data-col="\w+" data-type="\w+")?[^>]*>', html.split("<thead>", 1)[1].split("</thead>", 1)[0])
         self.assertEqual([bool(h) for h in heads], [False, True, True, True, True, True, True, False])  # Open and the actions do not sort
         self.assertNotIn("data-sorted", html)                                                     # no arrow until a sort is chosen

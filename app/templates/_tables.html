@@ -120,15 +120,16 @@
 {% macro check_cell(label, value) %}<td class="pick-col"><input type="checkbox" data-check value="{{ value }}" aria-label="{{ label }}"></td>{% endmacro %}
 
 {# The pages of the table whose id is `table` (static/tables.js `pager`): how many rows a page shows, 25 at first,
-   and the page before and after; `empty` shows when no row passes. #}
+   and the page before and after; `empty` shows when no row passes. What is shown is read out once typing pauses. #}
 {% macro pager(table, empty='No rows match.') %}
-<p class="empty-note" data-empty role="status" hidden>{{ empty }}</p>
+<p class="empty-note" data-empty="{{ table }}" hidden>{{ empty }}</p>
 <div class="table-tools table-pager" data-pager="{{ table }}">
   <label class="table-note">Show <select data-per><option>10</option><option selected>25</option><option>100</option><option value="0">All</option></select></label>
   <span class="header-spacer"></span>
   <button type="button" class="btn sm ghost" data-prev aria-label="Previous page">‹</button>
-  <span class="table-note" data-note aria-live="polite"></span>
+  <span class="table-note" data-note></span>
   <button type="button" class="btn sm ghost" data-next aria-label="Next page">›</button>
+  <span class="sr" data-live aria-live="polite"></span>
 </div>
 {% endmacro %}
 

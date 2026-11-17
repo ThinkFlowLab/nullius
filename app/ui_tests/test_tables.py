@@ -47,7 +47,7 @@ class El {
   get id() { return this.getAttribute('id'); }
   get textContent() { return this.text + this.children.map(c => c.textContent).join(''); }
   set textContent(v) { this.text = String(v); this.children = []; }
-  appendChild(k) { if (k.parentNode) k.parentNode.children.splice(k.parentNode.children.indexOf(k), 1); k.parentNode = this; this.children.push(k); return k; }
+  appendChild(k) { if (k.parentNode) k.parentNode.children.splice(k.parentNode.children.indexOf(k), 1); k.parentNode = this; this.children.push(k); mutated(this); return k; }
   get all() { return this.children.flatMap(c => [c, ...c.all]); }
   querySelectorAll(sel) { return this.all.filter(e => e.tagName !== '#TEXT' && matches(e, sel)); }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
@@ -70,7 +70,7 @@ class El {
     if (this.tagName === 'INPUT') this.dispatch('change');
   }
   focus() { document.activeElement = this; }
-  getBoundingClientRect() { return {width: this.width}; }
+  getBoundingClientRect() { return {width: this.style.display === 'none' ? 0 : this.width}; }
   get previousElementSibling() { const s = this.parentNode.children; return s[s.indexOf(this) - 1] || null; }
   get cellIndex() { return this.parentNode.children.indexOf(this); }
   get rows() { return this.querySelectorAll('tr'); }
@@ -87,7 +87,9 @@ global.CSS = {escape: s => s};
 global.localStorage = {getItem: () => null, setItem() {}};
 const observers = [];
 global.ResizeObserver = class { constructor(f) { this.f = f; observers.push(this); } observe() {} };
-global.MutationObserver = class { constructor(f) { this.f = f; } observe() {} };
+const watched = [];
+global.MutationObserver = class { constructor(f) { this.f = f; } observe(target) { watched.push([target, this.f]); } };
+const mutated = node => watched.forEach(([target, f]) => target.contains(node) && f());
 global.el = (tag, attrs, ...kids) => new El(tag, attrs, kids);
 global.resized = () => observers.forEach(o => o.f());
 require(process.argv[1]);
@@ -113,13 +115,14 @@ global.build = ({id, cols, rows, filter, search = true, sort = true, check = fal
   const per = el('select', {'data-per': ''}, el('option', {}, '10'), el('option', {}, '25'));
   per.value = '25';
   const pager = el('div', {'data-pager': id}, per, el('button', {'data-prev': ''}), el('span', {'data-note': ''}), el('button', {'data-next': ''}));
-  const page = el('main', {}, tools, table, el('p', {'data-empty': '', hidden: true}), pager);
+  pager.appendChild(el('span', {'data-live': ''}));
+  const page = el('main', {}, tools, table, el('p', {'data-empty': id, hidden: true}, 'No rows match.'), pager);
   document.appendChild(page);
   T.wire(table);
   const shown = () => table.tBodies[0].rows.filter(r => !r.hidden).map(r => r.cells[check ? 1 : 0].textContent);
   const type = q => { const box = tools.querySelector('[data-search]'); box.value = q; box.dispatch('input'); };
   return {table, tools, page, per, pager, shown, type, note: () => pager.querySelector('[data-note]').textContent,
-          empty: () => !page.querySelector('[data-empty]').hidden};
+          empty: () => !page.querySelector('[data-empty]').hidden, live: () => pager.querySelector('[data-live]').textContent};
 };
 '''
 
@@ -153,6 +156,7 @@ t.tools.querySelector('[data-search]').dispatch('keydown', {key: 'Escape'});    
 out.cleared = [t.tools.querySelector('[data-search]').value, t.note()];
 t.type('zzz'); out.none = [t.note(), t.shown(), t.empty()];
 t.type(''); out.back = [t.note(), t.empty()];
+t.type('AGENT l1'); out.words = t.shown();                                                // every word, in any order
 process.stdout.write(JSON.stringify(out));
 ''')
         self.assertEqual(got["start"], "1–25 of 30")
@@ -164,6 +168,21 @@ process.stdout.write(JSON.stringify(out));
         self.assertEqual(got["cleared"], ["", "1–10 of 10"])
         self.assertEqual(got["none"], ["", [], True])
         self.assertEqual(got["back"], ["1–10 of 10", False])
+        self.assertEqual(got["words"], ["L12", "L15", "L18"])                                       # the failed ones, still filtered
+
+    def test_a_screen_reader_hears_once_typing_pauses(self):
+        got = node(LAUNCHES + r'''
+const out = [];
+setTimeout(() => {
+  out.push(t.live());                                                                     // the first page, once read
+  t.type('g'); t.type('ga'); t.type('gamma'); out.push(t.live());                         // still typing: nothing new
+  setTimeout(() => { out.push(t.live()); t.type('zzz'); setTimeout(() => { out.push(t.live()); process.stdout.write(JSON.stringify(out)); }, 350); }, 350);
+}, 350);
+''')
+        self.assertEqual(got, ["1–25 of 30", "1–25 of 30", "1–15 of 15", "No rows match."])
+        html = Macros().render("{% call table('t', [dict(key='x', label='X')]) %}{% endcall %}")
+        self.assertEqual(html.count("aria-live"), 1)                                             # one live region a table
+        self.assertNotIn('role="status"', html)
 
 
 class Checks(unittest.TestCase):
@@ -187,18 +206,26 @@ process.stdout.write(JSON.stringify(out));
 class Sticky(unittest.TestCase):
     def test_each_offset_is_the_widths_before_it(self):
         got = node(r'''
-const sticky = (w, edge) => Object.assign(el('th', {class: 'sticky-col' + (edge ? ' sticky-edge' : '')}), {width: w});
-const head = el('tr', {}, sticky(35.2), sticky(120), el('th', {}), sticky(50, true));
-const row = el('tr', {}, el('td', {}), el('td', {}), el('td', {}), el('td', {}));        // a page writes its cells plain
-const table = el('table', {}, el('thead', {}, head), el('tbody', {}, row));
+const sticky = (k, w) => Object.assign(el('th', {class: 'sticky-col', 'data-col': k}), {width: w});
+const head = el('tr', {}, sticky('a', 35.2), sticky('b', 120), el('th', {}), sticky('d', 50));
+head.cells[3].classList.add('sticky-edge');
+const row = () => el('tr', {}, el('td', {'data-col': 'a'}), el('td', {'data-col': 'b'}), el('td', {}), el('td', {'data-col': 'd'}));   // a page writes its cells plain
+const first = row(), body = el('tbody', {}, first);
+const table = el('table', {}, el('thead', {}, head), body);
+const menu = el('div', {}, el('label', {}, el('input', {type: 'checkbox', 'data-col': 'b'})));
 T.sticky(table);
-const at = () => [...head.cells, ...row.cells].map(c => c.style['--sticky-left'] ?? null);
-const out = [at(), row.cells.map(c => ['sticky-col', 'sticky-edge'].filter(k => c.classList.contains(k)))];
-head.cells[0].width = 40; resized(); out.push(at());                // a column grows: those after it move
+T.columns(table, null, menu, 'k');
+const at = r => r.cells.map(c => c.style['--sticky-left'] ?? null);
+const out = [at(head), at(first), first.cells.map(c => ['sticky-col', 'sticky-edge'].filter(k => c.classList.contains(k)))];
+head.cells[0].width = 40; resized(); out.push(at(first));                       // a column grows: those after it move
+const added = body.appendChild(row()); out.push(at(added));                     // a row comes in: placed as it lands
+body.appendChild(el('tr', {}, el('td', {colspan: 4})));                         // a row with fewer cells: left alone, no throw
+menu.querySelector('input').click(); resized(); out.push(at(added));            // b hidden: d moves up to it
 process.stdout.write(JSON.stringify(out));
 ''')
-        self.assertEqual(got, [["0px", "35.2px", None, "155.2px"] * 2, [["sticky-col"], ["sticky-col"], [], ["sticky-col", "sticky-edge"]],
-                               ["0px", "40px", None, "160px"] * 2])
+        self.assertEqual(got, [["0px", "35.2px", None, "155.2px"], ["0px", "35.2px", None, "155.2px"],
+                               [["sticky-col"], ["sticky-col"], [], ["sticky-col", "sticky-edge"]],
+                               ["0px", "40px", None, "160px"], ["0px", "40px", None, "160px"], ["0px", "40px", None, "40px"]])
 
 
 class Menus(unittest.TestCase):
@@ -259,7 +286,7 @@ class Macros(unittest.TestCase):
         self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', html), ["", "a", "b"])        # c says it does not sort
         self.assertEqual(re.findall(r'data-col="(\w)"( data-off)?> ', html), [("b", " data-off"), ("c", "")])   # a is not in the menu
         self.assertIn('<td class="pick-col"><input type="checkbox" data-check value="a" aria-label="Select a"></td>', html)
-        self.assertIn('<p class="empty-note" data-empty role="status" hidden>No rows match.</p>', html)
+        self.assertIn('<p class="empty-note" data-empty="t" hidden>No rows match.</p>', html)
 
 
 if __name__ == "__main__":

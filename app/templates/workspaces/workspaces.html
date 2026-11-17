@@ -15,7 +15,7 @@
 {% set cols = [dict(key='name', label='Name', width='expand'), dict(key='runs', label='Runs', type='num', num=true),
                dict(key='checks', label='Checks', type='num', num=true), dict(key='opened', label='Last opened', type='num'),
                dict(key='launches', label='Launches', type='num', num=true), dict(key='roots', label='Roots', type='num')] %}
-{% call table('workspaces', cols, class='ws-table', search='Search by name or folder', status='Open', actions='Actions') %}
+{% call table('workspaces', cols, class='ws-table', search='Search by name', status='Open', actions='Actions') %}
     {% for ws in workspaces %}
     {% set current = workspace and ws.name == workspace.name %}{% set rs = roots[ws.name] %}{% set clash = labels.count(ws.label) > 1 %}
     <tr class="{{ 'ws-current' if current }}" data-ws="{{ ws.name }}" data-search="{{ ws.label }} {{ ws.name }}" data-holder>
