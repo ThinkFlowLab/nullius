@@ -291,8 +291,6 @@ class LiveBoard(unittest.TestCase):
                          (120, 60, 0.0004, 1, True, True))
         self.assertIsNotNone(cases["lme-arm"].duration_min)
         self.assertEqual((cases["lme-arm"].runner_judge, cases["lme-arm"].questions_from), ("official gpt-4o · evaluate_qa.py", "longmemeval_s"))
-        verdict = json.loads((arm / "q0" / "verifier" / "judge.json").read_text())                    # the benchmark's judge: asked, said
-        self.assertEqual((verdict["said"], verdict["model"]), ("no", "openai/gpt-4o-2024-08-06")); self.assertIn("Where did I move?", verdict["asked"])
         with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: list(cases.values())):
             for job_id, opens, base in (("lme-running", "live", ""), ("lme-arm", "results", "/job/lme-arm")):
                 with self.subTest(job_id):
@@ -311,11 +309,9 @@ class LiveBoard(unittest.TestCase):
             trial = self.client.get("/trial/lme-arm/q0"); self.addCleanup(trial.close)
             html = trial.get_data(as_text=True)
             self.assertEqual(trial.status_code, 200)
-            self.assertIn("1 rate-limited call retried", html)
-            self.assertIn("“Other” is the wait for the judge", html); self.assertNotIn("Harbor", html.split("<main", 1)[1])   # a reader's run, in its own words
+            self.assertIn("What the phases leave of the trial", html); self.assertNotIn("Harbor", html.split("<main", 1)[1])   # a reader's run, in its own words
             self.assertNotIn("How it worked", html); self.assertNotIn(">Tool calls</h3>", html)                    # edits and tests are an agent's, not one call's
-            self.assertIn("LongMemEval's judge", html); self.assertIn("Said <b class=\"mono\">no</b>", html)   # the judge that gave the outcome
-            self.assertIn("official gpt-4o · evaluate_qa.py", html)
+            self.assertNotIn('id="runner-verdict"', html)                                                   # no record of the judge's call is kept: no card
             self.assertIn('id="usage-mix"', html); self.assertIn("served from cache <b>60</b>", html)  # the one call drawn: from cache, new, written
             self.assertIn("asks its model once for each of its questions, so the bar is that one call", html)   # the definition's word for an item
             job = self.client.get("/job/lme-arm"); self.addCleanup(job.close)

@@ -155,7 +155,7 @@ class ComparisonRoutes(unittest.TestCase):
         body = self.get(cohort="matched")
         totals = re.findall(r'<span>Total time</span><strong>(.*?)</strong>', body)
         tokens = re.findall(r'<span>Tokens</span><strong>(.*?)</strong>', body)
-        self.assertEqual(totals, ["2.1m", "—"])
+        self.assertEqual(totals, ["2.08m", "—"])
         self.assertEqual(tokens, ["130", "—"])
         self.assertIn("Token usage not recorded", body)
         self.right.agent_name = "nop"

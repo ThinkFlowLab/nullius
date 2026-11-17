@@ -1,10 +1,11 @@
 <section class="conversation-reader" id="conversation-reader"
          data-endpoint="{{ url_for('conversation_data', job_id=job.job_id, trial_name=trial.trial_name) }}"
          aria-label="Conversation reader">
+  {% if traj and not traj.error %}
   <div class="reader-heading">
-    <div><h2>Conversation</h2><p class="muted small">One source step at a time, with its tool calls and results. Search reads the full recorded content.</p></div>
-    <span class="reader-total mono">{{ traj.n_steps if traj and not traj.error else '—' }} steps</span>
+    <span class="reader-total mono">{{ traj.n_steps }} steps</span>
   </div>
+  {% endif %}
   {% if not traj or traj.error %}
   <div class="panel"><p class="muted" style="margin:0">{% if traj and traj.error %}Trajectory unreadable: {{ traj.error }}{% elif trial.agent_type == 'control' %}This control has no recorded conversation.{% else %}No trajectory recorded for this trial.{% endif %}</p></div>
   {% else %}

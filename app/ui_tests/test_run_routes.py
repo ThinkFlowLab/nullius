@@ -195,7 +195,7 @@ class RunRoutes(unittest.TestCase):
         self.assertEqual((got["units"]["done"], got["units"]["n"], got["units"]["passed"], got["units"]["failed"]), (2, 10, 1, 1))
         page = self.client.get("/job/std-x"); self.addCleanup(page.close)
         html = page.get_data(as_text=True)
-        self.assertIn('<li class="xs done"', html); self.assertIn('<span class="xs-label">Base image</span><span class="xs-time">41s</span>', html)
+        self.assertIn('<li class="xs done"', html); self.assertIn('<span class="xs-label">Base image</span><span class="xs-time">41.00s</span>', html)
         self.assertIn('<li class="xs cached"', html); self.assertIn("Install reference", html)
         self.assertIn('<li class="xs running"', html)
         self.assertIn('aria-current="step"><i aria-hidden="true">', html)   # the running step, numbered

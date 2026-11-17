@@ -173,7 +173,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
 | `n_retries` | Retries a standard run's attempt took. | measured | any |
-| `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log reads *not recorded*, never 0. | inferred | any |
+| `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log: no count, never 0. | inferred | any |
 
 ## Standard run records
 

@@ -253,9 +253,9 @@ class Routes(unittest.TestCase):
         trial.dur_env, trial.dur_agent, trial.dur_verifier = 1, 2, 3
         with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
             for agent, duration, usage, total, tokens in (
-                ("fixture-agent", 135, (1000, 500, 900), "2.2m", "1.5k"),
+                ("fixture-agent", 135, (1000, 500, 900), "2.25m", "1.5k"),
                 ("fixture-agent", None, (0, 0, 0), "—", "—"),
-                ("oracle", 0, (0, 0, 0), "0.0s", "0"),
+                ("oracle", 0, (0, 0, 0), "0.00s", "0"),
             ):
                 with self.subTest(agent=agent, duration=duration):
                     job.agent_name = agent
@@ -299,7 +299,7 @@ class Routes(unittest.TestCase):
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-route-test", "LLM_JUDGE_MODEL": "vendor/m"}):
             html = self.get_ok("/trial/active-run/task-001").get_data(as_text=True)
         self.assertIn('<input type="hidden" name="lane" value="llm">', html)
-        self.assertIn("asked of OpenRouter · vendor/m", html)
+        self.assertIn('title="Asks OpenRouter · vendor/m">experimental</span>', html)    # who will answer, on the badge
         self.assertNotIn("sk-or-route-test", html)
 
     def test_a_judgement_names_its_provider_from_the_registry(self):
@@ -446,19 +446,67 @@ class Routes(unittest.TestCase):
             self.assertRegex(page, r'data-o="unknown" href="\?outcome=unknown"\s+data-tip="[^"]*"><i class="sw"></i><b>1</b><span>Unknown')
             self.assertIn('<span class="oc oc-unknown"><i></i>Unknown</span><details class="exd"><summary><span class="tw"></span>SomethingNobodyHasWrittenYetError</summary><code>the reader fell over</code>', page)
             trial_page = self.get_ok("/trial/crash-run/task-crash").get_data(as_text=True)
-        head = trial_page.split("<p class=\"subtitle\">", 1)[0]
+        head = trial_page.split("<div class=\"trial-head\">", 1)[0]
         self.assertIn('<span class="tag oc-unknown">Unknown</span>', head)
         self.assertIn('class="mono faint exception-type"', head)
         self.assertIn('classify.py.">SomethingNobodyHasWrittenYetError</span>', head)
         self.assertNotIn("Agent error", trial_page)
 
 
-    def test_retried_rate_limits_reach_the_job_table_and_the_trial_head(self):
+    def test_a_trajectory_without_usage_or_tool_calls_draws_no_empty_panel(self):
+        """The synthetic trajectory is messages only: no per-step usage, no
+        tool call. Its overview has nothing to put in that panel."""
+        synthetic_job(self.root, "messages-only")
+        job = parse.parse_job(str(self.root / "messages-only"))
+        with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
+            html = self.get_ok("/trial/messages-only/task-001").get_data(as_text=True)
+        overview = html.split('id="trial-overview"', 1)[1].split('id="trial-judgement"', 1)[0]
+        self.assertNotRegex(overview, r'<div class="panel">\s*</div>')
+
+    def test_a_recorded_phase_keeps_its_chip_however_short(self):
+        """A check that took no time was still made: its chip stays, with no
+        segment to draw. A phase never recorded has neither."""
+        job_dir = self.root / "instant-check"
+        synthetic_job(self.root, "instant-check")
+        result = job_dir / "task-001" / "result.json"
+        res = json.loads(result.read_text())
+        res.update(started_at="2026-09-13T17:00:00+00:00", finished_at="2026-09-13T17:00:12+00:00",
+                   environment_setup={"started_at": "2026-09-13T17:00:00+00:00", "finished_at": "2026-09-13T17:00:02+00:00"},
+                   agent_execution={"started_at": "2026-09-13T17:00:02+00:00", "finished_at": "2026-09-13T17:00:12+00:00"},
+                   verifier={"started_at": "2026-09-13T17:00:12+00:00", "finished_at": "2026-09-13T17:00:12.000500+00:00"})
+        write_json(result, res)
+        job = parse.parse_job(str(job_dir))
+        with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
+            html = self.get_ok("/trial/instant-check/task-001").get_data(as_text=True)
+        panel = html.split("Where the time went", 1)[1].split('<div class="panel', 1)[0]
+        self.assertIn('<span class="chip ph-verify"', panel)
+        self.assertNotIn('class="seg ph-verify"', panel)
+        self.assertNotIn("ph-setup", panel)
+        self.assertNotIn("ph-other", panel)
+
+    def test_a_trial_shorter_than_a_second_still_fills_its_bar(self):
+        """Flex weights that sum under 1 take only that share of the bar: a
+        trial of 0.6 s drew 60% of it. The weights are whole milliseconds."""
+        job_dir = self.root / "quick-trial"
+        synthetic_job(self.root, "quick-trial")
+        result = job_dir / "task-001" / "result.json"
+        res = json.loads(result.read_text())
+        res.update(started_at="2026-09-13T17:00:00+00:00", finished_at="2026-09-13T17:00:00.600000+00:00",
+                   environment_setup={"started_at": "2026-09-13T17:00:00+00:00", "finished_at": "2026-09-13T17:00:00.100000+00:00"},
+                   agent_execution={"started_at": "2026-09-13T17:00:00.100000+00:00", "finished_at": "2026-09-13T17:00:00.600000+00:00"})
+        write_json(result, res)
+        job = parse.parse_job(str(job_dir))
+        with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
+            html = self.get_ok("/trial/quick-trial/task-001").get_data(as_text=True)
+        panel = html.split("Where the time went", 1)[1].split('<div class="panel', 1)[0]
+        self.assertEqual(re.findall(r'class="seg ph-(\w+)" style="flex:(\d+)"', panel), [("env", "100"), ("agent", "500")])
+
+    def test_retried_rate_limits_reach_the_job_table(self):
         """A 429 the agent's SDK retried is in agent/gateway.log and nowhere
-        else: the outcome is untouched. The job table marks the row,
-        the trial head counts them, and a trial with no gateway log says the
-        count is not recorded rather than showing a clean zero. The manifest
-        Harbor writes beside them is listed on the Artifacts tab."""
+        else: the outcome is untouched. The job table marks the row; a trial
+        with no gateway log is unmeasured in the record, and has no mark. The
+        manifest Harbor writes beside them is listed on the Artifacts tab, and
+        read, downloaded and copied from there."""
         job_dir = self.root / "rate-limited-run"
         synthetic_job(self.root, "rate-limited-run")
         trial_dir = job_dir / "task-001"
@@ -479,18 +527,24 @@ class Routes(unittest.TestCase):
             self.assertIn('<span class="badge rate-limits" title="3 rate-limited calls retried by the agent', html)
             self.assertIn(">429 ×3</span>", html)
             html = self.get_ok("/trial/rate-limited-run/task-001").get_data(as_text=True)
-            self.assertIn('<b class="warn">3 rate-limited calls retried</b>', html)
             self.assertIn("Artifact manifest", html)
             self.assertIn("/trial/rate-limited-run/task-001/artifact/manifest", html)
+            self.assertIn('href="/trial/rate-limited-run/task-001/artifact/manifest/download" download>Download</a>', html)
+            self.assertNotIn("Run configuration", html)          # a record never written has no row
             manifest = self.get_ok("/trial/rate-limited-run/task-001/artifact/manifest").get_data(as_text=True)
             self.assertIn("artifacts/logs/artifacts", unescape(manifest))
+            self.assertIn('href="/trial/rate-limited-run/task-001?tab=artifacts">← Artifacts</a>', manifest)
+            self.assertIn('data-copy-url="/trial/rate-limited-run/task-001/artifact/manifest/download?inline=1"', manifest)
+            saved = self.get_ok("/trial/rate-limited-run/task-001/artifact/manifest/download")
+            self.assertEqual(saved.headers["Content-Disposition"], 'attachment; filename="manifest.json"')
+            self.assertIn("artifacts/logs/artifacts", saved.get_data(as_text=True))
+            copied = self.get_ok("/trial/rate-limited-run/task-001/artifact/manifest/download?inline=1")
+            self.assertNotIn("Content-Disposition", copied.headers)
+            self.assertEqual(self.client.get("/trial/rate-limited-run/task-001/artifact/config/download").status_code, 404)
         # the synthetic job writes no gateway log: unmeasured, not zero
         self.assertIsNone(self.active_job.trials[0].n_rate_limited_retries)
         html = self.get_ok("/job/active-run").get_data(as_text=True)
         self.assertNotIn("rate-limits", html)
-        html = self.get_ok("/trial/active-run/task-001").get_data(as_text=True)
-        self.assertIn("Rate limits · not recorded", html)
-        self.assertNotIn("rate-limited call", html)
 
 
 if __name__ == "__main__":
