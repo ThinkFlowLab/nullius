@@ -223,6 +223,12 @@ class AttemptRoutes(unittest.TestCase):
         self.assertNotIn('id="tab-llm-judge"', page)
         self.assertNotIn('id="trial-judgement"', page)
         self.assertEqual(self.client.get(first + "/conversation").status_code, 200)
+        # its own records, read and saved from its own page as its last try's are
+        self.assertIn(f'href="{first}/artifact/result/download" download>Download</a>', page)
+        self.assertEqual(self.client.get(first + "/artifact/result").status_code, 200)
+        saved = self.client.get(first + "/artifact/result/download")
+        self.assertEqual(saved.status_code, 200)
+        self.assertIn("RateLimitError", saved.get_data(as_text=True))     # the try's result, not the one that replaced it
         with web.app.test_request_context(first):
             with self.assertRaises(NotFound):                         # what the judge resolves: never a try
                 web.traces._trial_evidence("retried-run", "0001__u0000r2.try-1")

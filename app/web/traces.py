@@ -188,7 +188,7 @@ def artifact_download(job_id, trial_name, key):
     """The record whole, redacted as the reader shows it: what Download saves
     and Copy puts on the clipboard. One past the reader's limit is cut there,
     as its page says, and saved under a name that says so."""
-    _, trial = _trial_evidence(job_id, trial_name)
+    _, trial = _trial_evidence(job_id, trial_name, tries=True)
     try:
         text, truncated = artifacts.whole(trial.dir, key)
     except (LookupError, OSError):
