@@ -575,7 +575,8 @@ class Lifecycle(unittest.TestCase):
         self.assertIn(f"docker exec -e {self.g.TOKEN} id-gitlab gitlab-rails", argv[-1])
         self.assertIn("until docker exec id-gitlab gitlab-rails", argv[-1])
         self.assertNotIn("$$", argv[-1])
-        self.assertEqual(argv[:2], ["timeout", str(self.g.START_SECONDS)])
+        self.assertEqual(argv[:3], ["timeout", "--foreground", str(self.g.START_SECONDS)])
+        self.assertGreater(kw["timeout"], self.g.START_SECONDS)
         with mock.patch.object(self.g, "_upstream_script", lambda stack: "echo other"), \
                 self.assertRaises(self.g.GitLabError):
             self.g._make_token(self.stack)
@@ -686,22 +687,26 @@ class Lifecycle(unittest.TestCase):
                 with self.subTest(said), mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(stdout=said)):
                     self.assertIsNone(self.g._made())
             run = lambda said: lambda *a, **kw: Fake() if a[0] == "image" else said
-            with mock.patch.object(self.g, "_docker", run(Fake(3))):
+            with mock.patch.object(self.g, "_docker", run(Fake(1, stderr="cat: /snapshot/made: No such file or directory\n"))):
                 self.assertIsNone(self.g._made())
-            with mock.patch.object(self.g, "_docker", run(Fake(1, stderr="cat: read error\n"))), \
+            with mock.patch.object(self.g, "_docker", run(Fake(1, stderr="cat: /snapshot/made: I/O error\n"))), \
                     self.assertRaises(self.g.GitLabError):
                 self.g._made()
             with mock.patch.object(self.g, "_docker", run(Fake(125, stderr="daemon\n"))), \
                     self.assertRaises(self.g.GitLabError):
                 self.g._made()
-            with mock.patch.object(self.g, "_docker", lambda *a, **kw: self.calls.append(a) or Fake(int(a[0] == "image"))):
+            gone = Fake(1, stderr="Error: No such image: gitlab/gitlab-ce\n")
+            with mock.patch.object(self.g, "_docker", lambda *a, **kw: self.calls.append(a) or (gone if a[0] == "image" else Fake())):
                 self.assertIsNone(self.g._made())
             self.assertEqual(self.calls[-1][:2], ("image", "inspect"))
+            with mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(1, stderr="Cannot connect\n")), \
+                    self.assertRaises(self.g.GitLabError):
+                self.g._made()
         with mock.patch.object(self.g, "_snapshot", lambda: False):
             self.assertIsNone(self.g._made())
-        gone = Fake(1, stderr="Error response from daemon: get x: no such volume\n")
-        with mock.patch.object(self.g, "_docker", lambda *a, **kw: gone):
-            self.assertFalse(self.g._snapshot())
+        for said in ("Error response from daemon: get x: no such volume\n", "Error: No such volume: x\n"):
+            with mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(1, stderr=said)):
+                self.assertFalse(self.g._snapshot())
         with mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(1, stderr="Cannot connect to the Docker daemon\n")), \
                 self.assertRaises(self.g.GitLabError):
             self.g._snapshot()
