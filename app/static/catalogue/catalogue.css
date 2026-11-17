@@ -42,7 +42,7 @@
 .bench-stats > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .bench-stats dd { margin: 0; font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .bench-stats dd.word { font-size: 14px; line-height: 1.35; padding-top: 3px; }
-.bench-stats dt { font-size: 12px; color: var(--text-faint); }
+.bench-stats dt { font-size: 12px; color: var(--text-faint); overflow-wrap: anywhere; hyphens: auto; }   /* a long label wraps in its column */
 .bench-card-blocker { font-size: 13px; line-height: 1.5; color: var(--text-dim); }
 .bench-none { color: var(--text-dim); font-size: 14px; }
 
