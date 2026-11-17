@@ -1759,6 +1759,8 @@ select.ui-select-native { display: none !important; }
 /* Bundled upstream agent marks, shared by catalogue pages and the builder. */
 .agent-logo { display: block; width: 100%; height: 100%; object-fit: contain; flex: none; }
 .nav-agent-logo { width: 18px; height: 18px; }
+/* A mark with its own version for dark backgrounds: the one that suits the theme. */
+:root[data-theme="dark"] .on-light-bg, :root:not([data-theme="dark"]) .on-dark-bg { display: none; }
 
 /* An expanded section is context; its selected child owns the filled highlight. */
 .nav-tree:not(.folded):has(.tree-item.on) > .nav-row .nav-item.on { background: transparent; }

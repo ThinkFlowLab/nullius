@@ -6,8 +6,8 @@
     PYTHONPATH=app python3 -m nullius.standard.cli pins BENCHMARK[@VERSION] [--tag TAG] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
-    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container]
+    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container | --backend boat]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container | --backend boat [--boat-size SIZE]]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -19,6 +19,9 @@ an agent's run or conformance check there is refused without ``--unsandboxed``.
 ``--backend container`` (``docker``, its earlier name) runs each unit's agent or capability in a container whose
 only way out is the unit's relay, or a public web proxy when its environment
 declares ``network`` (``standard/container.py``), and needs no such yes.
+``--backend boat`` runs each unit's agent or capability in a boat.dev VM of its
+own, whose only way out is a tunnel to the unit's relay on this machine
+(``standard/boat.py``); its API key is Settings → Sandbox's, or ``BOAT_API_KEY``.
 A benchmark's control (``nop``, ``oracle``: its ``controls``) runs no agent
 and calls no model - only a judged benchmark's judge - so it asks for neither.
 ``prove`` runs a benchmark's controls and checks its units and that nothing
@@ -77,7 +80,7 @@ from nullius import constraints as limits, paths, prices as price_list, progress
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
     settings.load(paths.settings_file())
 
-from nullius.standard import conform, definitions, fidelity, job, match, merge, pins, ports, prove, run, shard
+from nullius.standard import boat, conform, definitions, fidelity, job, match, merge, pins, ports, prove, run, shard
 
 ENV_FILE = paths.settings_file()
 
@@ -101,8 +104,10 @@ def run_env(provider: str, env=os.environ) -> dict:
     """The environment a run started by Nullius reads its provider from:
     ``execution``'s launcher hands every run its one key as ``OPENAI_API_KEY``
     and its endpoint as ``OPENAI_BASE_URL`` (empty for OpenAI's own), so they
-    are named here as the provider's own settings and nothing else is."""
-    out = {k: v for k, v in env.items() if k in run.KEEP}
+    are named here as the provider's own settings and nothing else is - but
+    the Boat key, handed the same way to a run on Boat: on a host, the only
+    way it has one."""
+    out = {k: v for k, v in env.items() if k in run.KEEP or k == boat.NAME}
     if env.get("OPENAI_API_KEY"):
         out[providers.key_setting(provider)] = env["OPENAI_API_KEY"]
     if provider == "custom" and env.get("OPENAI_BASE_URL"):
@@ -527,7 +532,7 @@ def cmd_run(a):
     try:
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
-                      simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
+                      boat_size=a.boat_size, simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
                       licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
                       prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, constraints=given,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
@@ -663,8 +668,11 @@ def main(argv=None):
         p.add_argument("--unsandboxed", action="store_true",
                        help="allow an agent, or a setup check without Docker, to execute code on this machine as you")
         p.add_argument("--backend", default="local", type=definitions.names.backend, choices=list(run.BACKENDS),
-                       help="local processes (the default), or container: each unit in a container, its relay beside it "
-                            "(docker: its earlier name)")
+                       help="local processes (the default); container: each unit in a container, its relay beside it "
+                            "(docker: its earlier name); boat: each unit's agent in a boat.dev VM of its own")
+        if name == "run":
+            p.add_argument("--boat-size", default=boat.SIZE, choices=list(boat.SIZES),
+                           help="on the boat backend, its VMs' machine type (default small: 2 vCPU, 4 GB)")
         p.add_argument("--from-run", action="store_true",
                        help="started by Nullius: the key is OPENAI_API_KEY (and OPENAI_BASE_URL), saved settings are not read")
         p.add_argument("--option", action="append", metavar="NAME=VALUE",

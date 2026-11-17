@@ -240,12 +240,17 @@
 /* Compact settings rows use one shared control column, including paired fields. */
 #nullius-builder .nb-two:has(> .ui-field-row) { grid-template-columns: minmax(0, 1fr); gap: 0; }
 
-#nullius-builder .std-backends { grid-template-columns: repeat(2, minmax(0, 240px)); gap: 8px; }
-#nullius-builder .std-backends .nb-tile { flex-direction: row; align-items: center; gap: 8px; padding: 10px 12px; }
-#nullius-builder .std-backends .nb-tile-head { flex: 1; }
+#nullius-builder .std-backends { grid-template-columns: repeat(3, minmax(0, 240px)); gap: 8px; }
+@media (max-width: 860px) { #nullius-builder .std-backends { grid-template-columns: repeat(2, minmax(0, 240px)); } }
+/* the name keeps the tile's width; why one cannot be used goes under it, so a row's tiles stay one height */
+#nullius-builder .std-backends .nb-tile { flex-direction: column; align-items: stretch; justify-content: center; gap: 0; padding: 10px 12px; }
 #nullius-builder .std-backends .nb-mark { width: 20px; height: 20px; }
-#nullius-builder .std-backends .nb-tile-note { font-size: 11px; white-space: nowrap; }
-@media (max-width: 560px) { #nullius-builder .std-backends { grid-template-columns: minmax(0, 320px); } }
+#nullius-builder .std-backends .nb-tile-note { font-size: 11px; padding-left: 30px; }
+#nullius-builder .std-boat-sizes { grid-template-columns: repeat(4, minmax(0, 160px)); grid-auto-rows: auto; }
+#nullius-builder .std-boat-sizes .nb-tile { flex-direction: column; align-items: stretch; gap: 2px; }
+#nullius-builder .std-boat-sizes .nb-tile-note { white-space: normal; }
+@media (max-width: 760px) { #nullius-builder .std-boat-sizes { grid-template-columns: repeat(2, minmax(0, 180px)); } }
+@media (max-width: 560px) { #nullius-builder .std-backends { grid-template-columns: minmax(0, 320px); } #nullius-builder .std-boat-sizes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* Served by: a row after its model's row, as that row is: the label left, the picker right, the providers chosen
    under the picker in their order */
 #nullius-builder .std-served-list { grid-column: 2; min-width: 0; }

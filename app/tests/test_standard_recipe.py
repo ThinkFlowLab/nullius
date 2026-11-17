@@ -418,6 +418,14 @@ class FromRun(unittest.TestCase):
         self.assertEqual(cli.run_env("custom", env), {"MODEL_API_KEY": "sk-handed", "MODEL_API_URL": "http://127.0.0.1:9/v1", "PATH": "/bin"})
         self.assertEqual(cli.run_env("openai", env), {"OPENAI_API_KEY": "sk-handed", "PATH": "/bin"})
 
+    def test_the_boat_key_handed_to_a_run_on_boat_is_kept(self):
+        # on a host, the key handed over stdin is the run's only one: no store there holds it
+        env = {"OPENAI_API_KEY": "sk-handed", "BOAT_API_KEY": "boat_handed", "PATH": "/bin"}
+        self.assertEqual(cli.run_env("openai", env), {"OPENAI_API_KEY": "sk-handed", "BOAT_API_KEY": "boat_handed", "PATH": "/bin"})
+        from nullius.standard import boat
+        with patch.object(boat.secrets, "value", return_value=None):
+            self.assertEqual(boat.key(cli.run_env("openai", env)), "boat_handed")
+
     def test_a_run_started_by_nullius_does_not_read_app_env(self):
         loaded = []
         with patch.object(cli.settings, "load", lambda path: loaded.append(path)), patch.object(cli, "cmd_run", lambda a: 0):
