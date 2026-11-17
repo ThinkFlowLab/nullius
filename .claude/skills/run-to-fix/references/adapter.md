@@ -75,7 +75,8 @@ means.
 3. A command named in `paid` is never started by the loop. `loop.py` writes it, with every placeholder filled, to
    `round-NN/commands/<name>.sh` and stops. A person starts it, and the loop goes on from the job folder it
    produced. The written line is complete as text: the task list, the repeats, the job folder and the budget are all
-   in it.
+   in it. `commands.run_tasks` is always written this way, whether `paid` names it or not, because a run of tasks
+   calls the model.
 4. A null command switches its check off. The decision page then says that the check did not run, and which
    evidence is missing because of it.
 5. The loop writes the output of every command to a file under `round-NN/`. A command that has not
