@@ -455,7 +455,7 @@ class Run:
         if backend == "boat" and other.get("_kind") not in ("agent", "capability"):
             backend = "local"                    # a check or a setup: nothing of an agent's runs, so nothing goes to a VM
         if backend == "boat":
-            why = boat.unusable(env, which)
+            why = boat.unusable(env=env, which=which)
             if why:
                 raise Refused(f"the Boat backend cannot run here: {why}")
         if backend == "local" and other.get("_kind") == "agent" and not unsandboxed:

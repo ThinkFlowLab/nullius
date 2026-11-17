@@ -489,7 +489,7 @@ class StandardPieces(unittest.TestCase):
     def test_the_builder_is_given_the_controls_their_proofs_and_whether_docker_runs_here(self):
         from nullius.standard import boat
         self.fixture()
-        with patch.object(boat, "unusable", lambda: "no Boat API key: set it in Settings → Sandbox"):
+        with patch.object(boat, "unusable", lambda here=True: "no Boat API key: set it in Settings → Sandbox"):
             html = self.get("/new-run").get_data(as_text=True)
         schema = json.loads(re.search(r'<script id="nb-schema" type="application/json">(.*?)</script>', html, re.S).group(1))
         ds = schema["standard"]["benchmarks"][0]["datasets"][0]
@@ -497,7 +497,7 @@ class StandardPieces(unittest.TestCase):
                          [("nop", "nullius", None, None), ("oracle", "adapter", None, None)])
         # no benchmark here needs a machine setup
         self.assertEqual(schema["standardHere"], {"docker": None, "boat": "no Boat API key: set it in Settings → Sandbox",
-                                                  "boatSizes": {}, "boatSpecs": {"small": "2 vCPU, 4 GB", "default": "4 vCPU, 8 GB"},
+                                                  "boatKey": "no Boat API key: set it in Settings → Sandbox", "boatSizes": {}, "boatSpecs": {"small": "2 vCPU, 4 GB", "default": "4 vCPU, 8 GB"},
                                                   "licences": {}, "host": {}})
 
     def test_docker_is_refused_on_the_where_step_with_this_machines_reason(self):

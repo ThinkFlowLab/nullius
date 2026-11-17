@@ -29,7 +29,8 @@ the runs page groups them and ``cli merge`` puts them together. A shard's
 unit's agent or capability in a container, ``docker`` its earlier name - which a
 host must have Docker or Podman for (``docker`` in the result: the run checks it
 before anything is sent), or ``boat`` - each unit's agent or capability in a
-boat.dev VM of its own (``boat.py``), started from this machine with its key.
+boat.dev VM of its own (``boat.py``), started where the run runs, with this
+machine's key.
 Each machine's constraints in Settings (``nullius.constraints``) go on its
 command.
 """
@@ -279,7 +280,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     is the Where step's error. Not given, it is not asked: compiling stays a
     function of the definitions alone, and the routes that preview or start
     a run pass it. ``boat_unusable``: the same for the boat backend
-    (``boat.unusable``): its key, and the programs that reach a VM;
+    (``boat.unusable``), asked with whether the run is on this machine: its
+    key, and there the programs that reach a VM (a host's are its prerequisites);
     ``boat_size_problem``, why the account cannot start a VM of the size.
 
     ``max_usd``: the run's spending cap (``standard.ledger``), one amount for
@@ -504,10 +506,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         why = docker_unusable()
         if why:
             add("where", f"The container backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman.")
-    elif backend == "boat" and targets != ["local"]:
-        add("where", "Boat VMs are started from this machine, with its key: choose This machine alone.")
-    elif backend == "boat" and boat_unusable is not None and (why := boat_unusable()):
-        add("where", f"Boat cannot run from this machine: {why}.")
+    elif backend == "boat" and boat_unusable is not None and (why := boat_unusable("local" in targets)):
+        add("where", f"Boat cannot run: {why}.")
     elif backend == "boat" and boat_size_problem is not None and str(recipe.get("boat_size") or boat.SIZE) in boat.SIZES:
         why = boat_size_problem(str(recipe.get("boat_size") or boat.SIZE))
         if why:
@@ -653,9 +653,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["script"] = "\n".join(pt["script"] for pt in out["shards"][0]["parts"]) if len(pairs) > 1 else out["shards"][0]["script"]
     out["parts"] = [pt for sh in out["shards"] for pt in sh["parts"]]
     out["jobs"] = [j for sh in out["shards"] for j in sh["jobs"]]
-    # docker where it runs: the container backend, or a control run in each unit's own image, whatever the backend
+    # docker where it runs: the container backend, a control run in each unit's own image, whatever the backend,
+    # or an agent's code checked on Boat (it comes back from the VM to the check container)
     own = any(definitions.own_image(definitions.environment_of(b, None, x)[1]) for x in dss)
-    out["docker"] = backend == "container" or (own and any(p["control"] for p in picks))
+    checked = backend == "boat" and (b.get("score") or {}).get("runs_code") and any(not p["control"] and not p.get("setup") for p in picks)
+    out["docker"] = backend == "container" or (own and any(p["control"] for p in picks)) or bool(checked)
     out["model"] = model
     # Nothing in the run asks a model: no key is handed to it, and none need be set.
     out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"]

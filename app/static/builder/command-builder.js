@@ -427,7 +427,8 @@
     // Review's rule (nullius/standard/recipe.py): a setup's image installs what has an install; nothing else reaches its container
     const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
     const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
-    const boatWhy = list.some(w => w !== 'local') ? 'Started from this machine only' : here.boat ? here.boat : '';
+    // boat: started where the run runs, with this machine's key (Settings → Sandbox); a host's programs are its prerequisites
+    const boatWhy = (list.includes('local') ? here.boat : here.boatKey) || '';
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));
     const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? '$' : v === 'boat' ? '<img class="agent-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="agent-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">' : '▣', title: t, tip: sub});
@@ -440,7 +441,7 @@
       + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
       + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
         : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy)
-      + how('boat', 'Boat', 'Sandboxed: each unit in a Boat VM of its own, whose only way out is its relay on this machine.', boatWhy) + '</div>'
+      + how('boat', 'Boat', 'Sandboxed: each unit in a Boat VM of its own, whose only way out is its relay.', boatWhy) + '</div>'
       + (backend === 'boat' && !boatWhy ? boatSizes(rec) : '')
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
       + (dockerOnly.length && backend !== 'container' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - on ${backend === 'boat' ? 'Boat' : 'local processes'} their units are recorded as not run.</p>` : '')

@@ -107,6 +107,17 @@ class OnAHost(unittest.TestCase):
         self.assertEqual((rows["python3"]["state"], rows["git"]["state"], rows["setup:sandbox"]["state"]), ("ok", "missing", "missing"))
         self.assertEqual(prerequisites.check_host(self.HOST, ["docker"], test=self.probe())[1]["state"], "ok")
 
+    def test_a_boat_run_s_programs_are_asked_of_its_host(self):
+        # a run on Boat starts and fills its VMs from the host: ssh, ssh-keygen, rsync and tar there
+        asked = {}
+
+        def test(host, programs=None):
+            asked["programs"] = programs
+            return self.probe(missing=["rsync"])(host)
+        rows = by_name(prerequisites.check_host(self.HOST, ["python3", "git", "ssh", "ssh-keygen", "rsync", "tar"], test=test))
+        self.assertEqual(sorted(asked["programs"]), ["git", "python3", "rsync", "ssh", "ssh-keygen", "tar"])
+        self.assertEqual((rows["ssh"]["state"], rows["rsync"]["state"]), ("ok", "missing"))
+
     def test_a_host_s_docker_with_userns_remap_is_said_for_the_standard_alone(self):
         remapped = self.probe(docker_userns=True)
         rows = by_name(prerequisites.check_host(self.HOST, ["docker"], standard=True, test=remapped))

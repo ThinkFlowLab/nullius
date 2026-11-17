@@ -131,9 +131,9 @@ class Client(unittest.TestCase):
             self.assertEqual(boat.key({}), "boat_stored")
             self.assertEqual(boat.key({boat.NAME: "boat_env"}), "boat_env")
         with mock.patch.object(boat.secrets, "value", return_value=None):
-            self.assertIn("Settings", boat.unusable({}))
-            self.assertIsNone(boat.unusable({boat.NAME: "k"}, which=lambda p: "/usr/bin/" + p))
-            self.assertIn("rsync", boat.unusable({boat.NAME: "k"}, which=lambda p: None if p == "rsync" else p))
+            self.assertIn("Settings", boat.unusable(env={}))
+            self.assertIsNone(boat.unusable(env={boat.NAME: "k"}, which=lambda p: "/usr/bin/" + p))
+            self.assertIn("rsync", boat.unusable(env={boat.NAME: "k"}, which=lambda p: None if p == "rsync" else p))
 
 
 class VM(unittest.TestCase):
@@ -532,31 +532,34 @@ class BoatRun(unittest.TestCase):
 
 
 class BoatRecipe(unittest.TestCase):
-    def test_boat_needs_no_yes_and_runs_from_this_machine(self):
-        out = recipe.compile(a_recipe(backend="boat", unsandboxed=False), defs(), boat_unusable=lambda: None)
+    def test_boat_needs_no_yes_and_runs_here_or_on_a_host(self):
+        out = recipe.compile(a_recipe(backend="boat", unsandboxed=False), defs(), boat_unusable=lambda here=True: None)
         self.assertEqual(out["errors"], [])
         self.assertIn("--backend boat --boat-size small", out["script"]); self.assertNotIn("--unsandboxed", out["script"])
         self.assertFalse(out["docker"])
-        sized = recipe.compile(a_recipe(backend="boat", boat_size="default"), defs(), boat_unusable=lambda: None)
+        sized = recipe.compile(a_recipe(backend="boat", boat_size="default"), defs(), boat_unusable=lambda here=True: None)
         self.assertIn("--boat-size default", sized["script"])
         self.assertIn("default VMs", sized["review"][-1][2])
         self.assertEqual([e["step"] for e in recipe.compile(a_recipe(backend="boat", boat_size="huge"), defs())["errors"]],
                          [recipe.STEP["where"]])
         self.assertIn("boat backend", out["review"][-1][2])
-        out = recipe.compile(a_recipe(backend="boat", where="me@bench"), defs())
-        self.assertEqual([e["step"] for e in out["errors"]], [recipe.STEP["where"]])
-        self.assertIn("This machine", out["errors"][0]["message"])
+        # on a host: the key is this machine's, the programs the host's (its prerequisites)
+        asked = []
+        out = recipe.compile(a_recipe(backend="boat", where="me@bench"), defs(), boat_unusable=lambda here=True: asked.append(here))
+        self.assertEqual(out["errors"], [])
+        self.assertEqual(asked, [False])
+        self.assertIn("--backend boat", out["script"])
 
     def test_a_size_the_account_cannot_start_is_the_where_steps_error(self):
         problem = lambda size: "not during the free trial" if size == "large" else None
-        out = recipe.compile(a_recipe(backend="boat", boat_size="large"), defs(), boat_unusable=lambda: None, boat_size_problem=problem)
+        out = recipe.compile(a_recipe(backend="boat", boat_size="large"), defs(), boat_unusable=lambda here=True: None, boat_size_problem=problem)
         self.assertEqual([e["step"] for e in out["errors"]], [recipe.STEP["where"]])
         self.assertIn("large VM on this account: not during the free trial", out["errors"][0]["message"])
-        out = recipe.compile(a_recipe(backend="boat", boat_size="default"), defs(), boat_unusable=lambda: None, boat_size_problem=problem)
+        out = recipe.compile(a_recipe(backend="boat", boat_size="default"), defs(), boat_unusable=lambda here=True: None, boat_size_problem=problem)
         self.assertEqual(out["errors"], [])
 
     def test_without_its_key_the_where_step_says_so(self):
-        out = recipe.compile(a_recipe(backend="boat"), defs(), boat_unusable=lambda: "no Boat API key: set it in Settings → Sandbox")
+        out = recipe.compile(a_recipe(backend="boat"), defs(), boat_unusable=lambda here=True: "no Boat API key: set it in Settings → Sandbox")
         self.assertEqual([e["step"] for e in out["errors"]], [recipe.STEP["where"]])
         self.assertIn("Settings → Sandbox", out["errors"][0]["message"])
 

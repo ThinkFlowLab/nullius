@@ -93,11 +93,14 @@ def key(env=os.environ) -> Optional[str]:
     return v.decode().strip() if v else None
 
 
-def unusable(env=os.environ, which: Callable = shutil.which) -> Optional[str]:
-    """Why the boat backend cannot run from this machine, or None."""
+PROGRAMS = ("ssh", "ssh-keygen", "rsync", "tar")     # what starts, reaches and fills a VM, where the run runs
+
+
+def unusable(here: bool = True, env=os.environ, which: Callable = shutil.which) -> Optional[str]:
+    """Why the boat backend cannot run, or None: its key, and with ``here`` this machine's programs."""
     if not key(env):
         return "no Boat API key: set it in Settings → Sandbox"
-    lacking = [p for p in ("ssh", "ssh-keygen", "rsync", "tar") if not which(p)]
+    lacking = [p for p in PROGRAMS if not which(p)] if here else []
     if lacking:
         return "missing on this machine: " + ", ".join(lacking)
     return None
