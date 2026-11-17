@@ -1,0 +1,178 @@
+---
+name: run-to-fix
+description: Turn a finished benchmark run into checked fix candidates for the agent, as a loop with two stops for a person - classify every trial, find causes backed by counts, prove each cause with a test, check fix candidates on the recorded trials, try the kept fixes on chosen tasks, and compare the new run with exact tests and a stop rule written in advance. Works for any agent and both run paths of Nullius (a Harbor recipe or the standard), with everything that belongs to one agent in an adapter file. Use whenever the user has a finished run and wants to find the agent's errors and fix them, run another round of fixes, decide which fix to keep, or check whether a fix helped. For a one-off analysis or comparison page without fixes, use run-analysis.
+---
+
+# Run to fix
+
+Takes a finished run of an agent and turns it into fix candidates that have been checked before any money is spent
+on them, then into a new run that says whether the fixes helped. One pass through the five stages below is a round.
+A round stops twice and waits for a person: which candidates to keep, and what to run next at what cost. The person
+names every budget and starts every command that costs money.
+
+The work splits as in `run-analysis`. The bundled script counts and keeps the records, all in one folder. It reads
+only the files both run paths write. Explaining is done by you: reading trials, naming
+causes, writing tests and fixes in the agent's code.
+
+## What it needs
+
+- The `run-analysis` skill in a folder beside this one. `loop.py` calls its `runs.py` for `health`, `analyze` and
+  `render`, and stops with a message naming the missing file when it is absent.
+- Python 3 with the standard library, and git. The tests of this skill ran on Python 3.12.
+- A loop folder the person names, outside the repository or in a folder git ignores. `loop.py` writes only there.
+- An adapter, `adapter.json` in the loop folder: one file per agent with its checkout, its commands and the limits
+  of the run (`references/adapter.md`). For an agent of the Nullius catalogue, draft it from
+  `catalogue/agents/<key>/agent.json` (`versions.<v>.upstream.repository` and `tag`) and the run's settings, and
+  ask the person to confirm it. Ask the person for every value you cannot read from a file.
+- The run: one job folder with one folder per trial. A baseline run to compare it with is optional.
+
+`L` below is `scripts/loop.py` beside this skill. Every command takes `--loop <loop folder>`. `references/files.md`
+lists every file the loop writes and reads.
+
+## Stage 1. Read the run
+
+```bash
+python3 L read --loop DIR --run JOB [--baseline JOB] --budget-usd B [--pass-threshold 1]
+```
+
+The person names `B`, the budget of the round. `read` runs `health` and `analyze` of `run-analysis`, writes
+`input.json`, `health.txt` and `metrics.json`, and refuses a run that `health` calls not analysable (no trials, one
+shared error, an incomplete or unfinished job) or whose trials name another agent than the adapter. A refusal is the
+answer: give its cause, as `run-analysis` describes for a broken run, and stop. After a round whose stop rule said
+stop, `read` also refuses until the person's words are passed with `--continue-after-stop "..."`.
+
+## Stage 2. Find causes
+
+```bash
+python3 L classify --loop DIR
+```
+
+`classify` gives each trial one of seven classes and a signature, groups the failing trials by signature, and
+attaches warnings (`references/classes.md`). It writes `trials.csv` and `groups.json`, and runs `commands.classes` of
+the adapter for the agent's own classes when the adapter has it.
+
+Then read two or three trials of each group, largest first, as `run-analysis/references/investigation.md` describes.
+When you see a pattern the seven classes do not separate, write it as a found class in `found-classes.json` and run
+`classify` again, so that the script counts it on every trial, the passing ones included. Write each cause to
+`round-NN/causes/<id>.md`: the claim, a line `Rule: <group or found class>` that counts its trials, the trials and
+their count, the code lines at fault at `base_ref`, the layer (model, agent, harness or benchmark), and what you did
+not check. A group with the warning `fails_on_baseline` points at the benchmark; read one task's verifier and
+expected answer before you write that the benchmark is defective.
+
+## Stage 3. Prove and fix
+
+For each cause in the agent layer:
+
+1. On `source.work_branch` of the checkout, commit a test on a recorded trial that fails on the code of `base_ref`.
+   Then commit one or more fixes, each its own candidate; a candidate is a commit whose history holds the test.
+2. Register and check each candidate:
+
+```bash
+python3 L candidate --loop DIR --id ID --cause CAUSE --ref FIX --test PATH --test-ref TEST_COMMIT
+python3 L check --loop DIR --candidate ID
+python3 L decide --loop DIR --stop 1
+```
+
+`check` runs, each in a detached worktree of the commit that is removed afterwards: the test before and after the fix,
+`commands.test` against the failures the suite has on `base_ref`, and `commands.replay` on every recorded trial at
+`base_ref` and at the fix. The replay's labels crossed with pass and fail give the table done and passed / done and
+failed / not done and passed / not done and failed, and the count of false successes, failed trials the agent reports
+as a success. A command named in `paid` is written to `round-NN/commands/` and not started.
+
+**Stop 1.** Show the person `decision-1.md`: one row per candidate with its cause, test, table before and after, false
+successes added and diff size, and the checks that did not run. Ask which candidates to keep, and record the answer in
+the person's words:
+
+```bash
+python3 L answer --loop DIR --stop 1 --keep ID[,ID] --text "the person's words"
+```
+
+## Stage 4. Build and try
+
+Merge the kept candidates into one commit of the work branch. Then:
+
+```bash
+python3 L select --loop DIR --ref COMMIT --canaries N
+```
+
+prints the trial run in three sizes with their price from the cost per trial of the run that was read: the targets
+(the tasks the kept causes predict), plus the guards (passing tasks whose recorded trial ran the changed code, when
+the replay reports `touched`), plus the canaries (passing tasks drawn with a fixed seed). Every task gets 3 trials. The
+person picks a size and names its budget, which cannot exceed what the round has left:
+
+```bash
+python3 L select --loop DIR --ref COMMIT --canaries N --size targets|guards|canaries --budget-usd B --text "..."
+```
+
+This writes `trial-tasks.txt`, runs `commands.build` and writes `build.json`, and writes the run to
+`round-NN/commands/run_tasks.sh`. The person starts it. When its job folder exists:
+
+```bash
+python3 L decide --loop DIR --stop 2 --trial-job JOB
+```
+
+**Stop 2.** Show the person `decision-2.md`: the build, the targets' trials before and in every trial run of this
+round on that build with Fisher's exact test, the guards and canaries, the money spent and left, and three options
+with their price: stop, the targets and guards again, a full pass. The commands of the last two are written. Record
+the choice:
+
+```bash
+python3 L answer --loop DIR --stop 2 --choice stop|rerun|full --text "the person's words"
+```
+
+A rerun is another trial run of the round: run `decide --stop 2` on its job folder, and its trials and money add to
+the earlier ones.
+
+## Stage 5. Compare and record
+
+```bash
+python3 L compare --loop DIR --new JOB --against run
+```
+
+`compare` reads the new run against the round's run (`--against baseline` compares with the round's baseline) and
+writes `result.json`: the pass rates with their standard error; the tasks both runs share, won and lost; the verdict
+"improved" or "regressed" when an exact two-sided binomial test on won and lost gives p under 0.05, "noise" otherwise;
+the targets' trials with Fisher's exact test; each prediction of stage 3 beside its result; and the stop rule. It
+closes the round and writes `report.html` with `render` of `run-analysis`; fill its prose slots as that skill
+describes (`runs.py render --slots`, then `runs.py check`).
+
+The stop rule is fixed before a round starts. No new round when the verdict is noise and no group of failing trials
+of the new run has 3 trials or more, or when the budget left is under the price of the cheapest option, a trial run
+of the largest such group's tasks.
+
+## When the adapter lacks a command
+
+| null command | what the loop does | what is weaker |
+|---|---|---|
+| `test_one` | the test of a cause does not run | nothing shows that the cause is real or that the fix removes it |
+| `test` | the agent's suite does not run | a fix may break other code unseen |
+| `replay` | no table before and after, no guards | false successes and the effect on passing trials are unknown until a paid run |
+| `build` | the run installs the checkout | the build tried is not recorded by digest |
+| `classes` | no extra columns | the seven classes stay the only ones |
+| `run_tasks` | no command is written | the person starts the run of `trial-tasks.txt` by other means |
+| a null limit | its class is switched off | those trials fall into a later class, usually `verifier_failed` |
+
+Every decision page names the checks that did not run.
+
+## Writing rules
+
+These follow `run-analysis`, with what the loop adds.
+
+- **Every count says what it counts**: trials, tasks or model calls, and of which run.
+- **A cause is a claim with a count.** It names the rule that counts its trials and the trials it explains. A
+  plausible mechanism without a count is a hypothesis; say so.
+- **Respect the noise.** Quote the verdict and its p value with any gain. Do not call a round an improvement on a
+  noise verdict.
+- **Separate the layers.** Model, agent, harness or benchmark. A claim that a benchmark is defective needs the check
+  its warning names.
+- **The person decides.** Never start a written command, pick a size or keep a candidate for the person, and store
+  each answer in the person's words.
+- **Nothing sensitive.** No keys, tokens, host addresses or personal identifiers from logs.
+
+## Limits
+
+- `read` decides that a run is not analysable from the opening words of the verdicts `runs.py health` prints. A change
+  of that wording in `run-analysis` changes what `read` refuses.
+- The classes read only shared files. What one agent writes reaches the loop through a found class or
+  `commands.classes`.
+- A trial run gives every task the same number of trials, because `run_tasks` takes one `{repeat}`.
