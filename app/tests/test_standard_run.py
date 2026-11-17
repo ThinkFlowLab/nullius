@@ -601,6 +601,14 @@ class RunTest(unittest.TestCase):
         for phase, key in (("env_setup", "environment_setup"), ("agent_setup", "agent_setup"), ("agent_run", "agent_execution"), ("verify", "verifier")):
             self.assertAlmostEqual(told[phase], w[key][1] - w[key][0], places=3, msg=phase)
 
+    def test_a_forced_agent_limit_is_the_runs_never_the_setups(self):
+        """``--timeout agent`` bounds the agent's work from its open session, where its clock starts:
+        the board is told that limit for the run, and ACP's two start limits for the setup."""
+        job_dir = self.go("fakebench", "fake", limit=1, timeouts={"agent": 45})
+        with open(os.path.join(job_dir, "events.jsonl")) as f:
+            limits = [(e["phase"], e["timeout_sec"]) for e in map(json.loads, f) if e["event"] == "trial.phase"]
+        self.assertEqual(limits[1:3], [("agent_setup", acp.INITIALIZE_SECONDS + acp.SESSION_SECONDS), ("agent_run", 45)])
+
     def test_the_tasks_door_is_the_environments_not_the_agents(self):
         """A task's internet door opens before the agent begins and closes
         after it ended: neither is the agent's setup nor its run."""
