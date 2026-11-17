@@ -83,12 +83,13 @@ class NewVerdicts(unittest.TestCase):
                       ev("release", 100.8, button=1, hit="background", x=600, y=600)]
         self.assertFalse(checks.verdict("drag", {}, not_handle, ACTIONS, "")["passed"])
 
-    def test_scroll_passes_on_the_code_once_the_list_moved(self):
-        exp = {"code": "ACDE34679HJK"}
+    def test_scroll_passes_on_the_words_once_the_list_moved(self):
+        exp = {"words": ["ACORN", "BASKET"]}
         moved = [ev("scroll", 100.2, button=5, hit="list"), ev("moved", 100.21, top=0.4)]
-        self.assertTrue(checks.verdict("scroll", exp, moved, ACTIONS, "ACDE34679HJK")["passed"])
-        self.assertIn("never moved", checks.verdict("scroll", exp, moved[:1], ACTIONS, "ACDE34679HJK")["why"])
-        self.assertIn("does not hold", checks.verdict("scroll", exp, moved, ACTIONS, "")["why"])
+        self.assertTrue(checks.verdict("scroll", exp, moved, ACTIONS, "ACORN BASKET")["passed"])
+        self.assertIn("never moved", checks.verdict("scroll", exp, moved[:1], ACTIONS, "ACORN BASKET")["why"])
+        self.assertEqual(checks.verdict("scroll", exp, moved, ACTIONS, ""),
+                         {"passed": False, "why": "the words were not found together in order; expected ACORN, BASKET"})
 
     def test_recover_passes_on_a_success_after_the_error_and_the_click(self):
         exp = {"target": "OCEAN", "labels": ["OCEAN", "APPLE"]}
@@ -113,13 +114,13 @@ class NewVerdicts(unittest.TestCase):
 
     def test_every_check_fails_on_input_outside_every_action(self):
         passing = {
-            "see": ({"code": "ACDE34679HJK"}, [], "ACDE34679HJK", ()),
+            "see": ({"words": ["ACORN", "BASKET", "CANDLE"]}, [], "ACORN BASKET CANDLE", ()),
             "click": ({"target": "OCEAN", "labels": ["OCEAN"]}, press(100.2, "OCEAN"), "", ()),
             "type": ({"word": "kotabiru"}, [ev("enter", 100.3, value="kotabiru")], "", ()),
             "limit": (LIMIT, press(100.2, "ONE"), "", ()),
             "drag": ({}, [ev("ready", 99, boxes={"zone": [500, 500, 700, 700]}), ev("press", 100.2, button=1, hit="handle"),
                           ev("release", 100.8, button=1, hit="handle", x=600, y=600)], "", ()),
-            "scroll": ({"code": "ACDE34679HJK"}, [ev("moved", 100.3, top=0.5)], "ACDE34679HJK", ()),
+            "scroll": ({"words": ["ACORN", "BASKET"]}, [ev("moved", 100.3, top=0.5)], "ACORN BASKET", ()),
             "recover": ({"target": "OCEAN", "labels": ["OCEAN"]}, press(110.2, "OCEAN"), "",
                         ({"tool": "click", "isError": True, "start": 1, "end": 2},
                          {"tool": "click", "isError": False, "start": 3, "end": 4})),
@@ -250,7 +251,7 @@ class ScoreRecords(unittest.TestCase):
         os.makedirs(ws)
         u = driver.Unit("see", ws)
         os.makedirs(os.path.dirname(u.log))
-        u.expected = {"code": "ACDE34679HJK"}
+        u.expected = {"words": ["ACORN", "BASKET", "CANDLE"]}
         d = u.desktop = FakeDesktop("fake", u.values)
         u.boxes = d.boxes
         u.bridge = driver.KitBridge(driver.KitDesktop(d), u.steps, 0, desktop.SCREEN, 1)
@@ -258,7 +259,7 @@ class ScoreRecords(unittest.TestCase):
         return ws, u, d
 
     def test_a_failed_record_write_does_not_change_the_verdict_or_cleanup(self):
-        for answer in ("ACDE34679HJK", ""):
+        for answer in ("ACORN BASKET CANDLE", ""):
             ws, _, _ = self.unit()
             expected = driver.score("see", ws, [], answer)
             self.assertEqual(expected["passed"], bool(answer))
@@ -319,7 +320,7 @@ class ScoreRecords(unittest.TestCase):
 
                 def score():
                     try:
-                        replies.put(driver.score("see", ws, [], u.expected["code"]))
+                        replies.put(driver.score("see", ws, [], " ".join(u.expected["words"])))
                     except Exception as e:
                         replies.put(e)
 
@@ -483,12 +484,17 @@ def _alive(pid):
                           timeout=30).stdout.strip()[:1] not in ("", "Z")
 
 
-def _png(code, scale):
-    """A screen of 1920 by 1080 with ``code`` drawn as the fixture draws it, as PNG bytes (filter 0)."""
+def _png(text, scale, above=()):
+    """A screen of 1920 by 1080 with ``text`` drawn as the fixture draws it, as PNG bytes (filter 0)."""
     w, h = 1920, 1080
-    cols, rows, cells = driver.fixture.pixels(code)
+    cols, rows, cells = driver.fixture.pixels(text)
     x0, y0 = (w - cols * scale) // 2, (h - rows * scale) // 2
     ink = {(x0 + x * scale + dx, y0 + y * scale + dy) for x, y in cells for dx in range(scale) for dy in range(scale)}
+    for i, label in enumerate(above):
+        _, _, cells = driver.fixture.pixels(label)
+        s = driver.fixture.LIST_SCALE
+        ink.update((x0 + x * s + dx, y0 - (i + 1) * 60 - 40 + y * s + dy)
+                   for x, y in cells for dx in range(s) for dy in range(s))
     paper, mark = bytes.fromhex("eceff1"), bytes.fromhex("111111")
     raw = b"".join(b"\x00" + b"".join(mark if (x, y) in ink else paper for x in range(w)) for y in range(h))
 
@@ -498,20 +504,70 @@ def _png(code, scale):
             + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
 
 
-class Codes(unittest.TestCase):
-    def test_drawn_codes_keep_their_length_without_h_or_equal_neighbours_and_are_read_from_pixels(self):
+class Words(unittest.TestCase):
+    def test_the_reference_reads_current_vocabulary_and_gaps_at_both_scales(self):
         rng = random.Random(7)
-        for check, scale in (("see", driver.fixture.SEE_SCALE), ("scroll", driver.fixture.LIST_SCALE)):
+        for check, scale, count in (("see", driver.fixture.SEE_SCALE, 3), ("scroll", driver.fixture.SCROLL_SCALE, 2)):
             with self.subTest(check=check):
-                for _ in range(1000):
+                removed = " ".join(["WINDOW", "IGLOO", "INSECT"][:count])
+                with self.assertRaises(driver.ReferenceFailed):
+                    driver.read_words(_png(removed, scale), scale, count)
+                for _ in range(3):
                     values, expected = checks.draw(check, rng)
-                    code = values["code"]
-                    self.assertEqual(code, expected["code"])
-                    self.assertEqual(len(code), 12)
-                    self.assertNotIn("H", code)
-                    self.assertTrue(set(code) <= set(checks.ALPHABET), code)
-                    self.assertTrue(all(a != b for a, b in zip(code, code[1:])), code)
-                self.assertEqual(driver.read_code(_png(code, scale), scale), code)
+                    text = " ".join(values["words"])
+                    png = _png(text, scale)
+                    self.assertEqual(driver.fixture.read_lines(png, scale), [text])
+                    self.assertEqual(driver.read_words(png, scale, count), " ".join(expected["words"]))
+                text = " ".join(["IGLOO", "WALNUT", "INSECT"][:count])
+                self.assertEqual(driver.read_words(_png(text, scale), scale, count), text)
+
+    def test_the_reference_refuses_missing_unreadable_or_repeated_words(self):
+        for scale, count in ((driver.fixture.SEE_SCALE, 3), (driver.fixture.SCROLL_SCALE, 2)):
+            for text in ("", "ACORN", "ACORN BASKET ZZZZ", " ".join(["ACORN"] * count)):
+                with self.subTest(scale=scale, text=text), self.assertRaises(driver.ReferenceFailed):
+                    driver.read_words(_png(text, scale), scale, count)
+
+    def test_the_reference_reads_scroll_words_below_smaller_list_labels(self):
+        scale = driver.fixture.SCROLL_SCALE
+        png = _png("IGLOO BASKET", scale, above=driver.fixture.LIST_WORDS[-3:])
+        self.assertEqual(driver.read_words(png, scale, 2), "IGLOO BASKET")
+
+    def test_the_task_asks_for_words_in_order_without_the_answers_or_scoring_rules(self):
+        rng = random.Random(7)
+        for check in ("see", "scroll"):
+            prompts = set()
+            for _ in range(1000):
+                _, expected = checks.draw(check, rng)
+                text = driver.prompt(check, expected)
+                prompts.add(text)
+                self.assertIn("words", text)
+                self.assertIn("order", text)
+                self.assertFalse(set(re.findall(r"\b\w+\b", text.upper())) & set(checks.WORDS))
+                self.assertNotRegex(text.lower(), r"\b(code|two|three|vocabulary|dictionary|match|checked|scored)\b")
+            self.assertEqual(len(prompts), 1)
+
+    def test_the_null_control_still_fails_every_check(self):
+        for check in checks.CHECKS:
+            _, expected = checks.draw(check, random.Random(7))
+            if check in ("see", "scroll"):
+                self.assertIn("words", expected)
+            self.assertFalse(checks.verdict(check, expected, [], [], "")["passed"], check)
+
+    def test_the_reference_uses_the_screenshot_not_the_expected_words(self):
+        for check, scale, count in (("see", driver.fixture.SEE_SCALE, 3), ("scroll", driver.fixture.SCROLL_SCALE, 2)):
+            with self.subTest(check=check):
+                answer = " ".join(["IGLOO", "BASKET", "CANDLE"][:count])
+                png = _png(answer, scale)
+                unit = mock.Mock(expected={"words": ["ZEBRA", "PILLOW", "ORANGE"][:count]},
+                                 boxes={"list": [0, 0, 760, 540]})
+                client = mock.Mock()
+                client.call.side_effect = lambda tool, arguments=None: (False, png if tool == "screenshot" else {})
+                with mock.patch.dict(driver.OPEN, {check: unit}, clear=True), \
+                        mock.patch.object(driver, "Client", return_value=client):
+                    self.assertEqual(driver.oracle(check, "unused"), {"answer": answer})
+                self.assertEqual([c.args[0] for c in client.call.call_args_list],
+                                 ["info", "scroll", "screenshot"] if check == "scroll" else ["info", "screenshot"])
+                client.close.assert_called_once()
 
 
 class FakeWire:
@@ -733,12 +789,12 @@ class EarnedPasses(FakeUnits):
         self.assertEqual([c["isError"] for c in u.calls()], [True, False])
         self.assertTrue(driver.score("click", ws, [], "done")["passed"])
 
-    def test_the_reference_reads_the_code_from_the_screenshot_and_fails_without_one(self):
+    def test_the_reference_reads_the_words_from_the_screenshot_and_fails_without_one(self):
         ws, s = self.unit("see")
-        fake, code = FakeDesktop.made[-1], driver.OPEN["see"].expected["code"]
-        fake.capture = lambda: _png(code, 9)
-        self.assertEqual(driver.oracle("see", ws)["answer"], code)
-        self.assertTrue(driver.score("see", ws, [], code)["passed"])
+        fake, text = FakeDesktop.made[-1], " ".join(driver.OPEN["see"].expected["words"])
+        fake.capture = lambda: _png(text, driver.fixture.SEE_SCALE)
+        self.assertEqual(driver.oracle("see", ws)["answer"], text)
+        self.assertTrue(driver.score("see", ws, [], text)["passed"])
         ws, s = self.unit("see")
 
         def broken():
@@ -747,7 +803,7 @@ class EarnedPasses(FakeUnits):
         with self.assertRaises(driver.ReferenceFailed):
             driver.oracle("see", ws)
         ws, s = self.unit("see")
-        FakeDesktop.made[-1].capture = lambda: _png("ACDE", 9)            # a screen with no code of twelve
+        FakeDesktop.made[-1].capture = lambda: _png("ACORN", 9)           # a screen with only one word
         with self.assertRaises(driver.ReferenceFailed):
             driver.oracle("see", ws)
 

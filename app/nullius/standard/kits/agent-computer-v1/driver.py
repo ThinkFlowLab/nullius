@@ -61,7 +61,7 @@ NOT_RUN = "The desktop could not run this step, and none of it was run. It may b
 
 def prompt(unit, expected):
     if unit == "see":
-        return USE + "The screen shows a code of twelve characters. Reply with the code and nothing else."
+        return USE + "Read the words on the screen and reply with them in the order shown."
     if unit in ("click", "recover"):
         return USE + f"Click the button labelled {expected['target']} on the screen, once." + DONE
     if unit == "type":
@@ -72,8 +72,8 @@ def prompt(unit, expected):
     if unit == "drag":
         return USE + "Drag the blue square labelled MOVE into the green box labelled HERE and let it go inside the box." + DONE
     if unit == "scroll":
-        return (USE + "The list on the screen ends with a code of twelve characters, below what it shows at first. "
-                      "Scroll the list to find it, and reply with the code and nothing else.")
+        return (USE + "Scroll to the end of the list and read the large words there. "
+                      "Reply with those words in the order shown.")
     if unit == "batch":
         w = expected["words"]
         return (USE + "Fill the three text fields on the screen: " + ", ".join(f"{w[f]} in the field labelled {f}"
@@ -464,18 +464,19 @@ class ReferenceFailed(Exception):
     """A call of the reference did not go as a correct agent's would."""
 
 
-def read_code(png, scale):
-    """The code of twelve characters drawn on the screen, read from a screenshot, as an agent reads it."""
+def read_words(png, scale, count):
+    """The words drawn on the screen, read from a screenshot, as an agent reads them."""
     found = [line for line in fixture.read_lines(png, scale)
-             if len(line) == checks.CODE_LENGTH and set(line) <= set(checks.ALPHABET)]
+             if len(line.split()) == count and len(set(line.split())) == count
+             and all(word in checks.WORDS for word in line.split())]
     if len(found) != 1:
-        raise ReferenceFailed(f"no one code could be read from the screenshot ({len(found)} found)")
+        raise ReferenceFailed(f"no one group of words could be read from the screenshot ({len(found)} found)")
     return found[0]
 
 
 def oracle(unit, dir, **_):
     """The reference: the calls a correct agent makes, sent to the unit's own server, through its desktop, to the
-    same scorer; the answer they lead to. A code is read from the screenshot the server gives, and a call that does
+    same scorer; the answer they lead to. Words are read from the screenshot the server gives, and a call that does
     not answer as a correct agent's would (the one ``recover`` refuses aside) fails the reference."""
     with OPEN_LOCK:
         u = OPEN.get(unit)
@@ -499,7 +500,8 @@ def oracle(unit, dir, **_):
             png = call("screenshot")
             if not isinstance(png, bytes):
                 raise ReferenceFailed("the screenshot held no image")
-            answer = read_code(png, fixture.SEE_SCALE if unit == "see" else fixture.LIST_SCALE)
+            answer = read_words(png, fixture.SEE_SCALE if unit == "see" else fixture.SCROLL_SCALE,
+                                3 if unit == "see" else 2)
         elif unit in ("click", "recover"):
             x, y = centre(b[e["target"]])
             if unit == "recover":

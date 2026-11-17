@@ -8,7 +8,7 @@ same clock), the agent's last message, and what the server kept of the
 agent's calls (``calls``: the call log's lines, ``{tool, start, end,
 isError}``; ``past``: the acting calls sent once every step was taken).
 
-- ``see``: the last message holds the code the window drew;
+- ``see``: the last message holds the words the window drew, in order;
 - ``click``: the log holds a left press on the named button and no press,
   of any mouse button, on the five others;
 - ``type``: the field held exactly the word at the last Enter;
@@ -16,12 +16,18 @@ isError}``; ``past``: the acting calls sent once every step was taken).
   them, no input after the last action, and no acting call sent once the
   steps were taken;
 - ``drag``: a left press on the handle, then a release inside the zone;
-- ``scroll``: the last message holds the code drawn at the list's end, below
+- ``scroll``: the last message holds the words drawn at the list's end, in order, below
   what it shows at first, and the list moved;
 - ``recover``: the kit answers the agent's first acting call with an error,
   without running it; an acting call sent after that answer came succeeds,
   and the named button is clicked, as for ``click``;
 - ``batch``: each of three fields holds its word, within two steps.
+
+For ``see`` and ``scroll``, read whole vocabulary words from the last message
+in any letter case. The drawn words must occur as a consecutive run in that
+sequence at least once, with at most twelve vocabulary occurrences in all.
+Other prose and punctuation do not break the run; repeats and other vocabulary
+words outside it are allowed and count toward the limit.
 
 Every check passes only when every pointer and key event, Enter in a field
 included, lies inside an action's time: input sent any other way, through the
@@ -35,8 +41,19 @@ import re
 import secrets
 
 SLACK = 0.5
-CODE_LENGTH = 12
-ALPHABET = "ACDEFGJKMNPRTWXY34679"          # no pair a glance confuses: 0/O, 1/I/L, 5/S, 2/Z, 8/B, U/V, H/N
+# Everyday nouns, avoiding screen, desktop and action vocabulary and the
+# fixture's labels. Equal-length words differ in at least three positions,
+# giving the glyphs the context of a word.
+WORDS = ("ACORN", "ALMOND", "ANKLE", "APRON", "BANANA", "BASKET", "BEACH", "BEAVER", "BEETLE", "BERRY",
+         "BISON", "BOWL", "BREAD", "BROOM", "BUTTER", "CABIN", "CACTUS", "CAMEL", "CANDLE", "CANOE",
+         "CARPET", "CASHEW", "CELERY", "CHEESE", "CHERRY", "COCOA", "COFFEE", "CORN", "COTTON", "CRAB",
+         "DEER", "DINNER", "DONKEY", "DRUM", "EAGLE", "FABRIC", "FARM", "FERRET", "FLOWER", "FOREST",
+         "FROG", "GARDEN", "GARLIC", "GLOVE", "GOAT", "GUITAR", "HELMET", "HIPPO", "HORSE", "IGLOO",
+         "INSECT", "KOALA", "LADDER", "LENTIL", "LIZARD", "LUNCH", "MARBLE", "MEADOW", "MELON", "MITTEN",
+         "NOODLE", "ONION", "OTTER", "OYSTER", "PANDA", "PARROT", "PEANUT", "PEPPER", "PIGEON", "PILLOW",
+         "PIZZA", "POCKET", "POTATO", "RABBIT", "RAISIN", "ROPE", "SALAD", "SALMON", "SAND", "SANDAL",
+         "SCARF", "SCHOOL", "SHEEP", "SHIRT", "SHOE", "SHOVEL", "SHRIMP", "SOCK", "SUGAR", "TEAPOT",
+         "TOWEL", "TURTLE", "WALNUT", "WOLF", "YOGURT", "ZEBRA")
 LABELS = ("APPLE", "BRICK", "CLOUD", "DELTA", "EMBER", "FROST", "GRAPE", "HONEY", "IVORY", "JUMBO",
           "KNOT", "LEMON", "MAPLE", "NORTH", "OCEAN", "PIANO", "QUILT", "RIVER", "STONE", "TIGER",
           "UMBRA", "VELVET", "WHEAT", "YEAST")
@@ -56,13 +73,6 @@ def steps(check):
     return STEPS.get(check, DEFAULT_STEPS)
 
 
-def code(rng):
-    text = ""
-    for _ in range(CODE_LENGTH):
-        text += rng.choice(ALPHABET.replace(text[-1:], ""))
-    return text
-
-
 def word(rng=None, length=8):
     """A pronounceable word that is no word: consonant, vowel, and again."""
     rng = rng or secrets.SystemRandom()
@@ -75,8 +85,8 @@ def draw(check, rng=None):
     values but what the screen shows."""
     rng = rng or secrets.SystemRandom()
     if check in ("see", "scroll"):
-        c = code(rng)
-        return {"screen": check, "code": c}, {"code": c}
+        words = rng.sample(WORDS, 3 if check == "see" else 2)
+        return {"screen": check, "words": words}, {"words": words}
     if check in ("click", "recover"):
         labels = rng.sample(LABELS, 6)
         return {"screen": "click", "labels": labels}, {"target": rng.choice(labels), "labels": labels}
@@ -103,8 +113,17 @@ def outside(events, actions, slack=SLACK):
     return [e for e in events if e.get("kind") in POINTER + KEYS and not inside(e.get("t", -1.0), actions, slack)]
 
 
-def _flat(text):
-    return re.sub(r"[^A-Za-z0-9]", "", str(text or "")).upper()
+def _read_words(expected, message):
+    """Find the drawn words as a consecutive run among at most twelve whole
+    vocabulary words, ignoring case. Prose and punctuation may separate them;
+    repetitions and other vocabulary words outside the run are allowed."""
+    words = expected["words"]
+    found = [w for w in re.findall(r"\b\w+\b", str(message or "").upper()) if w in WORDS]
+    if len(found) > 12:
+        return f"too many words from the reading vocabulary: {len(found)}; expected at most twelve"
+    if not any(found[i:i + len(words)] == words for i in range(len(found) - len(words) + 1)):
+        return "the words were not found together in order; expected " + ", ".join(words)
+    return ""
 
 
 def _verdict(why):
@@ -134,8 +153,7 @@ def _in(box, e):
 
 
 def see(expected, events, actions, message, calls=(), past=0):
-    return _verdict(_first("" if expected["code"] in _flat(message) else "the last message does not hold the code",
-                           _input_rule(events, actions)))
+    return _verdict(_first(_read_words(expected, message), _input_rule(events, actions)))
 
 
 def click(expected, events, actions, message, calls=(), past=0):
@@ -186,7 +204,7 @@ def drag(expected, events, actions, message, calls=(), past=0):
 
 def scroll(expected, events, actions, message, calls=(), past=0):
     moved = any(e.get("kind") == "moved" and e.get("top", 0) > 0 for e in events)
-    return _verdict(_first("" if expected["code"] in _flat(message) else "the last message does not hold the code",
+    return _verdict(_first(_read_words(expected, message),
                            "" if moved else "the list never moved", _input_rule(events, actions)))
 
 
