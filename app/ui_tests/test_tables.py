@@ -423,8 +423,11 @@ class Macros(unittest.TestCase):
         self.assertEqual(re.findall(r'data-filter-menu="(\w)"', menu), ["a", "d"])                    # the Filter menu: a, by default, and d
         self.assertEqual(re.findall(r"<legend>(\w)</legend>", menu), ["A", "D"])                         # its groups keep their legends
         self.assertIn('<div class="menu-wrap"><button class="btn ghost sm" type="button" data-dropdown aria-haspopup="true" aria-expanded="false">'
-                      'B<span class="tools-count" hidden></span></button><div class="menu tools-menu" hidden><fieldset data-filter-menu="b" aria-label="B"><span class="tools-all">', html)   # no legend: the button names it
+                      'B<span class="tools-count" hidden></span><svg class="ic dd-chev" aria-hidden="true"><use href="#i-chev"/></svg></button><div class="menu tools-menu" hidden><fieldset data-filter-menu="b" aria-label="B"><span class="tools-all">', html)   # no legend: the button names it
         self.assertLess(html.index("data-dropdown"), html.index('data-tools-btn="filter"'))      # the dropdowns before the Filter
+        self.assertEqual(html.count("dd-chev"), 1)                                                  # a chevron on the dropdown only
+        self.assertNotIn("dd-chev", html.split('data-tools-btn="filter"')[1])
+        self.assertEqual(html.count("<svg"), 2)                                                     # no filter_icon, no icon: the chevron and the Filter's
         self.assertEqual(re.findall(r'data-pills="(\w)"', html), ["c", "d"])
         self.assertIn('<div class="filter-pills" role="group" aria-label="C" data-pills="c"><button type="button" class="filter-pill" data-all="c" aria-pressed="true">All</button>'
                       '<button type="button" class="filter-pill" data-value="x" aria-pressed="false">X</button>'
@@ -434,6 +437,16 @@ class Macros(unittest.TestCase):
         self.assertIn('data-all="c" aria-pressed="false">All</button><button type="button" class="filter-pill" data-value="x" aria-pressed="false">X</button>'
                       '<button type="button" class="filter-pill" data-value="y" aria-pressed="true">Y</button>', only)
         self.assertIn('<input type="checkbox" data-value="x"> X</label><label><input type="checkbox" data-value="y" checked> Y', only.split('data-filter-menu="b"')[1])
+
+    def test_a_filter_icon_leads_its_dropdown_and_its_pills(self):
+        cols = [dict(key="b", label="B", filter="dropdown", filter_icon="origin"), dict(key="c", label="C", filter="pills", filter_icon="runner")]
+        html = self.controls(cols, choices={k: [("x", "X")] for k in "bc"})
+        self.assertIn('aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-origin"/></svg>B<span class="tools-count"', html)
+        self.assertIn('<div class="filter-pills" role="group" aria-label="C" data-pills="c"><svg class="ic" aria-hidden="true"><use href="#i-runner"/></svg>'
+                      '<button type="button" class="filter-pill" data-all="c"', html)
+        bad = self.controls([dict(key="c", label="C", filter=["pills", "dropdown"], filter_icon='x"><b>')], choices={"c": [("x", "X")]})
+        self.assertNotIn("<b>", bad)
+        self.assertEqual(bad.count('<use href="#i-x&#34;&gt;&lt;b&gt;"/>'), 2)
 
     def test_without_a_filter_button_there_is_none(self):
         cols = [dict(key="c", label="C", filter="pills")]

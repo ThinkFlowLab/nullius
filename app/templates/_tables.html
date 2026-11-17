@@ -68,7 +68,8 @@
    buttons, each any number of them, run by the page: views (how the table looks) before Columns, actions (on the
    rows or the selection) last. The search goes left, the buttons right. A column's
    `filter` says where its choices go, one form or a list of them: 'button' (the default), in the Filter menu;
-   'dropdown', a menu of its own; 'pills', a row of toggles under the controls. `id`: the table's. #}
+   'dropdown', a menu of its own; 'pills', a row of toggles under the controls. A column's `filter_icon`, a sprite id
+   without its `i-`, leads its dropdown's button and its pills. `id`: the table's. #}
 {% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none, sort=true) %}
 {%- set by = {'button': [], 'dropdown': [], 'pills': []} %}{% for c in cols if c.key in choices %}{% for f in ([c.filter] if c.filter is string else c.filter or ['button']) %}{% set _ = by[f].append(c) %}{% endfor %}{% endfor %}
 <div class="table-tools table-controls" id="{{ id }}-tools">
@@ -77,7 +78,7 @@
   {{ slot('views', views) }}
   {% if columns %}<div class="menu-wrap">{{ columns_button() }}{{ columns_menu(cols) }}</div>{% endif %}
   {% for c in by.dropdown %}<div class="menu-wrap">
-    <button class="btn ghost sm" type="button" data-dropdown aria-haspopup="true" aria-expanded="false">{{ c.label }}<span class="tools-count" hidden></span></button>
+    <button class="btn ghost sm" type="button" data-dropdown aria-haspopup="true" aria-expanded="false">{{ icon(c) }}{{ c.label }}<span class="tools-count" hidden></span><svg class="ic dd-chev" aria-hidden="true"><use href="#i-chev"/></svg></button>
     <div class="menu tools-menu" hidden>{{ values(c, choices[c.key], only, legend=false) }}</div>
   </div>
   {% endfor %}
@@ -108,7 +109,7 @@
   </div>{% endif %}
   {% for c in by.pills %}
   <div class="filter-pills" role="group" aria-label="{{ c.label }}" data-pills="{{ c.key }}">
-    <button type="button" class="filter-pill" data-all="{{ c.key }}" aria-pressed="{{ 'false' if c.key in only else 'true' }}">All</button>
+    {{ icon(c) }}<button type="button" class="filter-pill" data-all="{{ c.key }}" aria-pressed="{{ 'false' if c.key in only else 'true' }}">All</button>
     {%- for value, text in choices[c.key] %}<button type="button" class="filter-pill" data-value="{{ value }}" aria-pressed="{{ 'true' if only.get(c.key) == value else 'false' }}">{{ text }}</button>{% endfor %}
   </div>
   {% endfor %}
@@ -118,6 +119,9 @@
 {#- A controls row's slot `name`: what the macro `fill` writes, in a group spaced as the buttons; nothing when it
     writes nothing. #}
 {% macro slot(name, fill) %}{% set html = fill() if fill else '' %}{% if html|trim %}<div class="table-slot" data-slot="{{ name }}">{{ html }}</div>{% endif %}{% endmacro %}
+
+{#- A column's `filter_icon`, if it has one. #}
+{% macro icon(c) %}{% if c.filter_icon %}<svg class="ic" aria-hidden="true"><use href="#i-{{ c.filter_icon }}"/></svg>{% endif %}{% endmacro %}
 
 {#- A column's choices as checkboxes, in the Filter menu or a dropdown: all ticked, or only its `only` value. #}
 {# `legend=false` in a dropdown, whose button already names the category #}

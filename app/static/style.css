@@ -464,6 +464,10 @@ button.seg:hover { filter: brightness(1.25); }
 .filter-pill:hover { border-color: var(--accent); color: var(--text); }
 .filter-pill[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--btn-fg); font-weight: 500; }
 .filter-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.filter-pills > .ic { align-self: center; color: var(--text-dim); }
+.dd-chev { margin-right: -.2rem; }
+[data-dropdown][aria-expanded="true"] .dd-chev { transform: rotate(180deg); }
+@media (prefers-reduced-motion: no-preference) { .dd-chev { transition: transform .24s ease; } }
 .tools-count { margin-left: .4rem; padding: 0 .4em; border-radius: 99px; background: var(--accent-soft); color: var(--text); font-size: .72rem; font-variant-numeric: tabular-nums; }
 .chip.clear { border-style: dashed; }
 

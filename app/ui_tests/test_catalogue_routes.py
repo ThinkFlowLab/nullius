@@ -98,7 +98,8 @@ class OriginTags(PageCase):
         self.assertIn('data-all="category" aria-pressed="true">All</button>', tools)
         for c in web.shared._catalog_cached().categories:
             self.assertIn(f'<button type="button" class="filter-pill" data-value="{c}" aria-pressed="false">{c}</button>', tools)
-        self.assertEqual(re.findall(r'data-dropdown aria-haspopup="true" aria-expanded="false">([^<]+)<', tools), ["Origin", "Runs with"])
+        self.assertEqual(re.findall(r'data-dropdown aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-(\w+)"/></svg>([^<]+)<', tools),
+                         [("origin", "Origin"), ("runner", "Runs with")])
         self.assertEqual(re.findall(r'data-filter-menu="(\w+)"', tools), ["origin", "runs"])
         self.assertNotIn('data-tools-btn="filter"', tools)                                      # no Filter button: each has its own
         self.assertIn('<span class="sr" data-live="benchmarks" aria-live="polite"></span>', self.html)
