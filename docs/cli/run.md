@@ -71,8 +71,6 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | `verify` | The verify step's `seconds`, else the agent's default | Verifier error |
 | `score` | 600 s: the driver's `score` | Verifier error |
 
-An ACP agent's start (120 s) and session (180 s) come before its `agent` limit.
-
 `--max-turns N` caps a conversation's agent turns over `limits.turns` (default 20); the conversation is scored as it stands. `config.json` records what was forced under `standard.timeouts` and `standard.max_turns`. From the builder, *Limits* takes them in minutes.
 
 ## A cap on model calls
