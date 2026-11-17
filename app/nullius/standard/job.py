@@ -400,11 +400,74 @@ def backfill_trace(trial_dir: str, write: bool = False) -> str:
     return "full" if full else "partial"
 
 
+def _named(name: str) -> str:
+    """A serving provider's name as its slug reads: lowercased, its words joined by dashes (``DeepInfra`` reads
+    ``deepinfra``) and nothing else folded: ``Prov/A`` is not ``prov-a``, and a provider whose name differs from its
+    slug otherwise (``Google`` serving ``google-vertex``) reads as another. A run fetches no list of
+    providers, and this is all a name is matched by."""
+    return re.sub(r"\s+", "-", name.strip().lower())
+
+
+def served(calls: List[dict], serving: Optional[Dict[str, List[str]]] = None) -> Optional[dict]:
+    """Who served a unit's answered calls (each record's ``reply.served_by``): the calls by serving provider and
+    those that named none; and, for each model the run pinned (``serving``), whether the pin held - true when
+    every answered call sent as that model names a provider that reads as one of its pinned slugs (``_named``,
+    a slug's first part), ``unknown`` when one names none or another name, None when it has no answered call.
+    A slug's endpoint variant (``/fp8``) is not in a reply's name: ``held`` says which provider answered, and
+    cannot tell one of its endpoints from another. None for a unit with no answered call in a run with no pin."""
+    answered = [c for c in calls if c.get("status") == 200 and not (c.get("reply") or {}).get("error")]
+    by: Dict[str, int] = {}
+    unnamed = 0
+    for c in answered:
+        name = (c.get("reply") or {}).get("served_by")
+        if isinstance(name, str) and name:
+            by[name] = by.get(name, 0) + 1
+        else:
+            unnamed += 1
+    if not answered and not serving:
+        return None
+    out = {"calls": dict(sorted(by.items())), "unnamed": unnamed}
+    if serving:
+        held = {}
+        for m, slugs in sorted(serving.items()):
+            mine = [c for c in answered if c.get("model") == m]
+            pinned = {str(s).split("/")[0].lower() for s in slugs}
+            held[m] = None if not mine else True if all(
+                _named(str((c.get("reply") or {}).get("served_by") or "")) in pinned for c in mine) else "unknown"
+        out["held"] = held
+    return out
+
+
+def served_total(results: List[dict], also: Optional[dict] = None) -> Optional[dict]:
+    """The job's ``served``: its trials' added up with ``also`` (the benchmark's own relay's, :func:`served`), a
+    pin held where it held in every one that called its model."""
+    parts = [p for p in [(r.get("standard") or {}).get("served") for r in results] + [also] if p]
+    if not parts:
+        return None
+    calls: Dict[str, int] = {}
+    for p in parts:
+        for name, n in (p.get("calls") or {}).items():
+            calls[name] = calls.get(name, 0) + n
+    out = {"calls": dict(sorted(calls.items())), "unnamed": sum(p.get("unnamed") or 0 for p in parts)}
+    models = sorted({m for p in parts for m in (p.get("held") or {})})
+    if models:
+        out["held"] = {}
+        for m in models:
+            said = [p["held"][m] for p in parts if (p.get("held") or {}).get(m) is not None]
+            out["held"][m] = None if not said else True if all(v is True for v in said) else "unknown"
+    return out
+
+
 def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: str, unit: str, t0: float, t1: float,
                 produce: tuple, score: Optional[dict], exception: Optional[tuple], calls: List[dict],
                 trajectory: Optional[dict], extra_logs: Optional[dict] = None, environment: str = "",
-                image: str = "", setup_end: Optional[float] = None, checking: tuple = (None, None)) -> dict:
-    """Write one unit's trial and return its result. ``environment``: the
+                image: str = "", setup_end: Optional[float] = None, checking: tuple = (None, None),
+                serving: Optional[Dict[str, List[str]]] = None, served_calls: Optional[List[dict]] = None) -> dict:
+    """Write one unit's trial and return its result. ``serving``: the run's
+    pin of serving providers by model; ``standard.served`` says who served
+    ``served_calls`` (the unit's calls on every route of its relay: its
+    agent's, its judge's, its simulated user's; ``calls`` when not given) and
+    whether the pin held (:func:`served`). ``environment``: the
     benchmark's environment the unit asked for (none: the base image), and
     ``image``, the one it ran in on the container backend - names only.
     ``setup_end``: when the unit's environment was ready and the agent began
@@ -426,7 +489,8 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
                             "cost_usd": tot["cost"], "cost_from": tot["cost_from"], "n_model_calls": tot["n_calls"]},
            "standard": {"benchmark": bench["key"], "family": bench["family"], "needs": bench["needs"], "unit": unit,
                         "plugged": other.get("_ref") or other["key"], "job": job, **_version(bench), **_control(other), **_setup(other),
-                        **({"environment": environment} if environment else {}), **({"image": image} if image else {})}}
+                        **({"environment": environment} if environment else {}), **({"image": image} if image else {}),
+                        **({"served": who} if (who := served(calls if served_calls is None else served_calls, serving)) else {})}}
     if score is not None:
         value = float(score.get("reward") or 0.0)
         # a pass benchmark leaves a reward, as a verifier does; a score
@@ -465,7 +529,8 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
                  bench_options: Optional[dict] = None,
                  simulator: str = "", prices: Optional[dict] = None, units_file: Optional[dict] = None,
-                 constraints: Optional[dict] = None):
+                 constraints: Optional[dict] = None,
+                 served_by: Optional[Dict[str, List[str]]] = None):
     """``unsandboxed`` is true for an agent on the local backend only: in a
     container (``backend``, ``image``) it is not. ``standard.options`` holds
     every option's value, the defaults included, so two runs read side by side
@@ -477,7 +542,9 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     ``simulator``: the models that graded and that played the user, when the
     benchmark has them. ``prices``: the rows its models' costs are
     estimated from and where the user's list came from, when it has any.
-    ``constraints``: what the machine allowed the run (``nullius.constraints``), when it set any."""
+    ``constraints``: what the machine allowed the run (``nullius.constraints``), when it set any.
+    ``served_by``: by model, the serving providers the run let answer it
+    (``--served-by``), said only for a run that pinned them."""
     with open(os.path.join(job_dir, "config.json"), "w") as f:
         json.dump({"job_name": job, "runner": "standard", "runner_label": "Nullius",
                    "standard": {"benchmark": bench["key"], **_version(bench), "plugged": other.get("_ref") or other["key"], "kind": other["_kind"], "provider": provider,
@@ -488,7 +555,8 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"launch": launch} if launch else {}), **({"shard": shard} if shard else {}),
                                 **({"units_file": units_file} if units_file else {}),
                                 **({"repeat": repeat} if repeat > 1 else {}), **({"prices": prices} if prices else {}),
-                                **({"constraints": constraints} if constraints else {})},
+                                **({"constraints": constraints} if constraints else {}),
+                                **({"served_by": dict(sorted(served_by.items()))} if served_by else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,
                    "agents": [{"name": other["key"], "model_name": model}],
@@ -544,14 +612,18 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
             "at": {str(k): round(sum(1 - comb(n - sum(v[:n]), k) / comb(n, k) for v in whole.values()) / len(whole), 4) for k in range(1, n + 1)}}
 
 
-def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int, budget: Optional[dict] = None):
+def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int, budget: Optional[dict] = None,
+                 served: Optional[dict] = None):
     """``budget``: a run with a spending cap (``run.Run.budget``): the cap,
     what was spent, whether it stopped the run, the units it cut off and
-    those never begun."""
+    those never begun. ``served``: who served the benchmark's own relay's
+    calls (:func:`served`); the job's ``served`` adds its trials' to them."""
     errored = sum(1 for r in results if r.get("exception_info"))
     hat = pass_hat(results)
+    who = served_total(results, served)
     with open(os.path.join(job_dir, "result.json"), "w") as f:
         json.dump({"id": job, "started_at": iso(t0), "finished_at": iso(t1), "n_total_trials": planned,
                    "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
                              "n_cancelled_trials": planned - len(results), "n_running_trials": 0, "n_pending_trials": 0},
-                   **({"pass_hat_k": hat} if hat else {}), **({"budget": budget} if budget else {})}, f, indent=1)
+                   **({"pass_hat_k": hat} if hat else {}), **({"budget": budget} if budget else {}),
+                   **({"served": who} if who else {})}, f, indent=1)

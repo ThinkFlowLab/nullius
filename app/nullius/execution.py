@@ -1676,19 +1676,45 @@ def run_folder(name: str, root: Optional[str] = None) -> str:
     return path
 
 
-def _run_deletion(name: str, home: str, root: Optional[str]) -> dict:
+def size_of(path: str) -> int:
+    """The bytes of every file under *path*, links not followed; a file gone
+    since the walk listed it (a run still writing replaces its own) counts 0."""
+    total = 0
+    for d, _, names in os.walk(path):
+        for n in names:
+            try:
+                total += os.lstat(os.path.join(d, n)).st_size
+            except FileNotFoundError:
+                pass
+    return total
+
+
+def _deletable(name: str, root: Optional[str]) -> tuple:
+    """A run's folder and record, when it is a run that has ended; ValueError
+    (alive, or not a run) or OSError (its record unreadable) otherwise."""
     path = run_folder(name, root)
     with open(os.path.join(path, RECORD), encoding="utf-8") as fh:
         rec = json.load(fh)
-    ex = next((e for e in EXECUTIONS.values() if os.path.realpath(e.dir) == path), None)
+    ex = next((e for e in EXECUTIONS.values() if e.plan.name == name and os.path.realpath(e.dir) == path), None)
     state = ex.state if ex is not None else rec.get("state")
     if state in ALIVE:
         raise ValueError(f"{name} is {state}: stop it before you delete it")
+    return path, rec
+
+
+def deletable(names: List[str], root: Optional[str] = None) -> None:
+    """Raise as ``deletion`` would for the runs *names*, without working out what goes."""
+    for n in dict.fromkeys(names):
+        _deletable(n, root)
+
+
+def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable) -> dict:
+    path, rec = _deletable(name, root)
     plan = rec.get("plan") or {}
     # a run refused at the name check never made the host folder: one of that name there is not its own
     host = hosts.parse(plan["host"]) if plan.get("host") and (rec.get("launched") or rec.get("step") not in ("connect", "name")) else None
     held = []
-    for ws, roots in workspace.holding(home, path):
+    for ws, roots in holding(path):
         dirs = parse.find_job_dirs(roots)
         ids = [j.job_id for j in workspace.load_jobs(ws, roots)]
         # a job of the same id from another root shares these judgements: they stay
@@ -1696,18 +1722,19 @@ def _run_deletion(name: str, home: str, root: Optional[str]) -> dict:
         judged = judgements.job_dirs(ws.dir, [i for i in ids if i.split("~")[0] not in others])
         held.append({"ws": ws, "roots": roots, "jobs": dirs,
                      "judged": judged, "judgements": sum(len(os.listdir(d)) for d in judged)})
-    size = sum(os.lstat(os.path.join(d, n)).st_size for d, _, names in os.walk(path) for n in names)
-    return {"name": name, "dir": path, "bytes": size, "host": host, "workspaces": held,
+    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held,
             "judgements": sum(w["judgements"] for w in held)}
 
 
-def deletion(names: List[str], home: str, root: Optional[str] = None) -> dict:
+def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None) -> dict:
     """What deleting the runs *names* of one launch removes: per run (``runs``)
     its folder and size, the host copy that is its own, and per workspace that
     holds it its roots, parsed jobs and judgement folders; the totals, and the
     number of copies per host. ValueError when any of them is alive or is not
-    a run: nothing goes then."""
-    runs = [_run_deletion(n, home, root) for n in dict.fromkeys(names)]
+    a run: nothing goes then. ``holding``: a run folder's ``workspace.holding``,
+    when the caller has it already."""
+    holding = holding or (lambda path: workspace.holding(home, path))
+    runs = [_run_deletion(n, home, root, holding) for n in dict.fromkeys(names)]
     copies: Dict[str, int] = {}
     for r in runs:
         if r["host"]:

@@ -347,6 +347,22 @@ class FromTheCommandLine(unittest.TestCase):
         cfg = read(os.path.join(job, "config.json"))
         self.assertEqual((cfg["standard"]["units_file"]["units"], cfg["standard"]["constraints"], cfg["n_concurrent_trials"]),
                          (["slow", "good"], {"concurrency": 1}, 1))
+    def test_the_command_records_both_the_units_file_and_the_serving_pin(self):
+        path = self.file("good\n")
+        self.b["score"] = dict(self.b["score"], judge={"model": "m-judge", "says": "a judge"})
+        # The fixture scores locally; no relay listener is needed.
+        for extra in ([], ["--from-run"]):
+            with self.subTest(extra=extra), mock.patch.object(run.relay.Relay, "start", lambda r: r), \
+                    mock.patch.object(run.relay.Relay, "public", "http://127.0.0.1:9"), \
+                    mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test", "OPENAI_API_KEY": "or-test"}):
+                code, out = self.cli("--units", path, "--provider", "openrouter", "--judge-model", "m-judge",
+                                     "--served-by", "m-judge=prov-a", "--name", "pinned" + "".join(extra), *extra)
+                self.assertEqual(code, 0, out)
+                job = out.strip().splitlines()[-1]
+                standard = read(os.path.join(job, "config.json"))["standard"]
+                self.assertEqual(standard["units_file"], run.units_file(path))
+                self.assertEqual(standard["served_by"], {"m-judge": ["prov-a"]})
+                self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000"])
 
     def test_a_list_the_run_cannot_take_is_refused_with_exit_2(self):
         for text, said in (("good\ngood\n", "more than once"), ("# none\n", "lists no unit"), ("good\nnope\n", "nope")):

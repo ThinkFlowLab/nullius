@@ -246,3 +246,13 @@
 #nullius-builder .std-backends .nb-mark { width: 20px; height: 20px; }
 #nullius-builder .std-backends .nb-tile-note { font-size: 11px; white-space: nowrap; }
 @media (max-width: 560px) { #nullius-builder .std-backends { grid-template-columns: minmax(0, 320px); } }
+/* Served by: a row after its model's row, as that row is: the label left, the picker right, the providers chosen
+   under the picker in their order */
+#nullius-builder .std-served-list { grid-column: 2; min-width: 0; }
+#nullius-builder .std-served-list:empty { display: none; }
+#nullius-builder label.std-served:has(.std-served-list:not(:empty)) > .ui-field-copy { grid-row: span 2; align-self: start; margin-top: 6px; }
+#nullius-builder .std-served-pick { cursor: default; gap: 2px; padding: 3px 3px 3px 11px; font: 12.5px/1.4 var(--mono); border-color: var(--nb-blue); background: var(--nb-tint); max-width: 100%; }
+/* a slug is never cut: a long one wraps inside its chip, which stays inside its row */
+#nullius-builder .std-served-slug { min-width: 0; overflow-wrap: anywhere; }
+#nullius-builder .std-served-pick .nb-remove { flex: none; padding: 0 6px; font-size: 14px; line-height: 1; }
+@media (max-width: 650px) { #nullius-builder .std-served-list { grid-column: 1; } #nullius-builder label.std-served:has(.std-served-list:not(:empty)) > .ui-field-copy { grid-row: auto; margin-top: 0; } }
