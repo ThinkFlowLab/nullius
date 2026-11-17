@@ -39,6 +39,7 @@ Each page's command, or why there is none.
 | Rename or delete a workspace | `nullius workspace rename`, `nullius workspace delete --yes` |
 | `/new-run` | `recipes.cli`; today `POST /new-run/runner` |
 | Delete a launch | `execution.delete`; today `POST /launch/<key>/delete` |
+| `/launches`, add a launch to a workspace | `execution.restore` reads every run record; today `POST /launch/<key>/add` |
 
 ## None needed
 

@@ -25,7 +25,8 @@ def workspace_open(name):
         flash(Markup(f'No workspace called <span class="mono">{escape(name)}</span>.'), "error")
         return redirect(url_for("workspaces_page"))
     shared.open_workspace(ws)
-    return redirect(url_for("index"))
+    launch = request.form.get("launch")                 # the Launches page: open at that launch
+    return redirect(url_for("launch_open", key=launch) if launch else url_for("index"))
 
 
 @app.route("/workspaces/refresh", methods=["POST"])

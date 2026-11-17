@@ -852,10 +852,10 @@ def _budget(b) -> dict:
             "shards": num(b.get("shards")) or 0, "shards_stopped": num(b.get("shards_stopped")) or 0}
 
 
-def parse_job(job_dir: str, reuse=None) -> Job:
+def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
     """One job directory. ``reuse(trial_dir)``: a Trial already parsed from
     files that have not changed since (a workspace's cache, for a running
-    job), or None to parse it."""
+    job), or None to parse it. ``trials=False``: the job's own records only."""
     res = verifier._read_json(os.path.join(job_dir, "result.json")) or {}
     cfg = verifier._read_json(os.path.join(job_dir, "config.json")) or {}
     stats = res.get("stats") or {}
@@ -909,7 +909,7 @@ def parse_job(job_dir: str, reuse=None) -> Job:
         dataset_path=redact(dataset_path),
     )
 
-    for name in sorted(os.listdir(job_dir)):
+    for name in sorted(os.listdir(job_dir)) if trials else ():
         sub = os.path.join(job_dir, name)
         if os.path.isdir(sub) and os.path.isfile(os.path.join(sub, "result.json")):
             t = (reuse(sub) if reuse else None) or parse_trial(job.job_id, sub)
