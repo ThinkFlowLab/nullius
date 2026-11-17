@@ -13,6 +13,7 @@ from pathlib import Path
 
 from nullius import workspace
 from nullius.judge import batch, client, questions, state, store
+from nullius.runs import parse
 from nullius.traces import trajectory
 
 HERE = Path(__file__).resolve().parent
@@ -391,6 +392,51 @@ class Hygiene(unittest.TestCase):
         import inspect
         self.assertEqual(list(inspect.signature(redact.redact).parameters), ["text"])
         self.assertNotIn("[transcript]", json.dumps(rec)); self.assertNotIn("AKIAIOSFODNN7EXAMPLE", json.dumps(rec))   # the record carries readings, never the state
+
+
+class VerifierSection(unittest.TestCase):
+    """The failure state's [verifier] section always has text: the
+    verifier's files when there are any, otherwise a sentence that says
+    whether the verifier ran."""
+    DID_NOT_RUN = "[verifier]\ndid not run: the trial records no reward and no verifier phase"
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="nullius-judge-verifier-")); self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.traj = trajectory.load(str(CLEAN))
+
+    def trial(self, reward, dur_verifier):
+        return parse.Trial(job_id="j", dir=str(self.tmp), task_name="x/y", trial_name="t", task_base="y", source="",
+                           model_name="", outcome="", reward=reward, exception_type="", exception_message="",
+                           patch_exists=None, patch_applied=None, f2p_pass=0, f2p_fail=0, p2p_pass=0, p2p_fail=0,
+                           n_input_tokens=0, n_output_tokens=0, n_cache_tokens=0, cost_usd=None, dur_total=None,
+                           dur_env=None, dur_agent_setup=None, dur_agent=None, dur_verifier=dur_verifier)
+
+    def section(self, text):
+        """The failure state's last section, from its heading to the end."""
+        return "[verifier]\n" + text.rpartition("\n\n[verifier]\n")[2]
+
+    def failure(self, trial):
+        return self.section(state.build("failure", self.traj, trial=trial, trial_dir=str(self.tmp))[0])
+
+    def test_no_verifier_file_and_no_trial_is_nothing_recorded(self):
+        self.assertEqual(self.failure(None), "[verifier]\nnothing recorded")
+        self.assertEqual(self.section(state.build("failure", self.traj)[0]), "[verifier]\nnothing recorded")
+
+    def test_a_trial_with_no_reward_and_no_verifier_phase_says_the_verifier_did_not_run(self):
+        self.assertEqual(self.failure(self.trial(None, None)), self.DID_NOT_RUN)
+
+    def test_a_trial_with_a_reward_or_a_verifier_phase_is_nothing_recorded(self):
+        for reward, dur_verifier in ((0.0, None), (None, 4.5), (1.0, 4.5)):
+            with self.subTest(reward=reward, dur_verifier=dur_verifier):
+                self.assertEqual(self.failure(self.trial(reward, dur_verifier)), "[verifier]\nnothing recorded")
+
+    def test_a_verifier_file_is_the_section_whatever_the_trial_records(self):
+        (self.tmp / "verifier").mkdir()
+        (self.tmp / "verifier" / "reward.txt").write_text("0\n")
+        self.assertEqual(state.verifier_text(str(self.tmp)), "[verifier/reward.txt]\n0\n")
+        for trial in (None, self.trial(None, None), self.trial(0.0, 4.5)):
+            with self.subTest(trial=trial and (trial.reward, trial.dur_verifier)):
+                self.assertEqual(self.failure(trial), "[verifier]\n[verifier/reward.txt]\n0\n")
 
 
 class Instruction(unittest.TestCase):
