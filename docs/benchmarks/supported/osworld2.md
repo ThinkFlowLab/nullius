@@ -19,7 +19,7 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 
 | Dataset | Key | Tasks | From | Verifier |
 |---|---|---|---|---|
-| OSWorld-V2, release osworld-v2.1 | `osworld2` | 108 | GitHub [xlang-ai/OSWorld-V2](https://github.com/xlang-ai/OSWorld-V2/tree/3d778a3c9a34a079316f70df023b166700445792) | OSWorld-V2's own evaluation: each task class's evaluate() on the VM's final state, from 0 to 1, as the upstream's run_single_example writes it to result.txt. |
+| OSWorld-V2, release osworld-v2.1 | `osworld2` | 108 | GitHub [xlang-ai/OSWorld-V2](https://github.com/xlang-ai/OSWorld-V2/tree/3d778a3c9a34a079316f70df023b166700445792) | Each task's own evaluate() on the VM's final state, 0 to 1. |
 
 ## On the standard
 
@@ -43,7 +43,7 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 | `max_steps` | **`100`**, `300`, `500` | The agent's step limit. | `original` |
 | `thinking` | **`off`**, `adaptive` | Whether M3 thinks. The paper ran it adaptive. | `original` |
 | `vm_provider` | **`docker`** | Where the VMs run. | `original`, `yours` |
-| `websites` | e.g. `10.213.0.1.nip.io`, default `none` | Where the mock websites are served. Needed by the 40 website tasks. | `original`, `yours` |
+| `websites` | e.g. `10.213.0.1.nip.io`, default `none` | Where the mock websites are served. Needed by the 40 mock website tasks. | `original`, `yours` |
 | `write_iops` | e.g. `160`, default `none` | Disk write limit for each VM. | `original`, `yours` |
 | `write_mbps` | e.g. `16`, default `none` | Disk write limit for each VM. | `original`, `yours` |
 
@@ -53,7 +53,7 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 
 ## Good to know
 
-- Scores are partial credit: each task's own evaluate() gives 0 to 1, and the upstream's score is the mean.
+- Partial credit: each task scores 0 to 1; the score is the mean.
 
 ## Nullius limitations
 
@@ -61,7 +61,7 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 - Muse Spark's published score came from newer upstream code: scores here do not compare with it.
 - The LLM grader (21 tasks) and the simulated user (6) are Claude Sonnet 4.6: the run's provider must serve it.
 - 29 tasks use the public internet: their outcome can change with the live sites.
-- Tasks 103 and 104 are not supported: they stay in the datasets and end in an error.
+- Tasks 103 and 104 are not supported: they stay in the datasets, and an agent's unit ends in an error.
 - A slow or loaded machine, or a run across 16:00 UTC (the VM's midnight), can change scores.
 - The null control scores above 0 on 015, 076, 090 and 092, and on 077 in some runs.
 - Only OSWorld-V2's own M3 and Muse Spark run it; no agent from the Agents page yet.

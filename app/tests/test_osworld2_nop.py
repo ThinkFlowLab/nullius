@@ -216,7 +216,7 @@ class EndsEarly(unittest.TestCase):
         with self.assertRaises(RuntimeError) as raised:
             self.nop(FAKE_FAILED="1", FAKE_HANG="30")
         self.assertLess(time.time() - t0, 10)
-        self.assertIn("did not end 1 s after its failure, and was handed to the reaper", str(raised.exception))
+        self.assertIn("did not end 1 s after its failure, and was stopped", str(raised.exception))
         self.assertIn("EnvironmentSetupError", str(raised.exception))
         self.assertNotIn(WORDS, str(raised.exception))
         self.assertTrue(self.reaped)

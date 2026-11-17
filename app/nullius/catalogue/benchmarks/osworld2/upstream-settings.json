@@ -487,7 +487,7 @@
   "setting": "OSWORLD_FILE_BASE_URL",
   "values": "a folder or a URL of the task files",
   "default": "$OSWORLD_FILE_BASE_URL, else ./cache/osworld_v2_assets",
-  "nullius": "fixed:the upstream's cache/osworld_v2_assets, by its absolute path - the release's gated assets, put there before a run: a file a task names through asset() is copied from there into the unit's task cache, not downloaded; for 001, 006 and 010 a folder of the unit's own, with their mail profiles signed out (driver.py _assets)"
+  "nullius": "fixed:the upstream's cache/osworld_v2_assets, by its absolute path - the release's gated assets, put there before a run: a file a task names through asset() is copied from there into the unit's task cache, not downloaded; for 001, 006 and 010 a folder of the unit's own, their mail client started offline (driver.py _assets)"
  },
  {
   "entry": "desktop_env/controllers/website.py",

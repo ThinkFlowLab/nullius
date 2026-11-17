@@ -571,13 +571,13 @@ def _run(argv, cwd, env, log, what, stagger=False, failed=None, until=None, grac
             if hard and time.time() > hard:
                 _reaper(p.pid, cwd, stagger, seen)
                 raise (VerifierError if _acted(cwd) or failed and _set_up_done(log) else EnvironmentSetupError)(
-                    f"{what} did not end {grace} s after the unit's turn limit, and was handed to the reaper")
+                    f"{what} did not end {grace} s after the unit's turn limit, and was stopped")
             if failed and given is None and os.path.exists(failed):
                 given = time.time()
             if given is not None and time.time() - given > CLOSE_SECONDS:
                 _reaper(p.pid, cwd, stagger, seen)
                 raise EnvironmentSetupError(f"{what} did not end {CLOSE_SECONDS} s after its failure, and was "
-                                            f"handed to the reaper: {_setup_failed(failed)} (the whole log: {log})")
+                                            f"stopped: {_setup_failed(failed)} (the whole log: {log})")
     finally:
         done.set()
         if p.pid in _ARMED:
@@ -732,7 +732,7 @@ def _graded(eid, judge):
     if not judge:
         if eid in JUDGED:
             raise RuntimeError(f"task {eid} is scored by the LLM grader and this run gives it no judge route: "
-                               "run it with the benchmark's judge (score.judge)")
+                               "run it with the benchmark's own judge")
         return {}
     if not isinstance(judge, dict) or not all(isinstance(judge.get(k), str) and judge[k] for k in ("model", "base_url", "key")):
         raise RuntimeError("the judge route needs a model, a base_url and a key")
@@ -1204,7 +1204,7 @@ def _grader_failed(*logs, refused=0):
                     elif m and m.group(1) in GRADER_FAILED:
                         raise VerifierError(f"the LLM grader failed in {m.group(1)[len('Error in '):-2]} "
                                            f"({_grader_cause(m.group(2))}), and the upstream counted its "
-                                           "comparison as failed; see the unit's judge route")
+                                           "comparison as failed; see the judge's calls")
         except OSError:
             continue
 
@@ -1303,7 +1303,7 @@ def _grader_refused(dir, judge):
         refused += [why] if why else []
     if failed:
         raise VerifierError(f"the LLM grader's endpoint answered {failed.get('status')}, and the task was "
-                           "scored without it; see the unit's judge route")
+                           "scored without it; see the judge's calls")
     return refused
 
 

@@ -113,7 +113,7 @@ def suffix(environ=os.environ):
     if value == "none":
         return None
     if not SUFFIX.fullmatch(value):
-        raise WebsiteError(f"the websites option {value!r} is not a host suffix: give the suffix the stack serves "
+        raise WebsiteError(f"Website host suffix {value!r} is not a host suffix: give the suffix the stack serves "
                            f"(such as {_site().GATEWAY}.nip.io), or none")
     return value
 
@@ -130,7 +130,7 @@ def needed(eid, environ=os.environ):
     if eid not in TASKS:
         return None
     if not value:
-        raise WebsiteError(f"task {eid} needs the mock websites and this run gives it none: set the websites option "
+        raise WebsiteError(f"task {eid} needs the mock websites and this run gives it none: set Website host suffix "
                            f"to the suffix the stack serves ({SETUP_DOC})")
     return value
 
@@ -165,11 +165,11 @@ def ready(value, overleaf=False, state=True):
         host = f"{name}.{value}"
         found = _resolves(host)
         if not found:
-            raise WebsiteError(f"{host} does not resolve: the websites option must be a wildcard DNS name of the "
+            raise WebsiteError(f"{host} does not resolve: Website host suffix must be a wildcard DNS name of the "
                                f"address the stack listens on, {gateway} (such as {gateway}.nip.io)")
         if gateway not in found:
             raise WebsiteError(f"{host} resolves to {', '.join(sorted(found))}, not {gateway}, the VMs' network's "
-                               f"gateway the stack listens on: set the websites option to a wildcard DNS name of "
+                               f"gateway the stack listens on: set Website host suffix to a wildcard DNS name of "
                                f"{gateway} (such as {gateway}.nip.io)")
         if not _fetch(opener, f"{SCHEME}{host}/").strip():
             raise WebsiteError(f"{SCHEME}{host}/ answered an empty page: the stack serves another suffix than "
@@ -255,7 +255,7 @@ def reset_overleaf(value, closed=None):
     compose, settings = _project()
     if settings.get("HOST_SUFFIX") != value:
         raise WebsiteError(f"the stack serves {settings.get('HOST_SUFFIX') or 'no suffix'} and this run asks for "
-                           f"{value}: set the websites option to the stack's")
+                           f"{value}: set Website host suffix to the stack's")
     _done(_docker(*compose, "rm", "--stop", "--force", "-v", *OVERLEAF), "removing Overleaf's services")
     _done(_docker("volume", "rm", "--force", *[f"{PROJECT}_{v}" for v in OVERLEAF_VOLUMES]), "removing Overleaf's volumes")
     _done(_docker(*compose, "up", "-d", "--no-build", "--pull", "never", OVERLEAF[-1]), "starting Overleaf")

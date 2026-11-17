@@ -165,7 +165,7 @@ class Driver(unittest.TestCase):
                     self.driver.score("tasks__003", self.tmp, setup="original", judge=self.judge)
                 said = str(raised.exception)
                 self.assertIn("the LLM grader failed in compare_text_with_llm (HTTP 402), and the upstream", said)
-                self.assertIn("see the unit's judge route", said)
+                self.assertIn("see the judge's calls", said)
                 self.assertNotIn("insufficient credits", said)
                 self.assertNotIn("\x1b", said)
                 os.remove(log)
@@ -339,7 +339,7 @@ class Driver(unittest.TestCase):
                         start()
                     self.assertIn("the LLM grader's endpoint answered", str(raised.exception))
                     self.assertIsInstance(raised.exception, self.driver.VerifierError)
-                    self.assertIn("see the unit's judge route", str(raised.exception))
+                    self.assertIn("see the judge's calls", str(raised.exception))
             for name, calls in recovered.items():
                 self.calls(*calls)
                 with self.subTest(name):
