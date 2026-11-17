@@ -404,19 +404,23 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
                 produce: tuple, score: Optional[dict], exception: Optional[tuple], calls: List[dict],
                 trajectory: Optional[dict], extra_logs: Optional[dict] = None, environment: str = "",
                 image: str = "", setup_end: Optional[float] = None, agent_ready: Optional[float] = None,
-                checking: tuple = (None, None)) -> dict:
+                agent_unready: Optional[float] = None, checking: tuple = (None, None)) -> dict:
     """Write one unit's trial and return its result. ``environment``: the
     benchmark's environment the unit asked for (none: the base image), and
     ``image``, the one it ran in on the container backend - names only.
     ``setup_end``: when the unit's environment was ready and the agent began
     (its setup, relay and container from ``t0``); ``agent_ready``: when the
     agent, started and in its session, was first asked - its setup from
-    ``setup_end``, its run from there; ``checking``: the check's
+    ``setup_end``, its run from there; ``agent_unready``: when its start ended
+    with no session (it never answered, it exited) - its setup ends there and
+    it has no run, as Harbor writes a failed agent setup; ``checking``: the check's
     start and end (its own step in the container, then the driver's score)."""
     os.makedirs(os.path.join(trial_dir, "agent"), exist_ok=True)
     os.makedirs(os.path.join(trial_dir, "verifier"), exist_ok=True)
     if produce and produce[0] and agent_ready:   # its run starts once it is set up: the trace's window too
         produce = (agent_ready, produce[1])
+    elif agent_unready:                          # it never got a session: no run to time
+        produce = (None, None)
     tot = _usage_total(calls)
     # the pages read a task's name after its last slash: a unit's own slashes
     # (a unit id like "set/12") would leave only its last part
@@ -425,7 +429,8 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
            "agent_info": {"name": other["key"], "version": str((other.get("upstream") or {}).get("version") or ""),
                           "model_info": {"name": model}},
            "environment_setup": {"started_at": iso(t0), "finished_at": iso(setup_end)} if setup_end else None,
-           "agent_setup": {"started_at": iso(setup_end), "finished_at": iso(agent_ready)} if setup_end and agent_ready else None,
+           "agent_setup": {"started_at": iso(setup_end), "finished_at": iso(agent_ready or agent_unready)}
+                          if setup_end and (agent_ready or agent_unready) else None,
            "agent_execution": {"started_at": iso(produce[0]), "finished_at": iso(produce[1])} if produce and produce[0] else None,
            "verifier": {"started_at": iso(checking[0]), "finished_at": iso(checking[1])} if checking and checking[0] and checking[1] else None,
            "agent_result": {"n_input_tokens": tot["input"], "n_output_tokens": tot["output"], "n_cache_tokens": tot["cached"],
@@ -504,6 +509,21 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
 #: an error kind naming the machine or the benchmark's side rather than the agent: the live board's infra_error
 _INFRA = ("Setup", "Verifier", "Api", "RateLimit", "Environment", "Docker", "Build", "Connection", "Network", "Authentication",
           "ModelNotFound")
+
+
+FEED_PHASES = (("env_setup", "environment_setup"), ("agent_setup", "agent_setup"), ("agent_run", "agent_execution"), ("verify", "verifier"))
+
+
+def feed_durations(res: dict) -> Optional[dict]:
+    """The phases a trial recorded, in the live feed's words and in seconds, read from its result so
+    the board and the trial's page say the same (Harbor's writer sends its four the same way). A
+    phase it has none of is left out; None when it recorded none."""
+    out = {}
+    for phase, key in FEED_PHASES:
+        window = res.get(key) or {}
+        if window.get("started_at") and window.get("finished_at"):
+            out[phase] = round((datetime.fromisoformat(window["finished_at"]) - datetime.fromisoformat(window["started_at"])).total_seconds(), 3)
+    return out or None
 
 
 def feed_outcome(kind: str, score: Optional[dict], exception: Optional[tuple]) -> dict:

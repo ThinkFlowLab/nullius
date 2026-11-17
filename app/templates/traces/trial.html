@@ -142,7 +142,7 @@
     {# A 0s phase emits no segment at all, so a control's empty setup leaves
        no stray sliver. #}
     {% if trial.dur_env|phase %}<span class="seg ph-env" style="flex:{{ trial.dur_env|phase }}" title="Environment build: {{ trial.dur_env|secs }}"></span>{% endif %}
-    {% if trial.dur_agent_setup|phase %}<span class="seg ph-setup" style="flex:{{ trial.dur_agent_setup|phase }}" title="Agent setup (installing the agent): {{ trial.dur_agent_setup|secs }}"></span>{% endif %}
+    {% if trial.dur_agent_setup|phase %}<span class="seg ph-setup" style="flex:{{ trial.dur_agent_setup|phase }}" title="{{ "Agent setup (its start and its session)" if job.runner else 'Agent setup (installing the agent)' }}: {{ trial.dur_agent_setup|secs }}"></span>{% endif %}
     {% if trial.dur_agent|phase %}<span class="seg ph-agent" style="flex:{{ trial.dur_agent|phase }}" title="Agent working: {{ trial.dur_agent|secs }}"></span>{% endif %}
     {% if trial.dur_verifier|phase %}<span class="seg ph-verify" style="flex:{{ trial.dur_verifier|phase }}" title="Verifier: {{ trial.dur_verifier|secs }}"></span>{% endif %}
     {% set items = job.runner_items[1] if job.runner_items else 'items' %}

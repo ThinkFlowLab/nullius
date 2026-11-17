@@ -10,6 +10,7 @@ import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from contextlib import contextmanager
 from datetime import datetime
 from unittest import mock
 
@@ -138,6 +139,18 @@ class RunTest(unittest.TestCase):
     def outcomes(self, job_dir):
         j = parse.parse_job(job_dir)
         return {t.trial_name.split("__")[0]: t for t in j.trials}, j
+
+    def windows(self, job_dir, starts):
+        """The phases one trial recorded as (start, end) seconds, its ``result.json`` whole, and what the
+        live feed was told of it: the phases in order and its end's durations."""
+        trial = [d for d in os.listdir(job_dir) if d.startswith(starts)][0]
+        with open(os.path.join(job_dir, trial, "result.json")) as f:
+            res = json.load(f)
+        at = lambda key: tuple(datetime.fromisoformat(res[key][k]).timestamp() for k in ("started_at", "finished_at")) if res.get(key) else None
+        with open(os.path.join(job_dir, "events.jsonl")) as f:
+            mine = [e for e in map(json.loads, f) if e.get("trial") == trial]
+        return ({k: at(k) for k in ("environment_setup", "agent_setup", "agent_execution", "verifier")}, res,
+                [e["phase"] for e in mine if e["event"] == "trial.phase"], next(e for e in mine if e["event"] == "trial.end")["durations"])
 
     def assert_no_key(self, job_dir):
         for root, _, files in os.walk(job_dir):
@@ -528,6 +541,39 @@ class RunTest(unittest.TestCase):
         self.assertEqual(tool["attributes"]["tool_name"], "write answer.txt")
         self.assertEqual(tool["timing_quality"], "measured")
 
+    def test_an_agents_setup_is_timed_apart_from_its_run_and_the_board_is_told_the_same(self):
+        """Over ACP, the agent's start and its session are its setup: the
+        environment, the setup, the run and the check follow one another on
+        shared stamps, and the live feed carries the same phases and the same
+        seconds as the trial's result."""
+        w, res, phases, told = self.windows(self.go("fakebench", "fake", limit=1), "good__")
+        self.assertEqual(w["environment_setup"][1], w["agent_setup"][0])
+        self.assertEqual(w["agent_setup"][1], w["agent_execution"][0])
+        self.assertLess(w["agent_setup"][0], w["agent_setup"][1])
+        self.assertLessEqual(w["agent_execution"][1], w["verifier"][0])
+        self.assertEqual(phases, ["env_setup", "agent_setup", "agent_run", "verify"])
+        self.assertEqual(sorted(told), ["agent_run", "agent_setup", "env_setup", "verify"])
+        for phase, key in (("env_setup", "environment_setup"), ("agent_setup", "agent_setup"), ("agent_run", "agent_execution"), ("verify", "verifier")):
+            self.assertAlmostEqual(told[phase], w[key][1] - w[key][0], places=3, msg=phase)
+
+    def test_the_tasks_door_is_the_environments_not_the_agents(self):
+        """A task's internet door opens before the agent begins and closes
+        after it ended: neither is the agent's setup nor its run."""
+        @contextmanager
+        def slow_door(self, setup, box, rl, trial):
+            threading.Event().wait(0.4)
+            try:
+                yield
+            finally:
+                threading.Event().wait(0.4)
+        t0 = datetime.now().timestamp()
+        with mock.patch.object(run.Run, "agent_internet", slow_door):
+            w, res, phases, told = self.windows(self.go("fakebench", "fake", limit=1), "good__")
+        self.assertGreaterEqual(w["agent_setup"][0] - w["environment_setup"][0], 0.4)      # the door opening is the environment's
+        self.assertGreaterEqual(w["verifier"][0] - w["agent_execution"][1], 0.4)           # its closing is nobody's phase
+        self.assertEqual(w["environment_setup"][1], w["agent_setup"][0])
+        self.assertGreater(w["environment_setup"][0], t0)
+
     def test_each_workspace_is_a_repository_of_its_own(self):
         # an agent looking up for its instructions (AGENTS.md) stops there, not at the checkout holding the jobs
         job_dir = self.go("fakebench", "fake", limit=1)
@@ -561,6 +607,12 @@ class RunTest(unittest.TestCase):
             got, j = self.outcomes(self.go("fakebench", "fake"))
         self.assertEqual(len(got), 4)            # every unit written, the run ended
         self.assertTrue(all(t.outcome == classify.SETUP_ERROR for t in got.values()), {k: t.outcome for k, t in got.items()})
+        # a start with no session is all setup: no run was timed, and the board ended each unit in its agent setup
+        self.assertTrue(all(t.dur_agent_setup is not None and t.dur_agent is None for t in got.values()),
+                        {k: (t.dur_agent_setup, t.dur_agent) for k, t in got.items()})
+        w, res, phases, told = self.windows(j.dir, "good__")
+        self.assertEqual(phases, ["env_setup", "agent_setup"])
+        self.assertEqual(sorted(told), ["agent_setup", "env_setup"])
 
     def test_a_rate_limit_is_infrastructure_not_a_miss(self):
         Echo.status = 429
@@ -629,6 +681,9 @@ class RunTest(unittest.TestCase):
         got, j = self.outcomes(job_dir)
         self.assertEqual(set(got), {"q1", "q2"})
         self.assertTrue(all(t.outcome == classify.SCORED and t.score == 1.0 for t in got.values()))   # a score, no pass
+        # a capability has no setup of its own: its process answers nothing until its first request
+        self.assertTrue(all(t.dur_agent_setup is None and t.dur_agent is not None for t in got.values()))
+        self.assertEqual(self.windows(job_dir, "q1__")[2], ["env_setup", "agent_run", "verify"])
         trial = [d for d in os.listdir(job_dir) if d.startswith("q1__")][0]
         with open(os.path.join(job_dir, trial, "agent", "trajectory.json")) as f:
             t = json.load(f)
@@ -808,6 +863,12 @@ class RunTest(unittest.TestCase):
             detail = json.load(f)["detail"]
         self.assertEqual(detail["said"], ["INTRO\n\nYOU SAID: OPEN", "INTRO\n\nYOU SAID: AGAIN"])
         self.assertEqual(opened.call_count, 2)
+        # its setup ended with its first session: the second is part of its run
+        w, res, phases, told = self.windows(job_dir, os.path.basename(trial))
+        self.assertEqual(phases.count("agent_setup"), 1)
+        self.assertEqual(w["agent_setup"][1], w["agent_execution"][0])
+        with open(os.path.join(trial, "agent", "acp.jsonl")) as f:
+            self.assertGreaterEqual(json.loads(f.readline())["t"], w["agent_execution"][0])
 
     def test_a_simulator_is_only_for_a_conversation(self):
         b = definitions.get("benchmark", "fakebench", ROOT)
