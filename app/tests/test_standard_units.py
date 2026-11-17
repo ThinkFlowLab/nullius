@@ -329,6 +329,19 @@ class FromTheCommandLine(unittest.TestCase):
             f.write(text)
         return path
 
+    def test_a_capped_run_fetches_the_price_list_first(self):
+        offline = "could not fetch the price list from the list's address: offline"
+        with mock.patch.object(cli.price_list, "update", side_effect=ValueError(offline)) as update, \
+                mock.patch.object(cli.run, "run_and_report", return_value=("job", False)) as ran:
+            self.cli("--max-usd", "1")
+        update.assert_called_once_with()
+        self.assertEqual(ran.call_args.kwargs["prices_unreachable"], offline)          # the run goes on uncapped, saying why
+        with mock.patch.object(cli.price_list, "update") as update, \
+                mock.patch.object(cli.run, "run_and_report", return_value=("job", False)) as ran:
+            self.cli()
+        update.assert_not_called()                                                      # no cap: nothing to price
+        self.assertIsNone(ran.call_args.kwargs["prices_unreachable"])
+
     def test_the_command_runs_the_listed_units_with_and_without_from_run(self):
         path = self.file("# a pair\nslow\ngood\n")
         for extra in ([], ["--from-run"]):

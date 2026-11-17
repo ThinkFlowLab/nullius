@@ -104,6 +104,20 @@ class Echo(BaseHTTPRequestHandler):
     refused = None          # a model that gets the rate limit while every other is answered
     limited = 0             # how many calls, from now, get the rate limit before the model answers again
     retry_after = None      # what a refused call says of when to call again (Retry-After), when it says
+    listed = None           # the models GET /models lists; None: no list, as a provider without one
+
+    def do_GET(self):
+        if Echo.listed is None or not self.path.endswith("/models"):
+            self.send_response(404)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        out = json.dumps({"data": [{"id": m} for m in Echo.listed]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
 
     def log_message(self, *a):
         pass
@@ -143,7 +157,7 @@ class RunTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self._home = install.HOME
         install.HOME = os.path.join(self.tmp, "home")
-        Echo.status, Echo.refused, Echo.limited, Echo.retry_after = 200, None, 0, None
+        Echo.status, Echo.refused, Echo.limited, Echo.retry_after, Echo.listed = 200, None, 0, None, None
         self.addCleanup(setattr, pacing, "FIRST", pacing.FIRST)
         pacing.FIRST = 0.5                       # a rate-limited unit's pause, short enough for a test
 
@@ -731,6 +745,40 @@ class RunTest(unittest.TestCase):
                     spans.append(tuple(datetime.fromisoformat(res[k].replace("Z", "+00:00")) for k in ("started_at", "finished_at")))
         self.assertGreaterEqual(len(spans), 2, spans)
         self.assertTrue(any(a[0] < b[1] and b[0] < a[1] for i, a in enumerate(spans) for b in spans[i + 1:]), spans)
+
+    def test_a_model_the_provider_does_not_list_is_refused_before_anything_starts(self):
+        """Every call to it would be refused the same way: no install, no unit,
+        the job saying why. A :suffix routes the model it follows; a provider
+        with no list is not checked."""
+        Echo.listed = ["m-1"]
+        b, o = definitions.get("benchmark", "fakebench", ROOT), definitions.get("agent", "fake", ROOT)
+        kw = dict(provider="custom", jobs_root=self.tmp, concurrency=2, env=self.env, say=lambda s: None, unsandboxed=True)
+        with self.assertRaises(run.Refused) as e:
+            run.run(b, o, model="m-typo", name="unlisted", **kw)
+        self.assertIn("lists no model m-typo: check the name", str(e.exception))
+        job_dir = os.path.join(self.tmp, "unlisted")
+        self.assertFalse([n for n in os.listdir(job_dir) if "__u" in n])                  # no unit begun
+        with open(os.path.join(job_dir, "progress.jsonl")) as f:
+            self.assertTrue(any(json.loads(line).get("stage") == "refused" for line in f))
+        self.assertTrue(os.path.isfile(os.path.join(run.run(b, o, model="m-1:nitro", name="routed", **kw), "result.json")))
+        Echo.listed = None
+        self.assertTrue(os.path.isfile(os.path.join(run.run(b, o, model="m-typo", name="no-list", **kw), "result.json")))
+
+    def test_a_capped_run_whose_price_list_could_not_be_fetched_runs_uncapped_and_says_so(self):
+        said = []
+        b, o = definitions.get("benchmark", "fakebench", ROOT), definitions.get("agent", "fake", ROOT)
+        kw = dict(model="m-1", provider="custom", jobs_root=self.tmp, concurrency=2, env=self.env, unsandboxed=True, max_usd=0.5)
+        job_dir = run.run(b, o, name="uncapped", say=said.append, prices_unreachable="could not fetch the price list: offline", **kw)
+        self.assertIn("warning: no spending cap: the price list could not be fetched, and m-1 has no price "
+                      "(could not fetch the price list: offline)", said)
+        with open(os.path.join(job_dir, "result.json")) as f:
+            self.assertNotIn("budget", json.load(f))
+        with open(os.path.join(job_dir, "progress.jsonl")) as f:
+            units = [e for e in map(json.loads, f) if e.get("stage") == "units" and e.get("state") == "start"]
+        self.assertEqual(units[0]["detail"], "no spending cap: the price list could not be fetched, and m-1 has no price")
+        with self.assertRaises(run.Refused) as e:                                       # the list reached, the model not in it
+            run.run(b, o, name="capped", say=lambda s: None, **kw)
+        self.assertIn("a spending cap needs a price for every model the run calls, and there is none for m-1", str(e.exception))
 
     def test_a_stopped_run_runs_nothing_again(self):
         Echo.status = 429

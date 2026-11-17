@@ -420,7 +420,8 @@ class Run:
                  retry_if: Optional[Callable[[dict], bool]] = None, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
-                 max_usd_per_unit: Optional[float] = None, units_file: Optional[dict] = None,
+                 max_usd_per_unit: Optional[float] = None, prices_unreachable: Optional[str] = None,
+                 units_file: Optional[dict] = None,
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
                  max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None, boat_size: str = boat.SIZE):
         """``proving``: the run is a conformance kit's, the one run that may
@@ -588,7 +589,7 @@ class Run:
         self.embed_model = providers.served_as(needs["embeddings"][0], provider) if needs["embeddings"] else None
         self.rerank_model = providers.served_as(needs["reranker"][0], provider) if needs["reranker"] else None
         # What a call's cost is estimated from when the provider does not say it: the user's price list
-        # (nullius.prices), this run's own prices over it. Read once, here: a run never fetches a price.
+        # (nullius.prices, fetched before a capped run by ``cli run``), this run's own prices over it. Read once, here.
         self.run_prices = dict(prices or {})
         self.prices = {**price_list.table(), **self.run_prices}
         self.max_usd, self.unit_max_usd, self.ledger = None, None, None
@@ -606,11 +607,18 @@ class Run:
                 self.max_usd = cap
             else:
                 self.unit_max_usd = cap
+        self.cap_dropped = None                  # why the spending cap asked for is not applied
         if self.max_usd is not None or self.unit_max_usd is not None:
             unpriced = [m for m in self.models_called() if m not in self.prices]
-            if unpriced:
+            if unpriced and prices_unreachable:
+                # the price list could not be fetched before the run (``cli run``): no price, no cap, and the user told
+                self.cap_dropped = (f"no spending cap: the price list could not be fetched, and "
+                                    f"{', '.join(unpriced)} {'has' if len(unpriced) == 1 else 'have'} no price")
+                self.cap_why = prices_unreachable
+                self.max_usd = self.unit_max_usd = None
+            elif unpriced:
                 raise Refused("a spending cap needs a price for every model the run calls, and there is none for "
-                              + ", ".join(unpriced) + ": nullius prices update, nullius prices set MODEL INPUT OUTPUT, "
+                              + ", ".join(unpriced) + ": nullius prices set MODEL INPUT OUTPUT, "
                               "or --price MODEL=INPUT,OUTPUT")
         on_host = needs["host"]
         if self.upstream and backend == "container":
@@ -646,6 +654,7 @@ class Run:
         self.bench_relay = None
         keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
+        self.provider_env = env                  # where the provider's model list is asked (``known_models``)
         self.key_header = "authorization" if keyless else key_header(provider, other, env)
         self.limit, self.concurrency = limit, limits.concurrency(max(1, int(concurrency)), self.constraints)
         self.units_file = units_file
@@ -765,7 +774,10 @@ class Run:
         if (self.max_usd is not None or self.unit_max_usd is not None) and self.base:
             # one ledger for the job, in a folder of its own: all a unit's relay container is given of the job besides its record
             self.ledger = ledgers.Ledger.create(os.path.join(self.job_dir, ".work", "ledger", "ledger.json"), self.max_usd, self.unit_max_usd)
+        if self.cap_dropped:
+            self.say(f"warning: {self.cap_dropped} ({self.cap_why})")
         try:
+            self.known_models()
             self.ready()
         except Refused as e:
             # said in the job, which holds nothing else: the runs list reads why there (progress.refusal)
@@ -822,7 +834,8 @@ class Run:
             why = self.boat.starts(len(units) * self.repeat)
             if why:
                 self.say(why)
-        p.emit("units", "start", n=len(units) * self.repeat, of=len(everything), noun=self.bench["units"]["nouns"])
+        p.emit("units", "start", n=len(units) * self.repeat, of=len(everything), noun=self.bench["units"]["nouns"],
+               **({"detail": self.cap_dropped} if self.cap_dropped else {}))
         job.write_config(self.job_dir, job=self.name, bench=self.bench, other=self.other, model=self.model,
                          provider=self.provider, dataset=self.ds["id"], units=units, concurrency=self.concurrency,
                          granted=self.other["_kind"] == "agent", judge=self.judge_model or "", backend=self.backend,
@@ -1568,6 +1581,24 @@ class Run:
                 with open(os.path.join(folder, name)) as f:
                     calls += [json.loads(line) for line in f if line.strip()]
         return calls
+
+    def known_models(self) -> None:
+        """Refused before anything is installed when the provider lists its
+        models and one this run calls is not among them: every call to it
+        would be refused the same way. A list that cannot be read checks
+        nothing; the first refusals then stop the run (``note_refusal``).
+        A name's ``:suffix`` (OpenRouter's ``:nitro``, ``:floor``) routes the
+        model it follows."""
+        if not self.base:
+            return
+        try:
+            listed = {m["id"] for m in providers.list_models(self.provider, getattr(self, "provider_env", os.environ))}
+        except ValueError:
+            return
+        unknown = [m for m in self.models_called() if m not in listed and m.rpartition(":")[0] not in listed]
+        if listed and unknown:
+            raise Refused(f"{providers.label(self.provider, getattr(self, 'provider_env', os.environ))} lists no model "
+                          f"{', '.join(unknown)}: check the name")
 
     def models_called(self) -> List[str]:
         """Every model this run's relays may send a call to, as sent: the

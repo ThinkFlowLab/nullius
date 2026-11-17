@@ -352,7 +352,7 @@ def settings_sandbox_logout():
 @app.route("/settings/prices/update", methods=["POST"])
 def settings_prices_update():
     """The public price list fetched and kept (``nullius.prices``): the one
-    fetch, asked for here and never by a run. Same guards as Save."""
+    fetch, asked for here (a capped run's ``cli run`` asks too). Same guards as Save."""
     _sandbox_guard("Prices are updated")
     try:
         prices.update()

@@ -90,7 +90,7 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 
 | Rule | Detail |
 | --- | --- |
-| Prices first | Every model the run calls needs a price ([price list](../settings/model-prices.md) or `--price`), else the run is refused |
+| Prices first | The [price list](../settings/model-prices.md) is fetched before the run. A model it lacks needs `--price`, else the run is refused; with no connection, the run goes on without a cap and says so |
 | What is counted | Each reply's cost, and an estimate for each call in flight |
 | At the run's cap | The call that does not fit is refused by the relay (HTTP 402), and every call after it |
 | Its units | One cut off is the outcome Spending cap, outside the adjusted rate; those not begun are not run |
@@ -110,7 +110,8 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | Rate limit | After the [pause](../standard.md#a-run) |
 | Provider, network or setup error; agent crash or no start in time | Yes |
 | Agent or benchmark out of time | Only if the provider was refusing the calls |
-| Wrong key or model, spent credit | No; three in a row stop the run |
+| Model the provider does not list | Refused before the run |
+| Wrong key, spent credit | No; three in a row stop the run |
 | A setup this machine lacks, a missing secret | No |
 | A spending or call cap reached | No |
 | Stop, failed task | No; a stopped retry leaves the try before |

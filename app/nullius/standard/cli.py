@@ -545,6 +545,14 @@ def cmd_run(a):
     if why:
         print("refused: constraints:", why)
         return 2
+    # a cap counts each call at its model's price: the public list fetched first (Settings, Model prices); a machine
+    # that cannot reach it runs uncapped where a model has no price, and says so (run.Run)
+    unreachable = None
+    if a.max_usd is not None or a.max_usd_per_unit is not None:
+        try:
+            price_list.update()
+        except ValueError as e:
+            unreachable = str(e)
     held, spill = licences(b, from_run=a.from_run)
     try:
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
@@ -552,7 +560,8 @@ def cmd_run(a):
                       boat_size=a.boat_size, simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
                       licences=held, bench_options=options(a.bench_option), repeat=a.repeat, retries=a.retries,
                       remove_images=a.remove_images,
-                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, constraints=given,
+                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, prices_unreachable=unreachable,
+                      constraints=given,
                       timeouts=timeouts(a.timeout), max_turns=a.max_turns, max_calls=a.max_calls,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
