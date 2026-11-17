@@ -38,7 +38,8 @@ Foreign results open the same way: [Open existing results](getting-started.md#op
 
 ## Compare runs
 
-1. Open **Compare**, pick the runs, choose **Matched tasks**.
+1. Open **Compare**: pick a workspace and a run in each column, **Add a run** for another, then choose **Matched tasks**. The first column is the baseline; every other number shows its difference from it.
+
 2. Start with the tasks whose outcomes differ and open the attempts side by side.
 3. Check dataset, model, agent and setup before attributing a change.
 
