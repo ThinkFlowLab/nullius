@@ -902,7 +902,8 @@ def _gitlab(eid, dir, closed=_Waiting()):
         where = gitlab_server.home()
         limits = gitlab_server.unit(where, dir)
         with _warden(dir):
-            gitlab_server.prepare(where, say=lambda said: print(said, file=sys.stderr, flush=True), closed=closed)
+            gitlab_server.prepare(where, say=lambda said: print(said, file=sys.stderr, flush=True), closed=closed,
+                                  limits=limits)
             gitlab_server.up(where, limits, closed)
             yield
 

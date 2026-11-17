@@ -41,7 +41,7 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 | `max_steps` | **`100`**, `300`, `500` | The agent's step limit. | `original` |
 | `thinking` | **`off`**, `adaptive` | Whether M3 thinks. The paper ran it adaptive. | `original` |
 | `vm_provider` | **`docker`** | Where the VMs run. | `original`, `yours` |
-| `websites` | e.g. `10.213.0.1.nip.io`, default `none` | Where the mock websites are served. Needed by the 40 mock website tasks. | `original`, `yours` |
+| `websites` | e.g. `10.213.0.1.nip.io`, default `none` | Where the mock websites, and GitLab with them, are served. Needed by the tasks that use them. | `original`, `yours` |
 | `write_iops` | e.g. `160`, default `none` | Disk write limit for each VM. | `original`, `yours` |
 | `write_mbps` | e.g. `16`, default `none` | Disk write limit for each VM. | `original`, `yours` |
 

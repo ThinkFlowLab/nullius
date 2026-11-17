@@ -187,10 +187,14 @@ class Clone(unittest.TestCase):
         with mock.patch.object(g, "REPOSITORY", "file://" + os.path.join(tmp, "none")), self.assertRaises(g.GitLabError):
             g._clone(os.path.join(tmp, "other"))
         self.assertEqual(sorted(os.listdir(tmp)), ["gitlab", "source"])
-        with self.assertRaises(g.GitLabError) as raised:
-            g._clone(source + "/..")
-        self.assertIn("no clone", str(raised.exception))
-        self.assertTrue(os.path.isdir(source))
+        with mock.patch.object(g, "prepare", lambda *a, **kw: self.fail("prepared")), \
+                mock.patch.object(g, "LOCK", os.path.join(tmp, "gitlab.lck")), \
+                mock.patch.object(g.websites, "SITES_LOCK", os.path.join(tmp, "sites.lck")), \
+                mock.patch("sys.stderr", new=io.StringIO()) as err:
+            for given in (source, tmp):
+                self.assertEqual(g.main(["prepare", given, SUFFIX]), 1)
+        self.assertIn("give the stack Nullius cloned", err.getvalue())
+        self.assertTrue(os.path.isfile(os.path.join(source, "docker-compose.yml")))
 
 
 class Ready(Case):
@@ -357,7 +361,7 @@ class Driver(unittest.TestCase):
                                    (self.driver, "_run", run), (self.driver, "_task_file", lambda *a: None),
                                    (self.g, "held", held),
                                    (self.g, "prepare", lambda where, **kw: self.order.append(("prepare", where))
-                                    or self.ups.append(kw["closed"])),
+                                    or self.ups.append(kw["closed"]) or self.order.append(("limits", kw["limits"]))),
                                    (self.g, "unit", lambda where, dir: os.path.join(dir, "gitlab.limits")),
                                    (self.g, "up", lambda *a: self.ups.append(a) or self.order.append(("up",))),
                                    (self.driver, "_warden", warden)):
@@ -402,7 +406,8 @@ class Driver(unittest.TestCase):
         self.assertIsNotNone(self.held[0][-1].until)
         self.assertIsNotNone(self.ups[1][-1].until)
         self.assertIs(self.ups[0], self.ups[1][-1])
-        self.assertEqual(self.order, [("warden", self.tmp), ("prepare", self.home), ("up",), ("let go", self.tmp)] * 2)
+        self.assertEqual(self.order, [("warden", self.tmp), ("prepare", self.home), ("limits", limits), ("up",),
+                                      ("let go", self.tmp)] * 2)
 
     def test_the_sites_that_serve_gitlab_are_checked_among_what_a_vm_start_needs(self):
         for name in ("vm_image", "_provider_image", "_write_limit"):
@@ -681,6 +686,9 @@ class Lifecycle(unittest.TestCase):
                     self.assertIsNone(self.g._made())
             with mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(1)):
                 self.assertIsNone(self.g._made())
+            with mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(125, stderr="daemon\n")), \
+                    self.assertRaises(self.g.GitLabError):
+                self.g._made()
         with mock.patch.object(self.g, "_snapshot", lambda: False):
             self.assertIsNone(self.g._made())
 
@@ -698,6 +706,22 @@ class Lifecycle(unittest.TestCase):
         self.assertIn(f"printf '%s %s' {self.g._stamp(os.path.abspath(self.stack), URL)} ", copied[-1])
         self.assertIn(f" > /snapshot/{self.g.STAMP}", copied[-1])
         self.assertNotIn(TOKEN, copied[-1])
+
+    def test_init_runs_under_the_unit_s_limits(self):
+        self.configure()
+        limits = self.g.unit(self.stack, self.tmp, {"NULLIUS_OPTION_WRITE_MBPS": "8", "NULLIUS_OPTION_WRITE_IOPS": "80"})
+        given, copied = [], []
+        for name, fake in (("compose", lambda stack, args, **kw: given.append(kw.get("limits")) or Fake()),
+                           ("_until", lambda *a, **kw: 1), ("_make_token", lambda stack: None),
+                           ("ready", lambda *a, **kw: URL), ("_register", lambda stack, value: 7),
+                           ("_volumes", lambda: []), ("_snapshot", lambda: False),
+                           ("_copy", lambda stack, settings, tar, keep: copied.append(settings))):
+            p = mock.patch.object(self.g, name, fake)
+            p.start()
+            self.addCleanup(p.stop)
+        self.g.init(self.stack, limits=limits)
+        self.assertEqual(set(given), {limits})
+        self.assertEqual((copied[0]["OSWORLD2_GITLAB_GITLAB_IOPS"], copied[0]["OSWORLD2_GITLAB_SHARE"]), ("60", "unit"))
 
     def test_a_snapshot_made_for_this_stack_host_and_token_is_kept(self):
         self.configure()
@@ -724,13 +748,14 @@ class Lifecycle(unittest.TestCase):
                            ("configure", lambda *a: order.append(("configure",) + a[1:])),
                            ("compose", lambda stack, args, **kw: order.append(args[0]) or Fake()),
                            ("down", lambda stack: order.append("down")), ("_snapshot", lambda: True),
-                           ("init", lambda stack, say, closed: order.append("init"))):
+                           ("init", lambda stack, say, closed, limits: order.append(("init", limits)))):
             p = mock.patch.object(self.g, name, fake)
             p.start()
             self.addCleanup(p.stop)
         self.g.prepare(self.stack, {SITES: SUFFIX})
-        self.g.prepare(self.stack, {SITES: SUFFIX, "NULLIUS_OPTION_WRITE_MBPS": "8", "NULLIUS_OPTION_WRITE_IOPS": "80"})
-        self.assertEqual(order, ["clone", ("configure", SUFFIX, 16, 160), "pull", "down", "init"] * 2)
+        self.g.prepare(self.stack, {SITES: SUFFIX}, limits="/unit/gitlab.limits")
+        self.assertEqual(order, ["clone", ("configure", SUFFIX, 16, 160), "pull", "down", ("init", None),
+                                 "clone", ("configure", SUFFIX, 16, 160), "pull", "down", ("init", "/unit/gitlab.limits")])
         self.assertEqual([a for a, _ in self.calls], [("volume", "rm", self.g.SNAPSHOT)] * 2)
         with self.assertRaises(self.g.GitLabError):
             self.g.prepare(self.stack, {})

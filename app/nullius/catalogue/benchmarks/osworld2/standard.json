@@ -195,7 +195,7 @@
     },
     "websites": {
       "label": "Website host suffix",
-      "summary": "Where the mock websites are served. Needed by the 40 mock website tasks.",
+      "summary": "Where the mock websites, and GitLab with them, are served. Needed by the tasks that use them.",
       "pattern": "none|(?=.{3,200}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+",
       "example": "10.213.0.1.nip.io",
       "default": "none",
