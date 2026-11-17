@@ -137,7 +137,8 @@ window.NulliusTable = {
 
   /* A toolbar's popover: `btn` opens `menu` and puts the focus in it; a click
      elsewhere or Tab out of it closes it, and Escape too, giving the focus
-     back to `btn`. */
+     back to `btn`. A click on a label's text moves the focus to a focusable
+     ancestor (the page's <main>): that is not leaving. */
   menu(btn, menu) {
     const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
     btn.addEventListener('click', () => {
@@ -148,7 +149,7 @@ window.NulliusTable = {
     });
     document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) close(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { close(); btn.focus(); } });
-    const left = e => { if (e.relatedTarget && !menu.contains(e.relatedTarget) && !btn.contains(e.relatedTarget)) close(); };
+    const left = e => { const to = e.relatedTarget; if (to && !menu.contains(to) && !btn.contains(to) && !to.contains(menu)) close(); };
     menu.addEventListener('focusout', left);
     btn.addEventListener('focusout', left);
   },
