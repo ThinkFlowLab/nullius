@@ -19,6 +19,10 @@ STOP_RULE = ("No new round when the verdict is noise and no group of failing tri
              "of the largest such group, 3 trials each, at the new run's mean cost per trial.")
 
 
+def usd(value: float) -> str:
+    return f"-${-value:.2f}" if value < 0 else f"${value:.2f}"
+
+
 def rate_of(run: dict) -> dict:
     return {"rate": run["pass_rate"], "standard_error": run["standard_error"], "tasks": run["tasks"],
             "trials": run["trials"], "trials_passed": run["trials_passed"]}
@@ -69,7 +73,8 @@ def stop_rule(result_verdict: str, groups: List[dict], budget: float, spent: Opt
         if cheapest["usd"] is None or left is None:
             not_checked.append("the budget: the new run reports no cost")
         elif left < cheapest["usd"]:
-            reasons.append(f"the budget left, ${left:.2f}, is under the price of the cheapest option, ${cheapest['usd']:.2f}")
+            reasons.append(f"the budget left, {usd(left)}, is under the price of the cheapest option, "
+                           f"{usd(cheapest['usd'])}")
     return {"rule": STOP_RULE, "stop": bool(reasons), "reasons": reasons, "not_checked": not_checked,
             "groups_of_3_or_more": len(big), "budget_usd": budget, "spent_usd": spent, "left_usd": left,
             "cheapest_option": cheapest}
