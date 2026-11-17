@@ -336,7 +336,8 @@ def withheld() -> List[str]:
     names other tools give them or this application gave them before
     (``settings.INSTEAD``, those that stand for a secret), the launcher's own
     names for the run's key and endpoint, the agent keys (a Harbor run is
-    sent them by its launcher, as the key), the names a standard benchmark's
+    sent them by its launcher, as the key), the Boat key (a standard run on
+    Boat is sent it the same way), the names a standard benchmark's
     own licences go by - kept in its own store (``nullius.secrets``), although
     imported saved settings may still hold a value until it is moved in
     Custom keys - and GitHub tokens from saved settings or the
@@ -344,7 +345,7 @@ def withheld() -> List[str]:
     run gets its own endpoint's key alone. A data provider's token name is not one."""
     secret = {v.name for v in settings.VARIABLES if v.secret or v.kind in ("endpoint", "provider")} | set(settings.endpoint_names())
     return sorted(secret | {old for old, new in settings.INSTEAD.items() if new in secret}
-                  | set(KEY_NAMES + URL_NAMES) | {"GITHUB_TOKEN", "GH_TOKEN"} | set(settings.agent_key_names())
+                  | set(KEY_NAMES + URL_NAMES) | {"GITHUB_TOKEN", "GH_TOKEN", "BOAT_API_KEY"} | set(settings.agent_key_names())
                   | set(_licence_names()))
 
 
@@ -398,6 +399,10 @@ class Execution:
             self._key, self._url = "", ""
         # the agent keys Settings holds (CURSOR_API_KEY, ...): a Harbor run's agent may need its own vendor's; the standard's never gets one
         self._agent_keys = dict(agent_keys) if agent_keys is not None else (settings.agent_key_values(env) if plan.runner == "harbor" else {})
+        if plan.runner == "standard" and (plan.recipe or {}).get("backend") == "boat":
+            from nullius.standard import boat      # the Boat key, to the standard run that starts VMs with it, and to no other command
+            if boat.key(env):
+                self._agent_keys[boat.NAME] = boat.key(env)
         # the benchmark's licences a standard run on a host is sent: read from its store at each launch, unless given
         self._licences_given = licences
         self._redact: List[str] = []              # the licences' values sent, as text: never in a log line
@@ -442,6 +447,7 @@ class Execution:
         self.workspace = rec.get("workspace", "")   # the workspace its job was added to, the one a restart adds it back to
         # the trials the log has said already, (job, trial), so a restart says each once; none in a record from before
         self._seen_trials: set = {(k[0], k[1]) for k in rec.get("seen_trials") or ()}
+        self._settled: set = set()                  # the kept tries whose trial's copy was settled (settle_retried)
         if record:
             # a run still going reads its log now, to go on from it; one that ended (most of them, and
             # history only grows) when its page asks - start-up read every one, seconds and hundreds of MB
@@ -1592,7 +1598,40 @@ class Execution:
         rc, out = self._copy_back(run, timeout)
         if rc != 0:
             self.log("  the job did not sync back: " + out.strip()[-300:])
+        else:
+            settle_retried(self.jobs, self._settled)
         self._trial_lines()
+
+
+def settle_retried(jobs: str, seen: Optional[set] = None) -> None:
+    """A standard run's retry moves a trial's folder into ``retried/<trial>.try-N``
+    on the host and writes the trial again (``run.run_again``). The copy here is
+    taken without deleting, so the trial's own folder still holds the earlier
+    try's files the retry did not write again: each one the same, by size and
+    time, as the kept try's copy goes - what the retry wrote, and anything
+    written here, stays. ``seen``: the kept tries settled already, each
+    copied whole by the time it is first seen (the try had ended)."""
+    for job in os.listdir(jobs) if os.path.isdir(jobs) else ():
+        kept = os.path.join(jobs, job, "retried")
+        if not os.path.isdir(kept):
+            continue
+        for k in os.listdir(kept):
+            trial, sep, n = k.rpartition(".try-")
+            src, dest = os.path.join(kept, k), os.path.join(jobs, job, trial)
+            if not sep or not n.isdigit() or not os.path.isdir(src) or not os.path.isdir(dest) or src in (seen or ()):
+                continue
+            if seen is not None:
+                seen.add(src)
+            for d, dirs, files in os.walk(src):
+                here = os.path.join(dest, os.path.relpath(d, src))
+                for f in files:
+                    a, b = os.path.join(d, f), os.path.join(here, f)
+                    try:
+                        x, y = os.lstat(a), os.lstat(b)
+                    except OSError:
+                        continue
+                    if (x.st_size, int(x.st_mtime)) == (y.st_size, int(y.st_mtime)) and not os.path.isdir(b):
+                        os.unlink(b)
 
 
 def _probe(run: Callable, argv: List[str], timeout: float) -> tuple:
@@ -1676,19 +1715,60 @@ def run_folder(name: str, root: Optional[str] = None) -> str:
     return path
 
 
-def _run_deletion(name: str, home: str, root: Optional[str]) -> dict:
+def run_of(path: str, root: Optional[str] = None) -> Optional[str]:
+    """The name of the run Nullius made whose folder, or its ``jobs`` folder,
+    *path* is once its links are resolved; None for any other path: the one
+    folder a workspace root may be deleted as is a run's own, in the runs root."""
+    real, runs = os.path.realpath(path), os.path.realpath(root or runs_root())
+    name, _, rest = os.path.relpath(real, runs).partition(os.sep)
+    if name in (os.curdir, os.pardir) or rest not in ("", "jobs"):
+        return None
+    try:
+        run_folder(name, runs)
+    except ValueError:
+        return None
+    return name
+
+
+def size_of(path: str) -> int:
+    """The bytes of every file under *path*, links not followed; a file gone
+    since the walk listed it (a run still writing replaces its own) counts 0."""
+    total = 0
+    for d, _, names in os.walk(path):
+        for n in names:
+            try:
+                total += os.lstat(os.path.join(d, n)).st_size
+            except FileNotFoundError:
+                pass
+    return total
+
+
+def _deletable(name: str, root: Optional[str]) -> tuple:
+    """A run's folder and record, when it is a run that has ended; ValueError
+    (alive, or not a run) or OSError (its record unreadable) otherwise."""
     path = run_folder(name, root)
     with open(os.path.join(path, RECORD), encoding="utf-8") as fh:
         rec = json.load(fh)
-    ex = next((e for e in EXECUTIONS.values() if os.path.realpath(e.dir) == path), None)
+    ex = next((e for e in EXECUTIONS.values() if e.plan.name == name and os.path.realpath(e.dir) == path), None)
     state = ex.state if ex is not None else rec.get("state")
     if state in ALIVE:
         raise ValueError(f"{name} is {state}: stop it before you delete it")
+    return path, rec
+
+
+def deletable(names: List[str], root: Optional[str] = None) -> None:
+    """Raise as ``deletion`` would for the runs *names*, without working out what goes."""
+    for n in dict.fromkeys(names):
+        _deletable(n, root)
+
+
+def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable) -> dict:
+    path, rec = _deletable(name, root)
     plan = rec.get("plan") or {}
     # a run refused at the name check never made the host folder: one of that name there is not its own
     host = hosts.parse(plan["host"]) if plan.get("host") and (rec.get("launched") or rec.get("step") not in ("connect", "name")) else None
     held = []
-    for ws, roots in workspace.holding(home, path):
+    for ws, roots in holding(path):
         dirs = parse.find_job_dirs(roots)
         ids = [j.job_id for j in workspace.load_jobs(ws, roots)]
         # a job of the same id from another root shares these judgements: they stay
@@ -1696,18 +1776,19 @@ def _run_deletion(name: str, home: str, root: Optional[str]) -> dict:
         judged = judgements.job_dirs(ws.dir, [i for i in ids if i.split("~")[0] not in others])
         held.append({"ws": ws, "roots": roots, "jobs": dirs,
                      "judged": judged, "judgements": sum(len(os.listdir(d)) for d in judged)})
-    size = sum(os.lstat(os.path.join(d, n)).st_size for d, _, names in os.walk(path) for n in names)
-    return {"name": name, "dir": path, "bytes": size, "host": host, "workspaces": held,
+    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held,
             "judgements": sum(w["judgements"] for w in held)}
 
 
-def deletion(names: List[str], home: str, root: Optional[str] = None) -> dict:
+def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None) -> dict:
     """What deleting the runs *names* of one launch removes: per run (``runs``)
     its folder and size, the host copy that is its own, and per workspace that
     holds it its roots, parsed jobs and judgement folders; the totals, and the
     number of copies per host. ValueError when any of them is alive or is not
-    a run: nothing goes then."""
-    runs = [_run_deletion(n, home, root) for n in dict.fromkeys(names)]
+    a run: nothing goes then. ``holding``: a run folder's ``workspace.holding``,
+    when the caller has it already."""
+    holding = holding or (lambda path: workspace.holding(home, path))
+    runs = [_run_deletion(n, home, root, holding) for n in dict.fromkeys(names)]
     copies: Dict[str, int] = {}
     for r in runs:
         if r["host"]:

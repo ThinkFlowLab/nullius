@@ -468,7 +468,9 @@ def _bench_options(d: dict) -> List[str]:
     ``summary``, its ``values``, a ``default`` a run gets when it chooses none, and optionally the
     ``datasets`` it applies to, a line ``about`` each value, what a value ``needs``: an
     ``embeddings`` model called through the run's relay, ``host`` requirements or ``files`` by name - and
-    ``when`` it applies: another option's values (a retriever's, only with a retrieval)."""
+    ``when`` it applies: another option's values (a retriever's, only with a retrieval). ``limit``:
+    a bound the upstream has of its own (its steps, its errors), offered with the run's limits; ``by``:
+    its default under each value of another option (an agent's own steps), for a default of ``default``."""
     opts = d.get("options")
     if opts is None:
         return []
@@ -486,6 +488,13 @@ def _bench_options(d: dict) -> List[str]:
         on = o.get("setups")
         if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours",) for x in on)):
             bad.append(f"{w}.setups: where it applies - some of original, model, yours (an agent or a capability)")
+        if "limit" in o and (not isinstance(o["limit"], bool) or "pattern" not in o):
+            bad.append(f"{w}.limit: true for a bound the upstream has of its own, a number its pattern allows")
+        by = o.get("by")
+        if by is not None and not (isinstance(by, dict) and len(by) == 1 and all(
+                k != name and k in opts and isinstance(m, dict) and set(m) == set(opts[k].get("values") or [None])
+                and all(option_problem(o, v) is None for v in m.values()) for k, m in by.items())):
+            bad.append(f"{w}.by: another option -> its every value -> this one's default under it")
         when = o.get("when") or {}
         if not _when_valid(name, when, opts):
             bad.append(f"{w}.when: another option -> the values of it this one applies under")

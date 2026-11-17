@@ -1,6 +1,8 @@
 // The run page's board and trials. Every number and row is rendered by the server; this adds the filters (outcome, judge
 // cause and status, flag - ANDed, carried in the query string so a link reproduces the view), the linked hover between the
 // board and the rows, Tokens/Total sorting, Esc, the live count, and one tooltip for hover and keyboard focus alike.
+// A task attempted more than once is one row that opens onto its attempts; a filter opens the groups it matches, and
+// clearing it brings back the groups the reader had opened.
 (() => {
   const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const page = $('#run-page'); if (!page) return;
@@ -15,6 +17,21 @@
   const hits = (d, r) => { const x = F.get(r);
     return (!('o' in d) || x.o === d.o) && (!('c' in d) || x.c === d.c) && (!('s' in d) || x.s === d.s) && (!('f' in d) || x.f.includes(d.f)) && (!('t' in d) || x.t === d.t); };
   const fxs = $$('.fx', page), hls = board ? $$('.hl', board) : [];
+  // groups: the task's row, its attempts, whether it is open, and whether the reader opened it
+  const members = new Map(); rows.forEach(r => { const k = r.dataset.group; if (k) { if (!members.has(k)) members.set(k, []); members.get(k).push(r); } });
+  const groups = new Map($$('#trial-rows tr.task-group').map(h => [h.dataset.group,
+    { head: h, rows: members.get(h.dataset.group) || [], open: false, chosen: false, btn: $('.group-toggle', h) }]));
+  const groupOf = r => groups.get(r.dataset.group);
+  function reveal() {
+    rows.forEach(r => { const g = groupOf(r); r.hidden = !r.matched || (!!g && !g.open); });
+    groups.forEach(g => { g.head.hidden = !g.rows.some(r => r.matched); g.btn.setAttribute('aria-expanded', String(g.open)); });
+  }
+  groups.forEach(g => g.head.addEventListener('click', e => {
+    if (e.target.closest('a')) return;
+    g.open = g.chosen = !g.open; reveal();
+    if (g.open && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+      g.rows.forEach(r => { if (!r.hidden) r.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: 240, easing: 'cubic-bezier(.2, 0, 0, 1)' }); });
+  }));
   const q = new URLSearchParams(location.search);
   const st = { o: q.get('outcome') || '', c: q.get('cause') || '', s: q.get('status') || '', f: q.get('flag') || '' };
 
@@ -38,8 +55,10 @@
   function apply() {
     const want = {}; KEYS.forEach(k => { if (st[k]) want[k] = st[k]; });
     let n = 0, solved = 0;
-    rows.forEach(r => { const on = hits(want, r); r.hidden = !on; if (on) { n++; if (F.get(r).o === 'resolved') solved++; } });
+    rows.forEach(r => { const on = hits(want, r); r.matched = on; if (on) { n++; if (F.get(r).o === 'resolved') solved++; } });
     const any = Object.keys(want).length > 0;
+    groups.forEach(g => { g.open = any ? g.rows.some(r => r.matched) : g.chosen; });
+    reveal();
     empty.hidden = n > 0; clear.hidden = !any;
     count.textContent = any ? `${n} of ${N} · ${solved} solved` : String(N);
     liveEl.textContent = any ? `${n} of ${N} trials shown, ${solved} solved` : `All ${N} trials shown`;
@@ -67,17 +86,20 @@
   let cur = null; const pips = $$('#trial-rows .pip');
   const light = src => {
     if (src === cur) return; cur = src;
-    const isPip = !!src && src.matches('.pip'), isRow = !!src && !isPip && src.matches('tr[data-outcome]');
-    const S = src && !isRow && !isPip ? rows.filter(r => !r.hidden && hits(src.dataset, r)) : [];
+    const isPip = !!src && src.matches('.pip'), isHead = !!src && src.matches('tr.task-group');
+    const isRow = !!src && !isPip && (isHead || src.matches('tr[data-outcome]'));
+    const own = isHead ? groups.get(src.dataset.group).rows.filter(r => r.matched) : isRow ? [src] : [];
+    const S = src && !isRow && !isPip ? rows.filter(r => r.matched && hits(src.dataset, r)) : [];
     tbody.classList.toggle('pv', !!src && !isRow && !isPip);
     rows.forEach(r => r.classList.toggle('lit', S.includes(r)));
+    groups.forEach(g => g.head.classList.toggle('lit', g.rows.some(r => S.includes(r))));
     if (board) board.classList.toggle('pv', isRow || isPip);
-    hls.forEach(e => { e.classList.toggle('lit', isPip ? e.dataset.f === src.dataset.f : isRow && hits(e.dataset, src));
+    hls.forEach(e => { e.classList.toggle('lit', isPip ? e.dataset.f === src.dataset.f : isRow && own.some(r => hits(e.dataset, r)));
       e.classList.toggle('hot', !!src && !isRow && !isPip && inside(e, src)); });
     const fl = src && !isRow && !isPip && 'f' in src.dataset ? src.dataset.f : null;
     pips.forEach(p => p.classList.toggle('hot', p.dataset.f === fl));
   };
-  const target = t => { const el = t && t.closest && t.closest('#trial-rows .pip, .fx, #trial-rows tr[data-outcome]'); return el && page.contains(el) ? el : null; };
+  const target = t => { const el = t && t.closest && t.closest('#trial-rows .pip, .fx, #trial-rows tr[data-outcome], #trial-rows tr.task-group'); return el && page.contains(el) ? el : null; };
   document.addEventListener('pointerover', e => light(target(e.target)));
   document.addEventListener('focusin', e => light(target(e.target)));
   document.addEventListener('focusout', e => { if (!target(e.relatedTarget)) light(null); });
@@ -90,8 +112,15 @@
     sort = { k: dir ? k : '', dir };
     sorts.forEach(b => b.closest('th').removeAttribute('aria-sort'));
     if (dir) a.closest('th').setAttribute('aria-sort', dir);
-    const before = new Map(rows.map(r => [r, r.getBoundingClientRect().top])), v = r => +r.dataset[k];
-    const order = [...rows].sort((x, y) => (!dir ? 0 : dir === 'ascending' ? v(x) - v(y) : v(y) - v(x)) || x.dataset.i - y.dataset.i);
+    const all = [...groups.values()].map(g => g.head).concat(rows);
+    const before = new Map(all.map(r => [r, r.getBoundingClientRect().top])), v = r => +r.dataset[k];
+    const cmp = (x, y) => (!dir ? 0 : dir === 'ascending' ? v(x) - v(y) : v(y) - v(x)) || x.dataset.i - y.dataset.i;
+    // a group sorts by its mean over the attempts, and its attempts sort among themselves
+    const units = [], placed = new Set();
+    rows.forEach(r => { const g = groupOf(r); if (!g) units.push({ lead: r, list: [r] });
+      else if (!placed.has(g)) { placed.add(g); const list = [...g.rows].sort(cmp); units.push({ lead: g.head, list: [g.head, ...list] }); } });
+    units.sort((a, b) => cmp(a.lead, b.lead));
+    const order = units.flatMap(u => u.list);
     order.forEach(r => tbody.insertBefore(r, empty));
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     order.forEach(r => { const dy = before.get(r) - r.getBoundingClientRect().top; if (!dy) return;

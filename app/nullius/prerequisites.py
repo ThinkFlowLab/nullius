@@ -98,7 +98,7 @@ def check_host(host: hosts.Host, needs: List[str], setups: Optional[Dict[str, di
     """The rows for a host, from one ssh probe. Unreachable: one row, and nothing else is known."""
     test = test or hosts.test
     programs = [p for s in (setups or {}).values() for p in s.get("check") or []]
-    programs += [n for n in needs if n in ("python3", "git")]
+    programs += [n for n in needs if n in ("python3", "git", "ssh", "ssh-keygen", "rsync", "tar")]
     got = test(host, programs=programs)
     if not got["ok"]:
         return [row("connect", "missing", got.get("error") or "no answer", label="Connection")]

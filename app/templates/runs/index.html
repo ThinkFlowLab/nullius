@@ -1,26 +1,12 @@
 {% from 'runs/_runtime.html' import what_ran %}
+{% from '_tables.html' import filter_button %}
+{% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Runs — Nullius{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">
+<script src="{{ url_for('static', filename='tables.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
 
-{# Value filter for one column: a caret in the header opening a checkbox list.
-   Values start all-checked; unchecking hides the matching rows. #}
-{% macro filter_button(col) %}
-<span class="th-filter">
-  <button class="filter-btn" type="button" data-filter="{{ col }}"
-          aria-haspopup="true" aria-expanded="false" aria-label="Filter by {{ col }}">▼</button>
-  <div class="menu filter-menu" data-filter-menu="{{ col }}" hidden>
-    <div class="menu-head">
-      <button type="button" class="linkish" data-all="{{ col }}">All</button>
-      <button type="button" class="linkish" data-none="{{ col }}">None</button>
-    </div>
-    {% for value, label in choices[col] %}
-    <label><input type="checkbox" data-value="{{ value }}" checked> {{ label }}</label>
-    {% endfor %}
-  </div>
-</span>
-{% endmacro %}
 
 {#- A row's name as the launch's table shows it: the control, the agent, else its job id past the launch's prefix. #}
 {% macro row_name(r, L) %}{% set j = r.job %}{{ r.control or (j.agent_label if j and j.agent_label else r.job_id[L.prefix|length - 1:] if L.prefix.endswith('*') and r.job_id.startswith(L.prefix[:-1]) else r.job_id) }}{% endmacro %}
@@ -168,50 +154,17 @@
       {% if g.compare|length >= 2 %}<a class="btn sm" href="{{ url_for('compare', job=g.compare) }}">Compare these {{ g.compare|length }}</a>
       {% elif g.agents %}<span class="faint" title="Two finished agents with a verdict are needed">Compare needs two finished agents</span>{% endif %}
       {#- every row is of runs Nullius made: the launch goes as one, its shards with it, asked first in the dialog below #}
-      {% if g.gone %}{% set gone, rows = g.gone, g.controls + g.agents %}{% set n, wss, k = gone.judgements, gone.workspaces, gone.runs|length %}
-      <button type="button" class="btn sm ghost danger launch-delete-btn" aria-haspopup="dialog">Delete launch</button>
-      <template class="launch-ask">
-        <div class="std-how-head"><h2 id="launch-delete-h">Delete launch {{ L.title }}</h2></div>
-        <form method="post" action="{{ url_for('launch_delete', key=L.key) }}">
-          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-          <ul>{% for r in rows %}<li>{{ row_name(r, L) }}{% if r.shards %} ({{ r.shards|length }} shards){% endif %}</li>{% endfor %}</ul>
-          <p>{{ k }} folder{{ '' if k == 1 else 's' }} · {{ gone.bytes|filesizeformat }}{% if n %} · {{ n }} judgement{{ '' if n == 1 else 's' }}{% endif %}{% if wss %} · workspace{{ '' if wss|length == 1 else 's' }} {{ wss|join(', ') }}{% endif %}</p>
-          {% for h, c in gone.hosts.items() %}<label><input type="checkbox" name="host" value="{{ h }}" checked> Its cop{{ 'y' if c == 1 else 'ies' }} on <b>{{ h }}</b></label>{% endfor %}
-          <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete launch</button></div>
-        </form>
-      </template>{% endif %}
+      {% if g.gone %}{% call delete_ask(L, g.gone) %}{% for r in g.controls + g.agents %}<li>{{ row_name(r, L) }}{% if r.shards %} ({{ r.shards|length }} shards){% endif %}</li>{% endfor %}{% endcall %}{% endif %}
     </footer>
   </section>
   {% endfor %}
-  {#- one dialog for every launch: its Delete fills it from the launch's template; ?delete=<key> opens it on load #}
-  <dialog class="std-how launch-delete" id="launch-delete" aria-labelledby="launch-delete-h"></dialog>
+  {{ dialogs() }}
 </div>
-<script>
-(() => {
-  const d = document.getElementById('launch-delete');
-  const btn = key => document.querySelector(`.launch[data-launch="${CSS.escape(key)}"] .launch-delete-btn`);
-  let key = '';
-  const open = b => {
-    const l = b.closest('.launch');
-    key = l.dataset.launch;
-    d.replaceChildren(l.querySelector('template.launch-ask').content.cloneNode(true));
-    d.showModal();
-  };
-  document.addEventListener('click', e => { const b = e.target.closest('.launch-delete-btn'); if (b) open(b); });
-  d.addEventListener('click', e => {   // the backdrop, not the dialog's own padding
-    const r = d.getBoundingClientRect();
-    if (e.target === d && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) d.close();
-  });
-  d.addEventListener('close', () => btn(key)?.focus());   // the button again, though a refresh replaced its block
-  const b = btn(new URLSearchParams(location.search).get('delete') || '');
-  if (b) { b.focus(); open(b); }
-})();
-</script>
 
 <div id="view-all"{% if view != 'all' %} hidden{% endif %}>
 <div class="table-tools">
   <div class="menu-wrap">
-    <button class="btn ghost sm" id="col-btn" aria-haspopup="true" aria-expanded="false">▦ Columns</button>
+    <button class="btn ghost sm" id="col-btn" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-table"/></svg>Columns</button>
   </div>
   <div class="menu-wrap">
     <button class="btn ghost sm" id="density-btn" aria-pressed="false" title="Fit more columns on screen">⇔ Compact</button>
@@ -238,16 +191,16 @@
                title="Select / unselect all">
       </th>
       <th data-col="run" data-type="text">Run</th>
-      <th data-col="agent" data-type="text">Agent{{ filter_button('agent') }}</th>
+      <th data-col="agent" data-type="text">Agent{{ filter_button('agent', choices.agent) }}</th>
       <th data-col="version" data-type="text" title="The agent's version as the run recorded it, or the runner and its commit">Version</th>
       <th data-col="start" data-type="num">Start</th>
       <th data-col="end" data-type="num">End</th>
       <th data-col="time" data-type="num" class="num">Time</th>
       <th data-col="model" data-type="text">
-        Model{{ filter_button('model') }}
+        Model{{ filter_button('model', choices.model) }}
       </th>
       <th data-col="dataset" data-type="text">
-        Dataset{{ filter_button('dataset') }}
+        Dataset{{ filter_button('dataset', choices.dataset) }}
       </th>
       <th data-col="mix" data-type="num">Mix</th>
       <th data-col="trials" data-type="num" class="num">Trials</th>
@@ -398,24 +351,7 @@
   const clearBtn = document.getElementById('clear-filter');
   const HIDDEN_BY_DEFAULT = ['end', 'model', 'dataset', 'raw'];
 
-  const colBtn = document.getElementById('col-btn');
-  const colMenu = document.getElementById('col-menu');
-  const stored = JSON.parse(localStorage.getItem('runs.cols') || 'null');
-
-  function setCol(col, on) {
-    table.querySelectorAll(`[data-col="${col}"]`).forEach(el => el.style.display = on ? '' : 'none');
-  }
-  const showCols = () => colMenu.querySelectorAll('input[data-col]').forEach(cb => setCol(cb.dataset.col, cb.checked));
-  colMenu.querySelectorAll('input[data-col]').forEach(cb => {
-    const col = cb.dataset.col;
-    cb.checked = stored ? stored.includes(col) : !HIDDEN_BY_DEFAULT.includes(col);
-    setCol(col, cb.checked);
-    cb.addEventListener('change', () => {
-      setCol(col, cb.checked);
-      localStorage.setItem('runs.cols', JSON.stringify(
-        [...colMenu.querySelectorAll('input:checked')].map(i => i.dataset.col)));
-    });
-  });
+  const showCols = NulliusTable.columns(table, document.getElementById('col-btn'), document.getElementById('col-menu'), 'runs.cols', HIDDEN_BY_DEFAULT);
   const densityBtn = document.getElementById('density-btn');
   const setDensity = on => {
     table.classList.toggle('compact', on);
@@ -429,61 +365,19 @@
     localStorage.setItem('runs.compact', on ? '1' : '0');
   });
 
-  colBtn.addEventListener('click', () => {
-    const open = colMenu.hidden;
-    colMenu.hidden = !open;
-    colBtn.setAttribute('aria-expanded', String(open));
-  });
-  document.addEventListener('click', e => {
-    if (!colMenu.hidden && !colMenu.contains(e.target) && e.target !== colBtn) {
-      colMenu.hidden = true;
-      colBtn.setAttribute('aria-expanded', 'false');
-    }
-  });
-
-  let sortCol = null, sortDir = 1;
-  const sortRows = () => {
-    if (sortCol === null) return;
-    const type = table.tHead.rows[0].cells[sortCol].dataset.type || 'text';
-    rows.sort((a, b) => {
-      const x = key(a, sortCol, type), y = key(b, sortCol, type);
-      return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
-    }).forEach(r => table.tBodies[0].appendChild(r));
-  };
-  const key = (row, idx, type) => {
-    const cell = row.cells[idx];
-    const raw = cell.dataset.sort ?? cell.textContent.trim();
-    return type === 'num' ? parseFloat(raw) || 0 : raw.toLowerCase();
-  };
-  [...table.tHead.rows[0].cells].forEach((th, idx) => {
-    th.tabIndex = 0;
-    const sort = () => {
-      const type = th.dataset.type || 'text';
-      sortDir = sortCol === idx ? -sortDir : (type === 'num' ? -1 : 1);
-      sortCol = idx;
-      [...table.tHead.rows[0].cells].forEach(c => c.removeAttribute('data-sorted'));
-      th.dataset.sorted = sortDir > 0 ? 'asc' : 'desc';
-      sortRows();
-    };
-    th.addEventListener('click', sort);
-    th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sort(); } });
-  });
+  const sortRows = NulliusTable.sortable(table);
 
   /* ---- filters: outcome (from the bar/chips) + per-column value menus ----
      A run matches an outcome if ANY of its trials had it. Column filters are
      sets of allowed values; all must pass. */
   let active = null;
-  const colFilters = {};   // col -> Set of allowed values, or absent for "all"
+  const columns = NulliusTable.filters(document, () => applyFilter());
+  const colFilters = columns.allowed;   // col -> Set of allowed values, or null for "all"
 
   function applyFilter() {
     let shown = 0;
     rows.forEach(r => {
-      let hit = !active || r.dataset.outcomes.split(' ').includes(active);
-      if (hit) {
-        for (const [col, allowed] of Object.entries(colFilters)) {
-          if (allowed && !allowed.has(r.getAttribute('data-f-' + col))) { hit = false; break; }
-        }
-      }
+      const hit = (!active || r.dataset.outcomes.split(' ').includes(active)) && columns.passes(r);
       r.hidden = !hit;
       if (hit) shown++;
     });
@@ -509,38 +403,6 @@
     if (!el) return;
     active = active === el.dataset.outcome ? null : el.dataset.outcome;
     applyFilter();
-  });
-
-  document.querySelectorAll('.filter-menu').forEach(menu => {
-    const col = menu.dataset.filterMenu;
-    const boxes = () => [...menu.querySelectorAll('input[data-value]')];
-    const btn = document.querySelector(`.filter-btn[data-filter="${col}"]`);
-
-    const sync = () => {
-      const on = boxes().filter(b => b.checked).map(b => b.dataset.value);
-      // All checked means "no filter" — keeps the active marker honest.
-      colFilters[col] = on.length === boxes().length ? null : new Set(on);
-      btn.classList.toggle('on', Boolean(colFilters[col]));
-      applyFilter();
-    };
-    menu.addEventListener('change', sync);
-    menu.addEventListener('click', e => {
-      if (e.target.closest('[data-all]')) { boxes().forEach(b => b.checked = true); sync(); }
-      if (e.target.closest('[data-none]')) { boxes().forEach(b => b.checked = false); sync(); }
-    });
-
-    btn.addEventListener('click', e => {
-      e.stopPropagation();          // the th itself sorts; don't sort on filter
-      const open = menu.hidden;
-      document.querySelectorAll('.filter-menu').forEach(m => m.hidden = true);
-      menu.hidden = !open;
-      btn.setAttribute('aria-expanded', String(open));
-    });
-    menu.addEventListener('click', e => e.stopPropagation());
-    document.addEventListener('click', () => {
-      menu.hidden = true;
-      btn.setAttribute('aria-expanded', 'false');
-    });
   });
 
   /* ---- the two views, switched in place and kept in the address ---- */
@@ -592,11 +454,7 @@
 
   clearBtn.addEventListener('click', () => {
     active = null;
-    document.querySelectorAll('.filter-menu').forEach(menu => {
-      menu.querySelectorAll('input[data-value]').forEach(b => b.checked = true);
-      colFilters[menu.dataset.filterMenu] = null;
-    });
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('on'));
+    columns.clear();
     applyFilter();
   });
 

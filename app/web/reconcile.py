@@ -11,7 +11,7 @@ from nullius.judge import questions, reconcile, store
 from nullius.runs import classify
 
 from .core import app
-from . import shared
+from . import judge, shared
 
 
 def ws_dir():
@@ -31,7 +31,7 @@ def threshold_requested() -> float:
 
 def view_of(job, threshold: float) -> dict:
     d = ws_dir()
-    records = store.for_job(d, job.job_id) if d else {}
+    records = store.for_job(d, job.job_id, started=judge.started_by_name(job)) if d else {}
     return reconcile.reconcile(job, records, threshold, key=lambda name: store._SAFE.sub("_", name))
 
 

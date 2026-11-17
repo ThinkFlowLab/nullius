@@ -237,12 +237,19 @@ def delete(home_dir: str, name: str) -> bool:
 
 def holding(home_dir: str, folder: str) -> list:
     """Every workspace with a root in *folder*: [(workspace, those roots)]."""
-    inside = os.path.join(os.path.realpath(folder), "")
-    found = []
+    return holding_all(home_dir, [folder])[folder]
+
+
+def holding_all(home_dir: str, folders) -> dict:
+    """``holding`` of each of *folders*, each workspace and root read once."""
+    inside = {f: os.path.join(os.path.realpath(f), "") for f in folders}
+    found = {f: [] for f in folders}
     for ws in list_all(home_dir):
-        roots = [r for r in ws.roots if os.path.join(os.path.realpath(r), "").startswith(inside)]
-        if roots:
-            found.append((ws, roots))
+        real = [(r, os.path.join(os.path.realpath(r), "")) for r in ws.roots]
+        for f, prefix in inside.items():
+            roots = [r for r, rr in real if rr.startswith(prefix)]
+            if roots:
+                found[f].append((ws, roots))
     return found
 
 

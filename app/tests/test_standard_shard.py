@@ -119,6 +119,42 @@ class Merge(unittest.TestCase):
         self.assertTrue(os.path.samefile(os.path.join(src, "workspace", "solution.py"),
                                          os.path.join(got["out"], "t-1__u0001", "workspace", "solution.py")))
 
+    def retried(self, dirs, retries=1):
+        """The launch allowed each attempt one retry, and the first shard's first attempt took it: its try
+        before kept under retried/, as a run leaves it. The attempt's name."""
+        for d in dirs:
+            cfg = read(os.path.join(d, "config.json"))
+            cfg["standard"]["retries"] = retries
+            with open(os.path.join(d, "config.json"), "w") as f:
+                json.dump(cfg, f)
+        t = sorted(n for n in os.listdir(dirs[0]) if "__u" in n)[0]
+        res = read(os.path.join(dirs[0], t, "result.json"))
+        first = dict(res, exception_info={"exception_type": "RateLimitError", "exception_message": "HTTP 429"})
+        os.makedirs(os.path.join(dirs[0], "retried", t + ".try-1"))
+        with open(os.path.join(dirs[0], "retried", t + ".try-1", "result.json"), "w") as f:
+            json.dump(first, f)
+        res["standard"]["retries"] = 1
+        with open(os.path.join(dirs[0], t, "result.json"), "w") as f:
+            json.dump(res, f)
+        return t
+
+    def test_the_merged_job_keeps_each_shards_earlier_tries(self):
+        dirs = self.shards()
+        t = self.retried(dirs)
+        got = merge.merge(dirs, os.path.join(self.tmp, "out", "run"))
+        self.assertEqual(read(os.path.join(got["out"], "retried", t + ".try-1", "result.json"))["standard"]["job"], "run")
+        j = parse.parse_job(got["out"])
+        self.assertEqual((len(j.trials), j.retries, j.n_retries), (10, 1, 1))     # a kept try is no trial; the retry is counted
+        attempt = next(x for x in j.trials if x.trial_name == t)
+        self.assertEqual([(n, x.outcome) for n, x in parse.tries(attempt)], [(1, "rate_limited"), (2, attempt.outcome)])
+
+    def test_shards_that_allowed_different_retries_are_not_one_launch(self):
+        dirs = self.shards()
+        self.retried(dirs[:1], retries=2)
+        with self.assertRaises(merge.Refused) as e:
+            merge.merge(dirs, os.path.join(self.tmp, "never"))
+        self.assertIn("retries per attempt", str(e.exception))
+
     def test_the_merged_job_carries_the_shards_spending_caps_as_one(self):
         """Each shard ran under its share of the run's cap: the merged job says the whole cap, what all of them
         spent, and every unit a cap cut off or left out."""

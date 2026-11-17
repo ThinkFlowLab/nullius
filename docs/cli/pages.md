@@ -37,8 +37,10 @@ Each page's command, or why there is none.
 | `/trial/…/save-trace` | a `harbor-trace-v1` writer |
 | `/judge/…` | `judge.cli job <root> <id> --confirm` |
 | Rename or delete a workspace | `nullius workspace rename`, `nullius workspace delete --yes` |
+| Unlink a workspace's root, delete its folder | `workspace.forget`, `execution.delete`; today `POST /workspaces/<name>/roots/unlink` and `/roots/delete` |
 | `/new-run` | `recipes.cli`; today `POST /new-run/runner` |
 | Delete a launch | `execution.delete`; today `POST /launch/<key>/delete` |
+| `/launches`, add a launch to a workspace | `execution.restore` reads every run record; today `POST /launch/<key>/add` |
 
 ## None needed
 

@@ -108,6 +108,11 @@ def find_jobs(root, max_depth=6):
             if isinstance(data, dict) and "task_name" in data:
                 jobs[os.path.dirname(cur)].append(cur)
                 dirs[:] = []  # nothing of interest below a trial
+                continue
+        if "config.json" in files and "retried" in dirs:
+            # a Nullius standard job keeps an attempt's tries before its last in retried/<trial>.try-N:
+            # none is a trial of the job, nor a job of its own
+            dirs.remove("retried")
     return dict(jobs)
 
 

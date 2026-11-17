@@ -23,6 +23,7 @@
 {%- endmacro %}
 
 {% from 'traces/_judgement.html' import judgement_panel %}
+{% from 'traces/_attempts.html' import attempt_tabs, attempt_count, try_tabs %}
 {% block body %}
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
 
@@ -48,6 +49,15 @@
     title="The agent's version as the trial's agent_info reports it">v{{ trial.agent_version }}</span>{% endif %}
   {%- if job.runner %}<span class="dot">·</span>{{ what_ran(job) }}{% endif %}
 </p>
+{% if attempts %}
+<div class="attempt-head">
+  <span class="attempt-count">{{ attempt_count(attempts) }}</span>
+  {{ attempt_tabs(job, attempts, attempt, request.args.get('workspace'), trial) }}
+</div>
+{% endif %}
+{% if tries %}{{ try_tabs(job, tries, trial, request.args.get('workspace')) }}{% endif %}
+{# an earlier try of an attempt: evidence only, never judged #}
+{% set replaced = trial.trial_name != attempt.trial_name %}
 
 <div class="cards">
   {# The check cards speak the dataset's language: labels come from its
@@ -95,7 +105,7 @@
   {% endif %}
 </div>
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
-  {% for name, label in [('overview', 'Overview'), ('judgement', 'System One judge'), ('llm-judge', 'LLM judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] %}
+  {% for name, label in [('overview', 'Overview'), ('judgement', 'System One judge'), ('llm-judge', 'LLM judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] if not (replaced and name in ('judgement', 'llm-judge')) %}
   <button id="tab-{{ name }}" role="tab" type="button" data-tab="{{ name }}" aria-controls="trial-{{ name }}" aria-selected="{{ 'true' if name == 'overview' else 'false' }}" tabindex="{{ '0' if name == 'overview' else '-1' }}">{{ label }}</button>
   {% endfor %}
 </nav>
@@ -291,6 +301,7 @@
   <div class="panel"><p class="muted" style="margin:0">No trajectory recorded for this trial.</p></div>
 {% endif %}
 </section>
+{% if not replaced %}
 <section class="trial-tab" id="trial-judgement" role="tabpanel" aria-labelledby="tab-judgement">
 {% if job.runner and bench_parts %}
 {#- scored part by part by the benchmark's own script: the score is the mean of these, each as the script wrote it #}
@@ -329,6 +340,7 @@
 <section class="trial-tab" id="trial-llm-judge" role="tabpanel" aria-labelledby="tab-llm-judge">
 {{ judgement_panel(llm_judgement, job, trial, csrf) }}
 </section>
+{% endif %}
 <section class="trial-tab" id="trial-task" role="tabpanel" aria-labelledby="tab-task">
 {# The task's instruction, scored on its own text: once per dataset and task, the same for every attempt,
    nothing of any run read. An unclear instruction caps every agent on this task - a finding about the

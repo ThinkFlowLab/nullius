@@ -98,6 +98,17 @@ class RunDelete(unittest.TestCase):
                 execution.delete([name], self.home, self.root)
         self.assertTrue(os.path.isfile(os.path.join(outside, execution.RECORD)))
 
+    def test_a_root_is_a_run_s_own_folder_only_inside_the_runs_root(self):
+        outside = os.path.join(self.tmp, "outside"); _write_json(os.path.join(outside, execution.RECORD), {"plan": {}, "state": "done"})
+        os.symlink(outside, os.path.join(self.root, "link"))                        # a link out of the runs root
+        os.symlink(self.jobs, os.path.join(self.tmp, "alias"))                      # a link into it: the run it resolves to
+        os.makedirs(os.path.join(self.jobs, "job-a", "deeper"), exist_ok=True)
+        for path, name in ((self.jobs, "r1"), (os.path.dirname(self.jobs), "r1"), (os.path.join(self.tmp, "alias"), "r1"),
+                           (self.root, None), (os.path.join(self.root, "link"), None), (outside, None),
+                           (os.path.join(self.jobs, "job-a"), None), (os.path.join(self.tmp, "elsewhere"), None)):
+            with self.subTest(path=path):
+                self.assertEqual(execution.run_of(path, self.root), name)
+
     def test_the_host_copy_goes_when_asked(self):
         self.run_("far", host="ubuntu@10.0.0.4")
         calls = []
@@ -158,6 +169,21 @@ class RunDelete(unittest.TestCase):
         self.assertEqual((gone["stays"], gone["kept"]), (["s2"], [f"s2 stays in {s2}: Permission denied"]))
         self.assertEqual(calls, ["ubuntu@10.0.0.4"])                                     # s2's host copy stays with it
         self.assertFalse(os.path.exists(os.path.join(self.root, "s1"))); self.assertTrue(os.path.isdir(s2))
+
+
+class SizeOf(unittest.TestCase):
+    def test_a_file_gone_since_the_walk_counts_nothing(self):
+        d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)
+        for name, data in (("run.json", b"{}"), ("run.json.tmp", b"12345")):
+            with open(os.path.join(d, name), "wb") as fh:
+                fh.write(data)
+        real = os.walk
+        def walk(path):                                         # the run replaces its record between the listing and the stat
+            for entry in real(path):
+                os.remove(os.path.join(d, "run.json.tmp"))
+                yield entry
+        with patch.object(execution.os, "walk", walk):
+            self.assertEqual(execution.size_of(d), 2)
 
 
 if __name__ == "__main__":

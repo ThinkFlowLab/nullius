@@ -47,7 +47,7 @@ Importing results needs no runner.
 | Object | Holds | Where |
 | --- | --- | --- |
 | Recipe | Runner, benchmark, dataset, agents, models, limits, machines | The builder; saved in the browser or exported as JSON |
-| Launch | The runs one press of **Run** starts | Runs, *By launch* |
+| Launch | The runs one press of **Run** starts | Runs, *By launch*; every launch, in a workspace or not, on **Launches** |
 | Run | One agent, or one check (`nop`, `oracle`), on the launch's tasks. Harbor calls it a job | Runs, one row |
 | Trial | One task attempted by one run | A run's page |
 | Task | One item of the dataset | A trial's page |
@@ -70,7 +70,7 @@ A count of runs leaves out the checks. The checks have a count of their own.
 
 ## Workspace
 
-The roots you opened, the imports converted and the judgements saved; the same roots reopen the same workspace. A start with no root given reopens the workspace left open; a closed one stays closed.
+The roots you opened, the imports converted and the judgements saved; the same roots reopen the same workspace. A start with no root given reopens the workspace left open; a closed one stays closed. **New workspace** with no root makes an empty workspace.
 
 <div class="grid cards" markdown>
 

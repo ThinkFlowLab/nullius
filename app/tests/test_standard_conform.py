@@ -6,8 +6,9 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
-from nullius.standard import conform, definitions, install, match
+from nullius.standard import conform, definitions, install, match, retries
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard")
 
@@ -32,7 +33,10 @@ class ConformTest(unittest.TestCase):
         return got, definitions.get(kind, key, self.root)
 
     def test_a_kit_that_passes_is_recorded_with_its_job(self):
-        got, d = self.check("capability", "fakemem", ["cap.memory/v1"])
+        with mock.patch.object(conform.run, "run", wraps=conform.run.run) as ran:
+            got, d = self.check("capability", "fakemem", ["cap.memory/v1"])
+        # a rate-limited unit runs once more, after its pause, and nothing else: a proof is never the endpoint's busy minute
+        self.assertEqual((ran.call_args.kwargs["retries"], ran.call_args.kwargs["retry_if"]), (1, retries.rate_limited))
         self.assertTrue(got["cap.memory/v1"]["ok"])
         rec = d["proven"]["cap.memory/v1"]
         self.assertEqual(rec["passed"], "2/2")

@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 from collections import OrderedDict
-from flask import abort, flash, jsonify, redirect, render_template, request, url_for
+from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 from markupsafe import Markup, escape
 from nullius.traces import behavior, charts, conversation, trace, trajectory
-from nullius.runs import artifacts, parse
+from nullius.runs import artifacts, attempts as task_attempts, parse
 
 from .core import app
 from . import shared
@@ -72,16 +73,47 @@ def _gold_localization(job, trial, traj):
     return None
 
 
+# An attempt's try before its last, as a page addresses it (parse.tries)
+_TRY_RE = re.compile(r"^(?P<trial>.+)\.try-(?P<n>[1-9][0-9]?)$")
+
+
 def _find_trial(job, trial_name):
     return next((x for x in job.trials if x.trial_name == trial_name), None)
 
 
-def _trial_evidence(job_id, trial_name):
-    """Resolve URL identifiers through parsed runs, never as filesystem paths."""
+def _tries(attempt):
+    """``parse.tries`` of an attempt, read once a request: a try's page finds
+    its try in the same list its tabs show."""
+    seen = g.setdefault("tries", {})
+    key = (attempt.job_id, attempt.trial_name)
+    if key not in seen:
+        seen[key] = parse.tries(attempt)
+    return seen[key]
+
+
+def _find_try(job, name):
+    m = _TRY_RE.match(name)
+    kept = _find_trial(job, m["trial"]) if m else None
+    return next((t for _, t in _tries(kept) if t.trial_name == name), None) if kept else None
+
+
+def _attempt_of(job, trial):
+    """The trial a try is one of: the attempt's last, the one the job counts.
+    A trial of the job is its own."""
+    if any(t is trial for t in job.trials):
+        return trial
+    m = _TRY_RE.match(trial.trial_name)
+    return (_find_trial(job, m["trial"]) if m else None) or trial
+
+
+def _trial_evidence(job_id, trial_name, tries=False):
+    """Resolve URL identifiers through parsed runs, never as filesystem paths.
+    ``tries``: an attempt's earlier try too, ``<trial>.try-N``: evidence to
+    read, never a trial to judge."""
     job = shared._find_job(shared._jobs_for_request(), job_id)
     if job is None:
         abort(404)
-    trial = _find_trial(job, trial_name)
+    trial = _find_trial(job, trial_name) or (_find_try(job, trial_name) if tries else None)
     if trial is None:
         abort(404)
     return job, trial
@@ -139,7 +171,7 @@ def _parsed_trace(path, filt):
 
 @app.route("/trial/<job_id>/<trial_name>/artifact/<key>")
 def artifact_page(job_id, trial_name, key):
-    job, trial = _trial_evidence(job_id, trial_name)
+    job, trial = _trial_evidence(job_id, trial_name, tries=True)
     try:
         record = artifacts.read(trial.dir, key, request.args.get("page", 1))
     except (LookupError, OSError):
@@ -152,7 +184,7 @@ def artifact_page(job_id, trial_name, key):
 
 @app.route("/trial/<job_id>/<trial_name>/conversation")
 def conversation_data(job_id, trial_name):
-    _, t = _trial_evidence(job_id, trial_name)
+    _, t = _trial_evidence(job_id, trial_name, tries=True)
     traj = trajectory.load(t.trajectory_path) if t.has_trajectory else None
     payload = conversation.page(
         traj, query=request.args.get("q", ""), kind=request.args.get("kind", "all"),
@@ -167,7 +199,7 @@ def conversation_data(job_id, trial_name):
 
 @app.route("/trial/<job_id>/<trial_name>/trace-span")
 def trace_span_data(job_id, trial_name):
-    _, t = _trial_evidence(job_id, trial_name)
+    _, t = _trial_evidence(job_id, trial_name, tries=True)
     tr, _ = _requested_trace(t)
     try:
         payload = conversation.span_detail(
@@ -183,7 +215,8 @@ def trace_span_data(job_id, trial_name):
 
 @app.route("/trial/<job_id>/<trial_name>")
 def trial(job_id, trial_name):
-    j, t = _trial_evidence(job_id, trial_name)
+    j, t = _trial_evidence(job_id, trial_name, tries=True)
+    attempt = _attempt_of(j, t)            # t itself, or the attempt's last try when t is an earlier one
     traj = trajectory.load(t.trajectory_path) if t.has_trajectory else None
     ok = traj is not None and not traj.error
     bench_judge = bench_parts = None
@@ -225,9 +258,23 @@ def trial(job_id, trial_name):
         "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_judge=bench_judge, bench_parts=bench_parts,
         trace=tr, charts=ch, viewing=viewing,
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
-        artifacts=records,
-        judgement=_judgement_panel(j, t), llm_judgement=_judgement_panel(j, t, "llm"), csrf=shared._csrf_token(),
+        artifacts=records, attempt=attempt, attempts=task_attempts.of(j, attempt), tries=_tries(attempt),
+        # an earlier try is evidence only: the job counts its last, and only that is judged
+        judgement=_judgement_panel(j, t) if attempt is t else None,
+        llm_judgement=_judgement_panel(j, t, "llm") if attempt is t else None, csrf=shared._csrf_token(),
     )
+
+
+@app.route("/trial/<job_id>/<trial_name>/attempts")
+def trial_attempts(job_id, trial_name):
+    """Every attempt at this trial's task, one line each, and a line for each
+    earlier try its runner kept."""
+    j, t = _trial_evidence(job_id, trial_name, tries=True)
+    t = _attempt_of(j, t)
+    # a task tried once has no tab that leads here; its one line still answers
+    attempts = task_attempts.of(j, t) or task_attempts.Attempts((t,))
+    tries = {a.trial_name: _tries(a) for a in attempts.trials if a.n_retries}
+    return render_template("traces/attempts.html", job=j, trial=t, attempts=attempts, tries=tries)
 
 
 def _judgement_panel(job, trial, lane="system-one"):
@@ -245,7 +292,7 @@ def save_trace(job_id, trial_name):
     is not reproducible, so nothing here may overwrite one.
     """
     shared._require_csrf()
-    _, t = _trial_evidence(job_id, trial_name)
+    _, t = _trial_evidence(job_id, trial_name, tries=True)
 
     # The zoom rides along only so the page comes back as it was; the file written
     # is the filtered tree whole — a zoom is a way of looking, not a change.

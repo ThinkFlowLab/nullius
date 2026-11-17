@@ -42,6 +42,12 @@ Anthropic is offered to agents that speak `messages`. It is not offered to an
 agent that speaks only `chat`, to a Harbor recipe, or to a judged benchmark.
 Run refuses a recipe whose provider does not serve what it asks for.
 
+On OpenRouter, whose base is fixed, a run may choose the serving providers of a
+model: **Served by** on the builder's Model step, hidden while its provider list
+is pending or has exactly one entry unless the field already has a pin, or
+[`--served-by`](../cli/run.md#serving-providers). An empty or failed list keeps
+the row visible; two endpoints of one provider count as two entries.
+
 ## Configure a provider
 
 1. **Settings → Model providers → + Add**: choose a preset from the searchable catalogue, or **Custom** for a provider of your own, then enter its key or base. Fields save automatically.

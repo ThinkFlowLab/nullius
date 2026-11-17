@@ -149,7 +149,7 @@ class NeedsSkills(unittest.TestCase):
 
 
 class Repeat(unittest.TestCase):
-    """``conform --repeat``: each check a trial of its own per run, the record counting them."""
+    """``conform --attempts``: each check a trial of its own per run, the record counting them."""
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.root = os.path.join(self.tmp, "catalogue")
