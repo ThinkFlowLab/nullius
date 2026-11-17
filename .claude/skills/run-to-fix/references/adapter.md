@@ -21,7 +21,7 @@ in `round-NN/input.json`.
 | `commands.test` | command or null | runs the agent's whole test suite on `{worktree}` |
 | `commands.test_one` | command or null | runs one test file, `{test}`, on `{worktree}` |
 | `commands.build` | command or null | builds what a run installs from `{worktree}` and prints its path as the last line of its output; null when a run installs the checkout |
-| `commands.run_tasks` | command | runs the tasks of `{units_file}`, `{repeat}` trials each, into `{jobs_dir}`, from `{build}` or `{ref}`; `{budget_usd}` is the budget the person named, for a runner that takes a spending cap |
+| `commands.run_tasks` | command or null | runs the tasks of `{units_file}`, `{repeat}` trials each, into `{jobs_dir}`, from `{build}` or `{ref}`; `{budget_usd}` is the budget the person named, for a runner that takes a spending cap |
 | `commands.replay` | command or null | replays the recorded trials of `{job_dir}` on the code of `{ref}`, checked out at `{worktree}`, and writes `{out_json}` |
 | `commands.classes` | command or null | writes the agent's own classes and flags for the trials of `{job_dir}` to `{out_json}` |
 | `test_failed_pattern` | regular expression or null | one capture group that takes the id of a failed test from the output of `commands.test`; required when `commands.test` is set |
@@ -49,9 +49,20 @@ Every key is present, and a value the agent does not have is null. `read` refuse
 | `{build}` | `run_tasks` | the path `commands.build` printed; empty when `commands.build` is null |
 
 A command is one line of POSIX shell. The loop replaces each placeholder with its value quoted for the shell.
-Write each placeholder without quotes around it. A placeholder that a command does not take is refused when
-the adapter is read, and so is a command that leaves out a placeholder it needs to do its work (`{out_json}` for
-`replay` and `classes`, `{test}` for `test_one`).
+Write each placeholder without quotes around it. When the adapter is read, the loop refuses a placeholder that a
+command does not take, and a command that leaves out one it needs:
+
+| command | needs |
+|---|---|
+| `test` | `{worktree}` |
+| `test_one` | `{worktree}`, `{test}` |
+| `build` | `{worktree}` |
+| `replay` | `{worktree}`, `{ref}`, `{job_dir}`, `{out_json}` |
+| `classes` | `{job_dir}`, `{out_json}` |
+| `run_tasks` | `{units_file}`, `{repeat}`, `{jobs_dir}`, and `{build}` or `{ref}` |
+
+When `commands.run_tasks` is null, the decision page lists the tasks and the person starts the run by other
+means.
 
 ## How the loop runs a command
 
