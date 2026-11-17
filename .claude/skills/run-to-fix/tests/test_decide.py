@@ -221,3 +221,64 @@ class StopTwo(Flow):
         rule = load(self.round_file("result.json"))["stop_rule"]
         self.assertAlmostEqual(rule["spent_usd"], 0.09 + 0.06)
         self.assertAlmostEqual(rule["left_usd"], 10 - 0.15)
+
+
+class Reruns(Flow):
+    """A rerun of stop 2 is a second trial run of the round: its money and its trials add to the first."""
+
+    def rerun_job(self) -> str:
+        trials = [trial(f"{task}-{k}__u", f"bench/{task}", 1.0) for task in ("f1", "f2", "p1") for k in range(3)]
+        return write_job(self.jobs, "rerun", "alpha", "harbor", trials)
+
+    def after_rerun(self) -> str:
+        first = self.chosen()
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", first])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        run(["answer", "--loop", self.loop, "--stop", "2", "--choice", "rerun", "--text", "run them again"])
+        second = self.rerun_job()
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", second])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        return second
+
+    def test_the_second_decision_counts_both_trial_runs(self) -> None:
+        self.after_rerun()
+        record = load(self.round_file("trial.json"))
+        self.assertAlmostEqual(record["cost_usd"], 0.18)
+        self.assertAlmostEqual(record["budget_left_usd"], 9.82)
+        self.assertEqual(record["targets"]["after"], {"trials": 12, "passed": 11})
+        self.assertEqual(record["guards"], {"trials": 6, "passed": 6})
+        runs = load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"]
+        self.assertEqual([os.path.basename(t["job_dir"]) for t in runs], ["trial", "rerun"])
+        self.assertIn("$9.82", self.page("decision-2.md"))
+        self.assertIn("11 of 12", self.page("decision-2.md"))
+        with open(self.round_file("commands/run_tasks-full.sh"), encoding="utf-8") as fh:
+            self.assertIn("--cap 9.82", fh.read())
+
+    def test_deciding_twice_on_one_trial_run_counts_it_once(self) -> None:
+        first = self.chosen()
+        for _ in range(2):
+            run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", first])
+        self.assertEqual(len(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"]), 1)
+        self.assertAlmostEqual(load(self.round_file("trial.json"))["cost_usd"], 0.09)
+
+    def test_select_after_a_trial_run_checks_the_budget_left(self) -> None:
+        first = self.chosen()
+        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", first])
+        r = self.select(["--size", "targets", "--budget-usd", "9.95", "--text", "again"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("$9.91", r.err)
+
+    def test_compare_counts_every_trial_run(self) -> None:
+        self.after_rerun()
+        full = write_job(self.jobs, "full", "alpha", "harbor",
+                         [trial(f"{t}__f", f"bench/{t}", 1.0) for t in ("p1", "p2", "p3", "f1", "f2", "f3")])
+        r = run(["compare", "--loop", self.loop, "--new", full, "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        rule = load(self.round_file("result.json"))["stop_rule"]
+        self.assertAlmostEqual(rule["spent_usd"], 0.09 + 0.09 + 0.06)
+
+    def test_compare_of_a_trial_run_counts_it_once(self) -> None:
+        second = self.after_rerun()
+        r = run(["compare", "--loop", self.loop, "--new", second, "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertAlmostEqual(load(self.round_file("result.json"))["stop_rule"]["spent_usd"], 0.18)
