@@ -46,7 +46,7 @@ Each page's command, or why there is none.
 | --- | --- |
 | `/runs/pulse`, refresh a workspace | commands read fresh every call |
 | `/upload` | import the directory |
-| Test a run host, install a key | `ssh -o BatchMode=yes <host> true`, `ssh-copy-id` |
+| Test a host, install a key | `ssh -o BatchMode=yes <host> true`, `ssh-copy-id` |
 | A Harbor recipe: run, follow, continue, stop | the generated script |
 
 <div class="grid cards" markdown>

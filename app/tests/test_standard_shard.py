@@ -278,17 +278,25 @@ class Launches(unittest.TestCase):
 
     def test_shards_started_by_separate_run_records_join_one_launch(self):
         jobs = [a_job("r-shard-1of2", 0, "r"), a_job("r-shard-2of2", 0.1, "r")]
-        records = {"e1": ("r-shard-1of2", ["r-shard-1of2"], None), "e2": ("r-shard-2of2", ["r-shard-2of2", "r-shard-2of2-pending"], None)}
+        records = {"e1": ("r-shard-1of2", ["r-shard-1of2"], None, set()), "e2": ("r-shard-2of2", ["r-shard-2of2", "r-shard-2of2-pending"], None, set())}
         out = launches.group(jobs, records)
         self.assertEqual(len(out), 1)
         self.assertEqual((out[0].job_ids, out[0].pending), (["r-shard-1of2", "r-shard-2of2"], ["r-shard-2of2-pending"]))
         self.assertEqual(out[0].prefix, "r-shard-*")
         self.assertEqual(out[0].title, "r")                                  # named by its launch id, not the jobs' prefix
 
+    def test_shards_whose_jobs_are_not_written_join_their_launch_by_the_plans_launch_id(self):
+        records = {f"e{i}": (f"r-shard-{i}of3", [f"r-shard-{i}of3"], None, {"r"}) for i in (1, 2, 3)}
+        for written in ([], [a_job("r-shard-2of3", 0, "r")]):
+            out = launches.group(written, records)
+            self.assertEqual(len(out), 1, written)
+            self.assertEqual(sorted(out[0].job_ids + out[0].pending), ["r-shard-1of3", "r-shard-2of3", "r-shard-3of3"])
+            self.assertEqual(out[0].title, "r")
+
     def test_a_launch_of_no_shards_or_of_several_launches_is_named_by_its_prefix(self):
         out = launches.group([a_job("x-1", 0), a_job("x-2", 0.2)])
         self.assertEqual(out[0].title, out[0].prefix)
-        mixed = launches.group([a_job("m-a", 0, "L1"), a_job("m-b", 0.1, "L2")], {"e": ("m", ["m-a", "m-b"], None)})
+        mixed = launches.group([a_job("m-a", 0, "L1"), a_job("m-b", 0.1, "L2")], {"e": ("m", ["m-a", "m-b"], None, set())})
         self.assertEqual((len(mixed), mixed[0].title), (1, mixed[0].prefix))
 
     def test_a_job_with_no_launch_groups_as_before(self):

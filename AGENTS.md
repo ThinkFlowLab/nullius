@@ -423,7 +423,7 @@ One line each; the code and the pages carry the rest.
   upstream's own code at a pin, its dependencies in its own environment, and
   any code of ours beyond glue is asked about first
 - Settings, its variables and their validation — `app/nullius/settings.py`;
-  run hosts, keys and the connection test — `app/nullius/hosts.py`
+  hosts, keys and the connection test — `app/nullius/hosts.py`
 - Removing a benchmark, agent or capability throughout the app, including
   generated artifacts and requested runtime data — `/remove-integration`
   (`.claude/skills/remove-integration/SKILL.md`)

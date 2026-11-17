@@ -120,7 +120,7 @@ def _capacity(cap: dict) -> str:
 
 
 def _machine(entry: str, label: str, host=None, found=None) -> dict:
-    """One machine as the Run hosts list shows it: its constraints, what its
+    """One machine as the Hosts list shows it: its constraints, what its
     last test found (``found``, ``constraints.load``) and what Settings warns of."""
     values, cap = constraints.of(entry, strict=False), (found or {}).get("capacity") or {}   # an invalid setting: said above the list
     label_of = lambda k: constraints.BY_KEY[k].label if k in constraints.BY_KEY else k

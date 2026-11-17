@@ -90,15 +90,15 @@
     <a class="btn sm ghost" href="{{ url_for('import_page') }}">Import</a>
     <a class="btn sm" href="{{ url_for('new_run') }}">New run</a>
   </span></div>
-{# Agents only: a control's trials are a check on the tasks, not results, and
-   are shown as their launch's task checks. #}
+{# Runs and trials are agents only: a control's trials are a check on the tasks, not results.
+   The checks are counted apart, as each launch counts them. #}
 <p class="subtitle" id="counts"
    data-runs="{{ n_agent_runs }}" data-trials="{{ n_trials }}">
-  {{ n_agent_runs }} runs<span class="dot">·</span>{{ n_trials }} trials
+  {{ launches|length }} launch{{ '' if launches|length == 1 else 'es' }}<span class="dot">·</span>{{ n_agent_runs }} run{{ '' if n_agent_runs == 1 else 's' }}<span class="dot">·</span>{{ n_trials }} trial{{ '' if n_trials == 1 else 's' }}
+  {%- if n_checks %}<span class="dot">·</span>{{ n_checks }} check{{ '' if n_checks == 1 else 's' }}{% endif %}
 </p>
 <p class="runs-glance" id="glance">
   {%- if workspace %}<span>in <b>{{ workspace.label }}</b></span>{% endif -%}
-  <span><b>{{ launches|length }}</b> launch{{ '' if launches|length == 1 else 'es' }}</span>
   {%- for s, n in states|dictsort %}<span class="st-{{ s }}"><b>{{ n }}</b> {{ s }}</span>{% endfor -%}
   <span title="Launches whose nop and oracle controls behaved on every task">task checks <b>{{ n_checked }}</b> of {{ launches|length }}</span>
 </p>
@@ -108,6 +108,11 @@
     <button class="seg oc-{{ k }}" style="flex:{{ totals[k] }}" data-outcome="{{ k }}"
             title="{{ LABELS[k] }}: {{ totals[k] }} — click to filter"></button>
   {% endif %}{% endfor %}
+</div>
+<div class="runs-filters">
+<div class="runs-views" role="group" aria-label="View">
+  <a class="rv{{ ' on' if view == 'launch' }}" href="?view=launch" data-view="launch" aria-pressed="{{ 'true' if view == 'launch' else 'false' }}">By launch</a>
+  <a class="rv{{ ' on' if view == 'all' }}" href="?view=all" data-view="all" aria-pressed="{{ 'true' if view == 'all' else 'false' }}">All runs</a>
 </div>
 <div class="legend">
   {% for k in ORDER %}{% if totals[k] %}
@@ -121,10 +126,6 @@
   {% endif %}
   <button class="chip clear" id="clear-filter" hidden>Clear filter ×</button>
 </div>
-
-<div class="runs-views" role="group" aria-label="View">
-  <a class="rv{{ ' on' if view == 'launch' }}" href="?view=launch" data-view="launch" aria-pressed="{{ 'true' if view == 'launch' else 'false' }}">By launch</a>
-  <a class="rv{{ ' on' if view == 'all' }}" href="?view=all" data-view="all" aria-pressed="{{ 'true' if view == 'all' else 'false' }}">All runs</a>
 </div>
 
 {#- By launch: runs started together ran the same tasks. Each launch is one block - its task checks (the nop and oracle
@@ -137,7 +138,7 @@
     <header class="launch-head">
       <h2>{{ g.dataset_title if L.dataset else (L.name or g.dataset_title) }}{% if g.n_tasks %} · {{ g.n_tasks }} {% if words %}{{ words[0] if g.n_tasks == 1 else words[1] }}{% else %}task{{ '' if g.n_tasks == 1 else 's' }}{% endif %}{% endif %}</h2>
       <span class="launch-id mono" title="{{ 'Launched together by one Run from the builder' if L.source == 'record' and not L.launch_ids else 'Shards of one launch, run on several machines' if L.launch_ids else 'Grouped: the same dataset, started within half an hour of the first' }}">{{ L.title }}</span>
-      <span class="launch-when">{% if L.started %}{{ L.started|dt }} · {% endif %}{{ L.job_ids|length + L.pending|length }} run{{ '' if (L.job_ids|length + L.pending|length) == 1 else 's' }}</span>
+      <span class="launch-when">{% if L.started %}{{ L.started|dt }} · {% endif %}{{ g.n_runs }} run{{ '' if g.n_runs == 1 else 's' }}{% if g.n_checks %} · {{ g.n_checks }} check{{ '' if g.n_checks == 1 else 's' }}{% endif %}</span>
     </header>
     {# a runner's launch without controls is checked by its own floor and ceiling, which are arms in its table #}
     {% if g.controls or not by_runner %}
@@ -160,7 +161,7 @@
     </div>
     {% endif %}
     <footer class="launch-foot">
-      <span>{{ g.summary or 'controls only' }}</span>
+      <span>{{ g.summary or 'checks only' }}</span>
       {% if g.paused %}<span class="launch-paused">Paused after a failure: <a href="{{ url_for('job', job_id=g.paused) }}">continue or stop</a></span>{% endif %}
       <span class="header-spacer"></span>
       {% if g.recipe %}<a href="{{ url_for('new_run', run=g.recipe) }}">Open this launch's recipe</a>{% endif %}
@@ -278,7 +279,7 @@
         {%- if j.is_preparing %} <span class="badge"
           title="Launched: Harbor has written this run's configuration and nothing else yet. No trial has started; the row will change on its own.">preparing</span>
         {%- elif j.is_running and ended[j.job_id] %} <span class="badge"
-          title="The run that wrote this job was {{ ended[j.job_id][0] }} at {{ ended[j.job_id][1].strftime('%H:%M:%S') }}Z; Harbor never closed it, so its record still names {{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending — those trials will not run">{{ ended[j.job_id][0] }}</span>
+          title="This run was {{ ended[j.job_id][0] }} at {{ ended[j.job_id][1].strftime('%H:%M:%S') }}Z; Harbor never closed it, so its record still names {{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending. Those trials will not run.">{{ ended[j.job_id][0] }}</span>
         {%- elif j.is_running %} <span class="badge warn"
           title="{{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending — this run is not finished; its numbers are partial">running</span>{% endif %}</td>
       <td data-col="agent"><span>{{ j.agent_label or '—' }}</span>
@@ -391,6 +392,7 @@
   const sent = new Map([...document.querySelectorAll('.launch')].map(l => [l.dataset.launch, l.outerHTML]));
   sent.set('tbody', table.tBodies[0].innerHTML);
   const counts = document.getElementById('counts');
+  let head = counts.innerHTML;
   const note = document.getElementById('filter-note');
   const emptyNote = document.getElementById('empty-note');
   const clearBtn = document.getElementById('clear-filter');
@@ -493,10 +495,12 @@
     const filtered = active || Object.values(colFilters).some(Boolean);
     clearBtn.hidden = !filtered;
     emptyNote.hidden = shown > 0;
-    note.textContent = filtered ? `${shown} of ${rows.length} runs` : '';
-    counts.textContent = filtered
-      ? `${shown} of ${counts.dataset.runs} runs shown`
-      : `${counts.dataset.runs} runs · ${counts.dataset.trials} trials`;
+    // agents only, as the header counts them
+    const runRows = rows.filter(r => !r.classList.contains('control-row'));
+    const agents = runRows.filter(r => !r.hidden).length;
+    note.textContent = filtered ? `${agents} of ${runRows.length} runs` : '';
+    if (filtered) counts.textContent = `${agents} of ${counts.dataset.runs} run${counts.dataset.runs === '1' ? '' : 's'} shown`;
+    else counts.innerHTML = head;
     syncPicks();   // the header checkbox tracks visible rows only
   }
   // on the document: the bar and the chips are replaced as the runs move
@@ -680,6 +684,7 @@
     const now = fresh.getElementById('counts');
     counts.dataset.runs = now.dataset.runs;
     counts.dataset.trials = now.dataset.trials;
+    head = now.innerHTML;
   }
   let seen = {{ pulse | tojson }}, asking = false;
   setInterval(async () => {

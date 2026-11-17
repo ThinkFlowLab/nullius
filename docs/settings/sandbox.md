@@ -8,5 +8,5 @@ Docker or Podman on this machine, where agents run apart from it. Under **Execut
 
 | Rule | |
 | --- | --- |
-| Hosts | This machine only; a run host keeps its own login and images |
+| Hosts | This machine only; a host keeps its own login and images |
 | Code | `app/nullius/sandbox.py` |

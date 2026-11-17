@@ -70,8 +70,9 @@ def index():
     used = {}
     for j in jobs:
         entry = used.setdefault(j.dataset, {"runs": 0, "trials": 0})
-        entry["runs"] += 1
-        entry["trials"] += len(j.trials)
+        if verdicts[j.job_id] is None:          # agents only, as the header counts them
+            entry["runs"] += 1
+            entry["trials"] += len(j.trials)
     datasets = [
         {"name": name, "info": shared.dataset_info(name), **counts}
         for name, counts in sorted(used.items(), key=lambda kv: -kv[1]["trials"])
@@ -99,6 +100,7 @@ def index():
         datasets=datasets, choices=choices, pulse=_roots_pulse(), preparing=preparing,
         launches=groups, view=view, states=states,
         n_checked=sum(1 for g in groups if g["checked"]),
+        n_checks=sum(g["n_checks"] for g in groups),
     )
 
 
@@ -114,8 +116,13 @@ def _grouped():
     mine = [e for e in execution.EXECUTIONS.values() if _launched_here(e, have)]
     merged = launches.merged_sources(jobs)
     jobs = [j for j in jobs if j.job_id not in merged]
-    records = {e.id: (e.plan.name, [str(x.get("name")) for x in e.plan.jobs if str(x.get("name")) not in merged], e.started) for e in mine}
-    return jobs, have, mine, launches.group(jobs, records)
+    return jobs, have, mine, launches.group(jobs, {e.id: _record(e, merged) for e in mine})
+
+
+def _record(ex, merged=()) -> tuple:
+    """A run record as ``launches.group`` reads it, less the jobs a merge stands for."""
+    names = [str(x.get("name")) for x in ex.plan.jobs if str(x.get("name")) not in merged]
+    return ex.plan.name, names, ex.started, {str(x.get("launch") or "") for x in ex.plan.jobs}
 
 
 def _launched_here(ex, have) -> bool:
@@ -293,6 +300,7 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
             "launch": g, "checks": checks, "verdict": verdict,
             "controls": controls, "checked": checked, "agents": rows,
             "n_tasks": n_tasks, "compare": finished,
+            "n_runs": len(leaves(rows)), "n_checks": len(leaves(controls)),
             "paused": next((i for i in g.job_ids + g.pending
                             if (execution.for_job(i) is not None and execution.for_job(i).state == "paused")), None),
             "summary": " · ".join(f"{n} {s}" for s, n in sorted(counts.items(), key=lambda kv: _STATE_ORDER.get(kv[0], 9))),
@@ -527,7 +535,7 @@ def launch_delete(key):
         abort(404)
     runs = _runs_of(g)
     if not runs:
-        flash(f"{g.title} has jobs Nullius did not run: it cannot be deleted here.", "error")
+        flash(f"{g.title} has runs that Nullius did not start: it cannot be deleted here.", "error")
         return redirect(url_for("index", view="launch"))
     try:
         gone = execution.delete([e.plan.name for e in runs], shared.WS_HOME, runs[0].root, copies=set(request.form.getlist("host")))
