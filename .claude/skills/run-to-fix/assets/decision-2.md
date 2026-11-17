@@ -1,6 +1,7 @@
 # Stop 2 of {{ROUND}}: what to run next
 
-Build: {{BUILD}}. Trial run: {{TRIAL_JOB}}, {{TRIALS}} trials, {{SPENT}}. Budget left: {{LEFT}} of {{BUDGET}}.
+Build: {{BUILD}}. Trial runs on it: {{TRIAL_JOB}}, {{TRIALS}} trials. Spent in this round: {{SPENT}}. Budget left:
+{{LEFT}} of {{BUDGET}}.
 
 | tasks | trials passed before | trials passed in the trial run | test |
 |---|---|---|---|

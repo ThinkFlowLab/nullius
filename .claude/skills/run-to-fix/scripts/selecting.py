@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 from adapter import Adapter
 from checkout import is_ancestor, resolve, worktree, write_paid_on_ref
 from classifying import read_rows
-from comparing import TARGET_TRIALS, usd
+from comparing import TARGET_TRIALS, trial_spent, usd
 from reading import adapter_of
 from rounds import (LoopError, ledger_round, load_ledger, now, open_round, read_input, read_json, run_command,
                     save_ledger, write_json, write_paid)
@@ -107,9 +107,10 @@ def cmd_select(args: argparse.Namespace) -> None:
 
     if args.budget_usd is None or not args.text:
         raise LoopError("--size needs --budget-usd and --text: the budget and the person's words")
-    left = float(record["budget_usd"])
+    left = float(record["budget_usd"]) - trial_spent(entry)
     if args.budget_usd > left:
-        raise LoopError(f"the budget of the trial run, {usd(args.budget_usd)}, is over the round's budget, {usd(left)}")
+        raise LoopError(f"the budget of the trial run, {usd(args.budget_usd)}, is over what the round has left, "
+                        f"{usd(left)} of {usd(float(record['budget_usd']))}")
     if price[args.size] is not None and price[args.size] > args.budget_usd:
         raise LoopError(f"{names[args.size]} cost {usd(price[args.size])}, over the budget of {usd(args.budget_usd)}")
     tasks = sizes[args.size]

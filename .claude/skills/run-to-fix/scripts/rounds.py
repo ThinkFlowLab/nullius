@@ -176,7 +176,8 @@ def ledger_round(ledger: dict, name: str) -> dict:
     for entry in ledger["rounds"]:
         if entry["round"] == name:
             return entry
-    entry = {"round": name, "started": now(), "answers": [], "selection": None, "predictions": [], "result": None}
+    entry = {"round": name, "started": now(), "answers": [], "selection": None, "predictions": [], "trial_runs": [],
+             "result": None}
     ledger["rounds"].append(entry)
     return entry
 

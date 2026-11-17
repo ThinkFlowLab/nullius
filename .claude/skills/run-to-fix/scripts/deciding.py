@@ -7,7 +7,7 @@ import re
 from typing import Dict, List, Optional
 
 from classifying import read_rows
-from comparing import TARGET_TRIALS, passes, targets_of, usd
+from comparing import TARGET_TRIALS, passes, targets_of, trial_spent, usd
 from reading import adapter_of, health
 from rounds import LoopError, ledger_round, load_ledger, now, open_round, read_input, read_json, save_ledger, write_json, write_paid
 from trials import TrialRow
@@ -102,13 +102,23 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         raise LoopError(f"adapter.json is for the agent {adapter.agent!r}, and the trial run names "
                         + ", ".join(repr(a) for a in checked.agents))
     job_dir = os.path.abspath(args.trial_job)
-    rows: List[TrialRow] = read_rows(job_dir, threshold)
+    this_run: List[TrialRow] = read_rows(job_dir, threshold)
+    costs = [r.cost_usd for r in this_run]
+    runs = [t for t in entry.setdefault("trial_runs", []) if t["job_dir"] != job_dir]
+    runs.append({"job_dir": job_dir, "ref": selection["ref"], "trials": len(this_run),
+                 "cost_usd": sum(c for c in costs if c is not None), "cost_complete": all(c is not None for c in costs),
+                 "added": now()})
+    entry["trial_runs"] = runs
+    save_ledger(args.loop, ledger)
+    # every trial run of this round on the same code adds its trials to the exact test of the targets
+    same = [t for t in runs if t["ref"] == selection["ref"]]
+    rows: List[TrialRow] = [r for t in same for r in read_rows(t["job_dir"], threshold)]
     before = read_rows(record["run"]["job_dir"], threshold)
     targets = targets_of(selection, before, rows)
     of = lambda tasks: passes([r for r in rows if r.task in set(tasks)])
-    costs = [r.cost_usd for r in rows]
-    spent = sum(c for c in costs if c is not None)
-    per_trial = spent / len(rows) if rows else None
+    spent = trial_spent(entry)
+    cost_on_ref = sum(t["cost_usd"] for t in same)
+    per_trial = cost_on_ref / len(rows) if rows else None
     left = float(record["budget_usd"]) - spent
     rerun_tasks = selection["targets"] + selection["guards"]
     full_tasks = sorted({r.task for r in before})
@@ -131,8 +141,10 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
                         "command": command})
     build = read_json(os.path.join(round_dir, "build.json"))
     trial_record = {
-        "schema": "run-to-fix.trial/v1", "created": now(), "job_dir": job_dir, "trials": len(rows),
-        "cost_usd": spent, "cost_complete": all(c is not None for c in costs), "cost_per_trial_usd": per_trial,
+        "schema": "run-to-fix.trial/v1", "created": now(), "job_dir": job_dir,
+        "counts": "cost_usd is every trial run of the round; trials and the results are the trial runs on this ref",
+        "trial_runs": runs, "trials": len(rows), "cost_usd": spent,
+        "cost_complete": all(t["cost_complete"] for t in runs), "cost_per_trial_usd": per_trial,
         "budget_usd": float(record["budget_usd"]), "budget_left_usd": left, "targets": targets,
         "guards": of(selection["guards"]), "canaries": of(selection["canaries"]), "options": options,
         "build": build,
@@ -149,7 +161,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     fill_page("decision-2.md", {
         "ROUND": os.path.basename(round_dir), "LOOP": args.loop,
         "BUILD": f"{build['path']} from {build['ref'][:12]}" if build["path"] else f"{build['reason']} ({build['ref'][:12]})",
-        "TRIAL_JOB": job_dir, "TRIALS": str(len(rows)),
+        "TRIAL_JOB": ", ".join(t["job_dir"] for t in same), "TRIALS": str(len(rows)),
         "SPENT": usd(spent) + ("" if trial_record["cost_complete"] else " at least: some trials report no cost"),
         "LEFT": usd(left), "BUDGET": usd(float(record["budget_usd"])), "RESULTS": "\n".join(results),
         "OPTIONS": "\n".join(option_rows), "PER_TRIAL": usd(per_trial) if per_trial is not None else "unknown",
