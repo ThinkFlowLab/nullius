@@ -2,6 +2,12 @@
    into (the macros of templates/_tables.html; their styles in style.css,
    "the table toolkit"), and the card toolkit's (templates/_cards.html). */
 window.NulliusTable = {
+  /* Whether `text` holds every word of `query`, in any order and case. */
+  matches(text, query) {
+    const t = (text ?? '').toLowerCase();
+    return query.toLowerCase().split(/\s+/).every(w => t.includes(w));
+  },
+
   /* A header with data-type sorts its column on a click or Enter; num sorts
      descending first. A cell's data-sort wins over its text. A header that
      carries data-sorted at load is the sort the rows came in. The sorted
@@ -152,10 +158,7 @@ window.NulliusTable = {
       q.addEventListener('input', changed);
       q.addEventListener('keydown', e => { if (e.key === 'Escape' && q.value) { e.preventDefault(); q.value = ''; changed(); } });
     }
-    const found = row => {
-      const text = (row.dataset.search ?? '').toLowerCase();
-      return !q || q.value.toLowerCase().split(/\s+/).every(w => text.includes(w));
-    };
+    const found = row => !q || this.matches(row.dataset.search, q.value);
     const menus = [...(fmenu ? [[fbtn, fmenu, () => 1]] : []),
                    ...[...tools.querySelectorAll('[data-dropdown]')].map(b => [b, b.parentNode.querySelector('.menu'), set => set.size])];
     const mark = () => menus.forEach(([btn, menu, n]) => {
