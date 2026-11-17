@@ -427,9 +427,11 @@
     // Review's rule (nullius/standard/recipe.py): a setup's image installs what has an install; nothing else reaches its container
     const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
     const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
+    // boat: started where the run runs, with this machine's key (Settings → Sandbox); a host's programs are its prerequisites
+    const boatWhy = (list.includes('local') ? here.boat : here.boatKey) || '';
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));
-    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? '$' : '▣', title: t, tip: sub});
+    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? '$' : v === 'boat' ? '<img class="agent-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="agent-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">' : '▣', title: t, tip: sub});
     const dockerOnly = Object.entries((b || {}).environments || {}).filter(([, e]) => !e.local_ok).map(([n]) => n);
     const web = agentRun && Object.values((b || {}).environments || {}).some(e => e.network);   // an agent's public web proxy
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
@@ -438,10 +440,20 @@
       + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
       + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
       + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
-        : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>'
+        : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy)
+      + how('boat', 'Boat', 'Sandboxed: each unit in a Boat VM of its own, whose only way out is its relay.', boatWhy) + '</div>'
+      + (backend === 'boat' && !boatWhy ? boatSizes(rec) : '')
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
-      + (dockerOnly.length && backend === 'local' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - on local processes their units are recorded as not run.</p>` : '')
+      + (dockerOnly.length && backend !== 'container' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - on ${backend === 'boat' ? 'Boat' : 'local processes'} their units are recorded as not run.</p>` : '')
       + hostSetup(rec);
+  }
+  const BOAT_SIZES = [['small', 'Small'], ['default', 'Default'], ['large', 'Large'], ['xlarge', 'XLarge']];
+  function boatSizes(rec) {
+    const here = schema.standardHere || {}, why = here.boatSizes || {}, spec = here.boatSpecs || {}, size = rec.boat_size || 'small';
+    const card = ([v, t]) => tile({attr: 'std-boat-size', key: v, on: size === v && !why[v], disabled: !!why[v],
+      note: why[v] ? 'Not on this account' : spec[v] || '', title: t});
+    return '<div class="nb-sectionhead std-wherehead"><h3>VM size</h3></div>'
+      + `<div class="nb-pick-grid std-backends std-boat-sizes">${BOAT_SIZES.map(card).join('')}</div>`;
   }
   // What the chosen options of the benchmark need: an embedding model, requirements of the machine (standard.json host).
   function optionNeeds(rec) {
@@ -1012,6 +1024,7 @@
     // the standard's machines: each a toggle, one at least; several split the run into shards
     else if(d.stdWhere){const rec=r(),list=C.whereList(rec),on=list.includes(d.stdWhere),next=on?list.filter(w=>w!==d.stdWhere):[...list,d.stdWhere];if(!next.length)return;rec.where=next.length>1?next:next[0];}
     else if(d.stdBackend){r().backend=d.stdBackend;}
+    else if(d.stdBoatSize){r().boat_size=d.stdBoatSize;}
     else if(d.harborSource){r().source=d.harborSource;}
     else if(d.benchmark){C.setBenchmark(r(),d.benchmark);}
     else if(d.where!==undefined){r().where=d.where;}

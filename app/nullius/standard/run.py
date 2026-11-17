@@ -13,13 +13,16 @@ One per unit costs a few megabytes and loses only a shared rate limit - each
 unit backs off on its own, as it always did. Its record sits in the trial's
 ``.work/relay``.
 
-Two backends (``backend``). ``local``: processes on this machine, which are
+Backends (``backend``). ``local``: processes on this machine, which are
 not a sandbox - what an agent runs, it runs as the user (``docs/standard.md``,
 "Safety"). ``docker``: the agent or the capability in a container of its own on
 an internal network with the unit's relay beside it (``container``); an
 own-image task may grant a public-address proxy with ``internet: true``, and
 an agent whose environment declares ``network`` gets a public web proxy.
 On docker the agent's or capability's packages are installed in the base image, on the libc and tools its container runs on.
+A third, ``boat``: the agent's or capability's process alone in a Boat VM of
+its own, its relay still here, reached through the VM's tunnel (``boat.Backend``);
+a check or a setup on it runs on local processes.
 The driver, its environment installed here, stays on this machine either
 way: it owns the answers. So do a benchmark's own MCP servers
 (``mcp_servers``), in the driver's environment: on the local backend the
@@ -71,7 +74,7 @@ from typing import Callable, Dict, List, Optional
 from nullius import constraints as limits, paths, prices as price_list, progress, providers
 from nullius.redact import redact
 from nullius.harbor import feed as live_feed
-from nullius.standard import acp, container, definitions, hostreq, install, job, jsonl, ledger as ledgers, match, mcp_machine, pace as pacing, relay, shard as shards
+from nullius.standard import acp, boat, container, definitions, hostreq, install, job, jsonl, ledger as ledgers, match, mcp_machine, pace as pacing, relay, shard as shards
 
 # the totals a unit's end carries onto the live board, from its trial's agent_result
 FEED_TOTALS = ("n_input_tokens", "n_cache_tokens", "n_output_tokens", "cost_usd")
@@ -417,13 +420,15 @@ class Run:
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
                  max_usd_per_unit: Optional[float] = None, units_file: Optional[dict] = None,
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
-                 max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None):
+                 max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None, boat_size: str = boat.SIZE):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
         local agents, and for setup checks that run code without Docker.
-        ``backend``: ``local`` or ``container`` (``docker``, its earlier name), which needs
-        no such yes and is refused when docker is missing or not usable.
+        ``backend``: ``local``, ``container`` (``docker``, its earlier name), which needs
+        no such yes and is refused when docker is missing or not usable, or ``boat``;
+        ``boat_size``: its VMs' machine type (``boat.SIZES``), refused when the
+        account cannot start it.
         ``options``: the
         agent's or capability's options set for this run, by name; the rest keep
         their defaults, and the job's config records every value.
@@ -481,6 +486,12 @@ class Run:
         backend = definitions.names.backend(backend)
         if backend not in BACKENDS:
             raise Refused(f"backend {backend!r} is not one of {list(BACKENDS)}")
+        if backend == "boat" and other.get("_kind") not in ("agent", "capability"):
+            backend = "local"                    # a check or a setup: nothing of an agent's runs, so nothing goes to a VM
+        if backend == "boat":
+            why = boat.unusable(env=env, which=which)
+            if why:
+                raise Refused(f"the Boat backend cannot run here: {why}")
         if backend == "local" and other.get("_kind") == "agent" and not unsandboxed:
             raise Refused(f"{other['label']} would run commands as you: the local backend is not a sandbox. "
                           "Say so explicitly to go on (--unsandboxed), or run it in a container (--backend container).")
@@ -507,6 +518,13 @@ class Run:
                 raise Refused(f"{bench['label']}'s check executes generated code, but Docker is unavailable: {why}. "
                               "Make Docker usable, or explicitly allow execution as you (--unsandboxed).")
             self.container_check = not why
+        if backend == "boat" and (bench.get("score") or {}).get("runs_code"):
+            # the agent's code comes back from its VM to be checked here: in a throwaway container, never as you
+            why = container.unusable()
+            if why:
+                raise Refused(f"{bench['label']}'s check executes the agent's code on this machine, in a container, "
+                              f"but Docker is unavailable: {why}. Make Docker usable here, or run it with --backend container.")
+            self.container_check = True
         self.bench, self.other, self.model, self.provider, self.backend = bench, other, model, provider, backend
         # A setup (definitions.setup): the upstream's own answerer, asked as one model (``asked``), the relay
         # sending another (``sent``); its units may be its own (a conversation where the paper batches questions).
@@ -654,6 +672,15 @@ class Run:
         # each stage said as it goes, on the cli's stderr and in the job's progress.jsonl (nullius/progress.py)
         self.progress = progress.Reporter(self.job_dir)
         self._said = threading.Lock()
+        self.boat = boat.Backend(self.name, env, size=boat_size, say=say) if backend == "boat" else None
+        if self.boat is not None:
+            why = boat.size_problem(self.boat.client, boat_size)
+            if why:
+                raise Refused(f"Boat cannot start a {boat_size} VM: {why}")
+            most = self.boat.most()
+            if most is not None and self.concurrency > most:
+                say(f"Boat runs {most} VMs at once on this account: {most} units at a time, not {self.concurrency}")
+                self.concurrency = most
         # the job page's live board (nullius/runs/live.py): written once the units are known
         self.feed: Optional[live_feed.Writer] = None
         self._ended = 0                      # units ended so far: the i of the next unit's line
@@ -775,10 +802,15 @@ class Run:
         mine = mine[: self.limit] if self.limit else mine
         units = [u for _, u in mine]
         self.n_units = len(units)
+        if getattr(self, "boat", None) is not None:
+            why = self.boat.starts(len(units) * self.repeat)
+            if why:
+                self.say(why)
         p.emit("units", "start", n=len(units), of=len(everything), noun=self.bench["units"]["nouns"])
         job.write_config(self.job_dir, job=self.name, bench=self.bench, other=self.other, model=self.model,
                          provider=self.provider, dataset=self.ds["id"], units=units, concurrency=self.concurrency,
                          granted=self.other["_kind"] == "agent", judge=self.judge_model or "", backend=self.backend,
+                         boat_size=self.boat.size if getattr(self, "boat", None) is not None else "",
                          image=self.setup_driver.image if self.setup_driver else self.image,
                          options=self.options, launch=self.launch or "", bench_options=self.bench_options,
                          # a shard of a list splits the listed units: they are its whole
@@ -858,6 +890,8 @@ class Run:
                 self.bench_relay.stop()
             if self.backend == "container":
                 container.sweep(self.name)          # whatever an interrupted unit left
+            if getattr(self, "boat", None) is not None:
+                self.boat.close()
             if self.loopback is not None:
                 self.loopback.stop()
             budget = self.budget([self.attempt_name(u, r) for n, (_, u, r) in enumerate(work) if n >= len(begun) or not begun[n]])
@@ -1090,6 +1124,8 @@ class Run:
             own = definitions.own_image(env_def)
             if "internet" in setup and (not isinstance(setup["internet"], bool) or not own):
                 raise _Ended("EnvironmentSetupError", "the unit's setup: internet is true or false, only in an own image")
+            if self.other["_kind"] == "agent" and self.backend == "boat" and (mcp_machine.wanted(setup) or setup.get("mcp")):
+                raise _Ended("EnvironmentSetupError", "not run: " + boat.MCP_REFUSAL)
             if self.other["_kind"] == "agent" and self.backend == "local" and mcp_machine.wanted(setup):
                 try:                             # the benchmark's own servers: the agent starts them from the driver's environment
                     setup = dict(setup, mcp=mcp_machine.entries(self.bench, setup, install.driver_dir(self.bench),
@@ -1113,23 +1149,24 @@ class Run:
                 box = self.own_box(tag, setup, rl, home)
                 if setup.get("prepare") is not None:
                     self.prepare(setup["prepare"], box, trial)
-            p0 = time.time()
-            self.phase(name, unit, "agent_run", self.agent_limit(setup) if self.other["_kind"] != "control"
-                       else self.phase_limit("agent", DRIVER_SECONDS) if self.other["key"] == "oracle" else None)
-            try:
-                with self.agent_internet(setup, box, rl, trial):
-                    if self.other["_kind"] == "control":
-                        answer = self.control_answer(unit, ws, box, name)
-                    elif self.upstream:
-                        answer, traj = self.drive_upstream(unit, ws, tag, transcript, rl)
-                    elif self.other["_kind"] == "agent":
-                        answer, traj, logs = self.drive_agent(unit, ws, home, tag, setup, transcript, rl, box, name)
-                    else:
-                        answer, traj = self.drive_feature(unit, ws, home, tag, setup, transcript, rl)
-            finally:
-                produce = (p0, time.time())
-                if box is not None:              # what the agent (or the control) left in the container, before the check
-                    changes = self.box_changes(box)
+            with self.unit_vm(ws, home, trial, setup):     # boat: the VM up and given its files before the agent's time starts
+                p0 = time.time()
+                self.phase(name, unit, "agent_run", self.agent_limit(setup) if self.other["_kind"] != "control"
+                           else self.phase_limit("agent", DRIVER_SECONDS) if self.other["key"] == "oracle" else None)
+                try:
+                    with self.agent_internet(setup, box, rl, trial):
+                        if self.other["_kind"] == "control":
+                            answer = self.control_answer(unit, ws, box, name)
+                        elif self.upstream:
+                            answer, traj = self.drive_upstream(unit, ws, tag, transcript, rl)
+                        elif self.other["_kind"] == "agent":
+                            answer, traj, logs = self.drive_agent(unit, ws, home, tag, setup, transcript, rl, box, name)
+                        else:
+                            answer, traj = self.drive_feature(unit, ws, home, tag, setup, transcript, rl)
+                finally:
+                    produce = (p0, time.time())
+                    if box is not None:          # what the agent (or the control) left in the container, before the check
+                        changes = self.box_changes(box)
             cut = self.cap_reached(rl, tag)
             if cut:                              # cut off at a spending cap: nothing of it is checked, and its judge is asked nothing
                 raise _Ended(cut[0], cut[1], traj)
@@ -1316,9 +1353,13 @@ class Run:
         refused the same way, for what would run in it (not a control)."""
         if name is None:
             return None
-        if self.backend == "local" and self.other["_kind"] not in ("control", "upstream") and not env_def.get("local_ok"):
+        if self.backend in ("local", "boat") and self.other["_kind"] not in ("control", "upstream") and not env_def.get("local_ok"):
             return ("EnvironmentSetupError", f"not run: the environment {name} needs the container backend "
                                              "(--backend container); it does not say local_ok")
+        if self.backend == "boat":
+            why = boat.refusal(env_def)
+            if why:
+                return ("EnvironmentSetupError", f"not run: the environment {name} {why}")
         missing = definitions.missing_secrets(env_def, self.licences)
         if missing:
             return ("EnvironmentSecretMissingError", "not run: needs " + ", ".join(missing))
@@ -1421,7 +1462,7 @@ class Run:
         record = os.path.join(trial, ".work", "relay")
         side = tuple((self.other.get("model") or {}).get("side_models") or ())
         key_header = self.key_header
-        if self.backend == "local":
+        if self.backend in ("local", "boat"):     # boat: the agent reaches it through its VM's tunnel
             rl = relay.Relay(self.base, self.key, record, prices=getattr(self, "prices", None), model=self.model, side_models=side,
                              key_header=key_header, ledger=self.ledger_file(), serving=getattr(self, "serving", None),
                              max_calls=self.max_calls).start()
@@ -1552,6 +1593,11 @@ class Run:
         if self.backend == "local":
             return limits.wrap(cmd, env, getattr(self, "scope_limits", {}))
         ws = os.path.join(os.path.dirname(home), "workspace")
+        if self.backend == "boat":
+            try:
+                return self.boat.place(cmd, env, workdir, inst=self.inst, owned=[ws, home], relay_url=rl.unit_url if rl is not None else None, local=KEEP)
+            except boat.Unavailable as e:
+                raise _Ended("EnvironmentSetupError", str(e))
         # What the agent's container sees: its workspace and home, its own
         # install and definition, and the files its MCP servers need - never
         # this application's folder (its .env holds the keys) nor the
@@ -1592,6 +1638,22 @@ class Run:
         return str(reply.get("answer") or "")
 
     # -- an own image: the unit's container ------------------------------------
+    @contextmanager
+    def unit_vm(self, ws: str, home: str, trial: str, setup: dict):
+        """On the boat backend, the unit's VM while its agent or capability runs (``boat.Backend.unit``),
+        living as long as its work may take: an agent's limit is its whole unit's, a capability's each add's and recall's."""
+        if getattr(self, "boat", None) is None:
+            yield
+            return
+        plan = setup.get("memory") or {}
+        requests = 1 if self.other["_kind"] == "agent" else max(1, len(plan.get("add") or []) + len(plan.get("recall") or []))
+        try:
+            with self.boat.unit(trial, ws, home, stopped=self._stopped, inst=self.inst, here=self.other.get("_here"),
+                                seconds=self.agent_limit(setup) * requests):
+                yield
+        except boat.Unavailable as e:
+            raise _Ended("EnvironmentSetupError", str(e))
+
     @contextmanager
     def agent_internet(self, setup: dict, box, rl, trial: str):
         """The benchmark's task policy, never a run option: a public-address proxy

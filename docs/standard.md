@@ -142,7 +142,7 @@ record); verifier/reward.txt and score.json
 | --- | --- |
 | Units | Run `-j` at a time, each with its own workspace (a git repository of its own), home and relay |
 | A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost |
-| Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image |
+| Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image. `boat`: each unit's agent or capability in a boat.dev VM of its own (`standard/boat.py`, [The boat backend](#the-boat-backend)) |
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
 | Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate, unless the unit passed; an agent past its limit for the unit, every turn included, is the agent's timeout ([time limits](cli/run.md#time-limits)). `"kind": "score"` leaves a score and no pass |
 | Rate limits | After a unit ends `rate_limited`, no unit starts for 5 s, doubling while units keep ending so (up to 300 s) and reset by any other end; `stage=units state=progress` says the pause and how many run. Each `rate_limited` unit is run once more after the others, one at a time: its first attempt moves whole to `retried/<trial>/`, the second is the trial and counts. Not after a Stop, a refused key or the spending cap, which counts both attempts |
@@ -175,6 +175,21 @@ The container backend (`--backend container`) is the isolation, and needs no suc
 Through Podman's Docker API (a docker CLI with `DOCKER_HOST` at `podman system service`'s socket), Nullius runs docker and needs `netns = "bridge"`, a DNS-enabled `default_network`, and `userns` at its default in `containers.conf`: with `keep-id`, a container's root is a sub-uid and cannot write the unit's folders.
 
 A rootful Docker with `userns-remap` maps the uids of each container to sub-uids. There, the containers that use your files (the agent's, the relay, an install, the check, a door and an own image) run with `--userns=host`, as on a default Docker. The licence forwarder and the check's proxy keep the remap.
+
+### The boat backend
+
+`--backend boat`: each unit's agent or capability in its own [boat.dev](https://boat.dev) VM. Driver, relay, spending cap and scoring stay with the run.
+
+| Piece | Rule |
+| --- | --- |
+| Key | Settings → Sandbox, or `BOAT_API_KEY` |
+| VM | One per unit, `--boat-size` (`small` by default). Always deleted. Free trial: 2 hours at most |
+| Units at a time | Capped by the account's VM limit. The run warns when it cannot start every unit |
+| Agent time | Excludes the VM's start-up |
+| Isolation | The agent reaches loopback only: no internet, no DNS, no model key |
+| Files | A link into your home or keys refuses the unit. Links out of the workspace are not copied back |
+| Code checks | A `runs_code` check needs Docker where the run runs |
+| Not run | Units needing the public web, their own image, a licence file or server of this machine, or MCP servers. No GPUs |
 
 ### A benchmark's MCP server on the machine
 

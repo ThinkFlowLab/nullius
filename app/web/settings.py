@@ -7,7 +7,7 @@ import shutil
 import socket
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from nullius import constraints, execution, hosts, paths, prerequisites, prices, providers, sandbox, secrets, settings
-from nullius.standard import container
+from nullius.standard import boat, container
 from nullius.standard import recipe as standard_recipe
 from nullius.judge import client
 
@@ -249,8 +249,32 @@ def settings_host_enrol():
 
 @app.route("/settings/sandbox")
 def settings_sandbox():
-    """The Sandbox section's state, asked when the section opens: docker's."""
-    return jsonify(docker=sandbox.docker_state())
+    """The Sandbox section's state, asked when the section opens: docker's, and whether a boat key is
+    set (never the key)."""
+    return jsonify(docker=sandbox.docker_state(), boat={"set": bool(secrets.status(boat.STORE).get(boat.NAME, {}).get("set")),
+                                                        "env": bool(os.environ.get(boat.NAME))})
+
+
+@app.route("/settings/sandbox/boat", methods=["POST"])
+def settings_sandbox_boat():
+    """The boat.dev API key, saved to the owner-only store or removed. Same guards as Save."""
+    _sandbox_guard("Sandbox providers are changed")
+    action = request.form.get("action", "save")
+    try:
+        if action == "remove":
+            secrets.delete(boat.STORE, boat.NAME)
+        elif action == "save":
+            value = request.form.get("key", "").strip()
+            if not value:
+                raise ValueError("Enter the API key.")
+            secrets.set(boat.STORE, boat.NAME, value)
+        else:
+            return jsonify(ok=False, error="Unknown action."), 400
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    except OSError:
+        return jsonify(ok=False, error="Could not update the credential store."), 500
+    return jsonify(ok=True)
 
 
 @app.route("/settings/data-providers")

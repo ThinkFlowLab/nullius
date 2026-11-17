@@ -413,6 +413,22 @@ class KeyCutShort(LocalHost):
                     self.assertEqual(marker.read_text().strip(), f"cursor={secret}" if runner == "harbor" else "cursor=none")
                     self.assertNotIn(secret, "\n".join(ex.lines))                                      # redacted from the log
 
+    def test_only_a_standard_run_on_boat_is_handed_the_boat_key(self):
+        # the Boat key starts VMs: over stdin to the standard run that uses it, never inherited by any other
+        secret = "boat_0123456789abcdef"
+        for target, runner, backend in (("here", "standard", "boat"), ("host", "standard", "boat"),
+                                        ("here", "standard", "container"), ("here", "harbor", "")):
+            with self.subTest(target, runner=runner, backend=backend):
+                name = f"boat-{target}-{runner}-{backend or 'none'}"; root = self.tmp / name; marker = root / "seen"
+                parts = [{"id": "a", "label": "a", "script": f'echo "boat=${{BOAT_API_KEY:-none}}" > {marker}; echo "$BOAT_API_KEY"'}]
+                plan = execution.Plan(name=name, script="", parts=parts) if target == "here" else self.plan(parts, name)
+                plan.runner, plan.recipe = runner, ({"backend": backend} if backend else {})
+                with patch.dict(os.environ, {"BOAT_API_KEY": secret}):
+                    ex = self.wait(execution.Execution(plan, root=str(root), key=self.KEY, url=self.URL).start())
+                self.assertEqual(ex.state, "done", ex.lines)
+                self.assertEqual(marker.read_text().strip(), f"boat={secret}" if backend == "boat" else "boat=none")
+                self.assertNotIn(secret, "\n".join(ex.lines))
+
     def test_a_standard_run_on_a_host_is_handed_its_benchmarks_licences_and_here_none(self):
         # on a host: the declared names that are set, one stdin line, in the part's environment and never on disk
         # but for the in-memory folder a licence file is written to, which the part's shell removes when it ends;

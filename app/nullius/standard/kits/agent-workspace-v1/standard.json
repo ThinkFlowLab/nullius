@@ -36,7 +36,8 @@
   },
   "score": {
     "kind": "pass",
-    "says": "the file holds the content; the test passes"
+    "says": "the file holds the content; the test passes",
+    "runs_code": true
   },
   "limits": {
     "turn_seconds": 600

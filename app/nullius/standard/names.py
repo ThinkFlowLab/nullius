@@ -1,7 +1,7 @@
 """Canonical names, with read compatibility for earlier catalogues, jobs and recipes."""
 from __future__ import annotations
 
-BACKENDS = ("local", "container")
+BACKENDS = ("local", "container", "boat")
 
 
 def backend(value):
