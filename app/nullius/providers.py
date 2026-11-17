@@ -1,7 +1,7 @@
 """Where model calls go: the one definition of each model provider, and the builder's steps.
 
 Every feature reads the registry below (``record``, ``records``, ``serves``) and asks for the
-protocol it speaks: a run what its agent speaks, the LLM judge ``chat`` or ``messages``, System One
+protocol it speaks: a run what its agent speaks, the LLM judge ``chat`` or ``messages``, Decision
 a decision protocol. A provider is a preset (``PRESETS``) or a custom provider, ``custom``: the
 OpenAI-compatible endpoint at MODEL_API_URL, and one per id in Settings (``settings.endpoint_ids``).
 A recipe names one by ``provider`` (``PROVIDERS``, the ones a run is sent to) and, for a custom one,
@@ -38,7 +38,7 @@ PROTOCOLS = {
     "chat": {"label": "OpenAI Chat Completions", "path": "/chat/completions", "auth": "authorization"},
     "responses": {"label": "OpenAI Responses", "path": "/responses", "auth": "authorization"},
     "messages": {"label": "Anthropic Messages", "path": "/messages", "auth": "x-api-key"},
-    "systemone": {"label": "TypeSafe System One", "path": "/systemone", "auth": "authorization"},
+    "systemone": {"label": "TypeSafe Decision", "path": "/systemone", "auth": "authorization"},
     "decisions": {"label": "OpenRouter Decisions", "path": "/decisions", "auth": "authorization"},
     "openai-decisions": {"label": "OpenAI Decisions", "path": "/decisions", "auth": "authorization"},
 }

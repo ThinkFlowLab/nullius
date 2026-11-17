@@ -30,7 +30,7 @@ SECTIONS = [
         {"id": "where", "text": "Choose where runs happen", "fact": "where",
          "target": [["#hosts", "Add a host, or run on this machine with Docker or Podman"]]},
         {"id": "judge", "text": "Pick a judge", "fact": "judge", "optional": True,
-         "target": [["#judge", "Choose System One or an LLM judge"]]},
+         "target": [["#judge", "Choose Decision or an LLM judge"]]},
     ]},
     {"id": "bench", "name": "Pick a benchmark", "page": "benchmarks_page", "where": "Benchmarks", "subs": [
         {"id": "browse", "text": "Browse the catalogue", "visit": r"^/benchmarks/?$",
@@ -86,7 +86,7 @@ def facts(env, jobs: Iterable[dict] = (), judged: bool = False, docker: Optional
     return {
         "provider": bool(providers.available(env)),            # a run provider: a TypeSafe key serves the judge only
         "where": bool((env.get("HOSTS") or "").strip()) or found,
-        "judge": bool(client.system_one(env)) or bool(client.llm_judge(env)),
+        "judge": bool(client.decision_judge(env)) or bool(client.llm_judge(env)),
         "control_run": any(a in CONTROLS for a in agents),
         "agent_run": any(a and a not in CONTROLS for a in agents),
         "judged": bool(judged),

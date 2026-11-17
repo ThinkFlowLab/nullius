@@ -107,7 +107,7 @@ class Consumers(unittest.TestCase):
         self.assertEqual(providers.offered(["responses"], {}), ["openrouter", "openai", "custom"])
         env = dict(KEYS, MODEL_GW=json.dumps({"base": "https://gw/v1", "endpoints": {"decisions": "/d"}}), MODEL_LAB=json.dumps({"base": "http://lab/v1"}))
         self.assertEqual(list(client._table(["decisions"], env, known=False)), ["openrouter", "custom:GW", "custom:LAB"])
-        self.assertEqual(list(client.system_one_providers(env)), ["openrouter", "openai", "typesafe", "custom:GW"])
+        self.assertEqual(list(client.decision_judge_providers(env)), ["openrouter", "openai", "typesafe", "custom:GW"])
         px = dict(env, MODEL_PX=json.dumps({"name": "PX", "base": "https://px/v1", "endpoints": {"messages": "/messages"}}))
         self.assertEqual(client.llm_providers(px)["custom:PX"]["protocol"], "messages")              # the one it lists, before chat
         self.assertEqual(providers.protocol_for("anthropic", ["chat", "messages"], env), "messages")
@@ -117,7 +117,7 @@ class Consumers(unittest.TestCase):
             run.key_header("anthropic", {"key": "reference", "model": {"apis": ["chat"]}}, env)     # as recipe.compile refuses it
 
     def test_each_judge_setting_takes_only_a_provider_that_judge_can_use(self):
-        s1, llm = settings.BY_NAME["SYSTEM_ONE_PROVIDER"].validate, settings.BY_NAME["LLM_JUDGE_PROVIDER"].validate
+        s1, llm = settings.BY_NAME["DECISION_PROVIDER"].validate, settings.BY_NAME["LLM_JUDGE_PROVIDER"].validate
         for ok in ("typesafe", "openrouter", "openai", "custom:GW", "local:GW"):
             self.assertIsNone(s1(ok), ok)
         for ok in ("openrouter", "openai", "anthropic", "custom", "custom:GW", "local"):

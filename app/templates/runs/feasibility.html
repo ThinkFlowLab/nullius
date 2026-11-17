@@ -68,7 +68,7 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <button class="btn sm ghost" type="submit" title="Ask why each unjudged control side misbehaved: one call per side over its own state">Triage {{ triage.unjudged }} side{{ '' if triage.unjudged == 1 else 's' }}</button>
   </form>
-  {% elif triage.unjudged %}<span class="small faint">System One not configured — <a href="{{ url_for('settings_page') }}#judge">set its key in Settings</a></span>{% endif %}
+  {% elif triage.unjudged %}<span class="small faint">Decision not configured: needs a model — <a href="{{ url_for('settings_page') }}#judge">choose one in Settings</a></span>{% endif %}
 </div>
 {% endif %}
 

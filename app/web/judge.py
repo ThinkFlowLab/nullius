@@ -16,9 +16,9 @@ from . import shared
 from . import settings as settings_web
 from . import traces
 
-def key(lane: str = "system-one") -> client.Judge:
+def key(lane: str = "decision") -> client.Judge:
     """A judgement's judge, with its key and model: true when it can be
-    asked. System One unless the LLM judgement is named; passed down to
+    asked. Decision unless the LLM judgement is named; passed down to
     every call as the key is."""
     return client.judge_for(lane, os.environ)
 
@@ -73,12 +73,12 @@ def started_by_name(job) -> dict:
     return {store._SAFE.sub("_", t.trial_name): started_of(t) for t in job.trials}
 
 
-def judgement_of(job, trial, lane: str = "system-one") -> dict | None:
+def judgement_of(job, trial, lane: str = "decision") -> dict | None:
     d = ws_dir()
     return store.load(d, job.job_id, trial.trial_name, lane=lane, started=started_of(trial)) if d else None
 
 
-def panel(job, trial, lane: str = "system-one") -> dict:
+def panel(job, trial, lane: str = "decision") -> dict:
     """What the trial page renders: each question with its answer or 'not
     judged', the record's provenance, whether a Judge action is possible.
     A record asked under an earlier vocabulary is shown under its own
@@ -271,7 +271,7 @@ def judge_trial_route(job_id, trial_name):
     """One click, one trial: the page's questions asked and stored."""
     _guard()
     job, trial = traces._trial_evidence(job_id, trial_name)
-    lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "system-one"
+    lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "decision"
     try:
         rec = judge_trial(job, trial, key(lane))
     except client.JudgeError as e:
@@ -289,11 +289,11 @@ def judge_trial_route(job_id, trial_name):
 @app.route("/judge/job/<job_id>", methods=["POST"])
 def judge_job_route(job_id):
     """Judge the job's unjudged trials with one judge, the form's ``lane``
-    (System One unless it names the LLM judge): the click is the request."""
+    (Decision unless it names the LLM judge): the click is the request."""
     job = shared._find_job(shared._jobs_for_request(), job_id)
     if job is None:
         abort(404)
-    lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "system-one"
+    lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "decision"
     d = ws_dir()
     judged = store.for_job(d, job_id, lane=lane, started=started_by_name(job)) if d else {}
     todo = [t for t in job.trials if t.has_trajectory and store._SAFE.sub("_", t.trial_name) not in judged]
@@ -301,7 +301,7 @@ def judge_job_route(job_id):
     k = key(lane)
     done, failed = run_batch(todo, lambda t: judge_trial(job, t, k), lambda t: t.trial_name)
     from flask import flash
-    flash(f"{'LLM judge' if lane == 'llm' else 'System One'}: judged {done} of {len(todo)} trial(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
+    flash(f"{'LLM judge' if lane == 'llm' else 'Decision'}: judged {done} of {len(todo)} trial(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
     return redirect(url_for("job", job_id=job_id) + "#judgement")
 
 
@@ -347,7 +347,7 @@ def job_summary(job) -> dict:
 
 def _llm_count(d, job) -> dict:
     """The LLM judge's own count for the job's button: it judges apart from
-    System One, so a trial judged by one is still unjudged by the other."""
+    Decision, so a trial judged by one is still unjudged by the other."""
     judged = store.for_job(d, job.job_id, lane="llm", started=started_by_name(job)) if d else {}
     return {"unjudged": len([t for t in job.trials if store._SAFE.sub("_", t.trial_name) not in judged]), "keyed": bool(key("llm"))}
 

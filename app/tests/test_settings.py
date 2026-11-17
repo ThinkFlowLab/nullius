@@ -43,7 +43,7 @@ class Table(unittest.TestCase):
 
     def test_the_page_offers_what_a_person_sets_and_no_more(self):
         self.assertEqual([v.name for v in settings.VARIABLES],
-                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "SYSTEM_ONE_PROVIDER", "SYSTEM_ONE_PROTOCOL", "SYSTEM_ONE_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_PROTOCOL", "LLM_JUDGE_MODEL",
+                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "DECISION_PROVIDER", "DECISION_PROTOCOL", "DECISION_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_PROTOCOL", "LLM_JUDGE_MODEL",
                           "OPENROUTER", "OPENAI", "ANTHROPIC", "TYPESAFE", "AGENT_KEYS", "HOSTS", "HF_ENDPOINT", "HOST_CONSTRAINTS"])
         self.assertEqual(sorted(v.name for v in settings.VARIABLES if v.secret), ["ANTHROPIC_API_KEY", "MODEL_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"])
         self.assertEqual(settings.BY_NAME["MODEL_API_URL"].kind, "endpoint")                         # shown, so it may hold no credential
@@ -254,6 +254,14 @@ class File(unittest.TestCase):
         settings.save_many(self.path, {"LLM_JUDGE_PROVIDER": "local:GPU"})
         with self.assertRaises(ValueError):
             settings.save_many(self.path, {"LLM_JUDGE_PROVIDER": "local:gpu"})
+
+    def test_saving_a_decision_setting_takes_its_old_name_out_of_the_file(self):
+        self.write("SYSTEM_ONE_MODEL=typesafe/jev-1.14\nSYSTEM_ONE_PROVIDER=openrouter\nHOSTS=bench\n")
+        settings.load(self.path)
+        self.assertEqual([u["instead"] for u in settings.unread(self.path)], ["DECISION_MODEL", "DECISION_PROVIDER"])
+        settings.save_many(self.path, {"DECISION_MODEL": "typesafe/jev-2"})
+        self.assertEqual(settings.in_file(self.path), {"SYSTEM_ONE_PROVIDER": "openrouter", "HOSTS": "bench", "DECISION_MODEL": "typesafe/jev-2"})
+        self.assertNotIn("SYSTEM_ONE_MODEL", os.environ); self.assertEqual(os.environ["DECISION_MODEL"], "typesafe/jev-2")
 
     def test_an_endpoint_url_is_shown_so_it_holds_no_credential(self):
         """An endpoint's URL is shown on the page: an http(s) URL with a host,

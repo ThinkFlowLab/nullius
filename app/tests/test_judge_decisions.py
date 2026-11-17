@@ -1,4 +1,4 @@
-"""System One in each decision protocol, and the LLM judge on Anthropic's
+"""Decision in each decision protocol, and the LLM judge on Anthropic's
 Messages. Every provider is a fake ``post``: it records what it was sent and
 answers with a fixture reply."""
 from __future__ import annotations
@@ -28,7 +28,7 @@ def fake(status, data):
 
 
 def judge(env):
-    return client.system_one(env)
+    return client.decision_judge(env)
 
 
 class Protocols(unittest.TestCase):
@@ -36,25 +36,38 @@ class Protocols(unittest.TestCase):
         got = lambda env: (judge(env).protocol, judge(env).url)
         self.assertEqual(got({"TYPESAFE_API_KEY": "k"}), ("systemone", "https://api.typesafe.ai/v1/systemone"))
         self.assertEqual(got({"OPENROUTER_API_KEY": "k"}), ("systemone", "https://openrouter.ai/api/v1/systemone"))
-        self.assertEqual(got({"OPENROUTER_API_KEY": "k", "SYSTEM_ONE_MODEL": "microsoft/microsoft-decision-1"}),
+        self.assertEqual(got({"OPENROUTER_API_KEY": "k", "DECISION_MODEL": "microsoft/microsoft-decision-1"}),
                          ("decisions", "https://openrouter.ai/api/alpha/decisions"))                   # another maker's model
-        self.assertEqual(got({"OPENAI_API_KEY": "k", "SYSTEM_ONE_PROVIDER": "openai"}), ("openai-decisions", "https://api.openai.com/v1/decisions"))
-        self.assertEqual(judge({"OPENAI_API_KEY": "k", "SYSTEM_ONE_PROVIDER": "openai"}).model, "gpt-6-luna")
+        self.assertEqual(got({"OPENAI_API_KEY": "k", "DECISION_PROVIDER": "openai"}), ("openai-decisions", "https://api.openai.com/v1/decisions"))
+        self.assertEqual(judge({"OPENAI_API_KEY": "k", "DECISION_PROVIDER": "openai"}).model, "gpt-6-luna")
         custom = {"MODEL_GW": '{"base": "https://gw/v1", "endpoints": {"decisions": "/alpha/decisions"}}', "MODEL_GW_API_KEY": "k",
-                  "SYSTEM_ONE_PROVIDER": "custom:GW", "SYSTEM_ONE_MODEL": "m"}
+                  "DECISION_PROVIDER": "custom:GW", "DECISION_MODEL": "m"}
         self.assertEqual(got(custom), ("decisions", "https://gw/v1/alpha/decisions"))
-        self.assertNotIn("custom:LAB", client.system_one_providers({"MODEL_LAB": '{"base": "http://lab/v1"}'}))   # lists none: not offered
+        self.assertNotIn("custom:LAB", client.decision_judge_providers({"MODEL_LAB": '{"base": "http://lab/v1"}'}))   # lists none: not offered
+
+    def test_a_setting_saved_before_the_rename_is_still_read_and_the_new_name_wins(self):
+        old = {"OPENROUTER_API_KEY": "k", "SYSTEM_ONE_PROVIDER": "openrouter", "SYSTEM_ONE_MODEL": "typesafe/jev-1.14",
+               "SYSTEM_ONE_PROTOCOL": "decisions"}
+        j = judge(old)
+        self.assertEqual((j.lane, j.provider, j.model, j.protocol), ("decision", "openrouter", "typesafe/jev-1.14", "decisions"))
+        self.assertEqual(judge(dict(old, DECISION_MODEL="typesafe/jev-2")).model, "typesafe/jev-2")
+
+    def test_without_a_provider_for_it_the_decision_judge_needs_a_model_on_any_of_them(self):
+        """Not "the TypeSafe key": OpenRouter and OpenAI serve decision models too."""
+        self.assertEqual(judge({}).missing, "a model")
+        self.assertFalse(judge({}))
+        self.assertEqual(judge({"OPENROUTER_API_KEY": "k"}).missing, "")
 
     def test_a_chosen_protocol_wins_where_the_provider_serves_it_else_the_automatic_one(self):
         from nullius import settings
         got = lambda env: (judge(env).protocol, judge(env).url)
         router = {"OPENROUTER_API_KEY": "k"}
-        self.assertEqual(got(dict(router, SYSTEM_ONE_PROTOCOL="decisions")), ("decisions", "https://openrouter.ai/api/alpha/decisions"))   # over TypeSafe's model
-        self.assertEqual(got(dict(router, SYSTEM_ONE_PROTOCOL="systemone", SYSTEM_ONE_MODEL="microsoft/microsoft-decision-1")),
+        self.assertEqual(got(dict(router, DECISION_PROTOCOL="decisions")), ("decisions", "https://openrouter.ai/api/alpha/decisions"))   # over TypeSafe's model
+        self.assertEqual(got(dict(router, DECISION_PROTOCOL="systemone", DECISION_MODEL="microsoft/microsoft-decision-1")),
                          ("systemone", "https://openrouter.ai/api/v1/systemone"))
-        self.assertEqual(got(dict(router, SYSTEM_ONE_PROTOCOL="openai-decisions")), ("systemone", "https://openrouter.ai/api/v1/systemone"))  # not served: automatic
-        self.assertEqual(client.system_one_providers(dict(router, SYSTEM_ONE_PROTOCOL="decisions"))["openrouter"]["protocol"], "decisions")
-        self.assertEqual(client.system_one_providers(router)["openrouter"]["listed"], ["systemone", "decisions"])
+        self.assertEqual(got(dict(router, DECISION_PROTOCOL="openai-decisions")), ("systemone", "https://openrouter.ai/api/v1/systemone"))  # not served: automatic
+        self.assertEqual(client.decision_judge_providers(dict(router, DECISION_PROTOCOL="decisions"))["openrouter"]["protocol"], "decisions")
+        self.assertEqual(client.decision_judge_providers(router)["openrouter"]["listed"], ["systemone", "decisions"])
         both = {"ANTHROPIC_API_KEY": "k", "ANTHROPIC": '{"endpoints": {"chat": "/chat/completions"}}', "LLM_JUDGE_PROVIDER": "anthropic", "LLM_JUDGE_MODEL": "m"}
         llm = lambda env: (client.llm_judge(env).protocol, client.llm_judge(env).url)
         self.assertEqual(llm(both), ("chat", "https://api.anthropic.com/v1/chat/completions"))                 # unset: chat before messages
@@ -62,13 +75,13 @@ class Protocols(unittest.TestCase):
         self.assertEqual(client.llm_providers(both)["anthropic"]["listed"], ["chat", "messages"])
         self.assertEqual(llm({"OPENROUTER_API_KEY": "k", "LLM_JUDGE_MODEL": "m", "LLM_JUDGE_PROTOCOL": "messages"}),
                          ("chat", "https://openrouter.ai/api/v1/chat/completions"))                                 # not served: automatic
-        for name, spoken in (("LLM_JUDGE_PROTOCOL", client.LLM_PROTOCOLS), ("SYSTEM_ONE_PROTOCOL", client.SYSTEM_ONE_PROTOCOLS)):
+        for name, spoken in (("LLM_JUDGE_PROTOCOL", client.LLM_PROTOCOLS), ("DECISION_PROTOCOL", client.DECISION_PROTOCOLS)):
             var = settings.BY_NAME[name]
             self.assertEqual([p for p in client.providers.PROTOCOLS if var.validate(p) is None], list(spoken))   # what that judge speaks, no more
             self.assertIsNotNone(var.validate("Chat"))
 
 
-class SystemOne(unittest.TestCase):
+class Decision(unittest.TestCase):
     def test_systemone_keeps_the_providers_cost_and_records_a_refusal(self):
         post, _ = fake(200, {"model": "~typesafe/jev-latest", "answers": {
             "task_completed": {"noul": 0.8}, "failure_cause": {"type": "refusal", "refusal": "not enough evidence"}},
@@ -88,7 +101,7 @@ class SystemOne(unittest.TestCase):
         self.assertIn("credit is spent", str(e.exception)); self.assertIn("Insufficient credits", str(e.exception))
 
     def test_decisions_reads_confidence_and_its_error_shape(self):
-        env = {"OPENROUTER_API_KEY": "sk-or-1", "SYSTEM_ONE_MODEL": "inception/mercury-decide"}
+        env = {"OPENROUTER_API_KEY": "sk-or-1", "DECISION_MODEL": "inception/mercury-decide"}
         post, sent = fake(200, {"model": "inception/mercury-decide", "answers": {"task_completed": {"noul": 0.3, "confidence": 0.9}},
                                 "usage": {"input_tokens": 10, "output_tokens": 0, "cost": 0.001}})
         rec = client.ask("state", IDS, judge(env), post=post)
@@ -111,8 +124,8 @@ class SystemOne(unittest.TestCase):
         for env, data in (({"OPENROUTER_API_KEY": "k"}, {"answers": [1, 2]}),
                           ({"OPENROUTER_API_KEY": "k"}, {"answers": {"failure_cause": {"choice": "a", "probabilities": {"a": "x"}}}}),
                           ({"OPENROUTER_API_KEY": "k"}, ["not", "an", "object"]),
-                          ({"OPENAI_API_KEY": "k", "SYSTEM_ONE_PROVIDER": "openai"}, {"answers": [{"name": ["task_completed"]}]}),
-                          ({"OPENAI_API_KEY": "k", "SYSTEM_ONE_PROVIDER": "openai"},
+                          ({"OPENAI_API_KEY": "k", "DECISION_PROVIDER": "openai"}, {"answers": [{"name": ["task_completed"]}]}),
+                          ({"OPENAI_API_KEY": "k", "DECISION_PROVIDER": "openai"},
                            {"answers": [{"name": "failure_cause", "choice": next(iter(Q.QUESTIONS["failure_cause"]["criteria"])), "probabilities": 5}]})):
             post, _ = fake(200, data)
             with self.assertRaises(client.JudgeError, msg=data) as e:
@@ -220,27 +233,27 @@ class DecisionModels(unittest.TestCase):
 
     def test_the_suggestions_are_the_list_with_the_alias_first_or_the_short_list(self):
         with mock.patch.object(providers, "decision_models", return_value=["z/one", "typesafe/jev-1.14", "a/two:free", "~typesafe/jev-latest"]) as live:
-            self.assertEqual(client.system_one_models("openrouter"), ["~typesafe/jev-latest", "typesafe/jev-1.14", "a/two:free", "z/one"])
+            self.assertEqual(client.decision_judge_models("openrouter"), ["~typesafe/jev-latest", "typesafe/jev-1.14", "a/two:free", "z/one"])
             live.assert_called_with(fetch=False)
-            client.system_one_models("openrouter", fetch=True); live.assert_called_with(fetch=True)
-            self.assertEqual(client.system_one_models("openai"), ["gpt-6-luna"])
-            self.assertEqual(client.system_one_providers({"OPENROUTER_API_KEY": "k"})["openrouter"]["model"], "~typesafe/jev-latest")
+            client.decision_judge_models("openrouter", fetch=True); live.assert_called_with(fetch=True)
+            self.assertEqual(client.decision_judge_models("openai"), ["gpt-6-luna"])
+            self.assertEqual(client.decision_judge_providers({"OPENROUTER_API_KEY": "k"})["openrouter"]["model"], "~typesafe/jev-latest")
         with mock.patch.object(providers, "decision_models", return_value=["b/x"]):
-            self.assertEqual(client.system_one_models("openrouter"), ["~typesafe/jev-latest", "b/x"])
+            self.assertEqual(client.decision_judge_models("openrouter"), ["~typesafe/jev-latest", "b/x"])
         with mock.patch.object(providers, "decision_models", return_value=[]):
-            self.assertEqual(client.system_one_models("openrouter"), client.SYSTEM_ONE_MODELS["openrouter"])
+            self.assertEqual(client.decision_judge_models("openrouter"), client.DECISION_MODELS["openrouter"])
 
     def test_the_protocol_follows_the_model_not_the_list(self):
-        on = lambda model, **env: client.system_one({"OPENROUTER_API_KEY": "k", "SYSTEM_ONE_MODEL": model, **env}).protocol
+        on = lambda model, **env: client.decision_judge({"OPENROUTER_API_KEY": "k", "DECISION_MODEL": model, **env}).protocol
         with mock.patch.object(providers, "decision_models", return_value=["google/gemini-decision-1", "typesafe/jev-1.14"]):
             self.assertEqual(on("typesafe/jev-1.14"), "systemone")
             self.assertEqual(on("google/gemini-decision-1"), "decisions")
             self.assertEqual(on("someone/typed-by-hand"), "decisions")
-            self.assertEqual(on("google/gemini-decision-1", SYSTEM_ONE_PROTOCOL="systemone"), "systemone")
+            self.assertEqual(on("google/gemini-decision-1", DECISION_PROTOCOL="systemone"), "systemone")
 
 
 class OpenAIDecisions(unittest.TestCase):
-    ENV = {"OPENAI_API_KEY": "sk-oa-1", "SYSTEM_ONE_PROVIDER": "openai"}
+    ENV = {"OPENAI_API_KEY": "sk-oa-1", "DECISION_PROVIDER": "openai"}
 
     def test_the_request_is_openais_shape(self):
         post, sent = fake(200, {"model": "gpt-6-luna", "answers": [], "usage": {}})

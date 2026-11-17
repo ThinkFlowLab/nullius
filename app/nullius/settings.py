@@ -41,13 +41,13 @@ _LOCAL_KEY_OK = re.compile(r"^[!-~]+$")   # the same, any length: a local server
 _TEXT_OK = re.compile(r"^[^\x00-\x1f]{1,400}$")
 _MODEL_OK = re.compile(r"^~?[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,159}$")     # an OpenRouter model id: [~]vendor/model[:variant]
 # a provider choice each judge can use: a preset that serves its protocols, or custom (local, its old name);
-# System One's custom provider is a named one, the only kind whose record lists a decision protocol
+# Decision's custom provider is a named one, the only kind whose record lists a decision protocol
 _ID = r"[A-Z0-9]+(_[A-Z0-9]+)*"
-_S1_OK = re.compile(rf"^(typesafe|openrouter|openai|(custom|local):{_ID})$")
+_DECISION_PROVIDER_OK = re.compile(rf"^(typesafe|openrouter|openai|(custom|local):{_ID})$")
 _LLM_JUDGE_OK = re.compile(rf"^(openrouter|openai|anthropic|(custom|local)(:{_ID})?)$")
-# the protocols each judge speaks (``judge.client``: LLM_PROTOCOLS, SYSTEM_ONE_PROTOCOLS)
+# the protocols each judge speaks (``judge.client``: LLM_PROTOCOLS, DECISION_PROTOCOLS)
 _LLM_PROTOCOL_OK = re.compile(r"^(chat|messages)$")
-_S1_PROTOCOL_OK = re.compile(r"^(systemone|decisions|openai-decisions)$")
+_DECISION_PROTOCOL_OK = re.compile(r"^(systemone|decisions|openai-decisions)$")
 _ENVNAME_OK = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 _BOOL = {"0", "1", "true", "false", "yes", "no"}
 
@@ -149,7 +149,7 @@ class Variable:
     name: str
     group: str
     purpose: str
-    kind: str            # secret | localkey | endpoint | mirror | provider | path | paths | url | repo | name | bool | text | envname | hosts | constraints | model | llmprovider | s1provider | llmprotocol | s1protocol | envnames
+    kind: str            # secret | localkey | endpoint | mirror | provider | path | paths | url | repo | name | bool | text | envname | hosts | constraints | model | llmprovider | decisionprovider | llmprotocol | decisionprotocol | envnames
     example: str = ""    # shown as a placeholder, written to .env.example as a comment
 
     @property
@@ -182,9 +182,9 @@ class Variable:
             "constraints": _constraints,
             "model": _check(_MODEL_OK, "a model id as OpenRouter lists it, vendor/model"),
             "llmprovider": _check(_LLM_JUDGE_OK, "a provider: openrouter, openai, anthropic, custom or custom:<endpoint id>"),
-            "s1provider": _check(_S1_OK, "a provider: typesafe, openrouter, openai or custom:<endpoint id>"),
+            "decisionprovider": _check(_DECISION_PROVIDER_OK, "a provider: typesafe, openrouter, openai or custom:<endpoint id>"),
             "llmprotocol": _check(_LLM_PROTOCOL_OK, "a protocol: chat or messages"),
-            "s1protocol": _check(_S1_PROTOCOL_OK, "a protocol: systemone, decisions or openai-decisions"),
+            "decisionprotocol": _check(_DECISION_PROTOCOL_OK, "a protocol: systemone, decisions or openai-decisions"),
             "envnames": _agent_key_names,
         }[self.kind](value)
 
@@ -213,13 +213,13 @@ VARIABLES: List[Variable] = [
     Variable("OPENAI_API_KEY", GROUPS[0], "An OpenAI key, for a recipe whose provider is OpenAI: that run is sent to OpenAI's own base with this key, never with the model API key or its endpoint. It reaches the run as the model key does, and never a recipe or a log.", "secret"),
     Variable("OPENROUTER_API_KEY", GROUPS[0], "An OpenRouter key, for a recipe whose provider is OpenRouter: that run is sent to OpenRouter's own base with this key, never with the model API key or its endpoint. It reaches the run as the model key does, and never a recipe or a log.", "secret"),
     Variable("ANTHROPIC_API_KEY", GROUPS[0], "An Anthropic key, for a run of the Nullius standard whose agent speaks Anthropic's Messages, and for the LLM judge: the calls go to Anthropic's own base with this key. Only the relay and the judge hold it, never an agent, a recipe or a log.", "secret"),
-    Variable("TYPESAFE_API_KEY", GROUPS[0], "A TypeSafe key, for the System One judgement on TypeSafe's own base: sent as a bearer header there and nowhere else.", "secret", "ts-…"),
-    Variable("SYSTEM_ONE_PROVIDER", GROUPS[0], "The provider the System One judgement is asked on: one that serves a decision protocol, such as typesafe or openrouter, with that provider's own key. Unset: TypeSafe when its key is set, else OpenRouter when its key is.", "s1provider"),
-    Variable("SYSTEM_ONE_PROTOCOL", GROUPS[0], "The decision protocol System One is asked in, on a provider that serves more than one: systemone, decisions or openai-decisions. Unset, or one the provider does not serve: on OpenRouter systemone for TypeSafe's models and decisions for another maker's, else the first the provider serves.", "s1protocol"),
-    Variable("SYSTEM_ONE_MODEL", GROUPS[0], "The System One model, as the provider names it: on TypeSafe jev-latest, on OpenRouter ~typesafe/jev-latest or typesafe/jev-1.14. Unset: the provider's default.", "model"),
-    Variable("LLM_JUDGE_PROVIDER", GROUPS[0], "The provider of the LLM judgement, the second judgement beside System One: openrouter, openai, anthropic, custom (the endpoint at MODEL_API_URL) or custom:<ID> (a custom provider), asked with that provider's own key and base from the model providers above. local and local:<ID> are read as custom. Unset: the first of them that is set, Anthropic last.", "llmprovider"),
+    Variable("TYPESAFE_API_KEY", GROUPS[0], "A TypeSafe key, for the Decision judgement on TypeSafe's own base: sent as a bearer header there and nowhere else.", "secret", "ts-…"),
+    Variable("DECISION_PROVIDER", GROUPS[0], "The provider the Decision judgement is asked on: one that serves a decision protocol, such as typesafe or openrouter, with that provider's own key. Unset: TypeSafe when its key is set, else OpenRouter when its key is.", "decisionprovider"),
+    Variable("DECISION_PROTOCOL", GROUPS[0], "The decision protocol Decision is asked in, on a provider that serves more than one: systemone, decisions or openai-decisions. Unset, or one the provider does not serve: on OpenRouter systemone for TypeSafe's models and decisions for another maker's, else the first the provider serves.", "decisionprotocol"),
+    Variable("DECISION_MODEL", GROUPS[0], "The Decision model, as the provider names it: on TypeSafe jev-latest, on OpenRouter ~typesafe/jev-latest or typesafe/jev-1.14. Unset: the provider's default.", "model"),
+    Variable("LLM_JUDGE_PROVIDER", GROUPS[0], "The provider of the LLM judgement, the second judgement beside Decision: openrouter, openai, anthropic, custom (the endpoint at MODEL_API_URL) or custom:<ID> (a custom provider), asked with that provider's own key and base from the model providers above. local and local:<ID> are read as custom. Unset: the first of them that is set, Anthropic last.", "llmprovider"),
     Variable("LLM_JUDGE_PROTOCOL", GROUPS[0], "The protocol the LLM judge is asked in, on a provider that serves both: chat (OpenAI Chat Completions) or messages (Anthropic Messages). Unset, or one the provider does not serve: the first the provider serves, chat before messages.", "llmprotocol"),
-    Variable("LLM_JUDGE_MODEL", GROUPS[0], "The model of the LLM judgement, as its provider names it (on OpenRouter, vendor/model). It is asked the same questions as System One and answers them as JSON; its numbers are what it states, so a choice or a score carries no confidence.", "model"),
+    Variable("LLM_JUDGE_MODEL", GROUPS[0], "The model of the LLM judgement, as its provider names it (on OpenRouter, vendor/model). It is asked the same questions as Decision and answers them as JSON; its numbers are what it states, so a choice or a score carries no confidence.", "model"),
     *(Variable(name, GROUPS[0], f"Additions to the {title} provider, as a JSON object without the key: endpoints of protocols the preset does not list, "
                '{"endpoints": {"<protocol>": "/path" or "https://full/url"}}. In the environment, a partial object merged over this one.', "provider")
       for name, title in (("OPENROUTER", "OpenRouter"), ("OPENAI", "OpenAI"), ("ANTHROPIC", "Anthropic"), ("TYPESAFE", "TypeSafe"))),
@@ -260,7 +260,11 @@ _FROM: Dict[str, str] = {}  # which file each of them came from, so a refresh of
 # says which of its own names was meant - for HOST and PORT, a start-up
 # option, read at start. OPENAI_API_KEY and OPENROUTER_API_KEY are its own:
 # the keys a recipe on OpenAI or on OpenRouter is sent with.
-INSTEAD: Dict[str, str] = {"API_TOKEN": "MODEL_API_KEY", "API_URL": "MODEL_API_URL", "OPENAI_BASE_URL": "MODEL_API_URL",
+# The Decision judge's settings before it had that name: still read (``judge.client``), and taken out of
+# the file when the page saves the new one, so a saved choice survives the rename.
+RENAMED: Dict[str, str] = {"SYSTEM_ONE_PROVIDER": "DECISION_PROVIDER", "SYSTEM_ONE_PROTOCOL": "DECISION_PROTOCOL",
+                           "SYSTEM_ONE_MODEL": "DECISION_MODEL"}
+INSTEAD: Dict[str, str] = {**RENAMED, "API_TOKEN": "MODEL_API_KEY", "API_URL": "MODEL_API_URL", "OPENAI_BASE_URL": "MODEL_API_URL",
                            "API_KEY_TYPESAFE": "TYPESAFE_API_KEY", "JUDGE_MODEL": "LLM_JUDGE_MODEL", "HOST": "APP_HOST", "PORT": "APP_PORT"}
 
 
@@ -641,8 +645,15 @@ def save_many(path: str, changes: Dict[str, Optional[str]]) -> None:
                 problems.append(f"{name} must be {why}.")
     if problems:
         raise ValueError(" ".join(problems))
+    # a setting saved under its new name takes its old one out of the file
+    old = {o for o, n in RENAMED.items() if n in changes and o not in changes}
     lines, done = [], set()
     for line, key, _ in parse(path):
+        if key in old:
+            if key in LOADED_KEYS:
+                os.environ.pop(key, None)
+                LOADED_KEYS.discard(key)
+            continue
         if key in changes:
             value = changes[key]
             if value is not None and key not in done:

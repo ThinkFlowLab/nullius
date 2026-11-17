@@ -6,10 +6,10 @@ Two judgements per trial, a tab each, records in `judgements/` and `judgements-l
 
 | Judgement | Answers |
 | --- | --- |
-| [System One](settings/system-one.md) | A decision model's answers: a yes/no's probability, a choice's distribution, a score, each with the model's confidence when it gives one; one call per state |
+| [Decision](settings/decision.md) | A decision model's answers: a yes/no's probability, a choice's distribution, a score, each with the model's confidence when it gives one; one call per state |
 | [LLM judge](settings/llm-judge.md) | What a chat model states, one JSON object per state, no confidence |
 
-The job, compare, feasibility and task-instruction pages ask System One. A record names the provider and the model that answered, and the questions the model refused. The cost estimate for TypeSafe is calibrated on its own stored calls.
+The job, compare, feasibility and task-instruction pages ask Decision. A record names the provider and the model that answered, and the questions the model refused. The cost estimate for TypeSafe is calibrated on its own stored calls.
 
 !!! note "A judge never changes an outcome, a count or a verdict"
 
@@ -76,7 +76,7 @@ Follow the evidence: a recorded rate limit is a provider's failure whatever the 
 
 <div class="grid cards" markdown>
 
-- [System One provider](settings/system-one.md)
+- [Decision provider](settings/decision.md)
 - [LLM judge provider](settings/llm-judge.md)
 - [Read results](results.md)
 
