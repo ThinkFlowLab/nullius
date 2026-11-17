@@ -1,4 +1,3 @@
-{% from 'runs/_runtime.html' import what_ran %}
 {% extends "base.html" %}
 {% block title %}{{ trial.task_base }} — Nullius{% endblock %}
 {% block crumb %}/ <a href="{{ url_for('job', job_id=job.job_id) }}">{{ job.job_id }}</a> / {{ trial.task_base }}{% endblock %}
@@ -24,6 +23,7 @@
 
 {% from 'traces/_judgement.html' import judgement_panel %}
 {% from 'traces/_attempts.html' import attempt_tabs, attempt_count, try_tabs %}
+{% from 'traces/_head.html' import ran_cards %}
 {% block body %}
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
 
@@ -38,10 +38,25 @@
   {% if trial.exception_type %}<span class="mono faint exception-type"
     title="{% if trial.outcome == 'unknown' %}Harbor recorded this exception on the trial and the classifier has no side for it, so the trial counts and is charged to nobody. To place it, add the name to _AGENT_EXCEPTIONS or _INFRA_EXCEPTIONS in app/nullius/runs/classify.py.{% else %}Harbor recorded this exception on the trial; the outcome label follows from it.{% endif %}">{{ trial.exception_type }}</span>{% endif %}
 </div>
-{# The trial records a bare model name ("gpt-5.6-luna"); the job keeps the
-   provider-qualified one ("openai/gpt-5.6-luna"). Prefer the fuller id. #}
-{% set model = job.model_name if job.model_name and job.model_name.endswith(trial.model_name or '~')
-               else (trial.model_name or job.model_name) %}
+{# an earlier try of an attempt: evidence only, never judged #}
+{% set replaced = trial.trial_name != attempt.trial_name %}
+{# What ran (traces/_head.html, the same on All attempts), then how it went: the dataset's own
+   checks, the reward or the score, the agent's time and its steps. A value the trial does not
+   have has no cell, and a block with no cell is not drawn. A task run several times, or an attempt
+   tried again, has its tabs between the two: what ran is every attempt's and stays above them,
+   the numbers are this one's and change under them. #}
+{% set vocab = trial.vocab %}
+{% set cells %}
+  {%- if vocab.gained and (trial.f2p_pass or trial.f2p_fail) %}<div><span class="k">{{ vocab.gained }}</span><span class="n"><span class="ok">{{ trial.f2p_pass }}</span><small>/{{ trial.f2p_fail }}</small></span></div>{% endif -%}
+  {%- if vocab.held and (trial.p2p_pass or trial.p2p_fail) %}<div><span class="k">{{ vocab.held }}</span><span class="n"><span class="ok">{{ trial.p2p_pass }}</span><small>/{{ trial.p2p_fail }}</small></span></div>{% endif -%}
+  {%- if vocab.has_patch and trial.patch_exists is not none %}<div><span class="k">Patch applied</span><span class="n">{{ 'Yes' if trial.patch_applied else 'No' }}</span></div>{% endif -%}
+  {%- if trial.reward is not none %}<div title="{{ "The benchmark's verdict on this trial: 1 when it counts as right" if job.runner else "The verifier's reward for this trial, what Harbor's headline mean averages" }}"><span class="k">Reward</span><span class="n">{{ trial.reward }}</span></div>{% endif -%}
+  {%- if trial.score is not none %}<div title="{% if trial.n_parts %}The mean score of its {{ trial.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it"><span class="k">Score</span><span class="n">{{ '%.2f'|format(trial.score) }}</span></div>{% endif -%}
+  {%- if trial.dur_agent is not none %}<div><span class="k">Agent time</span><span class="n">{{ trial.dur_agent|secs }}</span></div>{% endif -%}
+  {%- if traj and not traj.error %}<div><span class="k">Steps</span><span class="n">{{ traj.n_steps }}</span></div>{% endif -%}
+{% endset %}
+{% if attempts or tries %}
+<div class="trial-head">{{ ran_cards(job, trial, imported_from, agent_mark) }}</div>
 {% if attempts %}
 <div class="attempt-head">
   <span class="attempt-count">{{ attempt_count(attempts) }}</span>
@@ -49,44 +64,13 @@
 </div>
 {% endif %}
 {% if tries %}{{ try_tabs(job, tries, trial, request.args.get('workspace')) }}{% endif %}
-{# an earlier try of an attempt: evidence only, never judged #}
-{% set replaced = trial.trial_name != attempt.trial_name %}
+{% if cells|trim %}<div class="trial-head"><div class="th-strip">{{ cells }}</div></div>{% endif %}
+{% else %}
 <div class="trial-head">
-  {# What ran (where the task is from and what ran it; the agent, its mark, and the model that
-     answered), then how it went: the dataset's own checks, the reward or the score, the agent's
-     time and its steps. A value the trial does not have has no cell, and a block with no cell is
-     not drawn. An imported trial says its importer: no benchmark gave it, and no runner ran it here. #}
-  {% set agent = trial.agent_info_name or job.agent_label %}
-  {% if imported_from %}
-  <div class="th-card"><div><span class="k">Imported from</span><span class="v">{{ imported_from }}</span></div></div>
-  {% else %}
-  <div class="th-card">
-    {% if trial.source %}<div><span class="k">Benchmark</span><span class="v" title="{{ trial.source }}">{{ trial.source|dsname }}</span></div>
-    <span class="th-sep" aria-hidden="true"></span>{% endif %}
-    <div><span class="k">Runner</span><span class="v">{% if job.runner %}{{ what_ran(job) }}{% else %}<span{% if job.harbor_label %} title="harbor {{ job.harbor_label }}"{% endif %}>Harbor</span>{% endif %}</span></div>
-  </div>
-  {% endif %}
-  {% if agent or model %}
-  <div class="th-card">
-    {% if agent %}<span class="th-mark" aria-hidden="true">{{ agent_mark('agent', agent, agent) }}</span>{% endif %}
-    <div>
-      {% if agent %}<span class="v">{{ agent }}{% if trial.agent_version %} <span class="mono faint" title="The agent's version as the trial's agent_info reports it">{{ trial.agent_version }}</span>{% endif %}</span>{% endif %}
-      {% if model %}<span class="th-model mono">{{ model }}</span>{% endif %}
-    </div>
-  </div>
-  {% endif %}
-  {% set vocab = trial.vocab %}
-  {% set cells %}
-    {%- if vocab.gained and (trial.f2p_pass or trial.f2p_fail) %}<div><span class="k">{{ vocab.gained }}</span><span class="n"><span class="ok">{{ trial.f2p_pass }}</span><small>/{{ trial.f2p_fail }}</small></span></div>{% endif -%}
-    {%- if vocab.held and (trial.p2p_pass or trial.p2p_fail) %}<div><span class="k">{{ vocab.held }}</span><span class="n"><span class="ok">{{ trial.p2p_pass }}</span><small>/{{ trial.p2p_fail }}</small></span></div>{% endif -%}
-    {%- if vocab.has_patch and trial.patch_exists is not none %}<div><span class="k">Patch applied</span><span class="n">{{ 'Yes' if trial.patch_applied else 'No' }}</span></div>{% endif -%}
-    {%- if trial.reward is not none %}<div title="{{ "The benchmark's verdict on this trial: 1 when it counts as right" if job.runner else "The verifier's reward for this trial, what Harbor's headline mean averages" }}"><span class="k">Reward</span><span class="n">{{ trial.reward }}</span></div>{% endif -%}
-    {%- if trial.score is not none %}<div title="{% if trial.n_parts %}The mean score of its {{ trial.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it"><span class="k">Score</span><span class="n">{{ '%.2f'|format(trial.score) }}</span></div>{% endif -%}
-    {%- if trial.dur_agent is not none %}<div><span class="k">Agent time</span><span class="n">{{ trial.dur_agent|secs }}</span></div>{% endif -%}
-    {%- if traj and not traj.error %}<div><span class="k">Steps</span><span class="n">{{ traj.n_steps }}</span></div>{% endif -%}
-  {% endset %}
+  {{ ran_cards(job, trial, imported_from, agent_mark) }}
   {% if cells|trim %}<div class="th-strip">{{ cells }}</div>{% endif %}
 </div>
+{% endif %}
 
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
   {% for name, label in [('overview', 'Overview'), ('judgement', 'System One judge'), ('llm-judge', 'LLM judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] if not (replaced and name in ('judgement', 'llm-judge')) %}

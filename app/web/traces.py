@@ -306,7 +306,8 @@ def trial_attempts(job_id, trial_name):
     # a task tried once has no tab that leads here; its one line still answers
     attempts = task_attempts.of(j, t) or task_attempts.Attempts((t,))
     tries = {a.trial_name: _tries(a) for a in attempts.trials if a.n_retries}
-    return render_template("traces/attempts.html", job=j, trial=t, attempts=attempts, tries=tries)
+    return render_template("traces/attempts.html", job=j, trial=t, attempts=attempts, tries=tries,
+                           imported_from=_imported_from(j))
 
 
 def _judgement_panel(job, trial, lane="system-one"):
