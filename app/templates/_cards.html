@@ -4,7 +4,8 @@
     order: `status`, `tag`*, `meta`, `check` (the top row); `icon`, `title` (exactly one); `text`; `badge`*, `note`*;
     `stat` (up to 3, below a line); `alert`; `action`* (* any number, the others at most one).
     An item is a dict of display values by field key: a string, a dict {text, class, title, label, href, value} or a
-    list of them, empty for none; plus `href` (its title's link), `id`, `search` (what the search reads) and `keys`.
+    list of them, empty for none; a filter reads a value's `value`, else its text. Plus `href` (its title's link),
+    `id`, `search` (what the search reads) and `keys`.
     A field's `class` goes on each of its values; `card_label` names a stat when its column header does not, and a
     value's `label` names it for that item; `style` 'code' sets the text as code; `icon` puts #i-<icon> before a
     note. `icon` values are image URLs: when one item has one, the others show initials; when none has, no icon. -#}
@@ -41,7 +42,7 @@
 <div class="bench-grid">
 {%- for item in items %}
   <article class="bench-card" data-card{% if item.get('id') %} id="{{ item.get('id') }}"{% endif %}{% if item.get('search') %} data-search="{{ item.get('search') }}"{% endif %}{% if item.get('keys') %} data-keys="{{ item.get('keys') }}"{% endif %}
-    {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.text }}&#10;{% endcall %}"{% endfor %}>
+    {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}>
     {%- set top %}{% call(f, v) each(item, by.status) %}{{ pill(f, v) }}{% endcall %}
       {%- set tags %}{% call(f, v) each(item, by.tag) %}{{ pill(f, v) }}{% endcall %}{% endset %}{% if tags %}<span class="bench-card-tags">{{ tags }}</span>{% endif %}
       {%- call(f, v) each(item, by.meta) %}<span class="bench-harness">{{ v.text }}</span>{% endcall %}

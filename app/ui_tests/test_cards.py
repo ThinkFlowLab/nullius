@@ -73,6 +73,14 @@ class Macros(unittest.TestCase):
         self.assertIn('href="/&#34;x"', html)
         self.assertIn('data-f-tag="&lt;script&gt;x&lt;/script&gt;&#34;&#10;"', html)
 
+    def test_a_filter_reads_a_value_not_its_label(self):
+        cols = [COLS[2], dict(COLS[11], filter='dropdown')]
+        html = self.render(cols, [{'href': '/a', 'title': 'A', 'tag': [{'text': 'Coding', 'value': 'code'}, 'math']}],
+                           choices={'tag': [('code', 'Coding'), ('math', 'math')]})
+        self.assertIn('data-f-tag="code&#10;math&#10;"', html)                                 # the value given, else the text
+        self.assertIn('<span class="cat-tag">Coding</span>', html)
+        self.assertIn('<input type="checkbox" data-value="code" checked> Coding', html)
+
     def test_controls_search_and_filter_without_sort(self):
         html = self.render(COLS[2:3], [{'href': '/a', 'title': 'A', 'tag': 'x'}], search='Find', choices={'title': [('A', 'A')]},
                            empty='No card matches.')

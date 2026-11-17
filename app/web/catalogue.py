@@ -32,8 +32,8 @@ def benchmarks_page():
     sheet = url_for("static", filename="catalogue/marks.svg")
     items = [_card(cat, b, setup.get(b.key), sheet if f'<symbol id="bm-{b.key}"' in sprite or _user_mark(cat, b) else None)
              for b in cat.listed_benchmarks]
-    choices = {"category": [(c, c) for c in cat.categories], "runs": [(label, label) for label, _ in RUNS_WITH.values()],
-               "origin": [(o.capitalize(), o.capitalize()) for o in catalog.ORIGINS]}
+    choices = {"category": [(c, c) for c in cat.categories], "runs": [(way, label) for way, (label, _) in RUNS_WITH.items()],
+               "origin": [(o, o.capitalize()) for o in catalog.ORIGINS]}
     return render_template("catalogue/benchmarks.html", cat=cat, items=items, choices=choices,
                            prompts=howto.prompts(), catalogue_dir=paths.catalogue_dir())
 
@@ -48,9 +48,9 @@ def _card(cat, b, needs, sheet) -> dict:
     tasks, unit = cat.tasks_of(b)
     return {"href": url_for("benchmark_page", key=b.key), "shelf": b.origin, "keys": " ".join([b.key, *b.datasets]),
             "search": " ".join([b.title, b.category, b.key, *(d.title for d in ds), *b.datasets]),
-            "category": b.category, "origin": {"text": b.label, "class": b.origin},
+            "category": b.category, "origin": {"text": b.label, "class": b.origin, "value": b.origin},
             "icon": sheet and f"{sheet}#bm-{b.key}", "title": b.title, "domain": b.domain,
-            "runs": [{"text": label, "class": "rt-" + way, "title": "Runs with " + name}
+            "runs": [{"text": label, "class": "rt-" + way, "title": "Runs with " + name, "value": way}
                      for way, (label, name) in RUNS_WITH.items() if way in b.harness],
             "needs": needs and {"text": "needs " + ", ".join(needs),
                                 "title": f"Some of its options need {', '.join(needs)} installed on the machine it runs on: see its page"},
