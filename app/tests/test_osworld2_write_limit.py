@@ -243,6 +243,7 @@ class Intercept(unittest.TestCase):
         for value in ("30mb", "0", "007", "\u0663", "\u00b2", "-1", " 30"):
             with self.subTest(value), self.assertRaises(self.site.WriteLimitError) as raised:
                 self.site.wanted({"NULLIUS_OPTION_WRITE_MBPS": value})
+            self.assertIn("Disk write MB/s is", str(raised.exception))
             self.assertIn("Disk write IOPS to none", str(raised.exception))
         self.assertEqual(self.site.wanted({"NULLIUS_OPTION_WRITE_MBPS": "30"}),
                          [("device_write_bps", MB30, "BlkioDeviceWriteBps", "--device-write-bps")])

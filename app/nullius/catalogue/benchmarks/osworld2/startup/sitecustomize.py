@@ -42,6 +42,7 @@ LONGEST_START = (PORT_LISTS * DOCKER_PY_SECONDS + 5 * CREATE_SECONDS
 LIMITS = (("device_write_bps", "NULLIUS_OPTION_WRITE_MBPS", 1024 * 1024, "BlkioDeviceWriteBps", "--device-write-bps"),
           ("device_write_iops", "NULLIUS_OPTION_WRITE_IOPS", 1, "BlkioDeviceWriteIOps", "--device-write-iops"))
 TAKEN = {"device_write_bps": "OSWORLD2_PROXY_WRITE_BPS", "device_write_iops": "OSWORLD2_PROXY_WRITE_IOPS"}
+NAMES = {"device_write_bps": "Disk write MB/s", "device_write_iops": "Disk write IOPS"}
 SYS_BLOCK = "/sys/dev/block"
 DEV = "/dev"
 ACTION = "run where Docker limits writes on the disk under its root, or set Disk write MB/s and Disk write IOPS to none"
@@ -93,11 +94,13 @@ def wanted(environ):
         value = environ.get(name, "none")
         if value != "none":
             if not re.fullmatch(r"[1-9][0-9]*", value):
-                raise WriteLimitError(f"the VM's disk write limit cannot be applied: {name} is {value!r}; {ACTION}")
+                raise WriteLimitError(f"the VM's disk write limit cannot be applied: {NAMES[key]} is {value!r}; {ACTION}")
             taken = environ.get(TAKEN[key], "0")
-            if not re.fullmatch(r"0|[1-9][0-9]*", taken) or int(value) * unit <= int(taken):
-                raise WriteLimitError(f"the VM's disk write limit cannot be applied: {name} is {value}, and the "
-                                      f"unit's proxy takes {taken} of it ({TAKEN[key]}); give the VM more")
+            if not re.fullmatch(r"0|[1-9][0-9]*", taken):
+                raise WriteLimitError(f"the unit's proxy gave no write share it can take: {TAKEN[key]} is {taken!r}")
+            if int(value) * unit <= int(taken):
+                raise WriteLimitError(f"the VM's disk write limit cannot be applied: {NAMES[key]} is {value}, "
+                                      "no more than the unit's proxy takes; give the VM more")
             out.append((key, int(value) * unit - int(taken), field, flag))
     return out
 

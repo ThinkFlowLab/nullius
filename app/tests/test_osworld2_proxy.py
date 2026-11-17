@@ -684,7 +684,7 @@ class Driver(unittest.TestCase):
                 mock.patch.object(driver, "_asked", mock.Mock(side_effect=AssertionError("asked"))):
             with self.assertRaises(driver._startup().WriteLimitError) as raised:
                 driver._disk()
-        self.assertIn("OSWORLD2_PROXY_WRITE_IOPS", str(raised.exception))
+        self.assertIn("Disk write IOPS is 1, no more than the unit's proxy takes", str(raised.exception))
 
     def test_the_proxys_disk_is_the_vms_one_only_with_a_write_limit_set(self):
         driver = load("osworld2_driver_disk", os.path.join(HERE, "driver.py"), self.tmp)
