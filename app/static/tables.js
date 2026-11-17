@@ -50,23 +50,20 @@ window.NulliusTable = {
     return resort;
   },
 
-  /* The value lists (data-filter-menu) under `scope`: the filter_button
-     macro's, each opened by its caret, or the controls macro's. `allowed`:
-     column -> the Set of values ticked, or null when all are. A row passes
-     when, for each column, one of its values (data-f-<col>, one per line) is
-     ticked; a box unticked at load filters from the start. `changed` runs
-     after each change. */
+  /* The value lists (data-filter-menu) under `scope`, the controls macro's
+     Filter menu. `allowed`: column -> the Set of values ticked, or null when
+     all are. A row passes when, for each column, one of its values
+     (data-f-<col>, one per line) is ticked; a box unticked at load filters
+     from the start. `changed` runs after each change, a list's change event
+     included. */
   filters(scope, changed) {
     const allowed = {};
     scope.querySelectorAll('[data-filter-menu]').forEach(menu => {
       const col = menu.dataset.filterMenu;
       const boxes = () => [...menu.querySelectorAll('input[data-value]')];
-      const btn = scope.querySelector(`.filter-btn[data-filter="${col}"]`);
       const read = () => {
         const on = boxes().filter(b => b.checked).map(b => b.dataset.value);
-        // All checked means "no filter": keeps the active marker honest.
-        allowed[col] = on.length === boxes().length ? null : new Set(on);
-        btn?.classList.toggle('on', Boolean(allowed[col]));
+        allowed[col] = on.length === boxes().length ? null : new Set(on);   // all ticked: no filter
       };
       const sync = () => { read(); changed(); };
       read();
@@ -74,19 +71,6 @@ window.NulliusTable = {
       menu.addEventListener('click', e => {
         if (e.target.closest('[data-all]')) { boxes().forEach(b => b.checked = true); sync(); }
         if (e.target.closest('[data-none]')) { boxes().forEach(b => b.checked = false); sync(); }
-      });
-      if (!btn) return;
-      btn.addEventListener('click', e => {
-        e.stopPropagation();          // the th itself sorts; don't sort on filter
-        const open = menu.hidden;
-        scope.querySelectorAll('.filter-menu').forEach(m => m.hidden = true);
-        menu.hidden = !open;
-        btn.setAttribute('aria-expanded', String(open));
-      });
-      menu.addEventListener('click', e => e.stopPropagation());
-      document.addEventListener('click', () => {
-        menu.hidden = true;
-        btn.setAttribute('aria-expanded', 'false');
       });
     });
     const passes = row => Object.entries(allowed).every(([col, set]) =>
@@ -96,17 +80,15 @@ window.NulliusTable = {
         menu.querySelectorAll('input[data-value]').forEach(b => b.checked = true);
         allowed[menu.dataset.filterMenu] = null;
       });
-      scope.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('on'));
     };
     return {allowed, passes, clear};
   },
 
-  /* A Columns menu: `btn` opens `menu` (none: the caller opens it), whose
-     checkboxes (data-col) show or hide the table's cells of that data-col,
-     remembered per viewer under `key`; a disabled one stays on, a data-off
-     one is off until the viewer chooses. Returns show(), to apply the choice
-     to rows put in since. */
-  columns(table, btn, menu, key) {
+  /* A Columns menu (opened by `menu`): its checkboxes (data-col) show or
+     hide the table's cells of that data-col, remembered per viewer under
+     `key`; a disabled one stays on, a data-off one is off until the viewer
+     chooses. Returns show(), to apply the choice to rows put in since. */
+  columns(table, menu, key) {
     const boxes = [...menu.querySelectorAll('input[data-col]')];
     let stored = null;
     try { stored = JSON.parse(localStorage.getItem(key) || 'null'); } catch {}
@@ -120,18 +102,6 @@ window.NulliusTable = {
       });
     });
     show();
-    if (!btn) return show;
-    btn.addEventListener('click', () => {
-      const open = menu.hidden;
-      menu.hidden = !open;
-      btn.setAttribute('aria-expanded', String(open));
-    });
-    document.addEventListener('click', e => {
-      if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) {
-        menu.hidden = true;
-        btn.setAttribute('aria-expanded', 'false');
-      }
-    });
     return show;
   },
 
@@ -214,7 +184,7 @@ window.NulliusTable = {
     const tools = document.getElementById(table.id + '-tools');
     const cmenu = tools.querySelector('[data-tools="columns"]');
     if (cmenu) {
-      this.columns(table, null, cmenu, table.id + '.cols');
+      this.columns(table, cmenu, table.id + '.cols');
       this.menu(tools.querySelector('[data-tools-btn="columns"]'), cmenu);
     }
     const ticks = table.querySelector('[data-check-all]') ? this.checks(table) : () => {};

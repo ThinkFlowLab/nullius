@@ -388,20 +388,15 @@ button.seg:hover { filter: brightness(1.25); }
 
 .grid.sortable thead th { cursor: pointer; user-select: none; white-space: nowrap; }
 .grid.sortable thead th:hover { color: var(--text); }
-/* Arrows are set in a size independent of the small uppercase header text —
-   at .76rem uppercase they were rendering near-invisible. */
-.grid.sortable thead th::after {
-  content: "↕"; margin-left: .4rem; font-size: 1.05rem; line-height: 0;
-  vertical-align: -.1em; opacity: .4; color: var(--text-faint);
+/* an arrow on the sorted column only, in a size independent of the small uppercase header text */
+.grid.sortable thead th[data-sorted]::after {
+  margin-left: .4rem; font-size: 1.05rem; line-height: 0; vertical-align: -.1em; color: var(--accent); font-weight: 500;
 }
-.grid.sortable thead th:hover::after { opacity: .8; color: var(--text-dim); }
-.grid.sortable thead th[data-sorted]::after { opacity: 1; color: var(--accent); font-weight: 500; }
 .grid.sortable thead th[data-sorted="asc"]::after { content: "↑"; }
 .grid.sortable thead th[data-sorted="desc"]::after { content: "↓"; }
 .grid.sortable thead th:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent-soft); }
 /* a header without data-type (a checkbox, a state, the actions) does not sort */
 .grid.sortable thead th:not([data-type]) { cursor: default; }
-.grid.sortable thead th:not([data-type])::after { content: none; }
 .nowrap { white-space: nowrap; }
 
 /* give the two text-heavy columns room; the rest stay compact */
@@ -438,23 +433,7 @@ button.seg:hover { filter: brightness(1.25); }
 .grid.compact th[data-col="dataset"], .grid.compact td[data-col="dataset"] { min-width: 8rem; }
 .grid.compact .minibar { width: 56px; }
 
-/* per-column value filter */
-.th-filter { position: relative; display: inline-block; }
-.filter-btn {
-  font: inherit; font-size: .8rem; line-height: 1; cursor: pointer;
-  background: none; border: none; padding: 0 .15rem; margin-left: .3rem;
-  color: var(--text-faint); border-radius: 4px;
-}
-.filter-btn:hover { color: var(--text); }
-.filter-btn.on { color: var(--accent); }
-.filter-btn.on::after { content: "•"; margin-left: .1rem; }
-.filter-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
-.filter-menu {
-  right: 0; left: auto; text-transform: none; letter-spacing: 0;
-  font-weight: 400; max-height: 18rem; overflow-y: auto; min-width: 200px;
-}
-/* a table's Filter and Sort by menus (the controls macro): no header carets, an arrow on the sorted column only */
-.grid.sortable.tools thead th:not([data-sorted])::after { content: none; }
+/* a table's Filter and Sort by menus (the controls macro) */
 .tools-menu { min-width: 220px; max-height: min(70vh, 34rem); overflow-y: auto; }
 .tools-menu fieldset { margin: 0; padding: .3rem 0; border: 0; border-top: 1px solid var(--border-soft); min-width: 0; }
 .tools-menu fieldset:first-of-type { border-top: 0; }
@@ -473,13 +452,13 @@ button.seg:hover { filter: brightness(1.25); }
 .grid.snug th { position: relative; }
 .grid td.acts-col { position: relative; white-space: nowrap; }
 .count-btn { font-variant-numeric: tabular-nums; }   /* an icon and a count, as one button */
-.btn.ghost[aria-disabled="true"] { opacity: .45; cursor: default; }   /* greyed: it cannot act here */
+.btn[aria-disabled="true"] { opacity: .45; cursor: default; }   /* greyed: it cannot act here */
 .btn.ghost[aria-disabled="true"]:hover { color: var(--text-dim); border-color: var(--border); background: transparent; }
+.btn:not(.ghost)[aria-disabled="true"]:hover { background: var(--accent); }
 /* a column's alignment (its `align`), header and cells */
 .grid .align-right { text-align: right; }
 .grid .align-center { text-align: center; }
 .tools-count { margin-left: .4rem; padding: 0 .4em; border-radius: 99px; background: var(--accent-soft); color: var(--text); font-size: .72rem; font-variant-numeric: tabular-nums; }
-.menu-head { display: flex; gap: .75rem; padding: .15rem .45rem .4rem; border-bottom: 1px solid var(--border-soft); margin-bottom: .25rem; }
 .chip.clear { border-style: dashed; }
 
 .pick-col { width: 2.2rem; }

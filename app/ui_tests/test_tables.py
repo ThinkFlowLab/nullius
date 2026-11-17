@@ -215,7 +215,7 @@ const first = row(), body = el('tbody', {}, first);
 const table = el('table', {}, el('thead', {}, head), body);
 const menu = el('div', {}, el('label', {}, el('input', {type: 'checkbox', 'data-col': 'b'})));
 T.sticky(table);
-T.columns(table, null, menu, 'k');
+T.columns(table, menu, 'k');
 const at = r => r.cells.map(c => c.style['--sticky-left'] ?? null);
 const out = [at(head), at(first), first.cells.map(c => ['sticky-col', 'sticky-edge'].filter(k => c.classList.contains(k)))];
 head.cells[0].width = 40; resized(); out.push(at(first));                       // a column grows: those after it move

@@ -143,11 +143,11 @@ def dataset_info(name):
 
 # The runs table's columns, in render order, as _tables.html defines a column: its headers and Columns menu.
 COLUMNS = [
-    dict(key="run", label="Run", sticky=True), dict(key="agent", label="Agent", caret=True),
+    dict(key="run", label="Run", sticky=True), dict(key="agent", label="Agent"),
     dict(key="version", label="Version", title="The agent's version as the run recorded it, or the runner and its commit"),
     dict(key="start", label="Start", type="num", align="left"), dict(key="end", label="End", type="num", align="left", off=True),
-    dict(key="time", label="Time", type="num"), dict(key="model", label="Model", caret=True, off=True),
-    dict(key="dataset", label="Dataset", caret=True, off=True), dict(key="mix", label="Mix", type="num", align="left"),
+    dict(key="time", label="Time", type="num"), dict(key="model", label="Model", off=True),
+    dict(key="dataset", label="Dataset", off=True), dict(key="mix", label="Mix", type="num", align="left"),
     dict(key="trials", label="Trials", type="num"), dict(key="solved", label="Solved", type="num"),
     dict(key="raw", label="Raw", type="num", title="Solved ÷ all trials", off=True),
     dict(key="adjusted", label="Adjusted", type="num", title="Solved ÷ trials that actually ran (excludes infra failures)"),

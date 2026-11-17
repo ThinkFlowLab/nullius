@@ -1,31 +1,14 @@
 {#- The table toolkit: each macro is a feature a table opts into, run by static/tables.js (NulliusTable) and
     styled in style.css ("the table toolkit"). #}
-{# Value filter for one column: a caret in the header opening a checkbox list of `choices`, (value, label) pairs.
-   Values start all-checked; unchecking hides the matching rows (static/tables.js). #}
-{% macro filter_button(col, choices) %}
-<span class="th-filter">
-  <button class="filter-btn" type="button" data-filter="{{ col }}"
-          aria-haspopup="true" aria-expanded="false" aria-label="Filter by {{ col }}">▼</button>
-  <div class="menu filter-menu" data-filter-menu="{{ col }}" hidden>
-    <div class="menu-head">
-      <button type="button" class="linkish" data-all="{{ col }}">All</button>
-      <button type="button" class="linkish" data-none="{{ col }}">None</button>
-    </div>
-    {% for value, label in choices %}
-    <label><input type="checkbox" data-value="{{ value }}" checked> {{ label }}</label>
-    {% endfor %}
-  </div>
-</span>
-{% endmacro %}
 
 {# A table's columns are one list of definitions, dicts that the headers, the cells, the Columns menu and Sort by
    all read: `key` (the data-col), `label`; `type` 'text' (default) or 'num', how it sorts; `align` 'left', 'center'
    or 'right' (a 'num' column's default), of its header and cells; `sticky`: pinned while the table scrolls, the last
    one drawing the edge; `blank`: no visible name (a status, the actions), neither sorted nor in the Columns menu;
    `check`: blank, a checkbox that ticks every visible row (check_cell in each row); `sr`: the label for a screen
-   reader only; `title`: its tooltip; `caret`: a filter_button of `choices`[key] in its header; `menu` false: not in
-   the Columns menu; `fixed`: in it, always on; `off`: off until the viewer chooses; `width` in a table macro's
-   table: 'fit' (default), as wide as its widest cell on one line, or 'expand', the rest of the width, wrapping. #}
+   reader only; `title`: its tooltip; `menu` false: not in the Columns menu; `fixed`: in it, always on; `off`: off
+   until the viewer chooses; `width` in a table macro's table: 'fit' (default), as wide as its widest cell on one
+   line, or 'expand', the rest of the width, wrapping. #}
 
 {#- The class attribute of a column's header or cell: its alignment, whether it is pinned, `edge` whether it is the
     last pinned; `extra` adds to it. #}
@@ -36,11 +19,11 @@
 {#- The last pinned column's key. #}
 {% macro edge_of(cols) %}{{ (cols|selectattr('sticky')|map(attribute='key')|list)[-1:]|join }}{% endmacro %}
 
-{# The header cells of `cols`; `choices`: what each caret offers. #}
-{% macro heads(cols, choices={}) %}{% set edge = edge_of(cols) %}
+{# The header cells of `cols`. #}
+{% macro heads(cols) %}{% set edge = edge_of(cols) %}
 {%- for c in cols %}{% set named = not (c.blank or c.check) %}
       <th data-col="{{ c.key }}"{% if named %} data-type="{{ c.type or 'text' }}"{% else %} scope="col"{% endif %}{{ classes(c, c.key == edge, 'pick-col' if c.check) }}{% if c.title %} title="{{ c.title }}"{% endif %}>
-        {%- if c.check %}<input type="checkbox" data-check-all aria-label="{{ c.label }}" title="{{ c.label }}">{% elif c.sr or c.blank %}<span class="sr">{{ c.label }}</span>{% else %}{{ c.label }}{% endif %}{% if c.caret %}{{ filter_button(c.key, choices[c.key]) }}{% endif %}</th>
+        {%- if c.check %}<input type="checkbox" data-check-all aria-label="{{ c.label }}" title="{{ c.label }}">{% elif c.sr or c.blank %}<span class="sr">{{ c.label }}</span>{% else %}{{ c.label }}{% endif %}</th>
 {%- endfor %}
 {%- endmacro %}
 
@@ -87,7 +70,7 @@
   {% if search %}<label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-search placeholder="{{ search }}" aria-label="{{ search }}" autocomplete="off" spellcheck="false"></label>{% endif %}
   <div class="table-buttons">
   {{ slot('views', views) }}
-  {% if columns %}<div class="menu-wrap">{{ columns_button('') }}{{ columns_menu(cols, '') }}</div>{% endif %}
+  {% if columns %}<div class="menu-wrap">{{ columns_button() }}{{ columns_menu(cols) }}</div>{% endif %}
   {% if choices %}<div class="menu-wrap">
     <button class="btn ghost sm" type="button" data-tools-btn="filter" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter<span class="tools-count" hidden></span></button>
     <div class="menu tools-menu" data-tools="filter" hidden>
@@ -127,11 +110,10 @@
 {% macro slot(name, fill) %}{% set html = fill() if fill else '' %}{% if html|trim %}<div class="table-slot" data-slot="{{ name }}">{{ html }}</div>{% endif %}{% endmacro %}
 
 {# A Columns menu (static/tables.js `columns`): its button, and the menu of `cols`' definitions, each a checkbox that
-   shows or hides the cells of that data-col. The menu opens under the .menu-wrap that holds it. `id`: the
-   button's or the menu's; none in a controls row. #}
-{% macro columns_button(id='col-btn') %}<button class="btn ghost sm" type="button"{% if id %} id="{{ id }}"{% endif %} data-tools-btn="columns" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-table"/></svg>Columns</button>{% endmacro %}
-{% macro columns_menu(cols, id='col-menu') %}
-<div class="menu"{% if id %} id="{{ id }}"{% endif %} data-tools="columns" hidden>
+   shows or hides the cells of that data-col. The menu opens under the .menu-wrap that holds it. #}
+{% macro columns_button() %}<button class="btn ghost sm" type="button" data-tools-btn="columns" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-table"/></svg>Columns</button>{% endmacro %}
+{% macro columns_menu(cols) %}
+<div class="menu" data-tools="columns" hidden>
   {% for c in cols if c.menu is not sameas false and not (c.blank or c.check) %}<label><input type="checkbox" data-col="{{ c.key }}"{% if c.fixed %} disabled{% endif %}{% if c.off %} data-off{% endif %}> {{ c.label }}</label>{% endfor %}
 </div>
 {% endmacro %}

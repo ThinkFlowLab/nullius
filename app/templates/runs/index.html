@@ -1,5 +1,5 @@
 {% from 'runs/_runtime.html' import what_ran %}
-{% from '_tables.html' import heads, check_cell, columns_button, columns_menu %}
+{% from '_tables.html' import heads, check_cell, controls %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Runs — Nullius{% endblock %}
@@ -161,27 +161,20 @@
   {{ dialogs() }}
 </div>
 
+{#- All runs' own buttons in its controls row: the density, and Compare, greyed until two runs are ticked. #}
+{% macro density() %}<button class="btn ghost sm" id="density-btn" aria-pressed="false" title="Fit more columns on screen">⇔ Compact</button>{% endmacro %}
+{% macro compare_button() %}<form action="{{ url_for('compare') }}" method="get" id="compare-form" class="compare-bar">
+    <span class="table-note" id="pick-note"></span>
+    <button class="btn sm" type="submit" id="compare-btn" aria-disabled="true" aria-describedby="compare-why" title="Tick two or more runs to compare">Compare</button><span class="sr" id="compare-why">Tick two or more runs to compare</span>
+  </form>{% endmacro %}
 <div id="view-all"{% if view != 'all' %} hidden{% endif %}>
-<div class="table-tools">
-  <div class="menu-wrap">{{ columns_button() }}</div>
-  {#- the menu opens under Compact #}
-  <div class="menu-wrap">
-    <button class="btn ghost sm" id="density-btn" aria-pressed="false" title="Fit more columns on screen">⇔ Compact</button>
-    {{ columns_menu(COLUMNS) }}
-  </div>
-  <span class="table-note" id="filter-note"></span>
-  <span class="header-spacer"></span>
-  <form action="{{ url_for('compare') }}" method="get" id="compare-form" class="compare-bar">
-    <span class="table-note" id="pick-note">Tick two or more runs to compare</span>
-    <button class="btn sm" type="submit" id="compare-btn" disabled>Compare</button>
-  </form>
-</div>
+{{ controls('runs', COLUMNS, search='Search by run, agent, model, benchmark or dataset', columns=true, choices=choices, views=density, actions=compare_button) }}
 
 <div class="table-wrap">
 <table class="grid sortable" id="runs">
   <thead>
     <tr>
-      {{ heads([dict(key='pick', label='Select all runs for comparison', check=true, sticky=true)] + COLUMNS, choices) }}
+      {{ heads([dict(key='pick', label='Select all runs for comparison', check=true, sticky=true)] + COLUMNS) }}
     </tr>
   </thead>
   <tbody>
@@ -189,7 +182,7 @@
     {# A control row carries no outcomes to filter by: the chips count the
        agents' trials, and a nop's rejections are not failed verifications. #}
     {% set v = verdicts[j.job_id] %}
-    <tr data-outcomes="{% if not v %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"
+    <tr data-search="{{ [j.job_id, j.agent_label, j.model_name, j.runner, j.dataset, j.dataset|dsname]|select|unique|join(' ') }}" data-outcomes="{% if not v %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"
         data-f-dataset="{{ j.dataset }}" data-f-model="{{ j.model_name }}"
         data-f-agent="{{ j.agent_label }}"{% if v %} class="control-row" data-control="{{ v.control }}" data-state="{{ v.state }}"{% endif %}>
       {{ check_cell('Compare ' ~ j.job_id, j.job_id) }}
@@ -311,11 +304,12 @@
   sent.set('tbody', table.tBodies[0].innerHTML);
   const counts = document.getElementById('counts');
   let head = counts.innerHTML;
-  const note = document.getElementById('filter-note');
   const emptyNote = document.getElementById('empty-note');
   const clearBtn = document.getElementById('clear-filter');
 
-  const showCols = NulliusTable.columns(table, document.getElementById('col-btn'), document.getElementById('col-menu'), 'runs.cols');
+  const tools = document.getElementById('runs-tools'), query = tools.querySelector('[data-search]'), cmenu = tools.querySelector('[data-tools="columns"]');
+  const showCols = NulliusTable.columns(table, cmenu, 'runs.cols');
+  NulliusTable.menu(tools.querySelector('[data-tools-btn="columns"]'), cmenu);
   const densityBtn = document.getElementById('density-btn');
   const setDensity = on => {
     table.classList.toggle('compact', on);
@@ -329,19 +323,15 @@
     localStorage.setItem('runs.compact', on ? '1' : '0');
   });
 
-  const sortRows = NulliusTable.sortable(table);
-
-  /* ---- filters: outcome (from the bar/chips) + per-column value menus ----
-     A run matches an outcome if ANY of its trials had it. Column filters are
-     sets of allowed values; all must pass. */
+  /* ---- filters: an outcome (from the bar/chips), and the controls row's search, Filter and Sort by ----
+     A run matches an outcome if ANY of its trials had it. */
   let active = null;
-  const columns = NulliusTable.filters(document, () => applyFilter());
-  const colFilters = columns.allowed;   // col -> Set of allowed values, or null for "all"
+  const t = NulliusTable.toolbar(table, tools, () => applyFilter());
 
   function applyFilter() {
     let shown = 0;
     rows.forEach(r => {
-      const hit = (!active || r.dataset.outcomes.split(' ').includes(active)) && columns.passes(r);
+      const hit = (!active || r.dataset.outcomes.split(' ').includes(active)) && t.passes(r);
       r.hidden = !hit;
       if (hit) shown++;
     });
@@ -350,13 +340,12 @@
     // the launch view's rows: dimmed rather than hidden, so a launch keeps its shape
     document.querySelectorAll('.launch-agents tbody tr').forEach(r =>
       r.classList.toggle('dim', !!active && !(r.dataset.outcomes || '').split(' ').includes(active)));
-    const filtered = active || Object.values(colFilters).some(Boolean);
+    const filtered = active || query.value.trim() || tools.querySelector('[data-tools="filter"] input[data-value]:not(:checked)');
     clearBtn.hidden = !filtered;
     emptyNote.hidden = shown > 0;
     // agents only, as the header counts them
     const runRows = rows.filter(r => !r.classList.contains('control-row'));
     const agents = runRows.filter(r => !r.hidden).length;
-    note.textContent = filtered ? `${agents} of ${runRows.length} runs` : '';
     if (filtered) counts.textContent = `${agents} of ${counts.dataset.runs} run${counts.dataset.runs === '1' ? '' : 's'} shown`;
     else counts.innerHTML = head;
     syncPicks();   // the header checkbox tracks visible rows only
@@ -386,12 +375,13 @@
   // the header box ticks the visible rows, and shows all, none or some of them ticked
   const ticks = NulliusTable.checks(table);
 
+  // greyed while fewer than two are ticked: still focusable, its reason its tooltip and description
+  const why = compareBtn.title;
   function syncPicks() {
-    const on = picks.filter(p => p.checked);
-    compareBtn.disabled = on.length < 2;
-    pickNote.textContent = on.length
-      ? `${on.length} selected`
-      : 'Tick two or more runs to compare';
+    const on = picks.filter(p => p.checked), ready = on.length >= 2;
+    if (ready) ['aria-disabled', 'aria-describedby', 'title'].forEach(a => compareBtn.removeAttribute(a));
+    else Object.entries({'aria-disabled': 'true', 'aria-describedby': 'compare-why', title: why}).forEach(([a, v]) => compareBtn.setAttribute(a, v));
+    pickNote.textContent = on.length ? `${on.length} selected` : '';
     ticks();
     // Rebuild the querystring: ?job=…&job=… in the order they were ticked.
     form.querySelectorAll('input[name="job"]').forEach(i => i.remove());
@@ -404,11 +394,12 @@
     });
   }
   table.addEventListener('change', e => { if (e.target.matches('[data-check], [data-check-all]')) syncPicks(); });
+  form.addEventListener('submit', e => { if (compareBtn.hasAttribute('aria-disabled')) e.preventDefault(); });
 
   clearBtn.addEventListener('click', () => {
     active = null;
-    columns.clear();
-    applyFilter();
+    query.value = '';
+    tools.querySelector('[data-clear]').click();   // clears the Filter menu, then filters again
   });
 
   /* ---- the list keeps up by itself ----
@@ -466,14 +457,15 @@
     });
   }
   function refreshRows(fresh) {
-    document.querySelectorAll('.filter-menu').forEach(menu => {
-      const col = menu.dataset.filterMenu;
-      const next = fresh.querySelector(`[data-filter-menu="${col}"]`);
+    // each Filter list takes the values the runs have now, ticked as before; a new one ticked unless the list narrows
+    tools.querySelectorAll('[data-filter-menu]').forEach(menu => {
+      const next = fresh.querySelector(`#runs-tools [data-filter-menu="${CSS.escape(menu.dataset.filterMenu)}"]`);
       if (!next) return;
+      const boxes = [...menu.querySelectorAll('input[data-value]')], all = boxes.every(b => b.checked);
+      const on = new Set(boxes.filter(b => b.checked).map(b => b.dataset.value));
       menu.innerHTML = next.innerHTML;
-      menu.querySelectorAll('input[data-value]').forEach(b => {
-        b.checked = !colFilters[col] || colFilters[col].has(b.dataset.value);
-      });
+      menu.querySelectorAll('input[data-value]').forEach(b => { b.checked = all || on.has(b.dataset.value); });
+      menu.dispatchEvent(new Event('change'));
     });
     const html = fresh.querySelector('#runs tbody').innerHTML;
     if (sent.get('tbody') === html) return;
@@ -484,7 +476,7 @@
     picks = [...table.querySelectorAll('[data-check]')];
     picks.forEach(p => { p.checked = ticked.includes(p.value); });
     showCols();
-    sortRows();
+    t.resort();
   }
   function refreshHead(fresh) {
     document.getElementById('glance').replaceWith(fresh.getElementById('glance'));

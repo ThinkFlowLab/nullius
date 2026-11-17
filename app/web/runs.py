@@ -80,7 +80,7 @@ def index():
         for name, counts in sorted(used.items(), key=lambda kv: -kv[1]["trials"])
     ]
 
-    # Distinct values behind the per-column filter menus, as (value, label).
+    # Distinct values behind the Filter menu's lists, as (value, label).
     # Value is what the row carries; label is what the menu shows.
     choices = {
         "dataset": sorted(
