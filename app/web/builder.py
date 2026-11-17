@@ -29,8 +29,7 @@ from . import execute
 @app.route("/new-run")
 def new_run():
     """Build a Harbor recipe; never execute it from this route."""
-    active = shared.STATE.get("workspace")
-    data = command_builder.payload(catalog.load(), shared._load_jobs(), active.name if active else "")
+    data = command_builder.payload(catalog.load(), shared._load_jobs())
     # Execution sets these credential variables from Settings.
     data["credentialVars"] = {"key": "API_TOKEN", "url": "API_URL"}
     # Where a recipe can run: this machine, or the hosts named in Settings.
