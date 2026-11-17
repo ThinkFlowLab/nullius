@@ -1,7 +1,7 @@
 {% macro agent_mark(kind, key, label, css='agent-logo') -%}
-  {% set source = agent_marks.get(key.split('@')[0]) if kind == 'agent' else none %}
-  {% if source and '#' in source %}<svg class="{{ css }}" aria-hidden="true"><use href="{{ url_for('static', filename=source.split('#')[0]) }}#{{ source.split('#')[1] }}"/></svg>
-  {% elif source %}<img class="{{ css }}" src="{{ url_for('static', filename=source) }}" alt="" aria-hidden="true">
+  {% set source = agent_mark_url(key) if kind == 'agent' else none %}
+  {% if source and '#' in source %}<svg class="{{ css }}" aria-hidden="true"><use href="{{ source }}"/></svg>
+  {% elif source %}<img class="{{ css }}" src="{{ source }}" alt="" aria-hidden="true">
   {% else %}{{ label[:1] }}{% endif %}
 {%- endmacro %}
 <!doctype html>

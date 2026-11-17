@@ -34,7 +34,7 @@ from nullius.standard import recipe as standard_recipe
 from .core import app
 from . import shared
 from . import execute
-from .filters import AGENT_MARKS
+from .filters import agent_mark_url
 from . import settings as settings_web
 
 
@@ -98,14 +98,12 @@ def _card(kind: str, e: dict) -> dict:
     """An agent's or a capability's card on its list (templates/_cards.html)."""
     d = e["d"]
     version, n = (d.get("upstream") or {}).get("version"), len(d.get("_versions") or ())
-    mark = AGENT_MARKS.get(d["key"].split("@")[0]) if kind == "agent" else None
-    path, _, frag = (mark or "").partition("#")
     return {"href": url_for("agent_page" if kind == "agent" else "feature_page", key=d["key"]), "id": d["key"],
             "search": " ".join([d["label"], d["key"], d.get("kind", ""), e["protocol"], d.get("summary", "")]),
             "kind": d.get("kind") if kind == "capability" else None, "protocol": e["protocol"],
             "example": {"text": "example", "title": "Nullius's own, to read or copy - not an agent to compare"} if d.get("example") else None,
             "version": ("v" + str(version) if version else "") + (f" · {n} versions" if n > 1 else ""),
-            "icon": mark and url_for("static", filename=path) + ("#" + frag if frag else ""), "title": d["label"],
+            "icon": agent_mark_url(d["key"]) if kind == "agent" else None, "title": d["label"],
             "summary": d.get("summary"),
             "ports": "{}/{}".format(sum(p["state"] == "proven" for p in e["ports"]), len(e["ports"])),
             "runs": "{}/{}".format(sum(not f["why"] for f in e["fits"]), len(e["fits"])),
