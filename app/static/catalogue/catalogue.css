@@ -224,7 +224,7 @@
 .std-head h2 { margin: 0 0 6px; font-size: 20px; }
 .std-mark { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font: 500 18px/1 var(--mono); flex: none; }
 .std-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.std-tag { padding: 2px 9px; border: 1px solid var(--border); border-radius: 999px; font: 11px/1.5 var(--mono); color: var(--text-dim); }
+.std-tag { padding: 2px 9px; border: 1px solid var(--border); border-radius: 5px; font: 11px/1.5 var(--mono); color: var(--text-dim); }
 .std-versions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 14px; }
 .std-versions > span { font-size: 12px; color: var(--text-dim); margin-right: 4px; }
 .std-versions a { display: flex; flex-direction: column; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; color: inherit; text-decoration: none; }
@@ -322,7 +322,7 @@ dialog.std-how::backdrop { background: rgba(0, 0, 0, .45); }
 .std-add-hint { font-size: 12.5px; }
 @media (max-width: 640px) { dialog.std-how { padding: 18px 16px; } .std-add-fields { grid-template-columns: 1fr; } .std-add-fields :is(input, textarea) { font-size: 16px; } }
 /* What runs a benchmark, as bubbles - on its card, its page and the Add dialog - named as the filter chips name them. */
-.run-tag { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 500; letter-spacing: .03em; padding: .12rem .55rem; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
+.run-tag { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 500; letter-spacing: .03em; padding: .12rem .55rem; border-radius: 5px; border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
 .run-tag.rt-harbor { color: var(--text); border-color: var(--text-dim); }
 .run-tag.rt-standard { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
 .run-tags { display: flex; flex-wrap: wrap; gap: 6px; }
