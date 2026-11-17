@@ -46,7 +46,7 @@ Importing results needs no runner.
 
 | Object | Holds | Where |
 | --- | --- | --- |
-| Recipe | Runner, benchmark, dataset, agents, models, limits, machines | The builder; saved in the browser or exported as JSON |
+| Recipe | Runner, benchmark, dataset, agents, models, limits, machines | The builder; saved in the user data directory or exported as JSON |
 | Launch | The runs one press of **Run** starts | Runs, *By launch*; every launch, in a workspace or not, on **Launches** |
 | Run | One agent, or one check (`nop`, `oracle`), on the launch's tasks. Harbor calls it a job | Runs, one row |
 | Trial | One task attempted by one run | A run's page |

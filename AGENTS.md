@@ -57,7 +57,7 @@ and its resources. The source layout stays under `app/`.
   a Harbor benchmark added from the Benchmarks page's form; `citation`, an entry's
   BibTeX read into the paper its page shows; `storage`, whole-folder user overlays and restoring bundled entries; `sources`, where each dataset's data comes
   from for each way it runs), `recipes/`
-  (`launch`, the builder's vocabulary), `providers` (the model provider registry: protocols, presets and each provider's record, read by every consumer; and the builder's steps),
+  (`launch`, the builder's vocabulary; `store`, its saved recipes), `providers` (the model provider registry: protocols, presets and each provider's record, read by every consumer; and the builder's steps),
   `harbor/` (`source`: the Harbor a recipe pins - built, kept, scanned for its agents;
   `feed`: the live feed any Harbor writes, from its own trial hooks),
   `importers/` (`atif` ATIF, `otel` OpenTelemetry, and the `cli`), `judge/` (`questions`, `state`, `client`, `store`, `batch`, `reconcile`, `lanes`),
@@ -116,7 +116,7 @@ a recipe without a pin), and the viewer never imports it.
 
 `nullius paths` lists persistent locations. On Linux, settings, the model price
 list and benchmark licences live under `~/.config/nullius/`, user catalogue entries, workspaces,
-runs and standard installs under `~/.local/share/nullius/`, and caches under
+runs, saved builder recipes and standard installs under `~/.local/share/nullius/`, and caches under
 `~/.cache/nullius/`. XDG variables move those roots; `NULLIUS_HOME` selects a
 separate profile with `config/`, `data/` and `cache/`. Existing storage overrides
 still apply. Settings saves owner-only JSON; process environment values win.

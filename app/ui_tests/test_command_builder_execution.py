@@ -164,10 +164,11 @@ class DraftBetweenPages(CompilerCase):
     Opening a run's recipe or an explicit prefill takes precedence."""
 
     def test_a_draft_packs_and_comes_back_unless_the_page_was_opened_for_something_else(self):
-        out = self.js('const r=C.create("harbor");r.tasks=9;r.title="mine";const text=C.packDraft({recipe:r,step:4,tab:"tau3-llm-agent"});'
+        out = self.js('const r=C.create("harbor");r.tasks=9;r.title="mine";const text=C.packDraft({recipe:r,step:4,tab:"tau3-llm-agent",saved:"0123456789abcdef"});'
                       'const back=C.unpackDraft(text,{});const pre=C.unpackDraft(text,{dataset:"x"});const run=C.unpackDraft(text,{run:"j"});const bad=C.unpackDraft("{nope",{});const none=C.unpackDraft(null,{});'
-                      'process.stdout.write(JSON.stringify([typeof text,back.recipe.tasks,back.recipe.title,back.step,back.tab,typeof back.at,pre,run,bad,none]));')
-        self.assertEqual(out, ['string', 9, 'mine', 4, 'tau3-llm-agent', 'string', None, None, None, None])
+                      'process.stdout.write(JSON.stringify([typeof text,back.recipe.tasks,back.recipe.title,back.step,back.tab,typeof back.at,pre,run,bad,none,back.saved]));')
+        # `saved`: the saved recipe the page holds, so a save after a reload still updates (renames) it
+        self.assertEqual(out, ['string', 9, 'mine', 4, 'tau3-llm-agent', 'string', None, None, None, None, '0123456789abcdef'])
 
 
 if __name__ == "__main__":

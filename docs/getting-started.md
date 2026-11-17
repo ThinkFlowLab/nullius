@@ -96,8 +96,8 @@ dependency; benchmark and agent environments stay separate.
 
 Save provider credentials in **Settings**. The owner-only `settings.json` lives
 in the user configuration directory, and environment variables override it.
-`nullius paths` lists settings, licences, user catalogue, workspaces, runs and
-cache paths without showing credentials. Linux defaults use XDG directories;
+`nullius paths` lists settings, licences, user catalogue, workspaces, runs, saved
+recipes and cache paths without showing credentials. Linux defaults use XDG directories;
 see [Settings](settings/README.md#storage).
 
 For a separate profile, use the same `NULLIUS_HOME` for each command:

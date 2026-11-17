@@ -51,7 +51,42 @@
     }
     return {field, sync, acceptCompile};
   }
-  if (typeof module === 'object' && module.exports) { module.exports = {servedRows}; return; }
+  // Saved recipes are the server's (/new-run/recipes, nullius/recipes/store.py); a browser on its host alone writes them.
+  // move() sends what this browser kept before (nullius.recipes.v1, and the older nullius.recipes.v1.<workspace> lists)
+  // to the lenient import, which skips names already saved, and removes those keys once the server answered. The
+  // recipes it refused are kept under REJECTED, never sent again; move() returns how many. On a failure the keys stay
+  // for the next visit. `request` is nulliusFetch; the tests run this under Node with stand-ins.
+  function recipeStore({request, csrf, storage}) {
+    const call = async (url, method, body) => {
+      const res = await request(url, method ? {method, headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify(body || {})} : {});
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j.ok === false) throw Error(j.error || 'HTTP ' + res.status);
+      return j;
+    };
+    const OLD = 'nullius.recipes.v1', REJECTED = OLD + '.rejected';
+    const read = k => { try { const l = JSON.parse(storage.getItem(k)); return Array.isArray(l) ? l : [l]; } catch { return [storage.getItem(k)]; } };
+    return {
+      list: async () => (await call('/new-run/recipes')).recipes,
+      save: async (recipe, id) => (await call('/new-run/recipes', 'POST', {recipe, id})).recipe,
+      remove: id => call('/new-run/recipes/' + encodeURIComponent(id), 'DELETE'),
+      async move() {
+        const keys = Array.from({length: storage.length}, (_, i) => storage.key(i)).filter(k => k !== REJECTED && (k === OLD || k.startsWith(OLD + '.')));
+        const recipes = keys.flatMap(read);
+        if (!keys.length) return 0;
+        const bad = recipes.length ? (await call('/new-run/recipes/import', 'POST', {recipes, lenient: true})).rejected.map(x => recipes[x.index]) : [];
+        if (bad.length) storage.setItem(REJECTED, JSON.stringify([...(storage.getItem(REJECTED) ? read(REJECTED) : []), ...bad]));
+        keys.forEach(k => storage.removeItem(k));
+        return bad.length;
+      },
+    };
+  }
+  // The Saved recipes dialog's list. A browser on another machine gets Delete greyed, `why` its tooltip.
+  function savedList({saved, local, why, esc, button, state}) {
+    const del = id => local ? `data-delete="${esc(id)}"` : `aria-disabled="true" title="${esc(why)}"`;
+    return saved.length ? saved.map(s => `<div class="nb-savedrow"><span><strong>${esc(s.name)}</strong><small>${esc(s.recipe.harness)} · ${esc(new Date(s.saved).toLocaleDateString())}${state(s.recipe)}</small></span>`
+      + `<div>${button('Load', `data-load="${esc(s.id)}"`)} ${button('Delete', del(s.id))}</div></div>`).join('') : '<p class="nb-note">No saved recipes.</p>';
+  }
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
@@ -74,15 +109,16 @@
   // A run's own recipe (?run=) or a prefill from a run's fields comes first.
   // A draft comes back silently: the page simply is as it was left.
   const draftKey = 'nullius.recipe-draft.v1';
-  let opened = '';
+  let opened = '', savedId = '';   // savedId: the saved recipe this page holds, which a save updates (renames)
   if (schema.loadRecipe) { try { recipe = C.fromJSON(schema.loadRecipe); step = REVIEW; opened = 'Opened the recipe of run “' + schema.loadRun + '”. Run gives it a new name.'; } catch (e) { opened = 'This run’s recipe cannot be read: ' + e.message; } }
   else if (schema.loadLike) { const o = C.fromJob(schema.loadLike); recipe = o.recipe; step = REVIEW; opened = o.notes.join(' '); }
   // An unsupported draft opens nothing; its rejection is shown as a toast.
-  else { let d = null; try { d = C.unpackDraft(localStorage.getItem(draftKey), query); } catch {} if (d && d.recipe) { recipe = d.recipe; step = d.step; tab = d.tab; } else if (d && d.gone) opened = d.gone; }
-  const saveDraft = () => { try { localStorage.setItem(draftKey, C.packDraft({recipe, step, tab})); } catch {} };
+  else { let d = null; try { d = C.unpackDraft(localStorage.getItem(draftKey), query); } catch {} if (d && d.recipe) { recipe = d.recipe; step = d.step; tab = d.tab; savedId = d.saved; } else if (d && d.gone) opened = d.gone; }
+  const saveDraft = () => { try { localStorage.setItem(draftKey, C.packDraft({recipe, step, tab, saved: savedId})); } catch {} };
   let compiled, pendingDirs, dirsSequence = 0;
   const r = () => recipe;
-  const storageKey = 'nullius.recipes.v1';   // one list for this browser; a run may open another workspace and the recipes stay
+  const store = recipeStore({request: (...a) => nulliusFetch(...a), csrf: schema.csrf, storage: (() => { try { return localStorage; } catch { return {length: 0}; } })()});
+  let saved = [];
   // A message is a toast at the bottom right: a new one replaces it, its bar runs down and it goes, or its × closes it.
   // Shown again on each message, so it lands above a dialog opened since.
   const status = text => {
@@ -893,44 +929,33 @@
     renderForm();refreshPlan();moveUnderline();saveDraft();harborFollow();
     if(focus){const heading=$('#nb-form h2');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'nearest'});}}
   }
-  function readSaved(){
-    try{
-      const ok=list=>Array.isArray(list)?list.filter(x=>x&&x.recipe&&typeof x.id==='string'):[];
-      let list=ok(JSON.parse(localStorage.getItem(storageKey)||'[]'));
-      // Merge workspace-scoped recipe lists into this browser's shared list.
-      for(const k of Object.keys(localStorage))if(k.startsWith(storageKey+'.')){const old=ok(JSON.parse(localStorage.getItem(k)||'[]'));list=list.concat(old.filter(o=>!list.some(x=>x.id===o.id)));localStorage.removeItem(k);localStorage.setItem(storageKey,JSON.stringify(list));}
-      return list;
-    }catch{return [];}
-  }
-  const workspaceLabel = () => schema.workspace && schema.workspace!=='unassigned' ? 'Workspace: '+schema.workspace : 'Personal recipes · no workspace selected';
+  async function loadSaved(){try{saved=await store.list();}catch(e){status('Saved recipes cannot be read: '+e.message);}if($('#nb-saved').open)renderSaved();}
   const recipeSlug = title => title.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9._-]+/g,'-').replace(/^[^a-z0-9]+|[-.]+$/g,'').slice(0,72) || 'recipe';
   function savedState(recipe){try{return C.validate(C.fromJSON(recipe)).errors.length?' · Draft':'';}catch{return ' · Needs review';}}
   function renderSaved(){
-    const saved=readSaved();
-    $('#nb-saved-list').innerHTML='<p class="nb-note">'+esc(workspaceLabel())+' · stored in this browser</p>'+(saved.length?saved.map(s=>`<div class="nb-savedrow"><span><strong>${esc(s.recipe.title||s.recipe.name)}</strong><small>${esc(s.recipe.harness)} · ${esc(s.updated)}${savedState(s.recipe)}</small></span><div>${button('Load',`data-load="${esc(s.id)}"`)} ${button('Delete',`data-delete="${esc(s.id)}"`)}</div></div>`).join(''):'<p class="nb-note">Save your first recipe to find it here.</p>');
+    $('#nb-saved-list').innerHTML=savedList({saved,local:schema.local,why:schema.recipesWhy,esc,button,state:savedState});
   }
   function download(text,filename,type){const url=URL.createObjectURL(new Blob([text],{type})),link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function updateSavePreview(){
-    const title=$('#nb-recipe-title').value.trim(),name=recipeSlug(title),existing=readSaved().find(s=>s.id===(r().harness||'harbor')+':'+name);
-    $('#nb-recipe-title').setCustomValidity(title?'':'Enter a name for this recipe.');
-    $('#nb-save-submit').textContent=existing?'Update recipe':'Save recipe';
-    $('#nb-save-message').textContent=existing?'A recipe with this name exists. Saving will update it.':workspaceLabel()+'. You can save unfinished recipes as drafts.';
+    // as the store decides: the recipe this page holds is updated (renamed), else the one of this name; a name another holds is refused
+    const title=$('#nb-recipe-title').value.trim(),held=saved.find(s=>s.id===savedId),other=saved.find(s=>s.name===title&&s!==held);
+    $('#nb-recipe-title').setCustomValidity(!title?'Enter a name for this recipe.':held&&other?'Another saved recipe has this name.':'');
+    $('#nb-save-submit').textContent=held||other?'Update recipe':'Save recipe';
+    $('#nb-save-message').textContent=held&&other?'Another saved recipe has this name.':held&&held.name!==title?'Saving renames “'+held.name+'”.':other?'A recipe with this name exists. Saving will update it.':'';
   }
   function openSave(){
     $('#nb-recipe-title').value=r().title||r().name.replace(/-/g,' ');
     updateSavePreview();$('#nb-save-dialog').showModal();$('#nb-recipe-title').focus();$('#nb-recipe-title').select();
   }
-  function save(){
+  async function save(){
     const title=$('#nb-recipe-title').value.trim();if(!title){$('#nb-recipe-title').focus();return;}
     const candidate={...C.copy(r()),title,name:recipeSlug(title)};
     if(C.validate(candidate).errors.some(e=>/environment variable name|credentials; do not put/.test(e.message))){$('#nb-save-message').textContent='Use environment variable names for credentials before saving. Their values belong in your shell.';return;}
     try{
-      const list=readSaved(),id=(candidate.harness||'harbor')+':'+candidate.name;   // the harness prefix earlier versions wrote; a runner's key for its recipes
-      const saved={id,updated:new Date().toLocaleDateString(),recipe:candidate};
-      localStorage.setItem(storageKey,JSON.stringify([saved,...list.filter(s=>s.id!==id)].slice(0,50)));
+      const item=await store.save(candidate,savedId);saved=[item,...saved.filter(s=>s.id!==item.id)];savedId=item.id;
       recipe=candidate;$('#nb-save-dialog').close();render();renderSaved();
       status('Saved “'+title+'”'+(compiled.errors.length?' as a draft.':'.'));
-    }catch{ $('#nb-save-message').textContent='Browser storage is unavailable. Close this dialog and export the recipe as JSON instead.'; }
+    }catch(e){ $('#nb-save-message').textContent='Not saved: '+e.message; }
   }
   root.addEventListener('submit',event=>{if(event.target.id==='nb-save-form'){event.preventDefault();save();}});
   // Running from here: the runner script is posted with the target; the page follows the log until the run ends.
@@ -1055,15 +1080,15 @@
       return;
     }
     else if(d.remove!==undefined)r().custom.splice(Number(d.remove),1);
-    else if(d.load){try{const saved=readSaved().find(s=>s.id===d.load);recipe=C.fromJSON(saved.recipe);step=REVIEW;$('#nb-saved').close();status('Loaded “'+(recipe.title||recipe.name)+'”.');}catch(error){status('This saved recipe cannot be read: '+error.message);return;}}
-    else if(d.delete){try{localStorage.setItem(storageKey,JSON.stringify(readSaved().filter(s=>s.id!==d.delete)));renderSaved();status('Saved recipe deleted.');}catch{status('Browser storage is unavailable.');}return;}
+    else if(d.load){try{recipe=C.fromJSON(saved.find(s=>s.id===d.load).recipe);savedId=d.load;step=REVIEW;$('#nb-saved').close();status('Loaded “'+(recipe.title||recipe.name)+'”.');}catch(error){status('This saved recipe cannot be read: '+error.message);return;}}
+    else if(d.delete){try{await store.remove(d.delete);saved=saved.filter(s=>s.id!==d.delete);if(savedId===d.delete)savedId='';renderSaved();status('Saved recipe deleted.');}catch(e){status('Not deleted: '+e.message);}return;}
     else if(b.id==='nb-add'){r().custom.push({scope:'agent',key:'',type:'string',value:'',...(d.addAgent?{agent:d.addAgent}:{})});}
     else if(b.id==='nb-next'){if(step===REVIEW){if(!compiled.errors.length)download(JSON.stringify(r(),null,2)+'\n',r().name+'.json','application/json');return;}step=nextShown(step,1);}
     else if(b.id==='nb-back')step=nextShown(step,-1);
-    else if(b.id==='nb-save'){openSave();return;}
-    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});runnerOut=null;runnerKey='';step=S.benchmark;tab='select';status('Started over from the defaults.');}
+    else if(b.id==='nb-save'){if(schema.local)openSave();return;}
+    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});savedId='';runnerOut=null;runnerKey='';step=S.benchmark;tab='select';status('Started over from the defaults.');}
     else if(b.id==='nb-save-cancel'){$('#nb-save-dialog').close();return;}
-    else if(b.id==='nb-saved-toggle'){renderSaved();$('#nb-saved').showModal();return;}
+    else if(b.id==='nb-saved-toggle'){renderSaved();$('#nb-saved').showModal();loadSaved();return;}
     else if(b.id==='nb-saved-close'){$('#nb-saved').close();return;}
     else if(b.id==='nb-import'){$('#nb-import-file').click();return;}
     else if(b.id==='nb-refresh'){await refreshRegistry();return;}
@@ -1124,10 +1149,11 @@
     else if(d.harborChoice!==undefined){const rec=r(),v=el.value;if(v==='path')rec.harborDev='';else if(v==='dev')rec.harborDev=rec.harborDev||'~/harbor-dev/.venv/bin/harbor';renderForm();refreshPlan();if(v==='dev')root.querySelector('[data-field="harborDev"]')?.select();}
     else if(el.id==='nb-import-file'){
       const file=el.files[0];if(!file)return;
-      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Review the recipe before copying commands.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
+      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Review the recipe before copying commands.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
     }
   });
   { const dl=document.getElementById('nb-models'); if(dl){const seen=new Set(); for(const o of [...dl.options]){const v=C.bareModel(o.value); if(!v||seen.has(v)){o.remove();continue;} seen.add(v); o.value=v;}} }
   render();
   status(opened||'');
+  (async()=>{if(schema.local)try{const bad=await store.move();if(bad)status(bad+' old recipe'+(bad>1?'s':'')+' could not be moved.');}catch(e){status('Recipes saved in this browser were not moved to Nullius: '+e.message+'. Trying again next time.');}loadSaved();})();
 })();
