@@ -16,6 +16,10 @@ NUMBER = re.compile(r"\b[0-9a-f]{8,}\b|\d+(?:\.\d+)?")
 FAILING_LINE = re.compile(r"\b(FAIL(?:ED|URE)?|ERROR|Error|AssertionError|assert)\b")
 SCORE_TEXT_KEYS = ("reason", "error")
 DETAIL_CHARS = 200
+EXAMPLE_CHARS = 500
+#: an opening quote: a quote mark that does not follow a letter or digit, so the apostrophe of "agent's" opens nothing
+QUOTE_OPEN = re.compile(r"(?<!\w)(['\"])")
+SECRETS = re.compile(r"sk-[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._-]{8,}")
 
 
 class TrialError(Exception):
@@ -152,8 +156,30 @@ def rules_off(limits: Limits) -> List[str]:
     return off
 
 
-def mask(text: str) -> str:
-    return re.sub(r"\s+", " ", NUMBER.sub("#", text)).strip()[:DETAIL_CHARS]
+def mask_quotes(text: str) -> str:
+    """Each quoted string as a quote, # and the closing quote; a quote that is not closed masks to the end."""
+    out, i = [], 0
+    while True:
+        m = QUOTE_OPEN.search(text, i)
+        if m is None:
+            out.append(text[i:])
+            return "".join(out)
+        q = m.group(1)
+        out.append(text[i:m.start()] + q + "#")
+        close = re.compile(re.escape(q) + r"(?!\w)").search(text, m.end())
+        if close is None:
+            return "".join(out)
+        out.append(q)
+        i = close.end()
+
+
+def _collapse(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def mask(text: str, quotes: bool) -> str:
+    """The detail of a signature: quoted strings when `quotes`, then numbers and long ids, masked; then cut."""
+    return _collapse(NUMBER.sub("#", mask_quotes(text) if quotes else text))[:DETAIL_CHARS]
 
 
 def _last_line(message: str) -> str:
@@ -166,7 +192,7 @@ def _exception_detail(row: TrialRow) -> str:
     prefix = f"{row.exception_type}: "
     if line.startswith(prefix):
         line = line[len(prefix):]
-    return mask(f"{row.exception_type}: {line}" if line else str(row.exception_type))
+    return f"{row.exception_type}: {line}" if line else str(row.exception_type)
 
 
 def _ctrf_failure(path: str) -> Optional[str]:
@@ -185,30 +211,39 @@ def _verifier_detail(trial_dir: str) -> str:
     if os.path.isfile(ctrf):
         name = _ctrf_failure(ctrf)
         if name:
-            return mask(name)
+            return name
     stdout = os.path.join(verifier, "test-stdout.txt")
     if os.path.isfile(stdout):
         with open(stdout, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 if FAILING_LINE.search(line):
-                    return mask(line)
+                    return line
     score = os.path.join(verifier, "score.json")
     if os.path.isfile(score):
         data = read_json(score)
         for key in SCORE_TEXT_KEYS:
             value = data.get(key) if isinstance(data, dict) else None
             if isinstance(value, str) and value.strip():
-                return mask(_last_line(value))
+                return _last_line(value)
     return ""
 
 
-def signature(row: TrialRow, cls: str) -> str:
-    detail = ""
+@dataclass(frozen=True)
+class Signature:
+    text: str
+    example: str
+
+
+def signature(row: TrialRow, cls: str) -> Signature:
+    """The class and its masked detail; `example` is the detail as written, with secrets masked."""
+    raw = ""
     if row.exception_type is not None and cls in ("time_limit", "exception"):
-        detail = _exception_detail(row)
+        raw = _exception_detail(row)
     elif cls == "verifier_failed":
-        detail = _verifier_detail(row.dir)
-    return f"{cls}: {detail}" if detail else cls
+        raw = _verifier_detail(row.dir)
+    detail = mask(raw, cls == "exception")
+    return Signature(text=f"{cls}: {detail}" if detail else cls,
+                     example=_collapse(SECRETS.sub("[redacted]", raw))[:EXAMPLE_CHARS])
 
 
 def trial_dirs(job_dir: str) -> List[str]:

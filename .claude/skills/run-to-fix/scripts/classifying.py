@@ -11,10 +11,11 @@ from adapter import Adapter, Limits
 from found import UNREADABLE, Rule, apply, load_rules
 from reading import adapter_of
 from rounds import LoopError, open_round, read_input, read_json, run_command, write_json, write_paid
-from trials import CLASSES, TrialRow, classify, read_trial, rules_off, signature, solved_tasks, trial_dirs
+from trials import CLASSES, Signature, TrialRow, classify, read_trial, rules_off, signature, solved_tasks, trial_dirs
 
 FREQUENT_MIN_TRIALS = 3
 FREQUENT_MIN_SHARE = 0.05
+BENCHMARK_SUSPECT_TASKS = 3
 BASE_COLUMNS = ["trial", "task", "class", "signature", "reward", "pair", "cost_usd", "model_calls", "agent_s",
                 "max_completion_tokens", "exception_type"]
 
@@ -23,7 +24,7 @@ def read_rows(job_dir: str, threshold: float) -> List[TrialRow]:
     return [read_trial(d, threshold) for d in trial_dirs(job_dir)]
 
 
-def classes_of(rows: List[TrialRow], limits: Limits) -> Tuple[Dict[str, str], Dict[str, str]]:
+def classes_of(rows: List[TrialRow], limits: Limits) -> Tuple[Dict[str, str], Dict[str, Signature]]:
     """The class and the signature of each trial, by trial name."""
     classes, signatures = {}, {}
     for row in rows:
@@ -96,10 +97,11 @@ def warnings_of(group_rows: List[TrialRow], failures: int, by_task: Dict[str, Li
                     "text": f"{n} of {failures} failing trials share this signature. Read two or three of them."})
     tasks = sorted({r.task for r in group_rows})
     if base_solved is not None and all(t in base_solved and not base_solved[t] for t in tasks):
-        out.append({"kind": "fails_on_baseline", "tasks": len(tasks),
-                    "text": f"All {len(tasks)} tasks of this group also fail on the baseline, so the benchmark is a "
-                            "suspect. Check one task's verifier and expected answer before any claim that the "
-                            "benchmark is defective."})
+        text = (f"All {len(tasks)} tasks of this group also fail on the baseline, so the benchmark is a suspect. "
+                "Check one task's verifier and expected answer before any claim that the benchmark is defective."
+                if len(tasks) >= BENCHMARK_SUSPECT_TASKS else
+                ("The task fails on both runs." if len(tasks) == 1 else f"The {len(tasks)} tasks fail on both runs."))
+        out.append({"kind": "fails_on_baseline", "tasks": len(tasks), "text": text})
     repeated = [t for t in tasks if len(by_task[t]) > 1]
     every = [t for t in repeated if not any(r.passed for r in by_task[t])]
     if every:
@@ -131,7 +133,7 @@ def cmd_classify(args: argparse.Namespace) -> None:
     table = []
     found_counts = {r.id: collections.Counter() for r in rules}
     for row in rows:
-        cls, sig = classes[row.trial], signatures[row.trial]
+        cls, sig = classes[row.trial], signatures[row.trial].text
         cells = {"trial": row.trial, "task": row.task, "class": cls, "signature": sig,
                  "reward": "" if row.reward is None else row.reward, "pair": pair_of(row.task, run_solved, base_solved),
                  "cost_usd": "" if row.cost_usd is None else row.cost_usd,
@@ -184,17 +186,18 @@ def cmd_classify(args: argparse.Namespace) -> None:
         print(f"  check not run: {agent['reason']}")
 
 
-def failure_groups(rows: List[TrialRow], classes: Dict[str, str], signatures: Dict[str, str],
+def failure_groups(rows: List[TrialRow], classes: Dict[str, str], signatures: Dict[str, Signature],
                    base_solved: Optional[Dict[str, bool]]) -> List[dict]:
     """The failing trials grouped by signature, largest first, each with its warnings."""
     _, by_task = solved_tasks(rows)
     failing = [r for r in rows if classes[r.trial] != "pass"]
     by_sig: Dict[str, List[TrialRow]] = collections.defaultdict(list)
     for r in failing:
-        by_sig[signatures[r.trial]].append(r)
+        by_sig[signatures[r.trial].text].append(r)
     ordered = sorted(by_sig.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     return [{
-        "id": f"g{i + 1:02d}", "class": classes[members[0].trial], "signature": sig, "trials": len(members),
+        "id": f"g{i + 1:02d}", "class": classes[members[0].trial], "signature": sig,
+        "example": signatures[members[0].trial].example, "trials": len(members),
         "tasks": len({m.task for m in members}), "trial_names": sorted(m.trial for m in members),
         "task_names": sorted({m.task for m in members}),
         "warnings": warnings_of(members, len(failing), by_task, base_solved),
