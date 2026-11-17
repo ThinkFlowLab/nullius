@@ -186,18 +186,27 @@ def size_problem(client: Client, size: str) -> Optional[str]:
     return machine_types(client).get(size)
 
 
-def sweep(job: str, client: Optional[Client] = None) -> int:
-    """Deletes every VM labelled with ``job``: what a crash or a kill left. The number deleted."""
+def gone(d: dict) -> bool:
+    """A delete's answer: deleted, or not there to delete."""
+    return bool(d.get("ok")) or d.get("status") == 404
+
+
+def sweep(job: str, client: Optional[Client] = None, say: Optional[Callable[[str], None]] = None) -> int:
+    """Deletes every VM labelled with ``job``: what a crash or a kill left. The number deleted;
+    each one Boat would not delete is said."""
     if client is None:
         k = key()
         if not k:
             return 0
         client = Client(k)
-    gone = 0
+    n = 0
     for s in client.labelled(LABEL, job):
-        if client.delete(s["id"]).get("ok"):
-            gone += 1
-    return gone
+        d = client.delete(s["id"])
+        if gone(d):
+            n += 1
+        elif say is not None:
+            say(f"Boat did not delete VM {s['id']}: {said(d)}. It stops by itself at its auto-stop; delete it at boat.dev")
+    return n
 
 
 def _private(env=os.environ) -> tuple:
@@ -400,13 +409,21 @@ class VM:
         tunnel = ["-o", "ExitOnForwardFailure=yes", "-R", f"127.0.0.1:{port}:127.0.0.1:{port}"] if port else []
         return self.ssh + ["-T", *tunnel, self.target, remote]
 
-    def delete(self) -> None:
-        if self.id:
-            self.client.delete(self.id)
-            try:
-                os.remove(os.path.join(self.keys.dir, f"known-{self.id}"))
-            except OSError:
-                pass
+    def delete(self) -> Optional[str]:
+        """Deletes the VM, a second time if Boat did not; why it is still there, or None."""
+        if not self.id:
+            return None
+        for _ in range(2):
+            d = self.client.delete(self.id)
+            if gone(d):
+                break
+        else:
+            return said(d)
+        try:
+            os.remove(os.path.join(self.keys.dir, f"known-{self.id}"))
+        except OSError:
+            pass
+        return None
 
 
 def remote_env(env: Dict[str, str], bin_dirs: List[str], local: Sequence[str] = ()) -> Dict[str, str]:
@@ -499,7 +516,18 @@ class Backend:
                 vm.fetch(d)
         finally:
             self._held.vm = None
-            vm.delete()
+            why = vm.delete()
+            if why:
+                # still billing until its auto-stop: said, and kept with the unit's evidence
+                self.say(f"Boat did not delete VM {vm.id}: {why}. It stops by itself within {vm.ttl // 3600} hours; "
+                         "delete it at boat.dev")
+                try:
+                    with open(os.path.join(trial, "agent", "boat.json")) as f:
+                        rec = json.load(f)
+                    with open(os.path.join(trial, "agent", "boat.json"), "w") as f:
+                        json.dump(dict(rec, delete_error=why), f)
+                except (OSError, ValueError):
+                    pass
 
     def place(self, cmd: List[str], env: Dict[str, str], workdir: str, *, inst: Optional[str], owned: List[str],
               relay_url: Optional[str], local: Sequence[str] = ()) -> tuple:
@@ -515,6 +543,6 @@ class Backend:
         return vm.argv(list(cmd), env, workdir, port), {k: os.environ[k] for k in ("PATH", "HOME", "LANG") if k in os.environ}
 
     def close(self) -> None:
-        sweep(self.label, self.client)
+        sweep(self.label, self.client, self.say)
         if self._keys is not None:
             self._keys.close()

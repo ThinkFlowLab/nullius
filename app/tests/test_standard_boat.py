@@ -42,6 +42,7 @@ class FakeAPI:
 
     def __init__(self, creates):
         self.creates, self.calls = list(creates), []
+        self.deletes = []                        # answers to DELETE before it succeeds: (status, body)
 
     def __call__(self, req, timeout=None):
         body = json.loads(req.data) if req.data else None
@@ -63,6 +64,9 @@ class FakeAPI:
             return Answer({"ok": True, "maxActiveSandboxes": 2, "machineTypes": [
                 {"type": "small", "available": True, "reason": None}, {"type": "default", "available": True, "reason": None},
                 {"type": "large", "available": False, "reason": "not during the free trial"}]})
+        if method == "DELETE" and self.deletes:
+            status, d = self.deletes.pop(0)
+            raise urllib.error.HTTPError(req.full_url, status, "no", {}, io.BytesIO(json.dumps(d).encode()))
         return Answer({"ok": True})
 
 
@@ -187,6 +191,22 @@ class VM(unittest.TestCase):
         self.assertEqual([c[1] for c in api.calls if c[0] == "DELETE"], ["/sandboxes/bx_9"])
         self.assertEqual(self.ssh, [])
 
+    def test_a_delete_boat_refuses_is_tried_again_and_said_and_one_already_gone_is_done(self):
+        api = FakeAPI([MADE])
+        vm = boat.VM(boat.Client("k", opener=api), self.keys, "j", sleep=lambda s: None)
+        api.deletes = [(500, {"message": "busy"}), (500, {"message": "still busy"})]
+        self.assertEqual(vm.delete(), "still busy")
+        self.assertEqual(len([c for c in api.calls if c[0] == "DELETE"]), 2)
+        api.deletes = [(500, {"message": "busy"})]
+        self.assertIsNone(vm.delete())               # the second try went through
+        api.deletes = [(404, {"message": "not found"})]
+        self.assertIsNone(vm.delete())               # already gone
+        said = []
+        api.deletes = [(500, {"message": "busy"})]
+        self.assertEqual(boat.sweep("job.1", boat.Client("k", opener=api), said.append), 0)
+        self.assertEqual(len(said), 1)
+        self.assertIn("did not delete VM bx_1: busy", said[0])
+
     def test_a_vm_that_fails_its_setup_is_deleted(self):
         api = FakeAPI([MADE])
         fail = lambda argv, **kw: subprocess.CompletedProcess(argv, 1 if "useradd" in argv[-1] else 0, b"", b"no")
@@ -284,6 +304,16 @@ class Backend(unittest.TestCase):
         with open(os.path.join(self.trial, "agent", "boat.json")) as f:
             self.assertEqual(json.load(f)["ttl_seconds"], boat.TTL)
 
+    def test_a_vm_boat_would_not_delete_is_said_and_kept_with_the_units_evidence(self):
+        StandInVM.refuse = "busy"
+        self.addCleanup(setattr, StandInVM, "refuse", None)
+        with self.backend.unit(self.trial, "/t/workspace", "/t/.home"):
+            pass
+        self.assertEqual(len(self.said), 1)
+        self.assertIn("did not delete VM bx_0: busy", self.said[0])
+        with open(os.path.join(self.trial, "agent", "boat.json")) as f:
+            self.assertEqual(json.load(f)["delete_error"], "busy")
+
     def test_after_a_stop_nothing_is_brought_back(self):
         stopped = threading.Event()
         with self.assertRaises(RuntimeError):
@@ -373,6 +403,7 @@ class Sent(unittest.TestCase):
 class StandInVM:
     """A unit's VM that runs its command on this machine: what the run sends, starts and takes back."""
     made, deleted, sent, fetched, sizes, ready, asked = [], [], [], [], [], [], []
+    refuse = None                                # why a delete failed, or None
 
     def __init__(self, client, keys, job, size=boat.SIZE, stopped=None, ttl=boat.TTL):
         StandInVM.sizes.append(size)
@@ -396,6 +427,7 @@ class StandInVM:
 
     def delete(self):
         StandInVM.deleted.append(self.id)
+        return StandInVM.refuse
 
 
 class BoatRun(unittest.TestCase):
@@ -421,7 +453,7 @@ class BoatRun(unittest.TestCase):
         for name, value in (("unusable", lambda env=None, which=None: None), ("slots", lambda client: 1),
                             ("starts_problem", lambda client, n: f"Boat can start 1 more VMs today on this account: {n - 1} of the {n} units will end without running"),
                             ("size_problem", lambda client, size: "not during the free trial" if size == "large" else None),
-                            ("VM", StandInVM), ("Keys", FakeKeys), ("sweep", lambda job, client: self.swept.append(job))):
+                            ("VM", StandInVM), ("Keys", FakeKeys), ("sweep", lambda job, client, say=None: self.swept.append(job))):
             p = mock.patch.object(boat, name, value)
             p.start()
             self.addCleanup(p.stop)
