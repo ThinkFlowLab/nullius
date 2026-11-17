@@ -37,7 +37,7 @@
     {#- the time as digits, UTC as every workspace records it; never opened sorts last, newest first #}
     {%- elif c.key == 'opened' %}{% call cell(c, sort=ws.opened[:19]|replace('-', '')|replace(':', '')|replace('T', '') or 0, class='mono faint nowrap') %}{{ ws.opened[:16]|replace('T', ' ') }}{% endcall %}
     {%- elif c.key == 'launches' %}{% call cell(c) %}{% set n = n_launches[ws.name] %}{% if n %}<a class="btn ghost sm count-btn" href="{{ url_for('launches_page', ws=ws.name) }}" aria-label="Launches of {{ ws.label }}: {{ n }}" title="Launches of {{ ws.label }}"><svg class="ic" aria-hidden="true"><use href="#i-launches"/></svg>{{ n }}</a>
-      {%- else %}0{% endif %}{% endcall %}
+      {%- else %}{{ greyed('Launches of ' ~ ws.label ~ ': 0', '', 'No launches in ' ~ ws.label, 'none-' ~ ws.name, icon='launches', class='btn ghost sm count-btn', text='0') }}{% endif %}{% endcall %}
     {%- elif c.key == 'roots' %}{% call cell(c, sort=rs|length) %}
         <button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="ws-roots" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ rs|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ rs|length }}</button>
         <template class="ws-roots">

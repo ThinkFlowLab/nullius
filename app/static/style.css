@@ -472,6 +472,8 @@ button.seg:hover { filter: brightness(1.25); }
 .grid.snug th { position: relative; }
 .grid td.acts-col { position: relative; white-space: nowrap; }
 .count-btn { font-variant-numeric: tabular-nums; }   /* an icon and a count, as one button */
+.btn.ghost[aria-disabled="true"] { opacity: .45; cursor: default; }   /* greyed: it cannot act here */
+.btn.ghost[aria-disabled="true"]:hover { color: var(--text-dim); border-color: var(--border); background: transparent; }
 /* a column's alignment (its `align`), header and cells */
 .grid .align-right { text-align: right; }
 .grid .align-center { text-align: center; }

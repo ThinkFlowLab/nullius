@@ -13,3 +13,4 @@
 dialog.std-how.launch-delete.wide { width: min(56rem, calc(100vw - 32px)); }   /* the roots: room for a path */
 .launch-delete .std-how-head h2 { min-width: 0; overflow-wrap: anywhere; }
 .grid.tools.ws-table td { vertical-align: middle; }   /* a count beside a button: one line */
+.ws-table td[data-col="launches"] { position: relative; }   /* holds a greyed count's hidden reason */

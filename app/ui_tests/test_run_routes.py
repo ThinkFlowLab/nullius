@@ -1129,7 +1129,10 @@ class WorkspacesPage(unittest.TestCase):
                 self.assertEqual(n, 1)
                 self.assertIn(f'<a class="btn ghost sm count-btn" href="/launches?ws={ws.name}" aria-label="Launches of {ws.label}: 1" title="Launches of {ws.label}">'
                               '<svg class="ic" aria-hidden="true"><use href="#i-launches"/></svg>1</a>', self.row(ws))   # the sidebar's icon, as Roots' button
-        self.assertEqual(self.cell(bare, 5), "0"); self.assertNotIn("/launches?ws=", self.row(bare))   # none: plain text
+        self.assertIn(f'<button type="button" class="btn ghost sm count-btn" aria-disabled="true" aria-label="Launches of bare: 0" aria-describedby="none-{bare.name}" '
+                      f'title="No launches in bare"><svg class="ic"><use href="#i-launches"/></svg>0</button><span class="sr" id="none-{bare.name}">No launches in bare</span>',
+                      self.row(bare))                                                             # none: greyed, its reason reachable
+        self.assertNotIn("/launches?ws=", self.row(bare))
 
     def test_ws_presets_the_launches_filter(self):
         boxes = lambda html: dict(re.findall(r'<input type="checkbox" data-value="([^"]*)"( checked)?>', html.split('data-filter-menu="ws"', 1)[1].split("</fieldset>", 1)[0]))

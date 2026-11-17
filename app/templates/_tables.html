@@ -149,6 +149,7 @@
 </div>
 {% endmacro %}
 
-{#- An icon button that cannot act here: greyed, still focusable, `why` its description and, after `action`, its tooltip;
-    `id` names the description. The cell or line that holds it is positioned, so the hidden reason stays in it. #}
-{% macro greyed(label, action, why, id, icon='trash') %}<button type="button" class="icon-btn danger" aria-disabled="true" aria-label="{{ label }}" aria-describedby="{{ id }}" title="{{ action }}: {{ why }}"><svg class="ic"><use href="#i-{{ icon }}"/></svg></button><span class="sr" id="{{ id }}">{{ why }}</span>{% endmacro %}
+{#- A button that cannot act here: greyed, still focusable, `why` its description and, after `action` when given, its
+    tooltip; `id` names the description. An icon button by default; `class` and `text` make it another, such as a
+    count. The cell or line that holds it is positioned, so the hidden reason stays in it. #}
+{% macro greyed(label, action, why, id, icon='trash', class='icon-btn danger', text='') %}<button type="button" class="{{ class }}" aria-disabled="true" aria-label="{{ label }}" aria-describedby="{{ id }}" title="{{ action ~ ': ' if action }}{{ why }}"><svg class="ic"><use href="#i-{{ icon }}"/></svg>{{ text }}</button><span class="sr" id="{{ id }}">{{ why }}</span>{% endmacro %}
