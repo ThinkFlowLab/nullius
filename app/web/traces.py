@@ -9,6 +9,7 @@ from flask import abort, flash, jsonify, redirect, render_template, request, url
 from markupsafe import Markup, escape
 from nullius.traces import behavior, charts, conversation, trace, trajectory
 from nullius.runs import artifacts, parse
+from nullius import importers as harnesses
 
 from .core import app
 from . import shared
@@ -153,17 +154,22 @@ def artifact_page(job_id, trial_name, key):
 @app.route("/trial/<job_id>/<trial_name>/artifact/<key>/download")
 def artifact_download(job_id, trial_name, key):
     """The record whole, redacted as the reader shows it: what Download saves
-    and Copy puts on the clipboard."""
+    and Copy puts on the clipboard. One past the reader's limit is cut there,
+    as its page says, and saved under a name that says so."""
     _, trial = _trial_evidence(job_id, trial_name)
     try:
-        text, _ = artifacts.whole(trial.dir, key)
+        text, truncated = artifacts.whole(trial.dir, key)
     except (LookupError, OSError):
         abort(404)
     name = os.path.basename(artifacts.FILES[key][1])
+    if truncated:
+        stem, ext = os.path.splitext(name)
+        name = f"{stem}.partial{ext}"
     response = app.response_class(text, mimetype="application/json" if name.endswith(".json") else "text/plain")
     if not request.args.get("inline"):
         response.headers["Content-Disposition"] = f'attachment; filename="{name}"'
     response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"      # a run's own text, shown as text whatever it holds
     return response
 
 
@@ -196,6 +202,18 @@ def trace_span_data(job_id, trial_name):
     response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+def _imported_from(job) -> str:
+    """The importer's name for a job an importer wrote (``harness`` in its ``config.json``: ATIF,
+    OpenTelemetry), else "". Such a job has no benchmark and no runner: its pages say where it came from."""
+    try:
+        with open(os.path.join(job.dir, "config.json"), encoding="utf-8") as fh:
+            name = json.load(fh).get("harness")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    module = harnesses.available().get(name) if isinstance(name, str) else None
+    return getattr(module, "LABEL", name.upper()) if module else ""
 
 
 @app.route("/trial/<job_id>/<trial_name>")
@@ -237,7 +255,7 @@ def trial(job_id, trial_name):
                                      key=record["key"], workspace=request.args.get("workspace"))
     return render_template(
         "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts,
-        trace=tr, charts=ch, viewing=viewing,
+        trace=tr, charts=ch, viewing=viewing, imported_from=_imported_from(j),
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
         artifacts=records,
         judgement=_judgement_panel(j, t), llm_judgement=_judgement_panel(j, t, "llm"), csrf=shared._csrf_token(),

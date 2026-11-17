@@ -313,14 +313,12 @@ tr.tone-good .jbar .fill { background: #4cc26a; } tr.tone-warn .jbar .fill { bac
 .jmore { width: 2rem; text-align: right; }
 .jdisclose { border: 0; background: none; color: var(--text-dim); font-size: 1.2rem; cursor: pointer; padding: 0 .3rem; }
 .jdisclose[aria-expanded="true"] { transform: rotate(90deg); }
-.judgement-flags-summary { white-space: nowrap; }
 .flag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8em; font-weight: 500; border: 1px solid var(--border-soft); }
 .flag.raised { color: var(--bad); border-color: currentColor; }
 .flag.clear { color: var(--muted, #888); }
 .flag.undecided { color: var(--warn, #b8860b); border-color: currentColor; border-style: dashed; }
 .hygiene { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 500; border: 1px solid var(--border-soft); }
 .hygiene.warn { color: var(--warn, #b8860b); border-color: currentColor; }
-.hygiene.clear { color: var(--muted, #888); }
 .badge.task-quality { margin-left: 6px; }
 .badge.task-quality[data-task-quality="0"] { color: var(--bad); border-color: currentColor; }
 .badge.task-quality[data-task-quality="1"] { color: var(--warn, #b8860b); border-color: currentColor; }
@@ -356,8 +354,8 @@ button.seg:hover { filter: brightness(1.25); }
 
 /* table toolbar + column menu */
 .table-tools { display: flex; align-items: center; gap: .75rem; margin: 0 0 .6rem; }
-.artifact-actions { text-align: right; white-space: nowrap; }
-.artifact-actions .btn + .btn { margin-left: .35rem; }
+.artifact-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
+.artifact-tools { flex-wrap: wrap; }
 .menu-wrap { position: relative; }
 .btn.sm { font-size: .8rem; padding: .42rem .75rem; }
 .menu {
@@ -954,14 +952,11 @@ button.seg:hover { filter: brightness(1.25); }
 .control-verdict { color: var(--text-dim); white-space: nowrap; }
 a.control-verdict { text-decoration: none; border: 1px solid var(--border); border-radius: 999px; padding: .1rem .6rem; background: var(--surface-2); }
 a.control-verdict:hover { border-color: var(--text-dim); }
-.control-verdict.ok b, td.control-verdict.ok, .card.control-verdict.ok .v { color: var(--text); }
-.control-verdict.warn b, td.control-verdict.warn, .card.control-verdict.warn .v { color: var(--bad); }
-.card.control-verdict.warn { border-color: color-mix(in srgb, var(--agent_error) 55%, var(--border)); }
+.control-verdict.ok b, td.control-verdict.ok { color: var(--text); }
+.control-verdict.warn b, td.control-verdict.warn { color: var(--bad); }
 .seg.ctl-ok { background: var(--text-dim); }
 .seg.ctl-warn { background: var(--bad); }
 tr.control-row td { color: var(--text-dim); }
-.card.danger { border-color: color-mix(in srgb, var(--agent_error) 55%, var(--border)); }
-.card.danger .v { color: var(--bad); }
 .chip.regression-chip { border-color: color-mix(in srgb, var(--agent_error) 45%, var(--border)); }
 .chip.regression-chip::before { background: var(--bad); }
 .panel.danger-panel { border-color: color-mix(in srgb, var(--agent_error) 45%, var(--border));
@@ -1048,13 +1043,6 @@ tr.control-row td { color: var(--text-dim); }
 .tag:is(.oc-resolved, .oc-scored, .oc-patch_failed_tests, .oc-failed_verification, .oc-patch_not_applied, .oc-no_patch, .oc-agent_error, .oc-rate_limited, .oc-api_error, .oc-setup_error, .oc-spending_cap, .oc-cancelled, .oc-unknown)::before { width: 7px; height: 7px; flex: none; }
 .tag.oc-unknown { color: var(--text-dim); }
 .tag.oc-unknown::before { background: var(--text-dim); }
-
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .75rem; margin: 1.5rem 0; }
-.card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 1.2rem 1.25rem; }
-.card.warn { border-color: color-mix(in srgb, var(--patch_failed_tests) 45%, var(--border)); }
-.card .k { color: var(--text-dim); font-size: .75rem; font-weight: 500; }
-.card .v { font-size: 1.9rem; font-weight: 500; margin-top: .45rem; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
-.card .v small { font-size: .95rem; color: var(--text-dim); font-weight: 500; }
 
 table.grid { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .95rem; }
 .grid th, .grid td { text-align: left; padding: 1rem .9rem; border-bottom: 1px solid var(--border-soft); }
@@ -1531,8 +1519,6 @@ a.chip { text-decoration: none; }
   main { padding: 1.6rem 1rem 3rem; }
   .topbar { padding: 0 1rem; }
   .panel { padding: 1rem; }
-  .cards { gap: .6rem; }
-  .card { padding: 1rem; }
 }
 
 /* ---- workspaces ---- */

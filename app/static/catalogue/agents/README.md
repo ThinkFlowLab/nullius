@@ -1,6 +1,6 @@
 # Agent marks
 
-The catalogue, entry pages, sidebar and Nullius run builder share `marks.json`.
+The catalogue, entry pages, sidebar, Nullius run builder and a trial's head share `marks.json`.
 Keys are agent catalogue keys; versions use the same mark. Unknown agents and
 capabilities retain their initial as a fallback. Files are bundled locally;
 rendering a logo makes no request to its upstream website.

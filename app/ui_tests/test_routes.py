@@ -486,9 +486,10 @@ class Routes(unittest.TestCase):
 
     def test_retried_rate_limits_reach_the_job_table(self):
         """A 429 the agent's SDK retried is in agent/gateway.log and nowhere
-        else: the outcome is untouched. The job table marks the row, and a
-        trial with no gateway log is not marked as if it were clean. The manifest
-        Harbor writes beside them is listed on the Artifacts tab."""
+        else: the outcome is untouched. The job table marks the row; a trial
+        with no gateway log is unmeasured in the record, and has no mark. The
+        manifest Harbor writes beside them is listed on the Artifacts tab, and
+        read, downloaded and copied from there."""
         job_dir = self.root / "rate-limited-run"
         synthetic_job(self.root, "rate-limited-run")
         trial_dir = job_dir / "task-001"

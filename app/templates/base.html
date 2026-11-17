@@ -419,38 +419,42 @@
       }
     });
 
-    // One handler for every [data-copy] button: put the text on the
-    // clipboard and confirm inline. The execCommand fallback covers
-    // non-secure origins, where navigator.clipboard is undefined.
+    // One handler for every [data-copy] button: put the text on the clipboard and say so, or say
+    // that it failed. The execCommand fallback covers non-secure origins, where navigator.clipboard
+    // is undefined. [data-copy-url] is text too long for an attribute (a whole record), fetched on
+    // the click: the clipboard is handed the pending text at once, inside the click, because a
+    // browser that drops the gesture across an await (Safari) refuses a write made after the fetch.
     document.addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-copy], [data-copy-url]');
       if (!btn) return;
-      // data-copy-url: text too long for an attribute (a whole record), fetched on click
-      let text = btn.dataset.copy;
-      if (text === undefined) {
-        try {
-          const r = await nulliusFetch(btn.dataset.copyUrl, {cache: 'no-store'});
-          if (!r.ok) throw new Error(r.status);
-          text = await r.text();
-        } catch {
-          const label = btn.textContent;
-          btn.textContent = 'copy failed';
-          setTimeout(() => { btn.textContent = label; }, 1200);
-          return;
-        }
-      }
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch {
+      const legacy = (text) => {
         const ta = document.createElement('textarea');
         ta.value = text;
         document.body.appendChild(ta);
         ta.select();
-        document.execCommand('copy');
+        let done = false;
+        try { done = document.execCommand('copy'); } catch {}
         ta.remove();
+        return done;
+      };
+      const write = async (text) => {
+        try { await navigator.clipboard.writeText(text); return true; } catch { return legacy(text); }
+      };
+      let copied = false;
+      if (btn.dataset.copy !== undefined) {
+        copied = await write(btn.dataset.copy);
+      } else {
+        const text = nulliusFetch(btn.dataset.copyUrl, {cache: 'no-store'}).then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); });
+        text.catch(() => {});                    // read again below: never an unhandled rejection
+        try {
+          await navigator.clipboard.write([new ClipboardItem({'text/plain': text.then((t) => new Blob([t], {type: 'text/plain'}))})]);
+          copied = true;
+        } catch {
+          try { copied = await write(await text); } catch {}
+        }
       }
-      const label = btn.textContent;
-      btn.textContent = 'copied ✓';
+      const label = btn.dataset.copyLabel || (btn.dataset.copyLabel = btn.textContent);   // the button's own word, however fast it is clicked again
+      btn.textContent = copied ? 'copied ✓' : 'copy failed';
       setTimeout(() => { btn.textContent = label; }, 1200);
     });
   })();

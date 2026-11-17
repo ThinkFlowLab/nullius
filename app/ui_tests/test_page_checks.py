@@ -87,10 +87,11 @@ class Pages(unittest.TestCase):
     # --- views.md ---------------------------------------------------------
 
 
-    def test_a_degenerate_clock_keeps_the_totals(self):
+    def test_a_control_with_no_trajectory_still_draws_its_phases(self):
         control = self.page("trial-oracle-control")
         self.assertIn("Verify 6.72s", control)
-        self.assertIn("Agent 0.20s", control)                                  # the all-call total stays
+        self.assertIn("Agent 0.20s", control)                                  # the phases are the trial's, whatever else it recorded
+        self.assertIn("No trajectory recorded for this trial.", control)
 
 
 

@@ -42,33 +42,40 @@
 {% set model = job.model_name if job.model_name and job.model_name.endswith(trial.model_name or '~')
                else (trial.model_name or job.model_name) %}
 <div class="trial-head">
-  {# What ran (the benchmark and its runner; the agent, its mark, and the model that answered),
-     then how it went: the dataset's own checks, the reward, the agent's time and its steps.
-     A value the trial does not have is left out, never shown as a dash. #}
-  <div class="th-card" title="The benchmark the task is from, and what ran it">
-    <div><span class="k">Benchmark</span><span class="v" title="{{ trial.source }}">{{ trial.source|dsname }}</span></div>
-    <span class="th-sep" aria-hidden="true"></span>
-    <div><span class="k">Runner</span><span class="v">{% if job.runner %}{{ what_ran(job) }}{% else %}Harbor{% endif %}</span></div>
-  </div>
+  {# What ran (where the task is from and what ran it; the agent, its mark, and the model that
+     answered), then how it went: the dataset's own checks, the reward or the score, the agent's
+     time and its steps. A value the trial does not have has no cell, and a block with no cell is
+     not drawn. An imported trial says its importer: no benchmark gave it, and no runner ran it here. #}
   {% set agent = trial.agent_info_name or job.agent_label %}
+  {% if imported_from %}
+  <div class="th-card"><div><span class="k">Imported from</span><span class="v">{{ imported_from }}</span></div></div>
+  {% else %}
+  <div class="th-card">
+    {% if trial.source %}<div><span class="k">Benchmark</span><span class="v" title="{{ trial.source }}">{{ trial.source|dsname }}</span></div>
+    <span class="th-sep" aria-hidden="true"></span>{% endif %}
+    <div><span class="k">Runner</span><span class="v">{% if job.runner %}{{ what_ran(job) }}{% else %}<span{% if job.harbor_label %} title="harbor {{ job.harbor_label }}"{% endif %}>Harbor</span>{% endif %}</span></div>
+  </div>
+  {% endif %}
   {% if agent or model %}
   <div class="th-card">
-    {% if agent %}<span class="th-mark">{{ agent_mark('agent', agent, agent) }}</span>{% endif %}
+    {% if agent %}<span class="th-mark" aria-hidden="true">{{ agent_mark('agent', agent, agent) }}</span>{% endif %}
     <div>
       {% if agent %}<span class="v">{{ agent }}{% if trial.agent_version %} <span class="mono faint" title="The agent's version as the trial's agent_info reports it">{{ trial.agent_version }}</span>{% endif %}</span>{% endif %}
       {% if model %}<span class="th-model mono">{{ model }}</span>{% endif %}
     </div>
   </div>
   {% endif %}
-  <div class="th-strip">
-    {% set vocab = trial.vocab %}
-    {% if vocab.gained %}<div><span class="k">{{ vocab.gained }}</span><span class="n">{% if trial.f2p_pass or trial.f2p_fail %}<span class="ok">{{ trial.f2p_pass }}</span><small>/{{ trial.f2p_fail }}</small>{% else %}—{% endif %}</span></div>{% endif %}
-    {% if vocab.held %}<div><span class="k">{{ vocab.held }}</span><span class="n">{% if trial.p2p_pass or trial.p2p_fail %}<span class="ok">{{ trial.p2p_pass }}</span><small>/{{ trial.p2p_fail }}</small>{% else %}—{% endif %}</span></div>{% endif %}
-    {% if vocab.has_patch and trial.patch_exists is not none %}<div><span class="k">Patch applied</span><span class="n">{{ 'Yes' if trial.patch_applied else 'No' }}</span></div>{% endif %}
-    <div title="{{ "The judge's verdict on this answer: 1 when it said the answer is right" if job.runner else "The verifier's reward for this trial, what Harbor's headline mean averages" }}"><span class="k">Reward</span><span class="n">{{ trial.reward if trial.reward is not none else '—' }}</span></div>
-    {% if trial.dur_agent is not none %}<div><span class="k">Agent time</span><span class="n">{{ trial.dur_agent|secs }}</span></div>{% endif %}
-    {% if traj and not traj.error %}<div><span class="k">Steps</span><span class="n">{{ traj.n_steps }}</span></div>{% endif %}
-  </div>
+  {% set vocab = trial.vocab %}
+  {% set cells %}
+    {%- if vocab.gained and (trial.f2p_pass or trial.f2p_fail) %}<div><span class="k">{{ vocab.gained }}</span><span class="n"><span class="ok">{{ trial.f2p_pass }}</span><small>/{{ trial.f2p_fail }}</small></span></div>{% endif -%}
+    {%- if vocab.held and (trial.p2p_pass or trial.p2p_fail) %}<div><span class="k">{{ vocab.held }}</span><span class="n"><span class="ok">{{ trial.p2p_pass }}</span><small>/{{ trial.p2p_fail }}</small></span></div>{% endif -%}
+    {%- if vocab.has_patch and trial.patch_exists is not none %}<div><span class="k">Patch applied</span><span class="n">{{ 'Yes' if trial.patch_applied else 'No' }}</span></div>{% endif -%}
+    {%- if trial.reward is not none %}<div title="{{ "The benchmark's verdict on this trial: 1 when it counts as right" if job.runner else "The verifier's reward for this trial, what Harbor's headline mean averages" }}"><span class="k">Reward</span><span class="n">{{ trial.reward }}</span></div>{% endif -%}
+    {%- if trial.score is not none %}<div title="{% if trial.n_parts %}The mean score of its {{ trial.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it"><span class="k">Score</span><span class="n">{{ '%.2f'|format(trial.score) }}</span></div>{% endif -%}
+    {%- if trial.dur_agent is not none %}<div><span class="k">Agent time</span><span class="n">{{ trial.dur_agent|secs }}</span></div>{% endif -%}
+    {%- if traj and not traj.error %}<div><span class="k">Steps</span><span class="n">{{ traj.n_steps }}</span></div>{% endif -%}
+  {% endset %}
+  {% if cells|trim %}<div class="th-strip">{{ cells }}</div>{% endif %}
 </div>
 
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
@@ -110,15 +117,14 @@
 {% if total %}
 <div class="overview-tiles">
 <div class="panel">
-  <h3 style="margin-top:0">Where the time went <b class="total">{{ trial.dur_total|secs }}</b></h3>
-  {# All four phases Harbor records, and the same four on a standard run: Env
-     its environment, Setup the agent's start, Verify its check and score (a
-     model judge included). A recorded phase has its chip however short it
-     was: a check that took no time was still made. One never recorded has
-     none, and Other, which is computed, only when there is some. A segment
-     needs enough time to draw. #}
+  <h3 style="margin-top:0">Where the time went{% if trial.dur_total is not none %} <b class="total">{{ trial.dur_total|secs }}</b>{% endif %}</h3>
+  {# The phases the trial recorded, Harbor's four names for them. On a runner's trial Env is the
+     unit's environment, Setup (when it has one) the agent's start and session, Verify its check and
+     score, a model judge included. A recorded phase has its chip however short it was: a check that
+     took no time was still made. One never recorded has none, and Other, which is what the phases
+     leave of the trial, only when there is some. A segment needs enough time to draw. #}
   {%- if job.runner %}
-  {%- set says = {'env': "The unit's environment: the driver's setup, the relay, its image", 'setup': "The agent's start and session, its MCP servers included", 'verify': "The unit's check and its score, a model judge included", 'other': 'After the check: the container, the relay and the trial written'} %}
+  {%- set says = {'env': "The unit's environment: the driver's setup, the relay, its image", 'setup': "The agent's start and its session, its MCP servers included", 'verify': "The unit's check and its score, a model judge included", 'other': 'What the phases leave of the trial: the waits between them and the work after the check'} %}
   {%- else %}
   {%- set says = {'env': 'Environment build', 'setup': 'Installing the agent', 'verify': 'Verifier', 'other': 'Time Harbor does not attribute to a phase: image pull, container start and teardown, artifact collection'} %}
   {%- endif %}
@@ -627,7 +633,7 @@
     <table class="grid"><thead><tr><th>Record</th><th class="num">Size</th><th></th></tr></thead><tbody>
     {% for artifact in artifacts %}
       <tr><td>{{ artifact.label }}</td><td class="num mono muted">{{ '%.2f'|format(artifact.size / 1024) }} KB</td>
-        <td class="artifact-actions"><a class="btn ghost sm" href="{{ artifact.url }}">Read</a> <a class="btn ghost sm" href="{{ artifact.download }}" download>Download</a></td></tr>
+        <td><span class="artifact-actions"><a class="btn ghost sm" href="{{ artifact.url }}">Read</a><a class="btn ghost sm" href="{{ artifact.download }}" download>Download</a></span></td></tr>
     {% endfor %}
     </tbody></table>
   </div>

@@ -125,10 +125,9 @@ def _ts(value):
 def _phase(value):
     """Flex weight for a phase segment, or 0 when the phase is effectively nil.
 
-    Harbor records a control's agent setup as 4.2e-05s — truthy, but it renders
-    as "0s" and would still cost a flex gap and a sub-pixel sliver, implying
-    setup time that never happened. Anything under the 0.05s that `secs` rounds
-    to zero paints nothing at all.
+    Harbor records a control's agent setup as 4.2e-05s: truthy, but a segment
+    for it would cost a flex gap and a sub-pixel sliver. Anything under 0.05s
+    paints nothing; its chip still says the time (`secs`).
     """
     value = value or 0
     return value if value >= 0.05 else 0
@@ -166,11 +165,11 @@ def _nsdur(value):
         return f"{value / 1_000:.0f}µs"
     if value < 1_000_000_000:
         return f"{value / 1_000_000:.2f}ms"
-    if value < 60_000_000_000:
+    if value < 59_995_000_000:
         return f"{value / 1_000_000_000:.2f}s"
-    # Hands over to `secs`'s scale at the same minute mark, so a trace covering
+    # Hands over to `secs`'s scale at the same mark and with its two decimals, so a trace covering
     # an hour reads like the phase bar above it instead of as "3600.00s".
-    return f"{value / 60_000_000_000:.1f}m"
+    return f"{value / 60_000_000_000:.2f}m"
 
 
 @app.template_filter("nsoff")
