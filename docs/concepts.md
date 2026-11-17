@@ -54,10 +54,6 @@ Importing results needs no runner.
 
 A count of runs leaves out the checks. The checks have a count of their own.
 
-Conformance kits share a launch, but each completed, error-free kit reads
-**finished** as soon as its result is written. A later kit's failure does not
-change those finished rows; the launch still reports the failure.
-
 ## Evidence
 
 | Evidence | Shows |
