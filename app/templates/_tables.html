@@ -1,0 +1,68 @@
+{# Value filter for one column: a caret in the header opening a checkbox list of `choices`, (value, label) pairs.
+   Values start all-checked; unchecking hides the matching rows (static/tables.js). #}
+{% macro filter_button(col, choices) %}
+<span class="th-filter">
+  <button class="filter-btn" type="button" data-filter="{{ col }}"
+          aria-haspopup="true" aria-expanded="false" aria-label="Filter by {{ col }}">▼</button>
+  <div class="menu filter-menu" data-filter-menu="{{ col }}" hidden>
+    <div class="menu-head">
+      <button type="button" class="linkish" data-all="{{ col }}">All</button>
+      <button type="button" class="linkish" data-none="{{ col }}">None</button>
+    </div>
+    {% for value, label in choices %}
+    <label><input type="checkbox" data-value="{{ value }}" checked> {{ label }}</label>
+    {% endfor %}
+  </div>
+</span>
+{% endmacro %}
+
+{# A table's Filter and Sort by menus, in place of header carets (static/tables.js `toolbar`). `filters`: a list of
+   (col, label, choices), choices as filter_button's; `sorts`: a list of (col, label), the sortable headers;
+   `only`: column -> the one value ticked at load, the others unticked. No filters: no Filter button. #}
+{% macro tools(filters, sorts, only={}) %}
+{% if filters %}<div class="menu-wrap">
+  <button class="btn ghost sm" type="button" data-tools-btn="filter" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter<span class="tools-count" hidden></span></button>
+  <div class="menu tools-menu" data-tools="filter" hidden>
+    <button type="button" class="linkish tools-clear" data-clear>Clear filters</button>
+    {% for col, label, choices in filters %}
+    <fieldset data-filter-menu="{{ col }}">
+      <legend>{{ label }}</legend>
+      <span class="tools-all"><button type="button" class="linkish" data-all="{{ col }}">All</button><button type="button" class="linkish" data-none="{{ col }}">None</button></span>
+      {% for value, text in choices %}<label><input type="checkbox" data-value="{{ value }}"{% if col not in only or only[col] == value %} checked{% endif %}> {{ text }}</label>{% endfor %}
+    </fieldset>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+<div class="menu-wrap">
+  <button class="btn ghost sm" type="button" data-tools-btn="sort" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-sort"/></svg>Sort by</button>
+  <div class="menu tools-menu" data-tools="sort" hidden>
+    <fieldset>
+      <legend>Column</legend>
+      <label><input type="radio" name="tools-sort-col" data-sort-col value="" checked> Default</label>
+      {% for col, label in sorts %}<label><input type="radio" name="tools-sort-col" data-sort-col value="{{ col }}"> {{ label }}</label>{% endfor %}
+    </fieldset>
+    <fieldset>
+      <legend>Order</legend>
+      <label><input type="radio" name="tools-sort-dir" data-sort-dir value="asc"> Ascending</label>
+      <label><input type="radio" name="tools-sort-dir" data-sort-dir value="desc"> Descending</label>
+    </fieldset>
+  </div>
+</div>
+{% endmacro %}
+
+{# The pages of the table whose id is `table` (static/tables.js `pager`): how many rows a page shows, 25 at first,
+   and the page before and after. #}
+{% macro pager(table) %}
+<div class="table-tools table-pager" data-pager="{{ table }}">
+  <label class="table-note">Show <select data-per><option>10</option><option selected>25</option><option>100</option><option value="0">All</option></select></label>
+  <span class="header-spacer"></span>
+  <button type="button" class="btn sm ghost" data-prev aria-label="Previous page">‹</button>
+  <span class="table-note" data-note></span>
+  <button type="button" class="btn sm ghost" data-next aria-label="Next page">›</button>
+</div>
+{% endmacro %}
+
+{#- An icon button that cannot act here: greyed, still focusable, `why` its description and, after `action`, its tooltip;
+    `id` names the description. The cell or line that holds it is positioned, so the hidden reason stays in it. #}
+{% macro greyed(label, action, why, id, icon='trash') %}<button type="button" class="icon-btn danger" aria-disabled="true" aria-label="{{ label }}" aria-describedby="{{ id }}" title="{{ action }}: {{ why }}"><svg class="ic"><use href="#i-{{ icon }}"/></svg></button><span class="sr" id="{{ id }}">{{ why }}</span>{% endmacro %}

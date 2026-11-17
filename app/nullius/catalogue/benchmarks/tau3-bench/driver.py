@@ -24,11 +24,12 @@ setup  - the agent's instructions and the domain's policy as the upstream's
          executes nothing itself: it passes each call to this driver
 turn   - the conversation is the upstream's: its batch runner,
          ``runner.batch.run_tasks``, run on the unit's one task in a thread of
-         this driver, with a ``TextRunConfig`` at the upstream's defaults (max
-         steps, max errors, no timeout, one trial, its seed 300, three
-         retries, its user simulator). It draws the trial's seed from the
+         this driver, with a ``TextRunConfig`` at the upstream's defaults (no
+         timeout, one trial, its seed 300, three
+         retries, its user simulator), its max steps and max errors the run's
+         ``max_steps`` and ``max_errors`` options (``bounds``). It draws the trial's seed from the
          base seed as it does for every run: the unit's first attempt is
-         trial 0 of a one-trial run, its attempt N (``--repeat``) trial N-1
+         trial 0 of a one-trial run, its attempt N (``--attempts``) trial N-1
          at the seed run_tasks draws for that trial (``trial``), and each
          attempt is its ``run_single_task``: an ``Orchestrator`` built by its
          ``build_text_orchestrator`` at that seed, run by its
@@ -406,10 +407,18 @@ def retrieval():
     return os.environ.get("NULLIUS_OPTION_RETRIEVAL") or None
 
 
+def bounds():
+    """The conversation's bounds the run set, the upstream's --max-steps and --max-errors: its ``max_steps``
+    and ``max_errors`` options; the upstream's defaults (200, 10) otherwise."""
+    return {k: int(os.environ[v]) for k, v in (("max_steps", "NULLIUS_OPTION_MAX_STEPS"), ("max_errors", "NULLIUS_OPTION_MAX_ERRORS"))
+            if os.environ.get(v)}
+
+
 def run_config(**kw):
-    """The upstream's TextRunConfig for this domain, its retrieval config and task split set when the run chose one."""
+    """The upstream's TextRunConfig for this domain, its retrieval config and task split set when the run chose one,
+    and the conversation's bounds (bounds)."""
     return TextRunConfig(domain=domain(), task_split_name=split(),
-                         **({"retrieval_config": retrieval()} if retrieval() else {}), **kw)
+                         **({"retrieval_config": retrieval()} if retrieval() else {}), **bounds(), **kw)
 
 
 def user_config(simulator):

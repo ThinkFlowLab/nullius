@@ -24,6 +24,10 @@ class Failed(Exception):
     """The program answered with an error, or did not answer as it should."""
 
 
+class NoReply(Failed):
+    """The program did not answer in its time: a run tries no unit again for it (``retries``)."""
+
+
 class Proc:
     def __init__(self, cmd: List[str], cwd: str, env: dict, log: str, stopped=None):
         self.cmd, self.cwd, self.env, self.log = cmd, cwd, env, log
@@ -60,7 +64,7 @@ class Proc:
             line = wait_reply(self.lines, timeout, self.stopped)
         except queue.Empty:
             self.close()
-            raise Failed(f"{op}: no reply in {int(timeout)} s")
+            raise NoReply(f"{op}: no reply in {int(timeout)} s")
         if line is None:
             raise Failed(f"{op}: the program ended without replying ({self._tail()})")
         try:

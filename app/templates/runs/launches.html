@@ -1,0 +1,117 @@
+{% from '_tables.html' import tools, pager, greyed %}
+{% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
+{% extends "base.html" %}
+{% block title %}Launches — Nullius{% endblock %}
+{% block crumb %}/ launches{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
+<script src="{{ url_for('static', filename='tables.js') }}"></script>{% endblock %}
+
+{#- A workspace that holds the launch: opened on the Runs page at that launch. #}
+{% macro open_at(ws, L, label) %}
+{%- if workspace and ws.name == workspace.name %}<a href="{{ url_for('launch_open', key=L.key) }}">{{ label }}</a>
+{%- else %}<form method="post" action="{{ url_for('workspace_open', name=ws.name) }}" class="header-form inv-open"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="launch" value="{{ L.key }}"><button class="linkish" type="submit">{{ label }}</button></form>{% endif %}
+{%- endmacro %}
+
+{#- A run state as its icon, the word its tooltip and name; sorted by how telling it is. #}
+{% macro state_cell(state) %}{% set icon = {'running': 'play', 'preparing': 'hourglass', 'stopping': 'stopping', 'paused': 'pause', 'failed': 'alert',
+  'refused': 'refused', 'stopped': 'stop', 'finished': 'check'} %}
+<td data-col="state" class="sticky-col" data-sort="{{ telling.index(state) if state in telling else telling|length }}">{% if state %}<svg class="ic st-{{ state }}" role="img" aria-label="{{ state }}"><title>{{ state }}</title><use href="#i-{{ icon[state] }}"/></svg>{% endif %}</td>
+{%- endmacro %}
+
+{#- A benchmark or a dataset: linked to its catalogue page when it has one. #}
+{% macro entry(e) %}{% if e[1] %}<a href="{{ e[1] }}">{{ e[0] }}</a>{% else %}{{ e[0] }}{% endif %}{% endmacro %}
+
+{% block body %}
+<div class="page-title"><h1>Launches</h1></div>
+
+{% if rows %}
+{#- every column the menus name: the Columns menu all but the launch (State always on), Sort by the sortable ones,
+    Filter those with choices #}
+{% set cols = [('state', 'State'), ('launch', 'Launch'), ('bench', 'Benchmark'), ('dataset', 'Dataset'), ('started', 'Started'), ('runs', 'Runs'),
+               ('checks', 'Checks'), ('shards', 'Shards'), ('machines', 'Machines'), ('size', 'Size'), ('ws', 'Workspaces')] %}
+{% set unsorted = ['machines', 'ws'] %}
+<div class="table-tools inv-cols" id="launch-tools">
+  <div class="menu-wrap">
+    <button class="btn ghost sm" type="button" id="col-btn" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-table"/></svg>Columns</button>
+    <div class="menu" id="col-menu" hidden>
+      {% for col, label in cols if col != 'launch' %}<label><input type="checkbox" data-col="{{ col }}"{% if col == 'state' %} disabled{% endif %}> {{ label }}</label>{% endfor %}
+    </div>
+  </div>
+  {%- set filters = [] %}{% for col, label in cols if col in choices %}{% set _ = filters.append((col, label, choices[col])) %}{% endfor %}
+  {{ tools(filters, cols|rejectattr(0, 'in', unsorted)|list, only) }}
+</div>
+<div class="table-wrap">
+<table class="grid sortable tools inventory" id="launches">
+  <thead>
+    <tr>
+      <th data-col="state" data-type="num" class="sticky-col"><span class="sr">State</span></th>
+      <th data-col="launch" data-type="text" class="sticky-col sticky-edge">Launch</th>
+      <th data-col="bench" data-type="text">Benchmark</th>
+      <th data-col="dataset" data-type="text">Dataset</th>
+      <th data-col="started" data-type="num">Started</th>
+      <th data-col="runs" data-type="num" class="num">Runs</th>
+      <th data-col="checks" data-type="num" class="num">Checks</th>
+      <th data-col="shards" data-type="num" class="num">Shards</th>
+      <th data-col="machines">Machines</th>
+      <th data-col="size" data-type="num" class="num">Size</th>
+      <th data-col="ws">Workspaces</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}{% set L = r.launch %}{% set wss = r.workspaces %}
+    <tr data-launch="{{ L.key }}" data-f-bench="{{ r.bench[0] if r.bench }}" data-f-dataset="{{ r.datasets|map('first')|join('\n') }}" data-f-state="{{ r.state }}" data-f-machines="{{ r.machines|join('\n') }}" data-f-ws="{{ wss|map(attribute='name')|join('\n') }}">
+      {{ state_cell(r.state) }}
+      <td data-col="launch" data-sort="{{ L.title }}" class="sticky-col sticky-edge">{% if wss %}{{ open_at(wss[0], L, L.title) }}{% else %}{{ L.title }}{% endif %}</td>
+      <td data-col="bench">{% if r.bench %}{{ entry(r.bench) }}{% endif %}</td>
+      <td data-col="dataset">{% for d in r.datasets %}{{ entry(d) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+      <td data-col="started" data-sort="{{ L.started|ts }}" class="faint">{{ L.started|dt }}</td>
+      <td data-col="runs" class="num">{{ r.n_runs }}</td>
+      <td data-col="checks" class="num">{{ r.n_checks }}</td>
+      <td data-col="shards" class="num">{{ r.shards or 1 }}</td>
+      <td data-col="machines">{{ r.machines|join(', ') }}</td>
+      <td data-col="size" data-sort="{{ r.bytes }}" class="num nowrap">{{ r.bytes|filesizeformat }}</td>
+      <td data-col="ws">{% for w in wss %}{{ open_at(w, L, w.label) }}{% if not loop.last %}<br>{% endif %}{% else %}<span class="faint">none</span>{% endfor %}</td>
+      <td class="inv-acts">
+        {% set others = workspaces|rejectattr('name', 'in', wss|map(attribute='name')|list)|list %}
+        <button type="button" class="icon-btn launch-add-btn" aria-haspopup="dialog" aria-label="Add launch {{ L.title }} to a workspace" title="Add to workspace"><svg class="ic"><use href="#i-ws-add"/></svg></button>
+        <template class="launch-add">
+          <div class="std-how-head"><h2 id="launch-delete-h">Add launch {{ L.title }}</h2></div>
+          <form method="post" action="{{ url_for('launch_add', key=L.key) }}">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <label>Workspace <select name="workspace">{% for w in others %}<option value="{{ w.name }}">{{ w.label }}</option>{% endfor %}<option value="">New workspace…</option></select></label>
+            <label class="launch-add-new">Name <input type="text" name="label" placeholder="Optional" spellcheck="false" autocomplete="off"></label>
+            <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost">Cancel</button><button type="submit" class="btn">Add</button></div>
+          </form>
+        </template>
+        {% if not r.why %}{{ delete_ask(L, none, 'launches', icon=true) }}
+        {%- else %}{{ greyed('Delete launch ' ~ L.title, 'Delete launch', r.why, 'why-' ~ L.key) }}{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="empty-note" id="empty-note" hidden>No launch matches.</p>
+{{ pager('launches') }}
+{{ dialogs({'launch-delete-btn': 'launch-ask', 'launch-add-btn': 'launch-add'}) }}
+<script>
+(() => {
+  const table = document.getElementById('launches');
+  let pages = () => {};
+  const tools = NulliusTable.toolbar(table, document.getElementById('launch-tools'), () => pages());
+  pages = NulliusTable.pager(table, 'launches.per', tools.passes, document.getElementById('empty-note'));
+  // ?ws= ticked its workspace alone at load; from here the filter lives in the page, as the others do
+  const url = new URL(location.href);
+  if (url.searchParams.has('ws')) { url.searchParams.delete('ws'); history.replaceState(history.state, '', url); }
+  // off until a viewer chooses: the table fits 1280 px without them
+  const colBtn = document.getElementById('col-btn'), colMenu = document.getElementById('col-menu');
+  NulliusTable.columns(table, null, colMenu, 'launches.cols', ['checks', 'machines', 'size']);
+  NulliusTable.menu(colBtn, colMenu);
+})();
+</script>
+{% else %}
+<div class="alert">No launch yet.</div>
+{% endif %}
+{% endblock %}

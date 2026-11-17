@@ -1,0 +1,57 @@
+{#- What Delete asks of a launch: what goes, and the hosts' copies to take too. #}
+{% macro ask(L, gone, back='') %}{% set n, wss, k = gone.judgements, gone.workspaces, gone.runs|length %}
+        <div class="std-how-head"><h2 id="launch-delete-h">Delete launch {{ L.title }}</h2></div>
+        <form method="post" action="{{ url_for('launch_delete', key=L.key) }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}">{% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
+          <ul>{{ caller() }}</ul>
+          <p>{{ k }} folder{{ '' if k == 1 else 's' }} · {{ gone.bytes|filesizeformat }}{% if n %} · {{ n }} judgement{{ '' if n == 1 else 's' }}{% endif %}{% if wss %} · workspace{{ '' if wss|length == 1 else 's' }} {{ wss|join(', ') }}{% endif %}</p>
+          {% for h, c in gone.hosts.items() %}<label><input type="checkbox" name="host" value="{{ h }}" checked> Its cop{{ 'y' if c == 1 else 'ies' }} on <b>{{ h }}</b></label>{% endfor %}
+          <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete launch</button></div>
+        </form>
+{%- endmacro %}
+
+{#- Delete on a launch: the button, and what it asks in the dialog `dialogs()` draws. The caller lists the launch's runs,
+    as <li>. `back`: where the route returns to; `icon`: the button a trash icon; no `gone`: the question is asked of
+    the server when the dialog opens (`launch_ask`). The element that holds both carries data-launch. #}
+{% macro delete_ask(L, gone, back='', icon=false) %}
+      {% if icon %}<button type="button" class="icon-btn danger launch-delete-btn" aria-haspopup="dialog" aria-label="Delete launch {{ L.title }}" title="Delete launch"{% if not gone %} data-ask="{{ url_for('launch_ask', key=L.key) }}"{% endif %}><svg class="ic"><use href="#i-trash"/></svg></button>
+      {%- else %}<button type="button" class="btn sm ghost danger launch-delete-btn" aria-haspopup="dialog">Delete launch</button>{% endif %}
+      {%- if gone %}
+      {%- set items = caller() %}
+      <template class="launch-ask">{% call ask(L, gone, back) %}{{ items }}{% endcall %}</template>{% endif %}
+{%- endmacro %}
+
+{#- One dialog for every launch: a button fills it from its launch's template (`asks`: button class -> template class),
+    or from the server (the button's data-ask);
+    ?delete=<key> opens the Delete question on load. #}
+{% macro dialogs(asks={'launch-delete-btn': 'launch-ask'}) %}
+  <dialog class="std-how launch-delete" id="launch-delete" aria-labelledby="launch-delete-h"></dialog>
+<script>
+(() => {
+  const d = document.getElementById('launch-delete');
+  const asks = {{ asks|tojson }};
+  const btn = (key, cls) => document.querySelector(`[data-launch="${CSS.escape(key)}"] .${cls}`);
+  let key = '', cls = '';
+  const open = async b => {
+    const l = b.closest('[data-launch]');
+    key = l.dataset.launch;
+    cls = Object.keys(asks).find(c => b.classList.contains(c));
+    if (b.dataset.ask) {   // asked of the server only now: what goes takes a while to work out
+      const r = await nulliusFetch(b.dataset.ask);
+      if (!r.ok) { b.title = await r.text(); return; }
+      d.innerHTML = await r.text();
+    } else d.replaceChildren(l.querySelector('template.' + asks[cls]).content.cloneNode(true));
+    d.showModal();
+  };
+  const sel = Object.keys(asks).map(c => '.' + c).join(',');
+  document.addEventListener('click', e => { const b = e.target.closest(sel); if (b) open(b); });
+  d.addEventListener('click', e => {   // the backdrop, not the dialog's own padding
+    const r = d.getBoundingClientRect();
+    if (e.target === d && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) d.close();
+  });
+  d.addEventListener('close', () => btn(key, cls)?.focus());   // the button again, though a refresh replaced its block
+  const b = btn(new URLSearchParams(location.search).get('delete') || '', 'launch-delete-btn');
+  if (b) { b.focus(); open(b); }
+})();
+</script>
+{%- endmacro %}

@@ -69,6 +69,7 @@
     r.model_choice = choice;
     if (paperListed(r)) r.model = '';
     if (choice !== 'any') { delete r.judge_model; delete r.simulator_model; }
+    if (choice !== was) delete r.served_by;     // its models change with it: a pin belongs to the model it was set for
     if (lb && was === 'leaderboard' && choice !== 'leaderboard') {
       r.bench_options = {...(r.bench_options || {})};
       for (const k of Object.keys(lb.bench_options || {})) delete r.bench_options[k];
@@ -79,6 +80,59 @@
     }
     return r;
   }
+  // the phases of a unit whose time limit a standard recipe may force (run.py TIMEOUT_PHASES)
+  const STANDARD_PHASES = [['setup', 'Environment setup'], ['image', 'Image pull or build'], ['agent', 'Agent'], ['verify', 'Verifier'], ['score', 'Score']];
+  // Served by (recipe.py, served_by): on OpenRouter, the serving providers each model field pins, in the order they are
+  // tried; a field per model the run calls - the model, the user simulator's and the judge's when the benchmark has them.
+  const SERVED_ROLES = ['model', 'simulator', 'judge'];
+  function servedRoles(r) {
+    const b = standardBench(r);
+    if (!b || r.provider !== 'openrouter' || standardKeyless(r)) return [];
+    return SERVED_ROLES.filter(k => k === 'model' || (k === 'simulator' && b.simulator) || (k === 'judge' && b.judge));
+  }
+  // A field's text, "deepinfra, together", as the pin's list, every part kept for the server to check ("a,,b" is
+  // refused in sight, as the option refuses it); a field with nothing in it pins nothing.
+  const servedList = text => { const parts = String(text || '').split(',').map(s => s.trim()); return parts.some(Boolean) ? parts : []; };
+  // A model field's role, and its model changed: the pin set for the model before it goes with it.
+  const SERVED_FIELD = {model: 'model', simulator_model: 'simulator', judge_model: 'judge'};
+  function setModelOf(r, field, value) {
+    if (SERVED_FIELD[field] && r[field] !== value && r.served_by) setServed(r, SERVED_FIELD[field], []);
+    r[field] = value;
+    return r;
+  }
+  // The model a field's Served by lists the providers of: the one the run sends, as the server compiled it
+  // (recipe.py, served_models: a paper model's served name, an official one's with its maker), else the one shown.
+  const servedModelOf = (role, shown, compiled) => ((compiled || {}).served_models || {})[role] || shown || '';
+  // What decides the models the run sends: the recipe but its pins. A pin added or taken out changes none of them.
+  const servedKey = r => JSON.stringify({...r, served_by: undefined});
+  // The models the server last named, and what decided them ({out, key}): a compile that names them (`out`, the
+  // compile route's answer for the recipe `recipeKey`, its JSON) replaces them; one that failed keeps the last ones.
+  const servedCompiled = (last, out, recipeKey) => out && out.served_models && typeof out.served_models === 'object'
+    ? {out, key: servedKey(JSON.parse(recipeKey))} : last;
+  // A Served by row as the recipe holds it: the model its providers are listed for, the one the run sends as the
+  // server compiled it for this recipe (`compiled`; none while not known, and never the name shown: the list is not
+  // asked under a name the run may not send, and the row waits), its slugs in order, and its placeholder. Without a
+  // pin it waits for the list too, then hides only for one entry. A failed or empty list still allows a typed slug.
+  function servedRow(r, role, shown, compiled, providers) {
+    const chosen = (r.served_by || {})[role] || [], model = servedModelOf(role, '', compiled);
+    const visible = !!chosen.length || !!providers && (!providers.ok || providers.models.length !== 1);
+    return {shown, model, pending: !model && !!shown, chosen, visible, placeholder: chosen.length ? 'Add a provider' : 'any provider'};
+  }
+  function setServed(r, role, slugs) {
+    const list = Array.isArray(slugs) ? slugs : servedList(slugs);
+    r.served_by = {...(r.served_by || {})};
+    if (list.length) r.served_by[role] = list; else delete r.served_by[role];
+    if (!Object.keys(r.served_by).length) delete r.served_by;
+    return r;
+  }
+  // A pick, or slugs typed ("a, b"), join the field's list after the ones there, in order, each once; a removal takes
+  // out the one at its place, and the last one gone leaves the field empty: any provider.
+  function addServed(r, role, slugs) {
+    const list = [...((r.served_by || {})[role] || [])];
+    for (const s of (Array.isArray(slugs) ? slugs : servedList(slugs)).map(x => String(x).trim())) if (s && !list.includes(s)) list.push(s);
+    return setServed(r, role, list);
+  }
+  const removeServed = (r, role, at) => setServed(r, role, ((r.served_by || {})[role] || []).filter((_, i) => i !== Number(at)));
   function createStandard(benchmark = '', other = '') {
     const st = standard(), b = st.benchmarks.find(x => x.key === benchmark) || st.benchmarks[0];
     const r = {version: 1, harness: 'standard', name: 'standard-experiment', title: 'Standard experiment', benchmark: '', datasets: [], others: [],
@@ -94,7 +148,7 @@
     const b = standardBench({benchmark: key});
     if (!b) return r;
     const was = standardBench(r);
-    if (was !== b) r.model_choice = 'any';
+    if (was !== b) { r.model_choice = 'any'; delete r.served_by; }
     r.benchmark = key;
     const kept = was === b ? datasetsOf(r).filter(id => b.datasets.some(d => d.id === id)) : [];
     r.datasets = kept.length ? kept : [b.datasets[0].id];
@@ -120,7 +174,8 @@
     const picked = Array.isArray(raw.others) ? raw.others.filter(k => typeof k === 'string') : typeof raw.other === 'string' && raw.other ? [raw.other] : null;
     if (picked) r.others = [...new Set(picked)];
     if (Array.isArray(raw.where) && raw.where.length && raw.where.every(w => typeof w === 'string')) r.where = raw.where.length > 1 ? [...raw.where] : raw.where[0];
-    if (['local', 'container', 'docker'].includes(raw.backend)) r.backend = raw.backend === 'docker' ? 'container' : raw.backend;   // docker: its earlier name
+    if (['local', 'container', 'docker', 'boat'].includes(raw.backend)) r.backend = raw.backend === 'docker' ? 'container' : raw.backend;   // docker: its earlier name
+    if (['small', 'default', 'large', 'xlarge'].includes(raw.boat_size)) r.boat_size = raw.boat_size;
     if (raw.bench_options && typeof raw.bench_options === 'object' && !Array.isArray(raw.bench_options))   // the benchmark's own options, a word each
       r.bench_options = ownOptions(standardBench(r), Object.fromEntries(Object.entries(raw.bench_options).filter(([, v]) => typeof v === 'string')));
     // Options per choice, {ref: {name: word}}; a single agent also accepts flat {name: word} options.
@@ -134,13 +189,27 @@
     keepEndpoint(r, raw);
     if ((Number.isInteger(raw.limit) && raw.limit >= 1) || raw.limit === '') r.limit = raw.limit;
     if ((Number.isInteger(raw.concurrency) && raw.concurrency >= 1) || raw.concurrency === '') r.concurrency = raw.concurrency;
-    // attempts per unit and the judge's and user simulator's models: a reopened recipe runs as it was saved
+    // attempts per unit, retries per attempt, and the judge's and user simulator's models: a reopened recipe runs as it was saved
     if (Number.isInteger(raw.repeat) && raw.repeat >= 1 && raw.repeat <= 32) r.repeat = raw.repeat;
+    if (Number.isInteger(raw.retries) && raw.retries >= 0 && raw.retries <= 9) r.retries = raw.retries;
     // the run's spending cap in USD, shared by its jobs (recipe.py): an amount above zero, or none
     if (typeof raw.max_usd === 'number' && Number.isFinite(raw.max_usd) && raw.max_usd > 0) r.max_usd = raw.max_usd;
     // and each unit's own: a unit that reaches it is cut off there, the run going on
     if (typeof raw.max_usd_per_unit === 'number' && Number.isFinite(raw.max_usd_per_unit) && raw.max_usd_per_unit > 0) r.max_usd_per_unit = raw.max_usd_per_unit;
+    // the time limits it forces, in minutes by phase (recipe.py: run --timeout), and a conversation's most turns
+    delete r.timeouts;
+    if (raw.timeouts && typeof raw.timeouts === 'object' && !Array.isArray(raw.timeouts)) {
+      const t = Object.fromEntries(Object.entries(raw.timeouts).filter(([k, v]) => STANDARD_PHASES.some(([p]) => p === k) && typeof v === 'number' && Number.isFinite(v) && v > 0));
+      if (Object.keys(t).length) r.timeouts = t;
+    }
+    if (Number.isInteger(raw.turns) && raw.turns >= 1) r.turns = raw.turns;
+    if (Number.isInteger(raw.max_calls) && raw.max_calls >= 1) r.max_calls = raw.max_calls;   // the most model calls of a unit's agent
     for (const key of ['judge_model', 'simulator_model']) if (typeof raw[key] === 'string' && raw[key].trim()) r[key] = raw[key].trim();
+    // Served by: each field's serving providers, slugs in their order (the server checks them as --served-by)
+    if (raw.served_by && typeof raw.served_by === 'object' && !Array.isArray(raw.served_by))
+      for (const role of SERVED_ROLES) { const v = raw.served_by[role];
+        // kept as saved, a slug the server refuses included: a pin is refused in sight, never dropped in silence
+        if (Array.isArray(v) && v.length) setServed(r, role, v.map(s => typeof s === 'string' ? s.trim() : String(s))); }
     r.unsandboxed = raw.unsandboxed === true;
     if(raw.modelFormat === 'provider-id')r.modelFormat='provider-id';
     else r.model = bareModel(r.model);
@@ -230,7 +299,8 @@
   const recipeProvider = r => isStandard(r) ? r.provider : providerOf(r, r.model || r.userModel);
   const choiceOf = r => recipeProvider(r) === 'custom' && r.endpoint ? 'custom:' + r.endpoint : recipeProvider(r);
   // The Model step's choice into the recipe: its provider, and for a named endpoint its id.
-  function setChoice(r, c) { r.provider = kindOf(c); keepEndpoint(r, {endpoint: endpointOf(c)}); }
+  // a provider that routes no model to several takes no Served by: a pin made for OpenRouter is dropped with it
+  function setChoice(r, c) { r.provider = kindOf(c); keepEndpoint(r, {endpoint: endpointOf(c)}); if (r.provider !== 'openrouter') delete r.served_by; }
   // Why Run cannot start this recipe here, or '': its provider is not one of those. A recipe naming one keeps it,
   // said, until another is chosen - never switched behind the person's back. The server refuses the same
   // (web/execute.py, provider_problem).
@@ -307,7 +377,7 @@
     const r = {version: 1, harness: 'harbor', name: 'harbor-experiment', title: 'Harbor experiment', benchmark: '', source: '', dataset: '', path: '',
       generatorRoot: '', agents: [], harbor: {kind: 'release', version: '', extras: []},
       customAgents: [], model_choice: 'any', provider: firstAvailable(providersOf({}), providerOf({}, schema.defaultModel || '')), model: '', userModel: '', evalModel: '', keyEnv: (schema.credentialVars && schema.credentialVars.key) || 'API_TOKEN', urlEnv: schema.credentialVars ? (schema.credentialVars.url || '') : 'API_URL',
-      tasks: '', concurrency: 1, retries: 3,
+      tasks: '', concurrency: 1, retries: 0,
       timeoutMultiplier: 1, agentMinutes: '', attempts: '', setupTimeoutMultiplier: '', verifierTimeoutMultiplier: '', buildTimeoutMultiplier: '', harborDev: '', include: '', output: 'jobs',
       where: 'local', adapterPaths: {}, params: defaults(), custom: []};
     adoptModel(r, r.provider, schema.defaultModel || '');
@@ -444,15 +514,16 @@
     if (callsModel && benchmarkCallsModel(r) && providerOf(r, r.model || r.userModel) !== 'openai' && !r.urlEnv) add(STEP.model, 'A non-OpenAI model needs an endpoint source variable.');
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(r.name)) add(STEP.limits, 'Recipe name may contain letters, numbers, dots, underscores and hyphens.');
     if (!r.output.trim()) add(STEP.limits, 'Enter the output directory.');
-    for (const key of ['tasks','concurrency','retries']) {
-      const min = key === 'retries' ? 0 : 1;
+    for (const key of ['tasks','concurrency']) {
       if (key === 'tasks' && r.tasks === '') continue;                    // empty: every task, no limit written
-      if (!Number.isInteger(Number(r[key])) || Number(r[key]) < min) add(STEP.limits, key + ' must be an integer of at least ' + min + ', or empty for every task.');
+      if (!Number.isInteger(Number(r[key])) || Number(r[key]) < 1) add(STEP.limits, key + ' must be an integer of at least 1, or empty for every task.');
     }
+    // empty: none, as the standard's field reads it
+    if (r.retries !== '' && r.retries != null && (!Number.isInteger(Number(r.retries)) || Number(r.retries) < 0)) add(STEP.limits, 'Retries per attempt must be a whole number of at least 0, or empty.');
     if (!Number.isFinite(Number(r.timeoutMultiplier)) || !(Number(r.timeoutMultiplier) > 0)) add(STEP.agent, 'Timeout multiplier must be positive.', 'Common');
     // Common trial settings (Harbor's own per-trial flags): empty means the flag is not written.
     for (const [key, label] of COMMON) if (r[key] !== '' && (!Number.isFinite(Number(r[key])) || !(Number(r[key]) > 0))) add(STEP.agent, label + ' must be a positive number, or empty.', 'Common');
-    if (r.attempts !== '' && (!Number.isInteger(Number(r.attempts)) || Number(r.attempts) < 1)) add(STEP.agent, 'Repeats per task must be a whole number of at least 1, or empty.', 'Common');
+    if (r.attempts !== '' && (!Number.isInteger(Number(r.attempts)) || Number(r.attempts) < 1)) add(STEP.agent, 'Attempts per task must be a whole number of at least 1, or empty.', 'Common');
     if (r.agentMinutes !== '' && r.agentMinutes != null) {
       if (!Number.isFinite(Number(r.agentMinutes)) || !(Number(r.agentMinutes) > 0)) add(STEP.limits, 'Max agent time per trial must be a positive number of minutes.');
       else if (!declaredTimeouts(r)) add(STEP.limits, 'No run has recorded this benchmark\'s declared timeouts, so minutes cannot be turned into a multiplier here; set the multiplier directly.');
@@ -528,7 +599,7 @@
         parts.push(...agentCustom(r, id).map(p=>'--ak '+q(p.key+'='+kwargValue(customValue(p)))));
         // The reference agent's tool timeout follows the shared MCP timeout, so both agents wait the same.
         if (id === 'tau3-llm-agent' && r.params.mcp_timeout_s !== '' && r.params.mcp_timeout_s != null) parts.push('--ak '+q('tool_timeout_sec='+Number(r.params.mcp_timeout_s)));
-        parts.push(...(r.tasks === '' ? [] : ['--n-tasks '+r.tasks]),'--n-concurrent '+r.concurrency,'--max-retries '+r.retries,
+        parts.push(...(r.tasks === '' ? [] : ['--n-tasks '+r.tasks]),'--n-concurrent '+r.concurrency,'--max-retries '+(r.retries === '' || r.retries == null ? 0 : Number(r.retries)),
           '--agent-timeout-multiplier '+r.timeoutMultiplier,'--job-name '+q(r.name+(r.agents.length>1?'-'+id:'')), '--jobs-dir '+(runner ? '"$NULLIUS_JOBS"' : path(r.output)));
         if (r.include) parts.push('--include-task-name '+q(r.include));
         parts.push(...commonFlags(r));
@@ -774,5 +845,5 @@
         at: String(d.at || '')};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });

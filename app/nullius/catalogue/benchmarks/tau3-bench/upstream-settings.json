@@ -46,7 +46,7 @@
     "setting": "--num-trials",
     "values": "an integer from 1",
     "default": "1 (DEFAULT_NUM_TRIALS)",
-    "nullius": "fixed:1 trial per attempt - a run's --repeat K (the builder's Attempts per unit) runs each unit K times, attempt N being the upstream's trial N-1 at the seed run_tasks draws for it (limits.attempts); the job's result.json carries pass^k"
+    "nullius": "fixed:1 trial per attempt - a run's --attempts K (the builder's Attempts per unit) runs each unit K times, attempt N being the upstream's trial N-1 at the seed run_tasks draws for it (limits.attempts); the job's result.json carries pass^k"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",
@@ -158,21 +158,21 @@
     "setting": "--max-steps",
     "values": "an integer",
     "default": "200 (DEFAULT_MAX_STEPS)",
-    "nullius": "fixed:200 - the upstream's default, the leaderboard's; limits.turns (100) lets its limit be the one met"
+    "nullius": "option:max_steps"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",
     "setting": "--max-errors",
     "values": "an integer",
     "default": "10 (DEFAULT_MAX_ERRORS)",
-    "nullius": "fixed:10 - the upstream's default"
+    "nullius": "option:max_errors"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",
     "setting": "--timeout",
     "values": "seconds",
     "default": "none",
-    "nullius": "fixed:none - the upstream's default; a run's turn limit (600 s an agent turn, 7200 s an original conversation) ends a unit that hangs, as the unit's error"
+    "nullius": "fixed:none - the upstream's default; a run's agent limit (7200 s a conversation, as an original one; run --timeout agent=SECONDS forces another) ends a unit that hangs, as the unit's error"
   },
   {
     "entry": "tau2 run (src/tau2/cli.py)",
@@ -606,7 +606,7 @@
     "setting": "trials (4 or more)",
     "values": "an integer",
     "default": "4",
-    "nullius": "fixed:1 a unit's attempt - --repeat 4 runs the leaderboard's four trials (limits.attempts)"
+    "nullius": "fixed:1 a unit's attempt - --attempts 4 runs the leaderboard's four trials (limits.attempts)"
   },
   {
     "entry": "docs/leaderboard-submission.md",

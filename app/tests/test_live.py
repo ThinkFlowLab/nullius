@@ -228,6 +228,24 @@ class Fold(unittest.TestCase):
         flipt = next(t for t in board_of(*lines).snapshot()["trials"] if t["trial"] == "flipt")
         self.assertEqual((flipt["outcome"], flipt["attempt"]), ("resolved", 2))                     # the last attempt is its result
 
+    def test_a_retried_trial_reports_its_new_attempts_counters_alone(self):
+        # The standard's totals come on trial.end only: the attempt before reported 10k tokens and a cost,
+        # and its retry has reported nothing yet - so it shows none, and no rate is made of the two ends
+        start = datetime(2026, 10, 8, 14, 0, 0, tzinfo=timezone.utc)
+        def at(sec): return (start + timedelta(seconds=sec)).isoformat().replace("+00:00", "Z")
+        lines = [ev(1, "job.start", trial=None, ts=at(0), n_total=1, n_concurrent=1),
+                 ev(2, "trial.phase", trial="x", ts=at(0), phase="agent_run"),
+                 ev(3, "trial.end", trial="x", ts=at(10), outcome="agent_error", n_input_tokens=10000, n_output_tokens=500, cost_usd=0.2),
+                 ev(4, "trial.phase", trial="x", ts=at(11), phase="agent_run")]
+        b = board_of(*lines, now=start + timedelta(seconds=20))
+        x = b.trials[0]
+        self.assertEqual((x.attempt, x.n_input_tokens, x.n_output_tokens, x.cost_usd), (2, None, None, None))
+        lines.append(ev(5, "trial.end", trial="x", ts=at(25), outcome="resolved", reward=1.0, n_input_tokens=30000, n_output_tokens=900))
+        b = board_of(*lines, now=start + timedelta(seconds=30))
+        self.assertEqual((b.trials[0].n_input_tokens, b.trials[0].cost_usd), (30000, None))
+        self.assertEqual(b.totals()["cost_usd"], 0.2)   # the attempt before was paid for: the board's cost counts it
+        self.assertIsNone(b.tokens_per_sec())          # one report of the attempt's own: no baseline, no rate
+
     def test_eta_counts_down_while_a_trial_runs(self):
         # the same median, read later: a running trial's time so far comes off its share, so the ETA moves
         start = datetime(2026, 9, 12, 18, 0, 0, tzinfo=timezone.utc)

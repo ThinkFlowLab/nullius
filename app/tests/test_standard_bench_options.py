@@ -47,7 +47,7 @@ class Definition(unittest.TestCase):
 class Scope(unittest.TestCase):
     def test_an_option_applies_only_to_its_datasets(self):
         self.assertEqual(definitions.bench_options_of(TAU, "airline", {"retrieval": "alltools"}),
-                         ({"task_split": "base", "user_reasoning_effort": "default"}, []))
+                         ({"task_split": "base", "user_reasoning_effort": "default", "max_steps": "200", "max_errors": "10"}, []))
         vals, bad = definitions.bench_options_of(TAU, "banking_knowledge", {"retrieval": "alltools"})
         self.assertEqual((vals["retrieval"], "task_split" in vals, bad), ("alltools", False, []))
         self.assertEqual(definitions.bench_options_of(TAU, "banking_knowledge")[0]["retrieval"], "bm25")
@@ -296,14 +296,72 @@ class MachineDocker(unittest.TestCase):
         self.assertIn("vm_provider=docker needs on this machine docker (docker not on PATH)", str(e.exception))
 
 
+class UpstreamBounds(unittest.TestCase):
+    """The bounds a benchmark's upstream has of its own - τ³-bench's steps and tool errors per conversation,
+    OSWorld's agents' steps - are options with ``limit``: a run sets them as any option, the builder shows
+    them with the limits, and an OSWorld agent's own steps are its default (``by``)."""
+
+    def osworld_driver(self):
+        import importlib.util
+        b = definitions.get("benchmark", "osworld1")
+        with patch.dict(os.environ, {"NULLIUS_UPSTREAM": "/nonexistent"}), patch("sys.argv", ["driver.py"]):
+            spec = importlib.util.spec_from_file_location("osworld1_driver", os.path.join(b["_here"], "driver.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        return b, mod
+
+    def test_an_option_bound_is_a_number_and_its_default_by_another_option_names_each_value(self):
+        for key in ("tau3-bench", "osworld1"):
+            self.assertEqual(definitions.problems(definitions.get("benchmark", key), "benchmark"), [], key)
+        b = copy.deepcopy(definitions.get("benchmark", "osworld1"))
+        b["options"]["max_steps"]["by"]["agent"].pop("m3")
+        self.assertTrue(any("max_steps.by" in p for p in definitions.problems(b, "benchmark")))
+        b = copy.deepcopy(definitions.get("benchmark", "osworld1"))
+        del b["options"]["max_steps"]["pattern"]
+        b["options"]["max_steps"]["values"] = ["default"]
+        self.assertTrue(any("max_steps.limit" in p for p in definitions.problems(b, "benchmark")))
+
+    def test_each_osworld_agents_own_steps_are_its_default_and_a_run_forces_another(self):
+        b, mod = self.osworld_driver()
+        own = b["options"]["max_steps"]["by"]["agent"]
+        for name, spec in mod.AGENTS["agents"].items():
+            if "--max_steps" in spec["argv"]:
+                self.assertEqual(spec["argv"][spec["argv"].index("--max_steps") + 1], own[name], name)
+        argv = ["x.py", "--max_steps", "100", "--model", "m"]
+        self.assertEqual(mod.with_steps(argv, "default"), argv)
+        self.assertEqual(mod.with_steps(argv, "30"), ["x.py", "--max_steps", "30", "--model", "m"])
+        self.assertEqual(mod.with_steps(["x.py"], "30"), ["x.py", "--max_steps", "30"])
+
+    def test_a_recipe_sets_a_bound_on_the_participants_it_applies_to(self):
+        r = {"version": 1, "harness": "standard", "name": "t", "title": "t", "benchmark": "tau3-bench", "datasets": ["airline"],
+             "others": ["original"], "model_choice": "any", "provider": "openrouter", "model": "vendor/m", "limit": 1,
+             "concurrency": 1, "where": "local", "bench_options": {"max_steps": "60", "max_errors": "4"}}
+        out = recipe.compile(r)
+        self.assertEqual(out["errors"], [])
+        self.assertIn("--bench-option max_steps=60", out["script"])
+        self.assertIn("--bench-option max_errors=4", out["script"])
+        for over in ("0", "201"):        # above the upstream's 200, limits.turns would end it first
+            bad = recipe.compile(dict(r, bench_options={"max_steps": over}))["errors"]
+            self.assertTrue(bad, over)
+
+
 class TurnLimit(unittest.TestCase):
     def test_a_units_own_agent_limit_wins_within_bounds(self):
         r = run.Run.__new__(run.Run)
         r.turn_seconds = 900
-        self.assertEqual(r.turn_limit({"agent_seconds": 3600}), 3600)
-        self.assertEqual(r.turn_limit({}), 900)
+        self.assertEqual(r.agent_limit({"agent_seconds": 3600}), 3600)
+        self.assertEqual(r.agent_limit({}), 900)
         for bad in (0, -5, True, "3600", run.MAX_AGENT_SECONDS + 1):
-            self.assertEqual(r.turn_limit({"agent_seconds": bad}), 900, bad)
+            self.assertEqual(r.agent_limit({"agent_seconds": bad}), 900, bad)
+
+    def test_a_runs_own_limits_are_forced_over_the_task_and_the_step(self):
+        r = run.Run.__new__(run.Run)
+        r.turn_seconds = 900
+        self.assertEqual((r.phase_limit("setup", 600), r.step_limit("verify", {"seconds": 120}), r.step_limit("verify", {})), (600, 120, 900))
+        r.timeouts = {"agent": 60.0, "setup": 30.0, "verify": 45.0}
+        self.assertEqual(r.agent_limit({"agent_seconds": 3600}), 60)            # the run's, over the task's own
+        self.assertEqual((r.phase_limit("setup", 600), r.phase_limit("score", 600)), (30, 600))
+        self.assertEqual((r.step_limit("verify", {"seconds": 120}), r.step_limit("setup", {"seconds": 900})), (45, 30))
 
 
 GPU = {"summary": "A CUDA GPU with enough memory.", "check": ["nvidia-smi"], "gpu_memory_mb": 12000}

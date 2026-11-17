@@ -165,6 +165,8 @@
     tabs.forEach(tab => { const active = tab.dataset.tab === name; tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; });
     document.querySelectorAll('.trial-tab').forEach(panel => { panel.hidden = panel.id !== `trial-${name}`; });
     if (update) { const url = new URL(location.href); url.searchParams.set('tab', name); if (name !== 'trace') url.hash = ''; history.replaceState(null, '', url); }
+    // another attempt opens on the same evidence tab
+    document.querySelectorAll('a[data-keep-tab]').forEach(link => { const url = new URL(link.href, location.href); if (name === 'overview') url.searchParams.delete('tab'); else url.searchParams.set('tab', name); link.href = url; });
     if (name === 'conversation' && !conversationStarted) loadConversation();
   }
   tabs.forEach((tab, index) => {

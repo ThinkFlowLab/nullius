@@ -193,7 +193,7 @@ run only if your instructions already say yes.
 ## 4. Prove
 
 1. `cli conform KEY --model <cheap model> --unsandboxed` (or `--backend
-   docker`): every kit it can take; `--port PORT` for one kit, `--repeat 3`
+   docker`): every kit it can take; `--port PORT` for one kit, `--attempts 3`
    to hold a flaky check by the majority.
 2. **The relay saw its calls:**
    `cat jobs_standard/*__kit__*__<key>*/*/agent/calls.jsonl | head -3`. Empty

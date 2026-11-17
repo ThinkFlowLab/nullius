@@ -62,9 +62,20 @@ def ws_dir():
     return ws.dir if ws else None
 
 
+def started_of(trial) -> str | None:
+    """A trial's start, as its judgement keeps it: a retry runs an attempt
+    again under the same name, and an earlier try's record is not its own."""
+    return trial.started_at.isoformat() if trial.started_at else None
+
+
+def started_by_name(job) -> dict:
+    """{store key: start} for every trial of a job: what `store.for_job` checks its records against."""
+    return {store._SAFE.sub("_", t.trial_name): started_of(t) for t in job.trials}
+
+
 def judgement_of(job, trial, lane: str = "system-one") -> dict | None:
     d = ws_dir()
-    return store.load(d, job.job_id, trial.trial_name, lane=lane) if d else None
+    return store.load(d, job.job_id, trial.trial_name, lane=lane, started=started_of(trial)) if d else None
 
 
 def panel(job, trial, lane: str = "system-one") -> dict:
@@ -243,7 +254,8 @@ def judge_trial(job, trial, api_key: str, post=None) -> dict:
     traj = trajectory.load(trial.trajectory_path)
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
-    return batch.ask_and_store(ws_dir(), job.job_id, trial.trial_name, _trial_ids_and_states(trial, traj), api_key, post=post)
+    return batch.ask_and_store(ws_dir(), job.job_id, trial.trial_name, _trial_ids_and_states(trial, traj), api_key, post=post,
+                               started=started_of(trial))
 
 
 def _guard():
@@ -283,7 +295,7 @@ def judge_job_route(job_id):
         abort(404)
     lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "system-one"
     d = ws_dir()
-    judged = store.for_job(d, job_id, lane=lane) if d else {}
+    judged = store.for_job(d, job_id, lane=lane, started=started_by_name(job)) if d else {}
     todo = [t for t in job.trials if t.has_trajectory and store._SAFE.sub("_", t.trial_name) not in judged]
     _guard()
     k = key(lane)
@@ -303,7 +315,7 @@ def job_summary(job) -> dict:
     the board's record -> judge lanes (`nullius.judge.lanes`), whose status
     for each trial is also in `by_trial`."""
     d = ws_dir()
-    judged = store.for_job(d, job.job_id) if d else {}
+    judged = store.for_job(d, job.job_id, started=started_by_name(job)) if d else {}
     flag_ids = [q for q in Q.group_ids("trial") if Q.QUESTIONS[q].get("flag")]
     board = lanes.board(job, judged, key=lambda name: store._SAFE.sub("_", name))
     by_trial = {}
@@ -336,7 +348,7 @@ def job_summary(job) -> dict:
 def _llm_count(d, job) -> dict:
     """The LLM judge's own count for the job's button: it judges apart from
     System One, so a trial judged by one is still unjudged by the other."""
-    judged = store.for_job(d, job.job_id, lane="llm") if d else {}
+    judged = store.for_job(d, job.job_id, lane="llm", started=started_by_name(job)) if d else {}
     return {"unjudged": len([t for t in job.trials if store._SAFE.sub("_", t.trial_name) not in judged]), "keyed": bool(key("llm"))}
 
 
@@ -371,7 +383,7 @@ def side_of(job, trial) -> dict | None:
     current record: the expectation, the level it rounds to, the judge's
     confidence, the provenance. None until scored under the current vocabulary."""
     d = ws_dir()
-    rec = store.load(d, job.job_id, trial.trial_name) if d else None
+    rec = store.load(d, job.job_id, trial.trial_name, started=started_of(trial)) if d else None
     if not rec or not store.is_current(rec):
         return None
     a = (rec.get("answers") or {}).get(SIDE_QUESTION)
@@ -430,7 +442,7 @@ def judge_side(job, trial, api_key: str, post=None) -> dict | None:
     if not trial.has_trajectory:
         raise client.JudgeError(0, "this trial has no trajectory to judge")
     d = ws_dir()
-    rec = store.load(d, job.job_id, trial.trial_name)
+    rec = store.load(d, job.job_id, trial.trial_name, started=started_of(trial))
     have = (rec.get("answers") or {}) if store.is_current(rec) else {}
     ids = [q for q in side_ids(trial) if q not in have]
     if not ids:
@@ -438,7 +450,8 @@ def judge_side(job, trial, api_key: str, post=None) -> dict | None:
     traj = trajectory.load(trial.trajectory_path)
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
-    return batch.ask_and_store(d, job.job_id, trial.trial_name, _states_for(trial, traj, ids), api_key, post=post)
+    return batch.ask_and_store(d, job.job_id, trial.trial_name, _states_for(trial, traj, ids), api_key, post=post,
+                               started=started_of(trial))
 
 
 def _sides_todo(view) -> list:
@@ -523,7 +536,8 @@ def judge_control(side, jobs, api_key: str, post=None) -> dict | None:
     job, trial = _control_trial(side, jobs)
     if trial is None:
         raise client.JudgeError(0, f"{side.control} trial {side.trial_name} is not in this workspace")
-    return batch.ask_and_store(ws_dir(), job.job_id, trial.trial_name, control_states(side, trial), api_key, post=post)
+    return batch.ask_and_store(ws_dir(), job.job_id, trial.trial_name, control_states(side, trial), api_key, post=post,
+                               started=started_of(trial))
 
 
 def triage_summary(report, jobs) -> dict:

@@ -85,6 +85,7 @@ _CAP_EXCEPTION = "spendingcaperror"
 _AGENT_EXCEPTIONS = {
     "agenttimeouterror",            # the agent spent its budget — that is a result
     "unitspendingcaperror",         # the unit spent its own spending cap (the standard's relay): the same, in money
+    "unitcallcaperror",             # the unit's agent made the model calls the run allowed it: the same, in steps
     "agentsafetyrefusalerror",      # the agent (or its provider) chose to refuse
     "contextwindowexceedederror",   # the agent filled its own context
     "contextlengthexceedederror",   # same, from Harbor's LLM layer

@@ -475,15 +475,33 @@ def compare_task(task):
     # trace filter (`hide`) is deliberately not offered here — a filtered view
     # belongs to one trial, and is saved from its own page.
     cfilt = charts.ChartFilter.of(request.args.getlist("chart_off"))
+    # Each side shows one attempt: the one `attempt=<run>/<trial>` names, else
+    # the last indexed, as the task table does.
+    asked = dict(value.rsplit("/", 1) for value in request.args.getlist("attempt") if "/" in value)
+    sides = []
+    for selection, job, t, group in zip(view.selected, view.jobs, row.trials, row.tried):
+        # the row's own attempts, so this page and the table count the same ones
+        tried = list(group.trials) if group else []
+        chosen = next((x for x in tried if x.trial_name == asked.get(selection.value)), t)
+        sides.append((selection, job, chosen, group))
+    chosen_query = [f"{sel.value}/{c.trial_name}" for sel, _, c, group in sides if c and group and group.n > 1]
     panels = []
-    for selection, job, t, attempts in zip(view.selected, view.jobs, row.trials, row.attempts):
+    for selection, job, t, group in sides:
         traj = trajectory.load(t.trajectory_path) if (t and t.has_trajectory) else None
+        links = []
+        if group and group.n > 1:
+            others = [q for q in chosen_query if q.rsplit("/", 1)[0] != selection.value]
+            links = [{"trial": x, "current": x.trial_name == t.trial_name,
+                      "href": url_for("compare_task", task=task, pick=view.references, cohort=view.cohort,
+                                      dataset=row.dataset, attempt=others + [f"{selection.value}/{x.trial_name}"],
+                                      **cfilt.query)}
+                     for x in group.trials]
         panels.append({"job": job, "selection": selection, "trial": t,
-                       "attempts": attempts,
+                       "tried": group, "attempt_links": links,
                        "traj": traj if traj and not traj.error else None,
                        **trace_panel(t, cfilt)})
     return render_template(
         "compare/compare_task.html", task=task, dataset=row.dataset, panels=panels,
-        comparison=view, picks=view.references, cohort=view.cohort,
+        comparison=view, picks=view.references, cohort=view.cohort, chosen=chosen_query,
         chart_filter=cfilt, no_filter=trace.Filter(),
     )

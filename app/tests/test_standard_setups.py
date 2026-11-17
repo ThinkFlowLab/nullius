@@ -342,7 +342,7 @@ class Recipe(unittest.TestCase):
                    model_choice="leaderboard")
         out = self.compiled(**tau)
         self.assertEqual(out["errors"], [])
-        for words in ("--model their-model", "--simulator-model gpt-5.2", "--bench-option user_reasoning_effort=low", "--repeat 4"):
+        for words in ("--model their-model", "--simulator-model gpt-5.2", "--bench-option user_reasoning_effort=low", "--attempts 4"):
             self.assertIn(words, out["script"])
         self.assertNotIn("--judge-model", out["script"])
         self.assertIn("--simulator-model openai/gpt-5.2", self.compiled(**{**tau, "provider": "openrouter"})["script"])

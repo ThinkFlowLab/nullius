@@ -67,6 +67,22 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual((doc["units"]["u1"]["spent_usd"], doc["units"]["u1"]["closed"], doc["of"].get(a)), (0.02, True, None))
         self.assertAlmostEqual(led.state()["spent_usd"], 0.02)
 
+    def test_a_units_count_covers_every_try_of_it_until_none_follows(self):
+        """A retry books under its attempt's own unit: what the tries before it
+        spent stays counted, so the cap is the attempt's, all its tries
+        together - until no try follows and the count goes."""
+        led = ledger.Ledger.create(self.path, None, 0.50)
+        self.assertEqual(led.unit_left("u1"), 0.50)
+        a, _ = led.reserve(0.10, "u1")
+        led.settle(a, 0.45)                                                        # try 1 spent 0.45, then crashed
+        self.assertAlmostEqual(led.unit_left("u1"), 0.05)                          # what its retry may spend
+        b, state = led.reserve(0.10, "u1")
+        self.assertEqual((b, state["by"]), (None, "unit"))                         # never a fresh 0.50 for the retry
+        self.assertEqual(led.unit_left("u1"), 0.0)                                 # spent: no try follows
+        led.forget("u1")
+        self.assertEqual(led.unit_left("u1"), 0.50)
+        self.assertIsNone(ledger.Ledger.create(os.path.join(self.tmp, "run", "ledger.json"), 1.0).unit_left("u1"))   # no cap per unit
+
     def test_a_unit_that_has_spent_nothing_is_not_refused_on_what_other_units_replies_were(self):
         """Refused on that average, it would count against its agent with no call sent: 8 of 16 problems did, on a real run."""
         led = ledger.Ledger.create(self.path, None, 0.00015)

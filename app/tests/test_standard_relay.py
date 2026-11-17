@@ -92,6 +92,37 @@ class RelayTest(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return e.code, e.read()
 
+    def test_a_units_agent_is_refused_past_its_cap_on_model_calls(self):
+        """``max_calls`` counts the answered calls of a unit's agent route alone: a refused
+        call (a 429) is not one, its judge's and simulated user's never are, and past the cap
+        the next call is the relay's own 402, which the unit ends with as the agent's."""
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        r = relay.Relay(f"http://127.0.0.1:{self.up.server_address[1]}/v1", "sk-real", tmp, max_calls=2).start()
+        self.addCleanup(r.stop)
+
+        def post(tag, body):
+            req = urllib.request.Request(r.url(tag) + "/chat/completions", data=json.dumps(body).encode(),
+                                         headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req) as got:
+                    return got.status, got.read()
+            except urllib.error.HTTPError as e:
+                return e.code, e.read()
+        ask = {"model": "m", "messages": [{"role": "user", "content": "hi"}]}
+        self.assertEqual(post("u0007", dict(ask, mode="429"))[0], 429)          # refused upstream: not counted
+        self.assertEqual([post("u0007", ask)[0] for _ in range(2)], [200, 200])
+        for side in ("u0007-judge", "u0007-simulator"):                          # never the agent's
+            self.assertEqual(post(side, ask)[0], 200)
+        status, body = post("u0007", ask)
+        self.assertEqual(status, 402)
+        self.assertEqual(json.loads(body)["error"]["code"], "unit_call_cap")
+        self.assertEqual(post("u0008", ask)[0], 200)                             # another unit counts its own
+        kind, said = relay.failure(r.calls("u0007"))
+        self.assertEqual(kind, relay.CALLS_ERROR)
+        self.assertIn("cap of 2 model calls", said)
+        self.assertEqual(classify.from_verdict(kind, None), classify.AGENT_ERROR)
+
     def test_plain_reply_passes_through_and_the_real_key_goes_out(self):
         status, body = self.post("u1", "/chat/completions", {"model": "m", "messages": [{"role": "user", "content": "hi"}]})
         self.assertEqual((status, json.loads(body)), (200, CHAT))
@@ -867,6 +898,39 @@ class ProcTest(unittest.TestCase):
         with self.assertRaisesRegex(jsonl.Failed, "no reply in 1 s"):
             q.request("x", timeout=1)
         q.close()
+
+
+class Failure(unittest.TestCase):
+    """What a unit whose last call failed ends with: named so a retry is asked
+    only of what a second call may mend (``retries``)."""
+
+    def test_a_spent_credit_and_an_unknown_model_are_named_as_no_retry_mends(self):
+        def named(status, said, **kw):
+            return relay.failure([{"status": status, "error": said, **kw}])[0]
+        self.assertEqual(named(429, "HTTP 429: Rate limit reached for requests"), "RateLimitError")
+        # OpenAI's spent credit is a 429 too; Gemini says "exceeded your current quota" for its per-minute limit
+        self.assertEqual(named(429, "HTTP 429: You exceeded your current quota", error_code="insufficient_quota"), "ApiUsageLimitError")
+        self.assertEqual(named(429, "HTTP 429: You exceeded your current quota, please check your plan"), "RateLimitError")
+        self.assertEqual(named(402, "HTTP 402: Insufficient credits"), "ApiUsageLimitError")
+        self.assertEqual(named(402, "HTTP 402: no price for the model", refused="price"), "ApiError")   # the relay's own, as before
+        for said in ("HTTP 400: xyz is not a valid model ID", "HTTP 400: Invalid model: foo", "HTTP 400: Model Not Exist",
+                     "HTTP 404: models/x is not found for API version v1beta"):
+            with self.subTest(said=said):
+                self.assertEqual(named(int(said[5:8]), said), "ModelNotFoundError")
+        for said in ("HTTP 400: This model's maximum context length is 8192 tokens", "HTTP 400: The model does not support tools"):
+            with self.subTest(said=said):
+                self.assertEqual(named(400, said), "ApiError")
+
+    def test_the_providers_word_on_when_to_call_again_is_read(self):
+        self.assertEqual(relay._retry_after([("Retry-After", "20")]), 20.0)
+        self.assertEqual(relay._retry_after([("retry-after-ms", "1500")]), 1.5)
+        self.assertEqual(relay._retry_after([("Retry-After", "Wed, 21 Oct 2015 07:28:00 GMT")]), 0.0)   # a date gone by
+        self.assertIsNone(relay._retry_after([("Retry-After", "soon")]))
+        self.assertIsNone(relay._retry_after([]))
+        self.assertEqual(relay._code(b'{"error": {"message": "x", "type": "insufficient_quota", "code": "insufficient_quota"}}'),
+                         "insufficient_quota")
+        self.assertIsNone(relay._code(b'{"error": {"message": "x", "code": 429}}'))
+        self.assertIsNone(relay._code(b"not json"))
 
 
 if __name__ == "__main__":

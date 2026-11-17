@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'traces/_attempts.html' import attempt_count %}
 {% block title %}{{ task }} side by side — Nullius{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">
 <style>
@@ -15,7 +16,7 @@
    call it without knowing which page they are on. Only the legend state rides
    in it: this page has no trace filter, so `f` is always the empty one. #}
 {% macro view_url(f, cf=none) -%}
-{{ url_for('compare_task', task=task, pick=picks, cohort=cohort, dataset=dataset,
+{{ url_for('compare_task', task=task, pick=picks, cohort=cohort, dataset=dataset, attempt=chosen,
            **((cf if cf is not none else chart_filter).query)) }}
 {%- endmacro %}
 
@@ -27,7 +28,6 @@
   <span class="faint">drag a column header to reorder</span></p>
 <div class="cohort-note">
   <p>{{ 'Dataset not recorded' if dataset.startswith('[unidentified:') else dataset }} · {{ 'Matched tasks' if cohort == 'matched' else 'Whole runs' }}</p>
-  {% if panels|selectattr('attempts', 'gt', 1)|list %}<p>A run has repeated attempts on this task. This page shows the last indexed attempt, matching the task table; all attempts remain in the comparison totals.</p>{% endif %}
 </div>
 
 {# One grid, sections as full-width rows. Each section's cells land on the same
@@ -57,7 +57,17 @@
            title="Every step, tool call and observation for this run">Open full trial →</a>
       {% endif %}
     </div>
-    <p class="compare-workspace">{{ p.selection.workspace_label }}{% if p.attempts > 1 %} · {{ p.attempts }} attempts, last indexed shown{% endif %}</p>
+    <p class="compare-workspace">{{ p.selection.workspace_label }}</p>
+    {% if p.attempt_links %}
+    <div class="attempt-head">
+      <span class="attempt-count">{{ attempt_count(p.tried) }}</span>
+      <nav class="attempt-tabs" aria-label="Attempts by {{ p.job.agent_label or p.job.job_id }}">
+        {%- for a in p.attempt_links %}
+        <a class="attempt-tab oc-{{ a.trial.outcome }}" href="{{ a.href }}" title="Attempt {{ loop.index }}: {{ a.trial.outcome_label }}"{% if a.current %} aria-current="page"{% endif %}>{{ ('Attempt ' if p.tried.n <= 4 else '') ~ loop.index }}</a>
+        {%- endfor %}
+      </nav>
+    </div>
+    {% endif %}
   </div>
   {% endfor %}
 
@@ -321,6 +331,7 @@
         next.forEach(id => url.searchParams.append('pick', id));
         url.searchParams.set('cohort', {{ cohort|tojson }});
         url.searchParams.set('dataset', {{ dataset|tojson }});
+        {{ chosen|tojson }}.forEach(a => url.searchParams.append('attempt', a));
         location.href = url;
       });
     });
