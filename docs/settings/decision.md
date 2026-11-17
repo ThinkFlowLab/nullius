@@ -17,7 +17,7 @@ Decision asks a provider that lists a decision protocol
 | `DECISION_PROVIDER` | Unset: TypeSafe when its key is set, else OpenRouter |
 | `DECISION_PROTOCOL` | `systemone`, `decisions` or `openai-decisions`, on a provider that serves more than one; unset, or not served: the protocol in the table above |
 | `DECISION_MODEL` | A model the provider accepts, such as `typesafe/jev-1.14` |
-| `SYSTEM_ONE_PROVIDER`, `SYSTEM_ONE_PROTOCOL`, `SYSTEM_ONE_MODEL` | The names before: read as the new ones; the next save in Settings writes the new names |
+| `SYSTEM_ONE_PROVIDER`, `SYSTEM_ONE_PROTOCOL`, `SYSTEM_ONE_MODEL` | Old names, still read |
 
 | Reply | Recorded as |
 | --- | --- |
