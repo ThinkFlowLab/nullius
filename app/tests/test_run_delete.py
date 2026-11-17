@@ -160,5 +160,20 @@ class RunDelete(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.root, "s1"))); self.assertTrue(os.path.isdir(s2))
 
 
+class SizeOf(unittest.TestCase):
+    def test_a_file_gone_since_the_walk_counts_nothing(self):
+        d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)
+        for name, data in (("run.json", b"{}"), ("run.json.tmp", b"12345")):
+            with open(os.path.join(d, name), "wb") as fh:
+                fh.write(data)
+        real = os.walk
+        def walk(path):                                         # the run replaces its record between the listing and the stat
+            for entry in real(path):
+                os.remove(os.path.join(d, "run.json.tmp"))
+                yield entry
+        with patch.object(execution.os, "walk", walk):
+            self.assertEqual(execution.size_of(d), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

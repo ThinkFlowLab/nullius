@@ -705,6 +705,258 @@ class RunDelete(unittest.TestCase):
         self.assertEqual(runs.status_code, 200); self.assertNotIn("r1-a", runs.get_data(as_text=True))
 
 
+class LaunchesPage(unittest.TestCase):
+    """The Launches page: every launch Nullius made, one row each, in a
+    workspace or not; added to a workspace, or deleted, from its row."""
+    setUp, get, sharded = RunDelete.setUp, RunDelete.get, RunDelete.sharded
+
+    def record(self, name, state="done"):
+        d = self.tmp / "runs" / name
+        rec = {"id": name, "plan": execution.Plan(name=name, script="true", jobs=[{"name": f"{name}-a"}, {"name": f"{name}-nop", "agent": "nop"}]).to_dict(),
+               "state": state, "step": "run"}
+        self._write_json(str(d / "run.json"), rec)
+        self._job_dir(str(d / "jobs"), f"{name}-a")
+        ex = execution.EXECUTIONS[name] = execution.Execution(execution.Plan.from_dict(rec["plan"]), root=str(self.tmp / "runs"), record=rec)
+        return ex
+
+    def post(self, path, **data):
+        r = self.client.post(path, data={"csrf": self.csrf, **data}, headers={"Origin": "http://localhost"}); self.addCleanup(r.close)
+        return r
+
+    def rows(self):
+        html = self.get("/launches").get_data(as_text=True)
+        return {m.group(1): m.group(2) for m in re.finditer(r'<tr data-launch="([^"]+)"(.*?)</tr>', html, re.S)}
+
+    def cells(self, row):
+        """A launch row's cells by column, as text."""
+        return {c: " ".join(re.sub(r"<[^>]+>", " ", v).split()) for c, v in re.findall(r'<td data-col="(\w+)"[^>]*>(.*?)</td>', row, re.S)}
+
+    def test_every_launch_is_a_row_in_a_workspace_or_not(self):
+        key = self.sharded()
+        orphan = self.record("r3")
+        rows = self.rows()
+        self.assertEqual(set(rows), {f"run:{self.ex.id}", key, f"run:{orphan.id}"})
+        text = {k: " ".join(re.sub(r"<[^>]+>", " ", v).split()) for k, v in rows.items()}
+        orphaned, sharded, whole = (self.cells(rows[k]) for k in (f"run:{orphan.id}", key, f"run:{self.ex.id}"))
+        self.assertEqual([orphaned[c] for c in ("runs", "checks", "shards", "ws")], ["1", "1", "1", "none"])
+        self.assertEqual(orphaned["launch"], "r3-*")                                         # the title alone, no second line
+        self.assertEqual([sharded[c] for c in ("runs", "shards", "machines")], ["2", "2", "ubuntu@10.0.0.4, ubuntu@10.0.0.5"])   # a run per shard, as on the Runs page
+        self.assertIn("calm otter", text[key])
+        self.assertEqual([whole[c] for c in ("runs", "checks", "shards")], ["2", "0", "1"])
+        self.assertTrue({"witty pelican", "sharp lemur"} <= set(re.findall(r'<button class="linkish" type="submit">([^<]+)</button>', rows[f"run:{self.ex.id}"])))
+        self.assertEqual(rows[key].count("launch-delete-btn"), 1)
+
+    def test_benchmark_and_dataset_link_to_the_catalogue(self):
+        listed, foreign, bare, std = self.record("r5"), self.record("r6"), self.record("r7"), self.record("r8")
+        std.plan.recipe = {"benchmark": "longmemeval", "datasets": ["longmemeval_s"]}
+        listed.plan.recipe = {"benchmark": "gsm8k", "datasets": ["test", "gone"]}
+        foreign.plan.recipe = {"benchmark": "removed-bench", "dataset": "x"}
+        rows = self.rows()
+        cells = lambda key: dict(re.findall(r'<td data-col="(bench|dataset)">(.*?)</td>', rows[key], re.S))
+        self.assertEqual(cells(f"run:{listed.id}"), {"bench": '<a href="/benchmarks/gsm8k">GSM8K</a>',
+                                                      "dataset": '<a href="/benchmarks/gsm8k#test">GSM8K test</a><br>gone'})
+        self.assertEqual(cells(f"run:{std.id}"), {"bench": '<a href="/benchmarks/longmemeval">LongMemEval</a>',      # the standard's own dataset id
+                                                   "dataset": '<a href="/benchmarks/longmemeval#standard">LongMemEval-S · cleaned</a>'})
+        self.assertEqual(cells(f"run:{foreign.id}"), {"bench": "removed-bench", "dataset": "x"})     # not in the catalogue: as written
+        self.assertEqual(cells(f"run:{bare.id}"), {"bench": "", "dataset": "tau3-bench"})     # no recipe: the dataset its job recorded
+        html = self.get("/launches").get_data(as_text=True)
+        self.assertRegex(html, r'<th data-col="launch" data-type="text" class="sticky-col sticky-edge">Launch</th>\s*<th data-col="bench" data-type="text">Benchmark</th>\s*<th data-col="dataset" data-type="text">Dataset</th>')
+        self.assertEqual(re.findall(r'<input type="checkbox" data-col="(\w+)"( disabled)?>', html),
+                         [("state", " disabled")] + [(c, "") for c in ("bench", "dataset", "started", "runs", "checks", "shards", "machines", "size", "ws")])   # the launch, its state and its actions always show
+
+    def test_state_is_the_first_column_an_icon_in_the_runs_page_words(self):
+        finished, refused, failed, paused = self.record("r3"), self.record("r4", "failed"), self.record("r5", "failed"), self.record("r6", "paused")
+        failed.launched = "run"                                                              # got as far as its launch: failed, not refused
+        rows = self.rows()
+        first = {e.plan.name: re.search(r'^[^>]*>\s*(<td.*?</td>)', rows[f"run:{e.id}"], re.S).group(1) for e in (finished, refused, failed, paused)}
+        self.assertEqual(first["r4"], '<td data-col="state" class="sticky-col" data-sort="6"><svg class="ic st-refused" role="img" aria-label="refused"><title>refused</title><use href="#i-refused"/></svg></td>')
+        self.assertEqual([re.search(r'aria-label="([^"]+)"><title>\1</title><use href="#i-(\w+)"', first[n]).groups() for n in ("r3", "r5", "r6")],
+                         [("finished", "check"), ("failed", "alert"), ("paused", "pause")])
+        sort = {n: int(re.search(r'data-sort="(\d+)"', c).group(1)) for n, c in first.items()}
+        self.assertEqual(sorted(sort, key=sort.get), ["r6", "r5", "r4", "r3"])               # most telling first, not alphabetical
+        html = self.get("/launches").get_data(as_text=True)
+        self.assertRegex(html, r'<tr>\s*<th data-col="state" data-type="num" class="sticky-col"><span class="sr">State</span></th>')   # named, not shown
+        menu = re.search(r'data-filter-menu="state">(.*?)</fieldset>', html, re.S).group(1)
+        self.assertEqual(re.findall(r'data-value="([^"]+)"', menu), ["paused", "failed", "refused", "finished"])
+
+    def test_a_sharded_launch_is_one_row(self):
+        key = self.sharded()
+        row = self.rows()[key]
+        self.assertNotIn("<tr", row)                                                          # no row per shard, nothing to unfold
+        self.assertNotIn("la-fold-btn", self.get("/launches").get_data(as_text=True))
+        self.assertEqual([self.cells(row)[c] for c in ("state", "shards", "machines")], ["finished", "2", "ubuntu@10.0.0.4, ubuntu@10.0.0.5"])
+        self.assertIn(f'data-ask="/launch/{key}/ask"', row)
+        self.assertIn("<li>L1-shard-1of3 (2 shards)</li>", self.get(f"/launch/{key}/ask").get_data(as_text=True))   # Delete asks for the whole launch
+
+    def test_shards_that_wrote_no_job_yet_are_one_launch(self):
+        from tests.test_standard_shard import write_shard
+        for i in (1, 2, 3):
+            d = self.tmp / "runs" / f"p{i}"
+            plan = execution.Plan(name=f"p{i}", script="true", jobs=[{"name": f"P-shard-{i}of3", "launch": "P"}])
+            self._write_json(str(d / "run.json"), {"plan": plan.to_dict(), "state": "running", "step": "run"})
+            if i == 1:
+                write_shard(str(d / "jobs"), "P-shard-1of3", ["u-1"], 1, 3, total=3, launch="P")
+        with patch.object(execution.Execution, "resume", lambda ex: ex):
+            execution.restore()
+        rows = self.rows()
+        (mine,) = [v for k, v in rows.items() if k != f"run:{self.ex.id}"]
+        self.assertEqual([self.cells(mine)[c] for c in ("launch", "shards")], ["P", "3"])
+
+    def test_a_sharded_launch_still_going_is_one_row_in_every_state(self):
+        for i, (state, host) in enumerate((("preparing", None), ("running", "ubuntu@10.0.0.6"), ("stopping", "gpu-box")), 1):
+            d = self.tmp / "runs" / f"q{i}"
+            plan = execution.Plan(name=f"q{i}", script="true", host=hosts.parse(host) if host else None, jobs=[{"name": f"Q-shard-{i}of3", "launch": "Q"}])
+            self._write_json(str(d / "run.json"), {"plan": plan.to_dict(), "state": state, "step": "run"})   # no shard wrote its job yet
+        with patch.object(execution.Execution, "resume", lambda ex: ex):
+            execution.restore()
+        rows = self.rows()
+        (mine,) = [v for k, v in rows.items() if k != f"run:{self.ex.id}"]
+        self.assertEqual([self.cells(mine)[c] for c in ("state", "launch", "shards", "machines")],
+                         ["running", "Q", "3", "this machine, ubuntu@10.0.0.6, gpu-box"])           # the most telling shard
+        self.assertIn('title="Delete launch: not while it runs"', mine)
+
+    def test_filter_and_sort_by_are_menus_beside_columns(self):
+        self.record("r3")
+        html = self.get("/launches").get_data(as_text=True)
+        tools = re.search(r'<div class="table-tools inv-cols" id="launch-tools">(.*?)<div class="table-wrap">', html, re.S).group(1)
+        self.assertEqual(re.findall(r'<button class="btn ghost sm" type="button" (?:id|data-tools-btn)="([\w-]+)" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-(\w+)"/></svg>([^<]+)', tools),
+                         [("col-btn", "table", "Columns"), ("filter", "filter", "Filter"), ("sort", "sort", "Sort by")])   # each its own icon, the text its name
+        self.assertEqual(re.findall(r'data-filter-menu="(\w+)">\s*<legend>([^<]+)', tools),
+                         [("state", "State"), ("bench", "Benchmark"), ("dataset", "Dataset"), ("machines", "Machines"), ("ws", "Workspaces")])
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools),
+                         ["", "state", "launch", "bench", "dataset", "started", "runs", "checks", "shards", "size"])     # "": the order the page came in
+        self.assertNotIn("filter-btn", html)                                                     # no caret in a header
+        self.assertNotIn("data-sorted", html)                                                    # no sort, no arrow, until one is chosen
+        self.assertIn('<table class="grid sortable tools inventory" id="launches">', html)
+        pager = re.search(r'<div class="table-tools table-pager" data-pager="launches">(.*?)</div>', html, re.S).group(1)   # the shared pages, after the table
+        self.assertEqual(re.findall(r"<option(?: value=\"(\w+)\")?(?: selected)?>(\w+)</option>", pager), [("", "10"), ("", "25"), ("", "100"), ("0", "All")])
+        self.assertIn("<option selected>25</option>", pager)
+        self.assertNotIn(" id=", pager)
+        self.assertEqual(re.findall(r'aria-label="(\w+ page)"', pager), ["Previous page", "Next page"])
+
+    def test_the_sidebar_lists_it_after_workspaces(self):
+        html = self.get("/workspaces").get_data(as_text=True)
+        self.assertRegex(html, r'(?s)>Workspaces</span>.*href="/launches"[^>]*><svg class="ic"><use href="#i-launches"/>')
+
+    def test_a_title_opens_its_workspace_at_the_launch(self):
+        web.shared.close_workspace()
+        r = self.post(f"/workspaces/open/{self.ws.name}", launch=f"run:{self.ex.id}")
+        self.assertEqual(r.headers["Location"], f"/launch/run:{self.ex.id}/open")
+        self.assertEqual(self.get(r.headers["Location"]).headers["Location"], f"/runs?view=launch#run-{self.ex.id}")
+
+    def test_a_title_opens_its_workspace_at_the_key_its_runs_page_gives(self):
+        key = self.sharded()                                                                # s1's key: the first record of the launch
+        s2 = next(e for e in execution.EXECUTIONS.values() if e.plan.name == "s2")
+        only = workspace.create(self.home, [s2.jobs], label="half moon")                    # holds shard 2 alone: its block is s2's
+        web.shared.close_workspace()
+        r = self.post(f"/workspaces/open/{only.name}", launch=key)
+        self.assertEqual(self.get(r.headers["Location"]).headers["Location"], f"/runs?view=launch#run-{s2.id}")
+        self.assertIn(f'id="run-{s2.id}"', self.get("/runs?view=launch").get_data(as_text=True))
+        self.assertIn(f'<a href="/launch/{key}/open">', self.rows()[key])                  # the open workspace: a link, the same way
+
+    def test_add_to_workspace(self):
+        orphan = self.record("r3")
+        other = workspace.load(self.home, next(w.name for w in workspace.list_all(self.home) if w.label == "sharp lemur"))
+        self.assertEqual(self.client.post(f"/launch/run:{orphan.id}/add", data={"workspace": other.name}, headers={"Origin": "http://localhost"}).status_code, 403)
+        self.assertEqual(self.post(f"/launch/run:{orphan.id}/add", workspace="nowhere").status_code, 404)
+        r = self.post(f"/launch/run:{orphan.id}/add", workspace=other.name)
+        self.assertEqual((r.status_code, r.headers["Location"]), (302, "/launches"))
+        self.assertIn(f'Added launch <span class="mono">r3-*</span> to <b>sharp lemur</b>.', self.get("/launches").get_data(as_text=True))
+        self.assertIn(orphan.jobs, workspace.load(self.home, other.name).roots)
+        self.assertIn("sharp lemur", self.rows()[f"run:{orphan.id}"])
+
+    def test_add_to_a_new_workspace(self):
+        orphan = self.record("r3")
+        before = {w.name for w in workspace.list_all(self.home)}
+        self.assertEqual(self.client.post(f"/launch/run:{orphan.id}/add", data={"workspace": "", "label": "fresh trial"}, headers={"Origin": "http://localhost"}).status_code, 403)
+        self.assertEqual(self.post(f"/launch/run:{orphan.id}/add", csrf="", workspace="", label="fresh trial").status_code, 403)
+        self.assertEqual({w.name for w in workspace.list_all(self.home)}, before)            # refused: nothing made
+        r = self.post(f"/launch/run:{orphan.id}/add", workspace="", label="fresh trial")
+        self.assertEqual((r.status_code, r.headers["Location"]), (302, "/launches"))
+        (new,) = [w for w in workspace.list_all(self.home) if w.name not in before]
+        self.assertEqual((new.label, new.roots, web.shared.STATE["workspace"].name), ("fresh trial", [orphan.jobs], new.name))   # opened
+        self.assertIn('Added launch <span class="mono">r3-*</span> to <b>fresh trial</b>.', self.get("/launches").get_data(as_text=True))
+
+    def test_a_blank_name_is_a_new_random_workspace_though_one_holds_the_launch(self):
+        before = {w.name for w in workspace.list_all(self.home)}
+        row = self.rows()[f"run:{self.ex.id}"]                                              # every workspace holds it
+        self.assertIn('class="icon-btn launch-add-btn" aria-haspopup="dialog" aria-label="Add launch r1-* to a workspace" title="Add to workspace"><svg class="ic"><use href="#i-ws-add"/>', row)
+        self.assertIn('<select name="workspace"><option value="">New workspace…</option></select>', row)
+        self.post(f"/launch/run:{self.ex.id}/add", workspace="", label=" ")
+        (new,) = [w for w in workspace.list_all(self.home) if w.name not in before]
+        self.assertEqual((new.label, new.roots), (new.name, [self.ex.jobs]))
+        self.assertRegex(new.name, r"^[a-z]+-[a-z]+$")
+
+    def test_add_with_no_workspace_at_all(self):
+        web.shared.close_workspace()
+        for w in workspace.list_all(self.home):
+            workspace.delete(self.home, w.name)
+        self.assertIn('<select name="workspace"><option value="">New workspace…</option></select>', self.rows()[f"run:{self.ex.id}"])
+        self.post(f"/launch/run:{self.ex.id}/add", workspace="")
+        (new,) = workspace.list_all(self.home)
+        self.assertEqual((new.roots, web.shared.STATE["workspace"].name), ([self.ex.jobs], new.name))
+
+    def test_delete_from_the_page_with_no_workspace_open(self):
+        orphan = self.record("r3")
+        web.shared.close_workspace()
+        row = self.rows()[f"run:{orphan.id}"]
+        self.assertNotIn('<template class="launch-ask"', row)                              # what goes is worked out when Delete opens, not with the page
+        self.assertIn(f'class="icon-btn launch-delete-btn" aria-haspopup="dialog" aria-label="Delete launch r3-*" title="Delete launch" data-ask="/launch/run:{orphan.id}/ask"><svg class="ic"><use href="#i-trash"/>', row)
+        ask = self.get(f"/launch/run:{orphan.id}/ask").get_data(as_text=True)
+        self.assertIn(f'action="/launch/run:{orphan.id}/delete"', ask)
+        self.assertIn('<input type="hidden" name="back" value="launches">', ask)
+        self.assertIn("<li>r3-a</li><li>nop</li>", ask)
+        self.assertRegex(" ".join(re.sub(r"<[^>]+>", " ", ask).split()), r"^Delete launch r3-\* r3-a nop 1 folder · \d+(\.\d)? (Bytes|kB) Keep it Delete launch$")
+        r = self.post(f"/launch/run:{orphan.id}/delete", back="launches")
+        self.assertEqual((r.status_code, r.headers["Location"]), (302, "/launches"))
+        self.assertFalse((self.tmp / "runs" / "r3").exists())
+        self.assertNotIn(f"run:{orphan.id}", self.rows())
+
+    def test_a_launch_still_going_has_no_delete(self):
+        running = self.record("r4")
+        running.state = "running"
+        row = self.rows()[f"run:{running.id}"]
+        self.assertIn(">running<", row)
+        self.assertNotIn("launch-delete-btn", row)
+        self.assertIn(f'<button type="button" class="icon-btn" aria-disabled="true" aria-label="Delete launch r4-*" aria-describedby="why-run:{running.id}" title="Delete launch: not while it runs">', row)   # greyed, in its place, focusable
+        self.assertIn(f'<span class="sr" id="why-run:{running.id}">not while it runs</span>', row)
+        self.assertEqual(self.get(f"/launch/run:{running.id}/ask").status_code, 409)
+        self.assertEqual(self.post(f"/launch/run:{running.id}/delete", back="launches").status_code, 302)
+        self.assertTrue((self.tmp / "runs" / "r4").is_dir())
+
+    def test_a_delete_it_cannot_do_says_why(self):
+        unread = self.record("r5")
+        (self.tmp / "runs" / "r5" / "run.json").write_text("{not json")                    # its record went bad on disk
+        row = self.rows()[f"run:{unread.id}"]
+        self.assertIn('title="Delete launch: its run record cannot be read"', row)
+        self.assertIn(f'<span class="sr" id="why-run:{unread.id}">its run record cannot be read</span>', row)
+        self.assertEqual(self.get(f"/launch/run:{unread.id}/ask").get_data(as_text=True), "Delete launch: its run record cannot be read")
+        self.assertEqual(web.runs._undeletable([]), "no run record")                        # a launch with a job no run of Nullius names
+        self.assertEqual(web.runs._undeletable([self.ex]), "")
+
+    def test_runs_and_checks_are_counted_alike_on_both_pages(self):
+        from nullius.standard import merge
+        from tests.test_standard_shard import write_shard
+        key = self.sharded()
+        s1 = next(e for e in execution.EXECUTIONS.values() if e.plan.name == "s1")
+        merge.merge([str(self.tmp / "runs" / f"s{i}" / "jobs" / f"L1-shard-{i}of3") for i in (1, 2)], os.path.join(s1.jobs, "L1-merged"), force=True)
+        refused = self.record("r8", "failed")                                               # its two jobs refused before they started
+        shutil.rmtree(refused.jobs); os.makedirs(refused.jobs)
+        web.shared.open_workspace(workspace.create(self.home, [str(self.tmp / "runs" / f"s{i}" / "jobs") for i in (1, 2)] + [refused.jobs], label="both"))
+        page = self.get("/runs?view=launch").get_data(as_text=True)
+        said = lambda k: re.search(rf'data-launch="{k}".*?<span class="launch-when">[^<]*?(\d+) runs?(?: · (\d+) checks?)?</span>', page, re.S).groups()
+        rows = self.rows()
+        # the Runs page keys the merged launch by the merge, its shards' records standing for nothing more there
+        for k, here in ((key, "inferred:L1-merged"), (f"run:{refused.id}", f"run:{refused.id}")):
+            self.assertEqual(said(here), (self.cells(rows[k])["runs"], self.cells(rows[k])["checks"] if self.cells(rows[k])["checks"] != "0" else None), k)
+        self.assertEqual([self.cells(rows[key])[c] for c in ("runs", "checks")], ["1", "0"])      # the merge stands for its two shards
+        self.assertEqual([self.cells(rows[f"run:{refused.id}"])[c] for c in ("runs", "checks", "state")], ["1", "1", "refused"])
+
+    def test_no_launch_is_one_line(self):
+        execution.EXECUTIONS.clear()
+        self.assertIn('<div class="alert">No launch yet.</div>', self.get("/launches").get_data(as_text=True))
+
+
 if __name__ == "__main__":
     unittest.main()
 

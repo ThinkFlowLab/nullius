@@ -184,6 +184,19 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual(workspace.last_open(self.home).name, "b")
 
 
+class Holding(unittest.TestCase):
+    def test_each_folder_lists_the_workspaces_with_a_root_in_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home, a, b = (os.path.join(tmp, n) for n in ("ws", "runs/a", "runs/b"))
+            one = workspace.create(home, [os.path.join(a, "jobs"), os.path.join(b, "jobs")], label="one")
+            workspace.create(home, [os.path.join(b, "jobs")], label="two")
+            got = workspace.holding_all(home, [a, b, os.path.join(tmp, "runs/c")])
+            self.assertEqual([(w.label, r) for w, r in got[a]], [("one", [os.path.join(a, "jobs")])])
+            self.assertEqual(sorted(w.label for w, _ in got[b]), ["one", "two"])
+            self.assertEqual(got[os.path.join(tmp, "runs/c")], [])
+            self.assertEqual([w.name for w, _ in workspace.holding(home, a)], [one.name])
+
+
 class Cache(unittest.TestCase):
     def setUp(self):
         self.home = tempfile.mkdtemp()

@@ -287,6 +287,8 @@ class RunsByLaunch(unittest.TestCase):
         html = self.get("/runs?view=all")
         self.assertIn('id="view-launch" class="launches" hidden', html)
         self.assertIn('<div id="view-all">', html)
+        between = html[html.index('<div id="view-launch"'):html.index('<div id="view-all"')]
+        self.assertEqual(between.count("<div"), between.count("</div>"))           # a sibling, never inside the hidden view
         self.assertIn('aria-pressed="true">All runs</a>', html)
         for job in self.jobs:
             self.assertIn(f'<td data-col="run"><a href="/job/{job.job_id}">', html)   # every run, one row
