@@ -70,7 +70,7 @@ A count of runs leaves out the checks. The checks have a count of their own.
 
 ## Workspace
 
-The roots you opened, the imports converted and the judgements saved; the same roots reopen the same workspace. A start with no root given reopens the workspace left open; a closed one stays closed.
+The roots you opened, the imports converted and the judgements saved; the same roots reopen the same workspace. A start with no root given reopens the workspace left open; a closed one stays closed. **New workspace** with no root makes an empty workspace.
 
 <div class="grid cards" markdown>
 

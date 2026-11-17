@@ -45,7 +45,7 @@ def index():
     preparing = [(jid, e) for e in mine if e.state in execution.ALIVE for jid in e.summary()["job_ids"] if jid not in have]
     # a launch whose runs wrote no job yet (or never will: refused, stopped) is still shown
     if not jobs and not mine:
-        return render_template("runs/setup.html", scanned=True, mode="add",
+        return render_template("runs/setup.html", scanned=bool(shared.STATE["roots"]), mode="add",
                                workspaces=workspace.list_all(shared.WS_HOME))
     # A Harbor killed by a Stop (or dead with the run) leaves its result
     # record saying trials are running; the runner's record says otherwise.
@@ -381,13 +381,17 @@ def _after_import(good, refused, new):
 @app.route("/use-path", methods=["POST"])
 def use_path():
     shared._require_csrf()
+    new = request.form.get("new") == "1"
+    label = (request.form.get("name") or "").strip()
+    if new and not any(p.strip() for p in request.form.getlist("path")):
+        shared.open_workspace(workspace.create(shared.WS_HOME, [], label))   # no path: an empty workspace
+        return redirect(url_for("index"))
     good, bad = shared.resolve_submitted_paths(request.form.getlist("path"))
     if bad:
         flash(shared._bad_paths_message(bad), "error")
     good, refused = _readable(good)
-    new = request.form.get("new") == "1"
     if good:
-        shared.adopt_roots(good, label=(request.form.get("name") or "").strip(), new=new)
+        shared.adopt_roots(good, label=label, new=new)
     return _after_import(good, refused, new)
 
 
