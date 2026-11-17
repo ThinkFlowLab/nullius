@@ -27,8 +27,8 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--dataset`, `--limit`, `-j` | One dataset, the first N units, N at a time |
 | `--units FILE` | Only the units the file lists: [below](#a-list-of-units) |
 | `--unsandboxed` | An agent runs as you; else `--backend container` |
-| `--backend` | `local` (default); `container`, each unit in a container with its relay; or `boat`, each unit's agent in a boat.dev VM of its own ([The boat backend](../standard.md#the-boat-backend)) |
-| `--boat-size` | On the boat backend, its VMs' size: `small` (default), `default`, `large` or `xlarge` |
+| `--backend` | `local` (default); `container`, each unit in a container with its relay; or [`boat`](../standard.md#the-boat-backend), a VM per unit |
+| `--boat-size` | Boat's VM size: `small` (default), `default`, `large`, `xlarge` |
 | `--option NAME=VALUE` | An agent's or capability's option (repeatable) |
 | `--bench-option NAME=VALUE` | A benchmark's option (repeatable), read as `NULLIUS_OPTION_<NAME>` |
 | `--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
