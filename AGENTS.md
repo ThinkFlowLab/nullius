@@ -293,6 +293,18 @@ one assistant or one benchmark.
 Use `nullius.thinkflowlab@proton.me` for Nullius-owned contact email addresses,
 including security reports.
 
+### Documentation
+
+`docs/` is terse: fragments and tables, the fewest words that change what a
+reader chooses, does or concludes.
+
+- Keep guarantees, requirements, refusals and their fix. Drop the mechanism
+  (flags, files, protocols, how a key travels), interface narration, history
+  and asides.
+- A table cell is a line, not a paragraph. One fact lives on one page; others link.
+- A prerequisite Review already checks is not repeated.
+- `docs/standard.md` headings are never renamed: the import skills cite them.
+
 ### Attribution
 
 **No machine attribution in commit messages or pull request descriptions** — no

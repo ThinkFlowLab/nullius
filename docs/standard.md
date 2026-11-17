@@ -177,18 +177,18 @@ A rootful Docker with `userns-remap` maps the uids of each container to sub-uids
 
 ### The boat backend
 
-`--backend boat` runs each unit's agent or capability in a [boat.dev](https://boat.dev) VM of its own. The driver, the relay, the spending cap and the scoring stay here; checks and Original setups run locally.
+`--backend boat`: each unit's agent or capability in its own [boat.dev](https://boat.dev) VM. Driver, relay, spending cap and scoring stay with the run.
 
 | Piece | Rule |
 | --- | --- |
-| Key | Settings → Sandbox, or `BOAT_API_KEY`. Goes to boat.dev, and to a host that runs the run, over stdin. The machine that runs it needs `ssh` and `rsync` |
-| VM | One per unit, sized by `--boat-size` (`small` by default). Deleted whatever ends the unit; a failed delete is said. Auto-stops after the unit's time, 2 hours at most on a free trial |
-| Units at a time | No more than the account's VMs at once. The run warns when the account cannot start every unit this hour or today |
-| Agent time | Starts once the VM is up and holds the install |
-| Isolation | The agent reaches only the VM's loopback: no internet, no DNS. Model calls go through an SSH tunnel to the relay here, so no key reaches the VM |
-| Sent, brought back | The install and its runtimes, the home, the workspace. A link into your home or keys refuses the unit. The workspace comes back without links that leave it; nothing after a Stop |
-| Code checks | A check that runs the agent's code (`runs_code`) runs it here, in the check container: without Docker, the run is refused |
-| Not run | Units that need the public web, their own image, a licence file or server of this machine, or MCP servers. Boat has no GPUs |
+| Key | Settings → Sandbox, or `BOAT_API_KEY` |
+| VM | One per unit, `--boat-size` (`small` by default). Always deleted. Free trial: 2 hours at most |
+| Units at a time | Capped by the account's VM limit. The run warns when it cannot start every unit |
+| Agent time | Excludes the VM's start-up |
+| Isolation | The agent reaches loopback only: no internet, no DNS, no model key |
+| Files | A link into your home or keys refuses the unit. Links out of the workspace are not copied back |
+| Code checks | A `runs_code` check needs Docker where the run runs |
+| Not run | Units needing the public web, their own image, a licence file or server of this machine, or MCP servers. No GPUs |
 
 ### A benchmark's MCP server on the machine
 
