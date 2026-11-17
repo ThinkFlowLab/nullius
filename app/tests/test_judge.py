@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nullius import workspace
+from nullius import redact, workspace
 from nullius.judge import batch, client, questions, state, store
 from nullius.traces import trajectory
 
@@ -452,6 +452,93 @@ class Relevance(unittest.TestCase):
         for line in whole.splitlines():
             if line.startswith("[tool ") or line.startswith("[agent] "):
                 self.assertIn(line, state.transcript_of(trajectory.load(str(CLEAN))), line)
+
+
+class FinalMessageOnce(unittest.TestCase):
+    """The step the final message came from is a one-line marker at its
+    place in the transcript, and the text is written once, under its heading."""
+    MARKER = "[agent] [the final message; its text is under [final message] below]"
+    MARKER_A = "[agent] [the final message; its text is under [final message A] below]"
+    MARKER_B = "[agent] [the final message; its text is under [final message B] below]"
+
+    def made_up(self, steps):
+        """A trajectory read from the clean fixture with its steps replaced."""
+        raw = json.loads(CLEAN.read_text())
+        raw["steps"] = steps(raw["steps"])
+        tmp = Path(tempfile.mkdtemp(prefix="nullius-judge-final-")); self.addCleanup(shutil.rmtree, tmp, True)
+        (tmp / "t.json").write_text(json.dumps(raw))
+        traj = trajectory.load(str(tmp / "t.json")); self.assertFalse(traj.error)
+        return traj
+
+    def transcript_lines(self, text):
+        return text.split("\n\n[transcript]\n", 1)[1].split("\n\n[final message]\n", 1)[0].splitlines()
+
+    def test_each_kind_holds_the_final_message_once_per_trajectory(self):
+        for fixture in (CLEAN, ADVERSARIAL):
+            traj = trajectory.load(str(fixture)); final = traj.last_agent_message; self.assertTrue(final)
+            with self.subTest(fixture=fixture.name):
+                for kind in ("trial", "failure", "final"):
+                    self.assertEqual(state.build(kind, traj)[0].count(final), 1, kind)
+                self.assertEqual(state.build("pair", traj, other=traj)[0].count(final), 2)
+
+    def test_the_marker_stands_where_the_final_message_stood(self):
+        for fixture in (CLEAN, ADVERSARIAL):
+            traj = trajectory.load(str(fixture)); final = traj.last_agent_message
+            line = "[agent] " + final
+            head = "[instruction]\n" + state.instruction_of(traj) + "\n\n[transcript]\n" + state.transcript_of(traj)
+            with self.subTest(fixture=fixture.name):
+                trial = state.build("trial", traj)[0]
+                self.assertEqual(trial.count(self.MARKER), 1)
+                self.assertEqual(trial.replace(self.MARKER, line), redact.redact(head + "\n\n[final message]\n" + final))
+                failure = state.build("failure", traj)[0]
+                self.assertEqual(failure.replace(self.MARKER, line).partition("\n\n[recorded error]\n")[0],
+                                 redact.redact(head + "\n\n[final message]\n" + final))
+                pair = state.build("pair", traj, other=traj)[0]
+                self.assertEqual((pair.count(self.MARKER_A), pair.count(self.MARKER_B)), (1, 1))
+                transcript = state.transcript_of(traj)
+                self.assertEqual(pair.replace(self.MARKER_A, line).replace(self.MARKER_B, line), redact.redact(
+                    "[instruction]\n" + state.instruction_of(traj) + "\n\n[transcript A]\n" + transcript + "\n[final message A]\n" + final
+                    + "\n\n[transcript B]\n" + transcript + "\n[final message B]\n" + final))
+
+    def test_an_earlier_step_with_the_same_text_stays_and_the_last_is_the_marker(self):
+        def same_text_earlier(steps):
+            steps[2]["message"] = steps[-1]["message"]
+            return steps
+        traj = self.made_up(same_text_earlier); final = traj.last_agent_message
+        lines = self.transcript_lines(state.build("trial", traj)[0])
+        self.assertEqual([l for l in lines if l.startswith("[agent] ")], ["[agent] " + final, self.MARKER])
+        self.assertEqual(lines[-1], self.MARKER)
+
+    def test_an_agent_step_after_the_final_message_stays_after_the_marker(self):
+        def tool_step_after(steps):
+            steps.append({"step_id": 6, "timestamp": "2026-09-18T10:00:06.000Z", "source": "agent", "message": "(tool use)",
+                          "tool_calls": [{"tool_call_id": "c6", "function_name": "Bash", "arguments": {"command": "git status"}}],
+                          "observation": {"results": [{"source_call_id": "c6", "content": "nothing to commit\n"}]}})
+            return steps
+        traj = self.made_up(tool_step_after); final = traj.last_agent_message
+        self.assertEqual(final, json.loads(CLEAN.read_text())["steps"][-1]["message"])
+        lines = self.transcript_lines(state.build("trial", traj)[0])
+        self.assertEqual([l for l in lines if l.startswith("[agent] ")], [self.MARKER, "[agent] (tool use)"])
+        self.assertEqual(lines[lines.index(self.MARKER) + 1:][:2], ["[agent] (tool use)", '[tool Bash] {"command": "git status"}'])
+        self.assertNotIn("[agent] " + final, lines)
+
+    def test_a_trajectory_with_no_agent_message_gets_no_marker(self):
+        for name, steps in (("no message", lambda s: s[:-1]),
+                            ("tool use only", lambda s: s[:-1] + [dict(s[-1], message="(tool use)")])):
+            with self.subTest(name):
+                traj = self.made_up(steps); self.assertEqual(traj.last_agent_message, "")
+                for kind in ("trial", "failure"):
+                    self.assertNotIn("[the final message;", state.build(kind, traj)[0])
+                self.assertNotIn("[the final message;", state.build("pair", traj, other=traj)[0])
+
+    def test_the_control_state_keeps_the_last_message_in_its_transcript(self):
+        for fixture in (CLEAN, ADVERSARIAL):
+            traj = trajectory.load(str(fixture))
+            with self.subTest(fixture=fixture.name):
+                text = state.build("control", traj, control="nop")[0]
+                self.assertIn("[agent] " + traj.last_agent_message, text)
+                self.assertNotIn("[the final message;", text)
+                self.assertTrue(text.endswith(redact.redact("[transcript]\n" + state.transcript_of(traj))))
 
 
 class PrJudgeWorkflow(unittest.TestCase):
