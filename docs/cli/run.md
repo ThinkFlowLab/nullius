@@ -51,6 +51,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | Rule | Detail |
 | --- | --- |
 | The pair must fit | Else refused, naming the missing port |
+| The model | Refused when the provider's model list lacks it |
 | Keys | Environment, then user `settings.json`; the agent never gets one |
 | A data provider's token | `HF_TOKEN` from the environment, then Settings → Data providers, for a benchmark that declares Hugging Face; only its driver gets it. Not with `--from-run` |
 | A control | No `--model`, no `--unsandboxed`; only a judge is called |
@@ -90,11 +91,11 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 
 | Rule | Detail |
 | --- | --- |
-| Prices first | The [price list](../settings/model-prices.md) is fetched before the run. A model it lacks needs `--price`, else the run is refused; with no connection, the run goes on without a cap and says so |
+| Prices first | The [price list](../settings/model-prices.md) is fetched first; a model it lacks needs `--price`, else the run is refused. Offline and unpriced: no cap, and the run says so |
 | What is counted | Each reply's cost, and an estimate for each call in flight |
 | At the run's cap | The call that does not fit is refused by the relay (HTTP 402), and every call after it |
 | Its units | One cut off is the outcome Spending cap, outside the adjusted rate; those not begun are not run |
-| At a unit's cap | Its own calls and its simulated user's count, its judge's do not, all of an attempt's tries together. A unit that reaches its cap is an Agent error; the run goes on |
+| At a unit's cap | Its own calls and its simulated user's count, over all its tries; its judge's do not. A unit that reaches its cap is an Agent error; the run goes on |
 | Not exact | A call that costs more than its estimate can take the spend past a cap by up to the difference |
 | Cached input | Estimated as if not cached, so a unit can be cut off short of its cap |
 | The result | `result.json` carries `budget`, and the job page shows it |
@@ -103,18 +104,15 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 
 ## Retries
 
-`--retries N` (at most 9) runs a failed attempt again after the other units, as many at once as `-j`. The last try counts.
+`--retries N` (at most 9) runs a failed attempt again after the other units; the last try counts.
 
 | Failure | Retried |
 | --- | --- |
 | Rate limit | After the [pause](../standard.md#a-run) |
-| Provider, network or setup error; agent crash or no start in time | Yes |
-| Agent or benchmark out of time | Only if the provider was refusing the calls |
-| Model the provider does not list | Refused before the run |
+| Provider, network or setup error; agent crash; setup timeout | Yes |
+| Run or check out of time | Only if the provider was refusing the calls |
 | Wrong key, spent credit | No; three in a row stop the run |
-| A setup this machine lacks, a missing secret | No |
-| A spending or call cap reached | No |
-| Stop, failed task | No; a stopped retry leaves the try before |
+| A setup this machine lacks, a missing secret, a cap reached, Stop, failed task | No |
 
 `conform` and `prove` retry a rate limit once.
 

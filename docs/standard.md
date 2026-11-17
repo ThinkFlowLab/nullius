@@ -607,8 +607,8 @@ already accepts arbitrary models needs only the `original` method.
 | `units` | A setup may count its own units; `units` is sent `setup` |
 | `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes or the Original setup driver container |
 | Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper` |
-| Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries `pass_hat_k` (C(c, k) / C(n, k) averaged over the units, an errored unit left out) |
-| Retries | `cli run --retries N` runs a failed attempt again ([which failures](cli/run.md#retries)); earlier tries stay in `retried/<trial>.try-N/`, the last counts |
+| Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
+| Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |
 
 ### Every setting, inventoried
 
