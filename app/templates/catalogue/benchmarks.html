@@ -37,8 +37,8 @@
   {% set cols = [dict(key='category', label='Category', card='tag', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', card='tag', class='origin-tag', filter='dropdown', filter_icon='origin'),
                  dict(key='icon', label='Mark', card='icon', table=false, class='bench-mark'), dict(key='title', label='Name', card='title'),
                  dict(key='domain', label='Domain', card='text'), dict(key='runs', label='Runs with', card='badge', class='run-tag', filter='dropdown', filter_icon='runner'),
-                 dict(key='needs', label='Needs', card='note', icon='wrench'), dict(key='tasks', label='Tasks', type='num', card='stat'),
-                 dict(key='datasets', label='Datasets', type='num', card='stat'), dict(key='scoring', label='Scored by', card='stat', class='word'),
+                 dict(key='needs', label='Needs', card='note', icon='wrench'), dict(key='tasks', label='Tasks', card='stat'),
+                 dict(key='datasets', label='Datasets', card='stat'), dict(key='scoring', label='Scored by', card='stat', class='word'),
                  dict(key='blocker', label='Blocker', card='alert')] %}
   {#- Two shelves: the official benchmarks, then the community benchmarks. A card opens the benchmark's own page. #}
   {% call cards('benchmarks', cols, items, search='Name, category, dataset', choices=choices, empty='No benchmark matches.') %}
