@@ -220,11 +220,12 @@ window.NulliusTable = {
   /* A collection of the cards macro (data-cards): its controls row (id
      <id>-tools) shows the cards (data-card) that pass, the note when none
      does; a data-group holding cards hides when none of them shows, and its
-     data-group-n counts those that do. A screen reader hears how many
-     show once the changes pause. */
+     data-group-n counts those that do. After a change, a screen reader hears
+     how many show once the changes pause, counted in the live region's
+     data-noun. */
   cards(root) {
     const items = [...root.querySelectorAll('[data-card]')], empty = document.querySelector(`[data-empty="${CSS.escape(root.id)}"]`);
-    const say = this.voice(document.querySelector(`[data-live="${CSS.escape(root.id)}"]`));
+    const live = document.querySelector(`[data-live="${CSS.escape(root.id)}"]`), say = this.voice(live);
     const draw = () => {
       items.forEach(c => { c.hidden = !passes(c); });
       root.querySelectorAll('[data-group]').forEach(g => {
@@ -234,7 +235,7 @@ window.NulliusTable = {
       });
       const n = items.filter(c => !c.hidden).length;
       empty.hidden = n > 0;
-      say(n ? `${n} of ${items.length}` : empty.textContent);
+      say(n ? `${n} of ${items.length} ${live.dataset.noun}` : empty.textContent);
     };
     const passes = this.narrow(document.getElementById(root.id + '-tools'), draw);
     draw();
@@ -286,10 +287,14 @@ window.NulliusTable = {
   },
 
   /* A live region: say(text) reads out the last text once the changes
-     pause. */
+     pause; the first, the page's own drawing at load, is not read out. */
   voice(live) {
-    let t;
-    return text => { clearTimeout(t); t = setTimeout(() => { live.textContent = text; }, 300); };
+    let t, loaded = false;
+    return text => {
+      clearTimeout(t);
+      if (loaded) t = setTimeout(() => { live.textContent = text; }, 300);
+      loaded = true;
+    };
   },
 
   /* A table's pages (the pager macro named after its id): the rows `passes`
@@ -302,7 +307,7 @@ window.NulliusTable = {
   pager(table, key, passes = () => true, drawn = () => {}) {
     const bar = document.querySelector(`[data-pager="${CSS.escape(table.id)}"]`), empty = document.querySelector(`[data-empty="${CSS.escape(table.id)}"]`);
     const [per, note, prev, next, live] = ['[data-per]', '[data-note]', '[data-prev]', '[data-next]', '[data-live]'].map(s => bar.querySelector(s));
-    let page = 0, loaded = false;
+    let page = 0;
     const say = this.voice(live);
     try { const n = localStorage.getItem(key); if (n !== null && [...per.options].some(o => o.value === n)) per.value = n; } catch {}
     const draw = () => {
@@ -314,7 +319,7 @@ window.NulliusTable = {
       prev.disabled = page === 0;
       next.disabled = (page + 1) * n >= hit.length;
       empty.hidden = hit.length > 0;
-      if (loaded) say(hit.length ? `${note.textContent} ${live.dataset.noun}` : empty.textContent);
+      say(hit.length ? `${note.textContent} ${live.dataset.noun}` : empty.textContent);
       drawn();
     };
     const first = () => { page = 0; draw(); };
@@ -325,7 +330,6 @@ window.NulliusTable = {
     prev.addEventListener('click', () => { page--; draw(); });
     next.addEventListener('click', () => { page++; draw(); });
     draw();
-    loaded = true;
     return first;
   },
 };

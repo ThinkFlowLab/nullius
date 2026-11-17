@@ -98,7 +98,7 @@ class Macros(unittest.TestCase):
                            choices={'tag': [('coding', 'Coding')], 'meta': [('v1', 'v1')]})
         self.assertEqual(re.findall(r' id="([^"]+)"', html), ['p-tools', 'p', 'q-tools', 'q'])
         self.assertEqual(html.count('aria-live="polite"'), 2)                                 # one live region a collection
-        self.assertIn('<span class="sr" data-live="q" aria-live="polite"></span>', html)
+        self.assertIn('<span class="sr" data-live="q" data-noun="items" aria-live="polite"></span>', html)
         self.assertEqual(html.count('data-pills="tag"'), 2)
         self.assertEqual(html.count('data-dropdown'), 2)
 
@@ -142,18 +142,18 @@ const card = (name, kind) => el('article', {'data-card': '', 'data-search': name
 const tools = el('div', {id: 'c-tools'}, el('label', {}, el('input', {type: 'search', 'data-search': ''})),
   el('div', {'data-pills': 'kind'}, el('button', {class: 'filter-pill', 'data-all': 'kind', 'aria-pressed': 'true'}),
      ...['x', 'y'].map(v => el('button', {class: 'filter-pill', 'data-value': v, 'aria-pressed': 'false'}))));
-const root = el('div', {id: 'c', 'data-cards': ''}, card('A', 'x'), card('B', 'y'), card('C', 'x')), live = el('span', {'data-live': 'c'});
+const root = el('div', {id: 'c', 'data-cards': ''}, card('A', 'x'), card('B', 'y'), card('C', 'x')), live = el('span', {'data-live': 'c', 'data-noun': 'cards'});
 document.appendChild(el('main', {}, tools, root, el('p', {'data-empty': 'c', hidden: true}, 'No card matches.'), live));
 T.cards(root);
 const out = [];
 const type = q => { const box = tools.querySelector('[data-search]'); box.value = q; box.dispatch('input'); };
 setTimeout(() => {
-  out.push(live.textContent);                                                            // once read
+  out.push(live.textContent);                                                            // the page's load: nothing
   tools.querySelector('[data-value="x"]').click(); type('a'); out.push(live.textContent);  // still changing: nothing new
   setTimeout(() => { out.push(live.textContent); type('zzz'); setTimeout(() => { out.push(live.textContent); process.stdout.write(JSON.stringify(out)); }, 350); }, 350);
 }, 350);
 ''')
-        self.assertEqual(got, ["3 of 3", "3 of 3", "1 of 3", "No card matches."])
+        self.assertEqual(got, ["", "", "1 of 3 cards", "No card matches."])
 
 
 if __name__ == "__main__":

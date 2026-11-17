@@ -41,7 +41,7 @@
                  dict(key='datasets', label='Datasets', card='stat'), dict(key='scoring', label='Scored by', card='stat', class='word'),
                  dict(key='blocker', label='Blocker', card='alert')] %}
   {#- Two shelves: the official benchmarks, then the community benchmarks. A card opens the benchmark's own page. #}
-  {% call cards('benchmarks', cols, items, search='Name, category, dataset', choices=choices, empty='No benchmark matches.') %}
+  {% call cards('benchmarks', cols, items, search='Name, category, dataset', choices=choices, empty='No benchmark matches.', noun='benchmarks') %}
   {% for state, heading in [('official', 'Official'), ('community', 'Community')] %}
   {% set shelf = items|selectattr('shelf', 'equalto', state)|list %}
   {% if shelf %}

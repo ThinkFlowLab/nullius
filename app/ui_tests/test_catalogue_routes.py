@@ -103,7 +103,7 @@ class OriginTags(PageCase):
                          [("origin", "Origin"), ("runner", "Runs with")])
         self.assertEqual(re.findall(r'data-filter-menu="(\w+)"', tools), ["origin", "runs"])
         self.assertNotIn('data-tools-btn="filter"', tools)                                      # no Filter button: each has its own
-        self.assertIn('<span class="sr" data-live="benchmarks" aria-live="polite"></span>', self.html)
+        self.assertIn('<span class="sr" data-live="benchmarks" data-noun="benchmarks" aria-live="polite"></span>', self.html)
 
     def test_the_list_searches_by_name_category_and_dataset(self):
         self.assertIn('<input type="search" data-search placeholder="Name, category, dataset"', self.html)

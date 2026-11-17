@@ -47,7 +47,7 @@
                  dict(key='icon', label='Logo', card='icon', table=false, class='std-mark small'), dict(key='title', label='Name', card='title'),
                  dict(key='summary', label='Summary', card='text', class='std-clamp'), dict(key='ports', label='Ports proven', card='stat'),
                  dict(key='runs', label='Benchmarks it runs', card='stat'), dict(key='installs', label='Installs', card='stat', class='word')] %}
-  {% if items %}{{ cards(plural|lower, cols, items, search='Name, protocol, summary', empty='No ' ~ kind ~ ' matches.') }}{% endif %}
+  {% if items %}{{ cards(plural|lower, cols, items, search='Name, protocol, summary', empty='No ' ~ kind ~ ' matches.', noun=plural|lower) }}{% endif %}
 </div>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='catalogue/add.js') }}"></script>{% endblock %}

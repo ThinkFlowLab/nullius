@@ -19,14 +19,14 @@
 {% macro pill(f, v) %}{% set cls = [f.class, v.class]|select|join(' ') %}<span{% if cls %} class="{{ cls }}"{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ v.text }}</span>{% endmacro %}
 
 {# A collection of cards (NulliusTable.cards): its controls row, its cards, the note when none passes. `id` names it;
-   `search`, `choices`, `only` and each field's `filter` as the table's controls. The call block, when given, writes the cards instead (grid
-   for each group, such as the Benchmarks' shelves); a section in it marked data-group hides when none of its cards
-   shows, and its data-group-n counts them. #}
-{% macro cards(id, cols, items, search='', choices={}, only={}, empty='No items match.') %}
+   `search`, `choices`, `only` and each field's `filter` as the table's controls; `noun` what the live region counts.
+   The call block, when given, writes the cards instead (grid for each group, such as the Benchmarks' shelves); a
+   section in it marked data-group hides when none of its cards shows, and its data-group-n counts them. #}
+{% macro cards(id, cols, items, search='', choices={}, only={}, empty='No items match.', noun='items') %}
 {{ controls(id, cols, search, choices=choices, only=only, sort=false) }}
 <div id="{{ id }}" data-cards>{% if caller is defined %}{{ caller() }}{% else %}{{ grid(cols, items, choices=choices) }}{% endif %}</div>
 {{ empty_note(id, empty) }}
-<span class="sr" data-live="{{ id }}" aria-live="polite"></span>
+<span class="sr" data-live="{{ id }}" data-noun="{{ noun }}" aria-live="polite"></span>
 {% endmacro %}
 
 {# The cards of `items`. `every`: the collection the icon rule reads, when `items` is a part of it; `choices`: the
