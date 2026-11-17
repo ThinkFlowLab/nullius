@@ -53,20 +53,22 @@ window.NulliusTable = {
      macro's, each opened by its caret, or the tools macro's. `allowed`:
      column -> the Set of values ticked, or null when all are. A row passes
      when, for each column, one of its values (data-f-<col>, one per line) is
-     ticked. `changed` runs after each change. */
+     ticked; a box unticked at load filters from the start. `changed` runs
+     after each change. */
   filters(scope, changed) {
     const allowed = {};
     scope.querySelectorAll('[data-filter-menu]').forEach(menu => {
       const col = menu.dataset.filterMenu;
       const boxes = () => [...menu.querySelectorAll('input[data-value]')];
       const btn = scope.querySelector(`.filter-btn[data-filter="${col}"]`);
-      const sync = () => {
+      const read = () => {
         const on = boxes().filter(b => b.checked).map(b => b.dataset.value);
         // All checked means "no filter": keeps the active marker honest.
         allowed[col] = on.length === boxes().length ? null : new Set(on);
         btn?.classList.toggle('on', Boolean(allowed[col]));
-        changed();
       };
+      const sync = () => { read(); changed(); };
+      read();
       menu.addEventListener('change', sync);
       menu.addEventListener('click', e => {
         if (e.target.closest('[data-all]')) { boxes().forEach(b => b.checked = true); sync(); }
@@ -153,19 +155,24 @@ window.NulliusTable = {
   /* A table's Filter and Sort by menus (the tools macro), under `tools`, in
      place of header carets. Filter counts the columns it narrows; Sort by
      sets the sort, and follows a header click. `changed` runs after either.
+     A toolbar without Filter (the macro given no filters) only sorts.
      Returns {passes, resort}, as filters and sortable do. */
   toolbar(table, tools, changed) {
     const [fbtn, fmenu, sbtn, smenu] = ['filter', 'sort'].flatMap(k =>
       [tools.querySelector(`[data-tools-btn="${k}"]`), tools.querySelector(`[data-tools="${k}"]`)]);
-    const count = fbtn.querySelector('.tools-count');
-    const narrowed = () => {
+    const count = fbtn?.querySelector('.tools-count');
+    const mark = () => {
       const n = Object.values(f.allowed).filter(Boolean).length;
       count.textContent = n || '';
       count.hidden = !n;
-      changed();
     };
-    const f = this.filters(fmenu, narrowed);
-    fmenu.querySelector('[data-clear]').addEventListener('click', () => { f.clear(); narrowed(); });
+    const narrowed = () => { mark(); changed(); };
+    const f = fmenu ? this.filters(fmenu, narrowed) : {allowed: {}, passes: () => true};
+    if (fmenu) {
+      mark();
+      fmenu.querySelector('[data-clear]').addEventListener('click', () => { f.clear(); narrowed(); });
+      this.menu(fbtn, fmenu);
+    }
     const heads = [...table.tHead.rows[0].cells];
     const sync = () => {
       const {col, dir} = resort.state(), on = col === null ? '' : heads[col].dataset.col;
@@ -180,7 +187,6 @@ window.NulliusTable = {
       resort.set(idx, dir);
     });
     sync();
-    this.menu(fbtn, fmenu);
     this.menu(sbtn, smenu);
     return {passes: f.passes, resort};
   },

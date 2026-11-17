@@ -1,4 +1,4 @@
-{% from '_tables.html' import tools, pager %}
+{% from '_tables.html' import tools, pager, greyed %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Launches — Nullius{% endblock %}
@@ -39,7 +39,7 @@
     </div>
   </div>
   {%- set filters = [] %}{% for col, label in cols if col in choices %}{% set _ = filters.append((col, label, choices[col])) %}{% endfor %}
-  {{ tools(filters, cols|rejectattr(0, 'in', unsorted)|list) }}
+  {{ tools(filters, cols|rejectattr(0, 'in', unsorted)|list, only) }}
 </div>
 <div class="table-wrap">
 <table class="grid sortable tools inventory" id="launches">
@@ -86,7 +86,7 @@
           </form>
         </template>
         {% if not r.why %}{{ delete_ask(L, none, 'launches', icon=true) }}
-        {%- else %}<button type="button" class="icon-btn" aria-disabled="true" aria-label="Delete launch {{ L.title }}" aria-describedby="why-{{ L.key }}" title="Delete launch: {{ r.why }}"><svg class="ic"><use href="#i-trash"/></svg></button><span class="sr" id="why-{{ L.key }}">{{ r.why }}</span>{% endif %}
+        {%- else %}{{ greyed('Delete launch ' ~ L.title, 'Delete launch', r.why, 'why-' ~ L.key) }}{% endif %}
       </td>
     </tr>
   {% endfor %}
@@ -102,6 +102,9 @@
   let pages = () => {};
   const tools = NulliusTable.toolbar(table, document.getElementById('launch-tools'), () => pages());
   pages = NulliusTable.pager(table, 'launches.per', tools.passes, document.getElementById('empty-note'));
+  // ?ws= ticked its workspace alone at load; from here the filter lives in the page, as the others do
+  const url = new URL(location.href);
+  if (url.searchParams.has('ws')) { url.searchParams.delete('ws'); history.replaceState(history.state, '', url); }
   // off until a viewer chooses: the table fits 1280 px without them
   const colBtn = document.getElementById('col-btn'), colMenu = document.getElementById('col-menu');
   NulliusTable.columns(table, null, colMenu, 'launches.cols', ['checks', 'machines', 'size']);

@@ -212,11 +212,6 @@ def _inject():
         # name so a workspace keeps its colour across pages and restarts.
         "workspaces": workspace.list_all(shared.WS_HOME)[:8],
         "ws_hue": lambda name: sum(ord(c) * (i + 7) for i, c in enumerate(name or "")) % 360,
-        # The open workspace's runs, for the rail's tree — from the cache index,
-        # so listing them costs one small file, not a parse.
-        "nav_runs": sorted(
-            workspace.job_index(shared.STATE["workspace"]).values(), key=lambda e: e["job_id"]
-        )[:12] if shared.STATE["workspace"] else [],
         # The catalogue's two trees in the rail: one small JSON read, cached
         # on its mtime so a page does not re-read it.
         "nav_catalog": shared._catalog_cached(),

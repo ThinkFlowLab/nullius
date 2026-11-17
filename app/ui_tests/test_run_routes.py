@@ -483,7 +483,7 @@ class Credentials(unittest.TestCase):
 
 
 class WorkspaceDelete(unittest.TestCase):
-    """The × on the Workspaces page: the workspace goes, its roots stay, the open one closes; a form token is needed."""
+    """Delete on the Workspaces page: the workspace goes, its roots stay, the open one closes; a form token is needed."""
     def setUp(self):
         from nullius import workspace
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
@@ -495,7 +495,7 @@ class WorkspaceDelete(unittest.TestCase):
         self.ws = workspace.create(str(self.tmp / "ws"), [str(root)], label="gone soon")
         self.client = web.app.test_client()
         r = self.client.get("/workspaces"); self.addCleanup(r.close)
-        self.assertIn('class="ws-remove"', r.get_data(as_text=True))
+        self.assertIn('aria-label="Delete workspace gone soon" title="Delete workspace"', r.get_data(as_text=True))
         with self.client.session_transaction() as s:
             self.csrf = s["csrf"]
 
@@ -530,7 +530,7 @@ class WorkspaceDelete(unittest.TestCase):
         other = workspace.create(home, [str(self.tmp / "jobs")], label="sharp lemur")
         page = self.client.get("/workspaces"); self.addCleanup(page.close)
         html = page.get_data(as_text=True)
-        self.assertEqual(html.count('class="ws-rename"'), 2)                                                  # a field on every row, none open
+        self.assertEqual(html.count('class="ws-rename" hidden>'), 2)                                         # a field on every row, none open
         for ws in (self.ws, other):
             self.assertIn(f'<input type="hidden" name="name" value="{ws.name}">', html)
         self.assertEqual(self.client.post("/workspaces/rename", data={"name": other.name, "label": "x"}, headers={"Origin": "http://localhost"}).status_code, 403)   # no token
@@ -901,7 +901,7 @@ class LaunchesPage(unittest.TestCase):
         web.shared.close_workspace()
         row = self.rows()[f"run:{orphan.id}"]
         self.assertNotIn('<template class="launch-ask"', row)                              # what goes is worked out when Delete opens, not with the page
-        self.assertIn(f'class="icon-btn launch-delete-btn" aria-haspopup="dialog" aria-label="Delete launch r3-*" title="Delete launch" data-ask="/launch/run:{orphan.id}/ask"><svg class="ic"><use href="#i-trash"/>', row)
+        self.assertIn(f'class="icon-btn danger launch-delete-btn" aria-haspopup="dialog" aria-label="Delete launch r3-*" title="Delete launch" data-ask="/launch/run:{orphan.id}/ask"><svg class="ic"><use href="#i-trash"/>', row)
         ask = self.get(f"/launch/run:{orphan.id}/ask").get_data(as_text=True)
         self.assertIn(f'action="/launch/run:{orphan.id}/delete"', ask)
         self.assertIn('<input type="hidden" name="back" value="launches">', ask)
@@ -918,7 +918,7 @@ class LaunchesPage(unittest.TestCase):
         row = self.rows()[f"run:{running.id}"]
         self.assertIn(">running<", row)
         self.assertNotIn("launch-delete-btn", row)
-        self.assertIn(f'<button type="button" class="icon-btn" aria-disabled="true" aria-label="Delete launch r4-*" aria-describedby="why-run:{running.id}" title="Delete launch: not while it runs">', row)   # greyed, in its place, focusable
+        self.assertIn(f'<button type="button" class="icon-btn danger" aria-disabled="true" aria-label="Delete launch r4-*" aria-describedby="why-run:{running.id}" title="Delete launch: not while it runs">', row)   # greyed, in its place, focusable
         self.assertIn(f'<span class="sr" id="why-run:{running.id}">not while it runs</span>', row)
         self.assertEqual(self.get(f"/launch/run:{running.id}/ask").status_code, 409)
         self.assertEqual(self.post(f"/launch/run:{running.id}/delete", back="launches").status_code, 302)
@@ -959,6 +959,242 @@ class LaunchesPage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkspacesPage(unittest.TestCase):
+    """The Workspaces page manages workspaces: one name, renamed in place; its
+    roots in a dialog, each unlinked from it or its folder deleted, only a run
+    Nullius made and has ended; no Open (the sidebar's menu opens one)."""
+    setUp, get = RunDelete.setUp, RunDelete.get
+    post = LaunchesPage.post
+
+    def row(self, ws, html=None):
+        html = html or self.get("/workspaces").get_data(as_text=True)
+        return html.split(f'data-ws="{ws.name}"', 1)[1].split("</tr>", 1)[0]
+
+    def greyed(self, root, why):
+        """A greyed trash, its reason its description (as on the Launches page) and its tooltip."""
+        return (rf'<button type="button" class="icon-btn danger" aria-disabled="true" aria-label="Delete folder {re.escape(str(root))}" aria-describedby="(why-[^"]+)" '
+                rf'title="Delete folder: {re.escape(why)}">.*?</button><span class="sr" id="\1">{re.escape(why)}</span>')
+
+    def other(self):
+        return next(w for w in workspace.list_all(self.home) if w.label == "sharp lemur")
+
+    def test_one_name_column_and_no_open(self):
+        html = self.get("/workspaces").get_data(as_text=True)
+        heads = re.findall(r"<th[^>]*>(.*?)</th>", html.split("<thead>", 1)[1].split("</thead>", 1)[0])
+        self.assertEqual([re.sub(r"<[^>]+>", "", h) for h in heads], ["Open", "Name", "Roots", "Runs", "Checks", "Launches", "Last opened", "Actions"])
+        row = self.row(self.ws, html)
+        self.assertIn(f'<span class="ws-title" title="{self.ws.name}">witty pelican</span>', row)   # the name on disk a tooltip
+        self.assertNotIn('<small class="mono faint">', row)                                          # no two labels alike
+        self.assertNotIn("workspaces/open", html.split('id="ws-table">', 1)[1])   # no Open, no "runs →"
+        self.assertNotIn("runs →", html)
+        self.assertRegex(html, r'<div class="page-title ws-head"><h1>Workspaces</h1>\s*<a class="btn sm" href="/import\?new=1">.*?New workspace</a>')
+
+    def test_two_labels_alike_show_their_names(self):
+        twin = workspace.create(self.home, [], label="witty pelican")
+        html = self.get("/workspaces").get_data(as_text=True)
+        for ws in (self.ws, twin):
+            self.assertIn(f'<small class="mono faint">{ws.name}</small>', self.row(ws, html))
+            self.assertIn(f'<h2 id="ws-dialog-h" title="{ws.name}">Roots of witty pelican</h2>', self.row(ws, html))
+
+    def test_rename_by_pencil(self):
+        row = self.row(self.ws)
+        self.assertIn('aria-label="Rename workspace witty pelican" title="Rename"><svg class="ic"><use href="#i-pencil"/>', row)
+        self.assertIn('<button class="btn sm ghost ws-cancel" type="button">Cancel</button>', row)    # Cancel sends nothing
+        self.assertEqual(self.post("/workspaces/rename", name=self.ws.name, label="  ").status_code, 302)   # empty: kept as it was
+        self.assertEqual(workspace.load(self.home, self.ws.name).label, "witty pelican")
+        self.post("/workspaces/rename", name=self.other().name, label="Witty Pelican")              # a name taken: suffixed on disk
+        renamed = next(w for w in workspace.list_all(self.home) if w.label == "Witty Pelican")
+        self.assertEqual(renamed.name, "witty-pelican-2")
+
+    def test_the_roots_dialog(self):
+        outside = self.tmp / "elsewhere"; self._job_dir(str(outside), "x-a")
+        web.shared.adopt_roots([str(outside)])
+        row = self.row(self.ws)
+        self.assertIn('data-ask="ws-roots" aria-haspopup="dialog" aria-label="Roots of witty pelican: 2" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>2</button>', row)
+        dialog = row.split('<template class="ws-roots">', 1)[1]
+        self.assertRegex(dialog, r'<h2 id="ws-dialog-h">Roots of witty pelican</h2>\s*<a class="btn sm" href="/import\?into=witty-pelican">')
+        self.assertIn('<h2 id="ws-dialog-h">Unlink a root of witty pelican</h2>', dialog)                # the confirms name it too
+        self.assertEqual(dialog.count('data-ask="ask-unlink"'), 2)
+        root = self.run_dir / "jobs"
+        self.assertNotIn('class="ask-delete"', dialog)                                                     # what Delete takes is asked when it opens
+        self.assertIn(f'data-ask="/workspaces/witty-pelican/roots/ask?root={root}" aria-haspopup="dialog" aria-label="Delete folder {root}" title="Delete folder">', dialog)
+        self.assertRegex(dialog, self.greyed(outside, "Outside Nullius&#39;s storage"))
+        ask = self.get(f"/workspaces/witty-pelican/roots/ask?root={root}").get_data(as_text=True)
+        self.assertIn('<h2 id="ws-dialog-h">Delete a root of witty pelican from disk</h2>', ask)
+        self.assertIn(f'<p class="mono">{self.run_dir}</p>', ask)
+        self.assertIn("2 runs", ask); self.assertIn("1 judgement", ask)
+        self.assertIn("Also removed from sharp lemur.", ask)                                              # the other workspace that loses it
+        self.assertEqual(self.get("/workspaces").get_data(as_text=True).count('<dialog class="std-how launch-delete" id="ws-dialog"'), 1)
+
+    def test_add_a_root_into_a_workspace_not_open(self):
+        other, more = self.other(), self.tmp / "more"; self._job_dir(str(more), "m-a")
+        self.assertIn('<input type="hidden" name="into" id="ws-into" value="sharp-lemur">', self.get(f"/import?into={other.name}").get_data(as_text=True))
+        r = self.client.post("/use-path", data={"csrf": self.csrf, "path": str(more), "into": other.name}, headers={"Origin": "http://localhost"}); self.addCleanup(r.close)
+        self.assertEqual(r.headers["Location"], "/workspaces")
+        self.assertIn(str(more), workspace.load(self.home, other.name).roots)
+        self.assertNotIn(str(more), web.shared.STATE["workspace"].roots)                             # the open one untouched
+
+    def test_unlink_takes_the_root_out_of_that_workspace_only(self):
+        root = str(self.run_dir / "jobs")
+        self.assertEqual(self.client.post(f"/workspaces/{self.ws.name}/roots/unlink", data={"root": root}).status_code, 403)   # no token
+        self.assertEqual(self.post(f"/workspaces/{self.ws.name}/roots/unlink", root="/nowhere").status_code, 404)
+        self.assertEqual(self.post(f"/workspaces/{self.ws.name}/roots/unlink", root=root).status_code, 302)
+        self.assertEqual(workspace.load(self.home, self.ws.name).roots, [])
+        self.assertEqual(web.shared.STATE["workspace"].roots, []); self.assertEqual(web.shared.STATE["job_roots"], [])   # read again
+        self.assertEqual(workspace.job_index(workspace.load(self.home, self.ws.name)), {})
+        self.assertIn(root, self.other().roots)
+        self.assertTrue((self.run_dir / "jobs").is_dir())                                           # its files stay
+
+    def test_delete_refuses_a_folder_outside_storage(self):
+        outside = self.tmp / "elsewhere"; self._job_dir(str(outside), "x-a")
+        link = self.tmp / "runs" / "link"; link.symlink_to(outside, target_is_directory=True)       # a link out of the runs root
+        web.shared.adopt_roots([str(outside), str(link)])
+        for root in (outside, link):
+            with self.subTest(root=root):
+                r = self.client.post(f"/workspaces/{self.ws.name}/roots/delete", data={"csrf": self.csrf, "root": str(root)},
+                                     headers={"Origin": "http://localhost"}, follow_redirects=True); self.addCleanup(r.close)
+                self.assertIn("outside nullius&#39;s storage", r.get_data(as_text=True))
+        self.assertTrue((outside / "x-a").is_dir())
+        self.assertIn(str(outside), workspace.load(self.home, self.ws.name).roots)
+
+    def test_delete_refuses_while_its_run_is_going(self):
+        root = str(self.run_dir / "jobs")
+        for state in execution.ALIVE:
+            with self.subTest(state=state):
+                self.ex.state = state
+                self.assertRegex(self.row(self.ws), self.greyed(root, "Not while its launch is going"))
+                self.assertEqual(self.get(f"/workspaces/{self.ws.name}/roots/ask?root={root}").status_code, 409)
+                self.post(f"/workspaces/{self.ws.name}/roots/delete", root=root)
+                self.assertTrue(self.run_dir.is_dir())
+
+    def test_delete_inside_storage(self):
+        root = str(self.run_dir / "jobs")
+        self.assertEqual(self.client.post(f"/workspaces/{self.ws.name}/roots/delete", data={"root": root}, headers={"Origin": "http://localhost"}).status_code, 403)
+        r = self.post(f"/workspaces/{self.ws.name}/roots/delete", root=root)
+        self.assertEqual(r.headers["Location"], "/workspaces")
+        self.assertFalse(self.run_dir.exists())
+        self.assertNotIn(self.ex.id, execution.EXECUTIONS)
+        for ws in (workspace.load(self.home, self.ws.name), self.other()):
+            self.assertEqual(ws.roots, [])                                                          # gone from both
+        self.assertEqual(web.shared.STATE["job_roots"], [])
+        self.assertIn(f"Deleted <span class=\"mono\">{self.run_dir}</span>.", self.get("/workspaces").get_data(as_text=True))
+
+    def cell(self, ws, i):
+        """A row's i-th cell, as text."""
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", re.sub(r"<template.*?</template>", "", self.row(ws), flags=re.S), re.S)
+        return " ".join(re.sub(r"<[^>]+>", " ", cells[i]).split())
+
+    def test_runs_and_checks_count_as_the_runs_and_launches_pages_count_them(self):
+        from tests.test_feasibility import write_job
+        d = self.tmp / "runs" / "r5"                                                                # a launch of an agent and its two checks
+        plan = execution.Plan(name="r5", script="true", jobs=[{"name": "r5-a", "agent": "my-agent"}, {"name": "r5-nop", "agent": "nop"}, {"name": "r5-oracle", "agent": "oracle"}])
+        self._write_json(str(d / "run.json"), {"plan": plan.to_dict(), "state": "done", "step": "run"})
+        for job, agent, reward in (("r5-a", "my-agent", 1), ("r5-nop", "nop", 0), ("r5-oracle", "oracle", 1)):
+            write_job(str(d / "jobs"), job, agent, {"a": reward})
+        execution.restore()
+        web.shared.adopt_roots([str(d / "jobs")])
+        listed = self.cell(self.ws, 3), self.cell(self.ws, 4)
+        page = self.get("/runs").get_data(as_text=True)
+        header = re.search(r'data-runs="(\d+)"', page).group(1), re.search(r"(\d+) checks\s*</p>", page).group(1)
+        rows = [LaunchesPage.cells(self, r) for r in re.findall(r'<tr data-launch="[^"]+"(.*?)</tr>', self.get("/launches").get_data(as_text=True), re.S)
+                if self.ws.name in re.search(r'data-f-ws="([^"]*)"', r).group(1).split("\n")]
+        launched = str(sum(int(r["runs"]) for r in rows)), str(sum(int(r["checks"]) for r in rows))
+        self.assertEqual((listed, header, launched), (("3", "2"),) * 3)
+        ask = self.get(f"/workspaces/{self.ws.name}/roots/ask?root={d / 'jobs'}").get_data(as_text=True)
+        self.assertIn("<p>1 run · 2 checks · ", ask)                                                # the folder's Delete counts its run alike
+
+    def test_launches_count_as_the_filtered_launches_page(self):
+        bare = workspace.create(self.home, [str(self.tmp / "none")], label="bare")
+        rows = re.findall(r'<tr data-launch="[^"]+".*?data-f-ws="([^"]*)"', self.get("/launches").get_data(as_text=True))
+        for ws in (self.ws, self.other()):
+            with self.subTest(ws=ws.label):
+                n = sum(ws.name in r.split("\n") for r in rows)
+                self.assertEqual(n, 1)
+                self.assertIn(f'<a href="/launches?ws={ws.name}" aria-label="Launches of {ws.label}: 1">1</a>', self.row(ws))
+        self.assertEqual(self.cell(bare, 5), "0"); self.assertNotIn("/launches?ws=", self.row(bare))   # none: plain text
+
+    def test_ws_presets_the_launches_filter(self):
+        boxes = lambda html: dict(re.findall(r'<input type="checkbox" data-value="([^"]*)"( checked)?>', html.split('data-filter-menu="ws"', 1)[1].split("</fieldset>", 1)[0]))
+        other = self.other()
+        self.assertEqual(boxes(self.get(f"/launches?ws={other.name}").get_data(as_text=True)), {"": "", self.ws.name: "", other.name: " checked"})
+        for q in ("?ws=nowhere", "?ws=", ""):                                                      # unknown: every box ticked
+            with self.subTest(q=q):
+                self.assertEqual(set(boxes(self.get(f"/launches{q}").get_data(as_text=True)).values()), {" checked"})
+
+    def test_sort_by_alone_and_every_sort_key(self):
+        html = self.get("/workspaces").get_data(as_text=True)
+        tools = html.split('<div class="table-tools inv-cols" id="ws-tools">', 1)[1].split('<div class="table-wrap">', 1)[0]
+        self.assertNotIn('data-tools-btn="filter"', tools)                                        # Sort by alone: nothing to filter
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools), ["", "name", "roots", "runs", "checks", "launches", "opened"])
+        self.assertIn('<table class="grid sortable tools inventory ws-table" id="ws-table">', html)
+        heads = re.findall(r'<th( data-col="\w+" data-type="\w+")?[^>]*>', html.split("<thead>", 1)[1].split("</thead>", 1)[0])
+        self.assertEqual([bool(h) for h in heads], [False, True, True, True, True, True, True, False])  # Open and the actions do not sort
+        self.assertNotIn("data-sorted", html)                                                     # no arrow until a sort is chosen
+        self.assertRegex(html, r'<div class="table-tools table-pager" data-pager="ws-table">\s*<label class="table-note">Show <select data-per><option>10</option><option selected>25</option>')
+        row = self.row(self.ws, html)
+        self.assertIn('<td class="ws-name" data-sort="witty pelican">', row)
+        self.assertIn('<td data-sort="1">', row)                                                  # its roots
+        self.assertRegex(row, r'data-sort="\d{14}">\d{4}-\d\d-\d\d \d\d:\d\d</td>')                 # last opened, as digits
+
+    def test_delete_workspace_says_what_is_lost(self):
+        from nullius.judge import store
+        store.save(self.ws.dir, "r1-b", "t0", {"questions": "v", "answers": {}}, lane="llm")            # beside the one setUp saved
+        ask = lambda ws: self.row(ws).split('<template class="ws-ask-delete">', 1)[1].split("</template>", 1)[0]
+        self.assertIn('<h2 id="ws-dialog-h">Delete workspace witty pelican</h2>', ask(self.ws))
+        self.assertIn("<p>Its judgements (2) are deleted. Its run folders stay on disk.</p>", ask(self.ws))
+        self.assertIn("<p>Its run folders stay on disk.</p>", ask(self.other()))                     # none: nothing lost but the cache
+
+    def test_a_shard_s_folder_stays_while_another_shard_of_its_launch_runs(self):
+        for i, state in ((1, "done"), (2, "running")):
+            d = self.tmp / "runs" / f"q{i}"
+            plan = execution.Plan(name=f"q{i}", script="true", jobs=[{"name": f"Q-shard-{i}of2", "launch": "Q"}])
+            self._write_json(str(d / "run.json"), {"plan": plan.to_dict(), "state": state, "step": "run"})
+            self._job_dir(str(d / "jobs"), f"Q-shard-{i}of2")
+        with patch.object(execution.Execution, "resume", lambda ex: ex):
+            execution.restore()
+        root = str(self.tmp / "runs" / "q1" / "jobs")
+        web.shared.adopt_roots([root])                                                               # the shard that ended
+        self.assertRegex(self.row(self.ws), self.greyed(root, "Not while its launch is going"))
+        r = self.post(f"/workspaces/{self.ws.name}/roots/delete", root=root); self.addCleanup(r.close)
+        self.assertTrue((self.tmp / "runs" / "q1" / "run.json").is_file())
+        self.assertIn(root, workspace.load(self.home, self.ws.name).roots)
+
+    def test_each_folder_that_stays_says_why(self):
+        bad = self.tmp / "runs" / "broken"; bad.mkdir(parents=True); (bad / "run.json").write_text("{not json")
+        roots = {str(bad): "Cannot read its run record", str(self.run_dir / "jobs" / "r1-a"): "Inside a run, not a run folder",
+                 str(self.tmp / "runs"): "Not a run folder", str(self.tmp): "Outside Nullius&#39;s storage"}
+        web.shared.adopt_roots(list(roots))
+        row = self.row(self.ws)
+        for root, why in roots.items():
+            with self.subTest(root=root):
+                self.assertRegex(row, self.greyed(root, why))
+
+    def test_a_name_from_a_hand_edited_record_stays_text(self):
+        twin = workspace.create(self.home, [], label="witty pelican")                                  # labels alike: the name is shown
+        record = Path(twin.dir) / "workspace.json"
+        record.write_text(json.dumps({**json.loads(record.read_text()), "name": 'x"><b>y'}))
+        html = self.get("/workspaces").get_data(as_text=True)
+        self.assertNotIn("<b>y", html)
+        self.assertIn('title="x&#34;&gt;&lt;b&gt;y">Roots of witty pelican</h2>', html)
+
+    def test_into_a_workspace_that_is_gone_adds_nothing(self):
+        more = self.tmp / "more"; self._job_dir(str(more), "m-a")
+        r = self.get("/import?into=gone-now")
+        self.assertEqual((r.status_code, r.headers["Location"]), (302, "/workspaces"))
+        for path in ("/use-path", "/upload"):
+            with self.subTest(path=path):
+                r = self.client.post(path, data={"csrf": self.csrf, "path": str(more), "into": "gone-now"}, headers={"Origin": "http://localhost"}, follow_redirects=True)
+                self.addCleanup(r.close)
+                self.assertIn('No workspace called <span class="mono">gone-now</span>: nothing added.', r.get_data(as_text=True))
+                self.assertNotIn(str(more), web.shared.STATE["workspace"].roots)
+
+    def test_the_sidebar_links_to_workspaces_without_a_tree(self):
+        html = self.get("/launches").get_data(as_text=True)
+        self.assertIn('<a class="nav-item " href="/workspaces" data-label="Workspaces" aria-label="Workspaces"><svg class="ic"><use href="#i-ws"/></svg><span class="lbl">Workspaces</span></a>', html)
+        self.assertNotIn('data-tree="nav-ws"', html)
+        self.assertNotIn("tree-runs", html)
 
 
 class ExecutionPolling(unittest.TestCase):

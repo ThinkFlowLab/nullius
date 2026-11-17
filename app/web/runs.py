@@ -106,16 +106,18 @@ def index():
     )
 
 
-def _grouped():
+def _grouped(ws=None):
     """The open workspace's jobs (less those a merge stands for), the ids of all
     it parsed, the run records that belong to it, and the launches By launch
     shows: the runs grouped by the launch that made them (nullius.runs.launches)
-    - the builder's run record, else the same dataset within half an hour."""
-    jobs = shared._load_jobs()
+    - the builder's run record, else the same dataset within half an hour.
+    ``ws``: another workspace's, read from its cache without opening it."""
+    jobs = shared._load_jobs() if ws is None else workspace.load_jobs(ws, ws.job_roots or ws.roots)
     have = {j.job_id for j in jobs}
     # The run records are the app's, not the workspace's: only those launched
     # into this workspace's roots, or with a job already written here, belong.
-    mine = [e for e in execution.EXECUTIONS.values() if _launched_here(e, have)]
+    roots = None if ws is None else list(ws.roots) + list(ws.job_roots)
+    mine = [e for e in execution.EXECUTIONS.values() if _launched_here(e, have, roots)]
     merged = launches.merged_sources(jobs)
     jobs = [j for j in jobs if j.job_id not in merged]
     return jobs, have, mine, launches.group(jobs, {e.id: _record(e, merged) for e in mine})
@@ -149,13 +151,15 @@ def _tally(g, by_id) -> dict:
     return {"n_runs": len(written) + len(pending) - checks, "n_checks": checks}
 
 
-def _launched_here(ex, have) -> bool:
-    """A run record belongs to the open workspace when its job root is one of
-    the workspace's roots (a Run adopts it there) or one of its jobs is here."""
+def _launched_here(ex, have, roots=None) -> bool:
+    """A run record belongs to the open workspace (or one of ``roots``) when its
+    job root is one of the workspace's roots (a Run adopts it there) or one of
+    its jobs is here."""
     if any(str(x.get("name")) in have for x in ex.plan.jobs):
         return True
     jobs_dir = getattr(ex, "jobs", None)
-    roots = list(shared.STATE.get("roots") or []) + list(shared.STATE.get("job_roots") or [])
+    if roots is None:
+        roots = list(shared.STATE.get("roots") or []) + list(shared.STATE.get("job_roots") or [])
     return bool(jobs_dir) and os.path.realpath(jobs_dir) in {os.path.realpath(r) for r in roots}
 
 
@@ -404,20 +408,29 @@ def _refused_message(refused):
         for root, why in refused))
 
 
-def _after_import(good, refused, new):
-    """Where a submission lands: the runs list — or, when something was
-    refused, the picker, which is the page that shows the message. The runs
-    list does not, and a refusal nobody sees is a silent success."""
+def _gone_into(name):
+    """``into`` names a workspace that is gone: nothing is added, not even to the open one."""
+    flash(Markup('No workspace called <span class="mono">{}</span>: nothing added.').format(name), "error")
+    return redirect(url_for("workspaces_page"))
+
+
+def _after_import(good, refused, new, into=""):
+    """Where a submission lands: the runs list, or the Workspaces page for
+    roots added ``into`` a named workspace — or, when something was refused,
+    the picker, which is the page that shows the message. The runs list does
+    not, and a refusal nobody sees is a silent success."""
     if refused:
         flash(_refused_message(refused), "error")
-        return redirect(url_for("import_page", new="1" if new and not good else None))
-    return redirect(url_for("index"))
+        return redirect(url_for("import_page", new="1" if new and not good else None, into=into or None))
+    return redirect(url_for("workspaces_page" if into else "index"))
 
 
 @app.route("/use-path", methods=["POST"])
 def use_path():
     shared._require_csrf()
-    new = request.form.get("new") == "1"
+    new, into = request.form.get("new") == "1", request.form.get("into", "")
+    if into and workspace.load(shared.WS_HOME, into) is None:
+        return _gone_into(into)
     label = (request.form.get("name") or "").strip()
     if new and not any(p.strip() for p in request.form.getlist("path")):
         shared.open_workspace(workspace.create(shared.WS_HOME, [], label))   # no path: an empty workspace
@@ -427,8 +440,8 @@ def use_path():
         flash(shared._bad_paths_message(bad), "error")
     good, refused = _readable(good)
     if good:
-        shared.adopt_roots(good, label=label, new=new)
-    return _after_import(good, refused, new)
+        shared.adopt_roots(good, label=label, new=new, into=into)
+    return _after_import(good, refused, new, into)
 
 
 @app.route("/api/folders", methods=["POST"])
@@ -449,15 +462,21 @@ def change_source():
 
 @app.route("/import")
 def import_page():
-    """The picker: add runs to the open workspace, or start a new one."""
-    mode = "new" if request.args.get("new") == "1" or shared.STATE["workspace"] is None else "add"
-    return render_template("runs/setup.html", scanned=False, mode=mode,
+    """The picker: add runs to the open workspace or the one ``?into=`` names, or start a new one."""
+    into = workspace.load(shared.WS_HOME, request.args.get("into", ""))
+    if request.args.get("into") and into is None:
+        return _gone_into(request.args["into"])
+    target = into or shared.STATE["workspace"]
+    mode = "new" if request.args.get("new") == "1" or target is None else "add"
+    return render_template("runs/setup.html", scanned=False, mode=mode, target=target, into=into,
                            workspaces=workspace.list_all(shared.WS_HOME))
 
 
 @app.route("/upload", methods=["POST"])
 def upload():
     shared._require_csrf()
+    if request.form.get("into") and workspace.load(shared.WS_HOME, request.form["into"]) is None:
+        return _gone_into(request.form["into"])
     files = request.files.getlist("files")
     files = [f for f in files if f.filename]
     # One Parse button serves both halves of the form, so typed paths can
@@ -502,11 +521,11 @@ def upload():
         label = f"{saved} files (uploaded)"
     if typed:
         label += f" +{len(typed)} local"
-    new = request.form.get("new") == "1"
+    new, into = request.form.get("new") == "1", request.form.get("into", "")
     if roots:
         shared.adopt_roots(roots, label=(request.form.get("name") or "").strip() or label,
-                    new=new)
-    return _after_import(roots, refused, new)
+                    new=new, into=into)
+    return _after_import(roots, refused, new, into)
 
 
 @app.route("/job/<job_id>", methods=["GET", "HEAD"])
@@ -599,28 +618,38 @@ def _catalogued(recipe, recorded, std) -> tuple:
     return bench, datasets
 
 
-def _inventory(g, by_id, held, owner) -> dict:
-    """One launch as a row of the Launches page; what its Delete would take is
-    asked only when it opens (``launch_ask``). ``held``: a record's real
-    folder -> ``workspace.holding`` of it; ``owner``: a job's run."""
-    runs = _runs_of(g, owner)
-    return {"launch": g, "runs": runs, "why": _undeletable(runs), "shards": len(runs), "state": _most_telling(map(_run_state, runs)),
-            **_tally(g, by_id), "machines": list(dict.fromkeys(e.plan.host.label if e.plan.host else "this machine" for e in runs)),
-            "bytes": sum(execution.size_of(e.dir) for e in runs),
-            "workspaces": list({w.name: w for e in runs for w, _ in held.get(os.path.realpath(e.dir), [])}.values())}
-
-
-@app.route("/launches")
-def launches_page():
-    """Every launch Nullius made, in a workspace or not."""
-    wss = workspace.list_all(shared.WS_HOME)
+def _held_launches() -> tuple:
+    """Every launch Nullius made (``_every``) as the Launches page lists it:
+    [(launch, its runs, the workspaces with a root in their folders)];
+    ``held``: a record's real folder -> ``workspace.holding`` of it; and
+    ``_every``'s job id -> job. The Workspaces page counts each workspace's
+    launches from it."""
     recs = sorted(execution.EXECUTIONS.values(), key=lambda e: e.started)
     held = workspace.holding_all(shared.WS_HOME, {os.path.realpath(e.dir) for e in recs})
     owner = {str(x.get("name")): e for e in recs for x in e.plan.jobs}     # the newest run naming a job, as for_job
     by_id, every = _every()
     for j in by_id.values():                                                # a merge beside its shards: their run's
         owner.setdefault(j.job_id, next((owner[m] for m in getattr(j, "merged_from", []) if m in owner), None))
-    rows = [_inventory(g, by_id, held, owner.get) for g in every]
+    rows = [(g, runs, list({w.name: w for e in runs for w, _ in held.get(os.path.realpath(e.dir), [])}.values()))
+            for g in every for runs in [_runs_of(g, owner.get)]]
+    return rows, held, by_id
+
+
+def _inventory(g, runs, wss, by_id) -> dict:
+    """One launch as a row of the Launches page (``_held_launches``' row); what
+    its Delete would take is asked only when it opens (``launch_ask``)."""
+    return {"launch": g, "runs": runs, "why": _undeletable(runs), "shards": len(runs), "state": _most_telling(map(_run_state, runs)),
+            **_tally(g, by_id), "machines": list(dict.fromkeys(e.plan.host.label if e.plan.host else "this machine" for e in runs)),
+            "bytes": sum(execution.size_of(e.dir) for e in runs), "workspaces": wss}
+
+
+@app.route("/launches")
+def launches_page():
+    """Every launch Nullius made, in a workspace or not. ``?ws=<name>``: the
+    Workspaces filter starts on that workspace alone."""
+    wss = workspace.list_all(shared.WS_HOME)
+    held_rows, _, by_id = _held_launches()
+    rows = [_inventory(g, runs, holders, by_id) for g, runs, holders in held_rows]
     std = standard_definitions.load("benchmark")[0]
     for r in rows:
         r["bench"], r["datasets"] = _catalogued(r["runs"][0].plan.recipe if r["runs"] else {}, r["launch"].dataset, std)
@@ -629,7 +658,8 @@ def launches_page():
                "state": [(s, s) for s in _TELLING if any(r["state"] == s for r in rows)],
                "machines": sorted({(m, m) for r in rows for m in r["machines"]}),
                "ws": [("", "none")] + [(w.name, w.label) for w in wss]}
-    return render_template("runs/launches.html", rows=rows, workspaces=wss, choices=choices, telling=_TELLING)
+    only = {"ws": request.args["ws"]} if request.args.get("ws") in {w.name for w in wss} else {}
+    return render_template("runs/launches.html", rows=rows, workspaces=wss, choices=choices, telling=_TELLING, only=only)
 
 
 @app.route("/launch/<key>/ask")

@@ -1676,6 +1676,21 @@ def run_folder(name: str, root: Optional[str] = None) -> str:
     return path
 
 
+def run_of(path: str, root: Optional[str] = None) -> Optional[str]:
+    """The name of the run Nullius made whose folder, or its ``jobs`` folder,
+    *path* is once its links are resolved; None for any other path: the one
+    folder a workspace root may be deleted as is a run's own, in the runs root."""
+    real, runs = os.path.realpath(path), os.path.realpath(root or runs_root())
+    name, _, rest = os.path.relpath(real, runs).partition(os.sep)
+    if name in (os.curdir, os.pardir) or rest not in ("", "jobs"):
+        return None
+    try:
+        run_folder(name, runs)
+    except ValueError:
+        return None
+    return name
+
+
 def size_of(path: str) -> int:
     """The bytes of every file under *path*, links not followed; a file gone
     since the walk listed it (a run still writing replaces its own) counts 0."""
