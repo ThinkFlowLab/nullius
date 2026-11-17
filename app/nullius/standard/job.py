@@ -596,8 +596,9 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
     """pass^k of a run that tried each unit several times (``repeat``), as τ-bench defines it: over
     the units, the chance that k attempts drawn from its n all passed, C(c, k) / C(n, k), averaged -
     pass^1 is the pass rate; and pass@k (``at``), the chance that one of them did, as HumanEval reads it. A unit with an attempt that ended in an error, with no verdict, is left
-    out, as the upstreams leave an infrastructure error out. None for a run of one attempt each."""
-    from math import comb
+    out, as the upstreams leave an infrastructure error out. None for a run of one attempt each.
+    The estimators are ``nullius.runs.attempts``', the ones the pages use."""
+    from nullius.runs import attempts
     per: Dict[str, List[bool]] = {}
     broken = set()
     for r in results:
@@ -609,14 +610,12 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
             broken.add(u)
             continue
         per.setdefault(u, []).append(rewards["reward"] == 1.0)
-    whole = {u: v for u, v in per.items() if u not in broken}
-    n = min((len(v) for v in whole.values()), default=0)
-    if n < 2:
+    got = attempts.estimate(v for u, v in per.items() if u not in broken)
+    if got is None:
         return None
-    return {"units": len(whole), "attempts": n,
-            **{str(k): round(sum(comb(sum(v[:n]), k) / comb(n, k) for v in whole.values()) / len(whole), 4) for k in range(1, n + 1)},
-            # pass@k, as HumanEval's estimate_pass_at_k reads n attempts with c passed: 1 - C(n-c, k) / C(n, k), averaged
-            "at": {str(k): round(sum(1 - comb(n - sum(v[:n]), k) / comb(n, k) for v in whole.values()) / len(whole), 4) for k in range(1, n + 1)}}
+    return {"units": got["units"], "attempts": got["attempts"],
+            **{str(k): round(v, 4) for k, v in got["hat"].items()},
+            "at": {str(k): round(v, 4) for k, v in got["at"].items()}}
 
 
 def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int, budget: Optional[dict] = None,

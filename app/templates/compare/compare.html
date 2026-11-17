@@ -1,4 +1,5 @@
 {% from 'runs/_runtime.html' import what_ran %}
+{% from 'traces/_attempts.html' import attempt_count %}
 {% extends "base.html" %}
 {% block title %}Compare {{ jobs|length }} runs — Nullius{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">{% endblock %}
@@ -31,7 +32,7 @@
   {% if not comparison.datasets_known %}<p>A run has no recorded dataset identity. Its task names are kept separate because their identity cannot be verified.</p>
   {% elif not comparison.datasets_match %}<p>The recorded datasets differ. Matching requires exact dataset names and versions; identical task names from different datasets are kept separate.</p>{% endif %}
   {% if cohort == 'matched' and not n_shared %}<p>No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
-  {% if comparison.repeated_trials|sum %}<p>Some tasks have repeated attempts. All attempts count in the summaries; each task row and its detail show the <strong>last indexed attempt</strong>, not necessarily the latest by timestamp.</p>{% endif %}
+  {% if comparison.repeated_trials|sum %}<p>Some tasks have repeated attempts. A task row counts every attempt, infra apart, and disagrees when its pass rate or how its attempts ended differs; its outcome is the last indexed attempt.</p>{% endif %}
   <p>Adjusted rate excludes only rate limits, API errors, setup errors and spending caps. Unknown outcomes stay in its denominator. Controls are never ranked.</p>
 </div>
 
@@ -108,6 +109,18 @@
       {% for v in r.cells %}<td class="{{ r.classes[loop.index0] }}">{{ v }}</td>{% endfor %}
     </tr>
     {% endfor %}
+    {% set pk = comparison.pass_k %}
+    {% if pk and pk|select|list|length == pk|length %}
+    {% set top = pk|map(attribute='attempts')|min %}
+    {% for name, key, hint in [('pass@', 'at', 'The chance that at least one of k attempts passed, averaged over the tasks'), ('pass^', 'hat', 'The chance that all k attempts passed, averaged over the tasks')] %}
+    {% for k in range(1, top + 1) %}
+    <tr class="pass-k">
+      <th class="rowhead" title="{{ hint }}">{{ name }}{{ k }}</th>
+      {% for p in pk %}<td class="mono" title="{{ p.units }} task{{ '' if p.units == 1 else 's' }}, each read on its first {{ p.attempts }} attempts">{{ '%.0f'|format(p[key][k] * 100) }}%</td>{% endfor %}
+    </tr>
+    {% endfor %}
+    {% endfor %}
+    {% endif %}
     <tr>
       <th class="rowhead" title="The recorded invocation — a foreign harness's own command verbatim, or the harbor run reconstructed from this run's recorded config — copy it to run the same benchmark again">Rerun</th>
       {% for j in jobs %}
@@ -120,7 +133,7 @@
 </div>
 
 <h2>Task by task</h2>
-<p class="subtitle">Tasks where the runs disagree are listed first. A blank cell means that run
+<p class="subtitle">Tasks whose pass rate moved most are listed first. A blank cell means that run
   didn't include the task.</p>
 {% if judgement %}
 <div class="judgement-job" id="judgement">
@@ -153,8 +166,7 @@
     {% for taskrow in tasks %}
     {% set task_index = loop.index0 %}
     {% set row = taskrow.trials %}
-    {% set outcomes = row|select|map(attribute='outcome')|list %}
-    <tr class="compare-task-row {% if outcomes|unique|list|length > 1 %}row-differs{% endif %}">
+    <tr class="compare-task-row {% if taskrow.differs %}row-differs{% endif %}">
       <td class="mono">
         <div class="compare-task-name">
         {# One glyph, rotated by CSS on aria-expanded. #}
@@ -185,7 +197,8 @@
           <span class="compare-quick-metric" title="{% if used_tokens or jobs[loop.index0].is_control %}Input {{ t.n_input_tokens or 0 }} · Output {{ t.n_output_tokens or 0 }} · Cached input {{ t.n_cache_tokens or 0 }} (included in input){% else %}Token usage not recorded{% endif %}"><span>Tokens</span><strong>{{ used_tokens|tokens(jobs[loop.index0].kind) }}</strong></span>
           </div>
           </div>
-          {% if taskrow.attempts[loop.index0] > 1 %}<span class="compare-attempts">{{ taskrow.attempts[loop.index0] }} attempts · last indexed shown</span>{% endif %}
+          {%- set tried = taskrow.tried[loop.index0] %}
+          {% if tried.n > 1 %}<span class="compare-attempts">{{ attempt_count(tried) }}</span>{% endif %}
         {% else %}
           <span class="faint">—</span>
         {% endif %}

@@ -30,7 +30,9 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 - **Isolation matters.** Local agents run as your user and can read accessible scorer files. Docker conformance keeps the driver and oracle outside the agent's mounts. Public kit checks remain compatibility checks, not evidence of resistance to cheating.
 
-## Repeated attempts {#attempts}
+## Attempts and retries {#attempts}
+
+An attempt is one run of a task, counted whatever its result. A retry reruns an attempt after an infrastructure or agent failure; its last try is the trial.
 
 Standard runs with repeated, scored attempts record both measures in `pass_hat_k`. They answer different questions.
 
@@ -44,9 +46,11 @@ Chance that all k sampled attempts pass: `C(c,k) / C(n,k)`.
 
 Here n is the attempt count and c the passed count per unit; results are averaged across eligible units. Units with an exception or missing verdict are excluded. The writer uses the smallest available attempt count across eligible units and emits no series below two attempts. This is separate from the trial-level adjusted solve rate.
 
+The job page and Compare show both for any run that tried every task at least twice, leaving out a task with an infra attempt; an agent error is a fail. A task's pass rate is its passes over the attempts that ran, infra apart.
+
 ## Compare like with like {#compare}
 
-Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs; its comparison row shows the last indexed attempt.
+Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs; a task row disagrees when its pass rate or its attempts' outcomes differ, and shows the last indexed attempt.
 
 Check dataset, model, provider, agent version, limits and execution backend before attributing a difference to the agent. Matched views omit whole-run wall time because it does not measure just the selected tasks.
 

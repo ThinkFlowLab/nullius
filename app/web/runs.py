@@ -21,7 +21,7 @@ from markupsafe import Markup, escape
 from nullius import execution
 from nullius import importers as harnesses
 from nullius.redact import redact
-from nullius.runs import classify, feasibility, launches, live, parse
+from nullius.runs import attempts, classify, feasibility, launches, live, parse
 from nullius import workspace
 from nullius.standard import definitions as standard_definitions
 
@@ -547,7 +547,8 @@ def job(job_id):
     return render_template("runs/job.html", job=j, live_board=board, view=_view_of(board, j),
                            execution=ex, csrf=shared._csrf_token(),
                            judgement=judge.job_summary(j) if j.trials else None,
-                           control=feasibility.summary_of(j), ended=execution.ended_for(job_id), own=own, deletable=_deletable(job_id, ex))
+                           control=feasibility.summary_of(j), ended=execution.ended_for(job_id), own=own, deletable=_deletable(job_id, ex),
+                           trial_rows=attempts.grouped(j), pass_k=attempts.for_job(j))
 
 
 def _runs_of(g, owner=execution.for_job) -> list:

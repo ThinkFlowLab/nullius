@@ -1,5 +1,21 @@
 {
  "artifacts": {},
+ "attempts": {
+  "Attempts": [
+   "endings",
+   "has_verdicts",
+   "mean_score",
+   "n",
+   "n_infra",
+   "n_passed",
+   "n_ran",
+   "n_scored",
+   "ran",
+   "rate",
+   "scores",
+   "trials"
+  ]
+ },
  "behavior": {
   "Behavior": [
    "edit_test_cycles",
@@ -223,6 +239,7 @@
    "excluded_trials",
    "jobs",
    "n_differing",
+   "pass_k",
    "references",
    "repeated_trials",
    "selected",
@@ -245,9 +262,12 @@
    "attempts",
    "dataset",
    "differs",
+   "movement",
+   "rate_moved",
    "shared",
    "task",
-   "trials"
+   "trials",
+   "tried"
   ]
  },
  "conversation": {},

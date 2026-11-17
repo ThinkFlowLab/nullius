@@ -40,7 +40,7 @@
 .rp .oc-no_patch { --oc: var(--no_patch); } .rp .oc-agent_error { --oc: var(--agent_error); }
 .rp .oc-rate_limited { --oc: var(--rate_limited); } .rp .oc-api_error { --oc: var(--api_error); }
 .rp .oc-setup_error { --oc: var(--setup_error); } .rp .oc-unknown { --oc: var(--unknown-mark); }
-.rp .oc-spending_cap { --oc: var(--spending_cap); }
+.rp .oc-spending_cap { --oc: var(--spending_cap); } .rp .oc-scored { --oc: var(--scored); } .rp .oc-cancelled { --oc: var(--cancelled); }
 .rp .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--oc); flex: none; }
 .rp .odot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--oc); flex: none; }
 .rp .adv { display: inline-block; font: 500 10.5px/16px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint);
@@ -111,6 +111,11 @@
 .rp .hk .em { color: var(--text); font-weight: 500; }
 .rp .hk .warn { color: var(--warn); font-weight: 500; }
 .rp .hk .bad { color: var(--bad); font-weight: 500; }
+.rp .hk .pass-k { border-collapse: collapse; margin-top: 6px; font: 12px/20px var(--mono); }
+.rp .hk .pass-k th { color: var(--text-faint); font-weight: 400; text-align: right; padding: 0 0 0 10px; }
+.rp .hk .pass-k th[scope=col] { font-family: var(--sans); }
+.rp .hk .pass-k th:first-child { text-align: left; padding: 0; }
+.rp .hk .pass-k td { color: var(--text-dim); text-align: right; padding: 0 0 0 10px; }
 
 /* outcomes: the bar, and its legend rows, which are the filter and each the start of its lanes */
 .rp .mix { flex: 1; display: flex; gap: 2px; height: 12px; }
@@ -291,6 +296,17 @@
 .rp .tt tbody.pv tr[data-outcome]:not(.lit) td { opacity: .34; }
 .rp .tt td.num { text-align: right; font: 12.5px/20px var(--mono); font-variant-numeric: tabular-nums; }
 .rp .task { font: 12.5px/20px var(--mono); color: var(--text); overflow-wrap: break-word; }
+.rp .tt tr.task-group { cursor: pointer; }
+.rp .tt tr.task-group:hover td, .rp .tt tr.task-group:focus-within td, .rp .tt tr.task-group.lit td { background: var(--surface-2); }
+.rp .tt tbody.pv tr.task-group:not(.lit) td { opacity: .34; }
+.rp .group-toggle { display: inline-flex; align-items: center; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.rp .group-toggle::before { color: var(--text-dim); }
+.rp .group-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.rp .group-pass { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.rp .group-pass b { font: 600 12.5px/20px var(--mono); }
+.rp .sqs { display: inline-flex; gap: 3px; }
+.rp .tt tr.in-group td:first-child { padding-left: 39px; }
+.rp .attempt-link { color: var(--text-dim); }
 .rp .tt td:first-child { min-width: 150px; }
 .rp tr:hover .task { text-decoration: underline; text-decoration-color: var(--hush); text-underline-offset: 4px; }
 .rp .tt .badge { margin-left: 6px; }
