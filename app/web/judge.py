@@ -93,9 +93,7 @@ def panel(job, trial, lane: str = "system-one") -> dict:
     return {"rows": rows, "sections": [(name, rs) for name, rs in sections if rs], "record": rec, "judged": bool(answers), "keyed": bool(key(lane)), "lane": lane, "judge": key(lane),
             "cards": [r for r in rows if not r["flag"]], "flags": flags,
             "earlier": bool(answers) and not store.is_current(rec),
-            "raised": [r["id"] for r in flags if r["raised"] and not r["undecided"]], "undecided": [r["id"] for r in flags if r["undecided"]],
-            "cleared": [r["id"] for r in flags if r["answer"] and not r["raised"] and not r["undecided"]],
-            "flags_judged": sum(1 for r in flags if r["answer"]), "floors_measured": bool(Q.floors().get("floors")),
+            "floors_measured": bool(Q.floors().get("floors")),
             "hygiene": hygiene_summary(hygiene)}
 
 
@@ -193,10 +191,10 @@ def hygiene_raised(reading: dict | None) -> list:
 
 
 def hygiene_summary(hygiene: dict) -> dict:
-    """For the panel head: which state kinds were read, and on which a
-    flag is raised - `{kinds: [...], flagged: {kind: [(id, label, p)]}}`."""
+    """For the panel head: the state kinds on which a flag is raised -
+    `{flagged: {kind: [(id, label, p)]}}`. A state read clean says nothing."""
     flagged = {kind: hygiene_raised(r) for kind, r in hygiene.items()}
-    return {"kinds": list(hygiene), "flagged": {k: v for k, v in flagged.items() if v}}
+    return {"flagged": {k: v for k, v in flagged.items() if v}}
 
 
 def is_undecided(kind: str, a, floor) -> bool:

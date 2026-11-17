@@ -45,7 +45,7 @@
   let since = 0, live = box.dataset.live === 'yes';
   // the stages, drawn as the template draws them: the same marks, times and units line. A step keeps
   // its element from one answer to the next, so its mark changes in place and the running one's beat goes on.
-  const secs = v => v < 9.95 ? v.toFixed(1) + 's' : v < 60 ? Math.round(v) + 's' : (v / 60).toFixed(1) + 'm';
+  const secs = v => v < 59.995 ? v.toFixed(2) + 's' : (v / 60).toFixed(2) + 'm';
   const clock = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const stages = sp => {

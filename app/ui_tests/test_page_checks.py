@@ -87,11 +87,11 @@ class Pages(unittest.TestCase):
     # --- views.md ---------------------------------------------------------
 
 
-    def test_a_degenerate_clock_says_unattributable_and_keeps_the_totals(self):
+    def test_a_control_with_no_trajectory_still_draws_its_phases(self):
         control = self.page("trial-oracle-control")
-        self.assertIn("No per-step clock is available", control)
-        self.assertIn("Agent 0.2s", control)                                  # the all-call total stays
-        self.assertIn("Trajectory · absent", control)
+        self.assertIn("Verify 6.72s", control)
+        self.assertIn("Agent 0.20s", control)                                  # the phases are the trial's, whatever else it recorded
+        self.assertIn("No trajectory recorded for this trial.", control)
 
 
 
@@ -118,8 +118,8 @@ class Pages(unittest.TestCase):
     def test_the_board_of_a_recorded_run_renders_from_its_own_clock(self):
         """the page half; the replay of every pair is test_live"""
         board = self.page("job-oracle-board")
-        self.assertIn("hello-alpine Resolved 0 23s 4.9s 0.2s 6.7s", board)
-        self.assertIn("reward-kit-example Resolved 0 24s 2.9s 2.0s 7.9s", board)
+        self.assertIn("hello-alpine Resolved 0 22.91s 4.90s 0.20s 6.72s", board)
+        self.assertIn("reward-kit-example Resolved 0 24.29s 2.93s 1.95s 7.91s", board)
 
 
 if __name__ == "__main__":

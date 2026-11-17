@@ -27,7 +27,7 @@ Each page's command, or why there is none.
 | Page | Route |
 | --- | --- |
 | The live board | `/job/<id>/live` |
-| A trial's conversation, spans, artifacts | `/trial/…/conversation`, `/trial/…/trace-span`, `/trial/…/artifact/<key>` |
+| A trial's conversation, spans, artifacts | `/trial/…/conversation`, `/trial/…/trace-span`, `/trial/…/artifact/<key>`, `/trial/…/artifact/<key>/download` |
 | One task side by side | `/compare/task/<task>` |
 
 ## No command yet
