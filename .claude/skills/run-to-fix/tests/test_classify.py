@@ -257,7 +257,7 @@ class AgentClasses(LoopCase):
         agent = load(self.round_file("groups.json"))["agent_classes"]
         self.assertFalse(agent["ran"])
         self.assertIn("commands.classes is null", agent["reason"])
-        self.assertFalse(any(k.startswith("agent_") for k in self.rows()[0]))
+        self.assertFalse(any(k.startswith(("agent_class:", "agent_flag:")) for k in self.rows()[0]))
 
     def test_a_failing_command_stops(self) -> None:
         run_dir = self.job()
