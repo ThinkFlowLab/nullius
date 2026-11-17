@@ -130,15 +130,17 @@ window.NulliusTable = {
      ancestor (the page's <main>): that is not leaving. */
   menu(btn, menu) {
     const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    // a modal over the page (the first-visit guide) takes the focus and the clicks without closing the menu under it
+    const away = to => !menu.contains(to) && !btn.contains(to) && !to.closest?.('[aria-modal="true"]');
     btn.addEventListener('click', () => {
       const open = menu.hidden;
       menu.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
       if (open) menu.querySelector('input:not(:disabled), button')?.focus();
     });
-    document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) close(); });
+    document.addEventListener('click', e => { if (!menu.hidden && away(e.target)) close(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { close(); btn.focus(); } });
-    const left = e => { const to = e.relatedTarget; if (to && !menu.contains(to) && !btn.contains(to) && !to.contains(menu)) close(); };
+    const left = e => { const to = e.relatedTarget; if (to && away(to) && !to.contains(menu)) close(); };
     menu.addEventListener('focusout', left);
     btn.addEventListener('focusout', left);
   },

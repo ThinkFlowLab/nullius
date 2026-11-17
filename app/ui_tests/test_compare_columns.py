@@ -94,6 +94,22 @@ process.stdout.write(JSON.stringify(out));
         self.assertEqual(got["picked"], "/compare?cohort=matched&pick=a%3Ar1&pick=a%3Ar2")
         self.assertEqual(got["clicked"], "/compare?cohort=matched&pick=a%3Ar1&pick=a%3Ar3")
 
+    def test_a_modal_over_the_page_leaves_the_opened_list_open(self):
+        got = node(r'''
+const [th] = page([column(0, '', 'a')], {values: ['a:'], lists: {a: {runs: RUNS, same: 0}}, dataset: '', runs: '/compare/runs'});
+const box = th.querySelector('input'), list = th.querySelector('[data-run-menu]');
+// the first-visit guide: a modal dialog that takes the focus, then a click on its answer
+const answer = el('button', {}), guide = el('div', {role: 'dialog', 'aria-modal': 'true'}, answer);
+document.appendChild(guide);
+box.dispatch('focusout', {relatedTarget: answer});
+answer.click();
+const out = {kept: !list.hidden};
+box.dispatch('focusout', {relatedTarget: el('a', {})});                 // Tab out to the page: closed
+out.closed = list.hidden;
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got, {"kept": True, "closed": True})
+
     def test_a_workspace_picked_lists_its_runs_in_place(self):
         got = node(r'''
 const [full, empty] = page([column(0, 'r1', 'a'), column(1, '', 'a')], {values: ['a:r1', 'a:'], lists: {a: {runs: RUNS, same: 0}}, dataset: 'set', runs: '/compare/runs'});
