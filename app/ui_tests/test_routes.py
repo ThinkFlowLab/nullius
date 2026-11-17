@@ -484,6 +484,23 @@ class Routes(unittest.TestCase):
         self.assertNotIn("ph-setup", panel)
         self.assertNotIn("ph-other", panel)
 
+    def test_a_trial_shorter_than_a_second_still_fills_its_bar(self):
+        """Flex weights that sum under 1 take only that share of the bar: a
+        trial of 0.6 s drew 60% of it. The weights are whole milliseconds."""
+        job_dir = self.root / "quick-trial"
+        synthetic_job(self.root, "quick-trial")
+        result = job_dir / "task-001" / "result.json"
+        res = json.loads(result.read_text())
+        res.update(started_at="2026-09-13T17:00:00+00:00", finished_at="2026-09-13T17:00:00.600000+00:00",
+                   environment_setup={"started_at": "2026-09-13T17:00:00+00:00", "finished_at": "2026-09-13T17:00:00.100000+00:00"},
+                   agent_execution={"started_at": "2026-09-13T17:00:00.100000+00:00", "finished_at": "2026-09-13T17:00:00.600000+00:00"})
+        write_json(result, res)
+        job = parse.parse_job(str(job_dir))
+        with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
+            html = self.get_ok("/trial/quick-trial/task-001").get_data(as_text=True)
+        panel = html.split("Where the time went", 1)[1].split('<div class="panel', 1)[0]
+        self.assertEqual(re.findall(r'class="seg ph-(\w+)" style="flex:(\d+)"', panel), [("env", "100"), ("agent", "500")])
+
     def test_retried_rate_limits_reach_the_job_table(self):
         """A 429 the agent's SDK retried is in agent/gateway.log and nowhere
         else: the outcome is untouched. The job table marks the row; a trial
