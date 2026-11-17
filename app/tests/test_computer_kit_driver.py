@@ -88,7 +88,8 @@ class NewVerdicts(unittest.TestCase):
         moved = [ev("scroll", 100.2, button=5, hit="list"), ev("moved", 100.21, top=0.4)]
         self.assertTrue(checks.verdict("scroll", exp, moved, ACTIONS, "ACORN BASKET")["passed"])
         self.assertIn("never moved", checks.verdict("scroll", exp, moved[:1], ACTIONS, "ACORN BASKET")["why"])
-        self.assertIn("missing words", checks.verdict("scroll", exp, moved, ACTIONS, "")["why"])
+        self.assertEqual(checks.verdict("scroll", exp, moved, ACTIONS, ""),
+                         {"passed": False, "why": "the words were not found together in order; expected ACORN, BASKET"})
 
     def test_recover_passes_on_a_success_after_the_error_and_the_click(self):
         exp = {"target": "OCEAN", "labels": ["OCEAN", "APPLE"]}
@@ -504,17 +505,20 @@ def _png(text, scale, above=()):
 
 
 class Words(unittest.TestCase):
-    def test_the_reference_reads_drawn_words_and_gaps_at_both_scales(self):
+    def test_the_reference_reads_current_vocabulary_and_gaps_at_both_scales(self):
         rng = random.Random(7)
         for check, scale, count in (("see", driver.fixture.SEE_SCALE, 3), ("scroll", driver.fixture.SCROLL_SCALE, 2)):
             with self.subTest(check=check):
+                removed = " ".join(["WINDOW", "IGLOO", "INSECT"][:count])
+                with self.assertRaises(driver.ReferenceFailed):
+                    driver.read_words(_png(removed, scale), scale, count)
                 for _ in range(3):
                     values, expected = checks.draw(check, rng)
                     text = " ".join(values["words"])
                     png = _png(text, scale)
                     self.assertEqual(driver.fixture.read_lines(png, scale), [text])
                     self.assertEqual(driver.read_words(png, scale, count), " ".join(expected["words"]))
-                text = " ".join(["IGLOO", "INSECT", "WINDOW"][:count])
+                text = " ".join(["IGLOO", "WALNUT", "INSECT"][:count])
                 self.assertEqual(driver.read_words(_png(text, scale), scale, count), text)
 
     def test_the_reference_refuses_missing_unreadable_or_repeated_words(self):

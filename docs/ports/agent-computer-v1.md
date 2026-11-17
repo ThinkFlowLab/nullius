@@ -75,16 +75,16 @@ The shared code is `app/nullius/standard/computer_port.py`, with the standard li
 
 | Check | Kind | The task | Passes when |
 | --- | --- | --- | --- |
-| `see` | basic | Read the words drawn on the screen and report them in order | The final message holds the words in order and no other word from the reading vocabulary |
+| `see` | basic | Read the words drawn on the screen and report them in order | The final message contains an uninterrupted sequence of the drawn words among at most twelve vocabulary occurrences |
 | `click` | basic | Click the named one of six buttons | A left press on that button, and no press on the five others |
 | `type` | basic | Type a word in a text field and press Enter | The field holds exactly the word at the last Enter |
 | `limit` | basic | Click six buttons with a budget of two steps | A button was pressed, no input came after the last step, and no acting call was sent once the steps were used up |
 | `drag` | skill | Drag a handle into a marked zone | A left press on the handle, released inside the zone |
-| `scroll` | skill | Scroll to the end of a list and report the large words there in order | The final message holds the words in order and no other word from the reading vocabulary, and the list moved |
+| `scroll` | skill | Scroll to the end of a list and report the large words there in order | The final message contains an uninterrupted sequence of the drawn words among at most twelve vocabulary occurrences, and the list moved |
 | `recover` | skill | Click a named button; the first acting call, whatever it is, is answered with an error and not run | An acting call sent after the error's answer succeeds, and the button is clicked as in `click` |
 | `batch` | skill | Fill three text fields with a budget of two steps | Each field holds its word |
 
-`see` shows three distinct common nouns drawn at 63 pixels tall, with gaps between words. `scroll` shows two at the list's end, below its initial view, at 56 pixels tall. Both sample from 112 words, separate from the fixture's labels, and accept any letter case and intervening prose or punctuation. `type` tests typing in a field that already has the focus; no pointing is needed. `limit` needs at least one button pressed within the two-step budget, no input after the last step and no acting call once the steps are used up.
+`see` shows three distinct common nouns drawn at 63 pixels tall, with gaps between words. `scroll` shows two at the list's end, below its initial view, at 56 pixels tall. Both sample from 96 everyday nouns chosen to avoid screen, desktop and action vocabulary and the fixture's labels. The verdict reads whole vocabulary words in the final message, ignoring case. The drawn words must occur together in the shown order at least once, with no other vocabulary word inside that sequence. Prose and punctuation may separate them. Repeated answers and vocabulary words before or after the sequence are accepted, up to twelve vocabulary occurrences in the whole message, counting repeats. `type` tests typing in a field that already has the focus; no pointing is needed. `limit` needs at least one button pressed within the two-step budget, no input after the last step and no acting call once the steps are used up.
 
 Every check also fails when a pointer or key event came outside an acting call: input sent through `python` fails it. Each check has 8 steps (2 for `limit` and `batch`), a pause of 1 s, 90 s for one `python` call and 600 s for the agent's turn.
 

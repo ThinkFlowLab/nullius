@@ -23,6 +23,12 @@ isError}``; ``past``: the acting calls sent once every step was taken).
   and the named button is clicked, as for ``click``;
 - ``batch``: each of three fields holds its word, within two steps.
 
+For ``see`` and ``scroll``, read whole vocabulary words from the last message
+in any letter case. The drawn words must occur as a consecutive run in that
+sequence at least once, with at most twelve vocabulary occurrences in all.
+Other prose and punctuation do not break the run; repeats and other vocabulary
+words outside it are allowed and count toward the limit.
+
 Every check passes only when every pointer and key event, Enter in a field
 included, lies inside an action's time: input sent any other way, through the
 desktop's Python for one, fails it. An event counts as inside from the
@@ -35,20 +41,19 @@ import re
 import secrets
 
 SLACK = 0.5
-# Everyday nouns, separate from the fixture's labels. Equal-length words
-# differ in at least three positions, giving the glyphs the context of a word.
-WORDS = ("ACORN", "ANCHOR", "ANKLE", "APRON", "BADGE", "BASKET", "BEACH", "BEETLE", "BERRY", "BOWL",
-         "BREAD", "BROOM", "BUTTER", "CABIN", "CACTUS", "CAMERA", "CANDLE", "CANOE", "CARPET", "CELERY",
-         "CHAIR", "CHERRY", "CLOCK", "COFFEE", "COOKIE", "CORN", "COTTON", "CRAYON", "CROWN", "DESK",
-         "DINNER", "DONKEY", "DOOR", "DRUM", "EAGLE", "EARTH", "ENGINE", "FABRIC", "FARM", "FENCE",
-         "FLOWER", "FOLDER", "FOREST", "FROG", "GARDEN", "GARLIC", "GATE", "GLOVE", "GOAT", "GUITAR",
-         "HAMMER", "HELMET", "HORSE", "IGLOO", "INSECT", "LADDER", "LAMP", "LEAF", "LIZARD", "LUNCH",
-         "MAGNET", "MARBLE", "MEADOW", "MELON", "MIRROR", "MITTEN", "NOODLE", "ONION", "ORANGE", "OTTER",
-         "PANDA", "PAPER", "PARROT", "PEANUT", "PENCIL", "PEPPER", "PILLOW", "PIZZA", "PLANT", "POCKET",
-         "POTATO", "RABBIT", "RADIO", "RAISIN", "RIBBON", "ROPE", "SALAD", "SALMON", "SAND", "SANDAL",
-         "SCARF", "SCHOOL", "SHEEP", "SHIRT", "SHOE", "SHOVEL", "SOCK", "SPRING", "SQUARE", "STAMP",
-         "STAR", "STREAM", "SUGAR", "TEAPOT", "THUMB", "TOWEL", "TRAIN", "TRAY", "TURTLE", "WINDOW",
-         "WOLF", "ZEBRA")
+# Everyday nouns, avoiding screen, desktop and action vocabulary and the
+# fixture's labels. Equal-length words differ in at least three positions,
+# giving the glyphs the context of a word.
+WORDS = ("ACORN", "ALMOND", "ANKLE", "APRON", "BANANA", "BASKET", "BEACH", "BEAVER", "BEETLE", "BERRY",
+         "BISON", "BOWL", "BREAD", "BROOM", "BUTTER", "CABIN", "CACTUS", "CAMEL", "CANDLE", "CANOE",
+         "CARPET", "CASHEW", "CELERY", "CHEESE", "CHERRY", "COCOA", "COFFEE", "CORN", "COTTON", "CRAB",
+         "DEER", "DINNER", "DONKEY", "DRUM", "EAGLE", "FABRIC", "FARM", "FERRET", "FLOWER", "FOREST",
+         "FROG", "GARDEN", "GARLIC", "GLOVE", "GOAT", "GUITAR", "HELMET", "HIPPO", "HORSE", "IGLOO",
+         "INSECT", "KOALA", "LADDER", "LENTIL", "LIZARD", "LUNCH", "MARBLE", "MEADOW", "MELON", "MITTEN",
+         "NOODLE", "ONION", "OTTER", "OYSTER", "PANDA", "PARROT", "PEANUT", "PEPPER", "PIGEON", "PILLOW",
+         "PIZZA", "POCKET", "POTATO", "RABBIT", "RAISIN", "ROPE", "SALAD", "SALMON", "SAND", "SANDAL",
+         "SCARF", "SCHOOL", "SHEEP", "SHIRT", "SHOE", "SHOVEL", "SHRIMP", "SOCK", "SUGAR", "TEAPOT",
+         "TOWEL", "TURTLE", "WALNUT", "WOLF", "YOGURT", "ZEBRA")
 LABELS = ("APPLE", "BRICK", "CLOUD", "DELTA", "EMBER", "FROST", "GRAPE", "HONEY", "IVORY", "JUMBO",
           "KNOT", "LEMON", "MAPLE", "NORTH", "OCEAN", "PIANO", "QUILT", "RIVER", "STONE", "TIGER",
           "UMBRA", "VELVET", "WHEAT", "YEAST")
@@ -109,20 +114,15 @@ def outside(events, actions, slack=SLACK):
 
 
 def _read_words(expected, message):
-    """Read whole vocabulary words in order, allowing other prose between them."""
+    """Find the drawn words as a consecutive run among at most twelve whole
+    vocabulary words, ignoring case. Prose and punctuation may separate them;
+    repetitions and other vocabulary words outside the run are allowed."""
     words = expected["words"]
     found = [w for w in re.findall(r"\b\w+\b", str(message or "").upper()) if w in WORDS]
-    missing = [w for w in words if w not in found]
-    extra = list(dict.fromkeys(w for w in found if w not in words))
-    why = []
-    if missing:
-        why.append("missing words: " + ", ".join(missing))
-    if extra:
-        why.append("extra words: " + ", ".join(extra))
-    if why:
-        return "; ".join(why)
-    if found != words:
-        return "the words are out of order or repeated; expected " + ", ".join(words)
+    if len(found) > 12:
+        return f"too many words from the reading vocabulary: {len(found)}; expected at most twelve"
+    if not any(found[i:i + len(words)] == words for i in range(len(found) - len(words) + 1)):
+        return "the words were not found together in order; expected " + ", ".join(words)
     return ""
 
 

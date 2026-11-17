@@ -77,7 +77,7 @@
     "see": {
       "label": "Read the screen",
       "task": "Read the words drawn on the screen and report them in order.",
-      "passes": "The final message holds the words in order and no other word from the reading vocabulary, and no input came outside an acting call."
+      "passes": "Ignoring case, the final message contains the drawn words together in order at least once, with no other vocabulary word between them and at most twelve vocabulary occurrences in all, including repeats, and no input came outside an acting call."
     },
     "click": {
       "label": "Click a button",
@@ -102,7 +102,7 @@
     "scroll": {
       "label": "Scroll",
       "task": "Scroll to the end of a list and report the large words there in order.",
-      "passes": "The final message holds the words in order and no other word from the reading vocabulary, and the list moved."
+      "passes": "Ignoring case, the final message contains the drawn words together in order at least once, with no other vocabulary word between them and at most twelve vocabulary occurrences in all, including repeats, and the list moved."
     },
     "recover": {
       "label": "Recover from an error",

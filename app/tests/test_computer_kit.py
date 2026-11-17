@@ -75,22 +75,66 @@ class Verdicts(unittest.TestCase):
                     got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS, answer)
                     self.assertEqual(got, {"passed": True, "why": ""})
 
-    def test_reading_fails_with_missing_reordered_extra_or_all_words(self):
+    def test_reading_accepts_repeats_and_other_vocabulary_before_or_after_the_run(self):
         for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
-            answers = [(" ".join(words[:-1]), "missing words: " + words[-1]),
-                       (" ".join(words[::-1]), "out of order"),
-                       (" ".join(words + ["ZEBRA"]), "extra words: ZEBRA"),
-                       (" ".join(checks.WORDS), "extra words:"),
-                       (" ".join(words + words), "repeated"),
-                       (" ".join(["ACORNS", *words[1:]]), "missing words: ACORN"),
-                       (" ".join(["xACORN", *words[1:]]), "missing words: ACORN"),
-                       (" ".join(words[:-1] + ["ZEBRA"]), "missing words: " + words[-1] + "; extra words: ZEBRA"),
-                       ("", "missing words:"), (None, "missing words:")]
-            for answer, why in answers:
+            text = " ".join(words)
+            answers = [text + "\n" + text,
+                       "I see " + ", ".join(words[:-1]) + " and " + words[-1] + ".\nAction: " + text,
+                       "Beside a zebra, I see " + text + ".",
+                       "I see " + text.lower() + ", followed by a zebra.",
+                       "ZEBRA " + text + " ZEBRA",
+                       " ".join(words[::-1]) + "; actually, " + text,
+                       " ".join([words[0], "ZEBRA", *words[1:]]) + "; actually, " + text,
+                       words[0] + " " + text,
+                       text + " " + words[-1]]
+            for answer in answers:
                 with self.subTest(check=check, answer=answer):
                     got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS, answer)
-                    self.assertFalse(got["passed"])
-                    self.assertIn(why, got["why"])
+                    self.assertEqual(got, {"passed": True, "why": ""})
+
+    def test_reading_ignores_screen_and_action_prose_between_the_drawn_words(self):
+        for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
+            answers = ["The window shows " + " ".join(words) + ".",
+                       "The square holds " + words[0] + "; the paper holds " + " and ".join(words[1:]) + ".",
+                       "I mirror " + words[0] + " and then stream " + " and ".join(words[1:]) + "."]
+            for answer in answers:
+                with self.subTest(check=check, answer=answer):
+                    got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS, answer)
+                    self.assertEqual(got, {"passed": True, "why": ""})
+
+    def test_reading_fails_without_an_unbroken_run_of_the_drawn_words(self):
+        for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
+            answers = [" ".join(words[:-1]), " ".join(words[::-1]),
+                       " ".join([words[0], "ZEBRA", *words[1:]]),
+                       " ".join(["ACORNS", *words[1:]]), " ".join(["xACORN", *words[1:]]),
+                       " ".join(["ACORN_", *words[1:]]), " ".join(["ACORN2", *words[1:]]),
+                       " ".join(words[:-1] + ["ZEBRA"]), "", None]
+            for answer in answers:
+                with self.subTest(check=check, answer=answer):
+                    got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS, answer)
+                    self.assertEqual(got, {"passed": False, "why":
+                                          "the words were not found together in order; expected " + ", ".join(words)})
+
+    def test_reading_accepts_twelve_vocabulary_occurrences_including_repeats(self):
+        for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
+            padding = ["ZEBRA"] * (12 - len(words))
+            for found in (words + padding, padding + words, words * (12 // len(words))):
+                with self.subTest(check=check, found=found):
+                    got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS,
+                                         " ".join(found))
+                    self.assertEqual(got, {"passed": True, "why": ""})
+
+    def test_reading_rejects_more_than_twelve_vocabulary_occurrences_even_with_a_correct_run(self):
+        for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
+            answers = [words + ["ZEBRA"] * (13 - len(words)),
+                       words * (12 // len(words)) + [words[0]],
+                       list(checks.WORDS), list(checks.WORDS) + words]
+            for found in answers:
+                with self.subTest(check=check, found=found):
+                    got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS,
+                                         " ".join(found).lower())
+                    self.assertEqual(got, {"passed": False, "why":
+                                          f"too many words from the reading vocabulary: {len(found)}; expected at most twelve"})
 
     def test_click_passes_on_a_left_press_on_the_named_button_inside_an_action(self):
         events = [ev("ready", 99.0)] + press(100.5, "OCEAN")
@@ -174,10 +218,14 @@ class Draw(unittest.TestCase):
         self.assertNotIn((5, 3), cells)                                   # the blank column
 
     def test_reading_words_are_distinct_nouns_apart_from_each_other_and_the_labels(self):
-        self.assertGreaterEqual(len(checks.WORDS), 64)
+        self.assertGreaterEqual(len(checks.WORDS), 96)
         self.assertEqual(len(checks.WORDS), len(set(checks.WORDS)))
         labels = set(checks.LABELS + checks.ORDER + checks.FIELDS + fixture.LIST_WORDS + ("MOVE", "HERE", fixture.TITLE.upper()))
         self.assertFalse(set(checks.WORDS) & labels)
+        prose = set("ANCHOR BADGE CAMERA CHAIR CLOCK COOKIE CRAYON CROWN DESK DOOR EARTH ENGINE FENCE FOLDER GATE "
+                    "HAMMER LAMP LEAF MAGNET MIRROR ORANGE PAPER PENCIL PLANT RADIO RIBBON SPRING SQUARE STAMP "
+                    "STAR STREAM THUMB TRAIN TRAY WINDOW".split())
+        self.assertFalse(set(checks.WORDS) & prose)
         for i, word in enumerate(checks.WORDS):
             self.assertRegex(word, r"^[A-Z]{4,6}$")
             for other in checks.WORDS[i + 1:]:
