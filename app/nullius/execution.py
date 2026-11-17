@@ -570,10 +570,29 @@ class Execution:
 
     def job_state(self, job_id: str) -> Optional[tuple]:
         """``(state, finished_at)`` for one job of this run once it has ended:
+        a complete, error-free standard result when jobs share a part, then
         its own part's result when that part ran to its end - an arm that
         answered every question is done though a later one failed - else the
         run's, once the run has ended. None while it is still to come."""
-        end = self.ends.get(self.part_for(job_id) or "")
+        part = self.part_for(job_id)
+        # Conformance runs several kits in one process. Its exit code belongs
+        # to the whole step, not to each kit that already finished cleanly.
+        # Read only the small result record, including on a restored run or a
+        # host's mirrored jobs. Interrupted/errored jobs still use the runner.
+        if self.plan.runner == "standard" and part is not None and sum(
+                self.part_for(str(j.get("name"))) == part for j in self.plan.jobs) > 1:
+            try:
+                with open(os.path.join(self.jobs, job_id, "result.json"), encoding="utf-8") as f:
+                    result = json.load(f)
+                stats = result["stats"]
+                if (result["id"] == job_id and result["n_total_trials"] > 0
+                        and stats["n_completed_trials"] == result["n_total_trials"]
+                        and all(stats[k] == 0 for k in ("n_errored_trials", "n_cancelled_trials", "n_running_trials", "n_pending_trials"))):
+                    at = datetime.fromisoformat(result["finished_at"].replace("Z", "+00:00"))
+                    return "done", at
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                pass                            # absent or being written/synced: the runner still owns the state
+        end = self.ends.get(part or "")
         if end is not None:
             return ("done" if end["rc"] == 0 else "failed"), datetime.fromtimestamp(end["at"], tz=timezone.utc)
         if self.state in ENDED and self.finished:
