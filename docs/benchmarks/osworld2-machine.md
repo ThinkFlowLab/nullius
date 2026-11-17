@@ -1,6 +1,6 @@
 # Prepare a machine for OSWorld2
 
-OSWorld2's driver, its VMs, the mock websites, GitLab and the proxies run on one machine: this one, or the host chosen in the builder's **Where** step ([Hosts](../settings/run-hosts.md)). Run every step below there, as the user that runs Nullius, from the root of a checkout of this repository; a run on a host starts from the builder's Review, which sends the key and the licence to it; the last step's commands run it here with this machine's keys. How a run is scored: [Read an OSWorld2 run](osworld2-results.md).
+OSWorld2's driver, its VMs, the mock websites, GitLab and the proxies run on one machine: this one, or the host chosen in the builder's **Where** step ([Hosts](../settings/run-hosts.md)). Run every step below there, as the user that runs Nullius, from the root of a checkout of this repository; a run on a host starts from the builder's Review, which sends the key to it; the last step's commands run it here with this machine's keys. How a run is scored: [Read an OSWorld2 run](osworld2-results.md).
 
 ## What it needs
 
@@ -35,7 +35,7 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
 | --- | --- |
 | 63, No hosted services | The VM and the gated assets; 27 of them also the LLM grader, the simulated user or the public internet |
 | 35, Mock website tasks | The mock websites, step 8; Overleaf keeps one account for all, so its 2 tasks run one at a time, each on Overleaf started anew, a few minutes more |
-| 2, tasks 026 and 041 | GitLab, step 9, and for some the mock websites; they run one at a time, each starting GitLab anew from its snapshot, about 5 minutes more |
+| 2, tasks 026 and 041 | The mock websites, step 8, which serve the GitLab that Nullius makes on this machine before the first of them |
 | 8 that ask for a proxy | The proxy image, step 7, and for some the mock websites |
 
 103 and 104 are not supported: their evaluate() runs FreeCAD's Python on this machine, which Nullius neither checks nor installs. They stay in the datasets; without FreeCAD the null control scores them 0, and an agent's unit ends in an error.
@@ -137,22 +137,9 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
 
     The build stops before a group that would leave less than 25 GB free under Docker's root. Give runs the suffix as **Website host suffix** (`websites=10.213.0.1.nip.io`).
 
-9. **Make GitLab once**, for tasks 026 and 041: Task-Web/gitlab at the commit the driver pins, served by the websites' Caddy as `gitlab.10.213.0.1.nip.io`. Choose its root token, at least 20 characters. `init` starts GitLab from its pulled images, makes the token and the runner, keeps the volumes as the snapshot each unit starts from, and takes GitLab down again.
+9. **Add the keys** on the machine where Nullius runs, in Settings ([Model providers](../settings/model-providers.md)), never on a host: OpenRouter, for the agents and for the LLM grader, which the null control calls too on its 21 graded tasks. The builder sends a run on a host its key. Muse Spark's calls are priced only where OpenRouter says their cost; for an estimate and a spending cap, add its price: `nullius prices set meta/muse-spark-1.3 1.25 4.25 --cached 0.15`.
 
-    ```bash title="Clone, configure, init"
-    git clone https://github.com/Task-Web/gitlab.git /data/gitlab
-    git -C /data/gitlab checkout 8655d651722f4254e59e813de9f68a6732ea525c
-    python3 "$HERE/gitlab_server.py" configure /data/gitlab 10.213.0.1.nip.io --write-mbps 16 --write-iops 160
-    python3 "$HERE/gitlab_server.py" compose /data/gitlab pull
-    read -rs GITLAB_PRIVATE_TOKEN && export GITLAB_PRIVATE_TOKEN
-    python3 "$HERE/gitlab_server.py" init /data/gitlab
-    ```
-
-    Set the same token as `GITLAB_PRIVATE_TOKEN` in Settings ([Custom keys](../settings/agent-keys.md)), and give runs **GitLab host** (`gitlab=gitlab.10.213.0.1.nip.io`).
-
-10. **Add the keys** on the machine where Nullius runs, in Settings ([Model providers](../settings/model-providers.md)), never on a host: OpenRouter, for the agents and for the LLM grader, which the null control calls too on its 21 graded tasks. The builder sends a run on a host its key. Muse Spark's calls are priced only where OpenRouter says their cost; for an estimate and a spending cap, add its price: `nullius prices set meta/muse-spark-1.3 1.25 4.25 --cached 0.15`.
-
-11. **Run one task of the null control** on this machine, then no VM left:
+10. **Run one task of the null control** on this machine, then no VM left:
 
     ```bash
     PYTHONPATH=app python3 -m nullius standard run osworld2 nop --dataset offline36 --limit 1 --provider openrouter
@@ -176,8 +163,8 @@ On a disk shared with others, limit what the VMs write with **Disk write MB/s** 
 
 ```bash title="The null control on all 108 tasks, six at a time"
 PYTHONPATH=app python3 -m nullius standard run osworld2 nop --dataset test_v2 -j 6 --provider openrouter \
-  --bench-option websites=10.213.0.1.nip.io --bench-option gitlab=gitlab.10.213.0.1.nip.io \
-  --bench-option gitlab_write=16:160 --bench-option write_mbps=16 --bench-option write_iops=160
+  --bench-option websites=10.213.0.1.nip.io --bench-option gitlab_write=16:160 \
+  --bench-option write_mbps=16 --bench-option write_iops=160
 ```
 
 ## What is pinned
@@ -202,5 +189,5 @@ PYTHONPATH=app python3 -m nullius standard run osworld2 nop --dataset test_v2 -j
 | A run refused for `scoring_programs` | Install ImageMagick, ffmpeg and tesseract (step 2) |
 | `no task class`, `no assets` or `no VM image` | Steps 4 and 5 |
 | A websites task refused before its VM starts | Step 8 and Website host suffix; `python3 "$HERE/websites.py" check 10.213.0.1.nip.io` |
-| A GitLab task refused before its VM starts | Step 9, the key and the GitLab write share |
+| A GitLab task refused before its VM starts | Step 8 and GitLab write share |
 | A Docker volume left after runs | `docker volume ls -f dangling=true`; remove your own |

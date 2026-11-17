@@ -459,14 +459,14 @@
   "setting": "GITLAB_URL",
   "values": "a GitLab server",
   "default": "the wrapper's server",
-  "nullius": "option:gitlab"
+  "nullius": "fixed:http://gitlab.<websites option> - Task-Web/gitlab, which Nullius makes on the run's machine behind the mock websites' Caddy"
  },
  {
   "entry": "scripts/bash/run_multienv_m3.sh",
   "setting": "GITLAB_PRIVATE_TOKEN",
   "values": "the GitLab server's root token",
   "default": "an empty token",
-  "nullius": "fixed:the licence GITLAB_PRIVATE_TOKEN - a secret, the driver's alone, given to the processes of the 2 GitLab tasks"
+  "nullius": "fixed:the root token Nullius makes - with that GitLab, kept on that machine and given to the processes of the 2 GitLab tasks alone"
  },
  {
   "entry": "scripts/bash/run_multienv_m3.sh",

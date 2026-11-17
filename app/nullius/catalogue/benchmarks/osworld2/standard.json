@@ -204,17 +204,6 @@
         "yours"
       ]
     },
-    "gitlab": {
-      "label": "GitLab host",
-      "summary": "Where GitLab is served. Needed by tasks 026 and 041.",
-      "pattern": "none|[a-z0-9](?:[a-z0-9.-]{0,56}[a-z0-9])?(?::[1-9][0-9]{0,4})?",
-      "example": "gitlab.10.213.0.1.nip.io",
-      "default": "none",
-      "setups": [
-        "original",
-        "yours"
-      ]
-    },
     "gitlab_write": {
       "label": "GitLab write share",
       "summary": "Disk write limit for GitLab, as MB/s:IOPS. Needed by tasks 026 and 041 while the VMs' writes are limited.",
@@ -274,20 +263,6 @@
           "tesseract-ocr"
         ]
       }
-    }
-  },
-  "environments": {
-    "gitlab": {
-      "summary": "GitLab's root token for the driver, which tasks 026 and 041 use to set up and score: the base image, nothing added.",
-      "dockerfile": "gitlab.Dockerfile",
-      "local_ok": true,
-      "needs_secrets": [
-        {
-          "name": "GITLAB_PRIVATE_TOKEN",
-          "to": "driver",
-          "summary": "GitLab's root personal access token, the one python3 gitlab_server.py init made it with"
-        }
-      ]
     }
   },
   "controls": {

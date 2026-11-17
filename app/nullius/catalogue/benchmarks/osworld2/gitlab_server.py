@@ -2,23 +2,25 @@
 
 GitLab is that repository's compose project with gitlab.compose.yml over it.
 It publishes no port: the mock websites' Caddy serves it as gitlab.<suffix>.
-init makes the root token, registers the runner and keeps the volumes as the
-snapshot. A unit of TASKS holds LOCK and starts GitLab from the snapshot; a
-warden in a session of its own removes it once the unit lets go or its driver
-dies.
+A unit of TASKS holds LOCK, has prepare() clone it beside the upstream, make
+this machine's root token, register the runner and keep the volumes as the
+snapshot, once, then starts GitLab from the snapshot; a warden in a session of
+its own removes it once the unit lets go or its driver dies.
 
-python3 gitlab_server.py configure STACK SUFFIX --write-mbps N --write-iops N
-python3 gitlab_server.py init STACK | up STACK | down STACK | check HOST [--runner]
+python3 gitlab_server.py prepare STACK SUFFIX | up STACK | down STACK
 python3 gitlab_server.py compose STACK ARGS..."""
 import argparse
 import contextlib
 import fcntl
+import hashlib
 import json
 import os
 import re
-import shlex
+import secrets
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -29,19 +31,19 @@ import websites
 HERE = os.path.dirname(os.path.abspath(__file__))
 OVERRIDE = os.path.join(HERE, "gitlab.compose.yml")
 COMMIT = "8655d651722f4254e59e813de9f68a6732ea525c"
+REPOSITORY = "https://github.com/Task-Web/gitlab.git"
 PROJECT = "osworld2-gitlab"
-OPTION = "NULLIUS_OPTION_GITLAB"
 SHARE_OPTION = "NULLIUS_OPTION_GITLAB_WRITE"
 VM_WRITE = ("NULLIUS_OPTION_WRITE_MBPS", "NULLIUS_OPTION_WRITE_IOPS")
 TOKEN = "GITLAB_PRIVATE_TOKEN"
 TASKS = frozenset(("026", "041"))
 RUNNER_TASKS = frozenset(("041",))
 LOCK = "/tmp/nullius-osworld2-gitlab.lck"
-HOST = re.compile(r"[a-z0-9](?:[a-z0-9.-]{0,56}[a-z0-9])?(?::[1-9][0-9]{0,4})?")
 SHARE = re.compile(r"[1-9][0-9]{0,5}:[1-9][0-9]{0,5}")
 ENV_FILE = ".osworld2.env"
 COMPOSE_FILE = ".osworld2.compose.yml"
 RB_FILE = ".osworld2.gitlab.rb"
+TOKEN_FILE = ".osworld2.token"
 RB = """puma['worker_processes'] = 2
 sidekiq['concurrency'] = 5
 prometheus_monitoring['enable'] = false
@@ -52,7 +54,8 @@ SETTINGS = ("GITLAB_URL", "GITLAB_PRIVATE_TOKEN", "OSWORLD2_GITLAB_HOST", "OSWOR
             "OSWORLD2_GITLAB_DISK", "OSWORLD2_GITLAB_RB", "OSWORLD2_GITLAB_SHARE") + LIMITS
 UNUSED = "unused"
 SNAPSHOT = "nullius-osworld2-gitlab-snapshot"
-STACK_FILE = "stack"
+STAMP = "made"
+SHARE_DEFAULT = (16, 160)
 GITLAB_IMAGE = re.compile(r"^\s+image: (gitlab/gitlab-ce@sha256:[0-9a-f]{64})$", re.M)
 SHARE_LABEL = "nullius.osworld2.share"
 ARCHIVE = "gitlab.tar.gz"
@@ -72,7 +75,6 @@ RUNNER_SECONDS = 300
 COPY_SECONDS = 3600
 POLL = 10
 PROXIES = {}
-INIT = "make GitLab once (python3 gitlab_server.py init STACK, from this benchmark's folder)"
 
 
 class GitLabError(RuntimeError):
@@ -80,32 +82,31 @@ class GitLabError(RuntimeError):
 
 
 def url(environ=os.environ):
-    """GitLab's URL from the run's GitLab option, its host; None for none."""
-    value = environ.get(OPTION, "none")
-    if value == "none":
-        return None
-    if not HOST.fullmatch(value):
-        raise GitLabError(f"the GitLab option {value!r} is not GitLab's host: give the name it answers at "
-                          f"(such as gitlab.{websites._site().GATEWAY}.nip.io), or none")
-    return websites.SCHEME + value
+    """GitLab's URL, gitlab. before the mock websites' suffix, as their Caddy serves it; None for no sites."""
+    value = websites.suffix(environ)
+    return f"{websites.SCHEME}gitlab.{value}" if value else None
+
+
+def home(environ=os.environ):
+    """Where this machine's GitLab is cloned: beside the upstream's clone."""
+    return os.path.join(os.path.dirname(os.path.abspath(environ["NULLIUS_UPSTREAM"])), f"gitlab-{COMMIT}")
 
 
 def needed(eid, environ=os.environ):
-    """A task of TASKS without GitLab's host and token is refused, since its class cannot even load."""
+    """A task of TASKS without the mock websites, which serve GitLab, is refused, since its class cannot even load."""
     value = url(environ)
     if eid not in TASKS:
         return None
-    if not value or not environ.get(TOKEN):
-        raise GitLabError(f"task {eid} needs GitLab and this run gives it no "
-                          + ("host: set the GitLab option" if not value else f"token: set the licence {TOKEN}")
-                          + f" ({websites.SETUP_DOC})")
+    if not value:
+        raise GitLabError(f"task {eid} needs GitLab, which the mock websites serve, and this run gives it none: set "
+                          f"the websites option to the suffix the stack serves ({websites.SETUP_DOC})")
     return value
 
 
 def env(eid, environ=os.environ):
-    """The variables the upstream reads GitLab by, for a task of TASKS; its token is in the driver's own."""
-    value = url(environ) if eid in TASKS else None
-    return {"GITLAB_URL": value} if value else {}
+    """The variables the upstream reads GitLab by, for a task of TASKS alone: its URL and this machine's token."""
+    value = needed(eid, environ)
+    return {"GITLAB_URL": value, TOKEN: token(home(environ))} if value else {}
 
 
 def share(environ=os.environ):
@@ -123,28 +124,71 @@ def share(environ=os.environ):
     return given
 
 
-def stack():
-    """The stack's folder, as init wrote it beside the snapshot's archive."""
+def token(stack):
+    """This machine's root token for GitLab, made once and kept beside the stack, for this user alone."""
+    path = _beside(stack, TOKEN_FILE)
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".nullius-")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(secrets.token_hex(24))
+        with contextlib.suppress(FileExistsError):
+            os.link(tmp, path)
+        os.remove(tmp)
+    with open(path, encoding="utf-8") as f:
+        value = f.read()
+    if len(value) < MIN_TOKEN or not value.isalnum():
+        raise GitLabError(f"{path} holds no token: remove it, and GitLab is made anew")
+    return value
+
+
+def _stamp(stack, value):
+    return hashlib.sha256(f"{stack}\n{value}\n{token(stack)}".encode()).hexdigest()
+
+
+def _made():
+    """The stamp init left in the snapshot, read read-only; None without one."""
     if not _snapshot():
-        raise GitLabError(f"no snapshot {SNAPSHOT} on this machine: {INIT}")
+        return None
     image = GITLAB_IMAGE.search(_override())
     said = _docker("run", "--rm", "--network", "none", "--pull", "never", "-v", f"{SNAPSHOT}:/snapshot:ro",
-                   "--entrypoint", "cat", image.group(1) if image else "", f"/snapshot/{STACK_FILE}")
-    found = said.stdout.strip() if said.returncode == 0 else ""
-    if not os.path.isabs(found):
-        raise GitLabError(f"the snapshot {SNAPSHOT} names no stack's folder: {INIT}")
-    return found
+                   "--entrypoint", "cat", image.group(1) if image else "", f"/snapshot/{STAMP}")
+    return said.stdout.strip() if said.returncode == 0 else None
 
 
-def prepared(environ=os.environ):
-    """What a unit's GitLab needs before its VM starts: the snapshot, the stack's settings, the write share."""
-    where = stack()
-    served = _settings(where).get("GITLAB_URL")
-    if url(environ) != served:
-        raise GitLabError(f"the GitLab option asks for {url(environ)} and the stack at {where} serves {served}: "
-                          "set the GitLab option to the stack's host")
-    share(environ)
-    return where
+def prepare(stack, environ=os.environ, say=None):
+    """GitLab made on this machine for the run's sites, once: cloned, configured, pulled, then init; made anew
+    when the snapshot was made for another stack, host or token."""
+    suffix, value = websites.suffix(environ), url(environ)
+    with contextlib.suppress(GitLabError):
+        if _made() == _stamp(stack, value) and _settings(_pinned(stack))["GITLAB_URL"] == value:
+            return stack
+    _clone(stack)
+    configure(stack, suffix, *(share(environ) or SHARE_DEFAULT))
+    _done(compose(stack, ["pull"], seconds=START_SECONDS), "pulling GitLab's images")
+    down(stack)
+    if _snapshot():
+        _done(_docker("volume", "rm", SNAPSHOT), "removing the old snapshot")
+    init(stack, say)
+    return stack
+
+
+def _clone(stack):
+    with contextlib.suppress(GitLabError):
+        return _pinned(stack)
+    tmp = stack + ".tmp"
+    for gone in (stack, tmp):
+        shutil.rmtree(gone, ignore_errors=True)
+    for args in (("init", "--quiet", tmp), ("-C", tmp, "fetch", "--quiet", "--depth", "1", REPOSITORY, COMMIT),
+                 ("-C", tmp, "checkout", "--quiet", "FETCH_HEAD")):
+        try:
+            said = subprocess.run(["git", *args], capture_output=True, text=True, timeout=START_SECONDS,
+                                  stdin=subprocess.DEVNULL)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise GitLabError(f"git could not clone {REPOSITORY}: {type(e).__name__}") from None
+        _done(said, f"cloning {REPOSITORY} at {COMMIT}")
+    os.replace(tmp, stack)
+    return _pinned(stack)
 
 
 def _request(path, value, token=None, data=None, method=None):
@@ -175,13 +219,13 @@ def ready(value, token, runner=False):
     """GitLab's sign-in page, the root token as an administrator's and, with ``runner``, an online runner."""
     host = urllib.parse.urlsplit(value).hostname
     if not websites._resolves(host):
-        raise GitLabError(f"{host} does not resolve: the GitLab option must be the host GitLab answers at")
+        raise GitLabError(f"{host} does not resolve: the websites option must be a wildcard DNS name")
     if not _signed_in(value):
         raise GitLabError(f"{value}/users/sign_in answered no page")
     said = _request("/api/v4/user", value, token)
     if said[0] != 200 or _json(said, f"{value}/api/v4/user").get("is_admin") is not True:
         raise GitLabError(f"{value}/api/v4/user answered {said[0]} for the token {TOKEN}, or not as an "
-                          "administrator's: give the token GitLab was made with (python3 gitlab_server.py init)")
+                          "administrator's: GitLab was made with another")
     if runner:
         said = _request("/api/v4/runners/all?type=instance_type&status=online", value, token)
         if said[0] != 200 or not _json(said, f"{value}/api/v4/runners/all"):
@@ -372,14 +416,6 @@ def compose(stack, args, capture=True, seconds=websites.RESET_SECONDS, limits=No
     return subprocess.run(["docker", *_argv(stack, args, limits)], env=_clean(), pass_fds=websites.held_fds()).returncode
 
 
-def _token():
-    value = os.environ.get(TOKEN, "")
-    if len(value) < MIN_TOKEN or not value.isprintable() or value.strip() != value:
-        raise GitLabError(f"give GitLab's root token as {TOKEN} in this command's environment, at least "
-                          f"{MIN_TOKEN} printable characters")
-    return value
-
-
 def _container(stack, service):
     said = _done(compose(stack, ["ps", "-a", "-q", service]), f"finding {service}")
     found = said.stdout.split()
@@ -429,13 +465,13 @@ def _make_token(stack):
                               f"against Task-Web/gitlab at {COMMIT}")
         script = script.replace(old, new)
     done = subprocess.run(["sh", "-c", script.replace("$$", "$")], capture_output=True, text=True,
-                          timeout=START_SECONDS, env=dict(_clean(), **{TOKEN: _token()}), stdin=subprocess.DEVNULL)
+                          timeout=START_SECONDS, env=dict(_clean(), **{TOKEN: token(stack)}), stdin=subprocess.DEVNULL)
     _done(done, "making the root token")
 
 
 def _register(stack, value):
     """The README's runner registration; a runner the container could not take is removed from GitLab again."""
-    status, body = _request("/api/v4/user/runners", value, _token(), {
+    status, body = _request("/api/v4/user/runners", value, token(stack), {
         "runner_type": "instance_type", "description": RUNNER_NAME, "tag_list": "osworld,docker",
         "run_untagged": "true", "locked": "false", "paused": "false"})
     if status != 201:
@@ -447,7 +483,7 @@ def _register(stack, value):
                    "--docker-host", DOCKER_HOST, "--docker-tlsverify", "--docker-cert-path", "/certs/client",
                    env=dict(_clean(), CI_SERVER_TOKEN=made["token"]))
     if said.returncode != 0:
-        _request(f"/api/v4/runners/{made['id']}", value, _token(), method="DELETE")
+        _request(f"/api/v4/runners/{made['id']}", value, token(stack), method="DELETE")
     _done(said, "registering the runner")
     return made["id"]
 
@@ -477,11 +513,11 @@ def _snapshot():
     return _docker("volume", "inspect", SNAPSHOT).returncode == 0
 
 
-def init(stack, say=print):
+def init(stack, say=None):
     """GitLab made once from nothing: its first start, the root token, the runner; then kept as the snapshot."""
     stack = _pinned(stack)
     settings = _settings(stack)
-    value, token = settings["GITLAB_URL"], _token()
+    value, said, say = settings["GITLAB_URL"], token(stack), say or (lambda _: None)
     if _volumes():
         raise GitLabError(f"{PROJECT} has volumes already: python3 gitlab_server.py down STACK first")
     if _snapshot():
@@ -491,16 +527,16 @@ def init(stack, say=print):
     _done(compose(stack, ["up", "-d", "--pull", "never", "gitlab"]), "starting GitLab")
     say(json.dumps({"started": "gitlab", "up_s": _until(START_SECONDS, "GitLab", lambda: _signed_in(value))}))
     _make_token(stack)
-    ready(value, token)
+    ready(value, said)
     say(json.dumps({"token": "made", "s": round(time.time() - t0)}))
     _done(compose(stack, ["up", "-d", "--pull", "never", "dind", "gitlab-runner"]), "starting the runner")
     runner = _register(stack, value)
     say(json.dumps({"runner": runner, "online_s": _until(RUNNER_SECONDS, "the runner",
-                                                         lambda: _online(value, token, runner))}))
+                                                         lambda: _online(value, said, runner))}))
     _done(compose(stack, ["stop"]), "stopping GitLab")
     _done(_docker("volume", "create", SNAPSHOT), "making the snapshot's volume")
     _copy(stack, settings, f"tar -C /v -czf /snapshot/{ARCHIVE} {' '.join(VOLUMES)} && "
-                           f"printf %s {shlex.quote(stack)} > /snapshot/{STACK_FILE}", keep=True)
+                           f"printf %s {_stamp(stack, value)} > /snapshot/{STAMP}", keep=True)
     _done(compose(stack, ["down", "--volumes"]), "removing GitLab")
     return {"snapshot": SNAPSHOT, "s": round(time.time() - t0)}
 
@@ -514,9 +550,9 @@ def up(stack, limits=None, closed=None, say=None):
     """GitLab anew from the snapshot, waited on until ready() and reached from the VMs' network."""
     stack = _pinned(stack)
     settings = _settings(stack, limits)
-    value, token = settings["GITLAB_URL"], _token()
+    value, said = settings["GITLAB_URL"], token(stack)
     if not _snapshot():
-        raise GitLabError(f"no snapshot {SNAPSHOT}: {INIT}")
+        raise GitLabError(f"no snapshot {SNAPSHOT}: python3 gitlab_server.py prepare STACK SUFFIX")
     t0 = time.time()
     _done(compose(stack, ["down", "--volumes"], limits=limits), "removing GitLab")
     _done(compose(stack, ["create", "--pull", "never"], limits=limits), "making GitLab's containers")
@@ -524,7 +560,7 @@ def up(stack, limits=None, closed=None, say=None):
     if say:
         say(json.dumps({"restored_s": round(time.time() - t0)}))
     _done(compose(stack, ["start"], limits=limits), "starting GitLab")
-    _until(START_SECONDS, "GitLab", lambda: ready(value, token, runner=True), closed)
+    _until(START_SECONDS, "GitLab", lambda: ready(value, said, runner=True), closed)
     _from_vms(settings["OSWORLD2_GITLAB_HOST"])
     return {"url": value, "up_s": round(time.time() - t0)}
 
@@ -552,35 +588,25 @@ def down(stack, limits=None):
 def main(argv):
     p = argparse.ArgumentParser(prog="gitlab_server.py", description="OSWorld2's GitLab")
     sub = p.add_subparsers(dest="op", required=True)
-    c = sub.add_parser("configure")
+    c = sub.add_parser("prepare")
     c.add_argument("stack")
     c.add_argument("suffix")
-    c.add_argument("--write-mbps", type=int, required=True)
-    c.add_argument("--write-iops", type=int, required=True)
     d = sub.add_parser("compose")
     d.add_argument("stack")
     d.add_argument("args", nargs=argparse.REMAINDER)
-    for op in ("init", "up", "down"):
+    for op in ("up", "down"):
         sub.add_parser(op).add_argument("stack")
-    k = sub.add_parser("check")
-    k.add_argument("host")
-    k.add_argument("--runner", action="store_true")
     a = p.parse_args(argv)
     try:
         if a.op == "compose":
             args = a.args[1:] if a.args[:1] == ["--"] else a.args
             with contextlib.nullcontext() if websites.reads(args) else _alone():
                 return compose(a.stack, args, capture=False)
-        if a.op == "configure":
-            path, settings = configure(a.stack, a.suffix, a.write_mbps, a.write_iops)
-            out = {"settings": path, **{k: v for k, v in settings.items() if k != TOKEN}}
-        elif a.op == "check":
-            if not HOST.fullmatch(a.host):
-                raise GitLabError(f"{a.host!r} is not GitLab's host")
-            out = {"url": ready(websites.SCHEME + a.host, _token(), runner=a.runner)}
-        else:
-            with _alone():
-                out = {"init": init, "up": lambda s: up(s, say=print), "down": down}[a.op](a.stack)
+        with _alone():
+            if a.op == "prepare":
+                out = {"prepared": prepare(os.path.abspath(a.stack), {websites.OPTION: a.suffix}, say=print)}
+            else:
+                out = {"up": lambda s: up(s, say=print), "down": down}[a.op](a.stack)
     except (GitLabError, websites.WebsiteError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

@@ -10,6 +10,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -22,8 +23,9 @@ from urllib.parse import urlsplit
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2")
-HOST = "gitlab.10.213.0.1.nip.io"
-URL = f"http://{HOST}"
+SUFFIX = "10.213.0.1.nip.io"
+SITES = "NULLIUS_OPTION_WEBSITES"
+URL = f"http://gitlab.{SUFFIX}"
 TOKEN = "t" * 24
 JUDGE = {"model": "anthropic/claude-sonnet-4.6", "base_url": "http://127.0.0.1:9/u1-judge/v1", "key": "k"}
 
@@ -82,41 +84,96 @@ class Case(unittest.TestCase):
 
 
 class Option(Case):
-    def test_none_gives_no_url_and_a_task_that_needs_gitlab_is_refused(self):
+    def test_no_sites_give_no_url_and_a_task_that_needs_gitlab_is_refused(self):
         self.assertIsNone(self.g.url({}))
         self.assertIsNone(self.g.needed("001", {}))
-        self.assertEqual(self.g.env("026", {}), {})
-        with self.assertRaises(self.g.GitLabError) as raised:
-            self.g.needed("026", {self.g.OPTION: "none", self.g.TOKEN: TOKEN})
-        self.assertIn("task 026 needs GitLab", str(raised.exception))
-        self.assertIn("GitLab option", str(raised.exception))
+        self.assertEqual(self.g.env("001", {}), {})
+        for eid in sorted(self.g.TASKS):
+            with self.subTest(eid), self.assertRaises(self.g.GitLabError) as raised:
+                self.g.env(eid, {SITES: "none"})
+            self.assertIn(f"task {eid} needs GitLab", str(raised.exception))
+            self.assertIn("websites option", str(raised.exception))
+        self.assertEqual(os.listdir(self.tmp), [])
 
-    def test_a_url_with_no_token_is_refused(self):
-        with self.assertRaises(self.g.GitLabError) as raised:
-            self.g.needed("041", {self.g.OPTION: HOST})
-        self.assertIn("licence GITLAB_PRIVATE_TOKEN", str(raised.exception))
-
-    def test_the_url_is_gitlab_s_tasks_alone(self):
-        given = {self.g.OPTION: HOST, self.g.TOKEN: TOKEN}
+    def test_the_url_and_this_machine_s_token_are_gitlab_s_tasks_alone(self):
+        given = {SITES: SUFFIX, "NULLIUS_UPSTREAM": os.path.join(self.tmp, "upstreams", "osworld2", "c")}
         self.assertEqual(self.g.needed("041", given), URL)
         self.assertIsNone(self.g.needed("005", given))
-        self.assertEqual(self.g.env("026", given), {"GITLAB_URL": URL})
+        made = self.g.env("026", given)
+        self.assertEqual(made, {"GITLAB_URL": URL, self.g.TOKEN: self.g.token(self.g.home(given))})
+        self.assertEqual(self.g.env("041", given), made)
         self.assertEqual(self.g.env("005", given), {})
 
-    def test_a_value_that_is_no_url_is_refused(self):
-        for bad in ("http://gitlab.x.io", "x.io/path", "X.IO", "-x.io", "x.io:0", "a" * 65):
-            with self.subTest(bad), self.assertRaises(self.g.GitLabError):
-                self.g.url({self.g.OPTION: bad})
-
-    def test_the_option_s_pattern_is_the_module_s(self):
+    def test_no_option_and_no_licence_ask_for_gitlab(self):
         with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
             bench = json.load(f)
-        self.assertEqual(bench["options"]["gitlab"]["pattern"], "none|" + self.g.HOST.pattern)
-        from nullius.standard import definitions
-        self.assertIsNone(definitions.option_problem(bench["options"]["gitlab"], HOST))
-        self.assertIsNotNone(definitions.option_problem(bench["options"]["gitlab"], URL))
-        self.assertEqual([s for e in bench["environments"].values() for s in e["needs_secrets"]],
-                         [{"name": self.g.TOKEN, "to": "driver", "summary": mock.ANY}])
+        self.assertNotIn("gitlab", bench["options"])
+        self.assertFalse(bench.get("environments"))
+        self.assertFalse(os.path.exists(os.path.join(HERE, "gitlab.Dockerfile")))
+
+
+class Token(unittest.TestCase):
+    def setUp(self):
+        self.g = load()
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.stack = os.path.join(self.tmp, "upstreams", "osworld2", f"gitlab-{self.g.COMMIT}")
+
+    def test_the_stack_is_beside_the_upstream_s_clone(self):
+        self.assertEqual(self.g.home({"NULLIUS_UPSTREAM": os.path.dirname(self.stack) + "/c/"}), self.stack)
+
+    def test_made_once_beside_the_stack_for_this_user_alone(self):
+        found = []
+        threads = [threading.Thread(target=lambda: found.append(self.g.token(self.stack))) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(10)
+        self.assertEqual(len(set(found)), 1)
+        self.assertEqual(self.g.token(self.stack), found[0])
+        self.assertGreaterEqual(len(found[0]), self.g.MIN_TOKEN)
+        self.assertTrue(found[0].isalnum())
+        path = self.stack + self.g.TOKEN_FILE
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
+        self.assertEqual(os.listdir(os.path.dirname(path)), [os.path.basename(path)])
+        self.assertNotEqual(self.g.token(self.stack + "-other"), found[0])
+
+    def test_a_file_that_holds_no_token_is_refused_without_its_words(self):
+        os.makedirs(os.path.dirname(self.stack))
+        for said in ("secret-but-short", "x" * 30 + "\n"):
+            with open(self.stack + self.g.TOKEN_FILE, "w") as f:
+                f.write(said)
+            with self.subTest(said), self.assertRaises(self.g.GitLabError) as raised:
+                self.g.token(self.stack)
+            self.assertNotIn(said.strip(), str(raised.exception))
+
+
+class Clone(unittest.TestCase):
+    def test_cloned_at_the_commit_once_and_again_when_changed(self):
+        g = load()
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        source, stack = os.path.join(tmp, "source"), os.path.join(tmp, "gitlab")
+        git = lambda *a: subprocess.run(["git", "-C", source, *a], check=True, capture_output=True, text=True).stdout
+        os.makedirs(source)
+        git("init", "--quiet")
+        with open(os.path.join(source, "docker-compose.yml"), "w") as f:
+            f.write("services: {}\n")
+        git("add", ".")
+        git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "c")
+        with mock.patch.object(g, "REPOSITORY", "file://" + source), mock.patch.object(g, "COMMIT", git("rev-parse", "HEAD").strip()):
+            self.assertEqual(g._clone(stack), stack)
+            os.utime(stack, (0, 0))
+            g._clone(stack)
+            self.assertEqual(os.stat(stack).st_mtime, 0)
+            with open(os.path.join(stack, "docker-compose.yml"), "w") as f:
+                f.write("changed\n")
+            g._clone(stack)
+            with open(os.path.join(stack, "docker-compose.yml")) as f:
+                self.assertEqual(f.read(), "services: {}\n")
+            self.assertEqual(sorted(os.listdir(tmp)), ["gitlab", "source"])
+        with mock.patch.object(g, "REPOSITORY", "file://" + os.path.join(tmp, "none")), self.assertRaises(g.GitLabError):
+            g._clone(os.path.join(tmp, "other"))
 
 
 class Ready(Case):
@@ -268,7 +325,7 @@ class Driver(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.driver = load_driver(self.tmp)
         self.g = self.driver.gitlab_server
-        self.envs, self.checked, self.held = [], [], []
+        self.envs, self.held = [], []
 
         def run(argv, cwd, env, *a, **kw):
             self.envs.append(env)
@@ -291,52 +348,54 @@ class Driver(unittest.TestCase):
 
         for target, name, fake in ((self.driver, "_vm", lambda dir, domain, eid: os.path.join(dir, "vm.qcow2")),
                                    (self.driver, "_run", run), (self.driver, "_task_file", lambda *a: None),
-                                   (self.g, "held", held), (self.g, "prepared", lambda: self.checked.append(1) or "/s"),
+                                   (self.g, "held", held),
+                                   (self.g, "prepare", lambda where, **kw: self.order.append(("prepare", where))),
                                    (self.g, "unit", lambda where, dir: os.path.join(dir, "gitlab.limits")),
                                    (self.g, "up", lambda *a: self.ups.append(a) or self.order.append(("up",))),
                                    (self.driver, "_warden", warden)):
             p = mock.patch.object(target, name, fake)
             p.start()
             self.addCleanup(p.stop)
-        p = mock.patch.dict(os.environ, {self.g.OPTION: HOST, self.g.TOKEN: TOKEN,
-                                         self.driver.websites.OPTION: "10.213.0.1.nip.io"})
+        self.home = os.path.join(self.tmp, "upstreams", "osworld2", f"gitlab-{self.g.COMMIT}")
+        p = mock.patch.dict(os.environ, {SITES: SUFFIX, "NULLIUS_UPSTREAM": os.path.join(os.path.dirname(self.home), "c")})
         p.start()
         self.addCleanup(p.stop)
         p = mock.patch.object(self.driver.websites, "held", lambda *a: contextlib.nullcontext())
         p.start()
         self.addCleanup(p.stop)
 
-    def answer(self, eid):
-        return self.driver.answer(f"tasks__{eid}", self.tmp, "original", "MiniMax-M3", "http://127.0.0.1:9/u1/v1", "k")
+    def answer(self, eid, **kw):
+        return self.driver.answer(f"tasks__{eid}", self.tmp, "original", "MiniMax-M3", "http://127.0.0.1:9/u1/v1", "k", **kw)
 
-    def test_a_task_that_needs_gitlab_is_refused_without_it_before_anything_runs(self):
-        with mock.patch.dict(os.environ, {self.g.OPTION: "none"}):
+    def test_a_task_that_needs_gitlab_is_refused_without_the_sites_before_anything_runs(self):
+        with mock.patch.dict(os.environ, {SITES: "none"}):
             setup = self.driver.EnvironmentSetupError
-            for start, kind in ((lambda: self.driver.setup("tasks__026", self.tmp), self.g.GitLabError),
-                                (lambda: self.answer("026"), setup),
+            for start, kind in ((lambda: self.driver.setup("tasks__041", self.tmp), self.g.GitLabError),
+                                (lambda: self.answer("041", judge=JUDGE), setup),
                                 (lambda: self.driver.score("tasks__041", self.tmp, judge=JUDGE), setup)):
                 with self.assertRaises(kind) as raised:
                     start()
                 self.assertEqual(kind is setup, str(raised.exception).startswith("GitLabError: "))
         self.assertEqual(self.envs, [])
+        self.assertFalse(os.path.exists(self.home + self.g.TOKEN_FILE))
 
     def test_the_url_and_token_reach_gitlab_s_tasks_alone_and_gitlab_is_held(self):
         for start in (lambda: self.answer("026"), lambda: self.driver.score("tasks__041", self.tmp, judge=JUDGE)):
             with self.assertRaises(Started):
                 start()
-            self.assertEqual((self.envs[-1]["GITLAB_URL"], self.envs[-1][self.g.TOKEN]), (URL, TOKEN))
+            self.assertEqual((self.envs[-1]["GITLAB_URL"], self.envs[-1][self.g.TOKEN]), (URL, self.g.token(self.home)))
         with self.assertRaises(Started):
             self.answer("001")
         self.assertNotIn("GITLAB_URL", self.envs[-1])
         self.assertNotIn(self.g.TOKEN, self.envs[-1])
         self.assertEqual(self.held, [(URL, mock.ANY)] * 2 + [(None, mock.ANY)])
         limits = os.path.join(self.tmp, "gitlab.limits")
-        self.assertEqual(self.ups, [("/s", limits, mock.ANY)] * 2)
+        self.assertEqual(self.ups, [(self.home, limits, mock.ANY)] * 2)
         self.assertIsNotNone(self.held[0][-1].until)
         self.assertIsNotNone(self.ups[0][-1].until)
-        self.assertEqual(self.order, [("warden", self.tmp), ("up",), ("let go", self.tmp)] * 2)
+        self.assertEqual(self.order, [("warden", self.tmp), ("prepare", self.home), ("up",), ("let go", self.tmp)] * 2)
 
-    def test_gitlab_is_checked_among_what_a_vm_start_needs(self):
+    def test_the_sites_that_serve_gitlab_are_checked_among_what_a_vm_start_needs(self):
         for name in ("vm_image", "_provider_image", "_write_limit"):
             p = mock.patch.object(self.driver, name, lambda: "image")
             p.start()
@@ -344,12 +403,13 @@ class Driver(unittest.TestCase):
         with mock.patch.object(self.driver, "_nat", lambda: True), \
                 mock.patch.object(self.driver.os, "listdir", lambda p: ["x"]), \
                 mock.patch.object(self.driver.os.path, "isdir", lambda p: True), \
-                mock.patch.object(self.driver.websites, "ready", lambda *a, **kw: None), \
+                mock.patch.object(self.driver.websites, "ready", lambda *a, **kw: self.held.append((a, kw))), \
                 mock.patch.object(self.driver._startup(), "network", lambda docker: "nullius-osworld2"):
             self.driver._ready("tasks", "001")
             self.driver._ready("tasks", "026")
             self.driver._ready("tasks", "041")
-        self.assertEqual(self.checked, [1, 1])
+        self.assertEqual(self.held, [((SUFFIX,), {"state": False})] * 2)
+        self.assertEqual(self.order, [])
 
     def test_a_hosts_snapshot_carries_the_module(self):
         from pathlib import Path
@@ -470,7 +530,7 @@ class Lifecycle(unittest.TestCase):
             p = mock.patch.object(self.g, name, fake)
             p.start()
             self.addCleanup(p.stop)
-        p = mock.patch.dict(os.environ, {self.g.TOKEN: TOKEN})
+        p = mock.patch.object(self.g, "token", lambda stack: TOKEN)
         p.start()
         self.addCleanup(p.stop)
 
@@ -487,8 +547,6 @@ class Lifecycle(unittest.TestCase):
         self.assertIn(f"GITLAB_PRIVATE_TOKEN={self.g.UNUSED}\n", text)
         self.assertEqual(settings["GITLAB_URL"], URL)
         self.assertEqual(settings["OSWORLD2_GITLAB_SHARE"], "stack")
-        with mock.patch.dict(os.environ, {self.g.TOKEN: self.g.UNUSED}), self.assertRaises(self.g.GitLabError):
-            self.g._token()
 
     def test_the_token_step_passes_the_token_by_name(self):
         script = ('until docker exec gitlab gitlab-rails runner "x"; do sleep 1; done\n'
@@ -555,14 +613,14 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual(gone, [(self.stack, limits)])
         self.assertIsNone(self.g.unit(self.stack, self.tmp, {}))
 
-    def test_up_down_and_init_by_hand_refuse_while_a_unit_holds_gitlab(self):
+    def test_up_down_and_prepare_by_hand_refuse_while_a_unit_holds_gitlab(self):
         ran = []
         with mock.patch.object(self.g, "up", lambda *a, **kw: ran.append("up")), \
                 mock.patch.object(self.g, "down", lambda *a, **kw: ran.append("down")), \
-                mock.patch.object(self.g, "init", lambda *a, **kw: ran.append("init")):
+                mock.patch.object(self.g, "prepare", lambda *a, **kw: ran.append("prepare")):
             with self.g.held(URL, threading.Event()), mock.patch("sys.stderr", new=io.StringIO()) as err:
-                for op in ("up", "down", "init"):
-                    self.assertEqual(self.g.main([op, self.stack]), 1)
+                for args in (["up", self.stack], ["down", self.stack], ["prepare", self.stack, SUFFIX]):
+                    self.assertEqual(self.g.main(args), 1)
             self.assertIn("a unit's GitLab task runs", err.getvalue())
             self.assertEqual(ran, [])
             with mock.patch("sys.stdout", new=io.StringIO()):
@@ -596,22 +654,66 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual(len(fds), 2)
         self.assertEqual(given, [fds])
 
-    def test_the_run_s_gitlab_host_must_be_the_stack_s(self):
-        self.configure()
-        with mock.patch.object(self.g, "stack", lambda: self.stack):
-            self.assertEqual(self.g.prepared({self.g.OPTION: HOST}), self.stack)
-            with self.assertRaises(self.g.GitLabError) as raised:
-                self.g.prepared({self.g.OPTION: "gitlab.example.org"})
-        self.assertIn("set the GitLab option to the stack's host", str(raised.exception))
+    def test_the_stamp_is_read_from_the_snapshot_read_only(self):
+        with mock.patch.object(self.g, "_snapshot", lambda: True):
+            with mock.patch.object(self.g, "_docker", lambda *a, **kw: self.calls.append(a) or Fake(stdout="abc\n")):
+                self.assertEqual(self.g._made(), "abc")
+            self.assertIn(f"{self.g.SNAPSHOT}:/snapshot:ro", self.calls[-1])
+            self.assertIn("none", self.calls[-1])
+            with mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(1)):
+                self.assertIsNone(self.g._made())
+        with mock.patch.object(self.g, "_snapshot", lambda: False):
+            self.assertIsNone(self.g._made())
 
-    def test_the_stack_s_folder_is_read_from_the_snapshot_read_only(self):
-        with mock.patch.object(self.g, "_docker", lambda *a, **kw: self.calls.append(a) or Fake(stdout="/srv/gitlab\n")):
-            self.assertEqual(self.g.stack(), "/srv/gitlab")
-        self.assertIn(f"{self.g.SNAPSHOT}:/snapshot:ro", self.calls[-1])
-        self.assertIn("none", self.calls[-1])
-        for said in (Fake(1), Fake(stdout="relative\n")):
-            with mock.patch.object(self.g, "_docker", lambda *a, **kw: said), self.assertRaises(self.g.GitLabError):
-                self.g.stack()
+    def test_init_keeps_the_stamp_prepare_reads_and_not_the_token(self):
+        self.configure()
+        copied = []
+        for name, fake in (("compose", lambda *a, **kw: Fake()), ("_until", lambda *a, **kw: 1),
+                           ("_make_token", lambda stack: None), ("ready", lambda *a, **kw: URL),
+                           ("_register", lambda stack, value: 7), ("_volumes", lambda: []), ("_snapshot", lambda: False),
+                           ("_copy", lambda stack, settings, tar, keep: copied.append(tar))):
+            p = mock.patch.object(self.g, name, fake)
+            p.start()
+            self.addCleanup(p.stop)
+        self.g.init(self.stack)
+        self.assertIn(f"printf %s {self.g._stamp(os.path.abspath(self.stack), URL)} > /snapshot/{self.g.STAMP}",
+                      copied[-1])
+        self.assertNotIn(TOKEN, copied[-1])
+
+    def test_a_snapshot_made_for_this_stack_host_and_token_is_kept(self):
+        self.configure()
+        done = []
+        for name in ("_clone", "configure", "compose", "down", "init"):
+            p = mock.patch.object(self.g, name, lambda *a, n=name, **kw: done.append(n) or Fake())
+            p.start()
+            self.addCleanup(p.stop)
+        stamp = self.g._stamp(self.stack, URL)
+        with mock.patch.object(self.g, "_made", lambda: stamp):
+            self.assertEqual(self.g.prepare(self.stack, {SITES: SUFFIX}), self.stack)
+            self.assertEqual(done, [])
+        for made, environ in ((None, {SITES: SUFFIX}), ("other", {SITES: SUFFIX}),
+                              (stamp, {SITES: "10.0.0.1.nip.io"})):
+            done.clear()
+            with self.subTest(made=made, environ=environ), mock.patch.object(self.g, "_made", lambda: made), \
+                    mock.patch.object(self.g, "_snapshot", lambda: True):
+                self.g.prepare(self.stack, environ)
+                self.assertEqual(done, ["_clone", "configure", "compose", "down", "init"])
+
+    def test_made_anew_in_order_under_the_run_s_share(self):
+        order = []
+        for name, fake in (("_made", lambda: None), ("_clone", lambda stack: order.append("clone")),
+                           ("configure", lambda *a: order.append(("configure",) + a[1:])),
+                           ("compose", lambda stack, args, **kw: order.append(args[0]) or Fake()),
+                           ("down", lambda stack: order.append("down")), ("_snapshot", lambda: True),
+                           ("init", lambda stack, say: order.append("init"))):
+            p = mock.patch.object(self.g, name, fake)
+            p.start()
+            self.addCleanup(p.stop)
+        self.g.prepare(self.stack, {SITES: SUFFIX})
+        self.g.prepare(self.stack, {SITES: SUFFIX, self.g.SHARE_OPTION: "8:80"})
+        self.assertEqual(order, ["clone", ("configure", SUFFIX, 16, 160), "pull", "down", "init",
+                                 "clone", ("configure", SUFFIX, 8, 80), "pull", "down", "init"])
+        self.assertEqual([a for a, _ in self.calls], [("volume", "rm", self.g.SNAPSHOT)] * 2)
 
     def test_no_override_is_one_line_saying_what_to_do(self):
         with mock.patch.object(self.g, "OVERRIDE", os.path.join(self.tmp, "none.yml")), \
@@ -641,7 +743,8 @@ sys.argv = ["driver.py"]
 sys.path.insert(0, here)
 spec.loader.exec_module(driver)
 driver.gitlab_server.LOCK, driver.websites.SITES_LOCK = lock, sites
-driver.gitlab_server.prepared = lambda: os.environ["STACK"]
+driver.gitlab_server.home = lambda: os.environ["STACK"]
+driver.gitlab_server.prepare = lambda *a, **kw: None
 driver.gitlab_server.up = lambda *a: (print("up", flush=True), time.sleep(600))
 with driver._gitlab("041", os.environ["UNIT"]):
     pass
@@ -669,7 +772,7 @@ class Warden(unittest.TestCase):
         self.lock, self.sites = os.path.join(self.tmp, "gitlab.lck"), os.path.join(self.tmp, "sites.lck")
         self.env = dict(os.environ, PATH=bin_ + os.pathsep + os.environ["PATH"], FAKE_DOCKER_LOG=self.log,
                         NULLIUS_UPSTREAM=self.tmp, STACK=self.stack, UNIT=self.unit,
-                        NULLIUS_OPTION_GITLAB=HOST, GITLAB_PRIVATE_TOKEN=TOKEN)
+                        NULLIUS_OPTION_WEBSITES=SUFFIX)
 
     def free(self, path, mode):
         import fcntl

@@ -637,8 +637,7 @@ def _tail(log, code=0):
 
 def _env(eid, assets=ASSETS, **extra):
     """GitLab's token only for a task that needs it."""
-    kept = {k: v for k, v in os.environ.items() if k != gitlab_server.TOKEN or eid in gitlab_server.TASKS}
-    return dict(kept, PYTHONPATH=os.pathsep.join([os.path.dirname(os.path.abspath(SITE)), UP]),
+    return dict(os.environ, PYTHONPATH=os.pathsep.join([os.path.dirname(os.path.abspath(SITE)), UP]),
                 PYTHONIOENCODING="utf-8", OSWORLD_FILE_BASE_URL=assets, **websites.env(), **gitlab_server.env(eid),
                 **extra)
 
@@ -876,10 +875,8 @@ def _ready(domain, eid):
     sites = websites.needed(eid)
     lab = gitlab_server.needed(eid)
     _startup().network(_asked)
-    if sites:
-        websites.ready(sites, state=False)
-    if lab:
-        gitlab_server.prepared()
+    if sites or lab:
+        websites.ready(websites.suffix(), state=False)
     if not os.path.isdir(ASSETS) or not os.listdir(ASSETS):
         raise RuntimeError(f"no assets at {ASSETS}: put the gated assets there before a run ({SETUP_DOC})")
     _provider_image()
@@ -895,15 +892,17 @@ def _ready(domain, eid):
 
 @contextlib.contextmanager
 def _gitlab(eid, dir, closed=_Waiting()):
-    """GitLab started from its snapshot for a task of gitlab_server.TASKS, its warden first, however the unit ends."""
+    """GitLab made once and started from its snapshot for a task of gitlab_server.TASKS, its warden first, however
+    the unit ends."""
     value = gitlab_server.needed(eid)
     with gitlab_server.held(value, closed):
         if not value:
             yield
             return
-        where = gitlab_server.prepared()
+        where = gitlab_server.home()
         limits = gitlab_server.unit(where, dir)
         with _warden(dir):
+            gitlab_server.prepare(where, say=lambda said: print(said, file=sys.stderr, flush=True))
             gitlab_server.up(where, limits, closed)
             yield
 
