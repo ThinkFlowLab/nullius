@@ -853,6 +853,7 @@ class Shutdown(unittest.TestCase):
         launch = threading.Thread(target=lambda: replies.append(desktop._engine(["exec"], timeout=10)), daemon=True)
         drain = threading.Thread(target=lambda: counts.append(desktop.end_clients()), daemon=True)
         with mock.patch.object(desktop, "_CLIENTS_LOCK", Lock()), \
+                mock.patch.object(desktop.container, "client_env", return_value={}), \
                 mock.patch.object(desktop.subprocess, "Popen", side_effect=popen) as start:
             launch.start()
             try:
