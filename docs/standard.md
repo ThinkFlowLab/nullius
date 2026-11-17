@@ -89,7 +89,7 @@ A kit names its skills in its `standard.json`; any other check is basic.
 
 A proof from before skills were recorded reads as every skill shown on the current kit. A benchmark that relies on a skill says `"needs_skills": {"agent.tools/v1": ["decoys"]}`, each one its port's kit names (`cli check` refuses another); an agent that has not shown it does not fit.
 
-`cli conform --repeat K` (default 1) runs each check K times, each a trial (`u0002r1` … `u0002rK`); a check holds when a majority pass. The proof records `"repeat": 3`, `"checks": {"one-tool": "3/3", "arguments": "2/3"}` and each skill's `"passed": "1/3"`.
+`cli conform --attempts K` (default 1) runs each check K times, each a trial (`u0002r1` … `u0002rK`); a check holds when a majority pass. The proof records `"repeat": 3`, `"checks": {"one-tool": "3/3", "arguments": "2/3"}` and each skill's `"passed": "1/3"`.
 
 ### The tools kit
 

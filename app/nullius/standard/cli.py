@@ -6,7 +6,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli pins BENCHMARK[@VERSION] [--tag TAG] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
-    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container | --backend boat]
+    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--attempts K] [--option NAME=VALUE ...] [--unsandboxed | --backend container | --backend boat]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS ...] [--max-turns N] [--max-calls N] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container | --backend boat [--boat-size SIZE]]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
@@ -34,7 +34,7 @@ definitions (or one file); ``new`` writes a definition to fill in, or a new
 version of an agent or a capability (``new version``: the default's pins, with
 the version replaced, and nothing proven); ``fit`` says, for one benchmark, what can run it and
 why the rest cannot; ``conform`` runs the kits and writes what passed into the
-definition - the port, and each skill of its kit shown or not (``--repeat K``:
+definition - the port, and each skill of its kit shown or not (``--attempts K``:
 each check K times, held by a majority); ``run`` runs a benchmark into a job under ``--jobs`` (``jobs_standard/``),
 which the application opens like any other; ``fidelity`` drives an agent over
 ACP and through its own command, compares the requests its model was sent, and
@@ -701,7 +701,7 @@ def main(argv=None):
         elif name == "conform":
             p.add_argument("--port", type=definitions.names.port, action="append", help="only this port's kit (repeatable)")
             p.add_argument("--stamp", help="the time stamp the kit jobs are named with (default: now)")
-            p.add_argument("--repeat", type=int, default=1, metavar="K",
+            p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
                            help="run each check K times; a check passes when it passes in most of them (default 1)")
         else:
             p.add_argument("--dataset")
@@ -714,7 +714,7 @@ def main(argv=None):
             p.add_argument("--simulator-model", help="a benchmark whose user a model plays: this model instead of its official one")
             p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
                            help="run each unit K times, each an attempt counted whatever its result "
-                                "(the upstream's --num-trials, pass^k; --repeat is its older name); default 1")
+                                "(the upstream's --num-trials, pass^k); default 1")
             p.add_argument("--retries", type=_retries, default=RETRIES, metavar="N",
                            help="run a failed attempt again, up to N times, after the other units: never after a timeout, "
                                 f"a wrong key or model, spent credit or a cap; 0 to {MAX_RETRIES}, default {RETRIES}")
