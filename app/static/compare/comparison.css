@@ -12,20 +12,44 @@
 .compare-excluded { color: var(--text-faint); font-size: .73rem; margin-top: .35rem; }
 .compare-attempts { display: block; color: var(--text-faint); font-size: .72rem; margin-top: .4rem; }
 .compare-task-dataset { display: block; color: var(--text-faint); font: .7rem var(--sans); margin: .3rem 0 0 1.5rem; }
-.compare-picker { max-width: 1100px; }
-.compare-pick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4rem; }
-.compare-pick-side { min-width: 0; display: flex; flex-direction: column; gap: .6rem; }
-.compare-pick-side > label { color: var(--text-dim); font-size: .82rem; }
-.compare-pick-side select { width: 100%; min-width: 0; padding: .75rem .85rem; border: 1px solid var(--border); border-radius: 7px; font: .88rem var(--sans); color: var(--text); background: var(--surface); }
-.compare-pick-side option { color: var(--text); background: var(--surface); }
-.compare-pick-caption { color: var(--text-faint); font-size: .8rem; margin: .2rem 0 0; }
-.compare-pick-actions { display: flex; align-items: center; gap: 1rem; margin-top: 1.4rem; flex-wrap: wrap; }
-.compare-pick-actions > label { display: inline-flex; gap: .45rem; align-items: center; color: var(--text-dim); font-size: .85rem; }
-.compare-pick-step { color: var(--text-faint); font: .7rem var(--mono); letter-spacing: .08em; text-transform: uppercase; margin: 0 0 1.4rem; }
 @media (max-width: 640px) {
-  .compare-pick-grid { grid-template-columns: 1fr; gap: 1rem; }
   .cohort-tools { align-items: flex-start; flex-direction: column; }
 }
+.compare-tools { flex-wrap: wrap; }
+.compare-warn {
+ color: var(--patch_failed_tests); font-size: .86rem; margin: -.6rem 0 1.4rem; }
+
+/* A column's header: its tools, its workspace and its run; an empty column greyed, with no numbers. */
+.compare-col { vertical-align: top; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.col-head { display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
+.col-tools { display: flex; align-items: center; gap: .15rem; }
+.col-tools .icon-btn { width: 26px; height: 26px; font-size: .9rem; text-decoration: none; }
+.compare-baseline { margin-right: auto; color: var(--accent); font-size: .7rem; letter-spacing: .07em; text-transform: uppercase; }
+.col-ws, .col-run { width: 100%; min-width: 0; padding: .45rem .6rem; border: 1px solid var(--border); border-radius: 7px; font: .82rem var(--sans); color: var(--text); background: var(--surface); text-align: left; }
+.col-run { cursor: pointer; }
+.col-run:hover, .col-ws:hover { border-color: var(--text-faint); }
+.compare-col.empty .col-ws, .compare-col.empty .col-run { color: var(--text-dim); background: var(--surface-2); border-style: dashed; }
+.compare-empty { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+/* a run as its list and its button show it */
+.run-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .1rem .6rem; min-width: 0; }
+.run-line { overflow-wrap: anywhere; color: var(--text); }
+.run-line .chip-control, .run-shards { margin-left: .4rem; }
+.run-shards { color: var(--text-faint); font-size: .72rem; white-space: nowrap; }
+.run-date { color: var(--text-faint); font-size: .72rem; white-space: nowrap; }
+.run-where { grid-column: 1 / -1; color: var(--text-dim); font-size: .72rem; overflow-wrap: anywhere; }
+.run-menu { position: fixed; z-index: 30; padding: .5rem; }
+
+.run-menu .st-search { margin: 0 0 .4rem; }
+.run-list { list-style: none; margin: 0; padding: 0; max-height: min(60vh, 26rem); overflow-y: auto; }
+.run-list [role="option"] { padding: .45rem .5rem; border-radius: 6px; cursor: pointer; font-size: .82rem; }
+.run-list [role="option"]:hover, .run-list [aria-selected="true"] { background: var(--surface-2); }
+.run-list [aria-selected="true"] { box-shadow: inset 2px 0 0 var(--accent); }
+.run-sep { border-top: 1px solid var(--border-soft); margin: .25rem 0; }
+.run-sep.labelled { padding: .4rem .5rem .1rem; color: var(--text-faint); font-size: .7rem; letter-spacing: .07em; text-transform: uppercase; }
+/* a summary cell's difference from the baseline, in the row's unit */
+.delta { display: block; font-size: .72rem; font-weight: 400; color: var(--text-faint); }
+.delta.ok { color: var(--resolved); }
+.delta.bad { color: var(--bad); }
 
 /* One column contract for the overview, task rows and expanded metrics. */
 .compare-table-wrap {
@@ -78,12 +102,14 @@
 }
 @media (max-width: 640px) {
   .compare-table-wrap { --compare-label-width: 14rem; }
+  /* the summary keeps room for a run column beside its pinned names */
+  .compare-table-wrap .grid.compare:not(.tasks) { --compare-label-width: 8.5rem; min-width: calc(var(--compare-label-width) + var(--cols, 2) * 15rem); }
   /* Let a whole agent column enter the viewport when scrolling on a phone. */
-  .compare-table-wrap .grid.compare th.rowhead,
-  .compare-table-wrap .grid.inner th.rowhead,
-  .compare-table-wrap .grid.compare.tasks > thead > tr > th:first-child,
-  .compare-table-wrap .grid.compare.tasks > tbody > .compare-task-row > td:first-child { position: static; }
+  .compare-table-wrap .grid.compare.tasks .sticky-col,
+  .compare-table-wrap .grid.inner .sticky-col { position: static; }
 }
+
+
 
 /* Side-by-side trial headings: section-title margins must not offset badges. */
 .cmp-head .compare-trial-heading {

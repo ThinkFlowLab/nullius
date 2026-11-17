@@ -1,36 +1,39 @@
-{#- One task's detail, the same metrics for each side so differences line up: asked for when its row opens (/compare/detail/<index>), never built for every row of the page. -#}
-<table class="grid inner" style="--cols: {{ jobs|length }}">
+{#- One task's detail, the same metrics for each side so differences line up: asked for when its row opens (/compare/detail/<index>), never built for every row of the page. A cell a column, empty for a column with no run. -#}
+{% from '_tables.html' import classes %}
+{% macro each() %}{% for c in columns %}{% if c.i is none %}<td class="compare-empty"></td>{% else %}{{ caller(c.i) }}{% endif %}{% endfor %}{% endmacro %}
+{% set METRIC = dict(sticky=true) %}
+<table class="grid inner" style="--cols: {{ columns|length }}">
   <colgroup>
     <col class="compare-label-col">
-    {% for j in jobs %}<col>{% endfor %}
+    {% for c in columns %}<col>{% endfor %}
   </colgroup>
   <tbody>
     {% for r in d.rows %}
     <tr>
-      <th class="rowhead" {% if r.hint %}title="{{ r.hint }}"{% endif %}>{{ r.label }}</th>
-      {% for v in r.cells %}
-      <td class="{{ r.classes[loop.index0] }}{% if r.cells|unique|list|length > 1 %} cell-differs{% endif %}">{{ v }}</td>
-      {% endfor %}
+      <th{{ classes(METRIC, true, 'rowhead') }} {% if r.hint %}title="{{ r.hint }}"{% endif %}>{{ r.label }}</th>
+      {% call(i) each() %}
+      <td class="{{ r.classes[i] }}{% if r.cells|unique|list|length > 1 %} cell-differs{% endif %}">{{ r.cells[i] }}</td>
+      {% endcall %}
     </tr>
     {% endfor %}
     <tr>
-      <th class="rowhead">Files edited</th>
-      {% for files in d.files %}
+      <th{{ classes(METRIC, true, 'rowhead') }}>Files edited</th>
+      {% call(i) each() %}{% set files = d.files[i] %}
       <td>
         {% if files %}<ul class="files tight">{% for f in files %}<li class="mono">{{ f }}</li>{% endfor %}</ul>
         {% else %}<span class="faint">—</span>{% endif %}
       </td>
-      {% endfor %}
+      {% endcall %}
     </tr>
     {% if d.broke|select|list %}
     <tr>
-      <th class="rowhead">Broke</th>
-      {% for names in d.broke %}
+      <th{{ classes(METRIC, true, 'rowhead') }}>Broke</th>
+      {% call(i) each() %}{% set names = d.broke[i] %}
       <td>
         {% if names %}<ul class="files tight">{% for f in names %}<li class="mono bad">{{ f }}</li>{% endfor %}</ul>
         {% else %}<span class="faint">—</span>{% endif %}
       </td>
-      {% endfor %}
+      {% endcall %}
     </tr>
     {% endif %}
   </tbody>

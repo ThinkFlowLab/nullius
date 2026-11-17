@@ -172,6 +172,30 @@ class LaunchShards(unittest.TestCase):
         self.assertIn("· 2 runs · 2 checks</span>", block)
         self.assertEqual(len(rows_of(block)), 4)
 
+    def test_compare_offers_a_sharded_run_once_and_compares_every_shard_s_trials(self):
+        self.jobs, executions = write_launch(self.root, self.runs)
+        execution.EXECUTIONS.update(executions)
+        runs = self.client.get("/compare/runs", query_string={"workspace": "s"}).get_json()["runs"]
+        self.assertEqual(sorted((r["agent"], r["shards"], r["check"]) for r in runs),
+                         [("jiuwenswarm", 2, False), ("nop", 2, True), ("oracle", 1, True), ("terminus-2", 2, False)])   # no oracle on shard 2
+        self.assertEqual(len({r["launch"] for r in runs}), 1)
+        whole = next(r["value"] for r in runs if r["agent"] == "jiuwenswarm")
+        # any shard's id stands for its whole run, on a column or from the Runs page's job= links
+        for query in ({"pick": f"s:{NAME}-jiuwenswarm-shard-2of2"}, {"job": [f"{NAME}-jiuwenswarm-shard-2of2", f"{NAME}-jiuwenswarm-shard-1of2"]}):
+            response = self.client.get("/compare", query_string=query)
+            self.addCleanup(response.close)
+            body = response.get_data(as_text=True)
+            self.assertEqual(re.findall(r'data-column="\d+" data-run="([^"]*)"', body), [whole.split(":", 1)[1]])
+            trials = re.search(r'<th class="rowhead[^"]*"[^>]*>Trials</th>\s*<td[^>]*>(\d+)', body).group(1)
+            self.assertEqual(int(trials), len(UNITS))
+
+    def test_compare_keeps_a_run_of_one_shard_as_it_is(self):
+        self.jobs, executions = write_launch(self.root, self.runs, written=())
+        self.jobs = [j for j in self.jobs if j.job_id.endswith("1of2")]
+        runs = self.client.get("/compare/runs", query_string={"workspace": "s"}).get_json()["runs"]
+        self.assertEqual(sorted((r["id"], r["shards"]) for r in runs), sorted((j.job_id, 1) for j in self.jobs))
+
 
 if __name__ == "__main__":
+
     unittest.main()

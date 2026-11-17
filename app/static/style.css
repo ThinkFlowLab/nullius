@@ -490,16 +490,9 @@ button.seg:hover { filter: brightness(1.25); }
 .grid.compare th.rowhead, .grid.inner th.rowhead {
   color: var(--text-dim); font-weight: 500; font-size: .78rem;
   text-transform: uppercase; letter-spacing: .07em; width: 11rem; text-align: left;
-  position: sticky; left: 0; z-index: 2; background: var(--bg);
 }
-.grid.compare.tasks td:first-child {
-  position: sticky; left: 0; z-index: 2; background: var(--bg);
-  box-shadow: 1px 0 0 var(--border-soft);
-}
-.grid.compare.tasks tbody tr:hover td:first-child { background: var(--surface); }
-.grid.compare.tasks thead th:first-child {
-  position: sticky; left: 0; z-index: 3; background: var(--bg); width: 20rem;
-}
+.grid.compare.tasks thead th:first-child { width: 20rem; }
+
 /* the detail row spans the table, so its inner table must not re-scroll */
 .detail-row > td { overflow-x: auto; }
 .grid.compare tbody tr:hover { background: var(--surface); }

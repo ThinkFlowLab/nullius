@@ -162,7 +162,7 @@
       <div class="nav-group">
         <div class="nav-label">Analyse</div>
         <a class="nav-item {{ 'on' if ep in ('index', 'job', 'trial', 'save_trace') }}" href="{{ url_for('index') }}" data-label="Runs" aria-label="Runs"><svg class="ic"><use href="#i-runs"/></svg><span class="lbl">Runs</span></a>
-        <a class="nav-item {{ 'on' if ep in ('compare', 'compare_task', 'compare_picker') }}" href="{{ url_for('compare') }}" data-label="Compare" aria-label="Compare"><svg class="ic"><use href="#i-compare"/></svg><span class="lbl">Compare</span></a>
+        <a class="nav-item {{ 'on' if ep in ('compare', 'compare_task') }}" href="{{ url_for('compare') }}" data-label="Compare" aria-label="Compare"><svg class="ic"><use href="#i-compare"/></svg><span class="lbl">Compare</span></a>
       </div>
       <div class="nav-group">
         <div class="nav-label">Run</div>
