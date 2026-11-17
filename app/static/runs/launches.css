@@ -127,7 +127,6 @@ dialog.std-how.launch-delete { width: min(520px, calc(100vw - 32px)); }
 /* State and Launch stay put while the table scrolls sideways; State's header is its name for a screen reader only */
 .inventory { --inv-state-w: 2.2rem; }
 .inventory :is(th, td)[data-col="state"] { width: var(--inv-state-w); min-width: var(--inv-state-w); padding-left: 0; padding-right: 0; text-align: center; }
-.inventory [data-col="launch"] { --sticky-left: var(--inv-state-w); }
 /* a run's state: its icon, coloured as the Runs page's state dots */
 .inventory td[data-col="state"] .ic { vertical-align: middle; }
 .inventory .st-finished, .inventory .st-running, .inventory .st-preparing { color: var(--resolved); }

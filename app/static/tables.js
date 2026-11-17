@@ -203,6 +203,26 @@ window.NulliusTable = {
     return t;
   },
 
+  /* Sticky columns (.sticky-col): each at the summed widths of those before
+     it, again as they resize, hide or rows come in. */
+  sticky(table) {
+    const heads = [...table.tHead.rows[0].cells], pinned = heads.filter(th => th.classList.contains('sticky-col'));
+    const place = () => {
+      let left = 0;
+      pinned.forEach(th => {
+        for (const row of table.rows) {
+          const cell = row.cells[th.cellIndex];
+          if (cell?.classList.contains('sticky-col')) cell.style.setProperty('--sticky-left', left + 'px');
+        }
+        left += th.getBoundingClientRect().width;
+      });
+    };
+    const resized = new ResizeObserver(place);
+    pinned.forEach(th => resized.observe(th));
+    new MutationObserver(place).observe(table, {childList: true, subtree: true});
+    place();
+  },
+
   /* A table's pages (the pager macro named after its id): the rows `passes`
      lets through, a page of them at a time, the page's size remembered per
      viewer under `key`; `empty` shows when none passes. Returns first(), to
@@ -233,3 +253,10 @@ window.NulliusTable = {
     return first;
   },
 };
+
+/* Every table with sticky columns, set up once the page is read. */
+const nulliusTables = () => document.querySelectorAll('table.grid').forEach(t => {
+  if (t.querySelector('.sticky-col')) NulliusTable.sticky(t);
+});
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', nulliusTables);
+else nulliusTables();

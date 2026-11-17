@@ -395,7 +395,6 @@ button.seg:hover { filter: brightness(1.25); }
 
 /* give the two text-heavy columns room; the rest stay compact */
 .grid th[data-col="run"], .grid td[data-col="run"] { min-width: 14rem; }
-.grid [data-col="run"] { --sticky-left: 2.2rem; }   /* after the checkbox */
 .grid th[data-col="dataset"], .grid td[data-col="dataset"] { min-width: 10.5rem; }
 .grid td[data-col="dataset"] { color: var(--text-dim); }
 
@@ -411,8 +410,8 @@ button.seg:hover { filter: brightness(1.25); }
    The left-pinned columns below work correctly, because the wrapper really
    does scroll horizontally. */
 
-/* a table's .sticky-col cells stay put while it scrolls sideways, at --sticky-left, so a row never loses
-   its identity; .sticky-edge draws the line after the last one */
+/* a table's .sticky-col cells stay put while it scrolls sideways, at --sticky-left (tables.js `sticky`), so a
+   row never loses its identity; .sticky-edge draws the line after the last one */
 .table-wrap .grid .sticky-col {
   position: sticky; left: var(--sticky-left, 0); z-index: 2; background: var(--bg);
 }
