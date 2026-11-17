@@ -89,7 +89,7 @@ class ControlsApart(unittest.TestCase):
         return text_of(re.search(r'<p class="subtitle" id="counts".*?</p>', html, re.S).group(0))
 
     def row(self, html, job_id):
-        rows = [r for r in re.findall(r'<tr [^>]*>.*?</tr>', html, re.S) if '<td data-col="run"><a href="/job/%s">' % job_id in r]
+        rows = [r for r in re.findall(r'<tr [^>]*>.*?</tr>', html, re.S) if '<td data-col="run" class="sticky-col sticky-edge"><a href="/job/%s">' % job_id in r]
         self.assertEqual(len(rows), 1, job_id)
         return rows[0]
 

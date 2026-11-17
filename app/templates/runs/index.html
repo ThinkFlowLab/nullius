@@ -186,11 +186,11 @@
 <table class="grid sortable" id="runs">
   <thead>
     <tr>
-      <th class="pick-col">
+      <th class="pick-col sticky-col">
         <input type="checkbox" id="pick-all" aria-label="Select all runs for comparison"
                title="Select / unselect all">
       </th>
-      <th data-col="run" data-type="text">Run</th>
+      <th data-col="run" data-type="text" class="sticky-col sticky-edge">Run</th>
       <th data-col="agent" data-type="text">Agent{{ filter_button('agent', choices.agent) }}</th>
       <th data-col="version" data-type="text" title="The agent's version as the run recorded it, or the runner and its commit">Version</th>
       <th data-col="start" data-type="num">Start</th>
@@ -226,9 +226,9 @@
     <tr data-outcomes="{% if not v %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"
         data-f-dataset="{{ j.dataset }}" data-f-model="{{ j.model_name }}"
         data-f-agent="{{ j.agent_label }}"{% if v %} class="control-row" data-control="{{ v.control }}" data-state="{{ v.state }}"{% endif %}>
-      <td class="pick-col"><input type="checkbox" class="pick-run" value="{{ j.job_id }}"
+      <td class="pick-col sticky-col"><input type="checkbox" class="pick-run" value="{{ j.job_id }}"
              aria-label="Compare {{ j.job_id }}"></td>
-      <td data-col="run"><a href="{{ url_for('job', job_id=j.job_id) }}">{{ j.job_id }}</a>
+      <td data-col="run" class="sticky-col sticky-edge"><a href="{{ url_for('job', job_id=j.job_id) }}">{{ j.job_id }}</a>
         {%- if j.is_preparing %} <span class="badge"
           title="Launched: Harbor has written this run's configuration and nothing else yet. No trial has started; the row will change on its own.">preparing</span>
         {%- elif j.is_running and ended[j.job_id] %} <span class="badge"

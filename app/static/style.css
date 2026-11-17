@@ -352,10 +352,11 @@ button.seg:hover { filter: brightness(1.25); }
   overflow: hidden; background: var(--surface-2);
 }
 
-/* table toolbar + column menu */
+/* the table toolkit (templates/_tables.html, static/tables.js): toolbar, menus, sorting, sticky columns, pages */
 .table-tools { display: flex; align-items: center; gap: .75rem; margin: 0 0 .6rem; }
 .artifact-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
 .artifact-tools { flex-wrap: wrap; }
+.inv-cols { margin-top: 1rem; }
 .menu-wrap { position: relative; }
 .btn.sm { font-size: .8rem; padding: .42rem .75rem; }
 .menu {
@@ -387,10 +388,14 @@ button.seg:hover { filter: brightness(1.25); }
 .grid.sortable thead th[data-sorted="asc"]::after { content: "↑"; }
 .grid.sortable thead th[data-sorted="desc"]::after { content: "↓"; }
 .grid.sortable thead th:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent-soft); }
+/* a header without data-type (a checkbox, a state, the actions) does not sort */
+.grid.sortable thead th:not([data-type]) { cursor: default; }
+.grid.sortable thead th:not([data-type])::after { content: none; }
 .nowrap { white-space: nowrap; }
 
 /* give the two text-heavy columns room; the rest stay compact */
 .grid th[data-col="run"], .grid td[data-col="run"] { min-width: 14rem; }
+.grid [data-col="run"] { --sticky-left: 2.2rem; }   /* after the checkbox */
 .grid th[data-col="dataset"], .grid td[data-col="dataset"] { min-width: 10.5rem; }
 .grid td[data-col="dataset"] { color: var(--text-dim); }
 
@@ -406,21 +411,15 @@ button.seg:hover { filter: brightness(1.25); }
    The left-pinned columns below work correctly, because the wrapper really
    does scroll horizontally. */
 
-/* the checkbox and Run columns stay put while you scroll sideways, so a row
-   never loses its identity; so do a table's .sticky-col cells, at --sticky-left */
-.table-wrap .grid th.pick-col, .table-wrap .grid td.pick-col, .table-wrap .grid .sticky-col {
+/* a table's .sticky-col cells stay put while it scrolls sideways, at --sticky-left, so a row never loses
+   its identity; .sticky-edge draws the line after the last one */
+.table-wrap .grid .sticky-col {
   position: sticky; left: var(--sticky-left, 0); z-index: 2; background: var(--bg);
 }
 .table-wrap .grid .sticky-col.sticky-edge { box-shadow: 1px 0 0 var(--border-soft); }
-.table-wrap .grid th[data-col="run"], .table-wrap .grid td[data-col="run"] {
-  position: sticky; left: 2.2rem; z-index: 2; background: var(--bg);
-  box-shadow: 1px 0 0 var(--border-soft);
-}
-.table-wrap .grid thead th.pick-col,
-.table-wrap .grid thead th[data-col="run"], .table-wrap .grid thead th.sticky-col { z-index: 4; background: var(--bg); }
+.table-wrap .grid thead th.sticky-col { z-index: 4; background: var(--bg); }
 /* opaque sticky cells would hide the row hover, so repaint them to match */
-.table-wrap .grid tbody tr:hover td.pick-col,
-.table-wrap .grid tbody tr:hover td[data-col="run"], .table-wrap .grid tbody tr:hover td.sticky-col { background: var(--surface); }
+.table-wrap .grid tbody tr:hover td.sticky-col { background: var(--surface); }
 
 /* compact density — same data, ~35% less width */
 .grid.compact { font-size: .88rem; }
@@ -453,14 +452,21 @@ button.seg:hover { filter: brightness(1.25); }
 .tools-menu .tools-all { display: flex; justify-content: flex-end; gap: .75rem; padding: .3rem .45rem; font-size: .8rem; }
 .tools-menu label { clear: both; }
 .tools-menu .tools-clear { align-self: flex-start; padding: .2rem .45rem .4rem; font-size: .8rem; }
+/* a list in a .tools table: rows top-aligned; in an .inventory one, narrow gutters, a count only as wide as it
+   is, and an actions cell (.inv-acts) on one line; a header or cell positioned holds a hidden name or reason
+   inside the table's scroll */
+.grid.tools td { vertical-align: top; }
+.grid.inventory th, .grid.inventory td { padding-left: .4rem; padding-right: .4rem; }
+.grid.inventory th { position: relative; }
+.grid.inventory th.num, .grid.inventory td.num { width: 1%; }
+.inventory td.num { white-space: nowrap; }
+.inventory td.inv-acts { position: relative; white-space: nowrap; }
 .tools-count { margin-left: .4rem; padding: 0 .4em; border-radius: 99px; background: var(--accent-soft); color: var(--text); font-size: .72rem; font-variant-numeric: tabular-nums; }
 .menu-head { display: flex; gap: .75rem; padding: .15rem .45rem .4rem; border-bottom: 1px solid var(--border-soft); margin-bottom: .25rem; }
 .chip.clear { border-style: dashed; }
 
 .pick-col { width: 2.2rem; }
 .pick-col input { accent-color: var(--accent); cursor: pointer; }
-.grid.sortable thead th.pick-col { cursor: default; }
-.grid.sortable thead th.pick-col::after { content: none; }
 .compare-bar { display: flex; align-items: center; gap: .7rem; margin: 0; }
 .btn:disabled { opacity: .4; cursor: not-allowed; filter: none; }
 
@@ -928,8 +934,6 @@ button.seg:hover { filter: brightness(1.25); }
 .legend .chip:hover { cursor: help; }
 
 .cat-tag { display: inline-flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--text-dim); }
-.grid.tools td { vertical-align: top; }
-.grid.tools tr.row-failed td { background: color-mix(in srgb, var(--agent_error) 7%, transparent); }
 .files { margin: 0; padding-left: 1.1rem; color: var(--text-dim); font-size: .88rem; }
 .files li { margin: .2rem 0; }
 

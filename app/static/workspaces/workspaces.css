@@ -2,7 +2,6 @@
 .ws-head { justify-content: space-between; align-items: center; }
 .ws-current td { background: var(--accent-soft); }
 .ws-mark { width: 1.2rem; }
-.ws-table th { position: relative; }   /* holds a header named for a screen reader only, inside the scrolling box */
 .ws-name { min-width: 12rem; }
 .ws-show { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px .4rem; }
 .ws-title { overflow-wrap: anywhere; }   /* a name wraps, never cut */
