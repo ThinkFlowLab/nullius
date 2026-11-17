@@ -127,13 +127,10 @@ dialog.std-how.launch-delete { width: min(520px, calc(100vw - 32px)); }
 .grid.sortable.inventory thead th:not([data-type])::after { content: none; }
 .inventory td.inv-acts { position: relative; white-space: nowrap; }   /* holds its hidden reason, inside the table's scroll */   /* Add, then Delete, side by side on every row */
 .inventory .launch-add-btn:focus-visible { color: var(--text); }
-.inventory .launch-delete-btn:hover, .inventory .launch-delete-btn:focus-visible { color: var(--bad); }
-.inventory .icon-btn[aria-disabled="true"] { opacity: .4; background: none; border-color: transparent; cursor: default; }   /* Delete it cannot: the slot kept, greyed, its reason reachable */
 /* State and Launch stay put while the table scrolls sideways; State's header is its name for a screen reader only */
 .inventory { --inv-state-w: 2.2rem; }
 .inventory [data-col="state"] { width: var(--inv-state-w); min-width: var(--inv-state-w); padding-left: 0; padding-right: 0; text-align: center; }
 .inventory [data-col="launch"] { --sticky-left: var(--inv-state-w); }
-.inventory .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* a run's state: its icon, coloured as the Runs page's state dots */
 .inventory td[data-col="state"] .ic { vertical-align: middle; }
 .inventory .st-finished, .inventory .st-running, .inventory .st-preparing { color: var(--resolved); }

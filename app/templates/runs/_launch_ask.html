@@ -14,7 +14,7 @@
     as <li>. `back`: where the route returns to; `icon`: the button a trash icon; no `gone`: the question is asked of
     the server when the dialog opens (`launch_ask`). The element that holds both carries data-launch. #}
 {% macro delete_ask(L, gone, back='', icon=false) %}
-      {% if icon %}<button type="button" class="icon-btn launch-delete-btn" aria-haspopup="dialog" aria-label="Delete launch {{ L.title }}" title="Delete launch"{% if not gone %} data-ask="{{ url_for('launch_ask', key=L.key) }}"{% endif %}><svg class="ic"><use href="#i-trash"/></svg></button>
+      {% if icon %}<button type="button" class="icon-btn danger launch-delete-btn" aria-haspopup="dialog" aria-label="Delete launch {{ L.title }}" title="Delete launch"{% if not gone %} data-ask="{{ url_for('launch_ask', key=L.key) }}"{% endif %}><svg class="ic"><use href="#i-trash"/></svg></button>
       {%- else %}<button type="button" class="btn sm ghost danger launch-delete-btn" aria-haspopup="dialog">Delete launch</button>{% endif %}
       {%- if gone %}
       {%- set items = caller() %}

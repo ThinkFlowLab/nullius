@@ -901,7 +901,7 @@ class LaunchesPage(unittest.TestCase):
         web.shared.close_workspace()
         row = self.rows()[f"run:{orphan.id}"]
         self.assertNotIn('<template class="launch-ask"', row)                              # what goes is worked out when Delete opens, not with the page
-        self.assertIn(f'class="icon-btn launch-delete-btn" aria-haspopup="dialog" aria-label="Delete launch r3-*" title="Delete launch" data-ask="/launch/run:{orphan.id}/ask"><svg class="ic"><use href="#i-trash"/>', row)
+        self.assertIn(f'class="icon-btn danger launch-delete-btn" aria-haspopup="dialog" aria-label="Delete launch r3-*" title="Delete launch" data-ask="/launch/run:{orphan.id}/ask"><svg class="ic"><use href="#i-trash"/>', row)
         ask = self.get(f"/launch/run:{orphan.id}/ask").get_data(as_text=True)
         self.assertIn(f'action="/launch/run:{orphan.id}/delete"', ask)
         self.assertIn('<input type="hidden" name="back" value="launches">', ask)
@@ -918,7 +918,7 @@ class LaunchesPage(unittest.TestCase):
         row = self.rows()[f"run:{running.id}"]
         self.assertIn(">running<", row)
         self.assertNotIn("launch-delete-btn", row)
-        self.assertIn(f'<button type="button" class="icon-btn" aria-disabled="true" aria-label="Delete launch r4-*" aria-describedby="why-run:{running.id}" title="Delete launch: not while it runs">', row)   # greyed, in its place, focusable
+        self.assertIn(f'<button type="button" class="icon-btn danger" aria-disabled="true" aria-label="Delete launch r4-*" aria-describedby="why-run:{running.id}" title="Delete launch: not while it runs">', row)   # greyed, in its place, focusable
         self.assertIn(f'<span class="sr" id="why-run:{running.id}">not while it runs</span>', row)
         self.assertEqual(self.get(f"/launch/run:{running.id}/ask").status_code, 409)
         self.assertEqual(self.post(f"/launch/run:{running.id}/delete", back="launches").status_code, 302)

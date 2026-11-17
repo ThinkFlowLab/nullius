@@ -1417,6 +1417,9 @@ a.chip { text-decoration: none; }
 }
 .rail-toggle:hover, .icon-btn:hover { color: var(--text); background: var(--surface); border-color: var(--border); }
 .rail-toggle:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
+.icon-btn.danger:not([aria-disabled="true"]):is(:hover, :focus-visible) { color: var(--bad); }   /* it deletes */
+.icon-btn[aria-disabled="true"] { opacity: .4; background: none; border-color: transparent; cursor: default; }   /* it cannot here: the slot kept, greyed, its reason reachable */
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }   /* a name for a screen reader only */
 .ic-expand { display: none; }
 :root[data-rail="collapsed"] .ic-expand { display: block; }
 :root[data-rail="collapsed"] .ic-collapse { display: none; }
