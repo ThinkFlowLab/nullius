@@ -121,9 +121,7 @@
   });
   d.addEventListener('close', () => opener?.focus());
   const table = document.getElementById('ws-table');
-  let pages = () => {};
-  NulliusTable.toolbar(table, document.getElementById('ws-tools'), () => pages());
-  pages = NulliusTable.pager(table, 'workspaces.per');
+  NulliusTable.paged(table, document.getElementById('ws-tools'), 'workspaces.per');
 
   // Rename in place: the pencil opens the field; Escape or Cancel puts the name back.
   document.querySelectorAll('.ws-name').forEach(cell => {

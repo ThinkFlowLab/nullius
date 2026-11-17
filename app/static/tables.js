@@ -1,5 +1,6 @@
-/* A table.grid's sortable headers and per-column value filters, shared by the
-   tables that have them. */
+/* The table toolkit's script: each function is a feature a table.grid opts
+   into (the macros of templates/_tables.html; their styles in style.css,
+   "the table toolkit"). */
 window.NulliusTable = {
   /* A header with data-type sorts its column on a click or Enter; num sorts
      descending first. A cell's data-sort wins over its text. A header that
@@ -189,6 +190,16 @@ window.NulliusTable = {
     sync();
     this.menu(sbtn, smenu);
     return {passes: f.passes, resort};
+  },
+
+  /* A table with a toolbar (`tools`, as toolbar) and pages (as pager, the
+     page size kept under `key`): back to the first page after each filter or
+     sort. Returns toolbar's {passes, resort}. */
+  paged(table, tools, key, empty = null) {
+    let first = () => {};
+    const t = this.toolbar(table, tools, () => first());
+    first = this.pager(table, key, t.passes, empty);
+    return t;
   },
 
   /* A table's pages (the pager macro named after its id): the rows `passes`

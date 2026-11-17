@@ -94,9 +94,7 @@
 <script>
 (() => {
   const table = document.getElementById('launches');
-  let pages = () => {};
-  const tools = NulliusTable.toolbar(table, document.getElementById('launch-tools'), () => pages());
-  pages = NulliusTable.pager(table, 'launches.per', tools.passes, document.getElementById('empty-note'));
+  NulliusTable.paged(table, document.getElementById('launch-tools'), 'launches.per', document.getElementById('empty-note'));
   // ?ws= ticked its workspace alone at load; from here the filter lives in the page, as the others do
   const url = new URL(location.href);
   if (url.searchParams.has('ws')) { url.searchParams.delete('ws'); history.replaceState(history.state, '', url); }
