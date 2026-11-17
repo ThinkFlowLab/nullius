@@ -242,10 +242,10 @@
 
 #nullius-builder .std-backends { grid-template-columns: repeat(3, minmax(0, 240px)); gap: 8px; }
 @media (max-width: 860px) { #nullius-builder .std-backends { grid-template-columns: repeat(2, minmax(0, 240px)); } }
-#nullius-builder .std-backends .nb-tile { flex-direction: row; align-items: center; gap: 8px; padding: 10px 12px; }
-#nullius-builder .std-backends .nb-tile-head { flex: 1; }
+/* the name keeps the tile's width; why one cannot be used goes under it, so a row's tiles stay one height */
+#nullius-builder .std-backends .nb-tile { flex-direction: column; align-items: stretch; justify-content: center; gap: 0; padding: 10px 12px; }
 #nullius-builder .std-backends .nb-mark { width: 20px; height: 20px; }
-#nullius-builder .std-backends .nb-tile-note { font-size: 11px; white-space: nowrap; }
+#nullius-builder .std-backends .nb-tile-note { font-size: 11px; padding-left: 30px; }
 #nullius-builder .std-boat-sizes { grid-template-columns: repeat(4, minmax(0, 160px)); grid-auto-rows: auto; }
 #nullius-builder .std-boat-sizes .nb-tile { flex-direction: column; align-items: stretch; gap: 2px; }
 #nullius-builder .std-boat-sizes .nb-tile-note { white-space: normal; }
