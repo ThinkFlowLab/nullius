@@ -484,6 +484,13 @@ class Run:
                 raise Refused(f"{bench['label']}'s check executes generated code, but Docker is unavailable: {why}. "
                               "Make Docker usable, or explicitly allow execution as you (--unsandboxed).")
             self.container_check = not why
+        if backend == "boat" and (bench.get("score") or {}).get("runs_code"):
+            # the agent's code comes back from its VM to be checked here: in a throwaway container, never as you
+            why = container.unusable()
+            if why:
+                raise Refused(f"{bench['label']}'s check executes the agent's code on this machine, in a container, "
+                              f"but Docker is unavailable: {why}. Make Docker usable here, or run it with --backend container.")
+            self.container_check = True
         self.bench, self.other, self.model, self.provider, self.backend = bench, other, model, provider, backend
         # A setup (definitions.setup): the upstream's own answerer, asked as one model (``asked``), the relay
         # sending another (``sent``); its units may be its own (a conversation where the paper batches questions).
@@ -1072,7 +1079,7 @@ class Run:
             own = definitions.own_image(env_def)
             if "internet" in setup and (not isinstance(setup["internet"], bool) or not own):
                 raise _Ended("EnvironmentSetupError", "the unit's setup: internet is true or false, only in an own image")
-            if self.other["_kind"] == "agent" and self.backend == "boat" and mcp_machine.wanted(setup):
+            if self.other["_kind"] == "agent" and self.backend == "boat" and (mcp_machine.wanted(setup) or setup.get("mcp")):
                 raise _Ended("EnvironmentSetupError", "not run: " + boat.MCP_REFUSAL)
             if self.other["_kind"] == "agent" and self.backend == "local" and mcp_machine.wanted(setup):
                 try:                             # the benchmark's own servers: the agent starts them from the driver's environment

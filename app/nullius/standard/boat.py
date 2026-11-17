@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -69,13 +70,15 @@ SSH_SECONDS = 900
 DRIVER = 1800                        # a unit's time beyond its agent's: sending, bringing back
 
 # The agent's user reaches the VM's loopback and nothing else: no public address, no DNS. Inserted
-# first in OUTPUT, before the chains boat's own firewall accepts in.
+# first in OUTPUT, before the chains boat's own firewall accepts in; each at 1, so the last inserted
+# is matched first: DNS on loopback refused, then loopback accepted, then everything else refused.
 LOCK = ("U=$(id -u {user}) && for t in iptables ip6tables; do "
         "sudo -n $t -I OUTPUT 1 -m owner --uid-owner $U -j REJECT && "
-        "sudo -n $t -I OUTPUT 1 -o lo -p udp --dport 53 -m owner --uid-owner $U -j REJECT && "
+        "sudo -n $t -I OUTPUT 1 -o lo -m owner --uid-owner $U -j ACCEPT && "
         "sudo -n $t -I OUTPUT 1 -o lo -p tcp --dport 53 -m owner --uid-owner $U -j REJECT && "
-        "sudo -n $t -I OUTPUT 1 -o lo -m owner --uid-owner $U -j ACCEPT; done")
+        "sudo -n $t -I OUTPUT 1 -o lo -p udp --dport 53 -m owner --uid-owner $U -j REJECT; done")
 _SYSTEM = ("/usr/", "/bin/", "/lib", "/sbin/", "/etc/", "/opt/")
+_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")    # a variable a shell can export
 
 
 class Unavailable(Exception):
@@ -200,8 +203,11 @@ def sweep(job: str, client: Optional[Client] = None) -> int:
 def _private(env=os.environ) -> tuple:
     """What a folder sent to a VM may not hold, and what it may not be inside of."""
     home = os.path.realpath(os.path.expanduser("~"))
-    keys = [os.path.join(home, d) for d in (".ssh", ".gnupg", ".aws")] + [os.path.realpath(paths.config_dir(env))]
-    return [home, os.path.realpath(paths.data_dir(env)), os.path.realpath(paths.cache_dir(env)), *keys], keys
+    # where this user's tools keep their logins: never sent, nor a folder holding one (``~/.local`` holds keyrings)
+    keys = [os.path.join(home, d) for d in (".ssh", ".gnupg", ".aws", ".docker", ".kube", ".password-store", ".config")] \
+        + [os.path.realpath(paths.config_dir(env))]
+    holds = [os.path.join(home, d) for d in (".local", ".cache", ".netrc", ".git-credentials")]
+    return [home, *holds, os.path.realpath(paths.data_dir(env)), os.path.realpath(paths.cache_dir(env)), *keys], keys
 
 
 def outside_roots(where: str, env=os.environ) -> List[str]:
@@ -252,12 +258,13 @@ class Keys:
 
 class VM:
     """One unit's VM, ready: created, its host key pinned, the agent's user made and locked in.
-    ``stopped``: the run's Stop, which ends a wait for the account to start it. ``ttl``: its
+    ``stopped``: the run's Stop, which ends a wait for the account to start it, or for it to come up. ``ttl``: its
     auto-stop, asked for; ``self.ttl`` the one it has, ``TTL`` on a free trial."""
 
     def __init__(self, client: Client, keys: Keys, job: str, *, size: str = SIZE, stopped: Optional[threading.Event] = None,
                  wait: float = WAIT_SECONDS, sleep: Callable[[float], None] = time.sleep, ttl: int = TTL):
         self.client, self.keys, self.id, self.size, self.ttl = client, keys, None, size, max(int(ttl), TTL)
+        self.stopped = stopped
         t0 = time.time()
         pause = 5.0
         while True:
@@ -283,9 +290,14 @@ class VM:
             raise
         self.seconds = round(time.time() - t0, 1)
 
+    def _halt(self) -> None:
+        if self.stopped is not None and self.stopped.is_set():
+            raise Unavailable(f"Boat VM {self.id}: the run was stopped")
+
     def _ready(self, sleep) -> None:
         t0 = time.time()
         while True:
+            self._halt()
             s = self.client.get(self.id).get("sandbox") or {}
             if s.get("state") in ("ready", "idle", "running"):
                 break
@@ -307,6 +319,7 @@ class VM:
                     "-o", "ConnectTimeout=20"]
         self.target = f"{self.user}@{self.host}"
         for _ in range(30):                     # sshd answers a moment after the key is in, or hangs while it boots
+            self._halt()
             try:
                 if subprocess.run(self.ssh + [self.target, "true"], capture_output=True, timeout=60).returncode == 0:
                     return
@@ -372,9 +385,17 @@ class VM:
 
     def argv(self, cmd: List[str], env: Dict[str, str], workdir: str, port: Optional[int]) -> List[str]:
         """``cmd`` run in the VM as the agent's user, in ``workdir``, with ``env`` alone; its stdin and
-        stdout this process's (ACP, JSON lines). ``port``: the relay's, the same port in the VM."""
-        keep = " ".join(shlex.quote(f"{k}={v}") for k, v in env.items())
-        remote = (f"cd {shlex.quote(workdir)} && exec sudo -n -u {USER} env -i {keep} "
+        stdout this process's (ACP, JSON lines). ``port``: the relay's, the same port in the VM. The
+        environment (the relay's word, a licence's value) never goes on a command line, here or in the
+        VM: it is sent first as a file only the agent's user reads, which its shell reads and removes."""
+        lines = "".join(f"export {k}={shlex.quote(v)}\n" for k, v in env.items() if _NAME.match(k))
+        with tempfile.TemporaryFile() as f:
+            f.write(lines.encode())
+            f.seek(0)
+            made = self.sh(f"f=$(mktemp /tmp/.nullius-env.XXXXXXXX) && cat > \"$f\" && sudo -n chown {USER} \"$f\" && echo \"$f\"",
+                           stdin=f).strip()
+        remote = (f"cd {shlex.quote(workdir)} && exec sudo -n -u {USER} env -i /bin/bash -c "
+                  + shlex.quote('. "$0" && rm -f "$0" && exec "$@"') + f" {shlex.quote(made)} "
                   + " ".join(shlex.quote(w) for w in cmd))
         tunnel = ["-o", "ExitOnForwardFailure=yes", "-R", f"127.0.0.1:{port}:127.0.0.1:{port}"] if port else []
         return self.ssh + ["-T", *tunnel, self.target, remote]
@@ -396,7 +417,7 @@ def remote_env(env: Dict[str, str], bin_dirs: List[str], local: Sequence[str] = 
     return out
 
 
-MCP_REFUSAL = ("the benchmark's own MCP servers run on this machine, which an agent in a Boat VM cannot start "
+MCP_REFUSAL = ("the benchmark's MCP servers run from this machine, which an agent in a Boat VM cannot start "
                "(--backend local or container)")
 
 
@@ -419,6 +440,7 @@ class Backend:
     def __init__(self, job: str, env=os.environ, client: Optional[Client] = None, size: str = SIZE,
                  say: Callable[[str], None] = lambda s: None):
         self.client = client or Client(key(env) or "")
+        self.env = env
         self.size, self.say, self._cut = size, say, False
         self.label = f"{job}.{os.urandom(4).hex()}"
         self._keys: Optional[Keys] = None
@@ -448,10 +470,11 @@ class Backend:
             if self._keys is None:
                 self._keys = Keys()
             if inst and inst not in self._roots:
-                self._roots[inst] = outside_roots(inst) if os.path.isdir(inst) else []
+                self._roots[inst] = outside_roots(inst, self.env) if os.path.isdir(inst) else []
         read = [p for p in [inst, here, *self._roots.get(inst or "", [])] if p and os.path.isdir(p)]
         t0 = time.time()
-        vm = VM(self.client, self._keys, self.label, size=self.size, stopped=stopped, ttl=seconds + DRIVER)
+        # once a trial's cut is known, asked at once: a refused create would count against the account's starts
+        vm = VM(self.client, self._keys, self.label, size=self.size, stopped=stopped, ttl=TTL if self._cut else seconds + DRIVER)
         try:
             if vm.ttl < seconds + DRIVER and not self._cut:
                 self._cut = True

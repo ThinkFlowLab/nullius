@@ -164,8 +164,10 @@ class VM(unittest.TestCase):
             self.assertEqual(f.read(), "bx_9 ssh-ed25519 AAAA\n")
         setup = self.ssh[-1][-1]
         self.assertIn(f"useradd -m -s /bin/bash {boat.USER}", setup)
-        self.assertIn("-I OUTPUT 1 -m owner --uid-owner $U -j REJECT", setup)
-        self.assertIn("--dport 53", setup)
+        # each rule goes in at 1: the last inserted is matched first, so DNS is refused before loopback is accepted
+        rules = [r.split(" -m owner")[0].split("-I OUTPUT 1")[1].strip() for r in setup.split("sudo -n $t ")[1:]][:4][::-1]
+        self.assertEqual(rules, ["-o lo -p udp --dport 53", "-o lo -p tcp --dport 53", "-o lo", ""])
+        self.assertIn("-o lo -m owner --uid-owner $U -j ACCEPT", setup)
 
     def test_another_refusal_or_a_stop_ends_the_wait(self):
         with self.assertRaisesRegex(boat.Unavailable, "refused"):
@@ -176,6 +178,15 @@ class VM(unittest.TestCase):
         with self.assertRaisesRegex(boat.Unavailable, "in time"):
             boat.VM(boat.Client("k", opener=FakeAPI([SLOT_FULL])), self.keys, "j", stopped=stopped, sleep=lambda s: None)
 
+    def test_a_stop_while_the_vm_comes_up_ends_the_wait_and_deletes_it(self):
+        stopped = threading.Event()
+        stopped.set()
+        api = FakeAPI([MADE])
+        with self.assertRaisesRegex(boat.Unavailable, "stopped"):
+            boat.VM(boat.Client("k", opener=api), self.keys, "j", stopped=stopped, sleep=lambda s: self.fail("waited"))
+        self.assertEqual([c[1] for c in api.calls if c[0] == "DELETE"], ["/sandboxes/bx_9"])
+        self.assertEqual(self.ssh, [])
+
     def test_a_vm_that_fails_its_setup_is_deleted(self):
         api = FakeAPI([MADE])
         fail = lambda argv, **kw: subprocess.CompletedProcess(argv, 1 if "useradd" in argv[-1] else 0, b"", b"no")
@@ -185,10 +196,23 @@ class VM(unittest.TestCase):
 
     def test_the_agent_runs_as_its_user_with_its_environment_alone_and_the_relay_tunnelled(self):
         vm = boat.VM(boat.Client("k", opener=FakeAPI([MADE])), self.keys, "j", sleep=lambda s: None)
-        argv = vm.argv(["/inst/bin/agent", "--acp"], {"PATH": "/inst/bin:" + boat.VM_PATH, "HOME": "/h"}, "/w s", 41234)
+        given = []
+
+        def env_file(argv, stdin=None, **kw):
+            self.ssh.append(argv)
+            given.append(stdin.read().decode() if stdin is not None else None)
+            return subprocess.CompletedProcess(argv, 0, b"/tmp/.nullius-env.ab12\n", b"")
+        with mock.patch.object(boat.subprocess, "run", side_effect=env_file):
+            argv = vm.argv(["/inst/bin/agent", "--acp"], {"PATH": "/inst/bin:" + boat.VM_PATH, "HOME": "/h",
+                                                          "LICENCE": "s3cret value", "bad name": "x"}, "/w s", 41234)
         self.assertEqual(argv[argv.index("-R") + 1], "127.0.0.1:41234:127.0.0.1:41234")
         self.assertIn("ExitOnForwardFailure=yes", argv)
-        self.assertEqual(argv[-1], f"cd '/w s' && exec sudo -n -u {boat.USER} env -i PATH=/inst/bin:{boat.VM_PATH} HOME=/h /inst/bin/agent --acp")
+        # the environment goes as a file on stdin, read and removed by the agent's shell: never on a command line
+        self.assertEqual(given[-1], f"export PATH=/inst/bin:{boat.VM_PATH}\nexport HOME=/h\nexport LICENCE='s3cret value'\n")
+        self.assertIn(f"sudo -n chown {boat.USER}", self.ssh[-1][-1])
+        self.assertNotIn("s3cret", " ".join(argv + self.ssh[-1]))
+        self.assertEqual(argv[-1], f"cd '/w s' && exec sudo -n -u {boat.USER} env -i /bin/bash -c "
+                                   "'. \"$0\" && rm -f \"$0\" && exec \"$@\"' /tmp/.nullius-env.ab12 /inst/bin/agent --acp")
 
     def test_an_ssh_that_hangs_while_the_vm_boots_is_tried_again(self):
         tries = []
@@ -249,11 +273,14 @@ class Backend(unittest.TestCase):
         self.backend = boat.Backend("job", client=boat.Client("k", opener=FakeAPI([])), say=self.said.append)
 
     def test_a_unit_longer_than_a_trials_vm_is_said_once(self):
+        StandInVM.asked.clear()
         for _ in range(2):
             with self.backend.unit(self.trial, "/t/workspace", "/t/.home", seconds=3 * 3600):
                 pass
         self.assertEqual(len(self.said), 1)
         self.assertIn("2 hours", self.said[0])
+        # the second unit asks for the trial's auto-stop at once: no refused create counts against its starts
+        self.assertEqual(StandInVM.asked, [3 * 3600 + boat.DRIVER, boat.TTL])
         with open(os.path.join(self.trial, "agent", "boat.json")) as f:
             self.assertEqual(json.load(f)["ttl_seconds"], boat.TTL)
 
@@ -314,19 +341,21 @@ class Sent(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp)
         home = os.path.join(tmp, "home")
-        for d in (".ssh", "lib", ".local/share/uv/python/cpython-3.12/bin"):
+        for d in (".ssh", "lib", ".local/share/uv/python/cpython-3.12/bin", ".local/bin", ".config/gh"):
             os.makedirs(os.path.join(home, d))
-        for f in (".gitconfig", ".ssh/id_ed25519", ".local/share/uv/python/cpython-3.12/bin/python3"):
+        for f in (".gitconfig", ".ssh/id_ed25519", ".local/share/uv/python/cpython-3.12/bin/python3", ".local/bin/tool",
+                  ".config/gh/hosts.yml"):
             open(os.path.join(home, f), "w").close()
         inst = os.path.join(tmp, "inst")
         os.makedirs(inst)
-        env = {"HOME": home, "NULLIUS_HOME": os.path.join(home, ".nullius")}
+        env = {"HOME": home, "NULLIUS_HOME": os.path.join(tmp, "elsewhere")}     # Nullius's storage outside the home
         with mock.patch.dict(os.environ, {"HOME": home}):
             os.symlink(os.path.join(home, "lib"), os.path.join(inst, "lib"))
             os.symlink(os.path.join(home, ".local/share/uv/python/cpython-3.12/bin/python3"), os.path.join(inst, "python"))
             self.assertEqual(boat.outside_roots(inst, env), [os.path.join(home, "lib"),
                                                              os.path.join(home, ".local/share/uv/python/cpython-3.12")])
-            for target in (".gitconfig", ".ssh/id_ed25519"):
+            # a file in ~/.local/bin would send ~/.local (keyrings); a tool's login under ~/.config
+            for target in (".gitconfig", ".ssh/id_ed25519", ".local/bin/tool", ".config/gh/hosts.yml"):
                 link = os.path.join(inst, "x")
                 os.symlink(os.path.join(home, target), link)
                 with self.assertRaisesRegex(boat.Unavailable, "this user's own files"):
@@ -343,10 +372,11 @@ class Sent(unittest.TestCase):
 
 class StandInVM:
     """A unit's VM that runs its command on this machine: what the run sends, starts and takes back."""
-    made, deleted, sent, fetched, sizes, ready = [], [], [], [], [], []
+    made, deleted, sent, fetched, sizes, ready, asked = [], [], [], [], [], [], []
 
     def __init__(self, client, keys, job, size=boat.SIZE, stopped=None, ttl=boat.TTL):
         StandInVM.sizes.append(size)
+        StandInVM.asked.append(ttl)
         self.ttl = boat.TTL                      # a free trial's
         self.id, self.seconds = f"bx_{len(StandInVM.made)}", 0.1
         StandInVM.made.append(job)
