@@ -747,6 +747,7 @@ class LaunchesPage(unittest.TestCase):
         orphaned, sharded, whole = (self.cells(rows[k]) for k in (f"run:{orphan.id}", key, f"run:{self.ex.id}"))
         self.assertEqual([orphaned[c] for c in ("runs", "checks", "shards", "ws")], ["1", "1", "1", "none"])
         self.assertEqual(orphaned["launch"], "r3-*")                                         # the title alone, no second line
+        self.assertIn("nop", re.search(r'data-search="([^"]*)"', rows[f"run:{orphan.id}"]).group(1).split())   # an agent whose job is not written yet
         self.assertEqual([sharded[c] for c in ("runs", "shards", "machines")], ["2", "2", "ubuntu@10.0.0.4, ubuntu@10.0.0.5"])   # a run per shard, as on the Runs page
         self.assertIn("calm otter", text[key])
         self.assertEqual([whole[c] for c in ("runs", "checks", "shards")], ["2", "0", "1"])
