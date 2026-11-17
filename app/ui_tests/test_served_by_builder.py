@@ -126,11 +126,14 @@ class TheRows(CompilerCase):
     SETUP = ('const {servedRows}=require(' + json.dumps(str(Path(__file__).resolve().parents[1] / 'static' / 'builder' / 'command-builder.js')) + ');'
              'const b=C.standard().benchmarks.find(x=>x.judge)||C.standard().benchmarks[0];const r=C.createStandard(b.key);C.setChoice(r,"openrouter");'
              'r.model_choice="any";C.setModelOf(r,"model","gpt-4o");'
-             'const input={dataset:{servedBy:"model"},placeholder:""},list={dataset:{},innerHTML:""},asked=[];'
+             'const label={hidden:false},input={dataset:{servedBy:"model"},placeholder:"",closest:()=>label},list={dataset:{},innerHTML:""},asked=[];'
              'const root={querySelectorAll:s=>{asked.push(s);return s==="input[data-served-by]"?[input]:[];},querySelector:s=>{asked.push(s);return s===\'[data-served-list="model"]\'?list:null;}};'
              'let compiled={out:{served_models:{model:"openai/gpt-4o-2024-08-06"}},key:C.servedKey(r)};'
+             'const requests=[],endpoints=new Map(),listeners=[];const providers=model=>{if(!endpoints.has(model)){requests.push(model);let answer;'
+             'const entry={result:null,promise:new Promise(resolve=>answer=resolve)};entry.answer=result=>{entry.result=result;listeners.forEach(fn=>fn(model));answer(result);};endpoints.set(model,entry);}return endpoints.get(model);};'
+             'providers.subscribe=listener=>listeners.push(listener);'
              'const esc=x=>String(x??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"}[c]));'
-             'const rows=servedRows({C,root,r:()=>r,compiled:()=>compiled,esc,button:(t,a,c)=>`<button class="${c}" ${a}>${t}</button>`});'
+             'const rows=servedRows({C,root,r:()=>r,compiled:()=>compiled,esc,providers,button:(t,a,c)=>`<button class="${c}" ${a}>${t}</button>`});'
              'const seen=()=>({model:input.dataset.servedModel,pending:input.dataset.servedPending,chosen:input.dataset.chosen,placeholder:input.placeholder,'
              'chips:(list.innerHTML.match(/std-served-slug">([^<]*)</g)||[]).map(x=>x.slice(17,-1))});')
 
@@ -155,7 +158,55 @@ class TheRows(CompilerCase):
                       'got.push([C.servedRow(r,"judge","gpt-4.1",null),C.servedKey({a:1,served_by:{model:["x"]}})===C.servedKey({a:1})]);process.stdout.write(JSON.stringify(got));')
         self.assertEqual(out[:6], ['openai/gpt-4o-2024-08-06', ['openai/gpt-4o-2024-08-06', 'false'], 'openai/gpt-4o-2024-08-06', ['', 'true'], True,
                                    'openai/gpt-4o-mini-2024-07-18'])
-        self.assertEqual(out[6], [{'shown': 'gpt-4.1', 'model': '', 'pending': True, 'chosen': [], 'placeholder': 'any provider'}, True])
+        self.assertEqual(out[6], [{'shown': 'gpt-4.1', 'model': '', 'pending': True, 'chosen': [], 'visible': False, 'placeholder': 'any provider'}, True])
+
+    def test_the_list_is_asked_before_opening_and_only_its_row_changes(self):
+        """Loading hides an unpinned row; one entry keeps it hidden, other answers show it. Pins stay editable.
+        The request uses the compiled name once, and the existing input and chips are updated in place."""
+        cases = [(True, 1, False, True), (True, 1, True, False), (True, 2, False, False),
+                 (True, 0, False, False), (False, 0, False, False)]
+        for ok, count, pinned, hidden in cases:
+            with self.subTest(ok=ok, count=count, pinned=pinned):
+                result = {'ok': ok, 'models': [{'id': f'deepinfra/{i}', 'name': 'DeepInfra'} for i in range(count)]}
+                out = self.js(self.SETUP + f'const pinned={json.dumps(pinned)};if(pinned)r.served_by={{model:["bad slug"]}};'
+                              'const before=JSON.stringify(r);input.value="unfinished slug";rows.sync();rows.sync();'
+                              'const initial=[label.hidden,/ hidden>/.test(rows.field(r,"model")),requests.slice()];'
+                              '(async()=>{if(requests.length)endpoints.get(requests[0]).answer(' + json.dumps(result) + ');await Promise.resolve();'
+                              'process.stdout.write(JSON.stringify({initial,hidden:label.hidden,markup:/ hidden>/.test(rows.field(r,"model")),'
+                              'requests,unchanged:before===JSON.stringify(r),typed:input.value,chosen:seen().chips,selectors:[...new Set(asked)]}));})();')
+                self.assertEqual(out['initial'], [not pinned, not pinned, ['openai/gpt-4o-2024-08-06']])
+                self.assertEqual((out['hidden'], out['markup']), (hidden, hidden))
+                self.assertEqual(out['requests'], ['openai/gpt-4o-2024-08-06'])
+                self.assertTrue(out['unchanged'])
+                self.assertEqual(out['typed'], 'unfinished slug')
+                self.assertEqual(out['chosen'], ['bad slug'] if pinned else [])
+                self.assertEqual(out['selectors'], ['input[data-served-by]', '[data-served-list="model"]'])
+
+    def test_an_unknown_model_or_list_waits_but_a_pin_stays_visible(self):
+        out = self.js(self.SETUP + 'compiled=null;rows.sync();const got=[[label.hidden,requests.slice()]];'
+                      'r.served_by={model:["saved-provider"]};rows.sync();got.push([label.hidden,seen().chips,requests.slice()]);'
+                      'compiled={out:{served_models:{model:"openai/gpt-4o-2024-08-06"}},key:C.servedKey(r)};rows.sync();'
+                      'got.push([label.hidden,requests.slice()]);C.removeServed(r,"model",0);rows.sync();got.push([label.hidden,requests.slice()]);'
+                      'process.stdout.write(JSON.stringify(got));')
+        self.assertEqual(out, [[True, []], [False, ['saved-provider'], []],
+                               [False, ['openai/gpt-4o-2024-08-06']], [True, ['openai/gpt-4o-2024-08-06']]])
+
+    def test_a_model_change_asks_once_and_an_old_list_never_draws_its_row(self):
+        for old_first in (False, True):
+            with self.subTest(old_first=old_first):
+                out = self.js(self.SETUP + 'r.served_by={model:["saved-provider"]};rows.sync();const old=seen().model;'
+                              'C.setModelOf(r,"model","gpt-4o-mini");rows.sync();const changed=[label.hidden,seen().model,seen().chips];'
+                              'const next="openai/gpt-4o-mini-2024-07-18";compiled={out:{served_models:{model:next}},key:C.servedKey(r)};'
+                              'rows.sync();rows.sync();const pending=[label.hidden,seen().model];'
+                              '(async()=>{const answer=async(model,count)=>{if(endpoints.has(model))endpoints.get(model).answer({ok:true,models:Array(count).fill({id:"p"})});await Promise.resolve();};'
+                              f'const oldFirst={json.dumps(old_first)};if(!oldFirst)await answer(next,2);'
+                              'asked.length=0;await answer(old,1);const stale=[asked.slice(),label.hidden,seen().model];'
+                              'if(oldFirst)await answer(next,2);rows.sync();'
+                              'process.stdout.write(JSON.stringify({changed,pending,stale,final:[label.hidden,seen().model],requests,pins:r.served_by||null}));})();')
+                next_model = 'openai/gpt-4o-mini-2024-07-18'
+                self.assertEqual(out, {'changed': [True, '', []], 'pending': [True, next_model],
+                                       'stale': [[], old_first, next_model], 'final': [False, next_model],
+                                       'requests': ['openai/gpt-4o-2024-08-06', next_model], 'pins': None})
 
 
     def test_a_failed_compile_keeps_the_model_the_server_named(self):
@@ -223,9 +274,52 @@ class ThePicker(unittest.TestCase):
                       'P.entered([],-1,"x",false),P.entered([],-1,"  ",true),P.entered(ROWS,-1,"gpt-4o",false)]));')
         self.assertEqual(out, [{'id': 'my-provider/fp8', 'typed': True}, self.ROWS[1], None, None, None])
 
+    def test_the_row_and_picker_share_the_guarded_request_and_five_minute_cache(self):
+        """Pending, successful and failed lists are shared; two endpoints of one provider stay two entries.
+        Expiry permits another request, with the same model and form token."""
+        out = self.js('if(!P.servingProviders){process.stdout.write(JSON.stringify({shared:false}));}else{'
+                      'let now=0;Date.now=()=>now;const requests=[],answers=[],changed=[];'
+                      'const providers=P.servingProviders((url,options)=>{requests.push([url,options]);return new Promise((resolve,reject)=>answers.push({resolve,reject}));},"token");'
+                      'providers.subscribe(model=>changed.push(model));'
+                      '(async()=>{const first=providers("maker/model"),pending=providers("maker/model")===first;now=300001;'
+                      'const stillPending=providers("maker/model")===first;'
+                      'answers[0].resolve({json:async()=>({ok:true,endpoints:[{slug:"deepinfra/fp8",name:"DeepInfra",quantization:"fp8"},{slug:"deepinfra/bf16",name:"DeepInfra",quantization:"bf16"}]})});'
+                      'await first.promise;const shared=providers("maker/model")===first;now=600002;const next=providers("maker/model");'
+                      'answers[1].reject(new Error("offline"));await next.promise;const failed=providers("maker/model")===next;'
+                      'const typed=P.entered(next.result.models,-1,"my-provider",true);now=900003;const retried=providers("maker/model")!==next;'
+                      'process.stdout.write(JSON.stringify({pending,stillPending,shared,models:first.result.models,failed,ok:next.result.ok,typed,retried,requests,changed}));})();}')
+        self.assertTrue(out['shared'])
+        self.assertTrue(out['pending'])
+        self.assertTrue(out['stillPending'])
+        self.assertEqual(out['models'], [{'id': 'deepinfra/fp8', 'name': 'DeepInfra · fp8'}, {'id': 'deepinfra/bf16', 'name': 'DeepInfra · bf16'}])
+        self.assertTrue(out['failed'])
+        self.assertFalse(out['ok'])
+        self.assertEqual(out['typed'], {'id': 'my-provider', 'typed': True})
+        self.assertTrue(out['retried'])
+        self.assertEqual(out['changed'], ['maker/model', 'maker/model'])
+        self.assertEqual(out['requests'], [['/new-run/endpoints', {
+            'method': 'POST', 'headers': {'Content-Type': 'application/json', 'X-CSRF-Token': 'token'},
+            'body': json.dumps({'provider': 'openrouter', 'model': 'maker/model'}, separators=(',', ':')),
+        }]] * 3)
+
 
 class ServedInTheCore(CompilerCase):
     """command-builder-core.js: which model fields take a Served by, and the recipe's ``served_by``."""
+
+    def test_visibility_counts_entries_and_always_keeps_a_pin(self):
+        """All three fields wait for a list; one entry alone hides it. Empty, failed and plural lists show it.
+        Saved pins, including a slug the server will refuse, remain visible in every state."""
+        lists = [None, {'ok': True, 'models': [{'id': 'deepinfra/fp8'}]},
+                 {'ok': True, 'models': [{'id': 'deepinfra/fp8'}, {'id': 'deepinfra/bf16'}]},
+                 {'ok': True, 'models': []}, {'ok': False, 'models': []}]
+        for role in ('model', 'simulator', 'judge'):
+            for pin in ([], ['saved-provider'], ['bad slug']):
+                with self.subTest(role=role, pin=pin):
+                    out = self.js('const role=' + json.dumps(role) + ',pin=' + json.dumps(pin) + ',lists=' + json.dumps(lists) + ';'
+                                  'const r={served_by:{[role]:pin}},before=JSON.stringify(r);'
+                                  'const visible=lists.map(result=>C.servedRow(r,role,"shown",{served_models:{[role]:"maker/model"}},result).visible);'
+                                  'process.stdout.write(JSON.stringify([visible,before===JSON.stringify(r)]));')
+                    self.assertEqual(out, [[True] * 5 if pin else [False, False, True, True, True], True])
 
     def test_the_fields_show_on_openrouter_alone(self):
         out = self.js('const b=C.standard().benchmarks.find(x=>x.simulator&&x.judge)||C.standard().benchmarks.find(x=>x.judge);'

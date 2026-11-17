@@ -109,10 +109,12 @@
     ? {out, key: servedKey(JSON.parse(recipeKey))} : last;
   // A Served by row as the recipe holds it: the model its providers are listed for, the one the run sends as the
   // server compiled it for this recipe (`compiled`; none while not known, and never the name shown: the list is not
-  // asked under a name the run may not send, and the row waits), its slugs in order, and its placeholder.
-  function servedRow(r, role, shown, compiled) {
+  // asked under a name the run may not send, and the row waits), its slugs in order, and its placeholder. Without a
+  // pin it waits for the list too, then hides only for one entry. A failed or empty list still allows a typed slug.
+  function servedRow(r, role, shown, compiled, providers) {
     const chosen = (r.served_by || {})[role] || [], model = servedModelOf(role, '', compiled);
-    return {shown, model, pending: !model && !!shown, chosen, placeholder: chosen.length ? 'Add a provider' : 'any provider'};
+    const visible = !!chosen.length || !!providers && (!providers.ok || providers.models.length !== 1);
+    return {shown, model, pending: !model && !!shown, chosen, visible, placeholder: chosen.length ? 'Add a provider' : 'any provider'};
   }
   function setServed(r, role, slugs) {
     const list = Array.isArray(slugs) ? slugs : servedList(slugs);

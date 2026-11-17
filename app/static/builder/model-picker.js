@@ -6,11 +6,31 @@
   const matching = (items, query, chosen = []) => items.filter(m => !chosen.includes(m.id) && (m.id + ' ' + m.name).toLowerCase().includes(query.toLowerCase()));
   // what Enter takes: the highlighted row, else, in a field of several, the text as typed (a slug the list may lack)
   const entered = (items, index, text, several) => items[index] || (several && text.trim() ? {id: text.trim(), typed: true} : null);
-  if (typeof module === 'object' && module.exports) { module.exports = {matching, entered}; return; }
+  // The row and its menu share one request per model for five minutes, including failures. An in-flight request
+  // stays shared until it settles; result is absent while the row is waiting to learn how many entries there are.
+  function servingProviders(fetch, csrf) {
+    const cache = new Map(), listeners = new Set();
+    const providers = model => {
+      let entry = cache.get(model);
+      if (!entry || (entry.result && Date.now() - entry.at > 300000)) {
+        entry = {at: Date.now(), result: null};
+        entry.promise = fetch('/new-run/endpoints', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify({provider: 'openrouter', model})})
+          .then(r => r.json()).then(r => ({...r, models: (Array.isArray(r.endpoints) ? r.endpoints : []).map(e => ({id: e.slug, name: e.name + (e.quantization ? ' · ' + e.quantization : '')}))}))
+          .catch(() => ({ok: false, models: [], message: "Provider list unavailable. Enter a provider's slug by hand."}))
+          .then(result => { entry.at = Date.now(); entry.result = result; listeners.forEach(listener => listener(model)); return result; });
+        cache.set(model, entry);
+      }
+      return entry;
+    };
+    providers.subscribe = listener => listeners.add(listener);
+    return providers;
+  }
+  if (typeof module === 'object' && module.exports) { module.exports = {matching, entered, servingProviders}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
-  const cache = new Map(), servedCache = new Map(); let active = null, serial = 0, choosing = false;
+  const providers = window.NulliusServingProviders = servingProviders(nulliusFetch, schema.csrf);
+  const cache = new Map(); let active = null, serial = 0, choosing = false;
   const severalOf = input => input.dataset.pickerSeveral === 'true';
   function close() {
     if (!active) return;
@@ -88,19 +108,6 @@
     if (!result.ok) cache.delete(provider);
     return result;
   }
-  // a model's serving providers on OpenRouter (POST /new-run/endpoints), as rows: the slug, and the name with its quantisation
-  async function providers(model) {
-    let entry = servedCache.get(model);
-    if (!entry || Date.now() - entry.at > 300000) {
-      entry = {at: Date.now(), promise: nulliusFetch('/new-run/endpoints', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({provider: 'openrouter', model})})
-        .then(r => r.json()).then(r => ({...r, models: (Array.isArray(r.endpoints) ? r.endpoints : []).map(e => ({id: e.slug, name: e.name + (e.quantization ? ' · ' + e.quantization : '')}))}))
-        .catch(() => ({ok: false, models: [], message: "Provider list unavailable. Enter a provider's slug by hand."}))};
-      servedCache.set(model, entry);
-    }
-    const result = await entry.promise;
-    if (!result.ok) servedCache.delete(model);
-    return result;
-  }
   async function open(input, all = false) {
     close();
     const menu = document.createElement('div'); menu.className = 'ui-select-menu nb-model-menu'; menu.id = input.getAttribute('aria-controls');
@@ -112,7 +119,7 @@
     if (menu.showPopover) menu.showPopover();
     if (several) {
       if (!state.model) return;
-      const result = await providers(state.model);
+      const result = await providers(state.model).promise;
       if (active === state) { state.result = result; paint(); }
       return;
     }
@@ -124,7 +131,7 @@
     if (active === state) paint();
   }
   function scan() {
-    if (active && (!active.input.isConnected || active.provider !== root.dataset.modelProvider)) close();
+    if (active && (!active.input.isConnected || active.input.closest('[hidden]') || active.provider !== root.dataset.modelProvider)) close();
     // the model a Served by lists the providers of has moved (the server named the one the run sends): its rows follow
     else if (active && active.several && active.model !== (active.input.dataset.servedModel || '')) void open(active.input, !active.query);
     root.querySelectorAll('input[list="nb-models"], input[list="nb-served"]').forEach(input => {

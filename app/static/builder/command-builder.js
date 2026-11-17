@@ -6,7 +6,7 @@
   // the model's providers (POST /new-run/endpoints), a pick or a slug typed and Enter joins the list under it, each
   // removable. Empty: any provider. What a row shows is C.servedRow's; `compiled()` is the server's last compile and
   // the key of the recipe it was made for (C.servedKey). The tests run this under Node, with stand-ins for the page.
-  function servedRows({C, root, r, compiled, esc, button}) {
+  function servedRows({C, root, r, compiled, esc, button, providers}) {
     const NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
     // the model a Served by is for, as the step shows it: the field's, else the leaderboard's or the official one
     const shown = (rec, role) => {
@@ -16,16 +16,26 @@
     };
     // the server's compile, while what decides the models it names has not changed since
     const known = rec => { const c = compiled(); return c && c.out && c.key === C.servedKey(rec) ? c.out : null; };
+    providers.subscribe(model => {
+      // A late list for a previous model never draws its row. Shared models update every field still using it,
+      // including a list refreshed by opening the picker after the cache expires.
+      const current = r(), out = known(current);
+      if (C.servedRoles(current).some(role => C.servedModelOf(role, '', out) === model)) sync();
+    });
     // A compile's models can still apply after a pin edit; the rest of its answer needs the whole recipe's key.
     const acceptCompile = (rec, last, out, key, currentKey) => ({
       current: key === currentKey,
       served: C.servedKey(JSON.parse(key)) === C.servedKey(rec) ? C.servedCompiled(last, out, key) : last,
     });
-    const row = (rec, role) => C.servedRow(rec, role, shown(rec, role), known(rec));
+    const row = (rec, role) => {
+      const out = known(rec), model = C.servedModelOf(role, '', out);
+      const entry = C.servedRoles(rec).includes(role) && model ? providers(model) : null;
+      return C.servedRow(rec, role, shown(rec, role), out, entry && entry.result);
+    };
     const chips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick"><span class="std-served-slug">${esc(slug) || '“”'}</span>`
       + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
     const field = (rec, role) => { if (!C.servedRoles(rec).includes(role)) return ''; const s = row(rec, role);
-      return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any.">Served by<input list="nb-served" aria-label="Served by, ${NAME[role]}" data-served-by="${role}" data-served-model="${esc(s.model)}" data-served-pending="${s.pending}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
+      return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any."${s.visible ? '' : ' hidden'}>Served by<input list="nb-served" aria-label="Served by, ${NAME[role]}" data-served-by="${role}" data-served-model="${esc(s.model)}" data-served-pending="${s.pending}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
         + `<span class="nb-chips std-served-list" data-served-list="${role}" data-of="${esc(JSON.stringify(s.chosen))}">${chips(role, s.chosen)}</span></label>`; };
     // each Served by drawn again in place, as the recipe holds it now: its list, and the model its providers are listed
     // for. The rest of the form stays as it is: the keyboard stays where it is, and an open menu stays open.
@@ -33,6 +43,7 @@
       const rec = r();
       root.querySelectorAll('input[data-served-by]').forEach(input => {
         const role = input.dataset.servedBy, s = row(rec, role), list = root.querySelector(`[data-served-list="${role}"]`);
+        input.closest('.std-served').hidden = !C.servedRoles(rec).includes(role) || !s.visible;
         Object.assign(input.dataset, {servedModel: s.model, servedPending: String(s.pending), chosen: s.chosen.join(',')});
         input.placeholder = s.placeholder;
         if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = chips(role, s.chosen); }
@@ -156,7 +167,7 @@
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
   let runnerOut = null, runnerKey = '', runnerTimer, runnerServed = null;
   // Served by's rows (servedRows above), given the models the server last named and what decided them (C.servedCompiled)
-  const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed});
+  const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
