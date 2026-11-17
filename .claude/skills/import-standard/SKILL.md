@@ -341,7 +341,7 @@ output to stderr: stdout carries the JSON lines.
    (and `model`); then `cli prove KEY` (its controls, units, no leak).
    An agent or capability: `cli conform KEY --model <cheap model> [--unsandboxed]`.
    A value that needs a `host` requirement this machine lacks (a GPU) is
-   proven on a machine that has it: choose a run host from Settings and
+   proven on a machine that has it: choose a host from Settings and
    launch the short trial from the builder's Review step. Execution snapshots
    the current standard runtime and effective catalogue, including user
    additions, and sends that payload to the host. A `git archive` of the

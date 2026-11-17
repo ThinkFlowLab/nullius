@@ -302,6 +302,12 @@ class Routes(unittest.TestCase):
         self.assertIn("asked of OpenRouter · vendor/m", html)
         self.assertNotIn("sk-or-route-test", html)
 
+    def test_a_judgement_names_its_provider_from_the_registry(self):
+        named = web.app.jinja_env.filters["provider"]
+        with patch.dict(os.environ, {"MODEL_GW": json.dumps({"name": "Gateway", "base": "https://gw.example/v1"})}):
+            self.assertEqual([named(p) for p in ("openrouter", "anthropic", "custom:GW", "local:GW")],
+                             ["OpenRouter", "Anthropic", "Gateway", "Gateway"])
+
     def test_trial_html_does_not_inline_large_conversation_or_trace_payloads(self):
         response = self.get_ok("/trial/active-run/task-001")
         self.assertLess(len(response.data), 250_000)

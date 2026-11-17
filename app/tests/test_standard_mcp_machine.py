@@ -336,7 +336,7 @@ class DockerUnit(unittest.TestCase):
 
     def runner(self):
         r = run.Run.__new__(run.Run)
-        r.base, r.key, r.model, r.provider = "https://x/v1", "k", "m", "custom"
+        r.base, r.key, r.model, r.provider, r.key_header = "https://x/v1", "k", "m", "custom", "authorization"
         r.judge_model = r.simulator_model = r.setup_driver = None
         r.backend, r.other, r.bench, r.name, r.image = "container", agent(), bench("/defs/b"), "job", "img"
         r.up, r.data, r.ds, r.licences = "/up", "/data", {"id": "all"}, {}

@@ -238,12 +238,57 @@ def apply(pending):
                 os.unlink(temporary)
 
 
+def provider_records(values: dict) -> dict:
+    """The changes that move each custom provider's old name and URL settings (MODEL_<ID>_NAME,
+    MODEL_<ID>_API_URL) into its record, MODEL_<ID>: {setting: new value or None}. A field the record
+    already holds wins, and the old setting goes. Keys keep their names."""
+    changes = {}
+    for i in settings.endpoint_ids(values):
+        old = {f: values.get(f"MODEL_{i}_{part}") for f, part in (("name", "NAME"), ("base", "API_URL"))}
+        if not any(v is not None for v in old.values()):
+            continue
+        rec = settings.json_object(values.get(f"MODEL_{i}")) or {}
+        rec = {**{f: v for f, v in old.items() if v}, **rec}
+        changes[f"MODEL_{i}"] = json.dumps(rec, ensure_ascii=False)
+        changes.update({f"MODEL_{i}_{part}": None for part in ("NAME", "API_URL") if f"MODEL_{i}_{part}" in values})
+    return changes
+
+
+def migrate_providers(apply_it: bool) -> int:
+    """``--providers``: preview, or with ``apply_it`` write, the rewrite of the old provider settings in the
+    user's settings.json. The environment is the user's: it is never read or changed here."""
+    target = paths.settings_file()
+    try:
+        changes = provider_records(settings.in_file(target))
+        bad = [f"{n} must be {why}." for n, v in changes.items() if v and (why := settings.endpoint_variable(n).validate(v))]
+        if bad:
+            raise ValueError(" ".join(bad))
+        if apply_it and changes:
+            settings.save_many(target, changes)
+    except (OSError, ValueError) as error:
+        print(f"Migration stopped: {error}", file=sys.stderr)
+        return 1
+    print("Rewritten." if apply_it else "Preview only. Add --apply to rewrite.")
+    for name, value in changes.items():
+        print(f"{name}: {'removed' if value is None else 'written'}")
+    if not changes:
+        print("No old provider settings.")
+    print(f"settings: {target}")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Copy legacy settings, custom catalogue entries and workspaces; preview by default.")
-    parser.add_argument("--from", dest="checkout", type=Path, required=True, help="existing Nullius checkout (left unchanged)")
+    parser.add_argument("--from", dest="checkout", type=Path, help="existing Nullius checkout (left unchanged)")
     parser.add_argument("--secrets", type=Path, help="also copy a legacy benchmark licence directory")
+    parser.add_argument("--providers", action="store_true",
+                        help="rewrite the old provider settings of the user's settings.json into provider records instead")
     parser.add_argument("--apply", action="store_true", help="write the previewed copy; refuse conflicting destination data")
     args = parser.parse_args(argv)
+    if args.providers:
+        return migrate_providers(args.apply)
+    if args.checkout is None:
+        parser.error("--from is required, unless --providers is given")
     try:
         pending, counts = prepare(args.checkout, args.secrets)
         if args.apply:

@@ -737,6 +737,16 @@ class PassThroughTest(unittest.TestCase):
         self.assertEqual(len(KeptAlive.seen), 1)
         self.assertEqual(r.calls("u")[-1]["status"], 429)
 
+    def test_a_benchmark_route_beside_an_anthropic_agent_takes_a_bearer_key(self):
+        r = self.relay(model="claude-x", key_header="x-api-key")
+        self.post(r, "u", "/messages", {"model": "claude-x", "max_tokens": 10, "messages": []}, {"x-api-key": relay.PLACEHOLDER_KEY})
+        self.assertIn("x-api-key", {k.lower() for k in KeptAlive.seen[-1][1]})
+        r.url("u-judge", model="judge-x")
+        self.post(r, "u-judge", "/chat/completions", {"model": "any", "messages": []})
+        sent = {k.lower(): v for k, v in KeptAlive.seen[-1][1].items()}
+        self.assertEqual(sent["authorization"], "Bearer sk-real")
+        self.assertFalse({"x-api-key", "anthropic-version"} & set(sent))
+
     def test_anthropic_messages_take_the_key_as_x_api_key_and_their_usage_is_read(self):
         r = self.relay(model="claude-x", key_header="x-api-key")
         status, _, body = self.post(r, "u", "/messages", {"model": "claude-x", "max_tokens": 10, "messages": []},

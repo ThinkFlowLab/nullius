@@ -370,6 +370,7 @@ button.seg:hover { filter: brightness(1.25); }
 .menu label:hover { background: var(--surface-2); color: var(--text); }
 .menu input { accent-color: var(--accent); }
 .table-note { color: var(--text-faint); font-size: .8rem; }
+.table-pager { margin-top: .6rem; }
 .empty-note { color: var(--text-dim); font-size: .88rem; padding: 1.5rem 0; text-align: center; }
 
 .grid.sortable thead th { cursor: pointer; user-select: none; white-space: nowrap; }
@@ -405,19 +406,20 @@ button.seg:hover { filter: brightness(1.25); }
    does scroll horizontally. */
 
 /* the checkbox and Run columns stay put while you scroll sideways, so a row
-   never loses its identity */
-.table-wrap .grid th.pick-col, .table-wrap .grid td.pick-col {
-  position: sticky; left: 0; z-index: 2; background: var(--bg);
+   never loses its identity; so do a table's .sticky-col cells, at --sticky-left */
+.table-wrap .grid th.pick-col, .table-wrap .grid td.pick-col, .table-wrap .grid .sticky-col {
+  position: sticky; left: var(--sticky-left, 0); z-index: 2; background: var(--bg);
 }
+.table-wrap .grid .sticky-col.sticky-edge { box-shadow: 1px 0 0 var(--border-soft); }
 .table-wrap .grid th[data-col="run"], .table-wrap .grid td[data-col="run"] {
   position: sticky; left: 2.2rem; z-index: 2; background: var(--bg);
   box-shadow: 1px 0 0 var(--border-soft);
 }
 .table-wrap .grid thead th.pick-col,
-.table-wrap .grid thead th[data-col="run"] { z-index: 4; background: var(--bg); }
+.table-wrap .grid thead th[data-col="run"], .table-wrap .grid thead th.sticky-col { z-index: 4; background: var(--bg); }
 /* opaque sticky cells would hide the row hover, so repaint them to match */
 .table-wrap .grid tbody tr:hover td.pick-col,
-.table-wrap .grid tbody tr:hover td[data-col="run"] { background: var(--surface); }
+.table-wrap .grid tbody tr:hover td[data-col="run"], .table-wrap .grid tbody tr:hover td.sticky-col { background: var(--surface); }
 
 /* compact density — same data, ~35% less width */
 .grid.compact { font-size: .88rem; }
@@ -441,6 +443,16 @@ button.seg:hover { filter: brightness(1.25); }
   right: 0; left: auto; text-transform: none; letter-spacing: 0;
   font-weight: 400; max-height: 18rem; overflow-y: auto; min-width: 200px;
 }
+/* a table's Filter and Sort by menus (the tools macro): no header carets, an arrow on the sorted column only */
+.grid.sortable.tools thead th:not([data-sorted])::after { content: none; }
+.tools-menu { min-width: 220px; max-height: min(70vh, 34rem); overflow-y: auto; }
+.tools-menu fieldset { margin: 0; padding: .3rem 0; border: 0; border-top: 1px solid var(--border-soft); min-width: 0; }
+.tools-menu fieldset:first-of-type { border-top: 0; }
+.tools-menu legend { float: left; padding: .3rem .45rem; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); }
+.tools-menu .tools-all { display: flex; justify-content: flex-end; gap: .75rem; padding: .3rem .45rem; font-size: .8rem; }
+.tools-menu label { clear: both; }
+.tools-menu .tools-clear { align-self: flex-start; padding: .2rem .45rem .4rem; font-size: .8rem; }
+.tools-count { margin-left: .4rem; padding: 0 .4em; border-radius: 99px; background: var(--accent-soft); color: var(--text); font-size: .72rem; font-variant-numeric: tabular-nums; }
 .menu-head { display: flex; gap: .75rem; padding: .15rem .45rem .4rem; border-bottom: 1px solid var(--border-soft); margin-bottom: .25rem; }
 .chip.clear { border-style: dashed; }
 
@@ -1405,13 +1417,13 @@ a.chip { text-decoration: none; }
 }
 .rail-toggle:hover, .icon-btn:hover { color: var(--text); background: var(--surface); border-color: var(--border); }
 .rail-toggle:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
+.icon-btn.danger:not([aria-disabled="true"]):is(:hover, :focus-visible) { color: var(--bad); }   /* it deletes */
+.icon-btn[aria-disabled="true"] { opacity: .4; background: none; border-color: transparent; cursor: default; }   /* it cannot here: the slot kept, greyed, its reason reachable */
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }   /* a name for a screen reader only */
 .ic-expand { display: none; }
 :root[data-rail="collapsed"] .ic-expand { display: block; }
 :root[data-rail="collapsed"] .ic-collapse { display: none; }
 
-.ws-delete { width: 34px; text-align: right; }
-.ws-remove { border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); border-radius: 6px; width: 28px; height: 28px; font-size: 16px; line-height: 1; cursor: pointer; }
-.ws-remove:hover { color: var(--bad); border-color: var(--bad); }
 .ws-switch { position: relative; }
 .ws-btn {
   width: 100%; display: flex; align-items: center; gap: .6rem; text-align: left;
@@ -1526,12 +1538,6 @@ a.chip { text-decoration: none; }
 }
 
 /* ---- workspaces ---- */
-.ws-current td { background: var(--accent-soft); }
-.ws-mark { width: 1.2rem; }
-.ws-rename { display: flex; gap: .5rem; align-items: center; }
-.ws-rename input[type=text] { width: 16rem; font-size: .9rem; padding: .3rem .5rem; }
-.ws-roots { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; }
-.ws-roots .mono { font-size: .78rem; }
 
 .nav-tree { display: flex; flex-direction: column; }
 .nav-row { display: flex; align-items: center; gap: 2px; }
@@ -1545,7 +1551,6 @@ a.chip { text-decoration: none; }
 .tree-caret .ic { width: 15px; height: 15px; transition: transform .12s; }
 .nav-tree.folded .tree-caret .ic { transform: rotate(-90deg); }
 .tree-kids { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 .2rem .9rem; padding-left: .55rem; border-left: 1px solid var(--border-soft); }
-.tree-form { margin: 0; display: flex; }
 .tree-item {
   position: relative; display: flex; align-items: center; gap: .5rem; width: 100%; min-height: 30px; padding: 0 .5rem;
   border-radius: 7px; color: var(--text-dim); font-size: .85rem; text-align: left; white-space: nowrap;
@@ -1555,18 +1560,6 @@ a.chip { text-decoration: none; }
 .tree-item:hover { background: var(--surface); color: var(--text); text-decoration: none; }
 .tree-item.on { background: var(--accent-soft); color: var(--text); font-weight: 500; }
 .tree-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
-.tree-item.cur { color: var(--text); font-weight: 500; }
-.tree-check { width: 14px; height: 14px; color: var(--ok); flex: none; }
-.tree-item.add { color: var(--text-faint); }
-.tree-item.add:hover { color: var(--text); }
-.tree-runs { display: flex; flex-direction: column; gap: 1px; margin: 0 0 .15rem .5rem; }
-.run-item { min-height: 26px; font-size: .78rem; color: var(--text-faint); padding-left: .2rem; }
-.run-item .lbl.mono { font-size: .74rem; }
-.run-item .tree-guide { flex: none; width: 10px; height: 1px; background: var(--border); margin-right: -.1rem; }
-.run-item.on { color: var(--text); }
-.run-item.on .tree-guide { background: var(--accent); }
-.tree-n { flex: none; font-size: .68rem; color: var(--text-faint); font-variant-numeric: tabular-nums; }
-.run-item.faint { cursor: default; font-style: italic; }
 :root[data-rail="collapsed"] .tree-caret, :root[data-rail="collapsed"] .tree-kids { display: none; }
 @media (max-width: 900px) { :root[data-rail="collapsed"] .tree-caret, :root[data-rail="collapsed"] .tree-kids { display: flex; } }
 
@@ -1614,6 +1607,8 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 /* what a run is doing: a stepper of its stages, then its units. A step is a mark, the
    line to the next step, its name and its time; done reads filled and checked, the
    running one ringed, the rest numbered. Stacked where a row would crush the names. */
+.execution-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.run-delete { margin-left: auto; color: var(--text-dim); }
 .execution-stages { container: xs / inline-size; margin: 14px 0 8px; }
 .xs-list { --mark: 1.6rem; list-style: none; margin: 0; padding: 0; display: flex; align-items: flex-start; }
 .xs { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; padding-right: .9rem; font-size: .82rem; line-height: 1.3; color: var(--text-dim); }

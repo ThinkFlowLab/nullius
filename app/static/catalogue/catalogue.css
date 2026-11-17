@@ -130,7 +130,7 @@
 @media(max-width:640px){.setup-wrap.import-setup{margin:0}.import-setup h1{font-size:29px}.import-setup .setup-card{padding:22px 18px}.import-setup .drop{padding:26px 17px}.import-setup .field-label{font-size:12px}.import-setup .path-row input{font-size:16px}}
 @media(pointer:coarse){.import-setup .add-btn,.import-setup .row-x{min-width:44px;min-height:44px}}
 
-/* Settings: what testing a run host said. */
+/* Settings: what testing a host said. */
 .settings-page .settings-test { font-size: 12px; color: var(--text-dim); }
 .settings-page .settings-test:empty { display: none; }
 .settings-page .settings-test.ok { color: var(--ok); }

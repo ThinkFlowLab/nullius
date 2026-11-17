@@ -6,7 +6,7 @@ Read a result, inspect its evidence, and compare runs on the same terms.
 
 ### Did it run?
 
-Check the execution status and run log first. A failed launch is not a benchmark score. A stopped or failed run may contain only some planned trials.
+Check the launch's state and the launch log first. A failed launch is not a benchmark score. A stopped or failed run may contain only some planned trials.
 
 ### What was measured?
 
@@ -89,7 +89,7 @@ A run Harbor never wrote (ATIF trajectories, an OpenTelemetry export), converted
 
 `nullius/runs/parse.py`
 
-One benchmark invocation. Aggregates its trials; owns solve rates and totals.
+One benchmark invocation: a run on the Runs page. Aggregates its trials; owns solve rates and totals.
 
 *Layer 2 · task*
 
@@ -97,7 +97,7 @@ One benchmark invocation. Aggregates its trials; owns solve rates and totals.
 
 `nullius/runs/parse.py`
 
-One agent against one task. Outcome, tests, phase timings, tokens, cost.
+One task attempted by one run. Outcome, tests, phase timings, tokens, cost.
 
 *Layer 3 · transcript*
 
@@ -168,6 +168,19 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
 | `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log reads *not recorded*, never 0. | inferred | any |
+
+## Standard run records
+
+These fields are stored in the standard's job and trial files ([Run a benchmark](cli/run.md)).
+
+| Field | What it is | Source | Works on |
+| --- | --- | --- | --- |
+| `standard.units_file` | In `config.json`: the units file's name, sha256 and ordered ids, before sharding and the limit. Units run in dataset order; merging requires the same listed units, even with `--force`, and keeps the first shard's file record. | measured | standard |
+| `standard.constraints` | In the same config: what the machine allowed the run, when set. These values can coexist with a units file and serving pins. Shards may have different machine constraints; merging keeps the first shard's config values. | measured | standard |
+| `standard.served_by` | In the same config: the allowed OpenRouter provider slugs by model, in the order tried. A job can record both its units file and its serving pins; merging different pins requires `--force`. | measured | standard |
+| `served / standard.served` | In the job's `result.json` and each trial's `result.json`, respectively: answered calls by provider (`calls`), calls naming none (`unnamed`), and each pinned model's `held`. Counts cover every relay route; the job also includes the benchmark's own relay. Tokens and cost retain their existing scope. | measured | standard |
+| `held` | `true` when every answered call names an allowed provider, `unknown` for an absent or different name, and `null` for no answered calls. Names are lowercased with spaces as dashes and compared with the slug before `/`; endpoint variants cannot be verified. Merging different pins marks the affected models `unknown`. | inferred | standard |
+| `request.routing / request.routing_asked / reply.served_by / reply.end / reply.error` | In `agent/calls.jsonl`: routing sent, the caller's routing when replaced, the answering provider, the reply's ending and any error inside a 200 response. These credential-cleaned fields leave the call's status and the unit's verdict unchanged. | measured | standard |
 
 ## Trajectory metrics, inside a single run {#trajectory}
 

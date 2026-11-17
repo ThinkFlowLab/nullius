@@ -7,7 +7,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS ...] [--max-turns N] [--max-calls N] [--constraint KEY=VALUE ...] [--unsandboxed | --backend container]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS ...] [--max-turns N] [--max-calls N] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -43,6 +43,9 @@ the machine the command runs on, ``--from-run`` or not; ``merge``
 puts a launch's shard jobs together into one job (``standard/merge.py``). ``--option``
 sets one of the agent's or capability's options (``options`` in its definition);
 the rest keep the vendor's defaults, and the job's config records them all.
+``--served-by [MODEL=]SLUG[,SLUG...]`` lets only those serving providers answer
+a model on OpenRouter, in that order (``run.served_by``); each call's record
+names the provider that served it.
 A run says each stage before its first unit, and each unit's end, as one
 ``[nullius] stage=...`` line on stderr and in the job's ``progress.jsonl``
 (``nullius/progress.py``): what the run's page shows while it goes.
@@ -68,7 +71,7 @@ import signal
 import sys
 import tempfile
 
-from nullius import constraints as limits, paths, prices as price_list, progress, secrets, settings
+from nullius import constraints as limits, paths, prices as price_list, progress, providers, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed, just like the unified CLI does.
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
@@ -99,12 +102,11 @@ def run_env(provider: str, env=os.environ) -> dict:
     ``execution``'s launcher hands every run its one key as ``OPENAI_API_KEY``
     and its endpoint as ``OPENAI_BASE_URL`` (empty for OpenAI's own), so they
     are named here as the provider's own settings and nothing else is."""
-    p = run.PROVIDERS[provider]
     out = {k: v for k, v in env.items() if k in run.KEEP}
     if env.get("OPENAI_API_KEY"):
-        out[p["key"]] = env["OPENAI_API_KEY"]
-    if "base_var" in p and env.get("OPENAI_BASE_URL"):
-        out[p["base_var"]] = env["OPENAI_BASE_URL"]
+        out[providers.key_setting(provider)] = env["OPENAI_API_KEY"]
+    if provider == "custom" and env.get("OPENAI_BASE_URL"):
+        out["MODEL_API_URL"] = env["OPENAI_BASE_URL"]
     return out
 
 
@@ -535,6 +537,7 @@ def cmd_run(a):
                       prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, constraints=given,
                       timeouts=timeouts(a.timeout), max_turns=a.max_turns, max_calls=a.max_calls,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
+                      **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
         print("refused:", e)
@@ -661,7 +664,7 @@ def main(argv=None):
                        + ("; or nop, oracle: a control the benchmark declares; or original, model: one of its setups" if name == "run" else ""))
         p.add_argument("--model", required=name == "conform",
                        help="the model (a control needs none; original takes one of the paper's, its first by default)" if name == "run" else None)
-        p.add_argument("--provider", default="openai", choices=sorted(run.PROVIDERS))
+        p.add_argument("--provider", default="openai", choices=sorted(providers.PROVIDERS))
         p.add_argument("--jobs", default="jobs_standard", help="where jobs are written (default jobs_standard/, gitignored)")
         p.add_argument("--unsandboxed", action="store_true",
                        help="allow an agent, or a setup check without Docker, to execute code on this machine as you")
@@ -704,6 +707,9 @@ def main(argv=None):
             p.add_argument("--constraint", action="append", metavar="KEY=VALUE",
                            help="what the machine allows the run, repeatable: cpus, memory_mb, processes and cpu_set on its "
                                 "containers and, through a systemd scope, on its processes here; concurrency; gpu_ids (empty for none)")
+            p.add_argument("--served-by", action="append", metavar="[MODEL=]SLUG[,SLUG...]",
+                           help="on OpenRouter, the serving providers that may answer a model, tried in this order and no "
+                                "other (repeatable; without MODEL=, the run's model); each call records which one did")
             p.add_argument("--max-usd-per-unit", type=float, metavar="USD",
                            help="each unit's own spending cap: a unit that reaches it is cut off there, and the run goes on")
             p.add_argument("--timeout", action="append", metavar="PHASE=SECONDS",
@@ -718,7 +724,7 @@ def main(argv=None):
     v.add_argument("benchmark")
     v.add_argument("--dataset", help="one dataset (default: each)")
     v.add_argument("--limit", type=int, help="the first N units of each dataset (the record says so)")
-    v.add_argument("--provider", default="openai", choices=sorted(run.PROVIDERS), help="a judged benchmark's: the judge's provider")
+    v.add_argument("--provider", default="openai", choices=sorted(providers.PROVIDERS), help="a judged benchmark's: the judge's provider")
     v.add_argument("--judge-model", help="a judged benchmark: this judge instead of its official one")
     v.add_argument("-j", "--concurrency", type=int, default=4)
     v.add_argument("--jobs", default="jobs_standard", help="where the control jobs are written (default jobs_standard/)")

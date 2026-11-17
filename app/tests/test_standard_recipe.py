@@ -477,7 +477,7 @@ class Where(unittest.TestCase):
         for i, sh in enumerate(out["shards"], 1):
             self.assertIn(f"--name fake-0101-120000-shard-{i}of3", sh["script"])
             self.assertIn(f"--shard {i}/3 --launch fake-0101-120000 --from-run", sh["script"])
-            self.assertEqual(sh["jobs"], [{"name": sh["name"], "agent": "fake", "dataset": "fakebench"}])
+            self.assertEqual(sh["jobs"], [{"name": sh["name"], "agent": "fake", "dataset": "fakebench", "launch": "fake-0101-120000"}])
         self.assertEqual([j["name"] for j in out["jobs"]], [sh["name"] for sh in out["shards"]])
         self.assertEqual(len(out["parts"]), 3)
         self.assertIn("3 shards, one per machine", out["review"][-1][2])

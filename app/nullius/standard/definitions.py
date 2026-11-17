@@ -933,7 +933,7 @@ def _secrets(w: str, secrets, local_ok: bool, settings) -> List[str]:
         n = s.get("name")
         if not isinstance(n, str) or not _ENV_NAME.match(n) or n in seen:
             bad.append(f"{sw}.name: a variable name, each once")
-        elif settings.reserved_name(n):
+        elif settings.reserved_name(n, records=False):
             bad.append(f"{sw}.name: {n} is already the name of something else")
         seen.add(n)
         to, kind = s.get("to"), s.get("kind", "value")
@@ -956,7 +956,7 @@ def _secrets(w: str, secrets, local_ok: bool, settings) -> List[str]:
                 bad.append(f"{sw}: path and env are a file's; a {kind} reaches its process as the variable {n}")
             continue
         if v is not None:
-            if not isinstance(v, str) or not _ENV_NAME.match(v) or settings.reserved_name(v) or v in seen:
+            if not isinstance(v, str) or not _ENV_NAME.match(v) or settings.reserved_name(v, records=False) or v in seen:
                 bad.append(f"{sw}.env: a variable name of its own, which will hold the file's path")
             seen.add(v)
         if to == "driver":

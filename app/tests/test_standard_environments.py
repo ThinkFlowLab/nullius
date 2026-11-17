@@ -86,6 +86,9 @@ class Schema(unittest.TestCase):
         self.assertTrue(any(".to: one of ('agent', 'driver')" in p for p in said), said)
         said = self.problems({"x": dict(tool, needs_secrets=[{"name": "OPENAI_API_KEY", "to": "agent"}])})
         self.assertTrue(any("already the name of something else" in p for p in said), said)
+        for name in ("OPENAI", "MODEL_LICENSE"):                    # a provider record's name: a licence, kept apart, may take it
+            said = self.problems({"x": dict(tool, needs_secrets=[{"name": name, "to": "agent"}])})
+            self.assertFalse(any("already the name" in p for p in said), said)
         said = self.problems({"x": dict(tool, needs_secrets=[{"name": "A", "to": "agent"}, {"name": "A", "to": "driver"}])})
         self.assertTrue(any("each once" in p for p in said), said)
 

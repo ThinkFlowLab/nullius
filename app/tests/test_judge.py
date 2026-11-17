@@ -11,8 +11,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nullius import workspace
+from nullius import redact, workspace
 from nullius.judge import batch, client, questions, state, store
+from nullius.runs import parse
 from nullius.traces import trajectory
 
 HERE = Path(__file__).resolve().parent
@@ -206,6 +207,16 @@ class Store(unittest.TestCase):
         self.assertEqual(store.load(self.ws.dir, "job-1", "task__abc/def")["answers"]["task_completed"], {"noul": 0.9})
 
 
+    def test_count_is_one_per_trial_and_lane_every_version_inside(self):
+        self.assertEqual(store.count(self.ws.dir), 0)
+        for version in ("judgement.questions.v1", questions.VERSION):
+            store.save(self.ws.dir, "job-1", "t0", {"questions": version, "answers": {}})              # two versions: one judgement
+        store.save(self.ws.dir, "job-1", "t1", {"questions": "v", "answers": {}})
+        store.save(self.ws.dir, "job-2", "t0", {"questions": "v", "answers": {}}, lane="llm")
+        (Path(self.ws.jobs_dir)).mkdir(parents=True, exist_ok=True); (Path(self.ws.jobs_dir) / "x.json").write_text("{}")   # the cache: not one
+        self.assertEqual(store.count(self.ws.dir), 3)
+
+
 class Versions(unittest.TestCase):
     """The vocabulary bumped: a v1 record and a v2 record coexist in one
     file, a read without a version prefers the current one and falls back
@@ -276,7 +287,7 @@ class Batch(unittest.TestCase):
             asked = [q for q in ("task_completed",) if f'"{q}"' in body["messages"][1]["content"]]
             return 200, {"model": "vendor/m", "choices": [{"message": {"content": _json.dumps({"answers": {q: {"noul": 0.3} for q in asked}})}}],
                          "usage": {"prompt_tokens": 10, "completion_tokens": 2}}
-        llm = client.Judge("openrouter", "sk-or-1", "vendor/m", client.LLM_PROVIDERS["openrouter"]["url"])
+        llm = client.Judge("openrouter", "sk-or-1", "vendor/m", "https://openrouter.ai/api/v1/chat/completions")
         rec = batch.ask_and_store(str(self.tmp), "job", "t", {"trial": (["task_completed"], "the trial state", False)}, llm, post=chat)
         self.assertEqual(rec["judge"], {"provider": "openrouter", "model": "vendor/m"})
         self.assertEqual(store.load(str(self.tmp), "job", "t", lane="llm")["answers"], {"task_completed": {"noul": 0.3}})
@@ -393,6 +404,51 @@ class Hygiene(unittest.TestCase):
         self.assertNotIn("[transcript]", json.dumps(rec)); self.assertNotIn("AKIAIOSFODNN7EXAMPLE", json.dumps(rec))   # the record carries readings, never the state
 
 
+class VerifierSection(unittest.TestCase):
+    """The failure state's [verifier] section always has text: the
+    verifier's files when there are any, otherwise a sentence that says
+    whether the verifier ran."""
+    DID_NOT_RUN = "[verifier]\ndid not run: the trial records no reward and no verifier phase"
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="nullius-judge-verifier-")); self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.traj = trajectory.load(str(CLEAN))
+
+    def trial(self, reward, dur_verifier):
+        return parse.Trial(job_id="j", dir=str(self.tmp), task_name="x/y", trial_name="t", task_base="y", source="",
+                           model_name="", outcome="", reward=reward, exception_type="", exception_message="",
+                           patch_exists=None, patch_applied=None, f2p_pass=0, f2p_fail=0, p2p_pass=0, p2p_fail=0,
+                           n_input_tokens=0, n_output_tokens=0, n_cache_tokens=0, cost_usd=None, dur_total=None,
+                           dur_env=None, dur_agent_setup=None, dur_agent=None, dur_verifier=dur_verifier)
+
+    def section(self, text):
+        """The failure state's last section, from its heading to the end."""
+        return "[verifier]\n" + text.rpartition("\n\n[verifier]\n")[2]
+
+    def failure(self, trial):
+        return self.section(state.build("failure", self.traj, trial=trial, trial_dir=str(self.tmp))[0])
+
+    def test_no_verifier_file_and_no_trial_is_nothing_recorded(self):
+        self.assertEqual(self.failure(None), "[verifier]\nnothing recorded")
+        self.assertEqual(self.section(state.build("failure", self.traj)[0]), "[verifier]\nnothing recorded")
+
+    def test_a_trial_with_no_reward_and_no_verifier_phase_says_the_verifier_did_not_run(self):
+        self.assertEqual(self.failure(self.trial(None, None)), self.DID_NOT_RUN)
+
+    def test_a_trial_with_a_reward_or_a_verifier_phase_is_nothing_recorded(self):
+        for reward, dur_verifier in ((0.0, None), (None, 4.5), (1.0, 4.5)):
+            with self.subTest(reward=reward, dur_verifier=dur_verifier):
+                self.assertEqual(self.failure(self.trial(reward, dur_verifier)), "[verifier]\nnothing recorded")
+
+    def test_a_verifier_file_is_the_section_whatever_the_trial_records(self):
+        (self.tmp / "verifier").mkdir()
+        (self.tmp / "verifier" / "reward.txt").write_text("0\n")
+        self.assertEqual(state.verifier_text(str(self.tmp)), "[verifier/reward.txt]\n0\n")
+        for trial in (None, self.trial(None, None), self.trial(0.0, 4.5)):
+            with self.subTest(trial=trial and (trial.reward, trial.dur_verifier)):
+                self.assertEqual(self.failure(trial), "[verifier]\n[verifier/reward.txt]\n0\n")
+
+
 class Instruction(unittest.TestCase):
     """mini-swe-agent, swe-agent, OpenHands and Codex trajectories open with
     the agent's own system prompt; the task is the first user step."""
@@ -442,6 +498,93 @@ class Relevance(unittest.TestCase):
         for line in whole.splitlines():
             if line.startswith("[tool ") or line.startswith("[agent] "):
                 self.assertIn(line, state.transcript_of(trajectory.load(str(CLEAN))), line)
+
+
+class FinalMessageOnce(unittest.TestCase):
+    """The step the final message came from is a one-line marker at its
+    place in the transcript, and the text is written once, under its heading."""
+    MARKER = "[agent] [the final message; its text is under [final message] below]"
+    MARKER_A = "[agent] [the final message; its text is under [final message A] below]"
+    MARKER_B = "[agent] [the final message; its text is under [final message B] below]"
+
+    def made_up(self, steps):
+        """A trajectory read from the clean fixture with its steps replaced."""
+        raw = json.loads(CLEAN.read_text())
+        raw["steps"] = steps(raw["steps"])
+        tmp = Path(tempfile.mkdtemp(prefix="nullius-judge-final-")); self.addCleanup(shutil.rmtree, tmp, True)
+        (tmp / "t.json").write_text(json.dumps(raw))
+        traj = trajectory.load(str(tmp / "t.json")); self.assertFalse(traj.error)
+        return traj
+
+    def transcript_lines(self, text):
+        return text.split("\n\n[transcript]\n", 1)[1].split("\n\n[final message]\n", 1)[0].splitlines()
+
+    def test_each_kind_holds_the_final_message_once_per_trajectory(self):
+        for fixture in (CLEAN, ADVERSARIAL):
+            traj = trajectory.load(str(fixture)); final = traj.last_agent_message; self.assertTrue(final)
+            with self.subTest(fixture=fixture.name):
+                for kind in ("trial", "failure", "final"):
+                    self.assertEqual(state.build(kind, traj)[0].count(final), 1, kind)
+                self.assertEqual(state.build("pair", traj, other=traj)[0].count(final), 2)
+
+    def test_the_marker_stands_where_the_final_message_stood(self):
+        for fixture in (CLEAN, ADVERSARIAL):
+            traj = trajectory.load(str(fixture)); final = traj.last_agent_message
+            line = "[agent] " + final
+            head = "[instruction]\n" + state.instruction_of(traj) + "\n\n[transcript]\n" + state.transcript_of(traj)
+            with self.subTest(fixture=fixture.name):
+                trial = state.build("trial", traj)[0]
+                self.assertEqual(trial.count(self.MARKER), 1)
+                self.assertEqual(trial.replace(self.MARKER, line), redact.redact(head + "\n\n[final message]\n" + final))
+                failure = state.build("failure", traj)[0]
+                self.assertEqual(failure.replace(self.MARKER, line).partition("\n\n[recorded error]\n")[0],
+                                 redact.redact(head + "\n\n[final message]\n" + final))
+                pair = state.build("pair", traj, other=traj)[0]
+                self.assertEqual((pair.count(self.MARKER_A), pair.count(self.MARKER_B)), (1, 1))
+                transcript = state.transcript_of(traj)
+                self.assertEqual(pair.replace(self.MARKER_A, line).replace(self.MARKER_B, line), redact.redact(
+                    "[instruction]\n" + state.instruction_of(traj) + "\n\n[transcript A]\n" + transcript + "\n[final message A]\n" + final
+                    + "\n\n[transcript B]\n" + transcript + "\n[final message B]\n" + final))
+
+    def test_an_earlier_step_with_the_same_text_stays_and_the_last_is_the_marker(self):
+        def same_text_earlier(steps):
+            steps[2]["message"] = steps[-1]["message"]
+            return steps
+        traj = self.made_up(same_text_earlier); final = traj.last_agent_message
+        lines = self.transcript_lines(state.build("trial", traj)[0])
+        self.assertEqual([l for l in lines if l.startswith("[agent] ")], ["[agent] " + final, self.MARKER])
+        self.assertEqual(lines[-1], self.MARKER)
+
+    def test_an_agent_step_after_the_final_message_stays_after_the_marker(self):
+        def tool_step_after(steps):
+            steps.append({"step_id": 6, "timestamp": "2026-09-18T10:00:06.000Z", "source": "agent", "message": "(tool use)",
+                          "tool_calls": [{"tool_call_id": "c6", "function_name": "Bash", "arguments": {"command": "git status"}}],
+                          "observation": {"results": [{"source_call_id": "c6", "content": "nothing to commit\n"}]}})
+            return steps
+        traj = self.made_up(tool_step_after); final = traj.last_agent_message
+        self.assertEqual(final, json.loads(CLEAN.read_text())["steps"][-1]["message"])
+        lines = self.transcript_lines(state.build("trial", traj)[0])
+        self.assertEqual([l for l in lines if l.startswith("[agent] ")], [self.MARKER, "[agent] (tool use)"])
+        self.assertEqual(lines[lines.index(self.MARKER) + 1:][:2], ["[agent] (tool use)", '[tool Bash] {"command": "git status"}'])
+        self.assertNotIn("[agent] " + final, lines)
+
+    def test_a_trajectory_with_no_agent_message_gets_no_marker(self):
+        for name, steps in (("no message", lambda s: s[:-1]),
+                            ("tool use only", lambda s: s[:-1] + [dict(s[-1], message="(tool use)")])):
+            with self.subTest(name):
+                traj = self.made_up(steps); self.assertEqual(traj.last_agent_message, "")
+                for kind in ("trial", "failure"):
+                    self.assertNotIn("[the final message;", state.build(kind, traj)[0])
+                self.assertNotIn("[the final message;", state.build("pair", traj, other=traj)[0])
+
+    def test_the_control_state_keeps_the_last_message_in_its_transcript(self):
+        for fixture in (CLEAN, ADVERSARIAL):
+            traj = trajectory.load(str(fixture))
+            with self.subTest(fixture=fixture.name):
+                text = state.build("control", traj, control="nop")[0]
+                self.assertIn("[agent] " + traj.last_agent_message, text)
+                self.assertNotIn("[the final message;", text)
+                self.assertTrue(text.endswith(redact.redact("[transcript]\n" + state.transcript_of(traj))))
 
 
 class PrJudgeWorkflow(unittest.TestCase):

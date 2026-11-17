@@ -1,4 +1,4 @@
-// Run hosts: a table, a row per machine, this machine first. A row's actions (Info, Connection, Constraints, Delete) open a panel
+// Hosts: a table, a row per machine, this machine first. A row's actions (Info, Connection, Constraints, Delete) open a panel
 // in a row below it, one at a time, with the shared sliding disclosure. Test asks the machine and redraws its Info; Connection and
 // Delete go through the settings save with the form token, then the list is drawn again from the answer.
 (() => {

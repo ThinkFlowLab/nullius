@@ -109,6 +109,18 @@ class HarborRoutes(unittest.TestCase):
         self.assertEqual((got["agents"], got["version"]), (["claude-code", "nop", "oracle", "terminus-2"], "0.22.0+fork.1"))
         self.assertTrue((self.tmp / "pins" / ("git-" + up["commit"]) / "wheels").is_dir())
 
+    def test_a_provider_that_serves_no_chat_is_refused_model_or_not(self):
+        from web import execute
+        script = '"$NULLIUS_HARBOR" run --agent nop'
+        with patch.dict(os.environ, {"MODEL_API_URL": "http://box.example/v1", "TYPESAFE_API_KEY": "ts-fixture-0123456789", "ANTHROPIC_API_KEY": "sk-ant-fixture-0123"}):
+            for provider, said in (("typesafe", "TypeSafe does not serve"), ("anthropic", "Anthropic does not serve"), ("bogus", "bogus does not serve")):
+                for model in ({"model": "m"}, {}):
+                    r = self.post("/run", {"name": "p-0101", "where": "local", "script": script, **model,
+                                           "recipe": {"version": 1, "harness": "harbor", "provider": provider}})
+                    self.assertEqual(r.status_code, 400, (provider, model)); self.assertIn(said, r.json["error"])
+            self.assertEqual(self.started, [])
+            self.assertEqual(execute.credentials_for("typesafe")["key_var"], "MODEL_API_KEY")         # never a judge's key, as provider_problem reads it
+
     def test_the_pin_travels_with_the_run(self):
         script = '"$NULLIUS_HARBOR" run --agent nop'
         pin = {"kind": "repo", "repo": "owner/harbor", "revisionKind": "tag", "revision": "v1", "commit": "c" * 40, "extras": ["jw"]}

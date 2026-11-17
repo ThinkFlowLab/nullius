@@ -56,7 +56,7 @@ and its resources. The source layout stays under `app/`.
   a Harbor benchmark added from the Benchmarks page's form; `citation`, an entry's
   BibTeX read into the paper its page shows; `storage`, whole-folder user overlays and restoring bundled entries; `sources`, where each dataset's data comes
   from for each way it runs), `recipes/`
-  (`launch`, the builder's vocabulary), `providers` (where a run's model calls go, and the builder's steps),
+  (`launch`, the builder's vocabulary), `providers` (the model provider registry: protocols, presets and each provider's record, read by every consumer; and the builder's steps),
   `harbor/` (`source`: the Harbor a recipe pins - built, kept, scanned for its agents;
   `feed`: the live feed any Harbor writes, from its own trial hooks),
   `importers/` (`atif` ATIF, `otel` OpenTelemetry, and the `cli`), `judge/` (`questions`, `state`, `client`, `store`, `batch`, `reconcile`, `lanes`),
@@ -423,7 +423,7 @@ One line each; the code and the pages carry the rest.
   upstream's own code at a pin, its dependencies in its own environment, and
   any code of ours beyond glue is asked about first
 - Settings, its variables and their validation — `app/nullius/settings.py`;
-  run hosts, keys and the connection test — `app/nullius/hosts.py`
+  hosts, keys and the connection test — `app/nullius/hosts.py`
 - Removing a benchmark, agent or capability throughout the app, including
   generated artifacts and requested runtime data — `/remove-integration`
   (`.claude/skills/remove-integration/SKILL.md`)
