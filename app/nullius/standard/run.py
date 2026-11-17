@@ -448,8 +448,8 @@ class Run:
         ``retries``: how many times an attempt that ended in a failure a
         further try may mend (``retry_if``, ``retries.retryable`` unless
         given: a proof run's is ``retries.rate_limited``) runs again, after
-        the others and one at a time; each try before is kept under the job's
-        ``retried/``. 0 by default: none.
+        the others and as many at once as the concurrency; each try before
+        is kept under the job's ``retried/``. 0 by default: none.
         ``simulator_model``: a benchmark whose user a model plays
         (``simulator``): this model instead of its official one.
         ``prices``: this run's own prices, by model, over the user's list
@@ -888,7 +888,7 @@ class Run:
                     res = future.result()
                     if res is not None:          # None: a unit not begun once the endpoint refused the run
                         results.append(res)
-            self.run_again(results, work, work_unit, again)
+            self.run_again(results, work, work_unit, again, pool)
         except BaseException:
             self._stopped.set()
             self._halt.set()
@@ -940,15 +940,22 @@ class Run:
         if self.bench["score"]["kind"] == "pass":
             ok = sum(1 for w in rewards if w.get("reward") == 1.0)
             p.emit("done", n=len(results), passed=ok, seconds=round(time.time() - t0, 1))
-            self.say(f"done: {len(results)} {self.bench['units']['nouns']}, {ok} passed")
+            self.say(f"done: {self.counted(results)}, {ok} passed")
         else:
             scores = [w["score"] for w in rewards if "score" in w]
             mean = job.mean_score(results)
             p.emit("done", n=len(results), scored=len(scores), mean=round(mean, 3) if mean is not None else None,
                    seconds=round(time.time() - t0, 1))
-            self.say(f"done: {len(results)} {self.bench['units']['nouns']}, {len(scores)} scored"
+            self.say(f"done: {self.counted(results)}, {len(scores)} scored"
                      + (f", mean {mean:.3f}" if mean is not None else ""))
         return self.job_dir
+
+    def counted(self, results: List[dict]) -> str:
+        """What ended, as the run's last line says it: ``3 problems``, and
+        ``6 attempts`` beside them when each was attempted more than once."""
+        n = len({(r.get("standard") or {}).get("unit") for r in results})
+        words = self.bench["units"]
+        return f"{n} {words['noun'] if n == 1 else words['nouns']}" + (f", {len(results)} attempts" if self.repeat > 1 else "")
 
     def paced(self, res: Optional[dict]) -> None:
         """A unit's end, told to the run's pace: one that ended rate-limited
@@ -994,12 +1001,13 @@ class Run:
                 except ledgers.Unavailable:
                     pass
 
-    def run_again(self, results: List[dict], work: list, work_unit, done: Dict[str, dict]) -> None:
+    def run_again(self, results: List[dict], work: list, work_unit, done: Dict[str, dict], pool) -> None:
         """Each attempt that ended in a failure a further try may mend
         (``retry_if``: a rate limit, a provider or setup error, an agent
-        crash), run again after the others, one at a time and paced as the
-        rest - a rate limit's retry not before the provider's pause is over -
-        up to ``retries`` times. Each try before is moved into the job's
+        crash), run again after the others, on the run's own ``pool`` (as
+        many at once as its concurrency) and paced as the rest - a rate
+        limit's retry not before the provider's pause is over - up to
+        ``retries`` times. Each try before is moved into the job's
         ``retried/`` as ``<trial>.try-N`` (kept whole, its calls and its cost
         with it, where no reader takes it for a trial of its own); the last is
         written under the trial's own name and counted (into ``done``, as each
@@ -1015,19 +1023,22 @@ class Run:
             todo = [name for name, res in latest.items() if name in self._counted and self.retry_if(res)]
             if not todo:
                 return
-            self.progress.emit("units", "progress", detail=f"trying {len(todo)} again, one at a time: retry {retry} of {self.retries}")
-            self.say(f"trying again, one at a time: {len(todo)}, retry {retry} of {self.retries}")
-            for name in todo:
-                if self._stopped.is_set() or self._halt.is_set():
-                    return
-                res = self.try_again(name, by_name[name], retry, work_unit)
-                if res is not None:
-                    done[name] = latest[name] = res
+            self.progress.emit("units", "progress", detail=f"trying {len(todo)} again: retry {retry} of {self.retries}")
+            self.say(f"trying again: {len(todo)}, retry {retry} of {self.retries}")
+            tries = {pool.submit(self.try_again, name, by_name[name], retry, work_unit): name for name in todo}
+            pending = set(tries)
+            while pending:
+                # timed, as the first pass: a Stop's signal is run in this thread
+                ended, pending = wait(pending, timeout=0.5, return_when=FIRST_EXCEPTION)
+                for future in ended:
+                    res = future.result()
+                    if res is not None:
+                        done[tries[future]] = latest[tries[future]] = res
 
     def try_again(self, name: str, iur: tuple, retry: int, work_unit) -> Optional[dict]:
         """One attempt's next try (``run_again``): the try before moved into
         ``retried/<name>.try-<retry>``, the next run under the trial's name.
-        A try that does not end - not begun, or a Stop under it - leaves the
+        A try that does not end - not begun, or stopped under it - leaves the
         try before where it was, the attempt as it stood; what the stopped
         try had written goes."""
         here = os.path.join(self.job_dir, name)
@@ -1047,6 +1058,8 @@ class Run:
         res = None
         try:
             res = work_unit((*iur, retry))
+            if res is not None and self._stopped.is_set() and (res.get("exception_info") or {}).get("exception_type") == CANCELLED:
+                res = None                       # stopped under it: the try before says more than the Stop
         finally:
             if held:
                 self.release_image(held)

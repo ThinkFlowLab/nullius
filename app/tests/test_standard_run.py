@@ -414,6 +414,13 @@ class RunTest(unittest.TestCase):
         self.assertEqual(result["budget"]["not_run"], [f"m{i} (attempt 1)" for i in range(4, 8)] + [f"m{i} (attempt 2)" for i in range(8)])
         self.assertEqual((result["n_total_trials"], result["stats"]["n_cancelled_trials"]), (16, 12))     # as many as the trials not run
 
+    def test_the_last_line_counts_units_and_attempts_apart(self):
+        nouns = definitions.get("benchmark", "fakebench", ROOT)["units"]["nouns"]
+        _, _, _, said = self.calling(repeat=2)
+        self.assertTrue(any(s.startswith(f"done: 8 {nouns}, 16 attempts, ") for s in said), said)
+        _, _, _, said = self.calling()
+        self.assertTrue(any(s.startswith(f"done: 8 {nouns}, ") and "attempts" not in s for s in said), said)
+
     def test_each_threads_driver_has_a_route_of_its_own_on_the_benchmarks_relay(self):
         """A cap's refusal of a driver's own call (an option's embeddings) is the unit's that driver served, never one beside it."""
         r = run.Run.__new__(run.Run)
@@ -696,6 +703,34 @@ class RunTest(unittest.TestCase):
                     self.assertEqual(len(tries), 1)  # a timeout is the agent's result: never retried
                     self.assertEqual(got["model"].outcome, classify.AGENT_ERROR)
                     self.assertFalse(os.path.exists(os.path.join(job_dir, "retried")))
+
+    def test_retries_run_as_many_at_once_as_the_run(self):
+        """Every unit crashes on its first try: their retries share the run's
+        concurrency (2 here), so two of them are running at once."""
+        real_prompt = acp.Client.prompt
+        lock, seen = threading.Lock(), {}
+
+        def prompt(client, sid, text, timeout=600):
+            with lock:
+                seen[text] = seen.get(text, 0) + 1
+                first = seen[text] == 1
+            if first:
+                raise acp.AgentFailed("the agent's process exited with 1")
+            time.sleep(0.6)                      # each retry takes long enough to meet another
+            return real_prompt(client, sid, text, timeout=timeout)
+
+        with mock.patch.object(acp.Client, "prompt", prompt):
+            job_dir = self.go("fakebench", "fake", dataset="responding", name="retried-together", retries=1)
+        spans = []
+        for name in os.listdir(job_dir):
+            path = os.path.join(job_dir, name, "result.json")
+            if os.path.isfile(path):
+                with open(path) as f:
+                    res = json.load(f)
+                if (res.get("standard") or {}).get("retries"):
+                    spans.append(tuple(datetime.fromisoformat(res[k].replace("Z", "+00:00")) for k in ("started_at", "finished_at")))
+        self.assertGreaterEqual(len(spans), 2, spans)
+        self.assertTrue(any(a[0] < b[1] and b[0] < a[1] for i, a in enumerate(spans) for b in spans[i + 1:]), spans)
 
     def test_a_stopped_run_runs_nothing_again(self):
         Echo.status = 429

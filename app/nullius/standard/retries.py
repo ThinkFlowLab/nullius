@@ -2,7 +2,7 @@
 
 An attempt is one run of a unit, counted whatever its result (``--attempts``).
 A retry runs an attempt again after a failure a further try may mend: after
-the run's other units and one at a time, up to ``--retries`` times (0 by
+the run's other units, as many at once as the run's own, up to ``--retries`` times (0 by
 default, ``MAX_RETRIES`` at most). Each try before is kept under the job's
 ``retried/``; only the last is the attempt's trial and counts.
 

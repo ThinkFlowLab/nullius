@@ -103,7 +103,7 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 
 ## Retries
 
-`--retries N` (at most 9) runs a failed attempt again after the other units, one at a time. The last try counts.
+`--retries N` (at most 9) runs a failed attempt again after the other units, as many at once as `-j`. The last try counts.
 
 | Failure | Retried |
 | --- | --- |
