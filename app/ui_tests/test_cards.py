@@ -83,6 +83,17 @@ class Macros(unittest.TestCase):
         self.assertNotIn('data-tools-btn="sort"', html)
         self.assertIn('<p class="empty-note" data-empty="c" hidden>No card matches.</p>', html)
 
+    def test_two_collections_with_every_form_keep_their_ids_apart(self):
+        cols = [dict(COLS[2]), dict(COLS[11], filter='pills'), dict(COLS[10], filter=['dropdown', 'button'])]
+        page = self.env.from_string("{% from '_cards.html' import cards %}{% for id in ['p', 'q'] %}{{ cards(id, cols, items, search='Find', choices=choices) }}{% endfor %}")
+        html = page.render(cols=cols, items=[{'href': '/x', 'title': 'X', 'tag': 'coding', 'meta': 'v1'}],
+                           choices={'tag': [('coding', 'Coding')], 'meta': [('v1', 'v1')]})
+        self.assertEqual(re.findall(r' id="([^"]+)"', html), ['p-tools', 'p', 'q-tools', 'q'])
+        self.assertEqual(html.count('aria-live="polite"'), 2)                                 # one live region a collection
+        self.assertIn('<span class="sr" data-live="q" aria-live="polite"></span>', html)
+        self.assertEqual(html.count('data-pills="tag"'), 2)
+        self.assertEqual(html.count('data-dropdown'), 2)
+
 
 class Script(unittest.TestCase):
     def test_search_and_filter_hide_cards_and_their_empty_groups(self):

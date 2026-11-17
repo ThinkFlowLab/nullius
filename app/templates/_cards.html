@@ -18,7 +18,7 @@
 {% macro pill(f, v) %}{% set cls = [f.class, v.class]|select|join(' ') %}<span{% if cls %} class="{{ cls }}"{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ v.text }}</span>{% endmacro %}
 
 {# A collection of cards (NulliusTable.cards): its controls row, its cards, the note when none passes. `id` names it;
-   `search`, `choices`, `only` as the table's controls. The call block, when given, writes the cards instead (grid
+   `search`, `choices`, `only` and each field's `filter` as the table's controls. The call block, when given, writes the cards instead (grid
    for each group, such as the Benchmarks' shelves); a section in it marked data-group hides when none of its cards
    shows, and its data-group-n counts them. #}
 {% macro cards(id, cols, items, search='', choices={}, only={}, empty='No items match.') %}

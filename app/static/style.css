@@ -458,6 +458,12 @@ button.seg:hover { filter: brightness(1.25); }
 /* a column's alignment (its `align`), header and cells */
 .grid .align-right { text-align: right; }
 .grid .align-center { text-align: center; }
+/* a row of filter pills (the controls macro's `pills`), under the search and the buttons */
+.filter-pills { display: flex; flex-wrap: wrap; flex: 1 0 100%; gap: 8px; }
+.filter-pill { font: inherit; font-size: 13px; cursor: pointer; color: var(--text-dim); background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; min-height: 40px; }
+.filter-pill:hover { border-color: var(--accent); color: var(--text); }
+.filter-pill[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--btn-fg); font-weight: 500; }
+.filter-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tools-count { margin-left: .4rem; padding: 0 .4em; border-radius: 99px; background: var(--accent-soft); color: var(--text); font-size: .72rem; font-variant-numeric: tabular-nums; }
 .chip.clear { border-style: dashed; }
 

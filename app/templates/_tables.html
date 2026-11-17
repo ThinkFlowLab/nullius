@@ -63,27 +63,29 @@
 
 {# A table's controls row (static/tables.js `toolbar`) over the columns `cols`; each feature on only
    when asked. `search`: the search box's name and placeholder, over each row's data-search text; `columns`: the
-   Columns menu; `choices`: column -> its (value, label) pairs, a Filter menu of them; `only`: column -> the one value
-   ticked at load, the others unticked; then the Sort by menu, unless `sort` is false. `views` and `actions`: macros
-   writing a page's own buttons, each any number of them, run by the page: views (how the table looks) before
-   Columns, actions (on the rows or the selection) last. The search goes left, the buttons right. `id`: the table's. #}
+   Columns menu; `choices`: column -> its (value, label) pairs to filter by; `only`: column -> the one value chosen
+   at load; then the Sort by menu, unless `sort` is false. `views` and `actions`: macros writing a page's own
+   buttons, each any number of them, run by the page: views (how the table looks) before Columns, actions (on the
+   rows or the selection) last. The search goes left, the buttons right. A column's
+   `filter` says where its choices go, one form or a list of them: 'button' (the default), in the Filter menu;
+   'dropdown', a menu of its own; 'pills', a row of toggles under the controls. `id`: the table's. #}
 {% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none, sort=true) %}
+{%- set by = {'button': [], 'dropdown': [], 'pills': []} %}{% for c in cols if c.key in choices %}{% for f in ([c.filter] if c.filter is string else c.filter or ['button']) %}{% set _ = by[f].append(c) %}{% endfor %}{% endfor %}
 <div class="table-tools table-controls" id="{{ id }}-tools">
   {% if search %}<label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-search placeholder="{{ search }}" aria-label="{{ search }}" autocomplete="off" spellcheck="false"></label>{% endif %}
-  {% if columns or choices or sort or views or actions %}<div class="table-buttons">
+  {% if columns or by.dropdown or by.button or sort or views or actions %}<div class="table-buttons">
   {{ slot('views', views) }}
   {% if columns %}<div class="menu-wrap">{{ columns_button() }}{{ columns_menu(cols) }}</div>{% endif %}
-  {% if choices %}<div class="menu-wrap">
+  {% for c in by.dropdown %}<div class="menu-wrap">
+    <button class="btn ghost sm" type="button" data-dropdown aria-haspopup="true" aria-expanded="false">{{ c.label }}<span class="tools-count" hidden></span></button>
+    <div class="menu tools-menu" hidden>{{ values(c, choices[c.key], only) }}</div>
+  </div>
+  {% endfor %}
+  {% if by.button %}<div class="menu-wrap">
     <button class="btn ghost sm" type="button" data-tools-btn="filter" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter<span class="tools-count" hidden></span></button>
     <div class="menu tools-menu" data-tools="filter" hidden>
       <button type="button" class="linkish tools-clear" data-clear>Clear filters</button>
-      {% for c in cols if c.key in choices %}
-      <fieldset data-filter-menu="{{ c.key }}">
-        <legend>{{ c.label }}</legend>
-        <span class="tools-all"><button type="button" class="linkish" data-all="{{ c.key }}">All</button><button type="button" class="linkish" data-none="{{ c.key }}">None</button></span>
-        {% for value, text in choices[c.key] %}<label><input type="checkbox" data-value="{{ value }}"{% if c.key not in only or only[c.key] == value %} checked{% endif %}> {{ text }}</label>{% endfor %}
-      </fieldset>
-      {% endfor %}
+      {% for c in by.button %}{{ values(c, choices[c.key], only) }}{% endfor %}
     </div>
   </div>
   {% endif %}
@@ -104,12 +106,27 @@
   </div>{% endif %}
   {{ slot('actions', actions) }}
   </div>{% endif %}
+  {% for c in by.pills %}
+  <div class="filter-pills" role="group" aria-label="{{ c.label }}" data-pills="{{ c.key }}">
+    <button type="button" class="filter-pill" data-all="{{ c.key }}" aria-pressed="{{ 'false' if c.key in only else 'true' }}">All</button>
+    {%- for value, text in choices[c.key] %}<button type="button" class="filter-pill" data-value="{{ value }}" aria-pressed="{{ 'true' if only.get(c.key) == value else 'false' }}">{{ text }}</button>{% endfor %}
+  </div>
+  {% endfor %}
 </div>
 {% endmacro %}
 
 {#- A controls row's slot `name`: what the macro `fill` writes, in a group spaced as the buttons; nothing when it
     writes nothing. #}
 {% macro slot(name, fill) %}{% set html = fill() if fill else '' %}{% if html|trim %}<div class="table-slot" data-slot="{{ name }}">{{ html }}</div>{% endif %}{% endmacro %}
+
+{#- A column's choices as checkboxes, in the Filter menu or a dropdown: all ticked, or only its `only` value. #}
+{% macro values(c, choices, only) %}
+      <fieldset data-filter-menu="{{ c.key }}">
+        <legend>{{ c.label }}</legend>
+        <span class="tools-all"><button type="button" class="linkish" data-all="{{ c.key }}">All</button><button type="button" class="linkish" data-none="{{ c.key }}">None</button></span>
+        {% for value, text in choices %}<label><input type="checkbox" data-value="{{ value }}"{% if c.key not in only or only[c.key] == value %} checked{% endif %}> {{ text }}</label>{% endfor %}
+      </fieldset>
+{% endmacro %}
 
 {# A Columns menu (static/tables.js `columns`): its button, and the menu of `cols`' definitions, each a checkbox that
    shows or hides the cells of that data-col. The menu opens under the .menu-wrap that holds it. #}

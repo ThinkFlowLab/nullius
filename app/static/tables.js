@@ -50,37 +50,50 @@ window.NulliusTable = {
     return resort;
   },
 
-  /* The value lists (data-filter-menu) under `scope`, the controls macro's
-     Filter menu. `allowed`: column -> the Set of values ticked, or null when
-     all are. A row passes when, for each column, one of its values
-     (data-f-<col>, one per line) is ticked; a box unticked at load filters
-     from the start. `changed` runs after each change, a list's change event
-     included. */
+  /* The filters under `scope`, the controls macro's: value lists
+     (data-filter-menu) and rows of pills (data-pills). `allowed`: column ->
+     the Set of values chosen, or null when all are; every list and row of a
+     column shows that one state. A row passes when, for each column, one of
+     its values (data-f-<col>, one per line) is chosen; a choice made at load
+     filters from the start. `changed` runs after each change, a list's
+     change event included. */
   filters(scope, changed) {
-    const allowed = {};
-    scope.querySelectorAll('[data-filter-menu]').forEach(menu => {
-      const col = menu.dataset.filterMenu;
-      const boxes = () => [...menu.querySelectorAll('input[data-value]')];
-      const read = () => {
-        const on = boxes().filter(b => b.checked).map(b => b.dataset.value);
-        allowed[col] = on.length === boxes().length ? null : new Set(on);   // all ticked: no filter
-      };
-      const sync = () => { read(); changed(); };
-      read();
-      menu.addEventListener('change', sync);
-      menu.addEventListener('click', e => {
-        if (e.target.closest('[data-all]')) { boxes().forEach(b => b.checked = true); sync(); }
-        if (e.target.closest('[data-none]')) { boxes().forEach(b => b.checked = false); sync(); }
+    const allowed = {}, views = [...scope.querySelectorAll('[data-filter-menu], [data-pills]')];
+    const col = v => v.dataset.filterMenu ?? v.dataset.pills;
+    const values = v => [...v.querySelectorAll('[data-value]')];
+    const draw = () => views.forEach(v => {
+      const set = allowed[col(v)];
+      values(v).forEach(b => { if (b.matches('input')) b.checked = !set || set.has(b.dataset.value); else b.setAttribute('aria-pressed', String(Boolean(set?.has(b.dataset.value)))); });
+      v.querySelector('.filter-pill[data-all]')?.setAttribute('aria-pressed', String(!set));
+    });
+    // All chosen means "no filter": keeps the active markers honest.
+    const choose = (v, on) => { allowed[col(v)] = on && on.size < values(v).length ? on : null; };
+    const set = (v, on) => { choose(v, on); draw(); changed(); };
+    const chosen = v => new Set(values(v).filter(b => b.checked || b.getAttribute('aria-pressed') === 'true').map(b => b.dataset.value));
+    views.forEach(v => {
+      if (!(col(v) in allowed)) { const on = chosen(v); choose(v, v.dataset.pills !== undefined && !on.size ? null : on); }
+      if (v.dataset.pills !== undefined) {
+        // a pill toggles its value; none left is All
+        v.addEventListener('click', e => {
+          const b = e.target.closest('[data-value]'), now = allowed[col(v)];
+          if (e.target.closest('[data-all]')) return set(v, null);
+          if (!b) return;
+          const on = new Set(now || []);
+          on.has(b.dataset.value) ? on.delete(b.dataset.value) : on.add(b.dataset.value);
+          set(v, on.size ? on : null);
+        });
+        return;
+      }
+      v.addEventListener('change', () => set(v, chosen(v)));
+      v.addEventListener('click', e => {
+        if (e.target.closest('[data-all]')) set(v, null);
+        if (e.target.closest('[data-none]')) set(v, new Set());
       });
     });
+    draw();
     const passes = row => Object.entries(allowed).every(([col, set]) =>
       !set || (row.getAttribute('data-f-' + col) ?? '').split('\n').some(v => set.has(v)));
-    const clear = () => {
-      scope.querySelectorAll('[data-filter-menu]').forEach(menu => {
-        menu.querySelectorAll('input[data-value]').forEach(b => b.checked = true);
-        allowed[menu.dataset.filterMenu] = null;
-      });
-    };
+    const clear = () => { Object.keys(allowed).forEach(c => { allowed[c] = null; }); draw(); };
     return {allowed, passes, clear};
   },
 
@@ -124,11 +137,12 @@ window.NulliusTable = {
     btn.addEventListener('focusout', left);
   },
 
-  /* A controls row's search box and Filter menu (the controls macro), under
+  /* A controls row's search box and filters (the controls macro), under
      `tools`; each optional. Search keeps the rows (or cards) whose
      data-search holds every word of the query, in any order and case;
-     Escape clears it. Filter counts the columns it narrows. `changed` runs
-     after either. Returns passes(row). */
+     Escape clears it. The Filter button counts the columns it narrows, a
+     dropdown the values chosen; Clear filters clears every column. `changed`
+     runs after any of them. Returns passes(row). */
   narrow(tools, changed) {
     const [fbtn, fmenu] = [tools.querySelector('[data-tools-btn="filter"]'), tools.querySelector('[data-tools="filter"]')];
     const q = tools.querySelector('[data-search]');
@@ -140,19 +154,19 @@ window.NulliusTable = {
       const text = (row.dataset.search ?? '').toLowerCase();
       return !q || q.value.toLowerCase().split(/\s+/).every(w => text.includes(w));
     };
-    const count = fbtn?.querySelector('.tools-count');
-    const mark = () => {
-      const n = Object.values(f.allowed).filter(Boolean).length;
-      count.textContent = n || '';
-      count.hidden = !n;
-    };
+    const menus = [...(fmenu ? [[fbtn, fmenu, () => 1]] : []),
+                   ...[...tools.querySelectorAll('[data-dropdown]')].map(b => [b, b.parentNode.querySelector('.menu'), set => set.size])];
+    const mark = () => menus.forEach(([btn, menu, n]) => {
+      const sets = [...menu.querySelectorAll('[data-filter-menu]')].map(v => f.allowed[v.dataset.filterMenu]).filter(Boolean);
+      const count = btn.querySelector('.tools-count');
+      count.textContent = sets.length ? sets.reduce((sum, set) => sum + n(set), 0) : '';
+      count.hidden = !sets.length;
+    });
     const narrowed = () => { mark(); changed(); };
-    const f = fmenu ? this.filters(fmenu, narrowed) : {allowed: {}, passes: () => true};
-    if (fmenu) {
-      mark();
-      fmenu.querySelector('[data-clear]').addEventListener('click', () => { f.clear(); narrowed(); });
-      this.menu(fbtn, fmenu);
-    }
+    const f = this.filters(tools, narrowed);
+    mark();
+    menus.forEach(([btn, menu]) => this.menu(btn, menu));
+    fmenu?.querySelector('[data-clear]').addEventListener('click', () => { f.clear(); narrowed(); });
     return row => f.passes(row) && found(row);
   },
 
