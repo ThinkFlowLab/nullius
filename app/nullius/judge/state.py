@@ -179,7 +179,12 @@ def build(kind: str, traj, trial=None, trial_dir: Optional[str] = None, other=No
             if trial is not None and (trial.exception_type or trial.exception_message):
                 err = f"{trial.exception_type}: {trial.exception_message}".strip(": ")
             text += "\n\n[recorded error]\n" + (err or "none recorded")
-            text += "\n\n[verifier]\n" + (verifier_text(trial_dir) if trial_dir else "")
+            verifier = verifier_text(trial_dir) if trial_dir else ""
+            if not verifier:
+                # a trial stopped before its verifier phase records neither a reward nor that phase
+                did_not_run = trial is not None and trial.reward is None and trial.dur_verifier is None
+                verifier = "did not run: the trial records no reward and no verifier phase" if did_not_run else "nothing recorded"
+            text += "\n\n[verifier]\n" + verifier
     return truncate(redact(text), limit)
 
 
