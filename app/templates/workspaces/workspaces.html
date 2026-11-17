@@ -1,4 +1,4 @@
-{% from '_tables.html' import tools, pager, greyed %}
+{% from '_tables.html' import tools, pager, greyed, blank %}
 {% extends "base.html" %}
 {% block title %}Workspaces — Nullius{% endblock %}
 {% block crumb %}/ workspaces{% endblock %}
@@ -16,7 +16,7 @@
 <div class="table-wrap">
 <table class="grid sortable tools inventory ws-table" id="ws-table">
   <thead>
-    <tr><th><span class="sr">Open</span></th><th data-col="name" data-type="text">Name</th><th data-col="roots" data-type="num">Roots</th><th data-col="runs" data-type="num" class="num">Runs</th><th data-col="checks" data-type="num" class="num">Checks</th><th data-col="launches" data-type="num" class="num">Launches</th><th data-col="opened" data-type="num">Last opened</th><th><span class="sr">Actions</span></th></tr>
+    <tr>{{ blank('Open') }}<th data-col="name" data-type="text">Name</th><th data-col="roots" data-type="num">Roots</th><th data-col="runs" data-type="num" class="num">Runs</th><th data-col="checks" data-type="num" class="num">Checks</th><th data-col="launches" data-type="num" class="num">Launches</th><th data-col="opened" data-type="num">Last opened</th>{{ blank('Actions') }}</tr>
   </thead>
   <tbody>
     {% for ws in workspaces %}

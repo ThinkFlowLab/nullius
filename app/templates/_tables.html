@@ -1,3 +1,5 @@
+{#- The table toolkit: each macro is a feature a table opts into, run by static/tables.js (NulliusTable) and
+    styled in style.css ("the table toolkit"). #}
 {# Value filter for one column: a caret in the header opening a checkbox list of `choices`, (value, label) pairs.
    Values start all-checked; unchecking hides the matching rows (static/tables.js). #}
 {% macro filter_button(col, choices) %}
@@ -50,6 +52,19 @@
   </div>
 </div>
 {% endmacro %}
+
+{# A Columns menu (static/tables.js `columns`): its button, and the menu of `cols`, (col, label) pairs, each a checkbox
+   that shows or hides the cells of that data-col; a col in `fixed` always shows. The menu opens under the
+   .menu-wrap that holds it. #}
+{% macro columns_button() %}<button class="btn ghost sm" type="button" id="col-btn" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-table"/></svg>Columns</button>{% endmacro %}
+{% macro columns_menu(cols, fixed=[]) %}
+<div class="menu" id="col-menu" hidden>
+  {% for col, label in cols %}<label><input type="checkbox" data-col="{{ col }}"{% if col in fixed %} disabled{% endif %}> {{ label }}</label>{% endfor %}
+</div>
+{% endmacro %}
+
+{#- A header with no visible name (a checkbox, a status, the actions): `label` its name for a screen reader. #}
+{% macro blank(label='') %}<th scope="col">{% if label %}<span class="sr">{{ label }}</span>{% endif %}</th>{% endmacro %}
 
 {# The pages of the table whose id is `table` (static/tables.js `pager`): how many rows a page shows, 25 at first,
    and the page before and after. #}

@@ -1,4 +1,4 @@
-{% from '_tables.html' import tools, pager, greyed %}
+{% from '_tables.html' import tools, pager, greyed, columns_button, columns_menu, blank %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Launches — Nullius{% endblock %}
@@ -32,12 +32,7 @@
                ('checks', 'Checks'), ('shards', 'Shards'), ('machines', 'Machines'), ('size', 'Size'), ('ws', 'Workspaces')] %}
 {% set unsorted = ['machines', 'ws'] %}
 <div class="table-tools inv-cols" id="launch-tools">
-  <div class="menu-wrap">
-    <button class="btn ghost sm" type="button" id="col-btn" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-table"/></svg>Columns</button>
-    <div class="menu" id="col-menu" hidden>
-      {% for col, label in cols if col != 'launch' %}<label><input type="checkbox" data-col="{{ col }}"{% if col == 'state' %} disabled{% endif %}> {{ label }}</label>{% endfor %}
-    </div>
-  </div>
+  <div class="menu-wrap">{{ columns_button() }}{{ columns_menu(cols|rejectattr(0, 'eq', 'launch'), ['state']) }}</div>
   {%- set filters = [] %}{% for col, label in cols if col in choices %}{% set _ = filters.append((col, label, choices[col])) %}{% endfor %}
   {{ tools(filters, cols|rejectattr(0, 'in', unsorted)|list, only) }}
 </div>
@@ -56,7 +51,7 @@
       <th data-col="machines">Machines</th>
       <th data-col="size" data-type="num" class="num">Size</th>
       <th data-col="ws">Workspaces</th>
-      <th></th>
+      {{ blank() }}
     </tr>
   </thead>
   <tbody>

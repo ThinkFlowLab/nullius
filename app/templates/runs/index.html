@@ -1,5 +1,5 @@
 {% from 'runs/_runtime.html' import what_ran %}
-{% from '_tables.html' import filter_button %}
+{% from '_tables.html' import filter_button, columns_button, columns_menu %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Runs — Nullius{% endblock %}
@@ -163,16 +163,11 @@
 
 <div id="view-all"{% if view != 'all' %} hidden{% endif %}>
 <div class="table-tools">
-  <div class="menu-wrap">
-    <button class="btn ghost sm" id="col-btn" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-table"/></svg>Columns</button>
-  </div>
+  <div class="menu-wrap">{{ columns_button() }}</div>
+  {#- the menu opens under Compact #}
   <div class="menu-wrap">
     <button class="btn ghost sm" id="density-btn" aria-pressed="false" title="Fit more columns on screen">⇔ Compact</button>
-    <div class="menu" id="col-menu" hidden>
-      {% for col, label in COLUMNS %}
-      <label><input type="checkbox" data-col="{{ col }}"> {{ label }}</label>
-      {% endfor %}
-    </div>
+    {{ columns_menu(COLUMNS) }}
   </div>
   <span class="table-note" id="filter-note"></span>
   <span class="header-spacer"></span>
