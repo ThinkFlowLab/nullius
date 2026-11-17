@@ -11,7 +11,7 @@ import signal
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 RUNS_PY = os.path.join(os.path.dirname(os.path.dirname(SCRIPTS)), "run-analysis", "scripts", "runs.py")
@@ -152,3 +152,41 @@ def write_paid(round_dir: str, name: str, line: str, values: Dict[str, str], cwd
         fh.write("#!/usr/bin/env bash\nset -euo pipefail\n")
         fh.write(f"cd {shlex.quote(cwd)}\n{fill(line, values)}\n")
     return path
+
+
+LEDGER_SCHEMA = "run-to-fix.ledger/v1"
+
+
+def load_ledger(loop_dir: str) -> dict:
+    path = os.path.join(loop_dir, "ledger.json")
+    if not os.path.isfile(path):
+        return {"schema": LEDGER_SCHEMA, "rounds": []}
+    data = read_json(path)
+    if not isinstance(data, dict) or data.get("schema") != LEDGER_SCHEMA or not isinstance(data.get("rounds"), list):
+        raise LoopError(f"{path} is not a ledger of schema {LEDGER_SCHEMA}")
+    return data
+
+
+def save_ledger(loop_dir: str, ledger: dict) -> None:
+    write_json(os.path.join(loop_dir, "ledger.json"), ledger)
+
+
+def ledger_round(ledger: dict, name: str) -> dict:
+    """The ledger entry of round `name`, added when it is not there yet."""
+    for entry in ledger["rounds"]:
+        if entry["round"] == name:
+            return entry
+    entry = {"round": name, "started": now(), "answers": [], "selection": None, "predictions": [], "result": None}
+    ledger["rounds"].append(entry)
+    return entry
+
+
+def last_result(loop_dir: str) -> Optional[Tuple[str, dict]]:
+    """The name and result.json of the last finished round, when the last round is finished."""
+    existing = rounds(loop_dir)
+    if not existing or not os.path.isfile(os.path.join(existing[-1], "result.json")):
+        return None
+    data = read_json(os.path.join(existing[-1], "result.json"))
+    if not isinstance(data, dict):
+        raise LoopError(f"{existing[-1]}/result.json is not an object")
+    return os.path.basename(existing[-1]), data
