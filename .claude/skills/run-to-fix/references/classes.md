@@ -39,8 +39,8 @@ A signature is the class plus a detail with numbers and long hexadecimal ids mas
 | `verifier_failed` | the name of the first failed test in `verifier/ctrf.json`, else the first line of `verifier/test-stdout.txt` with FAIL, ERROR, Error or assert, else `reason` or `error` of `verifier/score.json`; empty when none of these exists |
 | the others | none |
 
-In an `exception` detail, a quoted string becomes `'#'` or `"#"` before the detail is cut to 200 characters, so two
-messages that differ only in the model text they quote share a signature. A quote with no closing quote masks to the
+In an `exception` detail, a quoted string becomes `'#'` or `"#"` before the detail is cut to 200 characters. Two
+messages that differ only in the model text they quote then share a signature. A quote with no closing quote masks to the
 end of the detail. An apostrophe inside a word, as in `agent's`, opens no quote. Verifier details keep their quoted
 values, because those separate one assertion from another.
 
