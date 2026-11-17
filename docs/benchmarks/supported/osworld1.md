@@ -31,13 +31,14 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `osworld1` | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `thinking`, `vm_provider` |
+| `osworld1` | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `max_steps`, `thinking`, `vm_provider` |
 
 ## Options
 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
 | `agent` | **`m3`**, `prompt`, `claude`, `gpt54`, `openai_cua`, `qwen`, `os_symphony`, `evocua`, `autoglm`, `autoglm_v`, `mano`, `muse_spark` | Which of OSWorld's own agents runs: each its script as published, with its own prompts, action format and step limit. | `original`, `model` |
+| `max_steps` | pattern `default\|[1-9][0-9]{0,3}`, default `default` | The agent script's --max_steps: the most actions it takes on a task. default: each agent's own, as its documented invocation runs it. | `original`, `model` |
 | `thinking` | **`adaptive`**, `off` | M3_THINKING_MODE: adaptive, as run_multienv_m3.py's own documented invocation exports it (the model decides whether to think; temperature 1, no top_p), or off, the agent's code default when the variable is unset. | `original`, `model` |
 | `vm_provider` | **`docker`** | --provider_name: where the task's VM runs. docker only: the upstream's other providers need cloud accounts or a hypervisor of their own. | `original`, `model`, `yours` |
 

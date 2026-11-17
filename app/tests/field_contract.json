@@ -533,6 +533,7 @@
  },
  "workspace": {
   "Workspace": [
+   "closed",
    "created",
    "dir",
    "imports_dir",

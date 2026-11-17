@@ -16,6 +16,17 @@ class StandardBenchmarkSwitch(CompilerCase):
         for key, others in out:
             self.assertEqual(others, ["original"], key)
 
+    def test_no_time_limit_is_forced_until_the_user_types_one(self):
+        """The benchmark's and the agent's own limits apply by themselves: choosing a setup or a
+        benchmark forces none on the recipe, and a saved recipe keeps exactly what it was saved with."""
+        out = self.js('const r=C.createStandard("tau3-bench");const osw=C.createStandard("osworld1");'
+                      'const saved=JSON.parse(JSON.stringify(r));saved.timeouts={agent:45};'
+                      'process.stdout.write(JSON.stringify([r.others,"timeouts" in r,"timeouts" in osw,C.fromJSON(JSON.stringify(saved)).timeouts]));')
+        self.assertEqual(out[0], ["original"])
+        self.assertFalse(out[1])
+        self.assertFalse(out[2])
+        self.assertEqual(out[3], {"agent": 45})
+
     def test_explicit_agent_is_preserved(self):
         out = self.js('const r=C.createStandard("gsm8k");'
                       'const agent=C.standardOthers(r).find(o=>!o.setup&&!o.control&&!o.why.length);'

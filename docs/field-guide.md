@@ -6,7 +6,7 @@ Read a result, inspect its evidence, and compare runs on the same terms.
 
 ### Did it run?
 
-Check the execution status and run log first. A failed launch is not a benchmark score. A stopped or failed run may contain only some planned trials.
+Check the launch's state and the launch log first. A failed launch is not a benchmark score. A stopped or failed run may contain only some planned trials.
 
 ### What was measured?
 
@@ -32,9 +32,9 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 ## Attempts and retries {#attempts}
 
-An attempt is one run of a task, counted whatever its result: Harbor's `n_attempts` and the standard's `--attempts` set how many, 1 by default. A retry runs an attempt again after the infrastructure or the agent failed, never because the task was failed, nor after what a second try meets again: a time run out, a wrong key or model, spent credit or a spent cap (Harbor's `max_retries`, the standard's `--retries`, both 0 by default), and only the attempt's last try is kept as its trial: a job records one trial per attempt, and the pages number a task's attempts by the run's own number when its trials carry one, else by when they started.
+An attempt is one run of a task, counted whatever its result. A retry reruns an attempt after an infrastructure or agent failure; its last try is the trial.
 
-Standard runs with repeated, scored attempts record both measures in `pass_hat_k`; the job page and Compare show them for any run, Harbor or standard, that tried every task at least twice. They answer different questions.
+Standard runs with repeated, scored attempts record both measures in `pass_hat_k`. They answer different questions.
 
 ### pass@k
 
@@ -44,13 +44,13 @@ Chance that at least one of k sampled attempts passes: `1 − C(n−c,k) / C(n,k
 
 Chance that all k sampled attempts pass: `C(c,k) / C(n,k)`.
 
-Here n is the attempt count and c the passed count per task; results are averaged across eligible tasks, each read on its first n attempts, n the smallest attempt count among them, and there is no series below two attempts. The pages read every attempt that ran as a pass when resolved and a fail otherwise: an agent's timeout or crash is its own result, and an unknown outcome stays in, as in the adjusted rate. A task with an infra attempt is left out, as τ-bench leaves out an infrastructure error, and so is a task with a scored attempt, which has no pass or fail. With every task tried equally often and no infra, pass^1 is the adjusted rate. The standard's own `pass_hat_k` leaves out a unit with any error instead. Compare lists k from 1 to the smallest attempt count across its runs, over the same tasks as its rows; the job page lists k = 1 to 3 and the largest k.
+Here n is the attempt count and c the passed count per unit; results are averaged across eligible units. Units with an exception or missing verdict are excluded. The writer uses the smallest available attempt count across eligible units and emits no series below two attempts. This is separate from the trial-level adjusted solve rate.
 
-A task's attempts are counted as the adjusted rate counts trials: its passes over the attempts that ran, infra attempts apart ("2/2 passed · 1 infra"); a task nothing passed or failed shows its mean score instead. A trial page shows the attempts as tabs, with that count and an All attempts table; an attempt the standard retried shows each kept try as a tab of its own, Try 1 first, only the last counted. The job page groups them under one row per task with the instruction score once and the mean tokens and times over the attempts that ran; an agent's token count of 0 was not captured and is left out of the mean.
+The job page and Compare show both for any run that tried every task at least twice, leaving out a task with an infra attempt; an agent error is a fail. A task's pass rate is its passes over the attempts that ran, infra apart.
 
 ## Compare like with like {#compare}
 
-Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs. A comparison row counts every attempt the same way, infra apart. It disagrees when the pass rate (for a scored task, the mean score) differs or the attempts that ran ended differently, one failing verification where another timed out; a run none of whose attempts ran disagrees with one that ran. Rows whose pass rate moved most come first, each rate read as if the run had one more pass and one more fail, so one flipped attempt (1/1 against 0/1) ranks below a steady gap (2/3 against 0/3); a pass rate is never set against a mean score. Then come the rows whose rate moved by less than that reading shows (1/1 against 3/4), then the other rows that disagree. A row's outcome is the last indexed attempt, and its side-by-side page opens on that attempt with a tab for each of the others.
+Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs; a task row disagrees when its pass rate or its attempts' outcomes differ, and shows the last indexed attempt.
 
 Check dataset, model, provider, agent version, limits and execution backend before attributing a difference to the agent. Matched views omit whole-run wall time because it does not measure just the selected tasks.
 
@@ -93,7 +93,7 @@ A run Harbor never wrote (ATIF trajectories, an OpenTelemetry export), converted
 
 `nullius/runs/parse.py`
 
-One benchmark invocation. Aggregates its trials; owns solve rates and totals.
+One benchmark invocation: a run on the Runs page. Aggregates its trials; owns solve rates and totals.
 
 *Layer 2 · task*
 
@@ -101,7 +101,7 @@ One benchmark invocation. Aggregates its trials; owns solve rates and totals.
 
 `nullius/runs/parse.py`
 
-One agent against one task. Outcome, tests, phase timings, tokens, cost.
+One task attempted by one run. Outcome, tests, phase timings, tokens, cost.
 
 *Layer 3 · transcript*
 
@@ -148,8 +148,8 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `agent_version` | The version the trial's `agent_info` reports. | measured | any |
 | `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. An imported runner's arm without that declaration is not a control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |
 | `is_running` | The job records running or pending trials. Numbers are partial; a managed execution's terminal status takes precedence on the page. | measured | any |
-| `n_planned / n_retries` | Planned trials from the run record or task count, and the retries the attempts took: Harbor's count, or a standard run's trials' summed. Repeated attempts are separate trials, not retries. | measured | any |
-| `retries` | The retries a standard run allowed each attempt (`--retries`), what the Retries column counts over. 0 for any other run. | measured | any |
+| `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
+| `retries` | Retries a standard run allows each attempt (`--retries`); 0 elsewhere. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
 
 ## Trial metrics, one row per task attempt {#trials}
@@ -172,8 +172,21 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings (a search index its driver builds) are the run's, in `.work/relay-benchmark`, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
-| `n_retries` | The retries a standard run's attempt took; each try before is kept beside the job, a Try tab of its own. | measured | any |
+| `n_retries` | Retries a standard run's attempt took. | measured | any |
 | `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log reads *not recorded*, never 0. | inferred | any |
+
+## Standard run records
+
+These fields are stored in the standard's job and trial files ([Run a benchmark](cli/run.md)).
+
+| Field | What it is | Source | Works on |
+| --- | --- | --- | --- |
+| `standard.units_file` | In `config.json`: the units file's name, sha256 and ordered ids, before sharding and the limit. Units run in dataset order; merging requires the same listed units, even with `--force`, and keeps the first shard's file record. | measured | standard |
+| `standard.constraints` | In the same config: what the machine allowed the run, when set. These values can coexist with a units file and serving pins. Shards may have different machine constraints; merging keeps the first shard's config values. | measured | standard |
+| `standard.served_by` | In the same config: the allowed OpenRouter provider slugs by model, in the order tried. A job can record both its units file and its serving pins; merging different pins requires `--force`. | measured | standard |
+| `served / standard.served` | In the job's `result.json` and each trial's `result.json`, respectively: answered calls by provider (`calls`), calls naming none (`unnamed`), and each pinned model's `held`. Counts cover every relay route; the job also includes the benchmark's own relay. Tokens and cost retain their existing scope. | measured | standard |
+| `held` | `true` when every answered call names an allowed provider, `unknown` for an absent or different name, and `null` for no answered calls. Names are lowercased with spaces as dashes and compared with the slug before `/`; endpoint variants cannot be verified. Merging different pins marks the affected models `unknown`. | inferred | standard |
+| `request.routing / request.routing_asked / reply.served_by / reply.end / reply.error` | In `agent/calls.jsonl`: routing sent, the caller's routing when replaced, the answering provider, the reply's ending and any error inside a 200 response. These credential-cleaned fields leave the call's status and the unit's verdict unchanged. | measured | standard |
 
 ## Trajectory metrics, inside a single run {#trajectory}
 
@@ -236,7 +249,7 @@ Thirteen classes. The five marked **yes** under Infrastructure leave the adjuste
 | `failed_verification` | Failed verification | no | The verifier said no, on a benchmark with no patch detail: Terminal-Bench, or one read only by its reward. |
 | `patch_not_applied` | Patch did not apply | no | Malformed context lines, or edits against the wrong revision. |
 | `no_patch` | No patch produced | no | Finished without changing anything. |
-| `agent_error` | Agent error | no | Timed out, filled its context, truncated its output, refused, exited non-zero, or reached its own spending cap. A result, counted against the agent. |
+| `agent_error` | Agent error | no | Timed out, filled its context, truncated its output, refused, exited non-zero, reached its own spending cap or its cap on model calls. A result, counted against the agent. |
 | `rate_limited` | Rate limited | yes | An HTTP 429 ended the trial. A standard unit that passed keeps its pass. |
 | `api_error` | API error | yes | Any other provider failure: overloaded, unreachable, out of quota, key rejected. A standard unit that passed keeps its pass. |
 | `setup_error` | Setup error | yes | The environment or image never came up, or the unit was not run for want of a secret or docker it needs, so the agent never ran. |

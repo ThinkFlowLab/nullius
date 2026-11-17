@@ -1,25 +1,15 @@
 {% from 'runs/_runtime.html' import what_ran %}
+{% from '_tables.html' import filter_button %}
+{% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Runs — Nullius{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">
+<script src="{{ url_for('static', filename='tables.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
 
-{# Value filter for one column: a caret in the header opening a checkbox list.
-   Values start all-checked; unchecking hides the matching rows. #}
-{% macro filter_button(col) %}
-<span class="th-filter">
-  <button class="filter-btn" type="button" data-filter="{{ col }}"
-          aria-haspopup="true" aria-expanded="false" aria-label="Filter by {{ col }}">▼</button>
-  <div class="menu filter-menu" data-filter-menu="{{ col }}" hidden>
-    <div class="menu-head">
-      <button type="button" class="linkish" data-all="{{ col }}">All</button>
-      <button type="button" class="linkish" data-none="{{ col }}">None</button>
-    </div>
-    {% for value, label in choices[col] %}
-    <label><input type="checkbox" data-value="{{ value }}" checked> {{ label }}</label>
-    {% endfor %}
-  </div>
-</span>
-{% endmacro %}
+
+{#- A row's name as the launch's table shows it: the control, the agent, else its job id past the launch's prefix. #}
+{% macro row_name(r, L) %}{% set j = r.job %}{{ r.control or (j.agent_label if j and j.agent_label else r.job_id[L.prefix|length - 1:] if L.prefix.endswith('*') and r.job_id.startswith(L.prefix[:-1]) else r.job_id) }}{% endmacro %}
 
 {#- One row of a launch's table: a task check (`kind` 'control') or an agent; `part` 'fold' for a participant's
     shards as one row, 'shard' for one of them, '' for a run of one job. #}
@@ -34,7 +24,7 @@
           {%- if kind == 'control' %}
           {%- if part == 'fold' %}{{ r.control }}{% else %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ r.control }}</a>{% endif %} <span class="la-kind">task check</span>
           {%- else %}
-          {%- set name = j.agent_label if j and j.agent_label else r.job_id[L.prefix|length - 1:] if L.prefix.endswith('*') and r.job_id.startswith(L.prefix[:-1]) else r.job_id %}
+          {%- set name = row_name(r, L) %}
           {%- if part == 'fold' %}{{ name }}{% else %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ name }}</a>{% endif %}
           {%- if j and j.runner %} {{ what_ran(j) }}{% elif j and j.agent_version %} <span class="la-ver mono">{{ j.agent_version }}</span>{% endif %}
           {%- endif %}</span>
@@ -86,15 +76,15 @@
     <a class="btn sm ghost" href="{{ url_for('import_page') }}">Import</a>
     <a class="btn sm" href="{{ url_for('new_run') }}">New run</a>
   </span></div>
-{# Agents only: a control's trials are a check on the tasks, not results, and
-   are shown as their launch's task checks. #}
+{# Runs and trials are agents only: a control's trials are a check on the tasks, not results.
+   The checks are counted apart, as each launch counts them. #}
 <p class="subtitle" id="counts"
    data-runs="{{ n_agent_runs }}" data-trials="{{ n_trials }}">
-  {{ n_agent_runs }} runs<span class="dot">·</span>{{ n_trials }} trials
+  {{ launches|length }} launch{{ '' if launches|length == 1 else 'es' }}<span class="dot">·</span>{{ n_agent_runs }} run{{ '' if n_agent_runs == 1 else 's' }}<span class="dot">·</span>{{ n_trials }} trial{{ '' if n_trials == 1 else 's' }}
+  {%- if n_checks %}<span class="dot">·</span>{{ n_checks }} check{{ '' if n_checks == 1 else 's' }}{% endif %}
 </p>
 <p class="runs-glance" id="glance">
   {%- if workspace %}<span>in <b>{{ workspace.label }}</b></span>{% endif -%}
-  <span><b>{{ launches|length }}</b> launch{{ '' if launches|length == 1 else 'es' }}</span>
   {%- for s, n in states|dictsort %}<span class="st-{{ s }}"><b>{{ n }}</b> {{ s }}</span>{% endfor -%}
   <span title="Launches whose nop and oracle controls behaved on every task">task checks <b>{{ n_checked }}</b> of {{ launches|length }}</span>
 </p>
@@ -104,6 +94,11 @@
     <button class="seg oc-{{ k }}" style="flex:{{ totals[k] }}" data-outcome="{{ k }}"
             title="{{ LABELS[k] }}: {{ totals[k] }} — click to filter"></button>
   {% endif %}{% endfor %}
+</div>
+<div class="runs-filters">
+<div class="runs-views" role="group" aria-label="View">
+  <a class="rv{{ ' on' if view == 'launch' }}" href="?view=launch" data-view="launch" aria-pressed="{{ 'true' if view == 'launch' else 'false' }}">By launch</a>
+  <a class="rv{{ ' on' if view == 'all' }}" href="?view=all" data-view="all" aria-pressed="{{ 'true' if view == 'all' else 'false' }}">All runs</a>
 </div>
 <div class="legend">
   {% for k in ORDER %}{% if totals[k] %}
@@ -117,23 +112,19 @@
   {% endif %}
   <button class="chip clear" id="clear-filter" hidden>Clear filter ×</button>
 </div>
-
-<div class="runs-views" role="group" aria-label="View">
-  <a class="rv{{ ' on' if view == 'launch' }}" href="?view=launch" data-view="launch" aria-pressed="{{ 'true' if view == 'launch' else 'false' }}">By launch</a>
-  <a class="rv{{ ' on' if view == 'all' }}" href="?view=all" data-view="all" aria-pressed="{{ 'true' if view == 'all' else 'false' }}">All runs</a>
 </div>
 
 {#- By launch: runs started together ran the same tasks. Each launch is one block - its task checks (the nop and oracle
     controls), then its agents on one 0-100% scale, then the runs its record named that Harbor has not written yet. -#}
 <div id="view-launch" class="launches"{% if view != 'launch' %} hidden{% endif %}>
   {% for g in launches %}{% set L = g.launch %}
-  <section class="launch" data-launch="{{ L.key }}" aria-label="Launch {{ L.title }}">
+  <section class="launch" data-launch="{{ L.key }}" id="{{ L.key|replace(':', '-') }}" aria-label="Launch {{ L.title }}">
     {% set by_runner = g.agents|map(attribute='job')|select|map(attribute='runner')|select|first %}
     {% set words = g.agents|map(attribute='job')|select|map(attribute='runner_items')|select|first %}
     <header class="launch-head">
       <h2>{{ g.dataset_title if L.dataset else (L.name or g.dataset_title) }}{% if g.n_tasks %} · {{ g.n_tasks }} {% if words %}{{ words[0] if g.n_tasks == 1 else words[1] }}{% else %}task{{ '' if g.n_tasks == 1 else 's' }}{% endif %}{% endif %}</h2>
       <span class="launch-id mono" title="{{ 'Launched together by one Run from the builder' if L.source == 'record' and not L.launch_ids else 'Shards of one launch, run on several machines' if L.launch_ids else 'Grouped: the same dataset, started within half an hour of the first' }}">{{ L.title }}</span>
-      <span class="launch-when">{% if L.started %}{{ L.started|dt }} · {% endif %}{{ L.job_ids|length + L.pending|length }} run{{ '' if (L.job_ids|length + L.pending|length) == 1 else 's' }}</span>
+      <span class="launch-when">{% if L.started %}{{ L.started|dt }} · {% endif %}{{ g.n_runs }} run{{ '' if g.n_runs == 1 else 's' }}{% if g.n_checks %} · {{ g.n_checks }} check{{ '' if g.n_checks == 1 else 's' }}{% endif %}</span>
     </header>
     {# a runner's launch without controls is checked by its own floor and ceiling, which are arms in its table #}
     {% if g.controls or not by_runner %}
@@ -156,21 +147,24 @@
     </div>
     {% endif %}
     <footer class="launch-foot">
-      <span>{{ g.summary or 'controls only' }}</span>
+      <span>{{ g.summary or 'checks only' }}</span>
       {% if g.paused %}<span class="launch-paused">Paused after a failure: <a href="{{ url_for('job', job_id=g.paused) }}">continue or stop</a></span>{% endif %}
       <span class="header-spacer"></span>
       {% if g.recipe %}<a href="{{ url_for('new_run', run=g.recipe) }}">Open this launch's recipe</a>{% endif %}
       {% if g.compare|length >= 2 %}<a class="btn sm" href="{{ url_for('compare', job=g.compare) }}">Compare these {{ g.compare|length }}</a>
       {% elif g.agents %}<span class="faint" title="Two finished agents with a verdict are needed">Compare needs two finished agents</span>{% endif %}
+      {#- every row is of runs Nullius made: the launch goes as one, its shards with it, asked first in the dialog below #}
+      {% if g.gone %}{% call delete_ask(L, g.gone) %}{% for r in g.controls + g.agents %}<li>{{ row_name(r, L) }}{% if r.shards %} ({{ r.shards|length }} shards){% endif %}</li>{% endfor %}{% endcall %}{% endif %}
     </footer>
   </section>
   {% endfor %}
+  {{ dialogs() }}
 </div>
 
 <div id="view-all"{% if view != 'all' %} hidden{% endif %}>
 <div class="table-tools">
   <div class="menu-wrap">
-    <button class="btn ghost sm" id="col-btn" aria-haspopup="true" aria-expanded="false">▦ Columns</button>
+    <button class="btn ghost sm" id="col-btn" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-table"/></svg>Columns</button>
   </div>
   <div class="menu-wrap">
     <button class="btn ghost sm" id="density-btn" aria-pressed="false" title="Fit more columns on screen">⇔ Compact</button>
@@ -197,16 +191,16 @@
                title="Select / unselect all">
       </th>
       <th data-col="run" data-type="text">Run</th>
-      <th data-col="agent" data-type="text">Agent{{ filter_button('agent') }}</th>
+      <th data-col="agent" data-type="text">Agent{{ filter_button('agent', choices.agent) }}</th>
       <th data-col="version" data-type="text" title="The agent's version as the run recorded it, or the runner and its commit">Version</th>
       <th data-col="start" data-type="num">Start</th>
       <th data-col="end" data-type="num">End</th>
       <th data-col="time" data-type="num" class="num">Time</th>
       <th data-col="model" data-type="text">
-        Model{{ filter_button('model') }}
+        Model{{ filter_button('model', choices.model) }}
       </th>
       <th data-col="dataset" data-type="text">
-        Dataset{{ filter_button('dataset') }}
+        Dataset{{ filter_button('dataset', choices.dataset) }}
       </th>
       <th data-col="mix" data-type="num">Mix</th>
       <th data-col="trials" data-type="num" class="num">Trials</th>
@@ -238,7 +232,7 @@
         {%- if j.is_preparing %} <span class="badge"
           title="Launched: Harbor has written this run's configuration and nothing else yet. No trial has started; the row will change on its own.">preparing</span>
         {%- elif j.is_running and ended[j.job_id] %} <span class="badge"
-          title="The run that wrote this job was {{ ended[j.job_id][0] }} at {{ ended[j.job_id][1].strftime('%H:%M:%S') }}Z; Harbor never closed it, so its record still names {{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending — those trials will not run">{{ ended[j.job_id][0] }}</span>
+          title="This run was {{ ended[j.job_id][0] }} at {{ ended[j.job_id][1].strftime('%H:%M:%S') }}Z; Harbor never closed it, so its record still names {{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending. Those trials will not run.">{{ ended[j.job_id][0] }}</span>
         {%- elif j.is_running %} <span class="badge warn"
           title="{{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending — this run is not finished; its numbers are partial">running</span>{% endif %}</td>
       <td data-col="agent"><span>{{ j.agent_label or '—' }}</span>
@@ -351,29 +345,13 @@
   const sent = new Map([...document.querySelectorAll('.launch')].map(l => [l.dataset.launch, l.outerHTML]));
   sent.set('tbody', table.tBodies[0].innerHTML);
   const counts = document.getElementById('counts');
+  let head = counts.innerHTML;
   const note = document.getElementById('filter-note');
   const emptyNote = document.getElementById('empty-note');
   const clearBtn = document.getElementById('clear-filter');
   const HIDDEN_BY_DEFAULT = ['end', 'model', 'dataset', 'raw'];
 
-  const colBtn = document.getElementById('col-btn');
-  const colMenu = document.getElementById('col-menu');
-  const stored = JSON.parse(localStorage.getItem('runs.cols') || 'null');
-
-  function setCol(col, on) {
-    table.querySelectorAll(`[data-col="${col}"]`).forEach(el => el.style.display = on ? '' : 'none');
-  }
-  const showCols = () => colMenu.querySelectorAll('input[data-col]').forEach(cb => setCol(cb.dataset.col, cb.checked));
-  colMenu.querySelectorAll('input[data-col]').forEach(cb => {
-    const col = cb.dataset.col;
-    cb.checked = stored ? stored.includes(col) : !HIDDEN_BY_DEFAULT.includes(col);
-    setCol(col, cb.checked);
-    cb.addEventListener('change', () => {
-      setCol(col, cb.checked);
-      localStorage.setItem('runs.cols', JSON.stringify(
-        [...colMenu.querySelectorAll('input:checked')].map(i => i.dataset.col)));
-    });
-  });
+  const showCols = NulliusTable.columns(table, document.getElementById('col-btn'), document.getElementById('col-menu'), 'runs.cols', HIDDEN_BY_DEFAULT);
   const densityBtn = document.getElementById('density-btn');
   const setDensity = on => {
     table.classList.toggle('compact', on);
@@ -387,61 +365,19 @@
     localStorage.setItem('runs.compact', on ? '1' : '0');
   });
 
-  colBtn.addEventListener('click', () => {
-    const open = colMenu.hidden;
-    colMenu.hidden = !open;
-    colBtn.setAttribute('aria-expanded', String(open));
-  });
-  document.addEventListener('click', e => {
-    if (!colMenu.hidden && !colMenu.contains(e.target) && e.target !== colBtn) {
-      colMenu.hidden = true;
-      colBtn.setAttribute('aria-expanded', 'false');
-    }
-  });
-
-  let sortCol = null, sortDir = 1;
-  const sortRows = () => {
-    if (sortCol === null) return;
-    const type = table.tHead.rows[0].cells[sortCol].dataset.type || 'text';
-    rows.sort((a, b) => {
-      const x = key(a, sortCol, type), y = key(b, sortCol, type);
-      return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
-    }).forEach(r => table.tBodies[0].appendChild(r));
-  };
-  const key = (row, idx, type) => {
-    const cell = row.cells[idx];
-    const raw = cell.dataset.sort ?? cell.textContent.trim();
-    return type === 'num' ? parseFloat(raw) || 0 : raw.toLowerCase();
-  };
-  [...table.tHead.rows[0].cells].forEach((th, idx) => {
-    th.tabIndex = 0;
-    const sort = () => {
-      const type = th.dataset.type || 'text';
-      sortDir = sortCol === idx ? -sortDir : (type === 'num' ? -1 : 1);
-      sortCol = idx;
-      [...table.tHead.rows[0].cells].forEach(c => c.removeAttribute('data-sorted'));
-      th.dataset.sorted = sortDir > 0 ? 'asc' : 'desc';
-      sortRows();
-    };
-    th.addEventListener('click', sort);
-    th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sort(); } });
-  });
+  const sortRows = NulliusTable.sortable(table);
 
   /* ---- filters: outcome (from the bar/chips) + per-column value menus ----
      A run matches an outcome if ANY of its trials had it. Column filters are
      sets of allowed values; all must pass. */
   let active = null;
-  const colFilters = {};   // col -> Set of allowed values, or absent for "all"
+  const columns = NulliusTable.filters(document, () => applyFilter());
+  const colFilters = columns.allowed;   // col -> Set of allowed values, or null for "all"
 
   function applyFilter() {
     let shown = 0;
     rows.forEach(r => {
-      let hit = !active || r.dataset.outcomes.split(' ').includes(active);
-      if (hit) {
-        for (const [col, allowed] of Object.entries(colFilters)) {
-          if (allowed && !allowed.has(r.getAttribute('data-f-' + col))) { hit = false; break; }
-        }
-      }
+      const hit = (!active || r.dataset.outcomes.split(' ').includes(active)) && columns.passes(r);
       r.hidden = !hit;
       if (hit) shown++;
     });
@@ -453,10 +389,12 @@
     const filtered = active || Object.values(colFilters).some(Boolean);
     clearBtn.hidden = !filtered;
     emptyNote.hidden = shown > 0;
-    note.textContent = filtered ? `${shown} of ${rows.length} runs` : '';
-    counts.textContent = filtered
-      ? `${shown} of ${counts.dataset.runs} runs shown`
-      : `${counts.dataset.runs} runs · ${counts.dataset.trials} trials`;
+    // agents only, as the header counts them
+    const runRows = rows.filter(r => !r.classList.contains('control-row'));
+    const agents = runRows.filter(r => !r.hidden).length;
+    note.textContent = filtered ? `${agents} of ${runRows.length} runs` : '';
+    if (filtered) counts.textContent = `${agents} of ${counts.dataset.runs} run${counts.dataset.runs === '1' ? '' : 's'} shown`;
+    else counts.innerHTML = head;
     syncPicks();   // the header checkbox tracks visible rows only
   }
   // on the document: the bar and the chips are replaced as the runs move
@@ -465,38 +403,6 @@
     if (!el) return;
     active = active === el.dataset.outcome ? null : el.dataset.outcome;
     applyFilter();
-  });
-
-  document.querySelectorAll('.filter-menu').forEach(menu => {
-    const col = menu.dataset.filterMenu;
-    const boxes = () => [...menu.querySelectorAll('input[data-value]')];
-    const btn = document.querySelector(`.filter-btn[data-filter="${col}"]`);
-
-    const sync = () => {
-      const on = boxes().filter(b => b.checked).map(b => b.dataset.value);
-      // All checked means "no filter" — keeps the active marker honest.
-      colFilters[col] = on.length === boxes().length ? null : new Set(on);
-      btn.classList.toggle('on', Boolean(colFilters[col]));
-      applyFilter();
-    };
-    menu.addEventListener('change', sync);
-    menu.addEventListener('click', e => {
-      if (e.target.closest('[data-all]')) { boxes().forEach(b => b.checked = true); sync(); }
-      if (e.target.closest('[data-none]')) { boxes().forEach(b => b.checked = false); sync(); }
-    });
-
-    btn.addEventListener('click', e => {
-      e.stopPropagation();          // the th itself sorts; don't sort on filter
-      const open = menu.hidden;
-      document.querySelectorAll('.filter-menu').forEach(m => m.hidden = true);
-      menu.hidden = !open;
-      btn.setAttribute('aria-expanded', String(open));
-    });
-    menu.addEventListener('click', e => e.stopPropagation());
-    document.addEventListener('click', () => {
-      menu.hidden = true;
-      btn.setAttribute('aria-expanded', 'false');
-    });
   });
 
   /* ---- the two views, switched in place and kept in the address ---- */
@@ -548,11 +454,7 @@
 
   clearBtn.addEventListener('click', () => {
     active = null;
-    document.querySelectorAll('.filter-menu').forEach(menu => {
-      menu.querySelectorAll('input[data-value]').forEach(b => b.checked = true);
-      colFilters[menu.dataset.filterMenu] = null;
-    });
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('on'));
+    columns.clear();
     applyFilter();
   });
 
@@ -640,6 +542,7 @@
     const now = fresh.getElementById('counts');
     counts.dataset.runs = now.dataset.runs;
     counts.dataset.trials = now.dataset.trials;
+    head = now.innerHTML;
   }
   let seen = {{ pulse | tojson }}, asking = false;
   setInterval(async () => {

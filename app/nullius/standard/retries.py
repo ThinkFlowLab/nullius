@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from nullius.standard import ledger, pace
+from nullius.standard import ledger, pace, relay
 
 RETRIES = 0
 MAX_RETRIES = 9
@@ -31,8 +31,8 @@ NOT_RETRIED = frozenset({
     "AgentTimeoutError", "VerifierTimeoutError", "RewardFileNotFoundError", "RewardFileEmptyError",
     "VerifierOutputParseError", "ApiUsageLimitError", "AgentSafetyRefusalError", "AgentAuthenticationError",
     "ModelNotFoundError",
-    # this runner's own: a secret no second try provides, the spending caps, a stopped run
-    "EnvironmentSecretMissingError", ledger.ERROR, ledger.UNIT_ERROR, "CancelledError",
+    # this runner's own: a secret no second try provides, the spending caps and the calls cap, a stopped run
+    "EnvironmentSecretMissingError", ledger.ERROR, ledger.UNIT_ERROR, relay.CALLS_ERROR, "CancelledError",
 })
 
 

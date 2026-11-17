@@ -1,6 +1,57 @@
 /* Builder page controller: edit recipes, resolve their dependencies, and start an explicit Run. */
 (() => {
   'use strict';
+  // Served by: a row after each model field's, on OpenRouter alone: the serving providers that may answer that model,
+  // in order (recipe.py, served_by). Its picker is the Model row's (model-picker.js, list="nb-served"): typing filters
+  // the model's providers (POST /new-run/endpoints), a pick or a slug typed and Enter joins the list under it, each
+  // removable. Empty: any provider. What a row shows is C.servedRow's; `compiled()` is the server's last compile and
+  // the key of the recipe it was made for (C.servedKey). The tests run this under Node, with stand-ins for the page.
+  function servedRows({C, root, r, compiled, esc, button, providers}) {
+    const NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
+    // the model a Served by is for, as the step shows it: the field's, else the leaderboard's or the official one
+    const shown = (rec, role) => {
+      if (role === 'model') return rec.model || '';
+      const b = C.standardBench(rec) || {}, lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
+      return (!paper && rec[role + '_model']) || lb && lb[role] || b[role] || '';
+    };
+    // the server's compile, while what decides the models it names has not changed since
+    const known = rec => { const c = compiled(); return c && c.out && c.key === C.servedKey(rec) ? c.out : null; };
+    providers.subscribe(model => {
+      // A late list for a previous model never draws its row. Shared models update every field still using it,
+      // including a list refreshed by opening the picker after the cache expires.
+      const current = r(), out = known(current);
+      if (C.servedRoles(current).some(role => C.servedModelOf(role, '', out) === model)) sync();
+    });
+    // A compile's models can still apply after a pin edit; the rest of its answer needs the whole recipe's key.
+    const acceptCompile = (rec, last, out, key, currentKey) => ({
+      current: key === currentKey,
+      served: C.servedKey(JSON.parse(key)) === C.servedKey(rec) ? C.servedCompiled(last, out, key) : last,
+    });
+    const row = (rec, role) => {
+      const out = known(rec), model = C.servedModelOf(role, '', out);
+      const entry = C.servedRoles(rec).includes(role) && model ? providers(model) : null;
+      return C.servedRow(rec, role, shown(rec, role), out, entry && entry.result);
+    };
+    const chips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick"><span class="std-served-slug">${esc(slug) || '“”'}</span>`
+      + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
+    const field = (rec, role) => { if (!C.servedRoles(rec).includes(role)) return ''; const s = row(rec, role);
+      return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any."${s.visible ? '' : ' hidden'}>Served by<input list="nb-served" aria-label="Served by, ${NAME[role]}" data-served-by="${role}" data-served-model="${esc(s.model)}" data-served-pending="${s.pending}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
+        + `<span class="nb-chips std-served-list" data-served-list="${role}" data-of="${esc(JSON.stringify(s.chosen))}">${chips(role, s.chosen)}</span></label>`; };
+    // each Served by drawn again in place, as the recipe holds it now: its list, and the model its providers are listed
+    // for. The rest of the form stays as it is: the keyboard stays where it is, and an open menu stays open.
+    function sync() {
+      const rec = r();
+      root.querySelectorAll('input[data-served-by]').forEach(input => {
+        const role = input.dataset.servedBy, s = row(rec, role), list = root.querySelector(`[data-served-list="${role}"]`);
+        input.closest('.std-served').hidden = !C.servedRoles(rec).includes(role) || !s.visible;
+        Object.assign(input.dataset, {servedModel: s.model, servedPending: String(s.pending), chosen: s.chosen.join(',')});
+        input.placeholder = s.placeholder;
+        if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = chips(role, s.chosen); }
+      });
+    }
+    return {field, sync, acceptCompile};
+  }
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
@@ -114,7 +165,9 @@
   };
   // The standard's recipe as the server compiles it from the definitions (POST
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
-  let runnerOut = null, runnerKey = '', runnerTimer;
+  let runnerOut = null, runnerKey = '', runnerTimer, runnerServed = null;
+  // Served by's rows (servedRows above), given the models the server last named and what decided them (C.servedCompiled)
+  const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -374,21 +427,33 @@
     // Review's rule (nullius/standard/recipe.py): a setup's image installs what has an install; nothing else reaches its container
     const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
     const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
+    // boat: started where the run runs, with this machine's key (Settings → Sandbox); a host's programs are its prerequisites
+    const boatWhy = (list.includes('local') ? here.boat : here.boatKey) || '';
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));
-    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? '$' : '▣', title: t, tip: sub});
+    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? '$' : v === 'boat' ? '<img class="agent-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="agent-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">' : '▣', title: t, tip: sub});
     const dockerOnly = Object.entries((b || {}).environments || {}).filter(([, e]) => !e.local_ok).map(([n]) => n);
     const web = agentRun && Object.values((b || {}).environments || {}).some(e => e.network);   // an agent's public web proxy
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
       + `<div class="nb-pick-grid nb-where">${machine('local', 'This machine', 'Nullius runs it here, in runs/' + rec.name + '.')}${H.map(h => machine(h.entry, h.label, 'Over ssh: the standard\'s code at this commit is sent there, uv put there if missing; its job comes back as it runs.')).join('')}</div>`
-      + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Run hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
+      + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
       + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
       + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
       + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
-        : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>'
+        : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy)
+      + how('boat', 'Boat', 'Sandboxed: each unit in a Boat VM of its own, whose only way out is its relay.', boatWhy) + '</div>'
+      + (backend === 'boat' && !boatWhy ? boatSizes(rec) : '')
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
-      + (dockerOnly.length && backend === 'local' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - on local processes their units are recorded as not run.</p>` : '')
+      + (dockerOnly.length && backend !== 'container' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - on ${backend === 'boat' ? 'Boat' : 'local processes'} their units are recorded as not run.</p>` : '')
       + hostSetup(rec);
+  }
+  const BOAT_SIZES = [['small', 'Small'], ['default', 'Default'], ['large', 'Large'], ['xlarge', 'XLarge']];
+  function boatSizes(rec) {
+    const here = schema.standardHere || {}, why = here.boatSizes || {}, spec = here.boatSpecs || {}, size = rec.boat_size || 'small';
+    const card = ([v, t]) => tile({attr: 'std-boat-size', key: v, on: size === v && !why[v], disabled: !!why[v],
+      note: why[v] ? 'Not on this account' : spec[v] || '', title: t});
+    return '<div class="nb-sectionhead std-wherehead"><h3>VM size</h3></div>'
+      + `<div class="nb-pick-grid std-backends std-boat-sizes">${BOAT_SIZES.map(card).join('')}</div>`;
   }
   // What the chosen options of the benchmark need: an embedding model, requirements of the machine (standard.json host).
   function optionNeeds(rec) {
@@ -446,7 +511,8 @@
   function benchOptions(rec, b, scope = 'yours') {
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
     const chosen = C.chosenOf(rec);
-    return Object.entries(b.options || {}).filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
+    return Object.entries(b.options || {}).filter(([, o]) => !o.limit)   // a bound of the upstream's own is with the limits
+      .filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
       // one that applies only under another's values (a top-k, only with a retrieval) is left out otherwise
       .filter(([, o]) => Object.entries(o.when || {}).every(([k, vs]) => vs.includes((rec.bench_options || {})[k] ?? (b.options[k] || {}).default)))
       .filter(([, o]) => {
@@ -600,14 +666,15 @@
     if (step === S.model) {
       const lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
       return `<div class="nb-sectionhead"><h2>Choose the model.</h2></div>` + modelChoiceCards(rec)
-        + providerField(rec, C.PROVIDERS)
+        + providerField(rec, C.providersOf(rec))
         + field('Model', 'model', rec.model, {list:'nb-models', placeholder:paper && C.paperListed(rec) ? 'Choose a paper model' : 'Search or enter a model ID'})
+        + servedField(rec, 'model')
         // the benchmark's other models: the user simulator its conversations need, the judge that grades - each its official one
         // unless named; like the paper, the official one; like the leaderboard, its own and the options it fixes
         + (b.simulator ? (paper ? fixed('Model for the user simulator', lb && lb.simulator || b.simulator, lb && lb.simulator ? 'leaderboard' : 'official') : field('Model for the user simulator', 'simulator_model', rec.simulator_model || '', {list: 'nb-models', placeholder: b.simulator + ' (official)',
-            hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) : '')
+            hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator') : '')
         + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)',
-            hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) : '')
+            hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
         + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, v, 'leaderboard')).join('') : '')
         + keyLine(rec);
     }
@@ -620,11 +687,62 @@
         + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: '1'}) + '</div>'
         + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
         + field('Retries per attempt', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0'}) + '</div>'
+        // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
+        + ((b.needs || []).includes('agent.conversation/v1')
+          ? field('Turns per conversation', 'turns', rec.turns ?? '', {type: 'number', min: 1, placeholder: String((b.timeouts || {}).turns || ''),
+              declared: ((b.timeouts || {}).catalogue || []).includes('turns')}) : '')
+        // the most model calls a unit's agent may make, the whole unit through (recipe.py: run --max-calls); none calls no model
+        // an agent's alone: a capability's route carries the benchmark's reader too (run.py refuses it)
+        + (C.standardKeyless(rec) || (b.needs || []).some(n => n.startsWith('cap.')) ? '' : field('Model calls per ' + u.noun, 'max_calls', rec.max_calls ?? '', {type: 'number', min: 1, placeholder: 'none'}))
         // the whole run's, shared by its jobs (recipe.py); a run that calls no model spends nothing: no cap to offer
         + (C.standardKeyless(rec) ? '' : field('Spending cap (USD)', 'max_usd', rec.max_usd ?? '', {type: 'number', min: 0, placeholder: 'none'})
-          + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'}));
+          + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'}))
+        + standardTimeLimits(rec, b, u) + benchLimits(rec, b);
     }
     return '';
+  }
+  // The bounds the benchmark's upstream has of its own (its steps, its errors: options with ``limit``), in a section
+  // of the benchmark's name after the run's scope and its time limits: those the chosen datasets and participants
+  // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).
+  function benchLimits(rec, b) {
+    const chosen = C.chosenOf(rec), yours = chosen.some(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k));
+    const given = rec.bench_options || {}, of = k => given[k] ?? (b.options[k] || {}).default;
+    const rows = Object.entries(b.options || {}).filter(([, o]) => o.limit).sort(([, x], [, y]) => x.label.localeCompare(y.label))
+      .filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
+      .filter(([, o]) => (o.setups || ['yours']).some(s => s === 'yours' ? yours : chosen.includes(s)))
+      .map(([n, o]) => {
+        const [k, by] = Object.entries(o.by || {})[0] || [];
+        const def = (k && by[of(k)]) || o.default;
+        return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}<input class="nb-declared" data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
+      });
+    return rows.length ? `<div class="nb-sectionhead nb-sectionnext"><h2>${esc(b.label)}</h2></div>` + rows.join('') : '';
+  }
+  // a time limit's row, laid out as every other field of the step: its name and its unit
+  const LIMIT_TIPS = {agent: 'A task that declares its own limit keeps it unless one is typed here.', verify: 'Each task\'s own check limit unless one is typed here.'};
+  const minutesRow = (k, name, value, [placeholder, declared]) => `<label class="nb-field"${LIMIT_TIPS[k] ? ` title="${esc(LIMIT_TIPS[k])}"` : ''}>${esc(name)} (min)`
+    + `<input${declared ? ' class="nb-declared"' : ''} aria-label="${esc(name)}" type="number" min="0.1" step="any" data-std-minutes="${k}" value="${value ?? ''}" placeholder="${esc(placeholder)}" autocomplete="off"></label>`;
+  // The agent's limit while its field is empty, as [minutes, declared]: by priority, the benchmark's (a setup's own,
+  // as its Original declares it, else its limits.turn_seconds), then the agent's, then Nullius's default. Participants
+  // that would get different ones read "per setup"; a check (a control) has its own.
+  function agentDefault(rec, b) {
+    const d = b.timeouts || {}, m = s => String(+(s / 60).toFixed(2)), benchwide = (d.catalogue || []).includes('agent');
+    const ofOne = k => { const s = (b.setups || []).find(x => x.key === k); return s && s.turn_seconds ? [s.turn_seconds, true] : [d.agent, benchwide]; };
+    const each = C.chosenOf(rec).filter(k => !(b.controls || []).some(x => x.key === k)).map(ofOne);
+    const all = each.length ? each : [[d.agent, benchwide]];
+    if (all.some(x => x[0] !== all[0][0])) return ['per setup', true];
+    return [m(all[0][0]), all[0][1]];
+  }
+  // A unit's time limit for each phase, in minutes, forced on every participant (recipe.py: run --timeout);
+  // empty keeps the default: the task's own when it declares one, else the benchmark's, else Nullius's.
+  function standardTimeLimits(rec, b, u) {
+    const d = b.timeouts || {}, t = rec.timeouts || {};
+    // each field shows, greyed, the value used while it is empty; a task that declares its own keeps it
+    const m = s => String(+(s / 60).toFixed(2));
+    // [placeholder, declared]: the benchmark's or the agent's own reads as a value, Nullius's default stays grey
+    const def = {setup: [m(d.setup), false], image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), false]};
+    const label = (k, l) => k === 'agent' ? 'Agent, whole ' + u.noun : l;
+    return '<div class="nb-sectionhead nb-sectionnext"><h2>Time limits</h2></div>'
+      + C.STANDARD_PHASES.map(([k, l]) => minutesRow(k, label(k, l), t[k], def[k])).join('');
   }
   function compileRunner() {
     const rec = r(), key = JSON.stringify(rec);
@@ -637,17 +755,19 @@
         const res = await nulliusFetch('/new-run/runner', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({recipe: rec})});
         out = await res.json();
       } catch (e) { out = {errors: [{step: REVIEW, message: 'The recipe could not be compiled here: ' + e}], notes: [], review: []}; }
-      if (key !== runnerKey) return;
+      const accepted = acceptCompile(r(), runnerServed, out, key, runnerKey);
+      runnerServed = accepted.served;
+      if (step === S.model) syncServed();
+      if (!accepted.current) return;
       runnerOut = out;
       if (step === REVIEW) renderForm();
       refreshPlan();
     }, 120);
   }
-  const field = (label,key,value,{type='text',hint='',list='',min='',max='',placeholder=''}={}) => `<label class="nb-field">${label}<input aria-label="${esc(label)}" data-field="${key}" type="${type}" value="${esc(value)}" ${list?`list="${list}"`:''} ${min!==''?`min="${min}"`:''} ${max!==''?`max="${max}"`:''} ${type==='number'?'step="any"':''} placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false">${hint?`<small>${hint}</small>`:''}</label>`;
+  const field = (label,key,value,{type='text',hint='',list='',min='',max='',placeholder='',declared=false}={}) => `<label class="nb-field">${label}<input${declared?' class="nb-declared"':''} aria-label="${esc(label)}" data-field="${key}" type="${type}" value="${esc(value)}" ${list?`list="${list}"`:''} ${min!==''?`min="${min}"`:''} ${max!==''?`max="${max}"`:''} ${type==='number'?'step="any"':''} placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false">${hint?`<small>${hint}</small>`:''}</label>`;
   const select = (label,key,value,options) => `<label class="nb-field">${label}<select data-field="${key}">${options.map(([v,t])=>`<option value="${esc(v)}" ${v===value?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
   const fixed = (label,value,whose='official') => `<label class="nb-field ui-field-row"><span class="ui-field-copy">${esc(label)}</span><span class="nb-fixed">${esc(value)} (${whose})</span></label>`;
   const note = (title,text) => `<div class="nb-notice"><strong>${title}</strong>${text}</div>`;
-
   function customRows(agent = '') {
     // '' lists the shared entries (every agent, and the other owners); an id lists that agent's own --ak.
     const rows = r().custom.map((p, i) => [p, i]).filter(([p]) => agent ? p.scope === 'agent' && p.agent === agent : !p.agent);
@@ -668,7 +788,7 @@
       if(C.needsCredentials(rec)){
         const controlOnly=!rec.agents.some(id=>!schema.agents.find(a=>a.id===id)?.control);
         const tau3=rec.benchmark==='tau3-bench';
-        html+=providerField(rec,C.PROVIDERS);
+        html+=providerField(rec,C.providersOf(rec));
         if(tau3&&controlOnly)html+=`<div class="nb-two">${field('Model · customer','userModel',rec.userModel,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'})}${field('Model · evaluator','evalModel',rec.evalModel,{list:'nb-models',placeholder:'same as the customer'})}</div>`;
         else if(tau3)html+=field('Model · agent','model',rec.model,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'})+`<div class="nb-two">${field('Model · customer','userModel',rec.userModel,{list:'nb-models',placeholder:'same as the agent'})}${field('Model · evaluator','evalModel',rec.evalModel,{list:'nb-models',placeholder:'same as the customer'})}</div>`;
         else html+=field('Model','model',rec.model,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'});
@@ -725,7 +845,7 @@
       const H=schema.hosts||[], rec2=r(), on=v=>rec2.where===v;
       html='<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
         +`<div class="nb-pick-grid nb-where">${[['local','This machine','Nullius runs the script here, in runs/'+esc(rec2.name)+'.'],...H.map(h=>[h.entry,h.label,own?'Over ssh. uv and a snapshot of this runner are put there if missing; results and proofs come back as it runs.':'Over ssh. The tasks are sent there, and a repository’s Harbor as the wheels built here; uv runs the Harbor the recipe pins; the job comes back as it runs.'])].map(([v,t,sub])=>machineTile('where',v,t,sub,on(v))).join('')}</div>`
-        +(H.length?button('Test connection','id="nb-test-host"'+(rec2.where==='local'?' disabled':''))+' <span id="nb-hosttest" class="nb-note"></span>':note('No host yet','Hosts are named in Settings → Run hosts; this machine is the only choice until then.'));
+        +(H.length?button('Test connection','id="nb-test-host"'+(rec2.where==='local'?' disabled':''))+' <span id="nb-hosttest" class="nb-note"></span>':note('No host yet','Hosts are named in Settings → Hosts; this machine is the only choice until then.'));
     }
     if(step===REVIEW){
       // the standard's review names Where itself (recipe.py): its machines and its backend
@@ -892,6 +1012,9 @@
   root.addEventListener('click',async event=>{
     const b=event.target.closest('button');if(!b)return;const d=b.dataset;
     if(d.modelChoice){C.setModelChoice(r(),d.modelChoice);renderForm();refreshPlan();return;}
+    // a provider taken out of a Served by. Its row's label does not then focus the field (its menu would open); by
+    // key, the keyboard goes back to that field
+    if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);syncServed();refreshPlan();if(event.detail===0)root.querySelector(`input[data-served-by="${d.servedRole}"]`)?.focus();return;}
     if(d.benchOpt!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOpt]||{};rec.bench_options={...(rec.bench_options||{})};if(d.benchVal===o.default)delete rec.bench_options[d.benchOpt];else rec.bench_options[d.benchOpt]=d.benchVal;renderForm();refreshPlan();return;}
     if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check');return;}
     if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install');return;}
@@ -915,6 +1038,7 @@
     // the standard's machines: each a toggle, one at least; several split the run into shards
     else if(d.stdWhere){const rec=r(),list=C.whereList(rec),on=list.includes(d.stdWhere),next=on?list.filter(w=>w!==d.stdWhere):[...list,d.stdWhere];if(!next.length)return;rec.where=next.length>1?next:next[0];}
     else if(d.stdBackend){r().backend=d.stdBackend;}
+    else if(d.stdBoatSize){r().boat_size=d.stdBoatSize;}
     else if(d.harborSource){r().source=d.harborSource;}
     else if(d.benchmark){C.setBenchmark(r(),d.benchmark);}
     else if(d.where!==undefined){r().where=d.where;}
@@ -950,6 +1074,7 @@
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
     if(d.pickFind!==undefined){pickOf().q=el.value;applyPick();return;}
+    if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
     if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
       const value=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;
@@ -959,8 +1084,10 @@
       else if(!d.providerModel&&['model','userModel','evalModel'].includes(d.field)&&/^(openrouter|openai)\//.test(String(value))){rec.provider=C.providerOf(rec,value);rec[d.field]=C.bareModel(value);
         renderForm();refreshPlan();const f=root.querySelector(`[data-field="${d.field}"]`);if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);}return;}   // the provider the prefix named, and whether it is set
       else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
+      else if(['model','simulator_model','judge_model'].includes(d.field)){C.setModelOf(rec,d.field,value);syncServed();}   // the field's pin goes with its model; its Served by follows, in place
       else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
+    }else if(d.stdMinutes){const t=Object.assign({},rec.timeouts);if(el.value===''||!(Number(el.value)>0))delete t[d.stdMinutes];else t[d.stdMinutes]=Number(el.value);if(Object.keys(t).length)rec.timeouts=t;else delete rec.timeouts;refreshPlan();return;
     }else if(d.minutes){C.setPhaseMinutes(rec,d.minutes,el.value===''?'':Number(el.value));const row=el.closest('tr');if(row){const m=row.querySelector('.nb-mono');const t=C.effectiveTimeouts(rec);const p=t&&t.phases.find(x=>x.key===d.minutes);if(m&&p)m.textContent='×'+p.multiplier;}refreshPlan();return;}
     else if(d.customAgent!==undefined){rec.customAgents[Number(d.customAgent)]=el.value;refreshPlan();return;}
     else if(d.harborRepo!==undefined){const h=rec.harbor;h.repo=el.value;h.commit='';h.revision='';applyScan();}
@@ -974,8 +1101,10 @@
   // no cap, unsaid. It is said, and the field emptied, so that it shows what the recipe holds
   root.addEventListener('focusout',event=>{
     const el=event.target;
-    if(el.type==='number'&&el.dataset.field&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
+    if(el.type==='number'&&(el.dataset.field||el.dataset.stdMinutes||el.dataset.benchOptSelect)&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
   });
+  // a provider picked in a Served by, or slugs typed there and Enter: they join its list, after the ones there
+  root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);syncServed();refreshPlan();});
   root.addEventListener('change',async event=>{
     const el=event.target,d=el.dataset;
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}

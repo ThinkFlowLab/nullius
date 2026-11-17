@@ -296,6 +296,12 @@ class Recipe(unittest.TestCase):
         r.update(**kw)
         return recipe.compile(r)
 
+    def test_a_setup_and_a_judge_need_a_provider_that_serves_chat(self):
+        said = [e["message"] for e in self.compiled(others=["original"], provider="anthropic", model="claude-x")["errors"]]
+        self.assertIn("Anthropic does not serve what LoCoMo original speaks: choose another provider.", said)
+        said = [e["message"] for e in self.compiled(others=["nop"], benchmark="longmemeval", datasets=["longmemeval_s"], provider="anthropic")["errors"]]
+        self.assertIn("Anthropic does not serve what LongMemEval's judge speaks: choose another provider.", said)
+
     def test_one_original_participant_uses_the_selected_model_scope(self):
         paper = self.compiled(others=["original"], model_choice="paper", model="gpt-3.5-turbo-16k")
         custom = self.compiled(others=["original"], model_choice="any", model="vendor/their-model")

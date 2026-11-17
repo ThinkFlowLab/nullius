@@ -15,11 +15,17 @@ also supports `--only KEY` for a focused benchmark check.
   Nullius handles automatically; being technically accurate is not enough.
 - **Names, not keys**: an option that does not read carries a `label`;
   acronyms in capitals. Never cut a name: it wraps.
+- **Launch, run, trial, task** each mean one thing (`docs/concepts.md`). A
+  count says which.
 - **Generic names for groups** ("Any agent", "Every agent"), never one
   vendor's name standing for all.
 - **Every choice is a card** (`tile()`, the catalogue's shape), one size per
   group. Plain values are small cards, a select past five. Settings of
   several chosen things are sub-tabs. A notice is a toast.
+- **A set the user fills** (their providers, keys) is a select at any size,
+  so its input keeps one shape as the set grows.
+- **A delete that lists or selects** asks in a dialog. A delete that is one
+  line of yes or no asks in place.
 - **One step, one question; a setting sits with what it changes.** Dataset:
   which tasks. Agent (Memory): who runs it - the benchmark's own setups, the
   agents or capabilities that fit, the checks - and their settings. Where:
@@ -42,5 +48,7 @@ also supports `--only KEY` for a focused benchmark check.
 - Collapsible content uses the shared thin chevron and sliding transition in
   `app/static/disclosures.js`; navigation groups use the same animation. Respect
   reduced motion and keyboard activation. Filter menus and popovers are separate.
+- **One icon, one meaning.** A new kind of thing gets its own icon, never a
+  neighbour's.
 
 - Catalogue Add actions share one dialog with the entry type preselected from the page. Keep generated prompts short and refer to import skills instead of duplicating their instructions.

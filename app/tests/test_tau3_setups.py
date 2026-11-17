@@ -47,10 +47,10 @@ class Definition(unittest.TestCase):
 
     def test_each_option_applies_where_tau2_run_applies_it_at_what_earlier_runs_did(self):
         opts = lambda ds, setup: definitions.bench_options_of(BENCH, ds, None, setup)[0]
-        self.assertEqual(opts("airline", "yours"), {"task_split": "base", "user_reasoning_effort": "default"})
-        self.assertEqual(opts("airline", "original"), {"task_split": "base", "user_reasoning_effort": "default",
+        self.assertEqual(opts("airline", "yours"), {"task_split": "base", "user_reasoning_effort": "default", "max_steps": "200", "max_errors": "10"})
+        self.assertEqual(opts("airline", "original"), {"task_split": "base", "user_reasoning_effort": "default", "max_steps": "200", "max_errors": "10",
                                                        "agent_reasoning_effort": "default", "upstream_agent": "llm_agent"})
-        self.assertEqual(opts("banking_knowledge", "yours"), {"retrieval": "bm25", "user_reasoning_effort": "default"})
+        self.assertEqual(opts("banking_knowledge", "yours"), {"retrieval": "bm25", "user_reasoning_effort": "default", "max_steps": "200", "max_errors": "10"})
         self.assertEqual(opts("banking_knowledge", "original")["retrieval"], "bm25")
 
     def test_attempts_are_told_apart(self):
@@ -184,6 +184,16 @@ class Driver(unittest.TestCase):
         by = {who: b for who, b in reversed(Fake.asked)}
         self.assertEqual((by["agent"].get("reasoning_effort"), "temperature" in by["agent"]), ("high", False))
         self.assertEqual((by["user"].get("reasoning_effort"), "temperature" in by["user"]), ("low", False))
+
+    def test_the_runs_bounds_are_the_conversations_as_max_steps_and_max_errors_set_them(self):
+        for options, want in (({}, (200, 10)), ({"max_steps": "7", "max_errors": "3"}, (7, 3))):
+            d = self.driver(**options)
+            ws = self.ws("b" + "".join(options.values()))
+            Fake.lines = ["Hello.", "Bye. ###STOP###"]
+            d.request("answer", unit="0", dir=ws, setup="original", simulator=self.user,
+                      **{k: self.agent[k] for k in ("model", "base_url", "key")})
+            dt = d.request("score", unit="0", dir=ws, transcript=[], answer="", setup="original")["detail"]
+            self.assertEqual((dt["max_steps"], dt["max_errors"]), want, options)
 
     def test_attempt_n_is_the_upstreams_trial_n_minus_1_at_its_seed(self):
         d = self.driver()

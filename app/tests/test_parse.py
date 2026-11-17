@@ -81,6 +81,14 @@ class JobDiscovery(unittest.TestCase):
             self.assertFalse(parse.is_preparing_job_dir(d))
             self.assertEqual(parse.find_job_dirs([tmp]), [])
 
+    def test_a_job_read_without_its_trials(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from tests.test_workspace import _job_dir
+            _job_dir(tmp, "j")
+            d = os.path.join(tmp, "j")
+            self.assertEqual(len(parse.parse_job(d).trials), 2)
+            self.assertEqual(parse.parse_job(d, trials=False).trials, [])
+
     def test_preparing_ends_when_the_result_record_appears(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = self._job(tmp, feed=True)

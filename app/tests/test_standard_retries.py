@@ -20,7 +20,7 @@ class Retryable(unittest.TestCase):
     def test_a_result_a_wrong_setting_a_cap_or_a_stop_is_not(self):
         for et in ("AgentTimeoutError", "VerifierTimeoutError", "AgentSafetyRefusalError", "AgentAuthenticationError",
                    "ModelNotFoundError", "ApiUsageLimitError", "EnvironmentSecretMissingError", "SpendingCapError",
-                   "UnitSpendingCapError", "CancelledError"):
+                   "UnitSpendingCapError", "UnitCallCapError", "CancelledError"):
             with self.subTest(et=et):
                 self.assertFalse(retries.retryable(ended(et)))
 
