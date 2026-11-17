@@ -1202,6 +1202,12 @@ class Run:
         if self.feed is not None:
             self.feed.emit("trial.phase", name, task=unit, agent=self.other["key"], phase=phase, timeout_sec=timeout)
 
+    def over_acp(self) -> bool:
+        """Whether the unit's other is an agent driven over ACP: the one kind with a setup of its own,
+        its start and its session. A command agent starts and runs in one call, an upstream setup and a
+        control are the driver's, and a capability's process answers nothing until its first request."""
+        return self.other["_kind"] == "agent" and "command" not in self.other["start"]
+
     def unit(self, i: int, unit: str, r: int = 1, retry: int = 0) -> Optional[dict]:
         if self._stopped.is_set() or (getattr(self, "_halt", None) is not None and self._halt.is_set()):
             return None                          # the endpoint refused the run: nothing more is begun
@@ -1223,7 +1229,8 @@ class Run:
         self.progress.emit("unit", "start", unit=unit)
         self.phase(name, unit, "env_setup", None if self.upstream else self.phase_limit("setup", DRIVER_SECONDS))
         produce, score, exc, traj, logs = (None, None), None, None, None, {}
-        p0, checking = None, (None, None)        # when the agent began; the check's start and end
+        p0, p1, checking = None, None, (None, None)   # when the agent began and ended; the check's start and end
+        clock: dict = {}                         # an agent's start: "ready" when its session opened, "failed" when it ended with none
         setup: dict = {}
         transcript: List[dict] = []
         rl, environment, box, changes = None, None, None, None
@@ -1268,21 +1275,27 @@ class Run:
                 if setup.get("prepare") is not None:
                     self.prepare(setup["prepare"], box, trial)
             with self.unit_vm(ws, home, trial, setup):     # boat: the VM up and given its files before the agent's time starts
-                p0 = time.time()
-                self.phase(name, unit, "agent_run", self.agent_limit(setup) if self.other["_kind"] != "control"
-                           else self.phase_limit("agent", DRIVER_SECONDS) if self.other["key"] == "oracle" else None)
                 try:
                     with self.agent_internet(setup, box, rl, trial):
-                        if self.other["_kind"] == "control":
-                            answer = self.control_answer(unit, ws, box, name)
-                        elif self.upstream:
-                            answer, traj = self.drive_upstream(unit, ws, tag, transcript, rl)
-                        elif self.other["_kind"] == "agent":
-                            answer, traj, logs = self.drive_agent(unit, ws, home, tag, setup, transcript, rl, box, name)
-                        else:
-                            answer, traj = self.drive_feature(unit, ws, home, tag, setup, transcript, rl)
+                        p0 = time.time()         # the task's door is open: the environment is ready, the agent begins
+                        try:
+                            if self.over_acp():  # its start and session are its setup: its limit begins once it is in one
+                                self.phase(name, unit, "agent_setup", acp.INITIALIZE_SECONDS + acp.SESSION_SECONDS)
+                            else:
+                                self.phase(name, unit, "agent_run", self.agent_limit(setup) if self.other["_kind"] != "control"
+                                           else self.phase_limit("agent", DRIVER_SECONDS) if self.other["key"] == "oracle" else None)
+                            if self.other["_kind"] == "control":
+                                answer = self.control_answer(unit, ws, box, name)
+                            elif self.upstream:
+                                answer, traj = self.drive_upstream(unit, ws, tag, transcript, rl)
+                            elif self.other["_kind"] == "agent":
+                                answer, traj, logs = self.drive_agent(unit, ws, home, tag, setup, transcript, rl, box, name, clock=clock)
+                            else:
+                                answer, traj = self.drive_feature(unit, ws, home, tag, setup, transcript, rl)
+                        finally:
+                            p1 = time.time()     # before the door closes
                 finally:
-                    produce = (p0, time.time())
+                    produce = (p0, p1 if p1 is not None else time.time())
                     if box is not None:          # what the agent (or the control) left in the container, before the check
                         changes = self.box_changes(box)
             cut = self.cap_reached(rl, tag)
@@ -1359,7 +1372,8 @@ class Run:
             traj["extra"] = dict(traj.get("extra") or {}, mcp_servers=[str(m.get("name")) for m in setup["mcp"] if m.get("name")])
         res = job.write_trial(trial, job=self.name, bench=self.bench, other=self.other, model=self.model, unit=unit,
                               t0=t0, t1=time.time(), produce=produce, score=score, exception=exc, calls=calls,
-                              setup_end=p0 or time.time(), checking=checking,
+                              setup_end=p0 or time.time(), agent_ready=clock.get("ready"), agent_unready=clock.get("failed"),
+                              checking=checking,
                               trajectory=traj, extra_logs=dict(logs or {}, **({"container-changes.txt": changes} if changes else {})),
                               environment=environment or "", retries=retry, retryable=retry_ok, serving=getattr(self, "serving", None),
                               # who served the unit: its agent's calls and its judge's and simulated user's routes
@@ -1374,7 +1388,7 @@ class Run:
             self.feed.emit("trial.end", name, task=unit, agent=self.other["key"],
                            **job.feed_outcome(self.bench["score"]["kind"], score, exc),
                            **{k: v for k, v in (res.get("agent_result") or {}).items() if k in FEED_TOTALS},
-                           durations={"agent_run": round(produce[1] - produce[0], 3)} if produce[0] is not None else None)
+                           durations=job.feed_durations(res))
         self.note_refusal(exc)
         if exc and exc[0] == ledgers.ERROR and getattr(self, "_halt", None) is not None:
             with self._said:
@@ -2071,13 +2085,16 @@ class Run:
             return float(own)
         return self.turn_seconds
 
-    def drive_agent(self, unit, ws, home, tag, setup, transcript, rl, box=None, name=""):
+    def drive_agent(self, unit, ws, home, tag, setup, transcript, rl, box=None, name="", clock=None):
         """The agent over ACP, its session's ``cwd`` the unit's workspace - in
         an own image (``box``), the container's working directory, which this
         machine does not see. Files are served (``acp.Client(fs=)``) only to an
         agent running here: one in a container has its workspace mounted, and
         serving it from this machine would let it swap a folder for a link
-        between the check and the open and reach any file of the user's."""
+        between the check and the open and reach any file of the user's.
+        ``clock`` gets when its setup ended: ``ready``, its session open, or
+        ``failed``, its start over with none (it never answered, it exited, the
+        run was stopped)."""
         a = self.other
         env = agent_env(a, self.inst, home, rl.unit_url, self.model, self.options)
         log = os.path.join(os.path.dirname(ws), "agent", "agent.log")
@@ -2098,10 +2115,13 @@ class Run:
                 except TimeoutError as e:
                     # the agent never answered its start: this unit's setup failed, not the run
                     raise _Ended("AgentSetupTimeoutError", f"the agent did not answer {e} in time ({c.tail()})")
+                if clock is not None:
+                    clock["ready"] = time.time()         # started and in its session: its setup ends, its run begins
                 prompt = setup["prompt"]
                 answer = ""
                 # one limit for the agent's whole work on the unit, every turn and the simulated user's between them
                 limit = self.agent_limit(setup)
+                self.phase(name, unit, "agent_run", limit)
                 deadline = time.monotonic() + limit
 
                 def left() -> float:
@@ -2153,6 +2173,8 @@ class Run:
             except jsonl.Failed as e:
                 raise _Ended("VerifierError", "the benchmark's next turn: " + str(e), retryable=not isinstance(e, jsonl.NoReply))
         finally:
+            if clock is not None and "ready" not in clock:
+                clock["failed"] = time.time()            # its start ended with no session: all of it was its setup
             c.close()
         raw = "".join(json.dumps(e) + "\n" for e in events)
         return answer, job.trajectory_from_events(events, rl.calls(tag), a, self.model, f"{self.name}/{unit}"), {"acp.jsonl": raw}

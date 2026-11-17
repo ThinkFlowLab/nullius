@@ -165,8 +165,8 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `task_broken` | On the feasibility page: `nop`, which changes nothing, failed passing tests: the task is broken as shipped, or its verifier unstable. | derived | swe-bench |
 | `patch_exists / patch_applied` | Whether a patch was produced, and whether it applied. | measured | swe-bench |
 | `dur_total` | Trial wall clock. | measured | any |
-| `dur_env / dur_agent_setup / dur_agent / dur_verifier` | The four phases Harbor records, drawn in order. An imported trial charges its whole window to `dur_agent`. | measured | any |
-| `dur_other` | `dur_total` minus the phases: on Harbor, image pull, container start and teardown; on an imported script run, the wait for the judge; on a standard run, the unit's setup, the benchmark's driver and its scorer. | derived | any |
+| `dur_env / dur_agent_setup / dur_agent / dur_verifier` | The four phases a trial records, drawn in order. An imported trial charges its whole window to `dur_agent`. | measured | any |
+| `dur_other` | `dur_total` minus the phases: waits and teardown. | derived | any |
 | `n_input_tokens` | Prompt tokens for the trial. | measured | any |
 | `n_cache_tokens` | Prompt tokens read from cache, excluding cache writes: a subset, never added to input tokens. Older standard records may include writes; stored results are not rewritten. | measured | any |
 | `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings (a search index its driver builds) are the run's, in `.work/relay-benchmark`, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
