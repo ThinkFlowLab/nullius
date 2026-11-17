@@ -1,0 +1,71 @@
+{#- The card toolkit: items as cards over the same field list as the table toolkit (_tables.html), run by
+    static/tables.js (NulliusTable.cards) and styled in catalogue/catalogue.css. A field's `card` names the slot it
+    fills; a field without one is not on the card, and `table` false keeps a card-only field off a table. Slots, in
+    order: `status`, `tag`*, `meta`, `check` (the top row); `icon`, `title` (exactly one); `text`; `badge`*, `note`*;
+    `stat` (up to 3, below a line); `alert`; `action`* (* any number, the others at most one).
+    An item is a dict of display values by field key: a string, a dict {text, class, title, label, href, value} or a
+    list of them, empty for none; plus `href` (its title's link), `id`, `search` (what the search reads) and `keys`.
+    A field's `class` goes on each of its values; `card_label` names a stat when its column header does not, and a
+    value's `label` names it for that item; `style` 'code' sets the text as code; `icon` puts #i-<icon> before a
+    note. `icon` values are image URLs: when one item has one, the others show initials; when none has, no icon. -#}
+{% from '_tables.html' import controls, empty_note %}
+
+{#- Each value of `fields` in `item`, as a dict, to the call block with its field. #}
+{% macro each(item, fields) %}{% for f in fields %}{% set v = item.get(f.key) %}
+{%- for x in ([v] if v is string or v is mapping or v is number else v or []) if x is not none and x != '' %}{{ caller(f, x if x is mapping else {'text': x}) }}{% endfor %}{% endfor %}{% endmacro %}
+
+{#- A value as a pill: its field's class and its own, its tooltip. #}
+{% macro pill(f, v) %}{% set cls = [f.class, v.class]|select|join(' ') %}<span{% if cls %} class="{{ cls }}"{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ v.text }}</span>{% endmacro %}
+
+{# A collection of cards (NulliusTable.cards): its controls row, its cards, the note when none passes. `id` names it;
+   `search`, `choices`, `only` as the table's controls. The call block, when given, writes the cards instead (grid
+   for each group, such as the Benchmarks' shelves); a section in it marked data-group hides when none of its cards
+   shows, and its data-group-n counts them. #}
+{% macro cards(id, cols, items, search='', choices={}, only={}, empty='No items match.') %}
+{{ controls(id, cols, search, choices=choices, only=only, sort=false) }}
+<div id="{{ id }}" data-cards>{% if caller is defined %}{{ caller() }}{% else %}{{ grid(cols, items, choices=choices) }}{% endif %}</div>
+{{ empty_note(id, empty) }}
+{% endmacro %}
+
+{# The cards of `items`. `every`: the collection the icon rule reads, when `items` is a part of it; `choices`: the
+   filtered fields, each written on the card for the filter. #}
+{% macro grid(cols, items, every=none, choices={}) %}
+{%- set fields = cols|selectattr('card')|list %}
+{%- set by = {} %}{% for slot in ['status', 'tag', 'meta', 'check', 'icon', 'title', 'text', 'badge', 'note', 'stat', 'alert', 'action'] %}{% set _ = by.update({slot: fields|selectattr('card', 'equalto', slot)|list}) %}{% endfor %}
+{#- the limits, each failing the page: one title, at most three stats, at most one of each other single slot #}
+{%- if not by.title or by.stat|length > 3 %}{{ cards_take_one_title_and_at_most_three_stats() }}{% endif %}
+{%- for slot in ['status', 'meta', 'check', 'icon', 'title', 'text', 'alert'] if by[slot]|length > 1 %}{{ cards_take_one_of_each_single_slot() }}{% endfor %}
+{%- set icon = by.icon[0] if by.icon else none %}
+{%- set icons = icon and (every or items)|selectattr(icon.key)|list|length > 0 %}
+<div class="bench-grid">
+{%- for item in items %}
+  <article class="bench-card" data-card{% if item.get('id') %} id="{{ item.get('id') }}"{% endif %}{% if item.get('search') %} data-search="{{ item.get('search') }}"{% endif %}{% if item.get('keys') %} data-keys="{{ item.get('keys') }}"{% endif %}
+    {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.text }}&#10;{% endcall %}"{% endfor %}>
+    {%- set top %}{% call(f, v) each(item, by.status) %}{{ pill(f, v) }}{% endcall %}
+      {%- set tags %}{% call(f, v) each(item, by.tag) %}{{ pill(f, v) }}{% endcall %}{% endset %}{% if tags %}<span class="bench-card-tags">{{ tags }}</span>{% endif %}
+      {%- call(f, v) each(item, by.meta) %}<span class="bench-harness">{{ v.text }}</span>{% endcall %}
+      {%- call(f, v) each(item, by.check) %}<input type="checkbox" data-check value="{{ v.value }}" aria-label="{{ v.text }}">{% endcall %}{% endset %}
+    {%- if top %}
+    <div class="bench-card-top">{{ top }}</div>{% endif %}
+    {%- set title = by.title[0] %}{% set name = item.get(title.key) %}{% set name = name.text if name is mapping else name %}
+    <div class="bench-card-title">{% if icons %}{% set src = item.get(icon.key) %}
+      {%- if not src %}<span class="ws-avatar {{ icon.class }}" aria-hidden="true">{{ name[:2]|upper }}</span>
+      {%- elif '#' in src %}<span class="{{ icon.class }}" aria-hidden="true"><svg class="agent-logo"><use href="{{ src }}"/></svg></span>
+      {%- else %}<span class="{{ icon.class }}" aria-hidden="true"><img class="agent-logo" src="{{ src }}" alt=""></span>{% endif %}{% endif -%}
+      <a class="card-link" href="{{ item.get('href') }}">{{ name }}</a></div>
+    {%- call(f, v) each(item, by.text) %}
+    <div class="bench-card-domain{{ ' ' ~ f.class if f.class }}">{% if f.style == 'code' %}<code>{{ v.text }}</code>{% else %}{{ v.text }}{% endif %}</div>{% endcall %}
+    {%- set badges %}{% call(f, v) each(item, by.badge) %}{{ pill(f, v) }}{% endcall %}{% endset %}{% if badges %}
+    <div class="bench-card-runs run-tags" role="group" aria-label="{{ by.badge|map(attribute='label')|join(', ') }}">{{ badges }}</div>{% endif %}
+    {%- call(f, v) each(item, by.note) %}
+    <div class="bench-card-setup"{% if v.title %} title="{{ v.title }}"{% endif %}>{% if f.icon %}<svg class="ic" aria-hidden="true"><use href="#i-{{ f.icon }}"/></svg>{% endif %}{{ v.text }}</div>{% endcall %}
+    {%- set stats %}{% call(f, v) each(item, by.stat) %}<div><dt>{{ v.label or f.card_label or f.label }}</dt><dd{% if f.class %} class="{{ f.class }}"{% endif %}>{{ v.text }}</dd></div>{% endcall %}{% endset %}{% if stats %}
+    <dl class="bench-stats">{{ stats }}</dl>{% endif %}
+    {%- call(f, v) each(item, by.alert) %}
+    <div class="bench-card-blocker">{{ v.text }}</div>{% endcall %}
+    {%- set actions %}{% call(f, v) each(item, by.action) %}{% if v.href %}<a class="btn ghost sm" href="{{ v.href }}">{{ v.text }}</a>{% else %}<button type="button" class="btn ghost sm"{% if v.value %} value="{{ v.value }}"{% endif %}>{{ v.text }}</button>{% endif %}{% endcall %}{% endset %}{% if actions %}
+    <div class="bench-card-actions">{{ actions }}</div>{% endif %}
+  </article>
+{%- endfor %}
+</div>
+{%- endmacro %}

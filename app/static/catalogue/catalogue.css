@@ -30,6 +30,16 @@
 .bench-card { display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-soft); color: var(--text); transition: border-color .13s ease; }
 .bench-card:hover { border-color: var(--accent); text-decoration: none; }
 .bench-card:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
+/* a card of the card toolkit (templates/_cards.html): its title's link stretched over it, so the whole card opens it;
+   a checkbox, a button or a value with a tooltip sits above that link */
+article.bench-card { position: relative; }
+.card-link, .card-link:hover { color: inherit; text-decoration: none; }
+.card-link::after { content: ""; position: absolute; inset: -1px; border-radius: 12px; }
+.card-link:focus-visible { outline: none; }
+.card-link:focus-visible::after { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
+.bench-card :is(input, button, .btn, [title]) { position: relative; z-index: 1; }
+.bench-card-top .bench-harness { margin-left: auto; }
+.bench-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .bench-shelf.st-community .bench-card { background: transparent; border-style: dashed; border-color: var(--border); }
 .bench-shelf.st-community .bench-card:hover { border-color: var(--accent); }
 .bench-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -45,6 +55,11 @@
 .bench-stats b { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .bench-stats b.word { font-size: 14px; font-weight: 500; line-height: 1.35; padding-top: 3px; }
 .bench-stats span { font-size: 12px; color: var(--text-faint); }
+/* the card toolkit's stats: each its label, then its value */
+.bench-stats:is(dl) { margin: auto 0 0; }
+.bench-stats dd { margin: 0; font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.bench-stats dd.word { font-size: 14px; line-height: 1.35; padding-top: 3px; }
+.bench-stats dt { font-size: 12px; color: var(--text-faint); }
 .bench-card-blocker { font-size: 13px; line-height: 1.5; color: var(--text-dim); }
 .bench-none { color: var(--text-dim); font-size: 14px; }
 

@@ -1,0 +1,122 @@
+"""The card toolkit: its macros (templates/_cards.html) as a page renders them, and its script
+(NulliusTable.cards in static/tables.js) run under Node on the table toolkit's stand-in DOM."""
+import re
+import unittest
+
+import jinja2
+
+from .test_tables import APP, node
+
+# One field of each slot, given in an order unlike the card's.
+COLS = [dict(key='stat1', label='Tasks', card='stat'), dict(key='alert', label='Blocker', card='alert'),
+        dict(key='title', label='Name', card='title'), dict(key='act', label='Open', card='action'),
+        dict(key='stat2', label='Scored by', card_label='Scorer', card='stat', **{'class': 'word'}),
+        dict(key='note', label='Needs', card='note', icon='wrench'), dict(key='badge', label='Runs with', card='badge', **{'class': 'run-tag'}),
+        dict(key='text', label='About', card='text', style='code'), dict(key='icon', label='Logo', card='icon', **{'class': 'bench-mark'}),
+        dict(key='check', label='Pick', card='check'), dict(key='meta', label='Version', card='meta'),
+        dict(key='tag', label='Kind', card='tag', **{'class': 'cat-tag'}), dict(key='status', label='State', card='status'),
+        dict(key='hidden', label='Only in a table')]
+FULL = {'href': '/a', 'id': 'a', 'search': 'Alpha one', 'keys': 'a', 'stat1': {'text': 5, 'label': 'Tasks each'}, 'alert': 'Blocked',
+        'title': 'Alpha', 'act': {'text': 'Open', 'href': '/a/open'}, 'stat2': 'tests', 'note': {'text': 'needs docker', 'title': 'Install docker'},
+        'badge': [{'text': 'Nullius', 'class': 'rt-standard'}, 'Harbor'], 'text': 'a.port/v1', 'icon': '/m.svg#bm-a',
+        'check': {'text': 'Pick Alpha', 'value': 'a'}, 'meta': 'v1', 'tag': 'coding', 'status': 'ready', 'hidden': 'never on a card'}
+
+
+class Macros(unittest.TestCase):
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(APP / "templates"), autoescape=True)
+
+    def render(self, cols, items, **kw):
+        return re.sub(r">\s+<", "><", self.env.from_string("{% from '_cards.html' import cards %}{{ cards('c', cols, items, **kw) }}")
+                      .render(cols=cols, items=items, kw=kw))
+
+    def test_slots_come_in_their_order_and_a_field_without_one_stays_off(self):
+        html = self.render(COLS, [FULL])
+        order = ['>ready<', 'class="cat-tag">coding<', 'class="bench-harness">v1<', 'aria-label="Pick Alpha"', 'href="/m.svg#bm-a"',
+                 'class="card-link" href="/a">Alpha<', '<code>a.port/v1</code>', 'class="run-tag rt-standard">Nullius<', 'class="run-tag">Harbor<',
+                 'title="Install docker"><svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg>needs docker<',
+                 '<dl class="bench-stats"><div><dt>Tasks each</dt><dd>5</dd></div><div><dt>Scorer</dt><dd class="word">tests</dd></div></dl>',
+                 'class="bench-card-blocker">Blocked<', '<a class="btn ghost sm" href="/a/open">Open</a>']
+        at = [html.index(part) for part in order]
+        self.assertEqual(at, sorted(at))
+        self.assertNotIn('never on a card', html)
+        self.assertIn('<article class="bench-card" data-card id="a" data-search="Alpha one" data-keys="a">', html)
+        self.assertEqual(html.count('<a '), 2)                                               # one link to the card, and its action
+
+    def test_empty_slots_take_no_space(self):
+        html = self.render(COLS, [{'href': '/b', 'title': 'Beta', 'stat1': 0, 'badge': [], 'tag': '', 'note': None}])
+        for absent in ('bench-card-top', 'bench-card-domain', 'bench-card-runs', 'bench-card-setup', 'bench-card-blocker', 'bench-card-actions'):
+            self.assertNotIn(absent, html)
+        self.assertIn('<dl class="bench-stats"><div><dt>Tasks</dt><dd>0</dd></div></dl>', html)   # a zero is a value
+        self.assertNotIn('bench-stats', self.render(COLS[2:3], [{'href': '/b', 'title': 'Beta'}]))
+
+    def test_one_title_at_most_one_text_and_three_stats(self):
+        title, stat, text = COLS[2], COLS[0], COLS[7]
+        for cols in ([stat], [title, title], [title, text, text], [title] + [stat] * 4, [title, COLS[8], COLS[8]]):
+            with self.subTest(cols=[c['card'] for c in cols]), self.assertRaises(jinja2.UndefinedError):
+                self.render(cols, [FULL])
+        self.render([title] + [stat] * 3, [FULL])
+
+    def test_initials_only_beside_a_real_icon(self):
+        cols = [COLS[8], COLS[2]]
+        html = self.render(cols, [{'href': '/a', 'title': 'Alpha', 'icon': '/logo.svg'}, {'href': '/b', 'title': 'beta'}])
+        self.assertIn('<span class="bench-mark" aria-hidden="true"><img class="agent-logo" src="/logo.svg" alt=""></span>', html)
+        self.assertIn('<span class="ws-avatar bench-mark" aria-hidden="true">BE</span>', html)
+        html = self.render(cols, [{'href': '/a', 'title': 'Alpha'}, {'href': '/b', 'title': 'Beta', 'icon': None}])
+        self.assertNotIn('aria-hidden="true"><', html.split('data-cards>')[1])              # no icon slot at all
+
+    def test_values_are_escaped(self):
+        bad = '<script>x</script>"'
+        html = self.render(COLS, [dict(FULL, title=bad, text=bad, search=bad, tag={'text': bad, 'title': bad}, stat2=bad, href='/"x')],
+                           choices={'tag': [(bad, bad)]})
+        self.assertNotIn('<script>', html)
+        self.assertIn('&lt;script&gt;x&lt;/script&gt;&#34;', html)
+        self.assertIn('href="/&#34;x"', html)
+        self.assertIn('data-f-tag="&lt;script&gt;x&lt;/script&gt;&#34;&#10;"', html)
+
+    def test_controls_search_and_filter_without_sort(self):
+        html = self.render(COLS[2:3], [{'href': '/a', 'title': 'A', 'tag': 'x'}], search='Find', choices={'title': [('A', 'A')]},
+                           empty='No card matches.')
+        self.assertIn('id="c-tools"', html)
+        self.assertIn('data-search placeholder="Find"', html)
+        self.assertIn('data-filter-menu="title"', html)
+        self.assertIn('data-f-title="A&#10;"', html)
+        self.assertNotIn('data-tools-btn="sort"', html)
+        self.assertIn('<p class="empty-note" data-empty="c" hidden>No card matches.</p>', html)
+
+
+class Script(unittest.TestCase):
+    def test_search_and_filter_hide_cards_and_their_empty_groups(self):
+        got = node(r'''
+const card = (name, search, kind) => el('article', {'data-card': '', 'data-search': search, 'data-f-kind': kind + '\n'}, name);
+const group = (state, ...cards) => el('section', {'data-group': ''}, el('h2', {}, state, el('span', {'data-group-n': ''}, String(cards.length))), ...cards);
+const a = group('official', card('A', 'Alpha coding', 'coding'), card('B', 'Beta math', 'math'));
+const b = group('community', card('C', 'Gamma coding', 'coding'));
+const tools = el('div', {id: 'c-tools'}, el('label', {}, el('input', {type: 'search', 'data-search': ''})),
+  el('button', {'data-tools-btn': 'filter'}, 'Filter', el('span', {class: 'tools-count', hidden: true})),
+  el('div', {'data-tools': 'filter', hidden: true}, el('button', {'data-clear': ''}),
+     el('fieldset', {'data-filter-menu': 'kind'}, ...['coding', 'math'].map(v => el('label', {}, el('input', {type: 'checkbox', 'data-value': v, checked: true}))))));
+const root = el('div', {id: 'c', 'data-cards': ''}, a, b), empty = el('p', {'data-empty': 'c', hidden: true}, 'No card matches.');
+document.appendChild(el('main', {}, tools, root, empty));
+T.cards(root);
+const shown = () => root.querySelectorAll('[data-card]').filter(c => !c.hidden).map(c => c.textContent);
+const state = () => [shown(), [a, b].map(g => [g.hidden, g.querySelector('[data-group-n]').textContent]), empty.hidden];
+const type = q => { const box = tools.querySelector('[data-search]'); box.value = q; box.dispatch('input'); };
+const out = [state()];
+type('CODING'); out.push(state());                                      // any case
+type('coding gamma'); out.push(state());                                // every word, in any order: an emptied group hides
+type('zzz'); out.push(state());                                         // nothing: the note
+type(''); tools.querySelector('[data-value="coding"]').click(); out.push(state());   // the filter
+tools.querySelector('[data-clear]').click(); out.push(state());
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got, [
+            [["A", "B", "C"], [[False, "2"], [False, "1"]], True],
+            [["A", "C"], [[False, "1"], [False, "1"]], True],
+            [["C"], [[True, "0"], [False, "1"]], True],
+            [[], [[True, "0"], [True, "0"]], False],
+            [["B"], [[False, "1"], [True, "0"]], True],
+            [["A", "B", "C"], [[False, "2"], [False, "1"]], True]])
+
+
+if __name__ == "__main__":
+    unittest.main()

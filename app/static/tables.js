@@ -1,6 +1,6 @@
 /* The table toolkit's script: each function is a feature a table.grid opts
    into (the macros of templates/_tables.html; their styles in style.css,
-   "the table toolkit"). */
+   "the table toolkit"), and the card toolkit's (templates/_cards.html). */
 window.NulliusTable = {
   /* A header with data-type sorts its column on a click or Enter; num sorts
      descending first. A cell's data-sort wins over its text. A header that
@@ -124,15 +124,13 @@ window.NulliusTable = {
     btn.addEventListener('focusout', left);
   },
 
-  /* A table's search box, Filter and Sort by menus (the controls macro),
-     under `tools`; each optional. Search keeps the rows whose data-search
-     holds every word of the query, in any order and case; Escape clears it. Filter counts the columns it
-     narrows; Sort by sets the sort, and follows a header click. `changed`
-     runs after any of them. Returns {passes, resort}, as filters and sortable
-     do. */
-  toolbar(table, tools, changed) {
-    const [fbtn, fmenu, sbtn, smenu] = ['filter', 'sort'].flatMap(k =>
-      [tools.querySelector(`[data-tools-btn="${k}"]`), tools.querySelector(`[data-tools="${k}"]`)]);
+  /* A controls row's search box and Filter menu (the controls macro), under
+     `tools`; each optional. Search keeps the rows (or cards) whose
+     data-search holds every word of the query, in any order and case;
+     Escape clears it. Filter counts the columns it narrows. `changed` runs
+     after either. Returns passes(row). */
+  narrow(tools, changed) {
+    const [fbtn, fmenu] = [tools.querySelector('[data-tools-btn="filter"]'), tools.querySelector('[data-tools="filter"]')];
     const q = tools.querySelector('[data-search]');
     if (q) {
       q.addEventListener('input', changed);
@@ -155,6 +153,15 @@ window.NulliusTable = {
       fmenu.querySelector('[data-clear]').addEventListener('click', () => { f.clear(); narrowed(); });
       this.menu(fbtn, fmenu);
     }
+    return row => f.passes(row) && found(row);
+  },
+
+  /* A table's controls row: narrow's search and Filter, and the Sort by
+     menu, which sets the sort and follows a header click. Returns
+     {passes, resort}, as narrow and sortable do. */
+  toolbar(table, tools, changed) {
+    const passes = this.narrow(tools, changed);
+    const [sbtn, smenu] = [tools.querySelector('[data-tools-btn="sort"]'), tools.querySelector('[data-tools="sort"]')];
     const heads = [...table.tHead.rows[0].cells];
     const sync = () => {
       if (!smenu) return;
@@ -173,7 +180,7 @@ window.NulliusTable = {
       sync();
       this.menu(sbtn, smenu);
     }
-    return {passes: row => f.passes(row) && found(row), resort};
+    return {passes, resort};
   },
 
   /* A table of the table macro (data-table): its controls row (id
@@ -191,6 +198,25 @@ window.NulliusTable = {
     let first = () => {};
     const t = this.toolbar(table, tools, () => first());
     first = this.pager(table, table.id + '.per', t.passes, ticks);
+  },
+
+  /* A collection of the cards macro (data-cards): its controls row (id
+     <id>-tools) shows the cards (data-card) that pass, the note when none
+     does; a data-group holding cards hides when none of them shows, and its
+     data-group-n counts those that do. */
+  cards(root) {
+    const items = [...root.querySelectorAll('[data-card]')], empty = document.querySelector(`[data-empty="${CSS.escape(root.id)}"]`);
+    const draw = () => {
+      items.forEach(c => { c.hidden = !passes(c); });
+      root.querySelectorAll('[data-group]').forEach(g => {
+        const n = [...g.querySelectorAll('[data-card]')].filter(c => !c.hidden).length, count = g.querySelector('[data-group-n]');
+        g.hidden = !n;
+        if (count) count.textContent = n;
+      });
+      empty.hidden = items.some(c => !c.hidden);
+    };
+    const passes = this.narrow(document.getElementById(root.id + '-tools'), draw);
+    draw();
   },
 
   /* A checkbox column (a `check` column, check_cell in each row): the header
@@ -276,10 +302,14 @@ window.NulliusTable = {
   },
 };
 
-/* Every table with sticky columns, and every table of the table macro, set up once the page is read. */
-const nulliusTables = () => document.querySelectorAll('table.grid').forEach(t => {
-  if (t.querySelector('.sticky-col')) NulliusTable.sticky(t);
-  if (t.hasAttribute('data-table')) NulliusTable.wire(t);
-});
+/* Every table with sticky columns, every table of the table macro and every collection of the cards macro, set up
+   once the page is read. */
+const nulliusTables = () => {
+  document.querySelectorAll('table.grid').forEach(t => {
+    if (t.querySelector('.sticky-col')) NulliusTable.sticky(t);
+    if (t.hasAttribute('data-table')) NulliusTable.wire(t);
+  });
+  document.querySelectorAll('[data-cards]').forEach(c => NulliusTable.cards(c));
+};
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', nulliusTables);
 else nulliusTables();

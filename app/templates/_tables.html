@@ -8,7 +8,8 @@
    `check`: blank, a checkbox that ticks every visible row (check_cell in each row); `sr`: the label for a screen
    reader only; `title`: its tooltip; `menu` false: not in the Columns menu; `fixed`: in it, always on; `off`: off
    until the viewer chooses; `width` in a table macro's table: 'fit' (default), as wide as its widest cell on one
-   line, or 'expand', the rest of the width, wrapping. #}
+   line, or 'expand', the rest of the width, wrapping; `table` false: on cards only (_cards.html, where `card` names
+   the slot a field fills), never in a table. #}
 
 {#- The class attribute of a column's header or cell: its alignment, whether it is pinned, `edge` whether it is the
     last pinned; `extra` adds to it. #}
@@ -33,6 +34,7 @@
    writes that cell with the cell macro. Opt-ins: `search`, `columns`, `choices`, `only`, `views`, `actions` as
    controls'; `empty` and `noun` as pager's. #}
 {% macro table(id, cols, rows, tr, class='', search='', columns=false, choices={}, only={}, empty='No rows match.', noun='rows', views=none, actions=none) %}
+{%- set cols = cols|rejectattr('table', 'sameas', false)|list %}
 {{ controls(id, cols, search, columns, choices, only, views, actions) }}
 {%- for c in cols if c.width == 'expand' %}
 <style>#{{ id }} > * > tr > :nth-child({{ cols.index(c) + 1 }}) { width: auto; min-width: var(--expand-min); white-space: normal; overflow-wrap: anywhere; }</style>
@@ -62,13 +64,13 @@
 {# A table's controls row (static/tables.js `toolbar`) over the columns `cols`; each feature on only
    when asked. `search`: the search box's name and placeholder, over each row's data-search text; `columns`: the
    Columns menu; `choices`: column -> its (value, label) pairs, a Filter menu of them; `only`: column -> the one value
-   ticked at load, the others unticked; then the Sort by menu. `views` and `actions`: macros writing a page's own
-   buttons, each any number of them, run by the page: views (how the table looks) before Columns, actions (on the
-   rows or the selection) last. The search goes left, the buttons right. `id`: the table's. #}
-{% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none) %}
+   ticked at load, the others unticked; then the Sort by menu, unless `sort` is false. `views` and `actions`: macros
+   writing a page's own buttons, each any number of them, run by the page: views (how the table looks) before
+   Columns, actions (on the rows or the selection) last. The search goes left, the buttons right. `id`: the table's. #}
+{% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none, sort=true) %}
 <div class="table-tools table-controls" id="{{ id }}-tools">
   {% if search %}<label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-search placeholder="{{ search }}" aria-label="{{ search }}" autocomplete="off" spellcheck="false"></label>{% endif %}
-  <div class="table-buttons">
+  {% if columns or choices or sort or views or actions %}<div class="table-buttons">
   {{ slot('views', views) }}
   {% if columns %}<div class="menu-wrap">{{ columns_button() }}{{ columns_menu(cols) }}</div>{% endif %}
   {% if choices %}<div class="menu-wrap">
@@ -85,7 +87,7 @@
     </div>
   </div>
   {% endif %}
-  <div class="menu-wrap">
+  {% if sort %}<div class="menu-wrap">
     <button class="btn ghost sm" type="button" data-tools-btn="sort" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-sort"/></svg>Sort by</button>
     <div class="menu tools-menu" data-tools="sort" hidden>
       <fieldset>
@@ -99,9 +101,9 @@
         <label><input type="radio" name="{{ id }}-sort-dir" data-sort-dir value="desc"> Descending</label>
       </fieldset>
     </div>
-  </div>
+  </div>{% endif %}
   {{ slot('actions', actions) }}
-  </div>
+  </div>{% endif %}
 </div>
 {% endmacro %}
 
@@ -128,7 +130,7 @@
    and the page before and after; `empty` shows when no row passes. After a change, what is shown is read out once
    typing pauses, counted in `noun`. #}
 {% macro pager(table, empty='No rows match.', noun='rows') %}
-<p class="empty-note" data-empty="{{ table }}" hidden>{{ empty }}</p>
+{{ empty_note(table, empty) }}
 <div class="table-tools table-pager" data-pager="{{ table }}">
   <label class="table-note">Show <select data-per><option>10</option><option selected>25</option><option>100</option><option value="0">All</option></select></label>
   <span class="header-spacer"></span>
@@ -138,6 +140,9 @@
   <span class="sr" data-live data-noun="{{ noun }}" aria-live="polite"></span>
 </div>
 {% endmacro %}
+
+{#- The note shown when no row of the table (or card of the collection) `id` passes. #}
+{% macro empty_note(id, text) %}<p class="empty-note" data-empty="{{ id }}" hidden>{{ text }}</p>{% endmacro %}
 
 {#- A button that cannot act here: greyed, still focusable, `why` its description and, after `action` when given, its
     tooltip; `id` names the description. An icon button by default; `class` and `text` make it another, such as a

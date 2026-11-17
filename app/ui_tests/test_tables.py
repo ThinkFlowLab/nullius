@@ -298,6 +298,12 @@ class Macros(unittest.TestCase):
                       '<td data-col="c" class="align-center">c=x</td><td data-col="acts">acts=x</td></tr>', html)   # each cell its column's
         self.assertIn('<p class="empty-note" data-empty="t" hidden>No rows match.</p>', html)
 
+    def test_a_card_only_field_stays_off_the_table(self):
+        html = self.page([dict(key="a", label="A", card="title"), dict(key="logo", label="Logo", card="icon", table=False)])
+        self.assertNotIn('data-col="logo"', html)
+        self.assertNotIn('value="logo"', html)
+        self.assertIn('<td data-col="a" data-sort="x">a=x</td></tr>', html)
+
     def test_the_cells_follow_the_columns(self):
         cols = [dict(key=k, label=k.upper()) for k in "abc"]
         for order in (cols, cols[::-1]):
