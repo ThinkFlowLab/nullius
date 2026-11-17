@@ -30,7 +30,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "15"
+SCHEMA = "16"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness (an agent's `max_retries` reaching its
@@ -54,7 +54,8 @@ GATEWAY_SCAN_BYTES = 8 * 1024 * 1024
 
 
 def _retries_of(res: dict) -> int:
-    """The retries a standard trial says it took (``standard.retries``), 0 otherwise."""
+    """``standard.retries`` of a standard trial's result or job's config: the
+    retries the trial took, or each attempt could take. 0 otherwise."""
     std = res.get("standard") if isinstance(res.get("standard"), dict) else {}
     n = std.get("retries")
     return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
@@ -287,6 +288,11 @@ class Job:
     # A Nullius standard job (config ``standard``): its trials are written as each unit ends, so the
     # live board links one as soon as it has - unlike a runner's, imported at its end.
     standard: bool = False
+    # The retries a Nullius standard job allowed each attempt (config
+    # ``standard.retries``, its --retries); each attempt says how many it took
+    # (Trial.n_retries). 0 for every other job: Harbor counts its retries for
+    # the whole job only (``n_retries``).
+    retries: int = 0
     # The launch a Nullius standard job was one shard of (config
     # ``standard.launch``): the shards of one launch, run on several machines,
     # are grouped as one on the runs page (launches.group). "" for every other job.
@@ -697,6 +703,24 @@ def parse_trial(job_id: str, trial_dir: str) -> Trial | None:
     )
 
 
+def tries(trial: Trial) -> list[tuple[int, Trial]]:
+    """``(number, trial)`` for each try of an attempt, Try 1 first and
+    ``trial``, its last and the one the job counts, last; [] when no try
+    before it was kept. The standard moves each into the job's ``retried/``
+    as ``<trial>.try-N`` before it runs the attempt again; Harbor keeps none.
+    A try's ``trial_name`` is ``<trial>.try-N``: how a page addresses it."""
+    if not trial.n_retries:
+        return []
+    job_dir, folder = os.path.split(trial.dir)
+    out = []
+    # a record's count is read, not trusted: a page addresses at most try 99 (two digits)
+    for n in range(1, min(trial.n_retries, 99) + 1):
+        t = parse_trial(trial.job_id, os.path.join(job_dir, "retried", f"{folder}.try-{n}"))
+        if t:
+            out.append((n, replace(t, trial_name=f"{trial.trial_name}.try-{n}")))
+    return out + [(trial.n_retries + 1, trial)] if out else []
+
+
 def harbor_command(cfg: dict, env_type: str = "") -> str:
     """Reconstruct the `harbor run` invocation a job's config.json records.
 
@@ -945,6 +969,7 @@ def parse_job(job_dir: str, reuse=None) -> Job:
     job.merged_from = [s["job"] for s in merged if isinstance(s, dict) and isinstance(s.get("job"), str) and s["job"]] if isinstance(merged, list) else []
     job.budget = _budget(res.get("budget"))
     job.standard = bool(std)
+    job.retries = _retries_of(cfg)
     # a runner's job was never a `harbor run`: there is no command to rebuild
     job.harbor_command = "" if job.runner else redact(harbor_command(
         cfg, next((t.env_type for t in job.trials if t.env_type), "")))

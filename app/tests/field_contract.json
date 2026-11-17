@@ -319,6 +319,7 @@
    "raw_solve_rate",
    "reasoning_effort",
    "reports_regressions",
+   "retries",
    "runner",
    "runner_commit",
    "runner_items",

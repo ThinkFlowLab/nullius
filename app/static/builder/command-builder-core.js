@@ -430,15 +430,16 @@
     if (callsModel && benchmarkCallsModel(r) && providerOf(r, r.model || r.userModel) !== 'openai' && !r.urlEnv) add(STEP.model, 'A non-OpenAI model needs an endpoint source variable.');
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(r.name)) add(STEP.limits, 'Recipe name may contain letters, numbers, dots, underscores and hyphens.');
     if (!r.output.trim()) add(STEP.limits, 'Enter the output directory.');
-    for (const key of ['tasks','concurrency','retries']) {
-      const min = key === 'retries' ? 0 : 1;
+    for (const key of ['tasks','concurrency']) {
       if (key === 'tasks' && r.tasks === '') continue;                    // empty: every task, no limit written
-      if (!Number.isInteger(Number(r[key])) || Number(r[key]) < min) add(STEP.limits, key + ' must be an integer of at least ' + min + ', or empty for every task.');
+      if (!Number.isInteger(Number(r[key])) || Number(r[key]) < 1) add(STEP.limits, key + ' must be an integer of at least 1, or empty for every task.');
     }
+    // empty: none, as the standard's field reads it
+    if (r.retries !== '' && r.retries != null && (!Number.isInteger(Number(r.retries)) || Number(r.retries) < 0)) add(STEP.limits, 'Retries per attempt must be a whole number of at least 0, or empty.');
     if (!Number.isFinite(Number(r.timeoutMultiplier)) || !(Number(r.timeoutMultiplier) > 0)) add(STEP.agent, 'Timeout multiplier must be positive.', 'Common');
     // Common trial settings (Harbor's own per-trial flags): empty means the flag is not written.
     for (const [key, label] of COMMON) if (r[key] !== '' && (!Number.isFinite(Number(r[key])) || !(Number(r[key]) > 0))) add(STEP.agent, label + ' must be a positive number, or empty.', 'Common');
-    if (r.attempts !== '' && (!Number.isInteger(Number(r.attempts)) || Number(r.attempts) < 1)) add(STEP.agent, 'Repeats per task must be a whole number of at least 1, or empty.', 'Common');
+    if (r.attempts !== '' && (!Number.isInteger(Number(r.attempts)) || Number(r.attempts) < 1)) add(STEP.agent, 'Attempts per task must be a whole number of at least 1, or empty.', 'Common');
     if (r.agentMinutes !== '' && r.agentMinutes != null) {
       if (!Number.isFinite(Number(r.agentMinutes)) || !(Number(r.agentMinutes) > 0)) add(STEP.limits, 'Max agent time per trial must be a positive number of minutes.');
       else if (!declaredTimeouts(r)) add(STEP.limits, 'No run has recorded this benchmark\'s declared timeouts, so minutes cannot be turned into a multiplier here; set the multiplier directly.');
@@ -514,7 +515,7 @@
         parts.push(...agentCustom(r, id).map(p=>'--ak '+q(p.key+'='+kwargValue(customValue(p)))));
         // The reference agent's tool timeout follows the shared MCP timeout, so both agents wait the same.
         if (id === 'tau3-llm-agent' && r.params.mcp_timeout_s !== '' && r.params.mcp_timeout_s != null) parts.push('--ak '+q('tool_timeout_sec='+Number(r.params.mcp_timeout_s)));
-        parts.push(...(r.tasks === '' ? [] : ['--n-tasks '+r.tasks]),'--n-concurrent '+r.concurrency,'--max-retries '+r.retries,
+        parts.push(...(r.tasks === '' ? [] : ['--n-tasks '+r.tasks]),'--n-concurrent '+r.concurrency,'--max-retries '+(r.retries === '' || r.retries == null ? 0 : Number(r.retries)),
           '--agent-timeout-multiplier '+r.timeoutMultiplier,'--job-name '+q(r.name+(r.agents.length>1?'-'+id:'')), '--jobs-dir '+(runner ? '"$NULLIUS_JOBS"' : path(r.output)));
         if (r.include) parts.push('--include-task-name '+q(r.include));
         parts.push(...commonFlags(r));

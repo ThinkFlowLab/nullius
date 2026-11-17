@@ -7,15 +7,21 @@ default, ``MAX_RETRIES`` at most). Each try before is kept under the job's
 ``retried/``; only the last is the attempt's trial and counts.
 
 Which failures, as Harbor's retry decides it (its ``RetryConfig``): any
-exception but those that are the agent's own result or a mistake no second try
-mends - and here a missing secret, the spending caps and a stopped run. A task
-the agent failed carries no exception and is never retried.
+exception but those a second try meets again - a wrong key or model, a usage
+limit, a time the agent or the benchmark ran out of - and here a missing
+secret, a setup this machine cannot give (the trial's ``exception_info`` says
+``retryable: false``), the spending caps and a stopped run. A time run out
+while the provider refused or failed the calls is the provider's failure
+(``relay.failure``), retried; a rate limit's retry waits the provider's
+pause (``pace``). A task the agent failed carries no exception and is never
+retried. An attempt that spent its own spending cap, all its tries together,
+is not tried again.
 """
 from __future__ import annotations
 
 from typing import Optional
 
-from nullius.standard import ledger
+from nullius.standard import ledger, pace
 
 RETRIES = 0
 MAX_RETRIES = 9
@@ -32,5 +38,11 @@ NOT_RETRIED = frozenset({
 
 def retryable(res: Optional[dict]) -> bool:
     """Whether an attempt's result is a failure a retry may mend."""
-    et = ((res or {}).get("exception_info") or {}).get("exception_type")
-    return bool(et) and et not in NOT_RETRIED
+    info = (res or {}).get("exception_info") or {}
+    et = info.get("exception_type")
+    return bool(et) and et not in NOT_RETRIED and info.get("retryable") is not False
+
+
+def rate_limited(res: Optional[dict]) -> bool:
+    """Whether an attempt ended refused by the provider's rate limit: what a proof run tries again after."""
+    return ((res or {}).get("exception_info") or {}).get("exception_type") == pace.RATE_LIMITED

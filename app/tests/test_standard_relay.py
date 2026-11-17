@@ -859,5 +859,38 @@ class ProcTest(unittest.TestCase):
         q.close()
 
 
+class Failure(unittest.TestCase):
+    """What a unit whose last call failed ends with: named so a retry is asked
+    only of what a second call may mend (``retries``)."""
+
+    def test_a_spent_credit_and_an_unknown_model_are_named_as_no_retry_mends(self):
+        def named(status, said, **kw):
+            return relay.failure([{"status": status, "error": said, **kw}])[0]
+        self.assertEqual(named(429, "HTTP 429: Rate limit reached for requests"), "RateLimitError")
+        # OpenAI's spent credit is a 429 too; Gemini says "exceeded your current quota" for its per-minute limit
+        self.assertEqual(named(429, "HTTP 429: You exceeded your current quota", error_code="insufficient_quota"), "ApiUsageLimitError")
+        self.assertEqual(named(429, "HTTP 429: You exceeded your current quota, please check your plan"), "RateLimitError")
+        self.assertEqual(named(402, "HTTP 402: Insufficient credits"), "ApiUsageLimitError")
+        self.assertEqual(named(402, "HTTP 402: no price for the model", refused="price"), "ApiError")   # the relay's own, as before
+        for said in ("HTTP 400: xyz is not a valid model ID", "HTTP 400: Invalid model: foo", "HTTP 400: Model Not Exist",
+                     "HTTP 404: models/x is not found for API version v1beta"):
+            with self.subTest(said=said):
+                self.assertEqual(named(int(said[5:8]), said), "ModelNotFoundError")
+        for said in ("HTTP 400: This model's maximum context length is 8192 tokens", "HTTP 400: The model does not support tools"):
+            with self.subTest(said=said):
+                self.assertEqual(named(400, said), "ApiError")
+
+    def test_the_providers_word_on_when_to_call_again_is_read(self):
+        self.assertEqual(relay._retry_after([("Retry-After", "20")]), 20.0)
+        self.assertEqual(relay._retry_after([("retry-after-ms", "1500")]), 1.5)
+        self.assertEqual(relay._retry_after([("Retry-After", "Wed, 21 Oct 2015 07:28:00 GMT")]), 0.0)   # a date gone by
+        self.assertIsNone(relay._retry_after([("Retry-After", "soon")]))
+        self.assertIsNone(relay._retry_after([]))
+        self.assertEqual(relay._code(b'{"error": {"message": "x", "type": "insufficient_quota", "code": "insufficient_quota"}}'),
+                         "insufficient_quota")
+        self.assertIsNone(relay._code(b'{"error": {"message": "x", "code": 429}}'))
+        self.assertIsNone(relay._code(b"not json"))
+
+
 if __name__ == "__main__":
     unittest.main()

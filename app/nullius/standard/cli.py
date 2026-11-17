@@ -696,9 +696,10 @@ def main(argv=None):
                                 "(the upstream's --num-trials, pass^k; --repeat is its older name); default 1")
             p.add_argument("--retries", type=_retries, default=RETRIES, metavar="N",
                            help="run an attempt again, up to N times, when it ends in a failure a further try may mend "
-                                "(a rate limit, a provider or setup error, an agent crash; never a timeout, a refusal "
-                                "or a task the agent failed): after the other units, one at a time; "
-                                f"0 to {MAX_RETRIES}, default {RETRIES}")
+                                "(a rate limit, after the provider's pause; a provider or setup error; an agent crash; "
+                                "never a time the agent or the benchmark ran out of, a wrong key or model, a usage limit, "
+                                "a setup this machine cannot give, an attempt that spent its own cap, or a task the agent "
+                                f"failed): after the other units, one at a time; 0 to {MAX_RETRIES}, default {RETRIES}")
             p.add_argument("--remove-images", action="store_true",
                            help="remove each image this run pulls or builds when its last unit ends (default: kept for the next run)")
             p.add_argument("--name")

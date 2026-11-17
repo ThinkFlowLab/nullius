@@ -33,7 +33,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--max-usd USD`, `--max-usd-per-unit USD` | A spending cap for the run, for each unit: [below](#a-spending-cap) |
 | `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). Containers take them as flags, the run's processes on the machine as a systemd scope. A recipe passes each machine's own |
 | `--attempts K` | Each unit K times, each an attempt counted whatever its result (`--repeat K` is its older name); `result.json` carries `pass_hat_k` |
-| `--retries N` | Run an attempt again, up to N times, when it ends in a failure a further try may mend (a rate limit, a provider or setup error, an agent crash; never a timeout, a refusal or a task the agent failed): after the other units, one at a time. 0 to 9, default 0 |
+| `--retries N` | Run an attempt again, up to N times, after a failure a further try may mend: a rate limit (after the provider's pause), a provider or setup error, an agent crash. Never a time the agent or the benchmark ran out of, a wrong key or model, a usage limit, a setup this machine cannot give, an attempt that spent its own cap, or a task the agent failed. After the other units, one at a time. 0 to 9, default 0 |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--attempts`); by default they stay for the next run |
 | `--judge-model` | Instead of the official judge |
 | `--simulator-model` | Instead of the official simulated user |
@@ -61,7 +61,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | What is counted | Each reply's cost, and an estimate for each call in flight |
 | At the run's cap | The call that does not fit is refused by the relay (HTTP 402), and every call after it |
 | Its units | One cut off is the outcome Spending cap, outside the adjusted rate; those not begun are not run |
-| At a unit's cap | Its own calls and its simulated user's count, its judge's do not. A unit that reaches its cap is an Agent error; the run goes on |
+| At a unit's cap | Its own calls and its simulated user's count, its judge's do not; every try of an attempt together. A unit that reaches its cap is an Agent error, never retried; the run goes on |
 | Not exact | A call that costs more than its estimate can take the spend past a cap by up to the difference |
 | Cached input | Estimated as if not cached, so a unit can be cut off short of its cap |
 | The result | `result.json` carries `budget`, and the job page shows it |

@@ -733,5 +733,26 @@ class UnverifiedJobHasNoRate(unittest.TestCase):
         self.assertIsNone(job.adjusted_solve_rate)
 
 
+class KeptTries(unittest.TestCase):
+    def test_a_recorded_retry_count_is_read_not_trusted(self):
+        """``standard.retries`` says how many tries a page looks for: a record
+        that says a billion looks for 99 at most, never a billion."""
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "job", "x"))
+            with open(os.path.join(d, "job", "x", "result.json"), "w") as f:
+                json.dump({"task_name": "b/t", "trial_name": "x", "standard": {"retries": 10 ** 9}}, f)
+            t = parse.parse_trial("job", os.path.join(d, "job", "x"))
+            real, looked = parse.parse_trial, []
+
+            def read(*a, **kw):
+                looked.append(a)
+                if len(looked) > 100:
+                    raise AssertionError("looked past try 99")     # fails at once where a billion would never end
+                return real(*a, **kw)
+            with mock.patch.object(parse, "parse_trial", side_effect=read):
+                self.assertEqual((t.n_retries, parse.tries(t)), (10 ** 9, []))
+            self.assertEqual(len(looked), 99)
+
+
 if __name__ == "__main__":
     unittest.main()

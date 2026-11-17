@@ -99,7 +99,7 @@
   };
   const commonSettings = rec => `<div class="nb-categoryhead"><h3>Common settings</h3><p>Every trial, whichever agent runs it.</p></div>`
     + `<div id="nb-timeouts">${timeLimits(rec)}</div>`
-    + `<div class="nb-two">${field('Attempts per task', 'attempts', rec.attempts, {type: 'number', min: 1, placeholder: '1', hint: 'Every task is run this many times, pass or fail (Harbor\'s --n-attempts). Retries after a failure are on Limits.'})}<span></span></div>`
+    + `<div class="nb-two">${field('Attempts per task', 'attempts', rec.attempts, {type: 'number', min: 1, placeholder: '1'})}<span></span></div>`
 ;
   // One tab per selected agent: the parameters this catalogue knows for it,
   // its extra --ak list, and what else it needs.
@@ -618,8 +618,8 @@
       return '<div class="nb-sectionhead"><h2>Scope</h2></div><div class="nb-two">'
         + field('Number of ' + u.nouns, 'limit', rec.limit, {type: 'number', min: 1, placeholder: all, hint: 'The first ones' + per + ', in its order.'})
         + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: '1'}) + '</div>'
-        + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1', hint: 'Each ' + u.noun + ' runs this many times, pass or fail.'})
-        + field('Retries per attempt', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0', hint: 'An attempt that fails on the infrastructure or the agent is run again, up to this many times.'}) + '</div>'
+        + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
+        + field('Retries per attempt', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0'}) + '</div>'
         // the whole run's, shared by its jobs (recipe.py); a run that calls no model spends nothing: no cap to offer
         + (C.standardKeyless(rec) ? '' : field('Spending cap (USD)', 'max_usd', rec.max_usd ?? '', {type: 'number', min: 0, placeholder: 'none'})
           + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'}));
@@ -715,7 +715,7 @@
       html='<div class="nb-sectionhead"><h2>Scope & execution</h2></div>';
       const allTasks=(()=>{const ds=schema.datasets.find(d=>d.benchmark===rec.benchmark);return ds&&ds.tasks?'all '+ds.tasks:'all';})();
       html+=`<div class="nb-two">${field('Number of tasks','tasks',rec.tasks,{type:'number',min:1,placeholder:allTasks,hint:'Empty: '+allTasks+'.'})}${field('Concurrent trials','concurrency',rec.concurrency,{type:'number',min:1})}</div>`;
-      html+=`<div class="nb-two">${field('Retries per attempt','retries',rec.retries,{type:'number',min:0,hint:'An attempt that fails on the infrastructure or the agent is run again, up to this many times.'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
+      html+=`<div class="nb-two">${field('Retries per attempt','retries',rec.retries,{type:'number',min:0,placeholder:'0'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
         +harborExecutableFields(rec);
       html+=field('Output directory','output',rec.output,{});
     }

@@ -1020,10 +1020,25 @@ tr.control-row td { color: var(--text-dim); }
 .attempt-tab:not(.all)::before { content: ""; width: 8px; height: 8px; border-radius: 2px; flex: none; }
 .attempt-tab.oc-unknown::before { background: var(--unknown); }
 .attempt-tab:hover { color: var(--text); border-color: var(--text-faint); }
-.attempt-tab[aria-current="page"] { color: var(--text); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+.attempt-tab[aria-current] { color: var(--text); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
 .attempt-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.attempt-retried { width: 12px; height: 12px; margin-left: -.15rem; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+/* an attempt's tries, when its runner kept the ones before its last: tabs of
+   their own under the attempt's, underlined, the last the one that counts */
+.try-tabs { display: flex; flex-wrap: wrap; gap: 0 1.2rem; width: fit-content; max-width: 100%; margin-top: .6rem; padding-right: .4rem; border-bottom: 1px solid var(--border); }
+.try-tab {
+  display: inline-flex; align-items: center; gap: .45rem; padding: .3rem .1rem .45rem; margin-bottom: -1px;
+  border-bottom: 2px solid transparent; color: var(--text-dim); font-size: .8rem; text-decoration: none; white-space: nowrap;
+}
+.try-tab::before { content: ""; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.try-tab.oc-unknown::before { background: var(--unknown); }
+.try-tab:hover { color: var(--text); }
+.try-tab[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.try-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.try-dur { color: var(--text-faint); font-weight: 400; font-variant-numeric: tabular-nums; }
 .attempt-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .attempt-table tr[aria-current="true"] td { background: var(--accent-soft); }
+.attempt-table tr.replaced td { opacity: .55; }
 
 /* outcome tag inside a table row */
 .tag {

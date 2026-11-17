@@ -9,6 +9,8 @@ import re
 import tempfile
 import unittest
 from contextlib import ExitStack
+from dataclasses import replace
+from datetime import datetime, timezone
 from html import unescape
 from unittest.mock import patch
 
@@ -60,6 +62,19 @@ class ReconcilePage(unittest.TestCase):
         self.assertIn("Judged 0 · 5 not judged", text); self.assertIn("Disagree 0", text); self.assertIn("None above the threshold.", text)
         self.assertNotIn("classifier vs judge</a>", self.get("/job/r-agent"))
         self.seed()
+        self.assertIn('href="/job/r-agent/reconcile"', self.get("/job/r-agent"))
+
+    def test_a_record_of_an_earlier_try_is_not_its_retrys(self):
+        """A retry runs an attempt again under its trial's name: what was asked
+        of the try before is neither shown nor counted for it."""
+        at = datetime(2026, 11, 17, 11, 0, tzinfo=timezone.utc)
+        job = replace(self.job, trials=[replace(t, started_at=at) for t in self.job.trials])
+        self.stack.enter_context(patch.object(web.shared, "_jobs_for_request", return_value=[job, self.nop]))
+        store.save(self.ws.dir, "r-agent", "failed__x", record("environment_error", 0.9, 0.85), started="2026-11-17T10:00:00+00:00")
+        self.assertIn("Judged 0 · 5 not judged", text_of(self.get("/job/r-agent/reconcile")))
+        self.assertNotIn("classifier vs judge</a>", self.get("/job/r-agent"))
+        store.save(self.ws.dir, "r-agent", "failed__x", record("environment_error", 0.9, 0.85), started=at.isoformat())
+        self.assertIn("Judged 1 · 4 not judged", text_of(self.get("/job/r-agent/reconcile")))
         self.assertIn('href="/job/r-agent/reconcile"', self.get("/job/r-agent"))
 
     def test_disagreements_first_gated_and_suggested_apart_counts_stated_outcome_unchanged(self):

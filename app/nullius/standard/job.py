@@ -404,13 +404,15 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
                 produce: tuple, score: Optional[dict], exception: Optional[tuple], calls: List[dict],
                 trajectory: Optional[dict], extra_logs: Optional[dict] = None, environment: str = "",
                 image: str = "", setup_end: Optional[float] = None, checking: tuple = (None, None),
-                retries: int = 0) -> dict:
+                retries: int = 0, retryable: bool = True) -> dict:
     """Write one unit's trial and return its result. ``environment``: the
     benchmark's environment the unit asked for (none: the base image), and
     ``image``, the one it ran in on the container backend - names only.
     ``setup_end``: when the unit's environment was ready and the agent began
     (its setup, relay and container from ``t0``); ``checking``: the check's
-    start and end (its own step in the container, then the driver's score)."""
+    start and end (its own step in the container, then the driver's score).
+    ``retryable``: False for an exception a further try meets again
+    whatever its name (``retries``), which its record then says."""
     os.makedirs(os.path.join(trial_dir, "agent"), exist_ok=True)
     os.makedirs(os.path.join(trial_dir, "verifier"), exist_ok=True)
     tot = _usage_total(calls)
@@ -447,7 +449,8 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
         _write(os.path.join(trial_dir, "verifier", "score.json"),
                json.dumps(dict({k: v for k, v in score.items() if k != "parts"}, says=bench["score"]["says"]), indent=1))
     if exception:
-        res["exception_info"] = {"exception_type": exception[0], "exception_message": exception[1][:2000]}
+        res["exception_info"] = {"exception_type": exception[0], "exception_message": exception[1][:2000],
+                                 **({} if retryable else {"retryable": False})}
     _write(os.path.join(trial_dir, "agent", "calls.jsonl"), "".join(json.dumps(c) + "\n" for c in calls))
     _write(os.path.join(trial_dir, "agent", "gateway.log"),
            "".join(f"{iso(c.get('t0'))} {c.get('model')} status {c.get('status')} {c.get('error') or ''}\n" for c in calls))
@@ -548,6 +551,11 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
             "at": {str(k): round(v, 4) for k, v in got["at"].items()}}
 
 
+def n_retries(results: List[dict]) -> int:
+    """The retries a job's attempts took, all together: Harbor's ``stats.n_retries``, from each trial's ``standard.retries``."""
+    return sum(int((r.get("standard") or {}).get("retries") or 0) for r in results)
+
+
 def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int, budget: Optional[dict] = None):
     """``budget``: a run with a spending cap (``run.Run.budget``): the cap,
     what was spent, whether it stopped the run, the units it cut off and
@@ -557,5 +565,6 @@ def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dic
     with open(os.path.join(job_dir, "result.json"), "w") as f:
         json.dump({"id": job, "started_at": iso(t0), "finished_at": iso(t1), "n_total_trials": planned,
                    "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
-                             "n_cancelled_trials": planned - len(results), "n_running_trials": 0, "n_pending_trials": 0},
+                             "n_cancelled_trials": planned - len(results), "n_running_trials": 0, "n_pending_trials": 0,
+                             "n_retries": n_retries(results)},
                    **({"pass_hat_k": hat} if hat else {}), **({"budget": budget} if budget else {})}, f, indent=1)

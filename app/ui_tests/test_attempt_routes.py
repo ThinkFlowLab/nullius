@@ -12,6 +12,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from werkzeug.exceptions import NotFound
+
 from nullius.runs import parse
 from nullius import workspace
 from .test_routes import web, write_json
@@ -176,23 +178,77 @@ class AttemptRoutes(unittest.TestCase):
         rewards = [re.findall(r'<td class="num">([^<]*)</td>', row)[0] for row in re.findall(r"<tr>(.*?)</tr>", html, re.S)[1:]]
         self.assertEqual(rewards, ["1", "0.67"])
 
-    def test_a_retried_attempt_says_so_on_every_page(self):
+    def test_a_retried_attempt_shows_each_try_it_kept(self):
         run = written_job(self.root, "retried-run", [("0001__u0000r1", "t", 0, 1, None), ("0001__u0000r2", "t", 4, 1, None),
                                                      ("0001__u0000r3", "t", 2, 0, None)])
-        # the standard's record of a retry: attempt 2 took one, and started after attempt 3
-        path = self.root / "retried-run" / "0001__u0000r2" / "result.json"
-        res = json.loads(path.read_text()); res["standard"] = {"unit": "t", "retries": 1}; path.write_text(json.dumps(res))
-        run = parse.parse_job(str(self.root / "retried-run"))
+        # the standard's record of a retry: the run allowed an attempt one, and
+        # attempt 2 took it after the others, its first try (rate limited) kept
+        # under retried/
+        job_dir = self.root / "retried-run"
+        cfg = json.loads((job_dir / "config.json").read_text()); cfg["standard"] = {"benchmark": "t", "retries": 1}
+        (job_dir / "config.json").write_text(json.dumps(cfg))
+        path = job_dir / "0001__u0000r2" / "result.json"
+        res = json.loads(path.read_text())
+        write_json(job_dir / "retried" / "0001__u0000r2.try-1" / "result.json", dict(
+            res, verifier_result=None, exception_info={"exception_type": "RateLimitError", "exception_message": "429"}))
+        res["standard"] = {"unit": "t", "retries": 1}; path.write_text(json.dumps(res))
+        run = parse.parse_job(str(job_dir))
+        self.assertEqual((run.retries, len(run.trials)), (1, 3))          # a kept try is no trial of the job
         self.stack.enter_context(patch.object(workspace, "load_jobs", return_value=[run]))
+
         job = self.get("/job/retried-run")
-        self.assertEqual(re.findall(r'>attempt (\d)</a>(<small class="attempt-retried">retried once</small>)?</td>', job),
-                         [("1", ""), ("2", '<small class="attempt-retried">retried once</small>'), ("3", "")])
-        self.assertIn('title="Its runner tried this attempt again after an infrastructure or agent failure; this is its last try">retried once</span>',
-                      self.get("/trial/retried-run/0001__u0000r2"))
-        self.assertNotIn("trial-retried", self.get("/trial/retried-run/0001__u0000r1"))
-        table = self.get("/trial/retried-run/0001__u0000r1/attempts")
+        self.assertIn('<th scope="col" class="num">Retries</th>', job)
+        self.assertEqual(re.findall(r'<td class="num run-retries">(.*?)</td>', job),
+                         ['<span class="faint">0/1</span>', '1<span class="faint">/1</span>', '<span class="faint">0/1</span>'])
+
+        def try_tabs(html):
+            return [(oc, unescape(href), bool(cur), n) for oc, href, cur, n in re.findall(
+                r'<a class="try-tab oc-([a-z_]+)"[^>]*?href="([^"]*)"[^>]*?( aria-current="page")?>Try (\d)', html, re.S)]
+
+        kept, first = "/trial/retried-run/0001__u0000r2", "/trial/retried-run/0001__u0000r2.try-1"
+        page = self.get(kept)
+        self.assertEqual(try_tabs(page), [("rate_limited", first, False, "1"), ("resolved", kept, True, "2")])
+        self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="page">Attempt 2<svg class="attempt-retried"', page)
+        self.assertIn('id="tab-judgement"', page)
+        # the first try: its own evidence, under its attempt's tab, never judged
+        page = self.get(first)
+        self.assertIn('<span class="tag oc-rate_limited">Rate limited</span>', page)
+        # the page is Try 1's: its attempt's tab, which leads to the attempt's last try, is where it is, not it
+        self.assertEqual([cur for _, cur in tabs(page)], [False, False, False, False])
+        self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="true">Attempt 2<svg class="attempt-retried"', page)
+        self.assertEqual(try_tabs(page), [("rate_limited", first, True, "1"), ("resolved", kept, False, "2")])
+        self.assertNotIn('id="tab-judgement"', page)
+        self.assertNotIn('id="tab-llm-judge"', page)
+        self.assertNotIn('id="trial-judgement"', page)
+        self.assertEqual(self.client.get(first + "/conversation").status_code, 200)
+        with web.app.test_request_context(first):
+            with self.assertRaises(NotFound):                         # what the judge resolves: never a try
+                web.traces._trial_evidence("retried-run", "0001__u0000r2.try-1")
+        self.get("/trial/retried-run/0001__u0000r2.try-2", status=404)     # the attempt's last try is the trial
+        self.get("/trial/retried-run/0001__u0000r1.try-1", status=404)     # an attempt that took no retry
+        self.assertNotIn("try-tabs", self.get("/trial/retried-run/0001__u0000r1"))
+
+        table = self.get(first + "/attempts")
         self.assertIn('<th class="num">Retries</th>', table)
-        self.assertEqual(re.findall(r'</td>\s*<td class="num">([^<]*)</td>\s*<td class="num">[^<]*</td>\s*<td class="num">[^<]*</td>', table)[:3], ["—", "1", "—"])
+        rows = re.findall(r'<tr( class="replaced"[^>]*)?>\s*<td><a href="([^"]*)">([^<]*)</a></td>.*?<td class="num">(.*?)</td>', table, re.S)
+        self.assertEqual([(bool(rep), unescape(href), label, retries) for rep, href, label, retries in rows], [
+            (False, "/trial/retried-run/0001__u0000r1", "Attempt 1", '<span class="faint">0/1</span>'),
+            (True, first, "Attempt 2 · Try 1", '<span class="faint">0/1</span>'),
+            (False, kept, "Attempt 2 · Try 2", '1<span class="faint">/1</span>'),
+            (False, "/trial/retried-run/0001__u0000r3", "Attempt 3", '<span class="faint">0/1</span>')])
+
+    def test_no_retries_column_without_the_runs_limit(self):
+        # a trial that says it was retried, in a run that allowed none: Harbor
+        # says no attempt's retries, so there is no count to put over a limit
+        run = written_job(self.root, "unlimited-run", [("u__a", "u", 0, 1, None), ("u__b", "u", 2, 0, None)])
+        path = self.root / "unlimited-run" / "u__a" / "result.json"
+        res = json.loads(path.read_text()); res["standard"] = {"unit": "u", "retries": 1}; path.write_text(json.dumps(res))
+        run = parse.parse_job(str(self.root / "unlimited-run"))
+        self.assertEqual(run.retries, 0)
+        self.stack.enter_context(patch.object(workspace, "load_jobs", return_value=[run]))
+        self.assertNotIn("Retries</th>", self.get("/job/unlimited-run"))
+        self.assertNotIn("run-retries", self.get("/job/unlimited-run"))
+        self.assertNotIn("Retries</th>", self.get("/trial/unlimited-run/u__a/attempts"))
 
     def test_an_unknown_trial_has_no_attempts_page(self):
         self.get("/trial/repeat-run/nope/attempts", status=404)

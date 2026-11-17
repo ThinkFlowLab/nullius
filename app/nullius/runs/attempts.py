@@ -1,7 +1,7 @@
 """A task's attempts in one job.
 
 An attempt is one run of a task, counted whatever its result: Harbor's
-``n_attempts`` and the standard's ``--repeat`` say how many. A retry runs an
+``n_attempts`` and the standard's ``--attempts`` say how many. A retry runs an
 attempt again after the infrastructure or the agent failed, never because the
 task was failed, and only its last try is kept as the attempt's trial: Harbor
 deletes the others, the standard moves them into the job's ``retried/``. So a

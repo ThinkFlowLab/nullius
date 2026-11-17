@@ -607,6 +607,10 @@ def fold(events: list[Event], now: datetime | None = None, notices: list[str] | 
                 t.retried.append(t.outcome)
                 t.outcome, t.reward, t.score, t.parts, t.finished_at = None, None, None, None, None
                 t.phases_done, t.durations, t.started_at = [], {}, e.ts
+                # its counters are the new attempt's own: what the one before spent is not reported by this one
+                for key in COUNTERS:
+                    setattr(t, key, None)
+                t._series = []
             if t.phase and t.phase not in t.phases_done and t.phase != d["phase"]:
                 t.phases_done.append(t.phase)
             t.phase, t.since = d["phase"], e.ts       # the last phase event wins

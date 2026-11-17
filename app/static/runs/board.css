@@ -274,7 +274,7 @@
 .rp .tscroll { position: relative; overflow-x: auto; }
 /* auto layout: the other columns keep their widths as minimums and Task takes the rest; past that the table scrolls */
 .rp table.tt { width: 100%; border-collapse: collapse; }
-.rp .w-out { width: 206px; } .rp .w-cause { width: 168px; } .rp .w-flags { width: 132px; } .rp .w-chk { width: 64px; } .rp .w-ins { width: 78px; } .rp .w-tok { width: 80px; }
+.rp .w-out { width: 206px; } .rp .w-cause { width: 168px; } .rp .w-flags { width: 132px; } .rp .w-chk { width: 64px; } .rp .w-ins { width: 78px; } .rp .w-tok { width: 80px; } .rp .w-rt { width: 64px; }
 .rp .w-tm { width: 68px; } .rp .w-env { width: 54px; } .rp .w-ag { width: 58px; } .rp .w-ver { width: 56px; } .rp .w-go { width: 36px; }
 .rp .tt th { font: 400 12px/1.3 var(--sans); color: var(--text-faint); text-align: left; padding: 0 10px 7px; white-space: nowrap; }
 .rp .tt thead tr.grp th { padding-top: 12px; padding-bottom: 0; }
@@ -307,7 +307,6 @@
 .rp .sqs { display: inline-flex; gap: 3px; }
 .rp .tt tr.in-group td:first-child { padding-left: 39px; }
 .rp .attempt-link { color: var(--text-dim); }
-.rp .attempt-retried { display: block; color: var(--text-faint); font-size: 11.5px; }
 .rp .tt td:first-child { min-width: 150px; }
 .rp tr:hover .task { text-decoration: underline; text-decoration-color: var(--hush); text-underline-offset: 4px; }
 .rp .tt .badge { margin-left: 6px; }

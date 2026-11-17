@@ -224,6 +224,8 @@ def fold(events: Iterable[dict]) -> dict:
     - ``units``: ``n`` to run, the ``noun``, how many ended and how: passed,
       failed, scored, errors; ``running`` the ones started and not ended. A
       run of several parts counts every part's: ``n`` grows as each begins.
+      A retry's end (``unit retried``, then its ``unit done``) takes the place
+      of the try before it: ``n`` counts attempts, not tries.
     - ``current``: the stage running now, else None; ``ended``: ``done``,
       ``refused`` (with ``detail``) or None while the run goes on.
     """
@@ -251,6 +253,11 @@ def fold(events: Iterable[dict]) -> dict:
                 outcome = ev.get("outcome")
                 bucket = {"passed": "passed", "failed": "failed", "scored": "scored"}.get(outcome, "errors")
                 units[bucket] += 1
+            elif state == "retried" and units["done"] and units["errors"]:
+                # a retry ended: it takes the place of its try before, an error, in the count
+                units["done"] -= 1
+                units["errors"] -= 1
+                started_units -= 1
             units["running"] = max(0, started_units - units["done"])
             continue
         if st in ("done", "refused"):

@@ -439,6 +439,7 @@ class Execution:
         self.workspace = rec.get("workspace", "")   # the workspace its job was added to, the one a restart adds it back to
         # the trials the log has said already, (job, trial), so a restart says each once; none in a record from before
         self._seen_trials: set = {(k[0], k[1]) for k in rec.get("seen_trials") or ()}
+        self._settled: set = set()                  # the kept tries whose trial's copy was settled (settle_retried)
         if record:
             # a run still going reads its log now, to go on from it; one that ended (most of them, and
             # history only grows) when its page asks - start-up read every one, seconds and hundreds of MB
@@ -1589,7 +1590,40 @@ class Execution:
         rc, out = self._copy_back(run, timeout)
         if rc != 0:
             self.log("  the job did not sync back: " + out.strip()[-300:])
+        else:
+            settle_retried(self.jobs, self._settled)
         self._trial_lines()
+
+
+def settle_retried(jobs: str, seen: Optional[set] = None) -> None:
+    """A standard run's retry moves a trial's folder into ``retried/<trial>.try-N``
+    on the host and writes the trial again (``run.run_again``). The copy here is
+    taken without deleting, so the trial's own folder still holds the earlier
+    try's files the retry did not write again: each one the same, by size and
+    time, as the kept try's copy goes - what the retry wrote, and anything
+    written here, stays. ``seen``: the kept tries settled already, each
+    copied whole by the time it is first seen (the try had ended)."""
+    for job in os.listdir(jobs) if os.path.isdir(jobs) else ():
+        kept = os.path.join(jobs, job, "retried")
+        if not os.path.isdir(kept):
+            continue
+        for k in os.listdir(kept):
+            trial, sep, n = k.rpartition(".try-")
+            src, dest = os.path.join(kept, k), os.path.join(jobs, job, trial)
+            if not sep or not n.isdigit() or not os.path.isdir(src) or not os.path.isdir(dest) or src in (seen or ()):
+                continue
+            if seen is not None:
+                seen.add(src)
+            for d, dirs, files in os.walk(src):
+                here = os.path.join(dest, os.path.relpath(d, src))
+                for f in files:
+                    a, b = os.path.join(d, f), os.path.join(here, f)
+                    try:
+                        x, y = os.lstat(a), os.lstat(b)
+                    except OSError:
+                        continue
+                    if (x.st_size, int(x.st_mtime)) == (y.st_size, int(y.st_mtime)) and not os.path.isdir(b):
+                        os.unlink(b)
 
 
 def _probe(run: Callable, argv: List[str], timeout: float) -> tuple:

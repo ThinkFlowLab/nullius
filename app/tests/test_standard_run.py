@@ -4,6 +4,7 @@ trajectories. No key, no network: the provider is a local fake endpoint."""
 from __future__ import annotations
 
 import json
+import re
 import os
 import shutil
 import tempfile
@@ -13,8 +14,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime
 from unittest import mock
 
+from nullius import progress
 from nullius.runs import classify, live, parse
-from nullius.standard import acp, container, definitions, install, ledger, pace as pacing, relay, run
+from nullius.standard import acp, container, definitions, install, jsonl, ledger, pace as pacing, relay, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 # A conversation whose user a model plays: it opens, speaks once more, then is done.
@@ -82,6 +84,7 @@ class Echo(BaseHTTPRequestHandler):
     status = 200
     refused = None          # a model that gets the rate limit while every other is answered
     limited = 0             # how many calls, from now, get the rate limit before the model answers again
+    retry_after = None      # what a refused call says of when to call again (Retry-After), when it says
 
     def log_message(self, *a):
         pass
@@ -93,6 +96,8 @@ class Echo(BaseHTTPRequestHandler):
         if Echo.status != 200 or body.get("model") == Echo.refused or limited:
             out = json.dumps({"error": {"message": "Rate limit reached for requests"}}).encode()
             self.send_response(Echo.status if Echo.status != 200 else 429)
+            if Echo.retry_after is not None:
+                self.send_header("Retry-After", Echo.retry_after)
         else:
             said = body["messages"][-1]["content"]
             out = json.dumps({"choices": [{"message": {"role": "assistant", "content": "you said: " + said}}],
@@ -119,7 +124,7 @@ class RunTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self._home = install.HOME
         install.HOME = os.path.join(self.tmp, "home")
-        Echo.status, Echo.refused, Echo.limited = 200, None, 0
+        Echo.status, Echo.refused, Echo.limited, Echo.retry_after = 200, None, 0, None
         self.addCleanup(setattr, pacing, "FIRST", pacing.FIRST)
         pacing.FIRST = 0.5                       # a rate-limited unit's pause, short enough for a test
 
@@ -609,6 +614,12 @@ class RunTest(unittest.TestCase):
         with open(os.path.join(job_dir, "progress.jsonl")) as f:
             said = [json.loads(line) for line in f]
         self.assertTrue(any("rate limited: no unit starts for 0.5 s" in (e.get("detail") or "") for e in said))
+        # the retry's end took its try's place: three attempts, none an error, the run's n never grown by the retry
+        units = progress.fold(said)["units"]
+        self.assertEqual((units["n"], units["done"], units["errors"], units["running"]), (3, 3, 0, 0))
+        with open(os.path.join(job_dir, "result.json")) as f:
+            self.assertEqual(json.load(f)["stats"]["n_retries"], 1)
+        self.assertEqual(j.n_retries, 1)
 
     def test_an_attempt_is_retried_up_to_its_retries_and_never_by_default(self):
         Echo.status = 429                        # every call refused: each try ends rate-limited
@@ -631,6 +642,13 @@ class RunTest(unittest.TestCase):
                 self.assertEqual(os.path.exists(os.path.join(job_dir, "retried")), retries > 0)
                 with open(os.path.join(job_dir, "config.json")) as f:
                     self.assertEqual(json.load(f)["standard"]["retries"], retries)
+                # what each attempt's retries are counted over on the pages
+                self.assertEqual(parse.parse_job(job_dir).retries, retries)
+                # each try, as the pages number and address it: Try 1 first, the trial last
+                name = got["model"].trial_name
+                self.assertEqual([(n, t.trial_name, t.outcome, t.n_retries) for n, t in parse.tries(got["model"])],
+                                 [(n, name if n > retries else f"{name}.try-{n}", classify.RATE_LIMITED, n - 1)
+                                  for n in range(1, retries + 2)] if retries else [])
 
     def test_an_agent_crash_is_retried_and_a_timeout_is_not(self):
         real_prompt = acp.Client.prompt
@@ -677,6 +695,100 @@ class RunTest(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(job_dir, "retried")))
         got, _ = self.outcomes(job_dir)
         self.assertEqual(got["model"].outcome, classify.RATE_LIMITED)
+        with open(os.path.join(job_dir, "progress.jsonl")) as f:
+            self.assertFalse(any("again" in (json.loads(line).get("detail") or "") for line in f))   # no round said that never ran
+
+    def test_a_stop_during_a_retry_leaves_the_try_before_as_the_attempt(self):
+        """Stop is a SystemExit in the CLI (cli._exit_on_term), and a retry runs
+        on the run's own thread, where it lands: whether the retry was waiting
+        or running, the attempt keeps the try it had, counted."""
+        Echo.status = 429
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
+        for where in ("waiting", "running"):
+            with self.subTest(where=where):
+                r = run.Run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                            concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True, dataset="responding", retries=1,
+                            name=f"stopped-{where}")
+
+                def unit(i, u, rr=1, retry=0, real=r.unit, r=r, where=where):
+                    if retry:
+                        if where == "running":       # broken off as it ran: a folder, no result
+                            os.makedirs(os.path.join(r.job_dir, r.trial_name(i, u, rr), "workspace"))
+                        raise SystemExit(143)
+                    return real(i, u, rr, retry)
+                r.unit = unit
+                with self.assertRaises(SystemExit):
+                    r.start()
+                got, j = self.outcomes(r.job_dir)
+                self.assertEqual(len(j.trials), 3)
+                self.assertEqual((got["model"].outcome, got["model"].n_retries), (classify.RATE_LIMITED, 0))
+                self.assertEqual(os.listdir(os.path.join(r.job_dir, "retried")), [])   # the try before is back; nothing beside it
+                with open(os.path.join(r.job_dir, "result.json")) as f:
+                    self.assertEqual(json.load(f)["stats"]["n_errored_trials"], 1)
+
+    def test_an_attempt_that_spent_its_own_cap_is_not_tried_again(self):
+        """The cap per unit is the attempt's, all its tries together: one that
+        spent it is not run again, one that did not is."""
+        real_prompt = acp.Client.prompt
+
+        def prompt(client, sid, text, timeout=600):
+            out = real_prompt(client, sid, text, timeout=timeout)
+            if text == "model hi":
+                tries.append(text)
+                if len(tries) == 1:
+                    raise acp.AgentFailed("the agent's process exited with 1")    # after its one call, paid for
+            return out
+
+        prices = {"m-1": {"input": 1.0, "output": 10.0, "max_output": 10}}            # a call: 11 in, 3 out, 0.000041 USD
+        for cap, again in ((0.00004, False), (0.001, True)):
+            tries = []
+            with self.subTest(cap=cap), mock.patch.object(acp.Client, "prompt", prompt):
+                job_dir = self.go("fakebench", "fake", dataset="responding", name=f"capped-{again}", retries=1,
+                                  prices=prices, max_usd_per_unit=cap)
+                self.assertEqual(len(tries), 2 if again else 1)
+                self.assertEqual(os.path.exists(os.path.join(job_dir, "retried")), again)
+                got, _ = self.outcomes(job_dir)
+                self.assertEqual(got["model"].outcome, classify.FAILED_VERIFICATION if again else classify.AGENT_ERROR)
+
+    def test_a_driver_that_did_not_answer_in_its_time_is_not_asked_again(self):
+        """A score with no reply in its time is the benchmark's: a retry would run
+        the agent again, paid for, to meet the same wait. One that broke is retried."""
+        real = jsonl.Proc.request
+
+        def request(proc, op, timeout=600, **kw):
+            if op == "score" and kw.get("unit") == "model" and not scored:
+                scored.append(op)
+                raise (jsonl.NoReply if kind == "no-reply" else jsonl.Failed)(f"score: {kind}")
+            return real(proc, op, timeout=timeout, **kw)
+
+        for kind in ("no-reply", "broke"):
+            scored = []
+            with self.subTest(kind=kind), mock.patch.object(jsonl.Proc, "request", request):
+                job_dir = self.go("fakebench", "fake", dataset="responding", name=f"driver-{kind}", retries=1)
+                retried = os.path.exists(os.path.join(job_dir, "retried"))
+                self.assertEqual(retried, kind == "broke")
+                if not retried:
+                    got, _ = self.outcomes(job_dir)
+                    with open(os.path.join(got["model"].dir, "result.json")) as f:
+                        self.assertEqual(json.load(f)["exception_info"]["retryable"], False)
+
+    def test_a_rate_limits_retry_waits_as_long_as_the_provider_said(self):
+        Echo.limited, Echo.retry_after = 1, "2"     # the first call refused: call again in 2 s, not the 0.5 s pause
+        job_dir = self.go("fakebench", "fake", dataset="responding", name="said-wait", retries=1)
+        (kept,) = os.listdir(os.path.join(job_dir, "retried"))
+        with open(os.path.join(job_dir, "retried", kept, "result.json")) as f:
+            first = json.load(f)
+        with open(os.path.join(job_dir, kept.rpartition(".try-")[0], "result.json")) as f:
+            second = json.load(f)
+        ended, began = (datetime.fromisoformat(x.replace("Z", "+00:00")) for x in (first["finished_at"], second["started_at"]))
+        self.assertGreaterEqual((began - ended).total_seconds(), 1.5)
+
+    def test_without_a_retry_the_providers_pause_still_holds_the_next_unit_back(self):
+        Echo.limited, Echo.retry_after = 1, "2"
+        job_dir = self.go("fakebench", "fake", dataset="responding", name="said-pause")      # no retries: the default
+        with open(os.path.join(job_dir, "progress.jsonl")) as f:
+            pauses = [float(m[1]) for line in f if (m := re.search(r"no unit starts for ([0-9.]+) s", json.loads(line).get("detail") or ""))]
+        self.assertTrue(pauses and pauses[0] >= 1.5, pauses)       # the provider's 2 s, not the 0.5 s pause
 
     def test_a_feature_run_drives_the_feature_through_its_port(self):
         job_dir = self.go("fakememo", "fakemem")

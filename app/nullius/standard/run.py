@@ -158,7 +158,7 @@ def units_file(path: str) -> dict:
     counts = Counter(ids)
     twice = [u for u in counts if counts[u] > 1]
     if twice:
-        raise Refused(f"--units {path} lists {', '.join(twice)} more than once: list each unit once (--repeat K runs each K times)")
+        raise Refused(f"--units {path} lists {', '.join(twice)} more than once: list each unit once (--attempts K runs each K times)")
     return {"name": os.path.basename(path), "sha256": hashlib.sha256(data).hexdigest(), "units": ids}
 
 
@@ -189,7 +189,7 @@ def option_env(values: dict) -> dict:
 
 
 # The endpoint refusing the run itself, not one unit: a key it rejects, a model it does not know.
-REFUSALS = ("AgentAuthenticationError", "ModelNotFoundError")
+REFUSALS = ("AgentAuthenticationError", "ModelNotFoundError", "ApiUsageLimitError")
 REFUSED_IN_A_ROW = 3
 # a unit still running when the run is stopped: Harbor's name for a trial a stopped job cut short
 CANCELLED = "CancelledError"
@@ -362,7 +362,8 @@ class Run:
                  turn_seconds: Optional[int] = None, say: Callable[[str], None] = print, env=os.environ,
                  proving: bool = False, unsandboxed: bool = False, judge_model: Optional[str] = None,
                  backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None,
-                 launch: Optional[str] = None, repeat: int = 1, retries: int = RETRIES, simulator_model: Optional[str] = None,
+                 launch: Optional[str] = None, repeat: int = 1, retries: int = RETRIES,
+                 retry_if: Optional[Callable[[dict], bool]] = None, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
                  max_usd_per_unit: Optional[float] = None, units_file: Optional[dict] = None,
@@ -388,8 +389,9 @@ class Run:
         ``u0042r2``; once by default, tagged ``u0042`` as always. Each is an
         attempt, counted whatever its result.
         ``retries``: how many times an attempt that ended in a failure a
-        further try may mend (``retries.retryable``) runs again, after the
-        others and one at a time; each try before is kept under the job's
+        further try may mend (``retry_if``, ``retries.retryable`` unless
+        given: a proof run's is ``retries.rate_limited``) runs again, after
+        the others and one at a time; each try before is kept under the job's
         ``retried/``. 0 by default: none.
         ``simulator_model``: a benchmark whose user a model plays
         (``simulator``): this model instead of its official one.
@@ -548,6 +550,13 @@ class Run:
         self.units_file = units_file
         self.repeat = max(1, int(repeat or 1))
         self.retries = max(0, int(retries or 0))
+        self.retry_if = retry_if or retryable
+        # an attempt a try may follow keeps what that try needs: its own image (removed when no try follows,
+        # ``release_image``), its unit's count of what it spent (``ledger.forget``), and a rate limit's end
+        # (when it ended, when the provider said to call again), which its retry's pause counts from
+        self._held_images: Dict[str, str] = {}
+        self._counted: Dict[str, str] = {}
+        self._waits: Dict[str, tuple] = {}
         # an own image this run pulled or built stays for the next run, unless the user asks it removed
         # when its last unit ends (never with a repeat): {image: how many units are using it now}
         self.keep_images = not remove_images or self.repeat > 1
@@ -689,7 +698,7 @@ class Run:
         mine = mine[: self.limit] if self.limit else mine
         units = [u for _, u in mine]
         self.n_units = len(units)
-        p.emit("units", "start", n=len(units), of=len(everything), noun=self.bench["units"]["nouns"])
+        p.emit("units", "start", n=len(units) * self.repeat, of=len(everything), noun=self.bench["units"]["nouns"])
         job.write_config(self.job_dir, job=self.name, bench=self.bench, other=self.other, model=self.model,
                          provider=self.provider, dataset=self.ds["id"], units=units, concurrency=self.concurrency,
                          granted=self.other["_kind"] == "agent", judge=self.judge_model or "", backend=self.backend,
@@ -763,6 +772,7 @@ class Run:
         finally:
             # a Stop or Ctrl-C: the units not begun are not begun, those running end with their agents
             pool.shutdown(wait=True, cancel_futures=True)
+            self.let_go()
             begun = [not f.cancelled() and f.exception() is None and f.result() is not None for f in futures]
             results = [again.get(f.result()["trial_name"], f.result()) for f, ran in zip(futures, begun) if ran]
             for d in self.drivers:
@@ -813,47 +823,108 @@ class Run:
 
     def paced(self, res: Optional[dict]) -> None:
         """A unit's end, told to the run's pace: one that ended rate-limited
-        holds the next unit back, said with how many units run meanwhile."""
+        holds the next unit back - as long as the provider said, when it said
+        longer - said with how many units run meanwhile."""
         if res is None:
             return
-        pause = self.pace.ended((res.get("exception_info") or {}).get("exception_type"))
+        _, ready = self._waits.get(res.get("trial_name"), (None, None))
+        pause = self.pace.ended((res.get("exception_info") or {}).get("exception_type"),
+                                said=ready - time.time() if ready else None)
         if pause is not None:
             self.progress.emit("units", "progress", detail=f"rate limited: no unit starts for {pause:g} s; "
                                                            f"{self._running} running of {self.concurrency} at once")
 
+    def tag_of(self, i: int, r: int = 1) -> str:
+        """A unit's attempt as its relay's routes and the ledger name it: ``u0042``, ``u0042r2`` with attempts."""
+        return f"u{i:04d}" + (f"r{r}" if self.repeat > 1 else "")
+
+    def cap_spent(self, i: int, r: int = 1) -> bool:
+        """Whether an attempt spent its own spending cap, all its tries
+        together: no try follows then. A ledger that cannot be read refuses
+        every capped call, so none follows either."""
+        if getattr(self, "ledger", None) is None or self.unit_max_usd is None:
+            return False
+        try:
+            left = self.ledger.unit_left(self.tag_of(i, r))
+        except ledgers.Unavailable:
+            return True
+        return left is not None and left <= 0
+
+    def let_go(self, name: Optional[str] = None) -> None:
+        """What an attempt's last try held for a try that does not follow -
+        ``name``'s, or every attempt's: its image released, its count dropped
+        from the ledger."""
+        for n in [name] if name is not None else list({**self._held_images, **self._counted}):
+            image = self._held_images.pop(n, None)
+            if image:
+                self.release_image(image)
+            tag = self._counted.pop(n, None)
+            if tag is not None and getattr(self, "ledger", None) is not None and self.unit_max_usd is not None:
+                try:
+                    self.ledger.forget(tag)      # the unit ended, no try of it to follow: its own count goes
+                except ledgers.Unavailable:
+                    pass
+
     def run_again(self, results: List[dict], work: list, work_unit, done: Dict[str, dict]) -> None:
         """Each attempt that ended in a failure a further try may mend
-        (``retries.retryable``: a rate limit, a provider or setup error, an
-        agent crash), run again after the others, one at a time and paced as
-        the rest, up to ``retries`` times. Each try before is moved into the
-        job's ``retried/`` as ``<trial>.try-N`` (kept whole, its calls and its
-        cost with it, where no reader takes it for a trial of its own); the
-        last is written under the trial's own name and counted (into ``done``,
-        as each ends), its ``result.json`` saying how many retries it took.
-        Nothing is run again once the run is stopped or halted; the spending
-        cap goes on counting every call."""
+        (``retry_if``: a rate limit, a provider or setup error, an agent
+        crash), run again after the others, one at a time and paced as the
+        rest - a rate limit's retry not before the provider's pause is over -
+        up to ``retries`` times. Each try before is moved into the job's
+        ``retried/`` as ``<trial>.try-N`` (kept whole, its calls and its cost
+        with it, where no reader takes it for a trial of its own); the last is
+        written under the trial's own name and counted (into ``done``, as each
+        ends), its ``result.json`` saying how many retries it took. Nothing is
+        run again once the run is stopped or halted, nor an attempt that spent
+        its own spending cap, all its tries together."""
         by_name = {self.trial_name(*iur): iur for iur in work}
         latest = {r["trial_name"]: r for r in results if r["trial_name"] in by_name}
         for retry in range(1, self.retries + 1):
-            todo = [name for name, res in latest.items() if retryable(res)]
+            if self._stopped.is_set() or self._halt.is_set():
+                return
+            # each attempt whose last try ended with a try to follow (``unit``: what it held stays held)
+            todo = [name for name, res in latest.items() if name in self._counted and self.retry_if(res)]
             if not todo:
                 return
-            self.n_units = (self.n_units or 0) + len(todo)    # the progress counts every try: the i-th to end of n
-            self.progress.emit("units", "start", n=len(todo),
-                               detail=f"trying {len(todo)} again, one at a time: retry {retry} of {self.retries}")
+            self.progress.emit("units", "progress", detail=f"trying {len(todo)} again, one at a time: retry {retry} of {self.retries}")
             self.say(f"trying again, one at a time: {len(todo)}, retry {retry} of {self.retries}")
             for name in todo:
                 if self._stopped.is_set() or self._halt.is_set():
                     return
-                keep = os.path.join(self.job_dir, "retried", f"{name}.try-{retry}")
-                os.makedirs(os.path.dirname(keep), exist_ok=True)
-                os.replace(os.path.join(self.job_dir, name), keep)
-                self.feed.emit("trial.queued", name, agent=self.other["key"], position=0)
-                res = work_unit((*by_name[name], retry))
+                res = self.try_again(name, by_name[name], retry, work_unit)
                 if res is not None:
                     done[name] = latest[name] = res
-                elif not os.path.exists(os.path.join(self.job_dir, name)):
-                    os.replace(keep, os.path.join(self.job_dir, name))    # not begun after all: the try before stands
+
+    def try_again(self, name: str, iur: tuple, retry: int, work_unit) -> Optional[dict]:
+        """One attempt's next try (``run_again``): the try before moved into
+        ``retried/<name>.try-<retry>``, the next run under the trial's name.
+        A try that does not end - not begun, or a Stop under it - leaves the
+        try before where it was, the attempt as it stood; what the stopped
+        try had written goes."""
+        here = os.path.join(self.job_dir, name)
+        keep = os.path.join(self.job_dir, "retried", f"{name}.try-{retry}")
+        ended, ready = self._waits.pop(name, (None, None))
+        if ended is not None:                    # a rate limit's: not before the provider's pause, from its end
+            left = self.pace.due(ended, ready - ended if ready else None)
+            if left > 0:
+                self.progress.emit("units", "progress", detail=f"rate limited: trying again in {left:.0f} s")
+        os.makedirs(os.path.dirname(keep), exist_ok=True)
+        os.replace(here, keep)
+        held = self._held_images.pop(name, None)  # the try before's image, kept for this one
+        self.feed.emit("trial.queued", name, agent=self.other["key"], position=0)
+        res = None
+        try:
+            res = work_unit((*iur, retry))
+        finally:
+            if held:
+                self.release_image(held)
+            if res is None:
+                if os.path.lexists(here):
+                    gone = keep + ".stopped"
+                    os.replace(here, gone)
+                    shutil.rmtree(gone, ignore_errors=True)
+                os.replace(keep, here)
+        return res
 
     def ready(self) -> None:
         """What the run needs before its first unit, each a stage said as it
@@ -975,7 +1046,7 @@ class Run:
         if getattr(self, "ledger", None) is not None and self.ledger.closed():
             self._halt.set()                     # the spending cap refused a call: every later one is refused too
             return None
-        tag = f"u{i:04d}" + (f"r{r}" if self.repeat > 1 else "")
+        tag = self.tag_of(i, r)
         self.local.attempt = r
         trial = os.path.join(self.job_dir, self.trial_name(i, unit, r))
         name = os.path.basename(trial)
@@ -994,31 +1065,33 @@ class Run:
         setup: dict = {}
         transcript: List[dict] = []
         rl, environment, box, changes = None, None, None, None
+        image, finished = None, False            # its own image; whether it ended, or was broken off (a Stop)
+        retry_ok = True                          # whether its failure is one a further try may mend
         try:
             try:
                 # a setup's unit needs none: the upstream's answerer reads its data itself
                 setup = {} if self.upstream else self.driver().request("setup", unit=unit, dir=ws, timeout=DRIVER_SECONDS, **self.attempt_kw())
-            except jsonl.Failed as e:
-                raise _Ended("EnvironmentSetupError", str(e))
+            except jsonl.Failed as e:            # a driver that did not answer in its time is not asked again
+                raise _Ended("EnvironmentSetupError", str(e), retryable=not isinstance(e, jsonl.NoReply))
             environment, env_def = self.unit_environment(setup)
             why = self.not_run(environment, env_def)
-            if why:
-                raise _Ended(*why)
+            if why:                              # this machine cannot give it: no further try can
+                raise _Ended(*why, retryable=False)
             own = definitions.own_image(env_def)
             if "internet" in setup and (not isinstance(setup["internet"], bool) or not own):
-                raise _Ended("EnvironmentSetupError", "the unit's setup: internet is true or false, only in an own image")
+                raise _Ended("EnvironmentSetupError", "the unit's setup: internet is true or false, only in an own image", retryable=False)
             if self.other["_kind"] == "agent" and self.backend == "local" and mcp_machine.wanted(setup):
                 try:                             # the benchmark's own servers: the agent starts them from the driver's environment
                     setup = dict(setup, mcp=mcp_machine.entries(self.bench, setup, install.driver_dir(self.bench),
                                                                 self.machine_env(trial)))
                 except mcp_machine.Unknown as e:
-                    raise _Ended("EnvironmentSetupError", f"the unit's setup: {e}")
+                    raise _Ended("EnvironmentSetupError", f"the unit's setup: {e}", retryable=False)
             if "env" in setup and not own:
-                raise _Ended("EnvironmentSetupError", "the unit's setup: env requires an own image")
+                raise _Ended("EnvironmentSetupError", "the unit's setup: env requires an own image", retryable=False)
             if setup.get("verify") is not None and not own:
-                raise _Ended("EnvironmentSetupError", "the unit's setup: verify runs in an own image, and this unit has none")
+                raise _Ended("EnvironmentSetupError", "the unit's setup: verify runs in an own image, and this unit has none", retryable=False)
             if setup.get("prepare") is not None and not own:
-                raise _Ended("EnvironmentSetupError", "the unit's setup: prepare runs in an own image, and this unit has none")
+                raise _Ended("EnvironmentSetupError", "the unit's setup: prepare runs in an own image, and this unit has none", retryable=False)
             try:
                 rl = self.unit_relay(tag, trial, setup, env_def, own)
             except (container.Unavailable, OSError) as e:
@@ -1062,12 +1135,15 @@ class Run:
                                               **judge, **({"setup": self.other["key"]} if self.upstream else {}), **({"verified": verified} if verified is not None else {}))
                 checking = (checking[0], time.time())
             except jsonl.Failed as e:
-                raise _Ended("VerifierError", str(e))
+                raise _Ended("VerifierError", str(e), retryable=not isinstance(e, jsonl.NoReply))
+            finished = True
         except _Ended as e:
             exc = (e.kind, e.said)
             traj = traj or e.trajectory
+            retry_ok, finished = e.retryable, True
         except Exception as e:                   # anything else is this unit's error, never the whole job's
             exc = (type(e).__name__, f"{type(e).__name__}: {e}\n" + "".join(traceback.format_exc().splitlines(True)[-6:]))
+            finished = True
         finally:
             if checking[0] is not None and checking[1] is None:
                 checking = (checking[0], time.time())
@@ -1075,7 +1151,9 @@ class Run:
                 # the home it wrote as root given back, then the container gone
                 box.give_back([home, *getattr(rl, "unit_rw", [])])
                 box.stop()
-                self.release_image(box.image)
+                image = box.image
+                if not finished:                 # broken off: no try of it follows
+                    self.release_image(image)
             if rl is not None:
                 rl.stop()
                 for ln in getattr(rl, "mcp_listeners", None) or []:
@@ -1094,7 +1172,7 @@ class Run:
             failed = next(filter(None, (relay.failure(rl.calls(f"{tag}-{side}")) for side in ("judge", "simulator"))), None)
         if failed and (exc is None or exc[0] not in ("EnvironmentSetupError",)):
             exc = failed                     # what the endpoint said outranks how the agent took it
-            score = None
+            score, retry_ok = None, True     # a time run out under refused calls is the provider's: tried again
         cut = self.cap_reached(rl, tag)          # at scoring too: its judge's call, or a refusal its agent made something else of
         if cut:
             exc, score = cut, None
@@ -1118,12 +1196,12 @@ class Run:
                               t0=t0, t1=time.time(), produce=produce, score=score, exception=exc, calls=calls,
                               setup_end=p0 or time.time(), checking=checking,
                               trajectory=traj, extra_logs=dict(logs or {}, **({"container-changes.txt": changes} if changes else {})),
-                              environment=environment or "", retries=retry,
+                              environment=environment or "", retries=retry, retryable=retry_ok,
                               image=(box.image if box is not None else getattr(rl, "unit_image", "")) or "")
         install.prune(self.other, home)          # its declared caches: the trial is written, no one reads them now
         verdict = "error " + exc[0] if exc else f"reward {score.get('reward')}"
         self.say(f"  {unit}: {verdict}")
-        self.said_unit(unit, score, exc)
+        self.said_unit(unit, score, exc, retry)
         if self.feed is not None:
             self.feed.emit("trial.end", name, task=unit, agent=self.other["key"],
                            **job.feed_outcome(self.bench["score"]["kind"], score, exc),
@@ -1137,12 +1215,26 @@ class Run:
         elif exc and exc[0] == ledgers.UNIT_ERROR:
             with self._said:
                 self._over.append(self.attempt_name(unit, r))     # its own cap: the others go on
-        if getattr(self, "ledger", None) is not None and self.unit_max_usd is not None:
-            try:
-                self.ledger.forget(tag)          # the unit ended: its own count goes from the ledger
-            except ledgers.Unavailable:
-                pass
+        if exc and exc[0] == pacing.RATE_LIMITED:  # when it ended, and when the provider said to call again
+            side = [c for x in ("judge", "simulator") for c in rl.calls(f"{tag}-{x}")] if rl is not None else []
+            self._waits[name] = (time.time(), self.provider_ready(calls + side))
+        # a try may follow: its image and its count of what it spent stay for it (``let_go`` when none does)
+        self._held_images.pop(name, None)
+        self._counted[name] = tag
+        if image:
+            self._held_images[name] = image
+        if not (retry < self.retries and self.retry_if(res) and not self._stopped.is_set()
+                and not (getattr(self, "_halt", None) is not None and self._halt.is_set()) and not self.cap_spent(i, r)):
+            self.let_go(name)                    # its rate limit's end stays: the next unit's pause reads it (``paced``)
         return res
+
+    @staticmethod
+    def provider_ready(calls: List[dict]) -> Optional[float]:
+        """When the provider said its refused calls could come again
+        (``Retry-After``, ``relay``): the latest; None when it never said."""
+        said = [c["t1"] + c["retry_after"] for c in calls
+                if c.get("status") == 429 and isinstance(c.get("retry_after"), (int, float)) and isinstance(c.get("t1"), (int, float))]
+        return max(said) if said else None
 
     def cap_reached(self, rl, tag: str) -> Optional[tuple]:
         """A spending cap's refusal among a unit's calls - its agent's, its
@@ -1197,12 +1289,17 @@ class Run:
             else:
                 self._refused.clear()
 
-    def said_unit(self, unit: str, score: Optional[dict], exc: Optional[tuple]) -> None:
+    def said_unit(self, unit: str, score: Optional[dict], exc: Optional[tuple], retry: int = 0) -> None:
         """A unit's end, as a progress line: the i-th to end of the run's n,
-        and how - passed or failed (a pass benchmark), scored, or the error."""
+        and how - passed or failed (a pass benchmark), scored, or the error.
+        A retry's end takes the place of its try before, an error, which
+        leaves the count (``unit retried``): the run's n counts attempts."""
         with self._said:
-            self._ended += 1
+            if not retry:
+                self._ended += 1
             i = self._ended
+        if retry:
+            self.progress.emit("unit", "retried", unit=unit)
         score = score or {}
         if exc:
             how = {"outcome": "error", "error": exc[0]}
@@ -1219,7 +1316,7 @@ class Run:
         try:
             return definitions.environment_of(self.bench, setup, self.ds)
         except ValueError as e:
-            raise _Ended("EnvironmentSetupError", f"the unit's setup: {e}")
+            raise _Ended("EnvironmentSetupError", f"the unit's setup: {e}", retryable=False)
 
     def not_run(self, name: Optional[str], env_def: Optional[dict]) -> Optional[tuple]:
         """Why a unit cannot be run in its environment here, as (kind, said),
@@ -1479,10 +1576,11 @@ class Run:
         try:
             reply = self.driver().request("oracle", unit=unit, dir=ws, timeout=DRIVER_SECONDS)
         except jsonl.Failed as e:
-            raise _Ended("NonZeroAgentExitCodeError", "the benchmark's oracle: " + str(e))
+            raise _Ended("NonZeroAgentExitCodeError", "the benchmark's oracle: " + str(e), retryable=not isinstance(e, jsonl.NoReply))
         if reply.get("solve") is not None:
             if box is None:
-                raise _Ended("NonZeroAgentExitCodeError", "the benchmark's oracle: solve runs in an own image, and this unit has none")
+                raise _Ended("NonZeroAgentExitCodeError", "the benchmark's oracle: solve runs in an own image, and this unit has none",
+                             retryable=False)
             if name:                             # the reference solution, run under its own limit
                 self.phase(name, unit, "agent_run", float(reply["solve"].get("seconds") or self.turn_seconds))
             done = self.in_box(box, reply["solve"], collect=False, what="the benchmark's oracle")
@@ -1491,7 +1589,8 @@ class Run:
                 f.write(done["output"])
             if done["exit"] != 0:
                 raise _Ended("NonZeroAgentExitCodeError", "the benchmark's oracle: its solution "
-                             + ("did not end in time" if done["timed_out"] else f"ended with exit {done['exit']}"))
+                             + ("did not end in time" if done["timed_out"] else f"ended with exit {done['exit']}"),
+                             retryable=not done["timed_out"])
         return str(reply.get("answer") or "")
 
     # -- an own image: the unit's container ------------------------------------
@@ -1542,10 +1641,10 @@ class Run:
         if setup.get("workdir") is not None and not (isinstance(setup["workdir"], str) and setup["workdir"].startswith("/")):
             bad.append("workdir: an absolute path inside the image")
         if bad:
-            raise _Ended("EnvironmentSetupError", "the unit's setup: " + "; ".join(bad))
+            raise _Ended("EnvironmentSetupError", "the unit's setup: " + "; ".join(bad), retryable=False)
         why = container.unusable()
         if why:
-            raise _Ended("EnvironmentSetupError", f"not run: its own image needs docker, and {why}")
+            raise _Ended("EnvironmentSetupError", f"not run: its own image needs docker, and {why}", retryable=False)
         box = None
         try:
             image = self.own_image(spec)
@@ -1565,7 +1664,7 @@ class Run:
             for name in runtimes:
                 why = box.runtime_problem(name)
                 if why:
-                    raise _Ended("EnvironmentSetupError", "not run: " + why)
+                    raise _Ended("EnvironmentSetupError", "not run: " + why, retryable=False)
             return box
         except (container.Unavailable, ValueError, OSError) as e:
             if box is not None:
@@ -1686,7 +1785,7 @@ class Run:
         if done["exit"] != 0:
             raise _Ended("EnvironmentSetupError", "the benchmark's preparation "
                          + ("did not end in time" if done["timed_out"] else f"ended with exit {done['exit']}")
-                         + ": " + done["output"].strip()[-300:])
+                         + ": " + done["output"].strip()[-300:], retryable=not done["timed_out"])
 
     def verify(self, step: dict, box, trial: str) -> dict:
         """The benchmark's check, run in the unit's container once the agent
@@ -1806,7 +1905,7 @@ class Run:
                 raise _Ended("AgentTimeoutError", f"the agent did not answer {e} in time",
                              job.trajectory_from_events(events, rl.calls(tag), a, self.model, f"{self.name}/{unit}"))
             except jsonl.Failed as e:
-                raise _Ended("VerifierError", "the benchmark's next turn: " + str(e))
+                raise _Ended("VerifierError", "the benchmark's next turn: " + str(e), retryable=not isinstance(e, jsonl.NoReply))
         finally:
             c.close()
         raw = "".join(json.dumps(e) + "\n" for e in events)
@@ -1859,7 +1958,7 @@ class Run:
                             for q in plan.get("recall") or []]
             except jsonl.Failed as e:
                 raise _Ended("NonZeroAgentExitCodeError", "the capability: " + str(e),
-                             job.trajectory_from_exchanges(exchanges, [], f, self.model, f"{self.name}/{unit}"))
+                             job.trajectory_from_exchanges(exchanges, [], f, self.model, f"{self.name}/{unit}"), retryable=not isinstance(e, jsonl.NoReply))
         finally:
             proc.close()
         try:
@@ -1867,7 +1966,7 @@ class Run:
                                         base_url=rl.url(tag), key=relay.PLACEHOLDER_KEY, timeout=self.turn_seconds)
         except jsonl.Failed as e:
             raise _Ended("VerifierError", "the benchmark's reader: " + str(e),
-                         job.trajectory_from_exchanges(exchanges, rl.calls(tag), f, self.model, f"{self.name}/{unit}"))
+                         job.trajectory_from_exchanges(exchanges, rl.calls(tag), f, self.model, f"{self.name}/{unit}"), retryable=not isinstance(e, jsonl.NoReply))
         transcript.append({"role": "capability", "recalled": recalled})
         return out.get("answer"), job.trajectory_from_exchanges(exchanges, rl.calls(tag), f, self.model, f"{self.name}/{unit}")
 
@@ -1895,15 +1994,17 @@ class Run:
                              + (" - the original's models do not reason" if o["key"] == "model" else ""),
                              job.trajectory_from_exchanges([], calls, o, self.model, f"{self.name}/{unit}"))
             raise _Ended("NonZeroAgentExitCodeError", f"{o['label']}: " + str(e),
-                         job.trajectory_from_exchanges([], calls, o, self.model, f"{self.name}/{unit}"))
+                         job.trajectory_from_exchanges([], calls, o, self.model, f"{self.name}/{unit}"), retryable=not isinstance(e, jsonl.NoReply))
         transcript.append({"role": "upstream", "setup": o["key"], "asked": self.asked, "sent": self.model})
         return out.get("answer"), job.trajectory_from_exchanges([], rl.calls(tag), o, self.model, f"{self.name}/{unit}")
 
 
 class _Ended(Exception):
-    def __init__(self, kind, said, trajectory=None):
+    """A unit's end in an error: ``kind``, Harbor's exception name; ``retryable`` False for one a further try
+    meets again whatever its name (a setup this machine cannot give, a time run out: ``retries``)."""
+    def __init__(self, kind, said, trajectory=None, retryable=True):
         super().__init__(said)
-        self.kind, self.said, self.trajectory = kind, said, trajectory
+        self.kind, self.said, self.trajectory, self.retryable = kind, said, trajectory, retryable
 
 
 def run(bench: dict, other: dict, **kw) -> str:

@@ -84,6 +84,41 @@ def _said(status: int, body: bytes) -> str:
     return f"HTTP {status}: {m or ''}".strip()[:300]
 
 
+def _code(body: bytes) -> Optional[str]:
+    """An error reply's own code (OpenAI's ``code`` or ``type``), None when it gives none."""
+    try:
+        e = json.loads(body).get("error")
+    except Exception:
+        return None
+    if not isinstance(e, dict):
+        return None
+    code = e.get("code") if isinstance(e.get("code"), str) else e.get("type")
+    return code[:80] if isinstance(code, str) and code else None
+
+
+def _retry_after(headers) -> Optional[float]:
+    """Seconds the provider says to wait (``Retry-After``, in seconds or as a date; ``retry-after-ms``), None when unsaid."""
+    got = {n.lower(): v for n, v in headers or ()}
+    try:
+        if "retry-after-ms" in got:
+            return max(0.0, float(got["retry-after-ms"]) / 1000)
+        if "retry-after" in got:
+            v = got["retry-after"].strip()
+            try:
+                return max(0.0, float(v))
+            except ValueError:
+                from email.utils import parsedate_to_datetime
+                return max(0.0, parsedate_to_datetime(v).timestamp() - time.time())
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return None
+
+
+# a provider's words for a model it does not have: no second call finds it
+_NO_MODEL = re.compile(r"\b(not a valid model|invalid model|unknown model|no such model)\b"
+                       r"|\bmodels?\b[^.]{0,80}?\b(does not exist|not exist|not found)\b", re.I)
+
+
 def _usage(u: Optional[dict]) -> Optional[dict]:
     """Chat Completions', Responses' and Messages' usage, in one shape:
     ``input`` counts every prompt token, ``cached`` those of them a cache
@@ -533,6 +568,11 @@ class Relay:
                     rec["cost_usd"], rec["cost_from"] = cost, how
             else:
                 rec["error"] = _said(status, body)
+                code, wait = _code(body), _retry_after(back)
+                if code:
+                    rec["error_code"] = code
+                if wait is not None:
+                    rec["retry_after"] = wait    # the provider's word on when to call again (pace)
             if booking is not None:
                 rec["booked_usd"] = booked
                 try:
@@ -711,10 +751,13 @@ def failure(calls: List[dict]) -> Optional[tuple]:
     last = calls[-1]
     s, said = last.get("status"), last.get("error") or ""
     if s == 429:
-        return "RateLimitError", said
+        # OpenAI's spent credit comes as a 429 too: a usage limit, no pace mends it
+        return ("ApiUsageLimitError" if last.get("error_code") == "insufficient_quota" else "RateLimitError"), said
+    if s == 402 and not last.get("refused"):
+        return "ApiUsageLimitError", said        # the provider's credit spent (the relay's own refusals say so above, or are its own)
     if s in (401, 403):
         return "AgentAuthenticationError", said
-    if s == 404 and "model" in said.lower():
+    if (s == 404 and "model" in said.lower()) or (s == 400 and _NO_MODEL.search(said)):
         return "ModelNotFoundError", said
     if s == 502:
         return "NetworkConnectionError", said

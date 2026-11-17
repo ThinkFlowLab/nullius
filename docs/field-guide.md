@@ -32,7 +32,7 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 ## Attempts and retries {#attempts}
 
-An attempt is one run of a task, counted whatever its result: Harbor's `n_attempts` and the standard's `--attempts` set how many, 1 by default. A retry runs an attempt again after the infrastructure or the agent failed, never because the task was failed (Harbor's `max_retries`, the standard's `--retries`, both 0 by default), and only the attempt's last try is kept as its trial: a job records one trial per attempt, and the pages number a task's attempts by the run's own number when its trials carry one, else by when they started.
+An attempt is one run of a task, counted whatever its result: Harbor's `n_attempts` and the standard's `--attempts` set how many, 1 by default. A retry runs an attempt again after the infrastructure or the agent failed, never because the task was failed, nor after what a second try meets again: a time run out, a wrong key or model, spent credit or a spent cap (Harbor's `max_retries`, the standard's `--retries`, both 0 by default), and only the attempt's last try is kept as its trial: a job records one trial per attempt, and the pages number a task's attempts by the run's own number when its trials carry one, else by when they started.
 
 Standard runs with repeated, scored attempts record both measures in `pass_hat_k`; the job page and Compare show them for any run, Harbor or standard, that tried every task at least twice. They answer different questions.
 
@@ -46,7 +46,7 @@ Chance that all k sampled attempts pass: `C(c,k) / C(n,k)`.
 
 Here n is the attempt count and c the passed count per task; results are averaged across eligible tasks, each read on its first n attempts, n the smallest attempt count among them, and there is no series below two attempts. The pages read every attempt that ran as a pass when resolved and a fail otherwise: an agent's timeout or crash is its own result, and an unknown outcome stays in, as in the adjusted rate. A task with an infra attempt is left out, as τ-bench leaves out an infrastructure error, and so is a task with a scored attempt, which has no pass or fail. With every task tried equally often and no infra, pass^1 is the adjusted rate. The standard's own `pass_hat_k` leaves out a unit with any error instead. Compare lists k from 1 to the smallest attempt count across its runs, over the same tasks as its rows; the job page lists k = 1 to 3 and the largest k.
 
-A task's attempts are counted as the adjusted rate counts trials: its passes over the attempts that ran, infra attempts apart ("2/2 passed · 1 infra"); a task nothing passed or failed shows its mean score instead. A trial page shows the attempts as tabs, numbered by start time, with that count and an All attempts table. The job page groups them under one row per task with the instruction score once and the mean tokens and times over the attempts that ran; an agent's token count of 0 was not captured and is left out of the mean.
+A task's attempts are counted as the adjusted rate counts trials: its passes over the attempts that ran, infra attempts apart ("2/2 passed · 1 infra"); a task nothing passed or failed shows its mean score instead. A trial page shows the attempts as tabs, with that count and an All attempts table; an attempt the standard retried shows each kept try as a tab of its own, Try 1 first, only the last counted. The job page groups them under one row per task with the instruction score once and the mean tokens and times over the attempts that ran; an agent's token count of 0 was not captured and is left out of the mean.
 
 ## Compare like with like {#compare}
 
@@ -148,7 +148,8 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `agent_version` | The version the trial's `agent_info` reports. | measured | any |
 | `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. An imported runner's arm without that declaration is not a control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |
 | `is_running` | The job records running or pending trials. Numbers are partial; a managed execution's terminal status takes precedence on the page. | measured | any |
-| `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
+| `n_planned / n_retries` | Planned trials from the run record or task count, and the retries the attempts took: Harbor's count, or a standard run's trials' summed. Repeated attempts are separate trials, not retries. | measured | any |
+| `retries` | The retries a standard run allowed each attempt (`--retries`), what the Retries column counts over. 0 for any other run. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
 
 ## Trial metrics, one row per task attempt {#trials}
@@ -171,6 +172,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings (a search index its driver builds) are the run's, in `.work/relay-benchmark`, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
+| `n_retries` | The retries a standard run's attempt took; each try before is kept beside the job, a Try tab of its own. | measured | any |
 | `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log reads *not recorded*, never 0. | inferred | any |
 
 ## Trajectory metrics, inside a single run {#trajectory}
