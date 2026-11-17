@@ -6,7 +6,7 @@ import os
 import re
 import threading
 from collections import OrderedDict
-from flask import abort, flash, jsonify, redirect, render_template, request, url_for
+from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 from markupsafe import Markup, escape
 from nullius.traces import behavior, charts, conversation, trace, trajectory
 from nullius.runs import artifacts, attempts as task_attempts, parse
@@ -81,10 +81,20 @@ def _find_trial(job, trial_name):
     return next((x for x in job.trials if x.trial_name == trial_name), None)
 
 
+def _tries(attempt):
+    """``parse.tries`` of an attempt, read once a request: a try's page finds
+    its try in the same list its tabs show."""
+    seen = g.setdefault("tries", {})
+    key = (attempt.job_id, attempt.trial_name)
+    if key not in seen:
+        seen[key] = parse.tries(attempt)
+    return seen[key]
+
+
 def _find_try(job, name):
     m = _TRY_RE.match(name)
     kept = _find_trial(job, m["trial"]) if m else None
-    return next((t for _, t in parse.tries(kept) if t.trial_name == name), None) if kept else None
+    return next((t for _, t in _tries(kept) if t.trial_name == name), None) if kept else None
 
 
 def _attempt_of(job, trial):
@@ -248,7 +258,7 @@ def trial(job_id, trial_name):
         "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_judge=bench_judge, bench_parts=bench_parts,
         trace=tr, charts=ch, viewing=viewing,
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
-        artifacts=records, attempt=attempt, attempts=task_attempts.of(j, attempt), tries=parse.tries(attempt),
+        artifacts=records, attempt=attempt, attempts=task_attempts.of(j, attempt), tries=_tries(attempt),
         # an earlier try is evidence only: the job counts its last, and only that is judged
         judgement=_judgement_panel(j, t) if attempt is t else None,
         llm_judgement=_judgement_panel(j, t, "llm") if attempt is t else None, csrf=shared._csrf_token(),
@@ -263,7 +273,7 @@ def trial_attempts(job_id, trial_name):
     t = _attempt_of(j, t)
     # a task tried once has no tab that leads here; its one line still answers
     attempts = task_attempts.of(j, t) or task_attempts.Attempts((t,))
-    tries = {a.trial_name: parse.tries(a) for a in attempts.trials if a.n_retries}
+    tries = {a.trial_name: _tries(a) for a in attempts.trials if a.n_retries}
     return render_template("traces/attempts.html", job=j, trial=t, attempts=attempts, tries=tries)
 
 

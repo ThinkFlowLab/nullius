@@ -211,7 +211,9 @@ class AttemptRoutes(unittest.TestCase):
         self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="page">Attempt 2<svg class="attempt-retried"', page)
         self.assertIn('id="tab-judgement"', page)
         # the first try: its own evidence, under its attempt's tab, never judged
-        page = self.get(first)
+        with patch.object(parse, "tries", wraps=parse.tries) as read:
+            page = self.get(first)
+        self.assertEqual(read.call_count, 1)          # the attempt's tries read once: the try found in the list its tabs show
         self.assertIn('<span class="tag oc-rate_limited">Rate limited</span>', page)
         # the page is Try 1's: its attempt's tab, which leads to the attempt's last try, is where it is, not it
         self.assertEqual([cur for _, cur in tabs(page)], [False, False, False, False])
