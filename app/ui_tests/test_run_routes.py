@@ -1114,6 +1114,9 @@ class WorkspacesPage(unittest.TestCase):
                 if self.ws.name in re.search(r'data-f-ws="([^"]*)"', r).group(1).split("\n")]
         launched = str(sum(int(r["runs"]) for r in rows)), str(sum(int(r["checks"]) for r in rows))
         self.assertEqual((listed, header, launched), (("3", "2"),) * 3)
+        table = page.split('<table class="grid sortable" id="runs">', 1)[1]                        # All runs: compare boxes of the toolkit's check column
+        self.assertIn('<th data-col="pick" scope="col" class="pick-col sticky-col"><input type="checkbox" data-check-all aria-label="Select all runs for comparison"', table)
+        self.assertIn('<td class="pick-col"><input type="checkbox" data-check value="r5-a" aria-label="Compare r5-a"></td>', table)
         ask = self.get(f"/workspaces/{self.ws.name}/roots/ask?root={d / 'jobs'}").get_data(as_text=True)
         self.assertIn("<p>1 run · 2 checks · ", ask)                                                # the folder's Delete counts its run alike
 

@@ -1,5 +1,5 @@
 {% from 'runs/_runtime.html' import what_ran %}
-{% from '_tables.html' import heads, columns_button, columns_menu %}
+{% from '_tables.html' import heads, check_cell, columns_button, columns_menu %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Runs — Nullius{% endblock %}
@@ -181,11 +181,7 @@
 <table class="grid sortable" id="runs">
   <thead>
     <tr>
-      <th class="pick-col sticky-col">
-        <input type="checkbox" id="pick-all" aria-label="Select all runs for comparison"
-               title="Select / unselect all">
-      </th>
-      {{ heads(COLUMNS, choices) }}
+      {{ heads([dict(key='pick', label='Select all runs for comparison', check=true, sticky=true)] + COLUMNS, choices) }}
     </tr>
   </thead>
   <tbody>
@@ -196,8 +192,7 @@
     <tr data-outcomes="{% if not v %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"
         data-f-dataset="{{ j.dataset }}" data-f-model="{{ j.model_name }}"
         data-f-agent="{{ j.agent_label }}"{% if v %} class="control-row" data-control="{{ v.control }}" data-state="{{ v.state }}"{% endif %}>
-      <td class="pick-col"><input type="checkbox" class="pick-run" value="{{ j.job_id }}"
-             aria-label="Compare {{ j.job_id }}"></td>
+      {{ check_cell('Compare ' ~ j.job_id, j.job_id) }}
       <td data-col="run"><a href="{{ url_for('job', job_id=j.job_id) }}">{{ j.job_id }}</a>
         {%- if j.is_preparing %} <span class="badge"
           title="Launched: Harbor has written this run's configuration and nothing else yet. No trial has started; the row will change on its own.">preparing</span>
@@ -387,10 +382,9 @@
   const form = document.getElementById('compare-form');
   const compareBtn = document.getElementById('compare-btn');
   const pickNote = document.getElementById('pick-note');
-  let picks = [...document.querySelectorAll('.pick-run')];
-
-  const pickAll = document.getElementById('pick-all');
-  const selectable = () => picks.filter(p => !p.closest('tr').hidden);
+  let picks = [...table.querySelectorAll('[data-check]')];
+  // the header box ticks the visible rows, and shows all, none or some of them ticked
+  const ticks = NulliusTable.checks(table);
 
   function syncPicks() {
     const on = picks.filter(p => p.checked);
@@ -398,11 +392,7 @@
     pickNote.textContent = on.length
       ? `${on.length} selected`
       : 'Tick two or more runs to compare';
-    // Header box reflects the visible rows: all, none, or partial.
-    const vis = selectable();
-    const hit = vis.filter(p => p.checked).length;
-    pickAll.checked = vis.length > 0 && hit === vis.length;
-    pickAll.indeterminate = hit > 0 && hit < vis.length;
+    ticks();
     // Rebuild the querystring: ?job=…&job=… in the order they were ticked.
     form.querySelectorAll('input[name="job"]').forEach(i => i.remove());
     on.forEach(p => {
@@ -413,13 +403,7 @@
       form.appendChild(hidden);
     });
   }
-  table.addEventListener('change', e => { if (e.target.matches('.pick-run')) syncPicks(); });
-
-  // Select/unselect all — scoped to rows the current filter leaves visible.
-  pickAll.addEventListener('change', () => {
-    selectable().forEach(p => p.checked = pickAll.checked);
-    syncPicks();
-  });
+  table.addEventListener('change', e => { if (e.target.matches('[data-check], [data-check-all]')) syncPicks(); });
 
   clearBtn.addEventListener('click', () => {
     active = null;
@@ -497,7 +481,7 @@
     const ticked = picks.filter(p => p.checked).map(p => p.value);
     table.tBodies[0].innerHTML = html;
     rows = [...table.tBodies[0].rows];
-    picks = [...document.querySelectorAll('.pick-run')];
+    picks = [...table.querySelectorAll('[data-check]')];
     picks.forEach(p => { p.checked = ticked.includes(p.value); });
     showCols();
     sortRows();
