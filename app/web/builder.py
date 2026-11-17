@@ -13,6 +13,7 @@ from nullius import constraints, settings, execution, gitrefs, hosts, prerequisi
 from nullius.harbor import source as harbor_source
 from nullius.catalogue import catalog
 from nullius.recipes import launch as command_builder
+from nullius.recipes import store as recipe_store
 from nullius.standard import boat, definitions, hostreq
 from nullius.standard import recipe as standard_recipe
 
@@ -60,6 +61,7 @@ def new_run():
                             "boatSpecs": {k: v for k, v in boat.SIZES.items() if v}, "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
     data["local"] = shared_local_client()
+    data["recipesWhy"] = WRITE_HERE
     # ?run=<job id>: the recipe a run of this application was started from,
     # opened as it was. ?like=<job id>, the job page's "New run like
     # this": that recipe when the run kept one, else what the job recorded -
@@ -233,6 +235,57 @@ def _licence_states() -> dict:
             if got and s["name"] not in held:
                 held[s["name"]] = {k: got[k] for k in ("set", "on", "expires", "expired")}
     return out
+
+
+# Saved recipes (nullius/recipes/store.py): anyone who can open the builder reads them; a browser on this machine
+# alone writes them, with the form token.
+WRITE_HERE = "Saved recipes change from a browser on the application host only."
+
+
+def _recipe_write():
+    shared._require_csrf()
+    if not shared_local_client():
+        abort(403, description=WRITE_HERE)
+    if request.content_length and request.content_length > 10 * recipe_store.MAX_BYTES:
+        abort(413)
+    return request.get_json(silent=True)
+
+
+@app.route("/new-run/recipes")
+def recipes_list():
+    return jsonify(recipes=recipe_store.listing())
+
+
+@app.route("/new-run/recipes", methods=["POST"])
+def recipes_save():
+    body = _recipe_write() or {}
+    try:
+        return jsonify(ok=True, recipe=recipe_store.save(body.get("recipe"), body.get("id")))
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+
+
+@app.route("/new-run/recipes/<recipe_id>", methods=["DELETE"])
+def recipes_delete(recipe_id):
+    _recipe_write()
+    try:
+        return jsonify(ok=recipe_store.delete(recipe_id))
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+
+
+@app.route("/new-run/recipes/import", methods=["POST"])
+def recipes_import():
+    """One recipe or a list, or {"recipes": [...], "lenient": true}: each one added unless its name is saved
+    already. Lenient (the builder's move of its earlier browser list) adds the good ones and names the bad."""
+    body = _recipe_write()
+    wrapped = isinstance(body, dict) and "recipes" in body
+    items = body["recipes"] if wrapped else body
+    items = items if isinstance(items, list) else [items]
+    try:
+        return jsonify(ok=True, **recipe_store.import_(items, lenient=wrapped and body.get("lenient") is True))
+    except ValueError as e:
+        return jsonify(ok=False, error="Not imported: " + str(e)), 400
 
 
 def _kept_recipe(job_id: str) -> bool:

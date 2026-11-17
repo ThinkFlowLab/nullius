@@ -29,6 +29,7 @@
 #nullius-builder .nb-savedrow > span { min-width: 0; overflow-wrap: anywhere; }
 #nullius-builder .nb-savedrow small { display: block; }
 #nullius-builder .nb-button[hidden] { display: none; }
+#nullius-builder .nb-button[aria-disabled=true] { opacity: .55; cursor: default; border-color: var(--nb-line); }   /* it cannot here: greyed, its reason the tooltip */
 #nullius-builder .nb-field input { scroll-margin-top: 100px; }
 
 @media(max-width:520px) { #nullius-builder .nb-headingactions { gap: 8px; } #nullius-builder .nb-errorlist { padding: 10px; } #nullius-builder .nb-field input { font-size: 16px; } }
