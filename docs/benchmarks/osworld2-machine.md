@@ -1,6 +1,6 @@
 # Prepare a machine for OSWorld2
 
-OSWorld2's driver runs on one machine: this one for a local run, or the host chosen in the builder's **Where** step ([Hosts](../settings/run-hosts.md)). Each task is an Ubuntu VM in Docker on that machine, and the mock websites, GitLab and the proxies run there too. Run every step below there, as the user that runs Nullius on it, from the root of a checkout of this repository. The commands of the last step run the benchmark on this machine with its own keys; a run on a host starts from the builder's Review, which sends the key and the licence to it.
+OSWorld2's driver runs on one machine: this one for a local run, or the host chosen in the builder's **Where** step ([Hosts](../settings/run-hosts.md)). Each task is an Ubuntu VM in Docker on that machine, and the mock websites, GitLab and the proxies run there too. Run every step below there, as the user that runs Nullius on it, from the root of a checkout of this repository. The commands of the last step run the benchmark on this machine with its own keys; a run on a host starts from the builder's Review, which sends the key and the licence to it. For how a run is scored and what differs from the paper, see [Read an OSWorld2 run](osworld2-results.md).
 
 ## What it needs
 
@@ -16,11 +16,13 @@ The minimum is one task at a time:
 | Scoring programs | ImageMagick (`identify`, `convert`), `ffmpeg`, `ffprobe` and `tesseract`: the evaluate() of tasks 025, 046, 051, 056, 085 and 095 runs them on this machine, and a run, the null control's too, is refused until they are on PATH |
 | Programs | `git`, `python3`, `uv`, `curl` |
 | CPU and memory | One VM, which the upstream's docker provider sets to 4 cores and 4 GB of memory, beside the driver, the agent's script and the services below |
-| Disk | Measured, so leave room above it: about 15 GB for the VM image (and its 15 GB zip until it is unpacked), 5 GB for the gated assets, 2 GB for the driver's environment; under Docker's root, 2 GB for each running VM's disk, about 20 GB for the mock websites' images and 25 GB free while they build, about 7 GB for GitLab's; each task's output, about 0.5 GB for 100 steps of M3 |
+| Disk | Measured, so leave room above it: about 15 GB for the VM image (and its 15 GB zip until it is unpacked), 5 GB for the gated assets, 2 GB for the driver's environment; under Docker's root, 2 GB for each running VM's disk (the VM itself sees a disk of at least 40 GB, more where a task asks for it, as on the upstream's aws provider, not the docker provider's 32 GB), about 20 GB for the mock websites' images and 25 GB free while they build, about 7 GB for GitLab's; each task's output, about 0.5 GB for 100 steps of M3 |
 | Network | GitHub, PyPI, Hugging Face and Docker Hub for the installs; OpenRouter for the agents and the LLM grader; the public internet for 29 tasks, 8 of them through a proxy of their own, which also install from the Ubuntu mirrors |
 | KVM | Recommended: `/dev/kvm`; without it the upstream runs the VM unaccelerated, slower |
 
-More at once is optional: `-j N` runs N tasks side by side, each with a VM of its own, so N times its cores, memory and disk. Their VMs start one after another.
+More at once is optional: `-j N` runs N tasks side by side, each with a VM of its own, so N times its cores, memory and disk. Their VMs start one after another. A machine's constraints in Settings (CPUs, memory, processes) do not reach the VMs, the mock websites, GitLab or the proxies: Docker starts them outside the run's limits, so bound them with `-j`.
+
+One Unix user runs a machine's VMs: the upstream's docker provider keeps its port lock in `/tmp`, and another user's VMs then fail to start. Task 082 takes this machine's port 3000 on 127.0.0.1 for its VM, so its units run one at a time per machine, and fail before the VM starts if another program listens on that port.
 
 !!! warning "The machine's speed can change a task's outcome"
     The upstream waits fixed times, not for the desktop: 60 s after a task is set up, 3 s after each action. A slower VM (no KVM, a loaded machine, a tight write limit) can show the agent a desktop that has not caught up. Compare scores from machines of similar speed and load.
@@ -32,8 +34,8 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
 | Tasks | Needs |
 | --- | --- |
 | 63, No hosted services | The VM and the gated assets; 27 of them also the LLM grader, the simulated user or the public internet |
-| 35, Mock website tasks | The mock websites, step 8 |
-| 2, tasks 026 and 041 | GitLab, step 9, and for some the mock websites |
+| 35, Mock website tasks | The mock websites, step 8; Overleaf keeps one account for all, so its 2 tasks run one at a time, each on Overleaf started anew, a few minutes more |
+| 2, tasks 026 and 041 | GitLab, step 9, and for some the mock websites; they run one at a time, each starting GitLab anew from its snapshot, about 5 minutes more |
 | 8 that ask for a proxy | The proxy image, step 7, and for some the mock websites |
 
 103 and 104 are not supported: their evaluate() runs FreeCAD's Python on this machine, which Nullius neither checks nor installs. They stay in the datasets; without FreeCAD the null control scores them 0, and an agent's unit ends in an error.
@@ -113,13 +115,13 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
     docker pull happysixd/osworld-docker@sha256:0e6497a9295647cf05bf2b2af522fdd79bdeba2737595259cab310a3bcf6baa9
     ```
 
-7. **Build the proxy image**, for the 8 tasks that ask for a proxy:
+7. **Build the proxy image**, for the 8 tasks that ask for a proxy (3 of Offline, none of No hosted services). Each such unit gets a tinyproxy of its own on this machine, given to the upstream in place of its DataImpulse entry, whose password is a placeholder. The upstream installs tinyproxy in the VM as each of the 8 is set up, through apt, which goes out directly: the 3 of Offline then need the Ubuntu mirrors too, and each is set up more slowly.
 
     ```bash
     python3 "$HERE/proxy.py" --build
     ```
 
-8. **Build and start the mock websites**, for their 40 tasks: OSWorld-web at the tag `osworld-v2.1`, with its submodules, served under `10.213.0.1.nip.io`, here cloned into `/data`, a folder of this user's. The write limits are in MB/s and IOPS: the stack's share of the disk (below), and the builder's, here a whole budget of 120 and 1200 while nothing else runs.
+8. **Build and start the mock websites**, for their 40 tasks: OSWorld-web at the tag `osworld-v2.1`, with its submodules, served under `10.213.0.1.nip.io` (no task of this release uses Moodle), here cloned into `/data`, a folder of this user's. The write limits are in MB/s and IOPS: the stack's share of the disk (below), and the builder's, here a whole budget of 120 and 1200 while nothing else runs.
 
     ```bash title="Clone, build, start, check"
     git clone --recurse-submodules --branch osworld-v2.1 https://github.com/Task-Web/OSWorld-web.git /data/OSWorld-web
@@ -161,7 +163,7 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
 
 ## Write limits and load
 
-On a disk shared with others, limit what the VMs write: `write_mbps` and `write_iops` apply to each VM's container, so with `-j N` give each the machine's budget divided by N, the websites' share and a GitLab task's set aside. The websites' share needs at least 80 IOPS. The null control on all 108 tasks ran at 16 MB/s and 160 IOPS a VM within 120 MB/s and 1200 IOPS: seven VMs and the websites' share, a GitLab task counting as two VMs. Tasks 093 and 108 write the most and set up slowest under a limit: 093 once failed its setup under load at 16 MB/s and 160 IOPS, and passed at 24 and 240. A GitLab unit's own GitLab runs Docker in Docker and takes a share of its own (`gitlab_write`): 16:160 worked, and 2:20 stalled Docker.
+On a disk shared with others, limit what the VMs write: `write_mbps` and `write_iops` apply to each VM's container on Docker's disk, not to reads or the trial's output; where Docker cannot apply them (btrfs, zfs, no io controller, cgroup v1), a unit with a limit fails before its VM starts. A limited disk slows the VM and can change a task's outcome. Each container has a limit of its own, so with `-j N` give each the machine's budget divided by N, the websites' share and a GitLab task's set aside. The websites' share needs at least 80 IOPS. The null control on all 108 tasks ran at 16 MB/s and 160 IOPS a VM within 120 MB/s and 1200 IOPS: seven VMs and the websites' share, a GitLab task counting as two VMs. Tasks 093 and 108 write the most and set up slowest under a limit: 093 once failed its setup under load at 16 MB/s and 160 IOPS, and passed at 24 and 240. A GitLab unit's own GitLab runs Docker in Docker and takes a share of its own (`gitlab_write`); with the VMs' writes limited, a GitLab task is refused without it: 16:160 worked, and 2:20 stalled Docker.
 
 | Run | Time | Cost |
 | --- | --- | --- |

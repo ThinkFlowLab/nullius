@@ -87,6 +87,7 @@ nav:
           - Add with an assistant: benchmarks/add-with-assistant.md
           - OSWorld1 machine setup: benchmarks/osworld1-machine.md
           - OSWorld2 machine setup: benchmarks/osworld2-machine.md
+          - OSWorld2 results: benchmarks/osworld2-results.md
       - Agents:
           - Supported agents: agents/supported/README.md
           - Add manually: agents/add-manually.md
