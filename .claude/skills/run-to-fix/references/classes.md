@@ -34,11 +34,18 @@ A signature is the class plus a detail with numbers and long hexadecimal ids mas
 
 | class | detail |
 |---|---|
-| `time_limit`, `exception` | the exception type and the last line of its message |
+| `exception` | the exception type and the last line of its message, with each quoted string masked as well |
+| `time_limit` | the exception type and the last line of its message, when there is an exception |
 | `verifier_failed` | the name of the first failed test in `verifier/ctrf.json`, else the first line of `verifier/test-stdout.txt` with FAIL, ERROR, Error or assert, else `reason` or `error` of `verifier/score.json`; empty when none of these exists |
 | the others | none |
 
+In an `exception` detail, a quoted string becomes `'#'` or `"#"` before the detail is cut to 200 characters, so two
+messages that differ only in the model text they quote share a signature. A quote with no closing quote masks to the
+end of the detail. An apostrophe inside a word, as in `agent's`, opens no quote. Verifier details keep their quoted
+values, because those separate one assertion from another.
+
 A group is the set of failing trials with one signature. Groups are numbered `g01`, `g02`, ... from the largest.
+`example` holds the detail of the group's first trial as written, with only key-shaped strings masked.
 
 ## Warnings
 
@@ -47,7 +54,7 @@ A warning is attached to a group, with its count, and points a person to a check
 | warning | when |
 |---|---|
 | `frequent` | the group has at least 3 trials and at least 5% of the failing trials |
-| `fails_on_baseline` | every task of the group also fails on the baseline; the benchmark is a suspect |
+| `fails_on_baseline` | every task of the group also fails on the baseline; for a group of 3 tasks or more the text names the benchmark as a suspect, for a smaller group it says only that the tasks fail on both runs |
 | `fails_in_every_repeat` | some tasks of the group have several trials and fail in all of them; only a run with repeats gets it |
 
 A claim that a benchmark is defective needs the check the warning names: read the verifier and the expected answer
