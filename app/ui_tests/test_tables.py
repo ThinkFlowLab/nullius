@@ -421,8 +421,9 @@ class Macros(unittest.TestCase):
         html = self.controls(cols, choices=choices)
         menu = html.split('data-tools="filter"')[1].split("</fieldset></div>")[0]
         self.assertEqual(re.findall(r'data-filter-menu="(\w)"', menu), ["a", "d"])                    # the Filter menu: a, by default, and d
+        self.assertEqual(re.findall(r"<legend>(\w)</legend>", menu), ["A", "D"])                         # its groups keep their legends
         self.assertIn('<div class="menu-wrap"><button class="btn ghost sm" type="button" data-dropdown aria-haspopup="true" aria-expanded="false">'
-                      'B<span class="tools-count" hidden></span></button><div class="menu tools-menu" hidden><fieldset data-filter-menu="b">', html)
+                      'B<span class="tools-count" hidden></span></button><div class="menu tools-menu" hidden><fieldset data-filter-menu="b" aria-label="B"><span class="tools-all">', html)   # no legend: the button names it
         self.assertLess(html.index("data-dropdown"), html.index('data-tools-btn="filter"'))      # the dropdowns before the Filter
         self.assertEqual(re.findall(r'data-pills="(\w)"', html), ["c", "d"])
         self.assertIn('<div class="filter-pills" role="group" aria-label="C" data-pills="c"><button type="button" class="filter-pill" data-all="c" aria-pressed="true">All</button>'

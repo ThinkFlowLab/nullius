@@ -79,12 +79,12 @@ class OriginTags(PageCase):
 
     def test_the_list_filters_by_what_runs_it(self):
         html = self.get("/benchmarks")
-        self.assertIn('<fieldset data-filter-menu="runs">', html)
+        self.assertIn('<fieldset data-filter-menu="runs" aria-label="Runs with">', html)
         self.assertIn('data-f-runs="Nullius&#10;Harbor&#10;"', self.card("swe-bench-verified")); self.assertIn('data-f-runs="Nullius&#10;"', self.card("longmemeval"))
 
     def test_the_list_filters_by_origin(self):
         html = self.get("/benchmarks")
-        self.assertIn('<fieldset data-filter-menu="origin">', html)
+        self.assertIn('<fieldset data-filter-menu="origin" aria-label="Origin">', html)
         for o in catalog.ORIGINS:
             self.assertIn(f'data-value="{o.capitalize()}"', html)
         self.assertIn('data-f-origin="Official&#10;"', self.card("terminal-bench"))
