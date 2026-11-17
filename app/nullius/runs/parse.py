@@ -30,7 +30,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "16"
+SCHEMA = "17"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness (an agent's `max_retries` reaching its
@@ -51,6 +51,20 @@ RATE_LIMIT_RE = re.compile(
 # GATEWAY_SCAN_BYTES only. Scanning is a bounded parse-time cost; for a log
 # that outgrows the bound, the count is a floor.
 GATEWAY_SCAN_BYTES = 8 * 1024 * 1024
+
+
+def _retried_cost(trial_dir: str, n: int) -> float | None:
+    """What an attempt's ``n`` tries before its last cost, summed (each one's
+    ``retried/<trial>.try-N``, as ``tries`` reads them); None when none
+    recorded a cost."""
+    if not n:
+        return None
+    job_dir, folder = os.path.split(trial_dir)
+    costs = [c for k in range(1, min(n, 99) + 1)
+             for c in [_token_totals(verifier._read_json(os.path.join(job_dir, "retried", f"{folder}.try-{k}", "result.json")) or {})
+                       .get("cost_usd")]
+             if isinstance(c, (int, float)) and not isinstance(c, bool)]
+    return sum(costs) if costs else None
 
 
 def _retries_of(res: dict) -> int:
@@ -161,6 +175,11 @@ class Trial:
     # `standard.retries`). 0 when it did not, or does not say: Harbor retries
     # under the trial's own name and keeps no count in it.
     n_retries: int = 0
+    # What the tries before this one cost, summed: kept in the job's
+    # `retried/` (`tries`), never a trial of their own, but paid for all the
+    # same, so the job's cost counts them (`Job.total_cost_usd`). None when
+    # none recorded a cost.
+    retried_cost_usd: float | None = None
     # A graded verdict (an F1, partial credit), beside the pass or fail the
     # reward says: the runner records it when its benchmark scores that way.
     # A benchmark that gives a score and no pass or fail leaves the reward
@@ -409,8 +428,9 @@ class Job:
 
     @property
     def total_cost_usd(self):
-        """None when no trial reported a cost — not every agent does."""
-        costs = [t.cost_usd for t in self.trials if t.cost_usd is not None]
+        """The trials' costs and their earlier tries' (``Trial.retried_cost_usd``);
+        None when none reported a cost — not every agent does."""
+        costs = [c for t in self.trials for c in (t.cost_usd, t.retried_cost_usd) if c is not None]
         return sum(costs) if costs else None
 
     @property
@@ -696,6 +716,7 @@ def parse_trial(job_id: str, trial_dir: str) -> Trial | None:
         has_trace=os.path.isfile(trace_path),
         n_rate_limited_retries=count_rate_limits(os.path.join(trial_dir, "agent", "gateway.log")),
         n_retries=_retries_of(res),
+        retried_cost_usd=_retried_cost(trial_dir, _retries_of(res)),
         env_type=((res.get("config") or {}).get("environment") or {}).get("type", ""),
         started_at=_iso(res.get("started_at")),
         finished_at=_iso(res.get("finished_at")),

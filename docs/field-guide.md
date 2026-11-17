@@ -141,7 +141,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `total_input_tokens` | Prompt tokens across the run. | derived | any |
 | `total_cache_tokens` | The part of those served from cache, as each trial's `result.json` records it. | derived | any |
 | `total_output_tokens` | Completion tokens. | derived | any |
-| `total_cost_usd` | The trials' recorded costs, summed: an estimate, not a bill. Shows — when no trial recorded one. | derived | any |
+| `total_cost_usd` | The trials' recorded costs and their retried tries', summed: an estimate, not a bill. Shows — when none recorded one. | derived | any |
 | `duration_min` | The whole run, start to finish. | derived | any |
 | `budget` | A standard run's spending cap, from `result.json`: `max_usd` and `spent_usd`, whether it `stopped` the run, the units `cut_off` and `not_run`, and with a cap per unit `unit_max_usd` and `over_unit`. Empty without a cap. | measured | any |
 | `agent_label` | The agent's name: the class of a `module:Class` path, or the trials' own name when the config gives none. | measured | any |

@@ -378,6 +378,7 @@
    "patch_exists",
    "phases",
    "reasoning_effort",
+   "retried_cost_usd",
    "reward",
    "score",
    "source",

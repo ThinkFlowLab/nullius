@@ -243,6 +243,7 @@ class Fold(unittest.TestCase):
         lines.append(ev(5, "trial.end", trial="x", ts=at(25), outcome="resolved", reward=1.0, n_input_tokens=30000, n_output_tokens=900))
         b = board_of(*lines, now=start + timedelta(seconds=30))
         self.assertEqual((b.trials[0].n_input_tokens, b.trials[0].cost_usd), (30000, None))
+        self.assertEqual(b.totals()["cost_usd"], 0.2)   # the attempt before was paid for: the board's cost counts it
         self.assertIsNone(b.tokens_per_sec())          # one report of the attempt's own: no baseline, no rate
 
     def test_eta_counts_down_while_a_trial_runs(self):

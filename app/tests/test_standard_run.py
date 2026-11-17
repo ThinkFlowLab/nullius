@@ -801,8 +801,10 @@ class RunTest(unittest.TestCase):
                                   prices=prices, max_usd_per_unit=cap)
                 self.assertEqual(len(tries), 2 if again else 1)
                 self.assertEqual(os.path.exists(os.path.join(job_dir, "retried")), again)
-                got, _ = self.outcomes(job_dir)
+                got, j = self.outcomes(job_dir)
                 self.assertEqual(got["model"].outcome, classify.FAILED_VERIFICATION if again else classify.AGENT_ERROR)
+                # the run's cost: the counted try's and, retried, the try before it, both paid for
+                self.assertAlmostEqual(j.total_cost_usd, 0.000041 * (2 if again else 1))
 
     def test_a_driver_that_did_not_answer_in_its_time_is_not_asked_again(self):
         """A score with no reply in its time is the benchmark's: a retry would run
