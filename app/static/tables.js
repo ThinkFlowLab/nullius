@@ -140,9 +140,11 @@ window.NulliusTable = {
   /* A controls row's search box and filters (the controls macro), under
      `tools`; each optional. Search keeps the rows (or cards) whose
      data-search holds every word of the query, in any order and case;
-     Escape clears it. The Filter button counts the columns it narrows, a
-     dropdown the values chosen; Clear filters clears every column. `changed`
-     runs after any of them. Returns passes(row). */
+     Escape clears it. A column narrows when it does not show every value;
+     the Filter button or a dropdown holding such a column is marked
+     .narrowed and counts: the Filter button the columns it narrows, a
+     dropdown the values chosen (after None, 0). Clear filters clears every
+     column. `changed` runs after any of them. Returns passes(row). */
   narrow(tools, changed) {
     const [fbtn, fmenu] = [tools.querySelector('[data-tools-btn="filter"]'), tools.querySelector('[data-tools="filter"]')];
     const q = tools.querySelector('[data-search]');
@@ -159,6 +161,7 @@ window.NulliusTable = {
     const mark = () => menus.forEach(([btn, menu, n]) => {
       const sets = [...menu.querySelectorAll('[data-filter-menu]')].map(v => f.allowed[v.dataset.filterMenu]).filter(Boolean);
       const count = btn.querySelector('.tools-count');
+      btn.classList.toggle('narrowed', sets.length > 0);
       count.textContent = sets.length ? sets.reduce((sum, set) => sum + n(set), 0) : '';
       count.hidden = !sets.length;
     });

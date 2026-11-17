@@ -253,6 +253,17 @@ process.stdout.write(JSON.stringify(out));
         self.assertEqual(got["open"], [False, "true", True])
         self.assertEqual(got["closed"], [True, True])
 
+    def test_a_count_shows_on_a_narrowed_button_only(self):
+        got = node(FORMS + r'''
+const t = make(), dd = t.tools.querySelector('[data-dropdown]'), fb = t.tools.querySelector('[data-tools-btn="filter"]');
+const mark = b => [b.classList.contains('narrowed'), b.querySelector('.tools-count').hidden ? null : b.querySelector('.tools-count').textContent];
+const out = [[mark(dd), mark(fb)]];
+drop(t).querySelector('[data-none]').click(); out.push([mark(dd), mark(fb)]);              // None: 0 chosen, narrowed
+drop(t).querySelector('[data-all]').click(); out.push([mark(dd), mark(fb)]);
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got, [[[False, None], [False, None]], [[True, "0"], [True, "1"]], [[False, None], [False, None]]])
+
     def test_a_preset_shows_in_every_form(self):
         got = node(FORMS + r'''
 const t = make({kind: 'b'}), out = [look(t)];

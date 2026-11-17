@@ -468,6 +468,7 @@ button.seg:hover { filter: brightness(1.25); }
 .dd-chev { margin-right: -.2rem; }
 [data-dropdown][aria-expanded="true"] .dd-chev { transform: rotate(180deg); }
 @media (prefers-reduced-motion: no-preference) { .dd-chev { transition: transform .24s ease; } }
+.btn.ghost.narrowed { border-color: var(--accent); color: var(--text); }   /* a filter button whose column shows not every value */
 .tools-count { margin-left: .4rem; padding: 0 .4em; border-radius: 99px; background: var(--accent-soft); color: var(--text); font-size: .72rem; font-variant-numeric: tabular-nums; }
 .chip.clear { border-style: dashed; }
 
