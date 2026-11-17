@@ -92,10 +92,20 @@ class OriginTags(PageCase):
         self.assertIn('data-f-origin="Official&#10;"', self.card("gaia"))
         self.assertNotIn('data-value="Experiment"', html)
 
+    def test_the_list_filters_by_category_pills_and_two_dropdowns(self):
+        tools = self.html.split('id="benchmarks-tools"', 1)[1].split('id="benchmarks"', 1)[0]
+        self.assertIn('<div class="filter-pills" role="group" aria-label="Category" data-pills="category">', tools)
+        self.assertIn('data-all="category" aria-pressed="true">All</button>', tools)
+        for c in web.shared._catalog_cached().categories:
+            self.assertIn(f'<button type="button" class="filter-pill" data-value="{c}" aria-pressed="false">{c}</button>', tools)
+        self.assertEqual(re.findall(r'data-dropdown aria-haspopup="true" aria-expanded="false">([^<]+)<', tools), ["Origin", "Runs with"])
+        self.assertEqual(re.findall(r'data-filter-menu="(\w+)"', tools), ["origin", "runs"])
+        self.assertNotIn('data-tools-btn="filter"', tools)                                      # no Filter button: each has its own
+        self.assertIn('<span class="sr" data-live="benchmarks" aria-live="polite"></span>', self.html)
+
     def test_the_list_searches_by_name_category_and_dataset(self):
         self.assertIn('<input type="search" data-search placeholder="Name, category, dataset"', self.html)
         self.assertIn('data-search="LongMemEval Memory longmemeval', self.card("longmemeval"))
-        self.assertIn('<fieldset data-filter-menu="category">', self.html)
         self.assertNotIn('data-tools-btn="sort"', self.html)                                # cards do not sort
         self.assertIn('<p class="empty-note" data-empty="benchmarks" hidden>No benchmark matches.</p>', self.html)
 

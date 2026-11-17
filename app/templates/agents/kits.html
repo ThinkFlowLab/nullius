@@ -38,8 +38,8 @@
 {% else %}
 <div class="bench-index">
   <header class="bench-index-head"><div><h1>Kits</h1><p class="bench-count">{{ items|length }} conformance kits</p></div></header>
-  {#- A card's fields (web/agents.py `_kit_card`); the filter is the family. #}
-  {% set cols = [dict(key='family', label='Family', card='tag', class='std-tag'), dict(key='version', label='Version', card='meta'),
+  {#- A card's fields (web/agents.py `_kit_card`); the family's pills filter them. #}
+  {% set cols = [dict(key='family', label='Family', card='tag', class='std-tag', filter='pills'), dict(key='version', label='Version', card='meta'),
                  dict(key='title', label='Name', card='title'), dict(key='port', label='Port', card='text', style='code'),
                  dict(key='checks', label='Checks', type='num', card='stat')] %}
   {{ cards('kits', cols, items, search='Name, port, check', choices={'family': [('agent', 'Agents'), ('capability', 'Capabilities')]}, empty='No kits match.') }}

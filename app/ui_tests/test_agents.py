@@ -129,7 +129,10 @@ class Tabs(unittest.TestCase):
         from html import unescape
         page = self.get("/kits").get_data(as_text=True)
         self.assertIn('<input type="search" data-search placeholder="Name, port, check"', page)       # the search and the family filter
-        self.assertIn('<fieldset data-filter-menu="family">', page)
+        self.assertIn('<div class="filter-pills" role="group" aria-label="Family" data-pills="family">', page)   # the family's pills, no button
+        self.assertIn('<button type="button" class="filter-pill" data-value="capability" aria-pressed="false">Capabilities</button>', page)
+        self.assertNotIn('data-filter-menu', page)
+        self.assertNotIn('data-tools-btn="filter"', page)
         self.assertIn('data-keys="agent-task-v1" data-f-family="agent&#10;"', page)
         self.assertIn('<p class="empty-note" data-empty="kits" hidden>No kits match.</p>', page)
         self.assertIn('<dl class="bench-stats"><div><dt>Checks</dt><dd>3</dd></div></dl>', page)

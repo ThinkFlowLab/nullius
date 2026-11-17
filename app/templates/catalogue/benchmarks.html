@@ -33,10 +33,10 @@
     </ul>
   {% endcall %}
 
-  {#- A card's fields (web/catalogue.py `_card`); the filters are the category, what runs it and the origin. #}
-  {% set cols = [dict(key='category', label='Category', card='tag', class='cat-tag'), dict(key='origin', label='Origin', card='tag', class='origin-tag'),
+  {#- A card's fields (web/catalogue.py `_card`); the filters are the category's pills, and the origin and what runs it as dropdowns. #}
+  {% set cols = [dict(key='category', label='Category', card='tag', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', card='tag', class='origin-tag', filter='dropdown'),
                  dict(key='icon', label='Mark', card='icon', table=false, class='bench-mark'), dict(key='title', label='Name', card='title'),
-                 dict(key='domain', label='Domain', card='text'), dict(key='runs', label='Runs with', card='badge', class='run-tag'),
+                 dict(key='domain', label='Domain', card='text'), dict(key='runs', label='Runs with', card='badge', class='run-tag', filter='dropdown'),
                  dict(key='needs', label='Needs', card='note', icon='wrench'), dict(key='tasks', label='Tasks', type='num', card='stat'),
                  dict(key='datasets', label='Datasets', type='num', card='stat'), dict(key='scoring', label='Scored by', card='stat', class='word'),
                  dict(key='blocker', label='Blocker', card='alert')] %}
