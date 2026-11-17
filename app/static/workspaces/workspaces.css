@@ -1,6 +1,7 @@
 /* The Workspaces page: one row per workspace; its roots in a dialog (the Launches page's, runs/launches.css). */
 .ws-head { justify-content: space-between; align-items: center; }
 .ws-current td { background: var(--accent-soft); }
+.ws-current .count-btn { border-color: var(--text-faint); }   /* the plain border blends into the open row */
 .ws-show { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px .4rem; }
 .ws-title { overflow-wrap: anywhere; }   /* a name wraps, never cut */
 .ws-rename { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
