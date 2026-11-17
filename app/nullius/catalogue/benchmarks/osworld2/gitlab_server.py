@@ -33,13 +33,11 @@ OVERRIDE = os.path.join(HERE, "gitlab.compose.yml")
 COMMIT = "8655d651722f4254e59e813de9f68a6732ea525c"
 REPOSITORY = "https://github.com/Task-Web/gitlab.git"
 PROJECT = "osworld2-gitlab"
-SHARE_OPTION = "NULLIUS_OPTION_GITLAB_WRITE"
 VM_WRITE = ("NULLIUS_OPTION_WRITE_MBPS", "NULLIUS_OPTION_WRITE_IOPS")
 TOKEN = "GITLAB_PRIVATE_TOKEN"
 TASKS = frozenset(("026", "041"))
 RUNNER_TASKS = frozenset(("041",))
 LOCK = "/tmp/nullius-osworld2-gitlab.lck"
-SHARE = re.compile(r"[1-9][0-9]{0,5}:[1-9][0-9]{0,5}")
 ENV_FILE = ".osworld2.env"
 COMPOSE_FILE = ".osworld2.compose.yml"
 RB_FILE = ".osworld2.gitlab.rb"
@@ -56,6 +54,7 @@ UNUSED = "unused"
 SNAPSHOT = "nullius-osworld2-gitlab-snapshot"
 STAMP = "made"
 SHARE_DEFAULT = (16, 160)
+TOKEN_DAYS = 300
 GITLAB_IMAGE = re.compile(r"^\s+image: (gitlab/gitlab-ce@sha256:[0-9a-f]{64})$", re.M)
 SHARE_LABEL = "nullius.osworld2.share"
 ARCHIVE = "gitlab.tar.gz"
@@ -110,18 +109,13 @@ def env(eid, environ=os.environ):
 
 
 def share(environ=os.environ):
-    """The run's GitLab write share, (MB/s, IOPS); None for none, refused while the VMs' writes are limited."""
-    value = environ.get(SHARE_OPTION, "none")
-    found = SHARE.fullmatch(value)
-    if value != "none" and not found:
-        raise GitLabError(f"the GitLab write share {value!r} is not MB/s:IOPS, or none")
-    if not found and any(environ.get(n, "none") != "none" for n in VM_WRITE):
-        raise GitLabError("the VMs' writes are limited and GitLab has no write share of its own: take a slot for it "
-                          "beside the VM's and give it as the GitLab write share option, MB/s:IOPS")
-    given = tuple(int(x) for x in value.split(":")) if found else None
-    if given:
-        allocation(*given)
-    return given
+    """GitLab's write share, (MB/s, IOPS): a VM's own limits, SHARE_DEFAULT's where one is none; None with neither."""
+    given = [environ.get(n, "none") for n in VM_WRITE]
+    if given == ["none", "none"]:
+        return None
+    found = tuple(d if v == "none" else int(v) for v, d in zip(given, SHARE_DEFAULT))
+    allocation(*found)
+    return found
 
 
 def token(stack):
@@ -130,11 +124,13 @@ def token(stack):
     if not os.path.exists(path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".nullius-")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(secrets.token_hex(24))
-        with contextlib.suppress(FileExistsError):
-            os.link(tmp, path)
-        os.remove(tmp)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(secrets.token_hex(24))
+            with contextlib.suppress(FileExistsError):
+                os.link(tmp, path)
+        finally:
+            os.remove(tmp)
     with open(path, encoding="utf-8") as f:
         value = f.read()
     if len(value) < MIN_TOKEN or not value.isalnum():
@@ -143,51 +139,62 @@ def token(stack):
 
 
 def _stamp(stack, value):
-    return hashlib.sha256(f"{stack}\n{value}\n{token(stack)}".encode()).hexdigest()
+    return hashlib.sha256(f"{stack}\n{value}\n{token(stack)}\n{_override()}\n{RB}".encode()).hexdigest()
 
 
 def _made():
-    """The stamp init left in the snapshot, read read-only; None without one."""
+    """The stamp init left in the snapshot, read read-only; None without one, or once the token is TOKEN_DAYS
+    old, since the upstream's token step makes it for a year."""
     if not _snapshot():
         return None
     image = GITLAB_IMAGE.search(_override())
     said = _docker("run", "--rm", "--network", "none", "--pull", "never", "-v", f"{SNAPSHOT}:/snapshot:ro",
                    "--entrypoint", "cat", image.group(1) if image else "", f"/snapshot/{STAMP}")
-    return said.stdout.strip() if said.returncode == 0 else None
+    found = said.stdout.split() if said.returncode == 0 else []
+    fresh = len(found) == 2 and found[1].isdigit() and time.time() - int(found[1]) < TOKEN_DAYS * 86400
+    return found[0] if fresh else None
 
 
-def prepare(stack, environ=os.environ, say=None):
+def prepare(stack, environ=os.environ, say=None, closed=None):
     """GitLab made on this machine for the run's sites, once: cloned, configured, pulled, then init; made anew
-    when the snapshot was made for another stack, host or token."""
+    when the snapshot was made for another stack, host, token or pin, or its token is old."""
     suffix, value = websites.suffix(environ), url(environ)
+    if not value:
+        raise GitLabError("GitLab is served by the mock websites: give their suffix")
+    made = _made()
     with contextlib.suppress(GitLabError):
-        if _made() == _stamp(stack, value) and _settings(_pinned(stack))["GITLAB_URL"] == value:
+        if made == _stamp(stack, value) and _settings(_pinned(stack))["GITLAB_URL"] == value:
             return stack
     _clone(stack)
-    configure(stack, suffix, *(share(environ) or SHARE_DEFAULT))
+    configure(stack, suffix, *SHARE_DEFAULT)
     _done(compose(stack, ["pull"], seconds=START_SECONDS), "pulling GitLab's images")
     down(stack)
     if _snapshot():
         _done(_docker("volume", "rm", SNAPSHOT), "removing the old snapshot")
-    init(stack, say)
+    init(stack, say, closed)
     return stack
 
 
 def _clone(stack):
+    if os.path.exists(stack) and not os.path.isdir(os.path.join(stack, ".git")):
+        raise GitLabError(f"{stack} is no clone of {REPOSITORY}: move it away")
     with contextlib.suppress(GitLabError):
         return _pinned(stack)
-    tmp = stack + ".tmp"
-    for gone in (stack, tmp):
-        shutil.rmtree(gone, ignore_errors=True)
-    for args in (("init", "--quiet", tmp), ("-C", tmp, "fetch", "--quiet", "--depth", "1", REPOSITORY, COMMIT),
-                 ("-C", tmp, "checkout", "--quiet", "FETCH_HEAD")):
-        try:
-            said = subprocess.run(["git", *args], capture_output=True, text=True, timeout=START_SECONDS,
-                                  stdin=subprocess.DEVNULL)
-        except (OSError, subprocess.TimeoutExpired) as e:
-            raise GitLabError(f"git could not clone {REPOSITORY}: {type(e).__name__}") from None
-        _done(said, f"cloning {REPOSITORY} at {COMMIT}")
-    os.replace(tmp, stack)
+    shutil.rmtree(stack, ignore_errors=True)
+    os.makedirs(os.path.dirname(stack), exist_ok=True)
+    tmp = tempfile.mkdtemp(dir=os.path.dirname(stack), prefix=".nullius-")
+    try:
+        for args in (("init", "--quiet"), ("fetch", "--quiet", "--depth", "1", REPOSITORY, COMMIT),
+                     ("checkout", "--quiet", "FETCH_HEAD")):
+            try:
+                said = subprocess.run(["git", "-C", tmp, *args], capture_output=True, text=True,
+                                      timeout=START_SECONDS, stdin=subprocess.DEVNULL)
+            except (OSError, subprocess.TimeoutExpired) as e:
+                raise GitLabError(f"git could not clone {REPOSITORY}: {type(e).__name__}") from None
+            _done(said, f"cloning {REPOSITORY} at {COMMIT}")
+        os.replace(tmp, stack)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
     return _pinned(stack)
 
 
@@ -225,7 +232,7 @@ def ready(value, token, runner=False):
     said = _request("/api/v4/user", value, token)
     if said[0] != 200 or _json(said, f"{value}/api/v4/user").get("is_admin") is not True:
         raise GitLabError(f"{value}/api/v4/user answered {said[0]} for the token {TOKEN}, or not as an "
-                          "administrator's: GitLab was made with another")
+                          f"administrator's: docker volume rm {SNAPSHOT}, and GitLab is made anew")
     if runner:
         said = _request("/api/v4/runners/all?type=instance_type&status=online", value, token)
         if said[0] != 200 or not _json(said, f"{value}/api/v4/runners/all"):
@@ -352,7 +359,7 @@ def _settings(stack, limits=None):
         return dict(_read(path), **(_read(limits) if limits else {}))
     except OSError as e:
         raise GitLabError(f"no settings of GitLab at {path} ({type(e).__name__}): run python3 gitlab_server.py "
-                          "configure first") from None
+                          "prepare STACK SUFFIX first") from None
 
 
 def allocation(mbps, iops):
@@ -362,7 +369,7 @@ def allocation(mbps, iops):
     total = sum(w for _, w in SHARES)
     out = {s: (mbps * websites.MB * w // total, iops * w // total) for s, w in SHARES}
     if not all(v for pair in out.values() for v in pair):
-        raise GitLabError(f"a write share of {iops} IOPS leaves a service none: give GitLab at least {total}")
+        raise GitLabError(f"a write limit of {iops} IOPS leaves a GitLab service none: give at least {total}")
     return out
 
 
@@ -464,8 +471,10 @@ def _make_token(stack):
             raise GitLabError("the upstream's token step is not the one this file knows: check gitlab_server.py "
                               f"against Task-Web/gitlab at {COMMIT}")
         script = script.replace(old, new)
+    value = token(stack)
     done = subprocess.run(["sh", "-c", script.replace("$$", "$")], capture_output=True, text=True,
-                          timeout=START_SECONDS, env=dict(_clean(), **{TOKEN: token(stack)}), stdin=subprocess.DEVNULL)
+                          timeout=START_SECONDS, env=dict(_clean(), **{TOKEN: value}), stdin=subprocess.DEVNULL)
+    done.stdout, done.stderr = (x.replace(value, TOKEN) for x in (done.stdout, done.stderr))
     _done(done, "making the root token")
 
 
@@ -513,7 +522,7 @@ def _snapshot():
     return _docker("volume", "inspect", SNAPSHOT).returncode == 0
 
 
-def init(stack, say=None):
+def init(stack, say=None, closed=None):
     """GitLab made once from nothing: its first start, the root token, the runner; then kept as the snapshot."""
     stack = _pinned(stack)
     settings = _settings(stack)
@@ -525,18 +534,18 @@ def init(stack, say=None):
                           "make GitLab anew")
     t0 = time.time()
     _done(compose(stack, ["up", "-d", "--pull", "never", "gitlab"]), "starting GitLab")
-    say(json.dumps({"started": "gitlab", "up_s": _until(START_SECONDS, "GitLab", lambda: _signed_in(value))}))
+    say(json.dumps({"started": "gitlab", "up_s": _until(START_SECONDS, "GitLab", lambda: _signed_in(value), closed)}))
     _make_token(stack)
     ready(value, said)
     say(json.dumps({"token": "made", "s": round(time.time() - t0)}))
     _done(compose(stack, ["up", "-d", "--pull", "never", "dind", "gitlab-runner"]), "starting the runner")
     runner = _register(stack, value)
     say(json.dumps({"runner": runner, "online_s": _until(RUNNER_SECONDS, "the runner",
-                                                         lambda: _online(value, said, runner))}))
+                                                         lambda: _online(value, said, runner), closed)}))
     _done(compose(stack, ["stop"]), "stopping GitLab")
     _done(_docker("volume", "create", SNAPSHOT), "making the snapshot's volume")
     _copy(stack, settings, f"tar -C /v -czf /snapshot/{ARCHIVE} {' '.join(VOLUMES)} && "
-                           f"printf %s {_stamp(stack, value)} > /snapshot/{STAMP}", keep=True)
+                           f"printf '%s %s' {_stamp(stack, value)} {int(time.time())} > /snapshot/{STAMP}", keep=True)
     _done(compose(stack, ["down", "--volumes"]), "removing GitLab")
     return {"snapshot": SNAPSHOT, "s": round(time.time() - t0)}
 

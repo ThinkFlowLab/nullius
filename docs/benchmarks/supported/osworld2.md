@@ -31,14 +31,13 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `osworld2` | Original · OSWorld-V2 agents · Like the paper or Any of your choice | `agent`, `gitlab_write`, `max_steps`, `thinking`, `vm_provider`, `websites`, `write_iops`, `write_mbps` |
+| `osworld2` | Original · OSWorld-V2 agents · Like the paper or Any of your choice | `agent`, `max_steps`, `thinking`, `vm_provider`, `websites`, `write_iops`, `write_mbps` |
 
 ## Options
 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
 | `agent` | **`m3`**, `muse_spark` | Which of OSWorld-V2's own agents runs: each its script as published, with its own prompts, tools and history, asking the model it is published with. | `original` |
-| `gitlab_write` | e.g. `16:160`, default `none` | Disk write limit for GitLab, as MB/s:IOPS. Needed by tasks 026 and 041 while the VMs' writes are limited. | `original`, `yours` |
 | `max_steps` | **`100`**, `300`, `500` | The agent's step limit. | `original` |
 | `thinking` | **`off`**, `adaptive` | Whether M3 thinks. The paper ran it adaptive. | `original` |
 | `vm_provider` | **`docker`** | Where the VMs run. | `original`, `yours` |

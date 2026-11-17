@@ -17,7 +17,7 @@ The minimum is one task at a time:
 | Programs | `git`, `python3`, `uv`, `curl` |
 | CPU and memory | One VM, which the upstream's docker provider sets to 4 cores and 4 GB of memory, beside the driver, the agent's script and the services below |
 | Disk | About 15 GB for the VM image (30 GB while its zip is unpacked), 5 GB for the gated assets, 2 GB for the driver's environment; under Docker's root, 2 GB for each running VM, about 20 GB for the mock websites' images (25 GB free while they build) and 7 GB for GitLab's; about 0.5 GB of output for 100 steps of M3. Measured: leave room above it |
-| Network | GitHub, PyPI, Hugging Face and Docker Hub for the installs; OpenRouter for the agents and the LLM grader; the public internet for 29 tasks, 8 of them through a proxy of their own, which also install from the Ubuntu mirrors |
+| Network | GitHub, PyPI, Hugging Face and Docker Hub for the installs and the first GitLab task; OpenRouter for the agents and the LLM grader; the public internet for 29 tasks, 8 of them through a proxy of their own, which also install from the Ubuntu mirrors |
 | KVM | Recommended: `/dev/kvm`; without it the upstream runs the VM unaccelerated, slower |
 
 More at once is optional: `-j N` runs N tasks side by side, each with a VM of its own, so N times its cores, memory and disk. Their VMs start one after another. A machine's constraints in Settings (CPUs, memory, processes) do not reach the VMs, the mock websites, GitLab or the proxies: Docker starts them outside the run's limits, so bound them with `-j`.
@@ -35,7 +35,7 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
 | --- | --- |
 | 63, No hosted services | The VM and the gated assets; 27 of them also the LLM grader, the simulated user or the public internet |
 | 35, Mock website tasks | The mock websites, step 8; Overleaf keeps one account for all, so its 2 tasks run one at a time, each on Overleaf started anew, a few minutes more |
-| 2, tasks 026 and 041 | The mock websites, step 8, which serve the GitLab that Nullius makes on this machine before the first of them |
+| 2, tasks 026 and 041 | The mock websites, step 8, which serve the GitLab that Nullius makes on this machine before the first of them, about 8 minutes once |
 | 8 that ask for a proxy | The proxy image, step 7, and for some the mock websites |
 
 103 and 104 are not supported: their evaluate() runs FreeCAD's Python on this machine, which Nullius neither checks nor installs. They stay in the datasets; without FreeCAD the null control scores them 0, and an agent's unit ends in an error.
@@ -152,7 +152,7 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
 
 ## Write limits and load
 
-On a disk shared with others, limit what the VMs write with **Disk write MB/s** and **Disk write IOPS** (`write_mbps`, `write_iops`): each VM's container has a write limit of its own on Docker's disk, so with `-j N` give each the machine's budget divided by N, after the websites' share (at least 80 IOPS) and a GitLab task's (**GitLab write share**, `gitlab_write`, which a GitLab task needs while the VMs' writes are limited). Where Docker cannot apply a limit (btrfs, zfs, no io controller, cgroup v1), a unit with one fails before its VM starts. A tight limit slows the VM and can change a task's outcome.
+On a disk shared with others, limit what the VMs write with **Disk write MB/s** and **Disk write IOPS** (`write_mbps`, `write_iops`): each VM's container has a write limit of its own on Docker's disk, so with `-j N` give each the machine's budget divided by N, after the websites' share (at least 80 IOPS) and a GitLab task's, whose GitLab takes the VM's limits again, or 16 MB/s and 160 IOPS where they are none. Where Docker cannot apply a limit (btrfs, zfs, no io controller, cgroup v1), a unit with one fails before its VM starts. A tight limit slows the VM and can change a task's outcome.
 
 | Run | Time | Cost |
 | --- | --- | --- |
@@ -163,8 +163,7 @@ On a disk shared with others, limit what the VMs write with **Disk write MB/s** 
 
 ```bash title="The null control on all 108 tasks, six at a time"
 PYTHONPATH=app python3 -m nullius standard run osworld2 nop --dataset test_v2 -j 6 --provider openrouter \
-  --bench-option websites=10.213.0.1.nip.io --bench-option gitlab_write=16:160 \
-  --bench-option write_mbps=16 --bench-option write_iops=160
+  --bench-option websites=10.213.0.1.nip.io --bench-option write_mbps=16 --bench-option write_iops=160
 ```
 
 ## What is pinned
@@ -189,5 +188,5 @@ PYTHONPATH=app python3 -m nullius standard run osworld2 nop --dataset test_v2 -j
 | A run refused for `scoring_programs` | Install ImageMagick, ffmpeg and tesseract (step 2) |
 | `no task class`, `no assets` or `no VM image` | Steps 4 and 5 |
 | A websites task refused before its VM starts | Step 8 and Website host suffix; `python3 "$HERE/websites.py" check 10.213.0.1.nip.io` |
-| A GitLab task refused before its VM starts | Step 8 and GitLab write share |
+| A GitLab task fails while Nullius makes its GitLab | Step 8; GitHub and Docker Hub reachable, and about 7 GB free under Docker's root |
 | A Docker volume left after runs | `docker volume ls -f dangling=true`; remove your own |

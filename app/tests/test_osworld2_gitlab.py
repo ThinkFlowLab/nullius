@@ -107,7 +107,7 @@ class Option(Case):
     def test_no_option_and_no_licence_ask_for_gitlab(self):
         with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
             bench = json.load(f)
-        self.assertNotIn("gitlab", bench["options"])
+        self.assertFalse({"gitlab", "gitlab_write"} & set(bench["options"]))
         self.assertFalse(bench.get("environments"))
         self.assertFalse(os.path.exists(os.path.join(HERE, "gitlab.Dockerfile")))
 
@@ -123,12 +123,19 @@ class Token(unittest.TestCase):
         self.assertEqual(self.g.home({"NULLIUS_UPSTREAM": os.path.dirname(self.stack) + "/c/"}), self.stack)
 
     def test_made_once_beside_the_stack_for_this_user_alone(self):
-        found = []
-        threads = [threading.Thread(target=lambda: found.append(self.g.token(self.stack))) for _ in range(8)]
+        found, failed = [], []
+
+        def make():
+            try:
+                found.append(self.g.token(self.stack))
+            except Exception as e:
+                failed.append(e)
+        threads = [threading.Thread(target=make) for _ in range(8)]
         for t in threads:
             t.start()
         for t in threads:
             t.join(10)
+        self.assertEqual((len(found), failed), (8, []))
         self.assertEqual(len(set(found)), 1)
         self.assertEqual(self.g.token(self.stack), found[0])
         self.assertGreaterEqual(len(found[0]), self.g.MIN_TOKEN)
@@ -137,6 +144,11 @@ class Token(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
         self.assertEqual(os.listdir(os.path.dirname(path)), [os.path.basename(path)])
         self.assertNotEqual(self.g.token(self.stack + "-other"), found[0])
+
+    def test_no_file_left_when_the_token_cannot_be_kept(self):
+        with mock.patch.object(self.g.os, "link", side_effect=PermissionError), self.assertRaises(PermissionError):
+            self.g.token(self.stack)
+        self.assertEqual(os.listdir(os.path.dirname(self.stack)), [])
 
     def test_a_file_that_holds_no_token_is_refused_without_its_words(self):
         os.makedirs(os.path.dirname(self.stack))
@@ -174,6 +186,11 @@ class Clone(unittest.TestCase):
             self.assertEqual(sorted(os.listdir(tmp)), ["gitlab", "source"])
         with mock.patch.object(g, "REPOSITORY", "file://" + os.path.join(tmp, "none")), self.assertRaises(g.GitLabError):
             g._clone(os.path.join(tmp, "other"))
+        self.assertEqual(sorted(os.listdir(tmp)), ["gitlab", "source"])
+        with self.assertRaises(g.GitLabError) as raised:
+            g._clone(source + "/..")
+        self.assertIn("no clone", str(raised.exception))
+        self.assertTrue(os.path.isdir(source))
 
 
 class Ready(Case):
@@ -270,25 +287,15 @@ class Share(unittest.TestCase):
     def setUp(self):
         self.g = load()
 
-    def test_none_with_no_vm_limit_and_a_share_given(self):
+    def test_the_vms_own_limits_and_the_default_where_one_is_none(self):
         self.assertIsNone(self.g.share({}))
-        self.assertEqual(self.g.share({self.g.SHARE_OPTION: "8:80", "NULLIUS_OPTION_WRITE_MBPS": "8"}), (8, 80))
+        self.assertEqual(self.g.share({"NULLIUS_OPTION_WRITE_MBPS": "8", "NULLIUS_OPTION_WRITE_IOPS": "80"}), (8, 80))
+        self.assertEqual(self.g.share({"NULLIUS_OPTION_WRITE_MBPS": "8"}), (8, 160))
+        self.assertEqual(self.g.share({"NULLIUS_OPTION_WRITE_IOPS": "80"}), (16, 80))
 
-    def test_with_the_vms_limited_gitlab_needs_a_share(self):
-        for limited in ({"NULLIUS_OPTION_WRITE_MBPS": "8"}, {"NULLIUS_OPTION_WRITE_IOPS": "80"}):
-            with self.subTest(limited), self.assertRaises(self.g.GitLabError) as raised:
-                self.g.share(limited)
-            self.assertIn("GitLab write share", str(raised.exception))
-
-    def test_a_share_that_is_no_share_is_refused(self):
-        for bad in ("8", "8:", ":80", "0:80", "8:4", "8/80"):
-            with self.subTest(bad), self.assertRaises(self.g.GitLabError):
-                self.g.share({self.g.SHARE_OPTION: bad})
-
-    def test_the_option_s_pattern_is_the_module_s(self):
-        with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
-            bench = json.load(f)
-        self.assertEqual(bench["options"]["gitlab_write"]["pattern"], "none|" + self.g.SHARE.pattern)
+    def test_a_limit_that_leaves_a_service_none_is_refused(self):
+        with self.assertRaises(self.g.GitLabError):
+            self.g.share({"NULLIUS_OPTION_WRITE_IOPS": "4"})
 
 
 class Allocation(unittest.TestCase):
@@ -349,7 +356,8 @@ class Driver(unittest.TestCase):
         for target, name, fake in ((self.driver, "_vm", lambda dir, domain, eid: os.path.join(dir, "vm.qcow2")),
                                    (self.driver, "_run", run), (self.driver, "_task_file", lambda *a: None),
                                    (self.g, "held", held),
-                                   (self.g, "prepare", lambda where, **kw: self.order.append(("prepare", where))),
+                                   (self.g, "prepare", lambda where, **kw: self.order.append(("prepare", where))
+                                    or self.ups.append(kw["closed"])),
                                    (self.g, "unit", lambda where, dir: os.path.join(dir, "gitlab.limits")),
                                    (self.g, "up", lambda *a: self.ups.append(a) or self.order.append(("up",))),
                                    (self.driver, "_warden", warden)):
@@ -390,9 +398,10 @@ class Driver(unittest.TestCase):
         self.assertNotIn(self.g.TOKEN, self.envs[-1])
         self.assertEqual(self.held, [(URL, mock.ANY)] * 2 + [(None, mock.ANY)])
         limits = os.path.join(self.tmp, "gitlab.limits")
-        self.assertEqual(self.ups, [(self.home, limits, mock.ANY)] * 2)
+        self.assertEqual(self.ups[1::2], [(self.home, limits, mock.ANY)] * 2)
         self.assertIsNotNone(self.held[0][-1].until)
-        self.assertIsNotNone(self.ups[0][-1].until)
+        self.assertIsNotNone(self.ups[1][-1].until)
+        self.assertIs(self.ups[0], self.ups[1][-1])
         self.assertEqual(self.order, [("warden", self.tmp), ("prepare", self.home), ("up",), ("let go", self.tmp)] * 2)
 
     def test_the_sites_that_serve_gitlab_are_checked_among_what_a_vm_start_needs(self):
@@ -564,6 +573,11 @@ class Lifecycle(unittest.TestCase):
         with mock.patch.object(self.g, "_upstream_script", lambda stack: "echo other"), \
                 self.assertRaises(self.g.GitLabError):
             self.g._make_token(self.stack)
+        with mock.patch.object(self.g, "_upstream_script", lambda stack: script), \
+                mock.patch.object(self.g.subprocess, "run", lambda argv, **kw: Fake(1, stderr=f"x {TOKEN} y\n")), \
+                self.assertRaises(self.g.GitLabError) as raised:
+            self.g._make_token(self.stack)
+        self.assertNotIn(TOKEN, str(raised.exception))
 
     def test_the_runner_runs_jobs_unprivileged_in_the_project_s_docker(self):
         asked = []
@@ -601,7 +615,7 @@ class Lifecycle(unittest.TestCase):
 
     def test_a_unit_s_mark_and_limits_and_its_reap(self):
         self.configure()
-        environ = {self.g.SHARE_OPTION: "8:80", "NULLIUS_OPTION_WRITE_MBPS": "8"}
+        environ = {"NULLIUS_OPTION_WRITE_MBPS": "8", "NULLIUS_OPTION_WRITE_IOPS": "80"}
         limits = self.g.unit(self.stack, self.tmp, environ)
         settings = self.g._settings(self.stack, limits)
         self.assertEqual(settings["OSWORLD2_GITLAB_SHARE"], "unit")
@@ -656,10 +670,15 @@ class Lifecycle(unittest.TestCase):
 
     def test_the_stamp_is_read_from_the_snapshot_read_only(self):
         with mock.patch.object(self.g, "_snapshot", lambda: True):
-            with mock.patch.object(self.g, "_docker", lambda *a, **kw: self.calls.append(a) or Fake(stdout="abc\n")):
+            with mock.patch.object(self.g, "_docker",
+                                   lambda *a, **kw: self.calls.append(a) or Fake(stdout=f"abc {int(time.time())}")):
                 self.assertEqual(self.g._made(), "abc")
             self.assertIn(f"{self.g.SNAPSHOT}:/snapshot:ro", self.calls[-1])
             self.assertIn("none", self.calls[-1])
+            old = int(time.time()) - self.g.TOKEN_DAYS * 86400 - 1
+            for said in ("abc", f"abc {old}", "abc x"):
+                with self.subTest(said), mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(stdout=said)):
+                    self.assertIsNone(self.g._made())
             with mock.patch.object(self.g, "_docker", lambda *a, **kw: Fake(1)):
                 self.assertIsNone(self.g._made())
         with mock.patch.object(self.g, "_snapshot", lambda: False):
@@ -676,8 +695,8 @@ class Lifecycle(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.g.init(self.stack)
-        self.assertIn(f"printf %s {self.g._stamp(os.path.abspath(self.stack), URL)} > /snapshot/{self.g.STAMP}",
-                      copied[-1])
+        self.assertIn(f"printf '%s %s' {self.g._stamp(os.path.abspath(self.stack), URL)} ", copied[-1])
+        self.assertIn(f" > /snapshot/{self.g.STAMP}", copied[-1])
         self.assertNotIn(TOKEN, copied[-1])
 
     def test_a_snapshot_made_for_this_stack_host_and_token_is_kept(self):
@@ -705,15 +724,28 @@ class Lifecycle(unittest.TestCase):
                            ("configure", lambda *a: order.append(("configure",) + a[1:])),
                            ("compose", lambda stack, args, **kw: order.append(args[0]) or Fake()),
                            ("down", lambda stack: order.append("down")), ("_snapshot", lambda: True),
-                           ("init", lambda stack, say: order.append("init"))):
+                           ("init", lambda stack, say, closed: order.append("init"))):
             p = mock.patch.object(self.g, name, fake)
             p.start()
             self.addCleanup(p.stop)
         self.g.prepare(self.stack, {SITES: SUFFIX})
-        self.g.prepare(self.stack, {SITES: SUFFIX, self.g.SHARE_OPTION: "8:80"})
-        self.assertEqual(order, ["clone", ("configure", SUFFIX, 16, 160), "pull", "down", "init",
-                                 "clone", ("configure", SUFFIX, 8, 80), "pull", "down", "init"])
+        self.g.prepare(self.stack, {SITES: SUFFIX, "NULLIUS_OPTION_WRITE_MBPS": "8", "NULLIUS_OPTION_WRITE_IOPS": "80"})
+        self.assertEqual(order, ["clone", ("configure", SUFFIX, 16, 160), "pull", "down", "init"] * 2)
         self.assertEqual([a for a, _ in self.calls], [("volume", "rm", self.g.SNAPSHOT)] * 2)
+        with self.assertRaises(self.g.GitLabError):
+            self.g.prepare(self.stack, {})
+
+    def test_a_snapshot_that_cannot_be_read_is_kept(self):
+        def fail():
+            raise self.g.GitLabError("docker volume got no answer in 300 s")
+        done = []
+        for name in ("_clone", "configure", "compose", "down", "init"):
+            p = mock.patch.object(self.g, name, lambda *a, n=name, **kw: done.append(n))
+            p.start()
+            self.addCleanup(p.stop)
+        with mock.patch.object(self.g, "_made", fail), self.assertRaises(self.g.GitLabError):
+            self.g.prepare(self.stack, {SITES: SUFFIX})
+        self.assertEqual((done, self.calls), ([], []))
 
     def test_no_override_is_one_line_saying_what_to_do(self):
         with mock.patch.object(self.g, "OVERRIDE", os.path.join(self.tmp, "none.yml")), \

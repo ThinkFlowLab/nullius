@@ -204,17 +204,6 @@
         "yours"
       ]
     },
-    "gitlab_write": {
-      "label": "GitLab write share",
-      "summary": "Disk write limit for GitLab, as MB/s:IOPS. Needed by tasks 026 and 041 while the VMs' writes are limited.",
-      "pattern": "none|[1-9][0-9]{0,5}:[1-9][0-9]{0,5}",
-      "example": "16:160",
-      "default": "none",
-      "setups": [
-        "original",
-        "yours"
-      ]
-    },
     "write_mbps": {
       "label": "Disk write MB/s",
       "summary": "Disk write limit for each VM.",

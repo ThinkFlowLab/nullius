@@ -48,7 +48,7 @@ def _task(examples, domain, eid):
         instruction = task["instruction"]
     except (Exception, SystemExit) as e:
         _fail(f"the task class for {domain}__{eid} did not load: {type(e).__name__}"
-              + (", which may need a service this entry does not set up (the mock websites, GitLab)"
+              + (", which may need a service this entry does not set up (the mock websites)"
                  if isinstance(e, ValueError) else ""))
     return task, instruction
 
