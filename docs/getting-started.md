@@ -157,7 +157,7 @@ Keep Nullius on loopback and forward its port over SSH:
 ssh -N -L 5057:127.0.0.1:5057 user@your-host
 ```
 
-Then open [localhost:5057](http://localhost:5057). To run benchmarks elsewhere and keep the application here, add a [run host](settings/run-hosts.md) instead.
+Then open [localhost:5057](http://localhost:5057). To run benchmarks elsewhere and keep the application here, add a [host](settings/run-hosts.md) instead.
 
 <div class="grid cards" markdown>
 

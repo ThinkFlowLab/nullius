@@ -170,6 +170,19 @@ class Lifecycle(unittest.TestCase):
         workspace.touch(a)
         self.assertEqual([w.name for w in workspace.list_all(self.home)][0], "a")
 
+    def test_last_open_is_the_latest_unless_the_user_closed_it(self):
+        self.assertIsNone(workspace.last_open(self.home))
+        a = workspace.create(self.home, ["/r/a"], label="a")
+        a.opened = "2000-01-01T00:00:00+00:00"
+        workspace.save(a)
+        b = workspace.create(self.home, ["/r/b"], label="b")
+        self.assertEqual(workspace.last_open(self.home).name, "b")
+        b.closed = True
+        workspace.save(b)
+        self.assertIsNone(workspace.last_open(self.home))                      # not the one opened before it either
+        workspace.touch(b)
+        self.assertEqual(workspace.last_open(self.home).name, "b")
+
 
 class Cache(unittest.TestCase):
     def setUp(self):

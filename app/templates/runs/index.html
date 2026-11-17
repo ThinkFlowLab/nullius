@@ -1,7 +1,8 @@
 {% from 'runs/_runtime.html' import what_ran %}
 {% extends "base.html" %}
 {% block title %}Runs — Nullius{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
 
 {# Value filter for one column: a caret in the header opening a checkbox list.
    Values start all-checked; unchecking hides the matching rows. #}
@@ -21,6 +22,9 @@
 </span>
 {% endmacro %}
 
+{#- A row's name as the launch's table shows it: the control, the agent, else its job id past the launch's prefix. #}
+{% macro row_name(r, L) %}{% set j = r.job %}{{ r.control or (j.agent_label if j and j.agent_label else r.job_id[L.prefix|length - 1:] if L.prefix.endswith('*') and r.job_id.startswith(L.prefix[:-1]) else r.job_id) }}{% endmacro %}
+
 {#- One row of a launch's table: a task check (`kind` 'control') or an agent; `part` 'fold' for a participant's
     shards as one row, 'shard' for one of them, '' for a run of one job. #}
 {% macro launch_row(r, g, kind, part='', first=False) %}{% set L = g.launch %}{% set j = r.job %}{% set v = r.verdict %}
@@ -34,7 +38,7 @@
           {%- if kind == 'control' %}
           {%- if part == 'fold' %}{{ r.control }}{% else %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ r.control }}</a>{% endif %} <span class="la-kind">task check</span>
           {%- else %}
-          {%- set name = j.agent_label if j and j.agent_label else r.job_id[L.prefix|length - 1:] if L.prefix.endswith('*') and r.job_id.startswith(L.prefix[:-1]) else r.job_id %}
+          {%- set name = row_name(r, L) %}
           {%- if part == 'fold' %}{{ name }}{% else %}<a href="{{ url_for('job', job_id=r.job_id) }}">{{ name }}</a>{% endif %}
           {%- if j and j.runner %} {{ what_ran(j) }}{% elif j and j.agent_version %} <span class="la-ver mono">{{ j.agent_version }}</span>{% endif %}
           {%- endif %}</span>
@@ -86,15 +90,15 @@
     <a class="btn sm ghost" href="{{ url_for('import_page') }}">Import</a>
     <a class="btn sm" href="{{ url_for('new_run') }}">New run</a>
   </span></div>
-{# Agents only: a control's trials are a check on the tasks, not results, and
-   are shown as their launch's task checks. #}
+{# Runs and trials are agents only: a control's trials are a check on the tasks, not results.
+   The checks are counted apart, as each launch counts them. #}
 <p class="subtitle" id="counts"
    data-runs="{{ n_agent_runs }}" data-trials="{{ n_trials }}">
-  {{ n_agent_runs }} runs<span class="dot">·</span>{{ n_trials }} trials
+  {{ launches|length }} launch{{ '' if launches|length == 1 else 'es' }}<span class="dot">·</span>{{ n_agent_runs }} run{{ '' if n_agent_runs == 1 else 's' }}<span class="dot">·</span>{{ n_trials }} trial{{ '' if n_trials == 1 else 's' }}
+  {%- if n_checks %}<span class="dot">·</span>{{ n_checks }} check{{ '' if n_checks == 1 else 's' }}{% endif %}
 </p>
 <p class="runs-glance" id="glance">
   {%- if workspace %}<span>in <b>{{ workspace.label }}</b></span>{% endif -%}
-  <span><b>{{ launches|length }}</b> launch{{ '' if launches|length == 1 else 'es' }}</span>
   {%- for s, n in states|dictsort %}<span class="st-{{ s }}"><b>{{ n }}</b> {{ s }}</span>{% endfor -%}
   <span title="Launches whose nop and oracle controls behaved on every task">task checks <b>{{ n_checked }}</b> of {{ launches|length }}</span>
 </p>
@@ -104,6 +108,11 @@
     <button class="seg oc-{{ k }}" style="flex:{{ totals[k] }}" data-outcome="{{ k }}"
             title="{{ LABELS[k] }}: {{ totals[k] }} — click to filter"></button>
   {% endif %}{% endfor %}
+</div>
+<div class="runs-filters">
+<div class="runs-views" role="group" aria-label="View">
+  <a class="rv{{ ' on' if view == 'launch' }}" href="?view=launch" data-view="launch" aria-pressed="{{ 'true' if view == 'launch' else 'false' }}">By launch</a>
+  <a class="rv{{ ' on' if view == 'all' }}" href="?view=all" data-view="all" aria-pressed="{{ 'true' if view == 'all' else 'false' }}">All runs</a>
 </div>
 <div class="legend">
   {% for k in ORDER %}{% if totals[k] %}
@@ -117,23 +126,19 @@
   {% endif %}
   <button class="chip clear" id="clear-filter" hidden>Clear filter ×</button>
 </div>
-
-<div class="runs-views" role="group" aria-label="View">
-  <a class="rv{{ ' on' if view == 'launch' }}" href="?view=launch" data-view="launch" aria-pressed="{{ 'true' if view == 'launch' else 'false' }}">By launch</a>
-  <a class="rv{{ ' on' if view == 'all' }}" href="?view=all" data-view="all" aria-pressed="{{ 'true' if view == 'all' else 'false' }}">All runs</a>
 </div>
 
 {#- By launch: runs started together ran the same tasks. Each launch is one block - its task checks (the nop and oracle
     controls), then its agents on one 0-100% scale, then the runs its record named that Harbor has not written yet. -#}
 <div id="view-launch" class="launches"{% if view != 'launch' %} hidden{% endif %}>
   {% for g in launches %}{% set L = g.launch %}
-  <section class="launch" data-launch="{{ L.key }}" aria-label="Launch {{ L.title }}">
+  <section class="launch" data-launch="{{ L.key }}" id="{{ L.key|replace(':', '-') }}" aria-label="Launch {{ L.title }}">
     {% set by_runner = g.agents|map(attribute='job')|select|map(attribute='runner')|select|first %}
     {% set words = g.agents|map(attribute='job')|select|map(attribute='runner_items')|select|first %}
     <header class="launch-head">
       <h2>{{ g.dataset_title if L.dataset else (L.name or g.dataset_title) }}{% if g.n_tasks %} · {{ g.n_tasks }} {% if words %}{{ words[0] if g.n_tasks == 1 else words[1] }}{% else %}task{{ '' if g.n_tasks == 1 else 's' }}{% endif %}{% endif %}</h2>
       <span class="launch-id mono" title="{{ 'Launched together by one Run from the builder' if L.source == 'record' and not L.launch_ids else 'Shards of one launch, run on several machines' if L.launch_ids else 'Grouped: the same dataset, started within half an hour of the first' }}">{{ L.title }}</span>
-      <span class="launch-when">{% if L.started %}{{ L.started|dt }} · {% endif %}{{ L.job_ids|length + L.pending|length }} run{{ '' if (L.job_ids|length + L.pending|length) == 1 else 's' }}</span>
+      <span class="launch-when">{% if L.started %}{{ L.started|dt }} · {% endif %}{{ g.n_runs }} run{{ '' if g.n_runs == 1 else 's' }}{% if g.n_checks %} · {{ g.n_checks }} check{{ '' if g.n_checks == 1 else 's' }}{% endif %}</span>
     </header>
     {# a runner's launch without controls is checked by its own floor and ceiling, which are arms in its table #}
     {% if g.controls or not by_runner %}
@@ -156,16 +161,52 @@
     </div>
     {% endif %}
     <footer class="launch-foot">
-      <span>{{ g.summary or 'controls only' }}</span>
+      <span>{{ g.summary or 'checks only' }}</span>
       {% if g.paused %}<span class="launch-paused">Paused after a failure: <a href="{{ url_for('job', job_id=g.paused) }}">continue or stop</a></span>{% endif %}
       <span class="header-spacer"></span>
       {% if g.recipe %}<a href="{{ url_for('new_run', run=g.recipe) }}">Open this launch's recipe</a>{% endif %}
       {% if g.compare|length >= 2 %}<a class="btn sm" href="{{ url_for('compare', job=g.compare) }}">Compare these {{ g.compare|length }}</a>
       {% elif g.agents %}<span class="faint" title="Two finished agents with a verdict are needed">Compare needs two finished agents</span>{% endif %}
+      {#- every row is of runs Nullius made: the launch goes as one, its shards with it, asked first in the dialog below #}
+      {% if g.gone %}{% set gone, rows = g.gone, g.controls + g.agents %}{% set n, wss, k = gone.judgements, gone.workspaces, gone.runs|length %}
+      <button type="button" class="btn sm ghost danger launch-delete-btn" aria-haspopup="dialog">Delete launch</button>
+      <template class="launch-ask">
+        <div class="std-how-head"><h2 id="launch-delete-h">Delete launch {{ L.title }}</h2></div>
+        <form method="post" action="{{ url_for('launch_delete', key=L.key) }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+          <ul>{% for r in rows %}<li>{{ row_name(r, L) }}{% if r.shards %} ({{ r.shards|length }} shards){% endif %}</li>{% endfor %}</ul>
+          <p>{{ k }} folder{{ '' if k == 1 else 's' }} · {{ gone.bytes|filesizeformat }}{% if n %} · {{ n }} judgement{{ '' if n == 1 else 's' }}{% endif %}{% if wss %} · workspace{{ '' if wss|length == 1 else 's' }} {{ wss|join(', ') }}{% endif %}</p>
+          {% for h, c in gone.hosts.items() %}<label><input type="checkbox" name="host" value="{{ h }}" checked> Its cop{{ 'y' if c == 1 else 'ies' }} on <b>{{ h }}</b></label>{% endfor %}
+          <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete launch</button></div>
+        </form>
+      </template>{% endif %}
     </footer>
   </section>
   {% endfor %}
+  {#- one dialog for every launch: its Delete fills it from the launch's template; ?delete=<key> opens it on load #}
+  <dialog class="std-how launch-delete" id="launch-delete" aria-labelledby="launch-delete-h"></dialog>
 </div>
+<script>
+(() => {
+  const d = document.getElementById('launch-delete');
+  const btn = key => document.querySelector(`.launch[data-launch="${CSS.escape(key)}"] .launch-delete-btn`);
+  let key = '';
+  const open = b => {
+    const l = b.closest('.launch');
+    key = l.dataset.launch;
+    d.replaceChildren(l.querySelector('template.launch-ask').content.cloneNode(true));
+    d.showModal();
+  };
+  document.addEventListener('click', e => { const b = e.target.closest('.launch-delete-btn'); if (b) open(b); });
+  d.addEventListener('click', e => {   // the backdrop, not the dialog's own padding
+    const r = d.getBoundingClientRect();
+    if (e.target === d && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) d.close();
+  });
+  d.addEventListener('close', () => btn(key)?.focus());   // the button again, though a refresh replaced its block
+  const b = btn(new URLSearchParams(location.search).get('delete') || '');
+  if (b) { b.focus(); open(b); }
+})();
+</script>
 
 <div id="view-all"{% if view != 'all' %} hidden{% endif %}>
 <div class="table-tools">
@@ -238,7 +279,7 @@
         {%- if j.is_preparing %} <span class="badge"
           title="Launched: Harbor has written this run's configuration and nothing else yet. No trial has started; the row will change on its own.">preparing</span>
         {%- elif j.is_running and ended[j.job_id] %} <span class="badge"
-          title="The run that wrote this job was {{ ended[j.job_id][0] }} at {{ ended[j.job_id][1].strftime('%H:%M:%S') }}Z; Harbor never closed it, so its record still names {{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending — those trials will not run">{{ ended[j.job_id][0] }}</span>
+          title="This run was {{ ended[j.job_id][0] }} at {{ ended[j.job_id][1].strftime('%H:%M:%S') }}Z; Harbor never closed it, so its record still names {{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending. Those trials will not run.">{{ ended[j.job_id][0] }}</span>
         {%- elif j.is_running %} <span class="badge warn"
           title="{{ j.n_running_trials }} running · {{ j.n_pending_trials }} pending — this run is not finished; its numbers are partial">running</span>{% endif %}</td>
       <td data-col="agent"><span>{{ j.agent_label or '—' }}</span>
@@ -351,6 +392,7 @@
   const sent = new Map([...document.querySelectorAll('.launch')].map(l => [l.dataset.launch, l.outerHTML]));
   sent.set('tbody', table.tBodies[0].innerHTML);
   const counts = document.getElementById('counts');
+  let head = counts.innerHTML;
   const note = document.getElementById('filter-note');
   const emptyNote = document.getElementById('empty-note');
   const clearBtn = document.getElementById('clear-filter');
@@ -453,10 +495,12 @@
     const filtered = active || Object.values(colFilters).some(Boolean);
     clearBtn.hidden = !filtered;
     emptyNote.hidden = shown > 0;
-    note.textContent = filtered ? `${shown} of ${rows.length} runs` : '';
-    counts.textContent = filtered
-      ? `${shown} of ${counts.dataset.runs} runs shown`
-      : `${counts.dataset.runs} runs · ${counts.dataset.trials} trials`;
+    // agents only, as the header counts them
+    const runRows = rows.filter(r => !r.classList.contains('control-row'));
+    const agents = runRows.filter(r => !r.hidden).length;
+    note.textContent = filtered ? `${agents} of ${runRows.length} runs` : '';
+    if (filtered) counts.textContent = `${agents} of ${counts.dataset.runs} run${counts.dataset.runs === '1' ? '' : 's'} shown`;
+    else counts.innerHTML = head;
     syncPicks();   // the header checkbox tracks visible rows only
   }
   // on the document: the bar and the chips are replaced as the runs move
@@ -640,6 +684,7 @@
     const now = fresh.getElementById('counts');
     counts.dataset.runs = now.dataset.runs;
     counts.dataset.trials = now.dataset.trials;
+    head = now.innerHTML;
   }
   let seen = {{ pulse | tojson }}, asking = false;
   setInterval(async () => {

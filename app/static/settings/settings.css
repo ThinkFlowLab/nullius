@@ -92,7 +92,7 @@
   .st-key-new-fields { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* run hosts: a row each - its name tests it, the result says what answered */
+/* hosts: a row each - its name tests it, the result says what answered */
 .st-hosts { padding: 14px 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); }
 .host-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .host-table th, .host-table td { padding: 6px 4px; text-align: left; vertical-align: middle; font-weight: 400; }
@@ -299,6 +299,9 @@
 .st-provider-choice { display: flex; align-items: center; gap: 12px; padding: 18px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: 500 14px/1.5 var(--sans); text-align: left; cursor: pointer; }
 .st-provider-choice:hover { background: var(--nav-hover); border-color: var(--text-faint); }
 .st-provider-choice .st-logo { width: 28px; height: 28px; }
+/* A custom provider's logo: the first two letters of its name, on the workspace badge. */
+.ws-avatar.st-logo { width: 20px; height: 20px; font-size: .5rem; border-radius: 5px; color: var(--accent); letter-spacing: 0; }
+.st-provider-choice .ws-avatar.st-logo { width: 28px; height: 28px; font-size: .64rem; border-radius: 7px; }
 .st-provider-summary { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .st-provider-summary > div { flex: 1; min-width: 0; }
 .st-provider-summary h3 { overflow-wrap: anywhere; }

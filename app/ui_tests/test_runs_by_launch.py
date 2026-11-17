@@ -145,8 +145,8 @@ class RunsByLaunch(unittest.TestCase):
     def test_a_later_paused_shard_has_a_resume_link(self):
         from web.runs import _launch_view
         group = SimpleNamespace(job_ids=[], pending=["first", "second"], source="record", dataset="")
-        first = SimpleNamespace(state="done", plan=SimpleNamespace(recipe={}), refused=lambda _: None, never_ran=lambda _: False)
-        second = SimpleNamespace(state="paused", plan=SimpleNamespace(recipe={}), live_state=lambda _: "paused")
+        first = SimpleNamespace(state="done", plan=SimpleNamespace(recipe={}, jobs=[]), refused=lambda _: None, never_ran=lambda _: False)
+        second = SimpleNamespace(state="paused", plan=SimpleNamespace(recipe={}, jobs=[]), live_state=lambda _: "paused")
         with patch.object(execution, "for_job", side_effect=lambda key: {"first": first, "second": second}[key]), \
              patch("web.runs._control_planned", return_value=""):
             self.assertEqual(_launch_view(group, {}, {}, {})["paused"], "second")
@@ -206,7 +206,7 @@ class RunsByLaunch(unittest.TestCase):
         with patch.dict(execution.EXECUTIONS, {"r2": ex}, clear=True):
             page = self.get("/job/exp-1008-codex")                                     # its own page, before Harbor writes it
         self.assertIn('id="execution-state">queued</span>', page)
-        self.assertIn("· the run: running", page)
+        self.assertIn("· the launch: running", page)
 
     def test_a_standard_launch_draws_its_controls_whatever_their_state(self):
         # A standard job carries a runner; its declared controls are still task checks, before and after they are written.
@@ -246,7 +246,7 @@ class RunsByLaunch(unittest.TestCase):
                 with patch.dict(execution.EXECUTIONS, {"r5": ex}, clear=True):
                     html = self.get("/runs")
                 block = next(b for b in blocks(html) if 'data-launch="run:r5"' in b)
-                self.assertIn("· 3 runs</span>", block)
+                self.assertIn("· 1 run · 2 checks</span>", block)
                 self.assertEqual(block.count("<tr class="), 3)                       # every run counted is drawn
                 self.assertEqual(re.findall(r'<tr class="la-control st-([^"]+)" data-control="(\w+)"', block),
                                  list(zip(states, ("nop", "oracle"))))

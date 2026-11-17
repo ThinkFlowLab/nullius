@@ -522,9 +522,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     def word_of(d: dict, p: dict) -> str:
         return "-".join(([d["id"]] if many else []) + ([definitions.job_word(p["o"])] if several else []))
 
+    def launch_of(d: dict, p: dict) -> str:
+        return "-".join(filter(None, [name, word_of(d, p)]))
+
     def job_of(d: dict, p: dict, index: int) -> str:
-        base = "-".join(filter(None, [name, word_of(d, p)]))
-        return f"{base}-shard-{index}of{of}" if of > 1 else base
+        return f"{launch_of(d, p)}-shard-{index}of{of}" if of > 1 else launch_of(d, p)
 
     def options_for_pick(d: dict, p: dict) -> dict:
         """The benchmark's options for this dataset and this pick: a setup's own, or those of the port."""
@@ -533,7 +535,6 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
 
     def command_for(d: dict, p: dict, index: int) -> str:
         o, control, given = p["o"], p["control"], p["given"]
-        launch = "-".join(filter(None, [name, word_of(d, p)]))
         m = p["model"] if p.get("setup") else model
         words = ["nullius", "standard", "run", definitions.ref_of(b), o["_ref"], *(["--model", m] if m else []), "--provider", provider,
                  "--dataset", d["id"], *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
@@ -546,7 +547,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
                  *(["--backend", "container"] if backend == "container" else []),
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
-                 *(["--shard", f"{index}/{of}", "--launch", launch] if of > 1 else []),
+                 *(["--shard", f"{index}/{of}", "--launch", launch_of(d, p)] if of > 1 else []),
                  *limits.cli_words(limits.of(targets[index - 1])), "--from-run"]
         return " ".join(shlex.quote(w) for w in words) + ' --jobs "${NULLIUS_JOBS:-jobs_standard}"'
 
@@ -569,7 +570,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             parts.append({"id": word_of(d, p) or definitions.job_word(p["o"]),
                           "label": " · ".join(([d.get("label") or d["id"]] if many else []) + [p["o"]["label"]]) + (f" · shard {i}/{of}" if of > 1 else ""),
                           "script": script_for(d, p, command, i)})
-            jobs.append({"name": job_of(d, p, i), "agent": p["o"]["_ref"], "dataset": definitions.ref_of(b)})
+            # a shard's launch id, so its run record joins the launch before its job is written (runs.launches)
+            jobs.append({"name": job_of(d, p, i), "agent": p["o"]["_ref"], "dataset": definitions.ref_of(b),
+                         **({"launch": launch_of(d, p)} if of > 1 else {})})
         out["shards"].append({"where": where, "index": i, "of": of, "name": f"{name}-shard-{i}of{of}" if of > 1 else name,
                               "command": "\n".join(commands[-len(pairs):]), "script": parts[0]["script"], "parts": parts, "jobs": jobs})
     out["script"] = "\n".join(pt["script"] for pt in out["shards"][0]["parts"]) if len(pairs) > 1 else out["shards"][0]["script"]

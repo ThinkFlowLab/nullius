@@ -113,7 +113,7 @@ nav:
           - LLM judge provider: settings/llm-judge.md
           - Custom keys: settings/agent-keys.md
           - Model prices: settings/model-prices.md
-          - Run hosts: settings/run-hosts.md
+          - Hosts: settings/run-hosts.md
           - Data providers: settings/data-providers.md
           - Sandbox: settings/sandbox.md
           - Other: settings/other.md

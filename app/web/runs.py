@@ -25,6 +25,7 @@ from nullius import workspace
 
 from .core import app
 from . import shared
+from . import settings as settings_web
 
 
 
@@ -38,19 +39,13 @@ def home():
 def index():
     if shared.STATE["workspace"] is None:
         return render_template("runs/start.html", workspaces=workspace.list_all(shared.WS_HOME))
-    jobs = shared._load_jobs()
+    jobs, have, mine, grouped = _grouped()
     # Runs started from the builder whose job Harbor has not written yet:
     # listed above the table, each a link to the page that follows it.
-    have = {j.job_id for j in jobs}
-    # The run records are the app's, not the workspace's: only those launched
-    # into this workspace's roots, or with a job already written here, belong.
-    mine = [e for e in execution.EXECUTIONS.values() if _launched_here(e, have)]
-    merged_sources = launches.merged_sources(jobs)
-    jobs = [j for j in jobs if j.job_id not in merged_sources]
     preparing = [(jid, e) for e in mine if e.state in execution.ALIVE for jid in e.summary()["job_ids"] if jid not in have]
     # a launch whose runs wrote no job yet (or never will: refused, stopped) is still shown
     if not jobs and not mine:
-        return render_template("runs/setup.html", scanned=True, mode="add",
+        return render_template("runs/setup.html", scanned=bool(shared.STATE["roots"]), mode="add",
                                workspaces=workspace.list_all(shared.WS_HOME))
     # A Harbor killed by a Stop (or dead with the run) leaves its result
     # record saying trials are running; the runner's record says otherwise.
@@ -75,8 +70,9 @@ def index():
     used = {}
     for j in jobs:
         entry = used.setdefault(j.dataset, {"runs": 0, "trials": 0})
-        entry["runs"] += 1
-        entry["trials"] += len(j.trials)
+        if verdicts[j.job_id] is None:          # agents only, as the header counts them
+            entry["runs"] += 1
+            entry["trials"] += len(j.trials)
     datasets = [
         {"name": name, "info": shared.dataset_info(name), **counts}
         for name, counts in sorted(used.items(), key=lambda kv: -kv[1]["trials"])
@@ -91,13 +87,8 @@ def index():
         "model": sorted({(j.model_name, j.model_name) for j in jobs}),
         "agent": sorted({(j.agent_label, j.agent_label or "—") for j in jobs}),
     }
-    # The page's first view: the runs grouped by the launch that made them
-    # (nullius.runs.launches) - the builder's run record, else the same dataset
-    # within half an hour - each with its task checks and its agents side by side.
-    records = {e.id: (e.plan.name, [str(x.get("name")) for x in e.plan.jobs
-                                  if str(x.get("name")) not in merged_sources], e.started) for e in mine}
     by_id = {j.job_id: j for j in jobs}
-    groups = [_launch_view(g, by_id, verdicts, ended) for g in launches.group(jobs, records)]
+    groups = [_launch_view(g, by_id, verdicts, ended) for g in grouped]
     view = request.args.get("view") if request.args.get("view") in ("launch", "all") else "launch"
     states = {}
     for g in groups:
@@ -109,7 +100,29 @@ def index():
         datasets=datasets, choices=choices, pulse=_roots_pulse(), preparing=preparing,
         launches=groups, view=view, states=states,
         n_checked=sum(1 for g in groups if g["checked"]),
+        n_checks=sum(g["n_checks"] for g in groups),
     )
+
+
+def _grouped():
+    """The open workspace's jobs (less those a merge stands for), the ids of all
+    it parsed, the run records that belong to it, and the launches By launch
+    shows: the runs grouped by the launch that made them (nullius.runs.launches)
+    - the builder's run record, else the same dataset within half an hour."""
+    jobs = shared._load_jobs()
+    have = {j.job_id for j in jobs}
+    # The run records are the app's, not the workspace's: only those launched
+    # into this workspace's roots, or with a job already written here, belong.
+    mine = [e for e in execution.EXECUTIONS.values() if _launched_here(e, have)]
+    merged = launches.merged_sources(jobs)
+    jobs = [j for j in jobs if j.job_id not in merged]
+    return jobs, have, mine, launches.group(jobs, {e.id: _record(e, merged) for e in mine})
+
+
+def _record(ex, merged=()) -> tuple:
+    """A run record as ``launches.group`` reads it, less the jobs a merge stands for."""
+    names = [str(x.get("name")) for x in ex.plan.jobs if str(x.get("name")) not in merged]
+    return ex.plan.name, names, ex.started, {str(x.get("launch") or "") for x in ex.plan.jobs}
 
 
 def _launched_here(ex, have) -> bool:
@@ -283,9 +296,11 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
     for r in leaves(controls + rows):
         counts[r["state"]] = counts.get(r["state"], 0) + 1
     ex = execution.for_job((g.job_ids + g.pending)[0])
-    return {"launch": g, "checks": checks, "verdict": verdict,
+    return {"gone": _deletion(_runs_of(g)),
+            "launch": g, "checks": checks, "verdict": verdict,
             "controls": controls, "checked": checked, "agents": rows,
             "n_tasks": n_tasks, "compare": finished,
+            "n_runs": len(leaves(rows)), "n_checks": len(leaves(controls)),
             "paused": next((i for i in g.job_ids + g.pending
                             if (execution.for_job(i) is not None and execution.for_job(i).state == "paused")), None),
             "summary": " · ".join(f"{n} {s}" for s, n in sorted(counts.items(), key=lambda kv: _STATE_ORDER.get(kv[0], 9))),
@@ -366,13 +381,17 @@ def _after_import(good, refused, new):
 @app.route("/use-path", methods=["POST"])
 def use_path():
     shared._require_csrf()
+    new = request.form.get("new") == "1"
+    label = (request.form.get("name") or "").strip()
+    if new and not any(p.strip() for p in request.form.getlist("path")):
+        shared.open_workspace(workspace.create(shared.WS_HOME, [], label))   # no path: an empty workspace
+        return redirect(url_for("index"))
     good, bad = shared.resolve_submitted_paths(request.form.getlist("path"))
     if bad:
         flash(shared._bad_paths_message(bad), "error")
     good, refused = _readable(good)
-    new = request.form.get("new") == "1"
     if good:
-        shared.adopt_roots(good, label=(request.form.get("name") or "").strip(), new=new)
+        shared.adopt_roots(good, label=label, new=new)
     return _after_import(good, refused, new)
 
 
@@ -466,14 +485,73 @@ def job(job_id):
         # Started from the builder and not written by Harbor yet: the run's
         # own page, which becomes this one when the job appears.
         if ex is not None and request.method == "GET":
-            return render_template("runs/preparing.html", job_id=job_id, ex=ex, csrf=shared._csrf_token(), own=own)
+            return render_template("runs/preparing.html", job_id=job_id, ex=ex, csrf=shared._csrf_token(), own=own, deletable=_deletable(job_id, ex))
         abort(404)
     from . import judge
     board = _live_board_state(j)
     return render_template("runs/job.html", job=j, live_board=board, view=_view_of(board, j),
                            execution=ex, csrf=shared._csrf_token(),
                            judgement=judge.job_summary(j) if j.trials else None,
-                           control=feasibility.summary_of(j), ended=execution.ended_for(job_id), own=own)
+                           control=feasibility.summary_of(j), ended=execution.ended_for(job_id), own=own, deletable=_deletable(job_id, ex))
+
+
+def _runs_of(g) -> list:
+    """The runs Nullius made that hold every row of the launch *g*, and no job
+    outside it; [] when a row is not one of theirs."""
+    ids = g.job_ids + g.pending
+    runs = list({id(e): e for e in map(execution.for_job, ids)}.values())
+    if None in runs or any(not {str(x.get("name")) for x in e.plan.jobs} <= set(ids) for e in runs):
+        return []
+    return runs
+
+
+def _deletion(runs):
+    """What deleting these runs removes, for the question Delete asks; None while they cannot all be deleted."""
+    if not runs or any(e.state in execution.ALIVE for e in runs):
+        return None
+    try:
+        return execution.deletion([e.plan.name for e in runs], shared.WS_HOME, runs[0].root)
+    except (OSError, ValueError):
+        return None
+
+
+def _deletable(job_id, ex):
+    """The key of this job's launch when the Runs page offers its Delete, else None."""
+    if ex is None or ex.state in execution.ALIVE:
+        return None
+    g = next((g for g in _grouped()[3] if job_id in g.job_ids + g.pending), None)
+    return g.key if g is not None and _deletion(_runs_of(g)) else None
+
+
+@app.route("/launch/<key>/delete", methods=["POST"])
+def launch_delete(key):
+    """Delete a launch that has ended: every run of it (``execution.delete``),
+    each shard's copy on its own host when ticked. A launch with a run still
+    going, or with a job from elsewhere, is refused. The launch's block on
+    the Runs page asks first, in a dialog."""
+    shared._require_csrf()
+    if not settings_web._local_client():
+        abort(403)
+    if shared.STATE["workspace"] is None:
+        abort(404)
+    g = next((g for g in _grouped()[3] if g.key == key), None)
+    if g is None:
+        abort(404)
+    runs = _runs_of(g)
+    if not runs:
+        flash(f"{g.title} has runs that Nullius did not start: it cannot be deleted here.", "error")
+        return redirect(url_for("index", view="launch"))
+    try:
+        gone = execution.delete([e.plan.name for e in runs], shared.WS_HOME, runs[0].root, copies=set(request.form.getlist("host")))
+    except (OSError, ValueError) as e:
+        flash(str(e), "error")
+        return redirect(url_for("index", view="launch"))
+    ws = shared.STATE["workspace"]
+    if any(w["ws"].name == ws.name for r in gone["runs"] for w in r["workspaces"]):
+        shared.open_workspace(workspace.load(shared.WS_HOME, ws.name))      # read without the runs' roots from now on
+    said = Markup('{} launch <span class="mono">{}</span>').format("Deleted part of" if gone["stays"] else "Deleted", g.title)
+    flash(said + "".join(f"; {k}" for k in gone["kept"]) + ".", "error" if gone["stays"] else "")
+    return redirect(url_for("index", view="launch"))
 
 
 def _view_of(board, j=None) -> str | None:
