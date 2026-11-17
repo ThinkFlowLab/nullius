@@ -222,10 +222,20 @@ window.NulliusTable = {
      does; a data-group holding cards hides when none of them shows, and its
      data-group-n counts those that do. After a change, a screen reader hears
      how many show once the changes pause, counted in the live region's
-     data-noun. */
+     data-noun. A click anywhere on a card but on a control of its own
+     follows the card's link, in a new tab or window with the keys or the
+     button a link takes; a click that ends a text selection does not. */
   cards(root) {
     const items = [...root.querySelectorAll('[data-card]')], empty = document.querySelector(`[data-empty="${CSS.escape(root.id)}"]`);
     const live = document.querySelector(`[data-live="${CSS.escape(root.id)}"]`), say = this.voice(live);
+    const follow = e => {
+      const link = e.target.closest('[data-card]')?.querySelector('.card-link');
+      if (!link || e.target.closest('a, button, input, select, textarea, label, summary, [role=button]') || !getSelection().isCollapsed) return;
+      if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) window.open(link.href, '_blank', 'noopener');
+      else if (e.button === 0) link.click();
+    };
+    root.addEventListener('click', follow);
+    root.addEventListener('auxclick', follow);
     const draw = () => {
       items.forEach(c => { c.hidden = !passes(c); });
       root.querySelectorAll('[data-group]').forEach(g => {

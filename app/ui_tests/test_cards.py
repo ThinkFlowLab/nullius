@@ -155,6 +155,35 @@ setTimeout(() => {
 ''')
         self.assertEqual(got, ["", "", "1 of 3 cards", "No card matches."])
 
+    def test_a_click_anywhere_on_a_card_but_a_control_opens_it(self):
+        got = node(r'''
+let selected = '';
+global.getSelection = () => ({isCollapsed: !selected});
+const opened = [], followed = [];
+window.open = (...a) => opened.push(a);
+const link = el('a', {class: 'card-link', href: '/a'}, 'A'), pill = el('span', {title: 'Runs with Harbor'}, 'Harbor');
+const box = el('input', {type: 'checkbox'}), btn = el('button', {}), lab = el('label', {}, el('span', {}, 'x'));
+link.addEventListener('click', () => followed.push('link'));
+const root = el('div', {id: 'c', 'data-cards': ''}, el('article', {'data-card': ''}, el('div', {}, link), pill, box, btn, lab));
+document.appendChild(el('main', {}, el('div', {id: 'c-tools'}), root, el('p', {'data-empty': 'c', hidden: true}), el('span', {'data-live': 'c', 'data-noun': 'cards'})));
+link.href = '/a';
+T.cards(root);
+const click = (target, props = {}) => { followed.length = 0; opened.length = 0; target.dispatch(props.type || 'click', {button: 0, ...props}); return [followed.length, opened.map(a => a.join(' '))]; };
+const out = {
+  pill: click(pill),                                          // a tooltip's pill: the card opens
+  ctrl: click(pill, {ctrlKey: true}), meta: click(pill, {metaKey: true}), shift: click(pill, {shiftKey: true}),
+  middle: click(pill, {type: 'auxclick', button: 1}), right: click(pill, {type: 'auxclick', button: 2}),
+  box: click(box), button: click(btn), label: click(lab.children[0]),   // a control of its own: left to it
+};
+selected = 'Harbor'; out.selecting = click(pill);               // the end of a text selection
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got["pill"], [1, []])
+        for k in ("ctrl", "meta", "shift", "middle"):
+            self.assertEqual(got[k], [0, ["/a _blank noopener"]], k)
+        for k in ("right", "box", "button", "label", "selecting"):
+            self.assertEqual(got[k], [0, []], k)
+
 
 if __name__ == "__main__":
     unittest.main()

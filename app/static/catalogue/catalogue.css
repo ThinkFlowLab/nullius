@@ -25,6 +25,7 @@
 .card-link:focus-visible { outline: none; }
 .card-link:focus-visible::after { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
 .bench-card :is(input, button, .btn, [title]) { position: relative; z-index: 1; }
+.bench-card [title]:not(input, button, .btn) { cursor: pointer; }   /* raised for its tooltip, it still opens the card */
 .bench-card-top .bench-harness { margin-left: auto; }
 .bench-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .bench-shelf.st-community .bench-card { background: transparent; border-style: dashed; border-color: var(--border); }

@@ -12,7 +12,7 @@ import jinja2
 APP = Path(__file__).resolve().parents[1]
 
 # A stand-in DOM: elements built by el(tag, attrs, ...children), selectors of one compound each
-# (tag, .class, [attr], [attr="v"], :checked, :not(:disabled)), events that bubble to the document.
+# (tag, .class, [attr], [attr="v"] or [attr=v], :checked, :not(:disabled)), events that bubble to the document.
 DOM = r'''
 const camel = k => k.replace(/-(\w)/g, (_, c) => c.toUpperCase()), kebab = k => k.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
 const simple = (e, s) => {
@@ -20,7 +20,7 @@ const simple = (e, s) => {
   if (s === ':checked') return e.checked;
   if (s === ':disabled') return e.disabled;
   if (s[0] === '.') return e.classList.contains(s.slice(1));
-  if (s[0] === '[') { const [, k, v] = s.match(/^\[([\w-]+)(?:="([^"]*)")?\]$/); return e.hasAttribute(k) && (v === undefined || e.getAttribute(k) === v); }
+  if (s[0] === '[') { const [, k, v] = s.match(/^\[([\w-]+)(?:="?([^"\]]*)"?)?\]$/); return e.hasAttribute(k) && (v === undefined || e.getAttribute(k) === v); }
   return e.tagName === s.toUpperCase();
 };
 const matches = (e, sel) => sel.split(',').some(one => (one.trim().match(/:not\([^)]*\)|\[[^\]]*\]|[.:]?[\w-]+/g) || []).every(s => simple(e, s)));
