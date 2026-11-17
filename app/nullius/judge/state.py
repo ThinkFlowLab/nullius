@@ -14,6 +14,7 @@ LIMIT = 60_000          # characters of state per call; the judge is priced per 
 OBSERVATION = 600       # characters kept of a tool observation: the head, and the tail below
 OBSERVATION_TAIL = 200  # of those, the characters kept from the end - where a traceback names its exception and a command its exit
 MARKER = "\n[… {n} characters left out here …]\n"
+FINAL_MARKER = "[agent] [the final message; its text is under {heading} below]"
 
 # Observation relevance. Accuracy falls as state grows with material unrelated
 # to the decision, so a tool observation is sent in full (up to OBSERVATION)
@@ -82,13 +83,15 @@ def _relevant(call: dict, obs: str, instruction: str, terms: set, next_message: 
     return len(_terms(obs) & terms) >= MIN_OVERLAP
 
 
-def transcript_of(traj, relevance: str = RELEVANCE) -> str:
+def transcript_of(traj, relevance: str = RELEVANCE, final_heading: str = "") -> str:
     """The agent's steps in order: each message and its tool calls with a
     bounded observation - in full when relevant to the question
     (`_relevant`), a stub with a marker otherwise; `relevance="all"` keeps
     every observation. A stub carries no observation text at all, so a
-    secret in an omitted observation cannot leak through it."""
-    return _transcript(traj, relevance)[0]
+    secret in an omitted observation cannot leak through it. With
+    `final_heading`, the step the final message came from is a marker
+    naming that heading."""
+    return _transcript(traj, relevance, final_heading)[0]
 
 
 def cap_observation(obs: str, limit: int = OBSERVATION, tail: int = OBSERVATION_TAIL) -> str:
@@ -99,14 +102,18 @@ def cap_observation(obs: str, limit: int = OBSERVATION, tail: int = OBSERVATION_
     return obs[:head] + f" … [{len(obs) - limit} characters left out here] … " + obs[-tail:]
 
 
-def _transcript(traj, relevance: str) -> tuple:
+def _transcript(traj, relevance: str, final_heading: str) -> tuple:
     instruction = instruction_of(traj) if relevance != "all" else ""
     terms = _terms(instruction)
     steps = [s for s in traj.steps if s.source == "agent"]
+    # the step `last_agent_message` is read from, by position: an earlier step with the same text stays
+    final = max((i for i, s in enumerate(steps) if s.message and s.message != "(tool use)"), default=-1) if final_heading else -1
     out = []
     kept = omitted = omitted_chars = 0
     for i, s in enumerate(steps):
-        if s.message:
+        if i == final:
+            out.append(FINAL_MARKER.format(heading=final_heading))
+        elif s.message:
             out.append(f"[agent] {s.message}")
         following = next((t.message for t in steps[i + 1:] if t.message), "") or ""
         for c in s.tool_calls or []:
@@ -146,11 +153,12 @@ def build(kind: str, traj, trial=None, trial_dir: Optional[str] = None, other=No
     `relevance` is the observation policy `transcript_of` applies to the
     built-in kinds ("question" by default, "all" keeps every observation).
 
-    `trial`: instruction + steps + final message. `failure`: the same plus
-    the recorded error and the verifier text. `final`: the final message.
+    `trial`: instruction + steps + final message, the step of the final
+    message a one-line marker among the steps. `failure`: the same plus the
+    recorded error and the verifier text. `final`: the final message.
     `pair`: instruction + transcript A + transcript B (`other` is B's
-    trajectory). Any other kind is a registered builder's (`register`),
-    given the same keywords."""
+    trajectory), each with the same marker. Any other kind is a registered
+    builder's (`register`), given the same keywords."""
     if kind in BUILDERS:
         text = BUILDERS[kind](traj, trial=trial, trial_dir=trial_dir, other=other, **extra)
     elif kind == "final":
@@ -158,14 +166,14 @@ def build(kind: str, traj, trial=None, trial_dir: Optional[str] = None, other=No
     elif kind == "pair":
         # each transcript truncated on its own, so a long A cannot push B out of the state
         half = max(2_000, (limit - 4_000) // 2)
-        a, ta = truncate(transcript_of(traj, relevance), half)
-        b, tb = truncate(transcript_of(other, relevance), half)
+        a, ta = truncate(transcript_of(traj, relevance, "[final message A]"), half)
+        b, tb = truncate(transcript_of(other, relevance, "[final message B]"), half)
         text = "[instruction]\n" + instruction_of(traj) + "\n\n[transcript A]\n" + a + "\n[final message A]\n" + (traj.last_agent_message or "") \
             + "\n\n[transcript B]\n" + b + "\n[final message B]\n" + (other.last_agent_message or "")
         text, t = truncate(redact(text), limit)
         return text, t or ta or tb
     else:
-        text = "[instruction]\n" + instruction_of(traj) + "\n\n[transcript]\n" + transcript_of(traj, relevance) + "\n\n[final message]\n" + (traj.last_agent_message or "")
+        text = "[instruction]\n" + instruction_of(traj) + "\n\n[transcript]\n" + transcript_of(traj, relevance, "[final message]") + "\n\n[final message]\n" + (traj.last_agent_message or "")
         if kind == "failure":
             err = ""
             if trial is not None and (trial.exception_type or trial.exception_message):
