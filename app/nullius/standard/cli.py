@@ -104,8 +104,10 @@ def run_env(provider: str, env=os.environ) -> dict:
     """The environment a run started by Nullius reads its provider from:
     ``execution``'s launcher hands every run its one key as ``OPENAI_API_KEY``
     and its endpoint as ``OPENAI_BASE_URL`` (empty for OpenAI's own), so they
-    are named here as the provider's own settings and nothing else is."""
-    out = {k: v for k, v in env.items() if k in run.KEEP}
+    are named here as the provider's own settings and nothing else is - but
+    the Boat key, handed the same way to a run on Boat: on a host, the only
+    way it has one."""
+    out = {k: v for k, v in env.items() if k in run.KEEP or k == boat.NAME}
     if env.get("OPENAI_API_KEY"):
         out[providers.key_setting(provider)] = env["OPENAI_API_KEY"]
     if provider == "custom" and env.get("OPENAI_BASE_URL"):
