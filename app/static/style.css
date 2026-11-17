@@ -359,7 +359,8 @@ button.seg:hover { filter: brightness(1.25); }
 /* the controls row: the search takes what the buttons leave, else a line of its own; the buttons go right */
 .table-controls { flex-wrap: wrap; margin-top: 1rem; }
 .table-controls .st-search { flex: 1 1 14rem; margin: 0; }
-.table-buttons { display: flex; align-items: center; gap: .75rem; margin-left: auto; }
+.table-buttons, .table-slot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .75rem; }
+.table-buttons { margin-left: auto; }
 .table-buttons .menu { left: auto; right: 0; }   /* opens leftwards, inside the page */
 /* a search box, its icon first (the Settings page's too) */
 .st-search { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--surface-2); color: var(--text-dim); }

@@ -305,6 +305,29 @@ class Macros(unittest.TestCase):
                 html = self.page(order)
                 self.assertEqual(re.findall(r'<td data-col="(\w)"[^>]*>(\w)=x<', html), [(c["key"], c["key"]) for c in order])
 
+    SLOTS = ("{% macro two(a, b) %}<button>{{ a }}</button><button>{{ b }}</button>{% endmacro %}"
+             "{% macro views() %}{{ two('v1', 'v2') }}{% endmacro %}{% macro actions() %}{{ two('a1', 'a2') }}{% endmacro %}"
+             "{% macro nothing() %} {% endmacro %}")
+
+    def controls(self, call):
+        return re.sub(r">\s+<", "><", self.render("{% from '_tables.html' import controls %}" + self.SLOTS + call))
+
+    def test_a_controls_row_places_its_slots_around_the_buttons(self):
+        cols = "[dict(key='x', label='X')]"
+        for call in (f"{{{{ controls('t', {cols}, search='Find', columns=true, choices={{'x': [('a', 'A')]}}, views=views, actions=actions) }}}}",
+                     f"{{% call(r, c) table('t', {cols}, [], none, search='Find', columns=true, choices={{'x': [('a', 'A')]}}, views=views, actions=actions) %}}{{% endcall %}}"):
+            with self.subTest(call=call[:12]):
+                html = self.controls(call)
+                self.assertEqual(re.findall(r'data-search|data-slot="(\w+)"|data-tools-btn="(\w+)"|<button>(\w+)</button>', html),
+                                 [("", "", ""), ("views", "", ""), ("", "", "v1"), ("", "", "v2"), ("", "columns", ""), ("", "filter", ""),
+                                  ("", "sort", ""), ("actions", "", ""), ("", "", "a1"), ("", "", "a2")])
+                self.assertEqual(html.count('class="table-slot"'), 2)                  # each slot one group, spaced as the buttons
+                self.assertIn('<div class="table-buttons"><div class="table-slot" data-slot="views">', html)
+        for call in ("{{ controls('t', [dict(key='x', label='X')]) }}", "{{ controls('t', [dict(key='x', label='X')], views=nothing, actions=nothing) }}"):
+            self.assertNotIn("data-slot", self.controls(call))                         # none asked, or one writing nothing: no group
+        css = (APP / "static" / "style.css").read_text()
+        self.assertIn(".table-buttons, .table-slot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .75rem; }", css)
+
     def test_names_and_values_are_escaped(self):
         html = self.page([dict(key="a", label='<b>"A"</b>', title="x<y"), dict(key="n", label="N", sr=True)], rows=[{"name": '<i>&"'}])
         self.assertIn('<th data-col="a" data-type="text" title="x&lt;y">&lt;b&gt;&#34;A&#34;&lt;/b&gt;</th>', html)

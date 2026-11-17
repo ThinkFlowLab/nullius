@@ -47,10 +47,10 @@
 {# A whole table (static/tables.js `wire`): its controls row, its headers from `cols`, a row of `rows` each,
    and its pages. `id` names it, and keys what a viewer chooses; `class` adds to its classes; `tr`: a macro writing a
    row's attributes. The call block writes a cell: it is called with a row and a column, in the order of `cols`, and
-   writes that cell with the cell macro. Opt-ins: `search`, `columns`, `choices`, `only` as controls'; `empty` and
-   `noun` as pager's. #}
-{% macro table(id, cols, rows, tr, class='', search='', columns=false, choices={}, only={}, empty='No rows match.', noun='rows') %}
-{{ controls(id, cols, search, columns, choices, only) }}
+   writes that cell with the cell macro. Opt-ins: `search`, `columns`, `choices`, `only`, `views`, `actions` as
+   controls'; `empty` and `noun` as pager's. #}
+{% macro table(id, cols, rows, tr, class='', search='', columns=false, choices={}, only={}, empty='No rows match.', noun='rows', views=none, actions=none) %}
+{{ controls(id, cols, search, columns, choices, only, views, actions) }}
 {%- for c in cols if c.width == 'expand' %}
 <style>#{{ id }} > * > tr > :nth-child({{ cols.index(c) + 1 }}) { width: auto; min-width: var(--expand-min); white-space: normal; overflow-wrap: anywhere; }</style>
 {%- endfor %}
@@ -79,12 +79,14 @@
 {# A table's controls row (static/tables.js `toolbar`) over the columns `cols`; each feature on only
    when asked. `search`: the search box's name and placeholder, over each row's data-search text; `columns`: the
    Columns menu; `choices`: column -> its (value, label) pairs, a Filter menu of them; `only`: column -> the one value
-   ticked at load, the others unticked; then the Sort by menu. The search goes left, the buttons right.
-   `id`: the table's. #}
-{% macro controls(id, cols, search='', columns=false, choices={}, only={}) %}
+   ticked at load, the others unticked; then the Sort by menu. `views` and `actions`: macros writing a page's own
+   buttons, each any number of them, run by the page: views (how the table looks) before Columns, actions (on the
+   rows or the selection) last. The search goes left, the buttons right. `id`: the table's. #}
+{% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none) %}
 <div class="table-tools table-controls" id="{{ id }}-tools">
   {% if search %}<label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-search placeholder="{{ search }}" aria-label="{{ search }}" autocomplete="off" spellcheck="false"></label>{% endif %}
   <div class="table-buttons">
+  {{ slot('views', views) }}
   {% if columns %}<div class="menu-wrap">{{ columns_button('') }}{{ columns_menu(cols, '') }}</div>{% endif %}
   {% if choices %}<div class="menu-wrap">
     <button class="btn ghost sm" type="button" data-tools-btn="filter" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter<span class="tools-count" hidden></span></button>
@@ -115,9 +117,14 @@
       </fieldset>
     </div>
   </div>
+  {{ slot('actions', actions) }}
   </div>
 </div>
 {% endmacro %}
+
+{#- A controls row's slot `name`: what the macro `fill` writes, in a group spaced as the buttons; nothing when it
+    writes nothing. #}
+{% macro slot(name, fill) %}{% set html = fill() if fill else '' %}{% if html|trim %}<div class="table-slot" data-slot="{{ name }}">{{ html }}</div>{% endif %}{% endmacro %}
 
 {# A Columns menu (static/tables.js `columns`): its button, and the menu of `cols`' definitions, each a checkbox that
    shows or hides the cells of that data-col. The menu opens under the .menu-wrap that holds it. `id`: the
