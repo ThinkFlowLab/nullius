@@ -98,7 +98,7 @@ def needed(eid, environ=os.environ):
         return None
     if not value:
         raise GitLabError(f"task {eid} needs GitLab, which the mock websites serve, and this run gives it none: set "
-                          f"the websites option to the suffix the stack serves ({websites.SETUP_DOC})")
+                          f"Website host suffix to the suffix the stack serves ({websites.SETUP_DOC})")
     return value
 
 
@@ -227,7 +227,7 @@ def ready(value, token, runner=False):
     """GitLab's sign-in page, the root token as an administrator's and, with ``runner``, an online runner."""
     host = urllib.parse.urlsplit(value).hostname
     if not websites._resolves(host):
-        raise GitLabError(f"{host} does not resolve: the websites option must be a wildcard DNS name")
+        raise GitLabError(f"{host} does not resolve: Website host suffix must be a wildcard DNS name")
     if not _signed_in(value):
         raise GitLabError(f"{value}/users/sign_in answered no page")
     said = _request("/api/v4/user", value, token)

@@ -92,7 +92,7 @@ class Option(Case):
             with self.subTest(eid), self.assertRaises(self.g.GitLabError) as raised:
                 self.g.env(eid, {SITES: "none"})
             self.assertIn(f"task {eid} needs GitLab", str(raised.exception))
-            self.assertIn("websites option", str(raised.exception))
+            self.assertIn("Website host suffix", str(raised.exception))
         self.assertEqual(os.listdir(self.tmp), [])
 
     def test_the_url_and_this_machine_s_token_are_gitlab_s_tasks_alone(self):

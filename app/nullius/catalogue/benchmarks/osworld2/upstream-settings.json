@@ -459,7 +459,7 @@
   "setting": "GITLAB_URL",
   "values": "a GitLab server",
   "default": "the wrapper's server",
-  "nullius": "fixed:http://gitlab.<websites option> - Task-Web/gitlab, which Nullius makes on the run's machine behind the mock websites' Caddy"
+  "nullius": "fixed:http://gitlab.<Website host suffix> - Task-Web/gitlab, which Nullius makes on the run's machine behind the mock websites' Caddy"
  },
  {
   "entry": "scripts/bash/run_multienv_m3.sh",
