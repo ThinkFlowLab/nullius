@@ -209,3 +209,15 @@ class StopTwo(Flow):
         result = load(self.round_file("result.json"))
         self.assertEqual(result["targets"]["after"], {"trials": 6, "passed": 5})
         self.assertEqual(result["predictions"][0]["result"], {"trials": 6, "passed": 5, "tasks": 2})
+
+    def test_the_stop_rule_counts_the_trial_run_and_the_new_run(self) -> None:
+        job = self.chosen()
+        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job])
+        run(["answer", "--loop", self.loop, "--stop", "2", "--choice", "full", "--text", "a full pass"])
+        full = write_job(self.jobs, "full", "alpha", "harbor",
+                         [trial(f"{t}__f", f"bench/{t}", 1.0) for t in ("p1", "p2", "p3", "f1", "f2", "f3")])
+        r = run(["compare", "--loop", self.loop, "--new", full, "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        rule = load(self.round_file("result.json"))["stop_rule"]
+        self.assertAlmostEqual(rule["spent_usd"], 0.09 + 0.06)
+        self.assertAlmostEqual(rule["left_usd"], 10 - 0.15)
