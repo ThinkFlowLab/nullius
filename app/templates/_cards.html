@@ -25,6 +25,7 @@
 {{ controls(id, cols, search, choices=choices, only=only, sort=false) }}
 <div id="{{ id }}" data-cards>{% if caller is defined %}{{ caller() }}{% else %}{{ grid(cols, items, choices=choices) }}{% endif %}</div>
 {{ empty_note(id, empty) }}
+<span class="sr" data-live="{{ id }}" aria-live="polite"></span>
 {% endmacro %}
 
 {# The cards of `items`. `every`: the collection the icon rule reads, when `items` is a part of it; `choices`: the

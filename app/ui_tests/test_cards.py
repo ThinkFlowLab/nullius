@@ -96,7 +96,7 @@ const tools = el('div', {id: 'c-tools'}, el('label', {}, el('input', {type: 'sea
   el('div', {'data-tools': 'filter', hidden: true}, el('button', {'data-clear': ''}),
      el('fieldset', {'data-filter-menu': 'kind'}, ...['coding', 'math'].map(v => el('label', {}, el('input', {type: 'checkbox', 'data-value': v, checked: true}))))));
 const root = el('div', {id: 'c', 'data-cards': ''}, a, b), empty = el('p', {'data-empty': 'c', hidden: true}, 'No card matches.');
-document.appendChild(el('main', {}, tools, root, empty));
+document.appendChild(el('main', {}, tools, root, empty, el('span', {'data-live': 'c'})));
 T.cards(root);
 const shown = () => root.querySelectorAll('[data-card]').filter(c => !c.hidden).map(c => c.textContent);
 const state = () => [shown(), [a, b].map(g => [g.hidden, g.querySelector('[data-group-n]').textContent]), empty.hidden];
@@ -116,6 +116,25 @@ process.stdout.write(JSON.stringify(out));
             [[], [[True, "0"], [True, "0"]], False],
             [["B"], [[False, "1"], [True, "0"]], True],
             [["A", "B", "C"], [[False, "2"], [False, "1"]], True]])
+
+    def test_a_screen_reader_hears_how_many_show_once_changes_pause(self):
+        got = node(r'''
+const card = (name, kind) => el('article', {'data-card': '', 'data-search': name, 'data-f-kind': kind + '\n'}, name);
+const tools = el('div', {id: 'c-tools'}, el('label', {}, el('input', {type: 'search', 'data-search': ''})),
+  el('div', {'data-pills': 'kind'}, el('button', {class: 'filter-pill', 'data-all': 'kind', 'aria-pressed': 'true'}),
+     ...['x', 'y'].map(v => el('button', {class: 'filter-pill', 'data-value': v, 'aria-pressed': 'false'}))));
+const root = el('div', {id: 'c', 'data-cards': ''}, card('A', 'x'), card('B', 'y'), card('C', 'x')), live = el('span', {'data-live': 'c'});
+document.appendChild(el('main', {}, tools, root, el('p', {'data-empty': 'c', hidden: true}, 'No card matches.'), live));
+T.cards(root);
+const out = [];
+const type = q => { const box = tools.querySelector('[data-search]'); box.value = q; box.dispatch('input'); };
+setTimeout(() => {
+  out.push(live.textContent);                                                            // once read
+  tools.querySelector('[data-value="x"]').click(); type('a'); out.push(live.textContent);  // still changing: nothing new
+  setTimeout(() => { out.push(live.textContent); type('zzz'); setTimeout(() => { out.push(live.textContent); process.stdout.write(JSON.stringify(out)); }, 350); }, 350);
+}, 350);
+''')
+        self.assertEqual(got, ["3 of 3", "3 of 3", "1 of 3", "No card matches."])
 
 
 if __name__ == "__main__":

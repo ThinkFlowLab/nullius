@@ -203,9 +203,11 @@ window.NulliusTable = {
   /* A collection of the cards macro (data-cards): its controls row (id
      <id>-tools) shows the cards (data-card) that pass, the note when none
      does; a data-group holding cards hides when none of them shows, and its
-     data-group-n counts those that do. */
+     data-group-n counts those that do. A screen reader hears how many
+     show once the changes pause. */
   cards(root) {
     const items = [...root.querySelectorAll('[data-card]')], empty = document.querySelector(`[data-empty="${CSS.escape(root.id)}"]`);
+    const say = this.voice(document.querySelector(`[data-live="${CSS.escape(root.id)}"]`));
     const draw = () => {
       items.forEach(c => { c.hidden = !passes(c); });
       root.querySelectorAll('[data-group]').forEach(g => {
@@ -213,7 +215,9 @@ window.NulliusTable = {
         g.hidden = !n;
         if (count) count.textContent = n;
       });
-      empty.hidden = items.some(c => !c.hidden);
+      const n = items.filter(c => !c.hidden).length;
+      empty.hidden = n > 0;
+      say(n ? `${n} of ${items.length}` : empty.textContent);
     };
     const passes = this.narrow(document.getElementById(root.id + '-tools'), draw);
     draw();
@@ -264,6 +268,13 @@ window.NulliusTable = {
     place();
   },
 
+  /* A live region: say(text) reads out the last text once the changes
+     pause. */
+  voice(live) {
+    let t;
+    return text => { clearTimeout(t); t = setTimeout(() => { live.textContent = text; }, 300); };
+  },
+
   /* A table's pages (the pager macro named after its id): the rows `passes`
      lets through, a page of them at a time, the page's size remembered per
      viewer under `key`; its empty note shows when none passes. After a
@@ -274,7 +285,8 @@ window.NulliusTable = {
   pager(table, key, passes = () => true, drawn = () => {}) {
     const bar = document.querySelector(`[data-pager="${CSS.escape(table.id)}"]`), empty = document.querySelector(`[data-empty="${CSS.escape(table.id)}"]`);
     const [per, note, prev, next, live] = ['[data-per]', '[data-note]', '[data-prev]', '[data-next]', '[data-live]'].map(s => bar.querySelector(s));
-    let page = 0, said, loaded = false;
+    let page = 0, loaded = false;
+    const say = this.voice(live);
     try { const n = localStorage.getItem(key); if (n !== null && [...per.options].some(o => o.value === n)) per.value = n; } catch {}
     const draw = () => {
       const rows = [...table.tBodies[0].rows], hit = rows.filter(passes), n = +per.value || hit.length || 1;
@@ -285,8 +297,7 @@ window.NulliusTable = {
       prev.disabled = page === 0;
       next.disabled = (page + 1) * n >= hit.length;
       empty.hidden = hit.length > 0;
-      clearTimeout(said);
-      if (loaded) said = setTimeout(() => { live.textContent = hit.length ? `${note.textContent} ${live.dataset.noun}` : empty.textContent; }, 300);
+      if (loaded) say(hit.length ? `${note.textContent} ${live.dataset.noun}` : empty.textContent);
       drawn();
     };
     const first = () => { page = 0; draw(); };
