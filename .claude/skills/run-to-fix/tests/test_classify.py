@@ -347,3 +347,81 @@ class FoundClasses(LoopCase):
         r = run(["classify", "--loop", self.loop])
         self.assertNotEqual(r.code, 0)
         self.assertIn("both", r.err)
+
+
+#: the last lines of two exception messages of one real run; they differ in the model text quoted after unit=
+REPEATED_STREAM = [
+    r"JiuwenSwarm failed: FrameworkError: [181001] model call failed, reason: LLM repeated stream output detected: "
+    r"field=reasoning_content, unit='OK.\n\nWriting.\n\nLet me go.\n\n', repeat_count=6",
+    r"JiuwenSwarm failed: FrameworkError: [181001] model call failed, reason: LLM repeated stream output detected: "
+    r"field=reasoning_content, unit='\n\nHmm.', repeat_count=27",
+]
+
+
+class QuotedStrings(LoopCase):
+    def classify_exceptions(self, messages: List[str]) -> Dict[str, Dict[str, str]]:
+        trials = []
+        for i, message in enumerate(messages):
+            t = trial(f"e{i}__a", f"bench/e{i}", None)
+            t.exception = ("NonZeroAgentExitCodeError", message)
+            trials.append(t)
+        trials.append(trial("p__a", "bench/p", 1.0))
+        run_dir = write_job(self.jobs, "run", "alpha", "harbor", trials)
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(run_dir, None)
+        self.classify_ok()
+        return self.by_trial()
+
+    def test_two_repeated_streams_share_one_signature(self) -> None:
+        rows = self.classify_exceptions(REPEATED_STREAM)
+        self.assertEqual(rows["e0__a"]["signature"], rows["e1__a"]["signature"])
+        self.assertTrue(rows["e0__a"]["signature"].endswith("unit='#', repeat_count=#"), rows["e0__a"]["signature"])
+        group = load(self.round_file("groups.json"))["groups"][0]
+        self.assertEqual(group["trials"], 2)
+        self.assertEqual(group["example"], "NonZeroAgentExitCodeError: " + REPEATED_STREAM[0])
+
+    def test_the_mask_runs_before_the_cut(self) -> None:
+        rows = self.classify_exceptions([f"reason: unit='{'x' * 400}', repeat_count=3"])
+        self.assertEqual(rows["e0__a"]["signature"], "exception: NonZeroAgentExitCodeError: reason: unit='#', repeat_count=#")
+
+    def test_a_quote_that_is_not_closed_masks_to_the_end(self) -> None:
+        rows = self.classify_exceptions(["reason: unit='OK. Writing. Let me go"])
+        self.assertEqual(rows["e0__a"]["signature"], "exception: NonZeroAgentExitCodeError: reason: unit='#")
+
+    def test_an_apostrophe_inside_a_word_masks_nothing(self) -> None:
+        rows = self.classify_exceptions(["the agent's reply isn't valid at step 12"])
+        self.assertEqual(rows["e0__a"]["signature"],
+                         "exception: NonZeroAgentExitCodeError: the agent's reply isn't valid at step #")
+
+    def test_double_quotes_are_masked(self) -> None:
+        rows = self.classify_exceptions(['tool "browser_click" failed with "element not found"'])
+        self.assertEqual(rows["e0__a"]["signature"], 'exception: NonZeroAgentExitCodeError: tool "#" failed with "#"')
+
+    def test_verifier_and_timeout_details_keep_their_quotes(self) -> None:
+        failed = trial("f__a", "bench/f", 0.0)
+        failed.verifier_text = "FAIL: Kevin Zhao's email does not have the 'Clients' label"
+        late = trial("t__a", "bench/t", None)
+        late.exception = ("AgentTimeoutError", "the agent did not answer 'ping' in time")
+        run_dir = write_job(self.jobs, "run", "alpha", "harbor", [failed, late, trial("p__a", "bench/p", 1.0)])
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(run_dir, None)
+        self.classify_ok()
+        rows = self.by_trial()
+        self.assertEqual(rows["f__a"]["signature"],
+                         "verifier_failed: FAIL: Kevin Zhao's email does not have the 'Clients' label")
+        self.assertEqual(rows["t__a"]["signature"], "time_limit: AgentTimeoutError: the agent did not answer 'ping' in time")
+
+
+class BaselineWarningText(LoopCase):
+    def test_a_small_group_only_says_the_task_fails_on_both_runs(self) -> None:
+        run_dir = write_job(self.jobs, "run", "alpha", "harbor",
+                            [shared_failure("a__r", "bench/a"), trial("p__r", "bench/p", 1.0)])
+        base_dir = write_job(self.jobs, "base", "alpha", "harbor",
+                             [shared_failure("a__b", "bench/a"), trial("p__b", "bench/p", 1.0)])
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(run_dir, base_dir)
+        self.classify_ok()
+        warning = load(self.round_file("groups.json"))["groups"][0]["warnings"][0]
+        self.assertEqual(warning["kind"], "fails_on_baseline")
+        self.assertIn("fails on both runs", warning["text"])
+        self.assertNotIn("benchmark", warning["text"])
