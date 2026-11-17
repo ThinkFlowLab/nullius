@@ -42,7 +42,7 @@ SAME = (("launch", ("standard", "launch")), ("benchmark", ("standard", "benchmar
         ("benchmark version", ("standard", "benchmark_version")), ("dataset", ("datasets", 0, "name")),
         ("agent or capability", ("standard", "plugged")), ("model", ("agents", 0, "model_name")),
         ("backend", ("standard", "backend")), ("serving providers", ("standard", "served_by")),
-        ("number of shards", ("standard", "shard", "of")))
+        ("number of shards", ("standard", "shard", "of")), ("retries per attempt", ("standard", "retries")))
 
 
 class Refused(Exception):
@@ -67,6 +67,12 @@ def _at(d, path):
         else:
             return None
     return d
+
+
+def _same(cfg: dict, path) -> object:
+    """What a shard's config says at ``path`` (``SAME``); a shard written before ``retries`` was recorded allowed none."""
+    got = _at(cfg, path)
+    return got or 0 if path == ("standard", "retries") else got
 
 
 def _listed(cfg: dict) -> Optional[tuple]:
@@ -100,6 +106,15 @@ def _served(shards: List[dict], results: List[dict]) -> Optional[dict]:
 def _trials(job_dir: str) -> List[str]:
     return sorted(n for n in os.listdir(job_dir)
                   if not n.startswith(".") and os.path.isfile(os.path.join(job_dir, n, "result.json")))
+
+
+def _tries(job_dir: str, trial: str) -> List[str]:
+    """The tries of ``trial`` before its last, kept in the job's ``retried/`` (``run.run_again``): their folders' names."""
+    kept = os.path.join(job_dir, "retried")
+    if not os.path.isdir(kept):
+        return []
+    return sorted(n for n in os.listdir(kept) if n.startswith(trial + ".try-") and n[len(trial) + 5:].isdigit()
+                  and os.path.isfile(os.path.join(kept, n, "result.json")))
 
 
 def _link_tree(src: str, dest: str) -> None:
@@ -147,9 +162,9 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
                       + " (--force does not merge them)")
     differ = []
     for label, path in SAME:
-        seen = {json.dumps(_at(s["config"], path), sort_keys=True) for s in shards}      # a mapping by its content
+        seen = {json.dumps(_same(s["config"], path), sort_keys=True) for s in shards}      # a mapping by its content
         if len(seen) > 1:
-            differ.append(f"{label}: " + ", ".join(f"{s['name']} {_at(s['config'], path)!r}" for s in shards))
+            differ.append(f"{label}: " + ", ".join(f"{s['name']} {_same(s['config'], path)!r}" for s in shards))
     if differ and not force:
         raise Refused("the shards are not of one launch - " + "; ".join(differ) + " (--force merges them anyway)")
     # every trial by its unit: two of one unit are never merged, force or not
@@ -243,7 +258,8 @@ def result_of(shards: list, results: List[dict]) -> dict:
     return {"started_at": min(starts) if starts else None, "finished_at": max(ends) if ends else None,
             "n_total_trials": planned,
             "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
-                      "n_cancelled_trials": max(0, planned - len(results)), "n_running_trials": 0, "n_pending_trials": 0},
+                      "n_cancelled_trials": max(0, planned - len(results)), "n_running_trials": 0, "n_pending_trials": 0,
+                      "n_retries": job.n_retries(results)},
             "standard": {"passed": sum(1 for w in rewards if w.get("reward") == 1.0),
                          "scored": len(scores), "mean_score": job.mean_score(results)},
             **({"budget": budget} if budget else {})}
@@ -262,16 +278,18 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
     results = []
     for s in shards:
         for t in s["trials"]:
-            src, dest = os.path.join(s["dir"], t), os.path.join(out, t)
-            _link_tree(src, dest)
-            # the trial's record is its own copy, naming the merged job and the shard it came from
-            res = _read(os.path.join(src, "result.json"))
-            std = dict(res.get("standard") or {}, job=name, shard_job=s["name"])
-            res["standard"] = std
-            os.unlink(os.path.join(dest, "result.json"))
-            with open(os.path.join(dest, "result.json"), "w", encoding="utf-8") as f:
-                json.dump(res, f, indent=1)
-            results.append(res)
+            # the trial, and each of its tries before it a retry kept (``retried/``), as the pages read them
+            for src, dest in [(os.path.join(s["dir"], t), os.path.join(out, t))] + [
+                    (os.path.join(s["dir"], "retried", k), os.path.join(out, "retried", k)) for k in _tries(s["dir"], t)]:
+                _link_tree(src, dest)
+                # the record is its own copy, naming the merged job and the shard it came from
+                res = _read(os.path.join(src, "result.json"))
+                std = dict(res.get("standard") or {}, job=name, shard_job=s["name"])
+                res["standard"] = std
+                os.unlink(os.path.join(dest, "result.json"))
+                with open(os.path.join(dest, "result.json"), "w", encoding="utf-8") as f:
+                    json.dump(res, f, indent=1)
+            results.append(_read(os.path.join(out, t, "result.json")))
     summary = result_of(shards, results)
     planned = summary["n_total_trials"]
     with open(os.path.join(out, "result.json"), "w", encoding="utf-8") as f:

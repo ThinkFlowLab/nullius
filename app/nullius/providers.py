@@ -367,8 +367,12 @@ _MOST = 8 * 1024 * 1024
 def _get(url: str, headers: dict, opener=None, timeout: float = 12) -> bytes:
     """One GET, never another method: no redirect followed, so a key stays at its endpoint; at most 8 MiB read."""
     req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "nullius", **headers})
-    with (opener or urllib.request.build_opener(_NoRedirect()).open)(req, timeout=timeout) as response:
-        content = response.read(_MOST + 1)
+    try:
+        with (opener or urllib.request.build_opener(_NoRedirect()).open)(req, timeout=timeout) as response:
+            content = response.read(_MOST + 1)
+    except urllib.error.HTTPError as e:
+        e.close()                                # its reply read by no one: closed, not left to the collector
+        raise
     if len(content) > _MOST:
         raise ValueError("response too large")
     return content

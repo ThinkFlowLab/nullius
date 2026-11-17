@@ -5,6 +5,7 @@ controls handed no key at all. No network, no docker."""
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -33,6 +34,16 @@ def a_recipe(**kw):
 
 
 class Backend(unittest.TestCase):
+    def test_attempts_and_retries_reach_the_command_only_when_set(self):
+        for kw, flags in (({}, []), ({"retries": 0}, []), ({"retries": 2, "repeat": 3}, ["--attempts 3", "--retries 2"])):
+            with self.subTest(kw=kw):
+                out = recipe.compile(a_recipe(unsandboxed=True, **kw), defs())
+                self.assertEqual(out["errors"], [])
+                self.assertEqual(sorted(set(re.findall(r"--attempts \S+|--retries \S+", out["script"]))), flags)
+                self.assertEqual(any("up to 2 retries an attempt" in str(row) for row in out["review"]), bool(flags))
+        bad = recipe.compile(a_recipe(unsandboxed=True, retries=10), defs())["errors"]
+        self.assertIn("Retries per attempt: a whole number from 0 to 9.", [e["message"] for e in bad])
+
     def test_a_container_needs_no_yes_and_says_so_in_the_command(self):
         out = recipe.compile(a_recipe(backend="container"), defs(), docker_unusable=lambda: None)
         self.assertEqual(out["errors"], [])

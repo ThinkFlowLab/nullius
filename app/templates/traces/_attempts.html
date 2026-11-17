@@ -1,16 +1,33 @@
-{# One tab per attempt at a task, and All attempts. `current` is the trial on
-   screen, or none on the All attempts view. A tab keeps the evidence tab the
+{# One tab per attempt at a task, and All attempts. `current` is the attempt
+   on screen, or none on the All attempts view; `shown`, the try on screen when
+   it is one before the attempt's last: the attempt's tab is then where the
+   page is, not the page (aria-current="true"). A tab keeps the evidence tab the
    reader is on (conversation.js rewrites `tab` on every [data-keep-tab]). #}
-{% macro attempt_tabs(job, attempts, current=none, workspace=none) -%}
+{% macro attempt_tabs(job, attempts, current=none, workspace=none, shown=none) -%}
 <nav class="attempt-tabs" aria-label="Attempts at this task">
   {%- for a in attempts.trials %}
   {%- set on = current is not none and a.trial_name == current.trial_name %}
   <a class="attempt-tab oc-{{ a.outcome }}" data-keep-tab
      href="{{ url_for('trial', job_id=job.job_id, trial_name=a.trial_name, workspace=workspace) }}"
-     title="Attempt {{ loop.index }}: {{ a.outcome_label }}"{% if on %} aria-current="page"{% endif %}>{{ ('Attempt ' if attempts.n <= 4 else '') ~ loop.index }}</a>
+     title="Attempt {{ loop.index }}: {{ a.outcome_label }}{% if a.n_retries %} on try {{ a.n_retries + 1 }}{% endif %}"{% if on %} aria-current="{{ 'true' if shown is not none and shown.trial_name != a.trial_name else 'page' }}"{% endif %}>{{ ('Attempt ' if attempts.n <= 4 else '') ~ loop.index }}
+    {%- if a.n_retries %}<svg class="attempt-retried" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.55M13 2.5v3h-3"/></svg>{% endif %}</a>
   {%- endfor %}
   <a class="attempt-tab all" href="{{ url_for('trial_attempts', job_id=job.job_id, trial_name=(current or attempts.trials[0]).trial_name, workspace=workspace) }}"
      {% if current is none %} aria-current="page"{% endif %}>All attempts</a>
+</nav>
+{%- endmacro %}
+
+{# An attempt's tries, when its runner kept the ones before its last
+   (parse.tries): one tab each, the last the one that counts. `current` is the
+   try on screen. #}
+{% macro try_tabs(job, tries, current, workspace=none) -%}
+<nav class="try-tabs" aria-label="Tries of this attempt">
+  {%- for n, t in tries %}
+  <a class="try-tab oc-{{ t.outcome }}" data-keep-tab
+     href="{{ url_for('trial', job_id=job.job_id, trial_name=t.trial_name, workspace=workspace) }}"
+     title="Try {{ n }}: {{ t.outcome_label }}"{% if t.trial_name == current.trial_name %} aria-current="page"{% endif %}>Try {{ n }}
+    {%- if t.dur_total is not none %}<span class="try-dur">{{ t.dur_total|secs }}</span>{% endif %}</a>
+  {%- endfor %}
 </nav>
 {%- endmacro %}
 

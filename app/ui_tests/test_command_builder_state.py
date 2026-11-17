@@ -125,6 +125,7 @@ class CommonAndPerAgent(CompilerCase):
         self.assertEqual(out['e'], [])
         bad = self.runs("r.attempts=0;r.verifierTimeoutMultiplier='x'")['e']
         self.assertEqual(sorted(g for g, _ in bad), ['Common', 'Common'])
+        self.assertIn('Attempts per task must be a whole number of at least 1, or empty.', [m for _, m in bad])   # the field's own name
 
     def test_an_agents_own_kwarg_reaches_that_agent_only(self):
         out = self.runs("r.custom=[{scope:'agent',key:'shared',type:'string',value:'s'},{scope:'agent',key:'mine',type:'number',value:'7',agent:'oracle'},{scope:'agent',key:'mine',type:'number',value:'8',agent:'custom-0'}]")
@@ -132,6 +133,24 @@ class CommonAndPerAgent(CompilerCase):
         self.assertIn("--ak 'shared=s'", out['runs']['run-custom-0']); self.assertIn("--ak 'shared=s'", out['runs']['run-oracle'])
         self.assertIn("--ak 'mine=8'", out['runs']['run-custom-0']); self.assertNotIn("--ak 'mine=7'", out['runs']['run-custom-0'])
         self.assertIn("--ak 'mine=7'", out['runs']['run-oracle']); self.assertNotIn("--ak 'mine=8'", out['runs']['run-oracle'])
+
+    def test_a_harbor_recipe_retries_nothing_unless_asked(self):
+        for text in self.runs()['runs'].values():
+            self.assertIn('--max-retries 0', text)
+        for text in self.runs("r.retries=2")['runs'].values():
+            self.assertIn('--max-retries 2', text)
+        # an emptied field is none, as the standard's reads it: never a flag without its value
+        out = self.runs("r.retries=''")
+        self.assertEqual(out['e'], [])
+        for text in out['runs'].values():
+            self.assertIn('--max-retries 0', text)
+        self.assertEqual([m for _, m in self.runs("r.retries=-1")['e']], ['Retries per attempt must be a whole number of at least 0, or empty.'])
+
+    def test_a_standard_recipes_retries_survive_reopening(self):
+        out = self.js('const r=C.createStandard("gsm8k");r.retries=2;'
+                      'process.stdout.write(JSON.stringify([C.fromJSON(JSON.stringify(r)).retries,'
+                      'C.fromJSON(JSON.stringify(Object.assign(r,{retries:10}))).retries,"retries" in C.createStandard("gsm8k")]));')
+        self.assertEqual(out, [2, None, False])
 
     def test_the_common_fields_and_agent_kwargs_survive_a_saved_recipe(self):
         out = self.js('const r=C.create("harbor");r.attempts=2;r.verifierTimeoutMultiplier=1.5;r.custom=[{scope:"agent",key:"k",type:"string",value:"v",agent:"nop"}];'

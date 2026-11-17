@@ -29,7 +29,7 @@ turn   - the conversation is the upstream's: its batch runner,
          retries, its user simulator), its max steps and max errors the run's
          ``max_steps`` and ``max_errors`` options (``bounds``). It draws the trial's seed from the
          base seed as it does for every run: the unit's first attempt is
-         trial 0 of a one-trial run, its attempt N (``--repeat``) trial N-1
+         trial 0 of a one-trial run, its attempt N (``--attempts``) trial N-1
          at the seed run_tasks draws for that trial (``trial``), and each
          attempt is its ``run_single_task``: an ``Orchestrator`` built by its
          ``build_text_orchestrator`` at that seed, run by its

@@ -8,7 +8,7 @@ nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--
     [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS]... [--max-turns N] [--max-calls N] \
     [--constraint KEY=VALUE]... \
     [--served-by [MODEL=]SLUG[,SLUG...]]... \
-    [--repeat K] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
+    [--attempts K] [--retries N] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
 ```
 
 ```bash title="Examples"
@@ -38,8 +38,9 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--max-calls N` | The most model calls a unit's agent may make: [below](#a-cap-on-model-calls) |
 | `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). Containers take them as flags, the run's processes on the machine as a systemd scope. A recipe passes each machine's own |
 | `--served-by [MODEL=]SLUG[,SLUG...]` | On OpenRouter, the serving providers that may answer a model (repeatable): [below](#serving-providers) |
-| `--repeat K` | Each unit K times; `result.json` carries `pass_hat_k` |
-| `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--repeat`); by default they stay for the next run |
+| `--attempts K` | Each unit K times; `result.json` carries `pass_hat_k` |
+| `--retries N` | Run a failed attempt again, up to N times: [below](#retries) |
+| `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--attempts`); by default they stay for the next run |
 | `--judge-model` | Instead of the official judge |
 | `--simulator-model` | Instead of the official simulated user |
 | `--name` | The job's name |
@@ -50,6 +51,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | Rule | Detail |
 | --- | --- |
 | The pair must fit | Else refused, naming the missing port |
+| The model | Refused when the provider's model list lacks it |
 | Keys | Environment, then user `settings.json`; the agent never gets one |
 | A data provider's token | `HF_TOKEN` from the environment, then Settings → Data providers, for a benchmark that declares Hugging Face; only its driver gets it. Not with `--from-run` |
 | A control | No `--model`, no `--unsandboxed`; only a judge is called |
@@ -89,16 +91,30 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 
 | Rule | Detail |
 | --- | --- |
-| Prices first | Every model the run calls needs a price ([price list](../settings/model-prices.md) or `--price`), else the run is refused |
+| Prices first | The [price list](../settings/model-prices.md) is fetched first; a model it lacks needs `--price`, else the run is refused. Offline and unpriced: no cap, and the run says so |
 | What is counted | Each reply's cost, and an estimate for each call in flight |
 | At the run's cap | The call that does not fit is refused by the relay (HTTP 402), and every call after it |
 | Its units | One cut off is the outcome Spending cap, outside the adjusted rate; those not begun are not run |
-| At a unit's cap | Its own calls and its simulated user's count, its judge's do not. A unit that reaches its cap is an Agent error; the run goes on |
+| At a unit's cap | Its own calls and its simulated user's count, over all its tries; its judge's do not. A unit that reaches its cap is an Agent error; the run goes on |
 | Not exact | A call that costs more than its estimate can take the spend past a cap by up to the difference |
 | Cached input | Estimated as if not cached, so a unit can be cut off short of its cap |
 | The result | `result.json` carries `budget`, and the job page shows it |
 | From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit |
 | Shards | A shard's cap is its own: [Shard and merge](shard-and-merge.md) |
+
+## Retries
+
+`--retries N` (at most 9) runs a failed attempt again after the other units; the last try counts.
+
+| Failure | Retried |
+| --- | --- |
+| Rate limit | After the [pause](../standard.md#a-run) |
+| Provider, network or setup error; agent crash; setup timeout | Yes |
+| Run or check out of time | Only if the provider was refusing the calls |
+| Wrong key, spent credit | No; three in a row stop the run |
+| A setup this machine lacks, a missing secret, a cap reached, Stop, failed task | No |
+
+`conform` and `prove` retry a rate limit once.
 
 ## A list of units
 

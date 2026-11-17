@@ -17,22 +17,27 @@
 <div class="table-wrap" style="margin-top:1.2rem">
 <table class="grid attempt-table">
   <thead><tr>
-    <th>Attempt</th><th>Outcome</th><th class="num">Reward</th><th class="num">Tokens</th>
+    <th>Attempt</th><th>Outcome</th>{% if job.retries %}<th class="num">Retries</th>{% endif %}<th class="num">Reward</th><th class="num">Tokens</th>
     <th class="num">Agent</th><th class="num">Total</th>
   </tr></thead>
   <tbody>
   {% for a in attempts.trials %}
-  {% set used = (a.n_input_tokens or 0) + (a.n_output_tokens or 0) %}
-  <tr>
-    <td><a href="{{ url_for('trial', job_id=job.job_id, trial_name=a.trial_name, workspace=workspace) }}">Attempt {{ loop.index }}</a></td>
-    <td><span class="tag oc-{{ a.outcome }}">{{ a.outcome_label }}</span>
-      {%- if a.score is not none %} <span class="badge trial-score">{{ '%.2f'|format(a.score) }}</span>{% endif %}
-      {%- if a.exception_type %} <span class="mono faint small">{{ a.exception_type }}</span>{% endif %}</td>
-    <td class="num">{{ '—' if a.reward is none else ('%g'|format(a.reward) if a.reward in (0, 1) else '%.2f'|format(a.reward)) }}</td>
+  {% set k = loop.index %}
+  {#- an attempt whose runner kept its earlier tries: a line each, the last the one that counts #}
+  {% for n, t in tries.get(a.trial_name) or [(none, a)] %}
+  {% set used = (t.n_input_tokens or 0) + (t.n_output_tokens or 0) %}
+  <tr{% if not loop.last %} class="replaced" title="Not counted"{% endif %}>
+    <td><a href="{{ url_for('trial', job_id=job.job_id, trial_name=t.trial_name, workspace=workspace) }}">Attempt {{ k }}{% if n %} · Try {{ n }}{% endif %}</a></td>
+    <td><span class="tag oc-{{ t.outcome }}">{{ t.outcome_label }}</span>
+      {%- if t.score is not none %} <span class="badge trial-score">{{ '%.2f'|format(t.score) }}</span>{% endif %}
+      {%- if t.exception_type %} <span class="mono faint small">{{ t.exception_type }}</span>{% endif %}</td>
+    {% if job.retries %}<td class="num">{% if t.n_retries %}{{ t.n_retries }}<span class="faint">/{{ job.retries }}</span>{% else %}<span class="faint">0/{{ job.retries }}</span>{% endif %}</td>{% endif %}
+    <td class="num">{{ '—' if t.reward is none else ('%g'|format(t.reward) if t.reward in (0, 1) else '%.2f'|format(t.reward)) }}</td>
     <td class="num">{{ used|tokens(job.kind) }}</td>
-    <td class="num">{{ a.dur_agent|secs }}</td>
-    <td class="num">{{ a.dur_total|secs }}</td>
+    <td class="num">{{ t.dur_agent|secs }}</td>
+    <td class="num">{{ t.dur_total|secs }}</td>
   </tr>
+  {% endfor %}
   {% endfor %}
   </tbody>
 </table>

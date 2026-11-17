@@ -659,6 +659,37 @@ class Refused(Base):
         self.assertIsNone(alive.refused("std-r"))                                    # still going: nothing to say yet
 
 
+class RetriedOnHost(unittest.TestCase):
+    """A host's retry moved a trial into retried/ and wrote it again; the copy
+    here, taken without deleting, keeps the earlier try's files under the trial."""
+
+    def test_the_earlier_trys_files_leave_the_trials_copy(self):
+        import tempfile
+        jobs = tempfile.mkdtemp(prefix="nullius-settle-")
+        self.addCleanup(shutil.rmtree, jobs, True)
+        trial, kept = Path(jobs, "job", "t__u0001"), Path(jobs, "job", "retried", "t__u0001.try-1")
+        for d in (trial / "agent", kept / "agent"):
+            d.mkdir(parents=True)
+        def put(path, text, at):
+            path.write_text(text)
+            os.utime(path, (at, at))
+        put(kept / "agent" / "trace.json", "try 1's spans", 1_700_000_000)     # the try, copied whole
+        put(trial / "agent" / "trace.json", "try 1's spans", 1_700_000_000)    # its copy under the trial: stale
+        put(kept / "result.json", '{"try": 1}', 1_700_000_000)
+        put(trial / "result.json", '{"try": 2}', 1_700_000_900)               # the retry's own, written again
+        put(trial / "agent" / "view.json", "a view saved here", 1_700_000_500)  # never on the host
+        seen = set()
+        execution.settle_retried(jobs, seen)
+        self.assertFalse((trial / "agent" / "trace.json").exists())
+        self.assertEqual((trial / "result.json").read_text(), '{"try": 2}')
+        self.assertTrue((trial / "agent" / "view.json").exists())
+        self.assertEqual((kept / "agent" / "trace.json").read_text(), "try 1's spans")   # the kept try itself is untouched
+        self.assertEqual(seen, {str(kept)})
+        put(trial / "agent" / "trace.json", "try 1's spans", 1_700_000_000)
+        execution.settle_retried(jobs, seen)                                   # settled once: its copy was whole then
+        self.assertTrue((trial / "agent" / "trace.json").exists())
+
+
 class TasksOnHost(unittest.TestCase):
     def test_two_folders_of_one_name_never_share_a_copy_and_one_folder_keeps_its_own(self):
         a, b = execution._tasks_place("/data/projA/tasks", "r1"), execution._tasks_place("/data/projB/tasks", "r2")

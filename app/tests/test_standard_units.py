@@ -243,9 +243,9 @@ class Listed(unittest.TestCase):
         self.assertEqual(self.trials(job), ["good__u0000", "model__u0003", "slow__u0002", "wrong__u0001"])
         self.assertEqual(self.started(job), DATASET)
         cfg = read(os.path.join(job, "config.json"))
-        # the keys a control's run recorded before there were lists, and no other
+        # the keys a control's run recorded before there were lists, the retries every run now records, and no other
         self.assertEqual(sorted(cfg["standard"]), ["backend", "benchmark", "control", "kind", "needs", "permissions_granted",
-                                                   "plugged", "provider", "unsandboxed"])
+                                                   "plugged", "provider", "retries", "unsandboxed"])
         self.assertEqual(cfg["datasets"], [{"name": "fakebench/all", "n_tasks": 4}])
         limited = self.go(limit=2, name="limited")
         self.assertEqual(self.trials(limited), ["good__u0000", "wrong__u0001"])
@@ -253,8 +253,8 @@ class Listed(unittest.TestCase):
 
 
 class RateLimited(unittest.TestCase):
-    """A listed unit that ends rate-limited is run once more after the others, as any unit is: under its own
-    trial's name, its first attempt kept in the job's ``retried/``. A unit the list leaves out is never run."""
+    """A listed unit that ends rate-limited is retried after the others, as any unit is: under its own
+    trial's name, its first try kept in the job's ``retried/``. A unit the list leaves out is never run."""
 
     @classmethod
     def setUpClass(cls):
@@ -288,10 +288,10 @@ class RateLimited(unittest.TestCase):
         b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
         job = run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom",
                       jobs_root=os.path.join(self.tmp, "jobs"), concurrency=1, env=self.env, say=lambda s: None,
-                      unsandboxed=True, dataset="responding", units_file=run.units_file(path))
+                      unsandboxed=True, dataset="responding", units_file=run.units_file(path), retries=1)
         self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "model__u0002"])
-        self.assertEqual(os.listdir(os.path.join(job, "retried")), ["model__u0002"])
-        first = read(os.path.join(job, "retried", "model__u0002", "result.json"))
+        self.assertEqual(os.listdir(os.path.join(job, "retried")), ["model__u0002.try-1"])
+        first = read(os.path.join(job, "retried", "model__u0002.try-1", "result.json"))
         self.assertEqual(first["exception_info"]["exception_type"], "RateLimitError")
         self.assertFalse(read(os.path.join(job, "model__u0002", "result.json")).get("exception_info"))   # its second counts
         self.assertEqual(read(os.path.join(job, "result.json"))["n_total_trials"], 2)
@@ -328,6 +328,19 @@ class FromTheCommandLine(unittest.TestCase):
         with open(path, "w") as f:
             f.write(text)
         return path
+
+    def test_a_capped_run_fetches_the_price_list_first(self):
+        offline = "could not fetch the price list from the list's address: offline"
+        with mock.patch.object(cli.price_list, "update", side_effect=ValueError(offline)) as update, \
+                mock.patch.object(cli.run, "run_and_report", return_value=("job", False)) as ran:
+            self.cli("--max-usd", "1")
+        update.assert_called_once_with()
+        self.assertEqual(ran.call_args.kwargs["prices_unreachable"], offline)          # the run goes on uncapped, saying why
+        with mock.patch.object(cli.price_list, "update") as update, \
+                mock.patch.object(cli.run, "run_and_report", return_value=("job", False)) as ran:
+            self.cli()
+        update.assert_not_called()                                                      # no cap: nothing to price
+        self.assertIsNone(ran.call_args.kwargs["prices_unreachable"])
 
     def test_the_command_runs_the_listed_units_with_and_without_from_run(self):
         path = self.file("# a pair\nslow\ngood\n")

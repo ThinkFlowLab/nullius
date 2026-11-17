@@ -1,5 +1,6 @@
 """Flask integration checks, separate from the framework-free data suite."""
 
+import tests  # noqa: F401  (no test reaches past this machine: tests/__init__.py)
 from nullius import execution, prerequisites
 
 # The suite runs where docker may not answer, and a run here asks it before it starts

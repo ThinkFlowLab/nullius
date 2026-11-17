@@ -6,7 +6,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli pins BENCHMARK[@VERSION] [--tag TAG] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
-    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container | --backend boat]
+    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--attempts K] [--option NAME=VALUE ...] [--unsandboxed | --backend container | --backend boat]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS ...] [--max-turns N] [--max-calls N] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container | --backend boat [--boat-size SIZE]]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
@@ -34,7 +34,7 @@ definitions (or one file); ``new`` writes a definition to fill in, or a new
 version of an agent or a capability (``new version``: the default's pins, with
 the version replaced, and nothing proven); ``fit`` says, for one benchmark, what can run it and
 why the rest cannot; ``conform`` runs the kits and writes what passed into the
-definition - the port, and each skill of its kit shown or not (``--repeat K``:
+definition - the port, and each skill of its kit shown or not (``--attempts K``:
 each check K times, held by a majority); ``run`` runs a benchmark into a job under ``--jobs`` (``jobs_standard/``),
 which the application opens like any other; ``fidelity`` drives an agent over
 ACP and through its own command, compares the requests its model was sent, and
@@ -74,6 +74,7 @@ import signal
 import sys
 import tempfile
 
+from nullius.standard.retries import MAX_RETRIES, RETRIES
 from nullius import constraints as limits, paths, prices as price_list, progress, providers, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed, just like the unified CLI does.
@@ -488,6 +489,17 @@ def prices(given) -> dict:
     return out
 
 
+def _retries(value: str) -> int:
+    """``--retries``: a whole number from 0 to ``MAX_RETRIES``."""
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a whole number")
+    if not 0 <= n <= MAX_RETRIES:
+        raise argparse.ArgumentTypeError(f"{n} is not between 0 and {MAX_RETRIES}")
+    return n
+
+
 def cmd_conform(a):
     o = _other(a.other)
     try:
@@ -533,13 +545,23 @@ def cmd_run(a):
     if why:
         print("refused: constraints:", why)
         return 2
+    # a cap counts each call at its model's price: the public list fetched first (Settings, Model prices); a machine
+    # that cannot reach it runs uncapped where a model has no price, and says so (run.Run)
+    unreachable = None
+    if a.max_usd is not None or a.max_usd_per_unit is not None:
+        try:
+            price_list.update()
+        except ValueError as e:
+            unreachable = str(e)
     held, spill = licences(b, from_run=a.from_run)
     try:
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
                       boat_size=a.boat_size, simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
-                      licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
-                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, constraints=given,
+                      licences=held, bench_options=options(a.bench_option), repeat=a.repeat, retries=a.retries,
+                      remove_images=a.remove_images,
+                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, prices_unreachable=unreachable,
+                      constraints=given,
                       timeouts=timeouts(a.timeout), max_turns=a.max_turns, max_calls=a.max_calls,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
@@ -688,7 +710,7 @@ def main(argv=None):
         elif name == "conform":
             p.add_argument("--port", type=definitions.names.port, action="append", help="only this port's kit (repeatable)")
             p.add_argument("--stamp", help="the time stamp the kit jobs are named with (default: now)")
-            p.add_argument("--repeat", type=int, default=1, metavar="K",
+            p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
                            help="run each check K times; a check passes when it passes in most of them (default 1)")
         else:
             p.add_argument("--dataset")
@@ -699,8 +721,12 @@ def main(argv=None):
             p.add_argument("-j", "--concurrency", type=int, default=4)
             p.add_argument("--judge-model", help="a benchmark scored by a model: this judge instead of its official one")
             p.add_argument("--simulator-model", help="a benchmark whose user a model plays: this model instead of its official one")
-            p.add_argument("--repeat", type=int, default=1, metavar="K",
-                           help="run each unit K times, each an attempt of its own (the upstream's --num-trials, pass^k); default 1")
+            p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
+                           help="run each unit K times, each an attempt counted whatever its result "
+                                "(the upstream's --num-trials, pass^k); default 1")
+            p.add_argument("--retries", type=_retries, default=RETRIES, metavar="N",
+                           help="run a failed attempt again, up to N times, after the other units: never after a timeout, "
+                                f"a wrong key or model, spent credit or a cap; 0 to {MAX_RETRIES}, default {RETRIES}")
             p.add_argument("--remove-images", action="store_true",
                            help="remove each image this run pulls or builds when its last unit ends (default: kept for the next run)")
             p.add_argument("--name")

@@ -150,7 +150,7 @@
   };
   const commonSettings = rec => `<div class="nb-categoryhead"><h3>Common settings</h3><p>Every trial, whichever agent runs it.</p></div>`
     + `<div id="nb-timeouts">${timeLimits(rec)}</div>`
-    + `<div class="nb-two">${field('Repeats per task', 'attempts', rec.attempts, {type: 'number', min: 1, placeholder: '1', hint: 'Every task is run this many times, pass or fail (Harbor\'s --n-attempts). Retries after a failure are on Limits.'})}<span></span></div>`
+    + `<div class="nb-two">${field('Attempts per task', 'attempts', rec.attempts, {type: 'number', min: 1, placeholder: '1'})}<span></span></div>`
 ;
   // One tab per selected agent: the parameters this catalogue knows for it,
   // its extra --ak list, and what else it needs.
@@ -685,7 +685,8 @@
       return '<div class="nb-sectionhead"><h2>Scope</h2></div><div class="nb-two">'
         + field('Number of ' + u.nouns, 'limit', rec.limit, {type: 'number', min: 1, placeholder: all, hint: 'The first ones' + per + ', in its order.'})
         + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: '1'}) + '</div>'
-        + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
+        + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
+        + field('Retries per attempt', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0'}) + '</div>'
         // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
         + ((b.needs || []).includes('agent.conversation/v1')
           ? field('Turns per conversation', 'turns', rec.turns ?? '', {type: 'number', min: 1, placeholder: String((b.timeouts || {}).turns || ''),
@@ -834,7 +835,7 @@
       html='<div class="nb-sectionhead"><h2>Scope & execution</h2></div>';
       const allTasks=(()=>{const ds=schema.datasets.find(d=>d.benchmark===rec.benchmark);return ds&&ds.tasks?'all '+ds.tasks:'all';})();
       html+=`<div class="nb-two">${field('Number of tasks','tasks',rec.tasks,{type:'number',min:1,placeholder:allTasks,hint:'Empty: '+allTasks+'.'})}${field('Concurrent trials','concurrency',rec.concurrency,{type:'number',min:1})}</div>`;
-      html+=`<div class="nb-two">${field('Retries per trial','retries',rec.retries,{type:'number',min:0,hint:'Run a trial again after an error, up to this many times.'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
+      html+=`<div class="nb-two">${field('Retries per attempt','retries',rec.retries,{type:'number',min:0,placeholder:'0'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
         +harborExecutableFields(rec);
       html+=field('Output directory','output',rec.output,{});
     }

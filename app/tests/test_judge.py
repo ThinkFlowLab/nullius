@@ -244,6 +244,23 @@ class Versions(unittest.TestCase):
         self.assertEqual(store.for_job(d, "job")["t"]["questions"], "judgement.questions.v2")
         self.assertFalse(store.is_current(None))
 
+    def test_a_record_is_the_try_it_judged_and_no_retry_under_its_name(self):
+        """A retry runs an attempt again under its trial's name: what was asked
+        of the try before is not shown, counted nor merged into the retry's."""
+        d = str(self.tmp)
+        first, retry = "2026-11-17T10:00:00+00:00", "2026-11-17T11:00:00+00:00"
+        store.save(d, "job", "t", self.record(questions.VERSION, task_completed={"noul": 0.2}), started=first)
+        self.assertEqual(store.load(d, "job", "t", started=first)["trial_started_at"], first)
+        self.assertIsNone(store.load(d, "job", "t", started=retry))
+        self.assertEqual(store.for_job(d, "job", started={"t": retry}), {})
+        self.assertIsNotNone(store.load(d, "job", "t"))                       # a read that names no start takes it as it is
+        store.save(d, "job", "t", self.record(questions.VERSION, failure_cause={"choice": "x"}), started=retry)
+        got = store.load(d, "job", "t", started=retry)
+        self.assertEqual(sorted(got["answers"]), ["failure_cause"])           # none of the try before's answers
+        # a record from before tries were told apart is taken as it is
+        store.save(d, "job", "old", self.record(questions.VERSION, task_completed={"noul": 0.5}))
+        self.assertIsNotNone(store.load(d, "job", "old", started=retry))
+
 
 class Batch(unittest.TestCase):
     """The seam a surface asks through: questions grouped by state, one call

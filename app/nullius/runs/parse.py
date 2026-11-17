@@ -30,7 +30,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "15"
+SCHEMA = "17"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness (an agent's `max_retries` reaching its
@@ -51,6 +51,28 @@ RATE_LIMIT_RE = re.compile(
 # GATEWAY_SCAN_BYTES only. Scanning is a bounded parse-time cost; for a log
 # that outgrows the bound, the count is a floor.
 GATEWAY_SCAN_BYTES = 8 * 1024 * 1024
+
+
+def _retried_cost(trial_dir: str, n: int) -> float | None:
+    """What an attempt's ``n`` tries before its last cost, summed (each one's
+    ``retried/<trial>.try-N``, as ``tries`` reads them); None when none
+    recorded a cost."""
+    if not n:
+        return None
+    job_dir, folder = os.path.split(trial_dir)
+    costs = [c for k in range(1, min(n, 99) + 1)
+             for c in [_token_totals(verifier._read_json(os.path.join(job_dir, "retried", f"{folder}.try-{k}", "result.json")) or {})
+                       .get("cost_usd")]
+             if isinstance(c, (int, float)) and not isinstance(c, bool)]
+    return sum(costs) if costs else None
+
+
+def _retries_of(res: dict) -> int:
+    """``standard.retries`` of a standard trial's result or job's config: the
+    retries the trial took, or each attempt could take. 0 otherwise."""
+    std = res.get("standard") if isinstance(res.get("standard"), dict) else {}
+    n = std.get("retries")
+    return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
 
 
 def count_rate_limits(path: str) -> int | None:
@@ -148,6 +170,16 @@ class Trial:
     # the run survived, which no result.json field records (`count_rate_limits`).
     # None when the trial has no `agent/gateway.log`: not measured, not zero.
     n_rate_limited_retries: int | None = None
+    # How many times the runner retried this attempt after an infrastructure or
+    # agent failure before this, its last try (the standard's --retries:
+    # `standard.retries`). 0 when it did not, or does not say: Harbor retries
+    # under the trial's own name and keeps no count in it.
+    n_retries: int = 0
+    # What the tries before this one cost, summed: kept in the job's
+    # `retried/` (`tries`), never a trial of their own, but paid for all the
+    # same, so the job's cost counts them (`Job.total_cost_usd`). None when
+    # none recorded a cost.
+    retried_cost_usd: float | None = None
     # A graded verdict (an F1, partial credit), beside the pass or fail the
     # reward says: the runner records it when its benchmark scores that way.
     # A benchmark that gives a score and no pass or fail leaves the reward
@@ -275,6 +307,11 @@ class Job:
     # A Nullius standard job (config ``standard``): its trials are written as each unit ends, so the
     # live board links one as soon as it has - unlike a runner's, imported at its end.
     standard: bool = False
+    # The retries a Nullius standard job allowed each attempt (config
+    # ``standard.retries``, its --retries); each attempt says how many it took
+    # (Trial.n_retries). 0 for every other job: Harbor counts its retries for
+    # the whole job only (``n_retries``).
+    retries: int = 0
     # The launch a Nullius standard job was one shard of (config
     # ``standard.launch``): the shards of one launch, run on several machines,
     # are grouped as one on the runs page (launches.group). "" for every other job.
@@ -391,8 +428,9 @@ class Job:
 
     @property
     def total_cost_usd(self):
-        """None when no trial reported a cost — not every agent does."""
-        costs = [t.cost_usd for t in self.trials if t.cost_usd is not None]
+        """The trials' costs and their earlier tries' (``Trial.retried_cost_usd``);
+        None when none reported a cost — not every agent does."""
+        costs = [c for t in self.trials for c in (t.cost_usd, t.retried_cost_usd) if c is not None]
         return sum(costs) if costs else None
 
     @property
@@ -677,11 +715,31 @@ def parse_trial(job_id: str, trial_dir: str) -> Trial | None:
         has_trajectory=os.path.isfile(traj_path),
         has_trace=os.path.isfile(trace_path),
         n_rate_limited_retries=count_rate_limits(os.path.join(trial_dir, "agent", "gateway.log")),
+        n_retries=_retries_of(res),
+        retried_cost_usd=_retried_cost(trial_dir, _retries_of(res)),
         env_type=((res.get("config") or {}).get("environment") or {}).get("type", ""),
         started_at=_iso(res.get("started_at")),
         finished_at=_iso(res.get("finished_at")),
         phases=phases,
     )
+
+
+def tries(trial: Trial) -> list[tuple[int, Trial]]:
+    """``(number, trial)`` for each try of an attempt, Try 1 first and
+    ``trial``, its last and the one the job counts, last; [] when no try
+    before it was kept. The standard moves each into the job's ``retried/``
+    as ``<trial>.try-N`` before it runs the attempt again; Harbor keeps none.
+    A try's ``trial_name`` is ``<trial>.try-N``: how a page addresses it."""
+    if not trial.n_retries:
+        return []
+    job_dir, folder = os.path.split(trial.dir)
+    out = []
+    # a record's count is read, not trusted: a page addresses at most try 99 (two digits)
+    for n in range(1, min(trial.n_retries, 99) + 1):
+        t = parse_trial(trial.job_id, os.path.join(job_dir, "retried", f"{folder}.try-{n}"))
+        if t:
+            out.append((n, replace(t, trial_name=f"{trial.trial_name}.try-{n}")))
+    return out + [(trial.n_retries + 1, trial)] if out else []
 
 
 def harbor_command(cfg: dict, env_type: str = "") -> str:
@@ -932,6 +990,7 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
     job.merged_from = [s["job"] for s in merged if isinstance(s, dict) and isinstance(s.get("job"), str) and s["job"]] if isinstance(merged, list) else []
     job.budget = _budget(res.get("budget"))
     job.standard = bool(std)
+    job.retries = _retries_of(cfg)
     # a runner's job was never a `harbor run`: there is no command to rebuild
     job.harbor_command = "" if job.runner else redact(harbor_command(
         cfg, next((t.env_type for t in job.trials if t.env_type), "")))

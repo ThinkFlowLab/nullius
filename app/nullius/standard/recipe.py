@@ -44,6 +44,7 @@ from typing import Callable, Dict, List, Optional
 from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
 from nullius.standard import boat, hostreq, definitions, ledger, match, ports, prove, relay, run
+from nullius.standard.retries import MAX_RETRIES
 
 CHOOSE_PROVIDER = "Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider."
 HARNESS = "standard"
@@ -461,6 +462,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         repeat = 1
     if lb and repeat < lb.get("repeat", 1):
         add("limits", f"Like the leaderboard runs each {(b.get('units') or {}).get('noun', 'unit')} at least {lb['repeat']} times.")
+    # each attempt run again up to N times when it ends in a failure a further try may mend (standard.retries)
+    retries = 0 if recipe.get("retries") in (None, "") else _int(recipe.get("retries"), 0, MAX_RETRIES)
+    if retries is None:
+        add("limits", f"Retries per attempt: a whole number from 0 to {MAX_RETRIES}.")
+        retries = 0
     sim_model = str(recipe.get("simulator_model") or "").strip()
     judge_model = str(recipe.get("judge_model") or "").strip()
     like = {"paper": "Like the paper", "leaderboard": "Like the leaderboard"}.get(model_choice)
@@ -645,7 +651,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         words = ["nullius", "standard", "run", definitions.ref_of(b), o["_ref"], *(["--model", m] if m else []), "--provider", provider,
                  "--dataset", d["id"], *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
                  *[w for k, v in options_for_pick(d, p).items() for w in ("--bench-option", f"{k}={v}")],
-                 *(["--repeat", str(repeat)] if repeat > 1 else []),
+                 *(["--attempts", str(repeat)] if repeat > 1 else []),
+                 *(["--retries", str(retries)] if retries else []),
                  *(["--max-usd", f"{share:.6f}".rstrip("0").rstrip(".")] if share and spends(p) else []),
                  *(["--max-usd-per-unit", f"{per_unit:.6f}".rstrip("0").rstrip(".")] if per_unit and spends(p) else []),
                  *[w for k, v in forced.items() for w in ("--timeout", f"{k}={v:g}")],
@@ -750,6 +757,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       + (" of each dataset" if many and isinstance(limit, int) else "")
                       + (f" · {len(pairs)} jobs, one after the other" if len(pairs) > 1 else "")
                       + (f" · {repeat} attempts each (pass^1 to pass^{repeat})" if repeat > 1 else "")
+                      + (f" · up to {retries} {'retry' if retries == 1 else 'retries'} an attempt" if retries else "")
                       + (" · a setup counts " + next(p["o"]["units"]["nouns"] for p in picks if p.get("setup"))
                          if any(p.get("setup") for p in picks) and not all(p.get("setup") for p in picks) else "")],
                      *([[STEP["limits"], "Spending cap", f"${ledger.usd(cap)}"

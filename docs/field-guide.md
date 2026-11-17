@@ -141,7 +141,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `total_input_tokens` | Prompt tokens across the run. | derived | any |
 | `total_cache_tokens` | The part of those served from cache, as each trial's `result.json` records it. | derived | any |
 | `total_output_tokens` | Completion tokens. | derived | any |
-| `total_cost_usd` | The trials' recorded costs, summed: an estimate, not a bill. Shows — when no trial recorded one. | derived | any |
+| `total_cost_usd` | The trials' recorded costs and their retried tries', summed: an estimate, not a bill. Shows — when none recorded one. | derived | any |
 | `duration_min` | The whole run, start to finish. | derived | any |
 | `budget` | A standard run's spending cap, from `result.json`: `max_usd` and `spent_usd`, whether it `stopped` the run, the units `cut_off` and `not_run`, and with a cap per unit `unit_max_usd` and `over_unit`. Empty without a cap. | measured | any |
 | `agent_label` | The agent's name: the class of a `module:Class` path, or the trials' own name when the config gives none. | measured | any |
@@ -149,6 +149,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. An imported runner's arm without that declaration is not a control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |
 | `is_running` | The job records running or pending trials. Numbers are partial; a managed execution's terminal status takes precedence on the page. | measured | any |
 | `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
+| `retries` | Retries a standard run allows each attempt (`--retries`); 0 elsewhere. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
 
 ## Trial metrics, one row per task attempt {#trials}
@@ -171,6 +172,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings (a search index its driver builds) are the run's, in `.work/relay-benchmark`, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
+| `n_retries` | Retries a standard run's attempt took. | measured | any |
 | `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log reads *not recorded*, never 0. | inferred | any |
 
 ## Standard run records
