@@ -40,6 +40,8 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
 
 103 and 104 are not supported: their evaluate() runs FreeCAD's Python on this machine, which Nullius neither checks nor installs. They stay in the datasets; without FreeCAD the null control scores them 0, and an agent's unit ends in an error.
 
+**Website host suffix** is a wildcard DNS name of the address the mock websites listen on, the VMs' gateway: `10.213.0.1.nip.io`. **VM provider** offers `docker` alone: the upstream's other providers need cloud accounts or a hypervisor of their own.
+
 ## Set it up
 
 1. **See where it installs.** Nullius installs under `standard/` in its data directory (`STANDARD_DIR`; `~/.local/share/nullius/standard` on Linux):
@@ -177,6 +179,8 @@ PYTHONPATH=app python3 -m nullius standard run osworld2 nop --dataset test_v2 -j
   --bench-option websites=10.213.0.1.nip.io --bench-option gitlab=gitlab.10.213.0.1.nip.io \
   --bench-option gitlab_write=16:160 --bench-option write_mbps=16 --bench-option write_iops=160
 ```
+
+`write_mbps` counts MB/s of 1024 × 1024 bytes and `write_iops` write operations a second; `gitlab_write` is one MB/s:IOPS for all of a GitLab task's containers together.
 
 ## What is pinned
 

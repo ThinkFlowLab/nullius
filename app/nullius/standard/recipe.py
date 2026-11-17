@@ -156,10 +156,10 @@ def _bench_page(b: dict) -> dict:
                          "catalogue": [k for k, f in (("agent", "turn_seconds"), ("turns", "turns"), ("score", "score_seconds")) if (b.get("limits") or {}).get(f)]},
             "options": {n: {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
                             "setups": o.get("setups") or ["yours"],
-                            **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "names": o.get("names") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
+                            **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"], "example": o.get("example")}), "default": o.get("default"), "about": o.get("about") or {}, "names": o.get("names") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
                             "limit": bool(o.get("limit")), "step": o.get("step") or "", "by": o.get("by") or {}}
                         for n, o in (b.get("options") or {}).items()},
-            "host": {n: {"summary": r["summary"], "check": r["check"], "install": hostreq.install_lines(b, [n]), "needed_by": r["needed_by"]}
+            "host": {n: {"label": r.get("label") or n, "summary": r["summary"], "check": r["check"], "install": hostreq.install_lines(b, [n]), "needed_by": r["needed_by"]}
                      for n, r in hostreq.all_of(b).items()},
             "datasets": [{"id": d["id"], "label": d.get("label") or d["id"], "summary": d.get("summary", ""), "units": d.get("units"),
                           "environment": d.get("environment") or "",
@@ -203,7 +203,7 @@ def _other_page(o: dict) -> dict:
                            "older": definitions.older_kit(p, r), "label": ports.PORTS[p]["label"], "skills": skills_of(p, r)}
                        for p, r in (o.get("proven") or {}).items() if ports.known(p)},
             "options": {n: {"summary": x.get("summary", ""), "default": x.get("default"),
-                            **({"values": list(x["values"])} if "values" in x else {"pattern": x.get("pattern")})}
+                            **({"values": list(x["values"])} if "values" in x else {"pattern": x.get("pattern"), "example": x.get("example")})}
                         for n, x in (o.get("options") or {}).items()},
             **({"fidelity": {k: o["proven"]["fidelity"].get(k) for k in ("verdict", "on", "model")}}
                if isinstance((o.get("proven") or {}).get("fidelity"), dict) else {})}
@@ -719,13 +719,13 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if backend == "container" and any(p.get("setup") for p in picks):
         # a container setup's image installs what has an install; nothing else reaches its container
         imaged = hostreq.in_image(b, on_host)
-        cannot = [n for n in hostreq.requirements(b, on_host) if n not in imaged]
+        cannot = [r.get("label") or n for n, r in hostreq.requirements(b, on_host).items() if n not in imaged]
         if cannot:
             add("where", f"{', '.join(cannot)} cannot be provided in a container: choose local processes.")
         if all(p.get("setup") for p in picks):
             on_host = []                 # an agent's or a check's driver still runs on the machine
     reqs = hostreq.requirements(b, on_host)
-    out["host"] = {"benchmark": b["key"], "needs": [{"name": n, "summary": r["summary"], "check": r["check"],
+    out["host"] = {"benchmark": b["key"], "needs": [{"name": n, "label": r.get("label") or n, "summary": r["summary"], "check": r["check"],
                                                   **({"gpu_memory_mb": r["gpu_memory_mb"]} if "gpu_memory_mb" in r else {})}
                                                  for n, r in reqs.items()],
                    "check": [p for r in reqs.values() for p in r["check"]], "install": hostreq.install_lines(b, list(reqs))}

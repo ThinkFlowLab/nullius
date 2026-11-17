@@ -136,7 +136,7 @@
     },
     "max_steps": {
       "label": "Steps",
-      "summary": "--max_steps: 100 as run_multienv_m3.sh invokes M3, 300 for a cheaper run, or 500, M3's budget in the paper and Muse Spark's in its wrapper and published run.",
+      "summary": "The agent's step limit.",
       "values": [
         "100",
         "300",
@@ -153,7 +153,8 @@
       }
     },
     "thinking": {
-      "summary": "M3_THINKING_MODE: off, as run_multienv_m3.sh leaves it unset, or adaptive, as the paper ran M3 (thinking on).",
+      "label": "Thinking",
+      "summary": "Whether M3 thinks. The paper ran it adaptive.",
       "values": [
         "off",
         "adaptive"
@@ -174,7 +175,7 @@
     },
     "vm_provider": {
       "label": "VM provider",
-      "summary": "--provider_name: docker only; aws, azure, vmware and virtualbox need accounts or a hypervisor of their own.",
+      "summary": "Where the VMs run.",
       "values": [
         "docker"
       ],
@@ -197,8 +198,9 @@
     },
     "websites": {
       "label": "Website host suffix",
-      "summary": "WEBSITE_HOST_SUFFIX: none, or the host suffix OSWorld-web's sites are served under for this machine's VMs, a wildcard DNS name of the address the stack listens on, the gateway of the VMs' own network (10.213.0.1.nip.io). The 40 tasks that use the sites need it.",
+      "summary": "Where the mock websites are served. Needed by the 40 website tasks.",
       "pattern": "none|(?=.{3,200}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+",
+      "example": "10.213.0.1.nip.io",
       "default": "none",
       "setups": [
         "original",
@@ -207,8 +209,9 @@
     },
     "gitlab": {
       "label": "GitLab host",
-      "summary": "GITLAB_URL: none, or the host name of Task-Web/gitlab behind the mock websites' Caddy (gitlab.10.213.0.1.nip.io), reached over http. Each unit of tasks 026 and 041 starts it from its snapshot and removes it after; they need its root token, the licence GITLAB_PRIVATE_TOKEN.",
+      "summary": "Where GitLab is served. Needed by tasks 026 and 041.",
       "pattern": "none|[a-z0-9](?:[a-z0-9.-]{0,56}[a-z0-9])?(?::[1-9][0-9]{0,4})?",
+      "example": "gitlab.10.213.0.1.nip.io",
       "default": "none",
       "setups": [
         "original",
@@ -217,8 +220,9 @@
     },
     "gitlab_write": {
       "label": "GitLab write share",
-      "summary": "Docker's write limits of a GitLab unit's own GitLab, on the disk under Docker's root: none, or MB/s:IOPS for all of its containers together. With the VMs' writes limited, tasks 026 and 041 need it, a slot of the machine's budget beside their VM's.",
+      "summary": "Disk write limit for GitLab, as MB/s:IOPS. Needed by tasks 026 and 041 while the VMs' writes are limited.",
       "pattern": "none|[1-9][0-9]{0,5}:[1-9][0-9]{0,5}",
+      "example": "16:160",
       "default": "none",
       "setups": [
         "original",
@@ -227,8 +231,9 @@
     },
     "write_mbps": {
       "label": "Disk write MB/s",
-      "summary": "Docker's device_write_bps on each VM's container, on the disk under Docker's root: none, or MB/s (1024 * 1024 bytes). Each container has its own: with -j N, give each the machine's budget divided by N.",
+      "summary": "Disk write limit for each VM.",
       "pattern": "none|[1-9][0-9]{0,5}",
+      "example": "16",
       "default": "none",
       "setups": [
         "original",
@@ -237,8 +242,9 @@
     },
     "write_iops": {
       "label": "Disk write IOPS",
-      "summary": "Docker's device_write_iops on each VM's container, on the disk under Docker's root: none, or write operations a second, each container its own.",
+      "summary": "Disk write limit for each VM.",
       "pattern": "none|[1-9][0-9]{0,5}",
+      "example": "160",
       "default": "none",
       "setups": [
         "original",
@@ -248,13 +254,15 @@
   },
   "host": {
     "docker": {
-      "summary": "Docker on the machine the driver runs on, usable without sudo, for the upstream's docker provider; /dev/kvm makes the VMs fast, and the upstream runs them without it, slowly; the ip_tables and iptable_nat kernel modules loaded, or the VM's port forwarding fails; the subnet 10.213.0.0/24 free, for the VMs' network nullius-osworld2 that Nullius makes.",
+      "label": "Docker",
+      "summary": "Docker without sudo; KVM recommended.",
       "check": [
         "docker"
       ]
     },
     "scoring_programs": {
-      "summary": "ImageMagick, ffmpeg, ffprobe and tesseract on the driver's machine, where the evaluate() of tasks 025, 046, 051, 056, 085 and 095 runs them.",
+      "label": "Scoring programs",
+      "summary": "ImageMagick, ffmpeg and tesseract, used to score 6 tasks.",
       "check": [
         "identify",
         "convert",

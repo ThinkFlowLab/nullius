@@ -526,7 +526,7 @@
       return `<li><b>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</b> ${state} ${button('Check', `data-hostreq-check="${esc(w)}"`, 'nb-inlinebutton')}${lines.length && (gone.length || (st && st.error)) ? ' ' + button('Install for me', `data-hostreq-install="${esc(w)}"`, 'nb-inlinebutton') : ''}${st && st.said ? ` <small>${esc(st.said)}</small>` : ''}</li>`;
     };
     return `<div class="nb-sectionhead std-wherehead"><h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small></div>`
-      + reqs.map(([n, r]) => `<p class="nb-note"><b>${esc(n)}</b>: ${esc(r.summary)}</p>`).join('')
+      + reqs.map(([n, r]) => `<p class="nb-note"><b>${esc(r.label)}</b>: ${esc(r.summary)}</p>`).join('')
       + `<ul class="nb-hostreq">${C.whereList(rec).map(line).join('')}</ul>`
       + (lines.length ? `<div class="std-code"><div class="std-code-head"><span>or run it yourself, on each machine</span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div>` : '');
   }
@@ -564,11 +564,11 @@
       .map(([n, o]) => {
       const cur = (rec.bench_options || {})[n] ?? o.default;
       if (scope === 'where' && o.values.length === 1) return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}</h3></div><p class="nb-fixed"${(o.about || {})[cur] ? ` title="${esc(o.about[cur])}"` : ''}>${esc((o.names || {})[cur] || cur)}</p>`;
-      if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(n === 'temperature' && o.default === 'default' ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
+      if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}${o.example ? esc(' e.g. ' + o.example) : ''}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(o.default === 'default' && !o.limit ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
       const tileOf = v => { const need = (o.needs || {})[v] || {};
         const foot = [need.embeddings ? `<span class="nb-tick" title="${esc(need.embeddings)} through the run's relay">${need.embeddings.includes('/') ? 'OpenRouter key' : 'OpenAI or OpenRouter key'}</span>` : '',
           need.reranker ? `<span class="nb-tick">reranker ${esc(need.reranker)}</span>` : '',
-          ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(h)}</span>`),
+          ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(((b.host || {})[h] || {}).label || h)}</span>`),
           v === o.default ? '<span class="nb-tag">default</span>' : ''].join('');
         return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: (o.names || {})[v] || v, mark: '', tip: (o.about || {})[v] || '', foot}); };
       return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}${o.datasets.length ? ' · ' + esc(o.datasets.join(', ')) : ''}</h3></div>`
@@ -678,7 +678,7 @@
           const cur = mine[n] ?? x.default;
           return x.values
             ? `<label class="nb-field std-optselect" title="${esc(x.summary)}">${esc(words(n))}<select data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}">${x.values.map(v => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(v === 'default' ? 'Default' : v + (v === x.default ? ' (its default)' : ''))}</option>`).join('')}</select></label>`
-            : `<label class="nb-field std-optselect" title="${esc(x.summary)}">${esc(words(n))}<input data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}" value="${esc(mine[n] ?? '')}" placeholder="${esc(x.default ?? '')} (its default)" spellcheck="false" autocomplete="off"></label>`;
+            : `<label class="nb-field std-optselect" title="${esc(x.summary)}${x.example ? esc(' e.g. ' + x.example) : ''}">${esc(words(n))}<input data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}" value="${esc(mine[n] ?? '')}" placeholder="${esc(x.default ?? '')} (its default)" spellcheck="false" autocomplete="off"></label>`;
         }).join('') + '</div>'; };
       // the chosen ones' settings, one tab each: the benchmark's own way, the benchmark's settings every agent takes, each one's own
       const yoursWord = agent ? 'agent' : (b.kind || 'capability');

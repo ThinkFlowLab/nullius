@@ -38,14 +38,14 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
 | `agent` | **`m3`**, `muse_spark` | Which of OSWorld-V2's own agents runs: each its script as published, with its own prompts, tools and history, asking the model it is published with. | `original` |
-| `gitlab` | pattern `none\|[a-z0-9](?:[a-z0-9.-]{0,56}[a-z0-9])?(?::[1-9][0-9]{0,4})?`, default `none` | GITLAB_URL: none, or the host name of Task-Web/gitlab behind the mock websites' Caddy (gitlab.10.213.0.1.nip.io), reached over http. Each unit of tasks 026 and 041 starts it from its snapshot and removes it after; they need its root token, the licence GITLAB_PRIVATE_TOKEN. | `original`, `yours` |
-| `gitlab_write` | pattern `none\|[1-9][0-9]{0,5}:[1-9][0-9]{0,5}`, default `none` | Docker's write limits of a GitLab unit's own GitLab, on the disk under Docker's root: none, or MB/s:IOPS for all of its containers together. With the VMs' writes limited, tasks 026 and 041 need it, a slot of the machine's budget beside their VM's. | `original`, `yours` |
-| `max_steps` | **`100`**, `300`, `500` | --max_steps: 100 as run_multienv_m3.sh invokes M3, 300 for a cheaper run, or 500, M3's budget in the paper and Muse Spark's in its wrapper and published run. | `original` |
-| `thinking` | **`off`**, `adaptive` | M3_THINKING_MODE: off, as run_multienv_m3.sh leaves it unset, or adaptive, as the paper ran M3 (thinking on). | `original` |
-| `vm_provider` | **`docker`** | --provider_name: docker only; aws, azure, vmware and virtualbox need accounts or a hypervisor of their own. | `original`, `yours` |
-| `websites` | pattern `none\|(?=.{3,200}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+`, default `none` | WEBSITE_HOST_SUFFIX: none, or the host suffix OSWorld-web's sites are served under for this machine's VMs, a wildcard DNS name of the address the stack listens on, the gateway of the VMs' own network (10.213.0.1.nip.io). The 40 tasks that use the sites need it. | `original`, `yours` |
-| `write_iops` | pattern `none\|[1-9][0-9]{0,5}`, default `none` | Docker's device_write_iops on each VM's container, on the disk under Docker's root: none, or write operations a second, each container its own. | `original`, `yours` |
-| `write_mbps` | pattern `none\|[1-9][0-9]{0,5}`, default `none` | Docker's device_write_bps on each VM's container, on the disk under Docker's root: none, or MB/s (1024 * 1024 bytes). Each container has its own: with -j N, give each the machine's budget divided by N. | `original`, `yours` |
+| `gitlab` | e.g. `gitlab.10.213.0.1.nip.io`, default `none` | Where GitLab is served. Needed by tasks 026 and 041. | `original`, `yours` |
+| `gitlab_write` | e.g. `16:160`, default `none` | Disk write limit for GitLab, as MB/s:IOPS. Needed by tasks 026 and 041 while the VMs' writes are limited. | `original`, `yours` |
+| `max_steps` | **`100`**, `300`, `500` | The agent's step limit. | `original` |
+| `thinking` | **`off`**, `adaptive` | Whether M3 thinks. The paper ran it adaptive. | `original` |
+| `vm_provider` | **`docker`** | Where the VMs run. | `original`, `yours` |
+| `websites` | e.g. `10.213.0.1.nip.io`, default `none` | Where the mock websites are served. Needed by the 40 website tasks. | `original`, `yours` |
+| `write_iops` | e.g. `160`, default `none` | Disk write limit for each VM. | `original`, `yours` |
+| `write_mbps` | e.g. `16`, default `none` | Disk write limit for each VM. | `original`, `yours` |
 
 | Option | Value | Refused without (`host`: the driver's machine; `embeddings`: a model the provider serves) |
 |---|---|---|

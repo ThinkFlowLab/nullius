@@ -432,8 +432,8 @@ Do not add custom prose-heavy layout or one full-width row per simple value.
 Check the shared benchmark page at desktop and mobile widths; simple options,
 detailed prerequisites and single/multiple datasets should remain readable.
 
-For continuous upstream settings such as temperature, use an input `pattern`
-rather than an arbitrary shortlist of `values`. Say what an omitted parameter
+For continuous upstream settings such as temperature, use an input `pattern`, with an `example` the
+pattern allows, rather than an arbitrary shortlist of `values`. Say what an omitted parameter
 means and retain any setup restrictions; do not imply every model accepts it.
 
 Normal upstream scoring rules and expected use of a chosen model belong in

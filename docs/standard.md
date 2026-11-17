@@ -477,7 +477,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 
 | Key of an option | Meaning |
 | --- | --- |
-| `summary`, `values` or `pattern`, `default` | What it changes, its allowed choices or input pattern, and its value when unset |
+| `summary`, `values` or `pattern`, `example`, `default` | What it changes, its allowed choices or input pattern, and its value when unset. `example`, optional and checked when given, is a value the pattern allows besides the default; pages show it in the pattern's place, and a pattern without one shows nothing |
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
 | `names` | A name for some values, shown in their place; a recipe and the CLI keep the value |
@@ -493,7 +493,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 - **`embeddings`**: the value gets the run's own relay as the driver's `OPENAI_BASE_URL` (and its MCP servers'), the model pinned on its route. Bare OpenAI model names work on OpenAI or OpenRouter; qualified names such as `qwen/qwen3-embedding-8b` require OpenRouter. On OpenRouter, bare names acquire their maker's prefix in both the price inventory and the sent request. A judge route handed to litellm goes in its `api_base`.
 - **`reranker`**: the chat model used by the upstream search. The driver receives one `OPENAI_BASE_URL`: embeddings requests use the embedding pin when present, while chat and Responses requests use the reranker pin. A BM25 reranker needs no embedding model. Both models count toward the run's price requirements and spending cap.
 - **`files`**: a benchmark declares `{name: {url: "https://…", sha256: "…"}}`; an option value names them with `needs.files: [name]`. A needs block may add `when: {other_option: [values]}` to require its resources only under those selections. Only active options and needs fetch files, once per digest under `STANDARD_DATA_DIR` (the dataset cache by default), refusing a mismatched download. The driver receives each path as `NULLIUS_FILE_<NAME>` (upper case). Names use lower case letters and underscores.
-- **`host`**: `{summary, check: [programs on PATH], install: {apt, npm}}` (`standard/hostreq.py`), whatever the backend; hardware (a CUDA GPU, by `nvidia-smi`) has no `install`. Optional `gpu_memory_mb` is a positive whole number of MiB required on the largest GPU, read with `nvidia-smi` (total memory, not free memory or the sum across cards). The local builder and run startup refuse insufficient memory with the required and available amounts; an unavailable query names `nvidia-smi` instead. Remote GPU memory is checked when the run starts on the host. A run refuses missing programs and says the install commands when supplied.
+- **`host`**: `{label, summary, check: [programs on PATH], install: {apt, npm}}`, `label` the name a page shows, the key without it (`standard/hostreq.py`), whatever the backend; hardware (a CUDA GPU, by `nvidia-smi`) has no `install`. Optional `gpu_memory_mb` is a positive whole number of MiB required on the largest GPU, read with `nvidia-smi` (total memory, not free memory or the sum across cards). The local builder and run startup refuse insufficient memory with the required and available amounts; an unavailable query names `nvidia-smi` instead. Remote GPU memory is checked when the run starts on the host. A run refuses missing programs and says the install commands when supplied.
 - **One integration per benchmark.** Add supported behavior as options on that entry, not numbered integration revisions. Record the selected options with each run and revalidate affected proofs.
 
 ### An agent
@@ -533,7 +533,7 @@ An agent or a capability may keep several versions in its one file: an older rel
 
 | Rule | Detail |
 | --- | --- |
-| Shape | A `summary`, `values` (or a `pattern`) and a `default`, the vendor's own; the summary says where it comes from |
+| Shape | A `summary`, `values` (or a `pattern`, with an optional `example` it allows besides the default, shown in its place) and a `default`, the vendor's own; the summary says where it comes from |
 | Reaches the agent | As `{opt_<name>}` in `model.env`, `env`, or a file `model.files` writes; `cli check` refuses a slot naming no option, and a default the option does not allow |
 | Set | `cli run` and `cli conform` take `--option name=value` (repeatable) |
 | Recorded | Every value under `standard.options` in `config.json`, defaults included |
