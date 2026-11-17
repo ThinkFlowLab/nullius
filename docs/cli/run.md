@@ -108,8 +108,8 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | Failure | Retried |
 | --- | --- |
 | Rate limit | After the [pause](../standard.md#a-run) |
-| Provider, network or setup error; agent crash | Yes |
-| Time run out | Only if the provider was refusing the calls |
+| Provider, network or setup error; agent crash or no start in time | Yes |
+| Agent or benchmark out of time | Only if the provider was refusing the calls |
 | Wrong key or model, spent credit | No; three in a row stop the run |
 | A setup this machine lacks, a missing secret | No |
 | A spending or call cap reached | No |
