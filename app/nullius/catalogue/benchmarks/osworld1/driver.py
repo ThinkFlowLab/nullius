@@ -203,31 +203,24 @@ def _remove_vms(dir, seconds=None):
     agent's unit); past it the rest is left."""
     until = None if seconds is None else time.time() + seconds
 
-    def docker(*argv, check=False, **kw):
+    def docker(*argv, **kw):
         left = None if until is None else until - time.time()
         if left is not None and left <= 0:
             raise subprocess.TimeoutExpired(argv, 0)
-        return subprocess.run(["docker", *argv], timeout=left, check=check, **kw)
+        return subprocess.run(["docker", *argv], timeout=left, check=True, **kw)
 
     mine = os.path.join(dir, "vm") + os.sep
-
-    def containers():
+    try:
         out = docker("ps", "-a", "-q", "--filter", "ancestor=happysixd/osworld-docker",
-                     capture_output=True, text=True, check=True).stdout.split()
+                     capture_output=True, text=True).stdout.split()
         ids = []
         for cid in out:
-            inspected = docker("inspect", "-f", "{{range .Mounts}}{{.Source}}\n{{end}}", cid,
-                               capture_output=True, text=True)
-            if inspected.returncode == 0 and any(s.startswith(mine) for s in inspected.stdout.split()):
+            sources = docker("inspect", "-f", "{{range .Mounts}}{{.Source}}\n{{end}}", cid,
+                             capture_output=True, text=True).stdout.split()
+            if any(s.startswith(mine) for s in sources):
                 ids.append(cid)
-        return ids
-
-    try:
-        ids = containers()
         if ids:
             docker("rm", "-f", *ids, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if containers():
-            raise RuntimeError(f"the unit's VMs were not all removed ({dir})")
     except subprocess.TimeoutExpired:
         sys.stderr.write(f"driver: the unit's VMs were not all removed within {seconds} s ({dir})\n")
         raise
@@ -618,22 +611,14 @@ def _reap_runner(where, seconds=None):
 
 def _remove_passes(where, seconds, again=True):
     """The unit's VMs removed within ``seconds``: once, then (``again``: the runner was killed, a create the engine had
-    accepted may still land) at 2, 8 and 20 s while time is left. Only the last pass decides whether removal failed."""
-    started = time.time()
-    until, failed = started + seconds, None
-    for delay in (0, 2, 8, 20) if again else (0,):
-        if delay and delay >= seconds:
-            break
-        time.sleep(max(0, started + delay - time.time()))
-        try:
-            _remove_vms(where, until - time.time())
-            failed = None
-        except (OSError, subprocess.SubprocessError, RuntimeError) as e:
-            failed = e
-        if time.time() >= until:
-            raise subprocess.TimeoutExpired("docker", seconds)
-    if failed:
-        raise failed
+    accepted may still land) once more after each of 2, 8 and 20 s while time is left, as reap does."""
+    until = time.time() + seconds
+    _remove_vms(where, seconds)
+    for wait in (2, 8, 20) if again else ():
+        if until - time.time() <= wait:
+            return
+        time.sleep(wait)
+        _remove_vms(where, until - time.time())
 
 
 def _removed(where, sock_dir, again):
