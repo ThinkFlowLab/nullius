@@ -20,7 +20,8 @@ causes, writing tests and fixes in the agent's code.
   `render`, and stops with a message naming the missing file when it is absent.
 - Python 3 with the standard library, git, and bash on a POSIX system: Linux or WSL. The tests of this skill ran
   on Python 3.12.
-- A loop folder the person names, outside the repository or in a folder git ignores. `loop.py` writes only there.
+- A loop folder the person names, outside every git repository or in a folder its repository ignores. `loop.py`
+  writes only there, and `read` refuses a loop folder that git would list as untracked.
 - An adapter, `adapter.json` in the loop folder: one file per agent with its checkout, its commands and the limits
   of the run (`references/adapter.md`). For an agent of the Nullius catalogue, draft it from
   `catalogue/agents/<key>/agent.json` (`versions.<v>.upstream.repository` and `tag`) and the run's settings, and

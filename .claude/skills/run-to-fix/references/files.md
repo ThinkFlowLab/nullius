@@ -3,6 +3,12 @@
 A person names the loop folder. `loop.py` writes only there, plus worktree records in the agent checkout's git
 folder while a check runs. Tests and fixes are commits that the assistant makes on `source.work_branch`.
 
+Before it writes anything, `read` asks git where the loop folder lies (`git rev-parse --show-toplevel`, then
+`git check-ignore`). A folder outside every repository, or one its repository ignores, is read. A folder inside a
+work tree that git does not ignore, the repository root included, is refused, and the message names the repository
+root and the two ways out: a folder outside the repository, or a line in its `.gitignore`. Any other answer of git
+stops `read` with git's output. The rule holds for every repository, the agent's checkout included.
+
 ## The loop folder
 
 | file | written by | holds |
