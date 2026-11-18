@@ -21,14 +21,14 @@ from . import client, questions as Q
 _SAFE = re.compile(r"[^A-Za-z0-9._@+-]")
 
 
-ROOTS = {"system-one": "judgements", "llm": "judgements-llm"}     # one directory per judgement
+ROOTS = {"decision": "judgements", "llm": "judgements-llm"}     # one directory per judgement
 
 
 def _root(ws_dir: str, lane: str) -> str:
     return os.path.join(ws_dir, ROOTS.get(lane, "judgements"))
 
 
-def _path(ws_dir: str, job_id: str, trial_name: str, lane: str = "system-one") -> str:
+def _path(ws_dir: str, job_id: str, trial_name: str, lane: str = "decision") -> str:
     return os.path.join(_root(ws_dir, lane), _SAFE.sub("_", job_id), _SAFE.sub("_", trial_name) + ".json")
 
 
@@ -52,7 +52,7 @@ def _pick(data: dict, version: Optional[str], started: Optional[str] = None) -> 
     return None
 
 
-def load(ws_dir: str, job_id: str, trial_name: str, version: Optional[str] = None, lane: str = "system-one",
+def load(ws_dir: str, job_id: str, trial_name: str, version: Optional[str] = None, lane: str = "decision",
          started: Optional[str] = None) -> Optional[dict]:
     """The record under `version`; with none named, the current version or
     the newest earlier one that has a record. `started`: the trial's own
@@ -69,7 +69,7 @@ def is_current(record: Optional[dict]) -> bool:
     return bool(record) and record.get("questions") == Q.VERSION
 
 
-def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "system-one",
+def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "decision",
          started: Optional[str] = None) -> None:
     """The record under its question version; other versions kept. A
     record's answers merge over the version's earlier answers, so judging
@@ -94,7 +94,7 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "s
     os.replace(tmp, path)
 
 
-def for_job(ws_dir: str, job_id: str, version: Optional[str] = None, lane: str = "system-one",
+def for_job(ws_dir: str, job_id: str, version: Optional[str] = None, lane: str = "decision",
             started: Optional[dict] = None) -> dict:
     """Every judged trial of a job: {trial_name: record}, each the current
     version's record or the newest earlier one, as `load` picks it.
@@ -129,7 +129,7 @@ def count(ws_dir: str) -> int:
     return sum(n.endswith(".json") for lane in ROOTS for _, _, names in os.walk(_root(ws_dir, lane)) for n in names)
 
 
-def all_records(ws_dir: str, job_id: Optional[str] = None, lane: str = "system-one"):
+def all_records(ws_dir: str, job_id: Optional[str] = None, lane: str = "decision"):
     """Every stored record, every version: yields (job_id, trial_name,
     version, record). One job's when `job_id` is given."""
     root = _root(ws_dir, lane)

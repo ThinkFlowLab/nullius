@@ -240,7 +240,7 @@ class EveryRoute(unittest.TestCase):
         self.assertTrue(asked, "no batch route asked the judge anything")
 
     def test_the_job_page_offers_each_judge_its_own_button(self):
-        """System One and the LLM judge judge apart, so the job page has a
+        """Decision and the LLM judge judge apart, so the job page has a
         button for each, and the one a post names is the one asked."""
         judge = web.judge
         job = web.shared._load_jobs()[0]                         # the fixtures are controls: read as an agent's job here
@@ -248,7 +248,7 @@ class EveryRoute(unittest.TestCase):
         env = dict(TYPESAFE_API_KEY="ts-fake", OPENROUTER_API_KEY="sk-or-fake", LLM_JUDGE_PROVIDER="openrouter", LLM_JUDGE_MODEL="vendor/judge-1")
         with patch.dict(os.environ, env):
             page = self.get(f"/job/{job.job_id}").get_data(as_text=True)
-            for lane in ("system-one", "llm"):
+            for lane in ("decision", "llm"):
                 self.assertIn(f'id="judge-all-{lane}"', page)
             asked = []
             with patch.object(judge, "judge_trial", lambda j, t, k: asked.append(k.lane) or {}):

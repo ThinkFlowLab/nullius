@@ -1,7 +1,7 @@
 # Model providers
 
 Where model calls go, and with which key. Each provider is defined once, and
-every feature reads that definition: runs, the provider test, System One and
+every feature reads that definition: runs, the provider test, Decision and
 the LLM judge. A feature asks for the protocol it speaks and gets the providers
 that can serve it.
 
@@ -28,7 +28,7 @@ and how the key is sent. The feature that calls the provider picks the protocol.
 | `chat` | OpenAI Chat Completions | `/chat/completions` | Bearer |
 | `responses` | OpenAI Responses | `/responses` | Bearer |
 | `messages` | Anthropic Messages | `/messages` | `x-api-key` and `anthropic-version` |
-| `systemone` | TypeSafe System One | `/systemone` | Bearer |
+| `systemone` | TypeSafe Decision | `/systemone` | Bearer |
 | `decisions` | OpenRouter Decisions (alpha) | `/decisions` | Bearer |
 | `openai-decisions` | OpenAI Decisions (beta) | `/decisions` | Bearer |
 
@@ -36,7 +36,7 @@ and how the key is sent. The feature that calls the provider picks the protocol.
 | --- | --- |
 | A run | What its agent speaks (`model.apis` in its definition); a Harbor run, `chat` |
 | LLM judge | `chat`, or `messages` on Anthropic |
-| System One | `systemone`, `decisions` or `openai-decisions` |
+| Decision | `systemone`, `decisions` or `openai-decisions` |
 
 Anthropic is offered to agents that speak `messages`. It is not offered to an
 agent that speaks only `chat`, to a Harbor recipe, or to a judged benchmark.
@@ -178,7 +178,7 @@ Keys keep their names. `LLM_JUDGE_PROVIDER` still reads `local` and
 
     Precedence, reloads.
 
-- [System One](system-one.md), [LLM judge](llm-judge.md)
+- [Decision](decision.md), [LLM judge](llm-judge.md)
 
     The judges.
 

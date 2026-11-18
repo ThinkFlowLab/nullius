@@ -75,7 +75,7 @@ class SettingsPage(unittest.TestCase):
         html = self.page()
         seen = re.search(r'<article[^>]*id="TYPESAFE_API_KEY".*?</article>', html, re.S).group(0)
         self.assertIn('data-source="file"', seen); self.assertIn("********", seen); self.assertNotIn("characters", seen); self.assertNotIn("not set", seen)
-        self.assertNotIn('System One <span class="st-legend-state">needs the TypeSafe key</span>', html)
+        self.assertNotIn('Decision <span class="st-legend-state">needs the TypeSafe key</span>', html)
         self.assertEqual(os.environ["TYPESAFE_API_KEY"], "ts-fake-0123456789")         # the judge sees it too, not only the page
         self.assertEqual(os.environ["MODEL_API_KEY"], "sk-fake-9876543210"); self.assertNotIn("HOSTS", os.environ)
         notice = html[html.index('id="settings-unread"'):]
@@ -135,7 +135,7 @@ class SettingsPage(unittest.TestCase):
         settings.load(self.env_file)
         html = self.page()
         judge_section = html.split('id="judge"')[1].split('id="custom-keys"')[0]
-        for prefix in ("SYSTEM_ONE", "LLM_JUDGE"):                                                     # Provider, Protocol, Model, each labelled
+        for prefix in ("DECISION", "LLM_JUDGE"):                                                     # Provider, Protocol, Model, each labelled
             labels = [judge_section.index(f'for="value-{prefix}_{part.upper()}">{part}</label>') for part in ("Provider", "Protocol", "Model")]
             self.assertEqual(labels, sorted(labels))
             self.assertIn(f'<select class="st-input" id="value-{prefix}_PROVIDER" name="value:{prefix}_PROVIDER"', judge_section)   # the shared select
@@ -150,20 +150,20 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('data-default="~typesafe/jev-latest" data-models="~typesafe/jev-latest|typesafe/jev-1.14|typesafe/jev-1.13|typesafe/jev-router|jaredpalmer/kev-4b"', html)
         self.assertNotIn("data-model-default", html)                       # the default is the model field's placeholder (judges.js)
 
-    def test_system_one_on_openrouter_offers_the_cached_list_and_asks_for_it_only_after_load(self):
+    def test_decision_judge_on_openrouter_offers_the_cached_list_and_asks_for_it_only_after_load(self):
         Path(self.env_file).write_text("OPENROUTER_API_KEY=sk-or-fromthefile\n")
         settings.load(self.env_file)
         with patch.object(providers, "decision_models", return_value=["b/decider:free", "typesafe/jev-1.14"]) as live:
             html = self.page()
             live.assert_called_with(fetch=False)                                                        # the page never waits on the network
             self.assertIn('data-models="~typesafe/jev-latest|typesafe/jev-1.14|b/decider:free" data-live', html)
-            post = lambda **kw: self.client.post("/settings/system-one/models", headers={"X-CSRF-Token": self.token(), "Origin": "http://localhost"}, **kw)
+            post = lambda **kw: self.client.post("/settings/decision/models", headers={"X-CSRF-Token": self.token(), "Origin": "http://localhost"}, **kw)
             r = post(); self.addCleanup(r.close)
             live.assert_called_with(fetch=True)
             self.assertEqual(r.get_json()["models"], [{"id": m, "name": m} for m in ("~typesafe/jev-latest", "typesafe/jev-1.14", "b/decider:free")])
             r = post(environ_overrides={"REMOTE_ADDR": "192.0.2.1"}); self.addCleanup(r.close)
             self.assertEqual(r.status_code, 403)
-            r = self.client.post("/settings/system-one/models"); self.addCleanup(r.close)
+            r = self.client.post("/settings/decision/models"); self.addCleanup(r.close)
             self.assertEqual(r.status_code, 403)                                                       # no form token
 
     def test_a_judge_s_protocol_is_a_quiet_line_unless_its_provider_lists_two(self):
@@ -173,8 +173,8 @@ class SettingsPage(unittest.TestCase):
         Path(self.env_file).write_text("ANTHROPIC_API_KEY=sk-ant-fixture0\nTYPESAFE_API_KEY=ts-fixture0\nLLM_JUDGE_PROVIDER=anthropic\n")
         settings.load(self.env_file)
         html = self.page()
-        s1, llm = (html[html.index(f'id="{p}_PROVIDER"'):html.index(f'id="{p}_MODEL"')] for p in ("SYSTEM_ONE", "LLM_JUDGE"))
-        self.assertIn('<p class="st-note" data-judge-via>via TypeSafe System One</p>', s1)
+        s1, llm = (html[html.index(f'id="{p}_PROVIDER"'):html.index(f'id="{p}_MODEL"')] for p in ("DECISION", "LLM_JUDGE"))
+        self.assertIn('<p class="st-note" data-judge-via>via TypeSafe Decision</p>', s1)
         self.assertIn('<p class="st-note" data-judge-via>via Anthropic Messages</p>', llm)
         self.assertIn('id="LLM_JUDGE_PROTOCOL" data-source="unset" data-secret="no" hidden>', llm)
         self.assertNotIn("messages<", llm); self.assertNotIn(">chat<", llm)                                   # names, never keys

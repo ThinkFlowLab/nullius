@@ -3,7 +3,7 @@ pages store. Two judges answer the same questions (``judge_for`` says which
 one Settings chose); each asks a provider of the registry (``nullius.providers``)
 that serves its protocol:
 
-- **System One**, a decision model on a decision protocol: ``systemone``
+- **Decision**, a decision model on a decision protocol: ``systemone``
   (TypeSafe's Jev, on TypeSafe or OpenRouter), ``decisions`` (OpenRouter's,
   for many makers' models) or ``openai-decisions``. Its answers are the
   model's own: a Noul's probability, a Choice's distribution over its
@@ -43,37 +43,42 @@ BUDGET_TOKENS = 32_000          # the request budget the docs state, shared by s
 CALIBRATION_MIN_CHARS = 4_000   # a stored call this small says nothing about a large request's ratio: it is kept out of the band
 
 
-LANES = ("system-one", "llm")              # the two judgements a trial can have, each with its own records
+LANES = ("decision", "llm")              # the two judgements a trial can have, each with its own records
 # The protocols each judge speaks, in its order of preference; the providers come from the registry.
 LLM_PROTOCOLS = ("chat", "messages")
-SYSTEM_ONE_PROTOCOLS = ("systemone", "decisions", "openai-decisions")
-# System One's models as each provider names them: the first is its default. Another is typed in Settings.
-SYSTEM_ONE_MODELS = {"typesafe": [MODEL],
+DECISION_PROTOCOLS = ("systemone", "decisions", "openai-decisions")
+# Decision's models as each provider names them: the first is its default. Another is typed in Settings.
+DECISION_MODELS = {"typesafe": [MODEL],
                      "openrouter": ["~typesafe/jev-latest", "typesafe/jev-1.14", "typesafe/jev-1.13", "typesafe/jev-router", "jaredpalmer/kev-4b"],
                      "openai": ["gpt-6-luna"]}
 
 
-def system_one_models(choice: str, fetch: bool = False) -> list:
-    """System One's models on a provider, its default first: on OpenRouter, its decision models
+def decision_judge_models(choice: str, fetch: bool = False) -> list:
+    """Decision's models on a provider, its default first: on OpenRouter, its decision models
     (``providers.decision_models``, cached; asked only when ``fetch``), TypeSafe's next; else, or with
-    none, ``SYSTEM_ONE_MODELS``."""
-    listed = SYSTEM_ONE_MODELS.get(choice, [])
+    none, ``DECISION_MODELS``."""
+    listed = DECISION_MODELS.get(choice, [])
     live = providers.decision_models(fetch=fetch) if choice == "openrouter" else []
     if not live:
         return list(listed)
     return [listed[0]] + sorted(set(live) - {listed[0]}, key=lambda m: ("typesafe/" not in m, m))
 
 
-def system_one_protocol(choice: str, model: str, env=os.environ) -> str:
-    """The decision protocol System One speaks on a provider: ``SYSTEM_ONE_PROTOCOL`` when the provider
+def _setting(env, suffix: str) -> str:
+    """``DECISION_<suffix>``, else its name before the rename (``settings.RENAMED``), stripped."""
+    return (env.get(f"DECISION_{suffix}") or env.get(f"SYSTEM_ONE_{suffix}") or "").strip()
+
+
+def decision_judge_protocol(choice: str, model: str, env=os.environ) -> str:
+    """The decision protocol Decision speaks on a provider: ``DECISION_PROTOCOL`` when the provider
     lists it; else, on one that serves both ``systemone`` and ``decisions`` (OpenRouter), ``systemone``
     for TypeSafe's models and the ones listed for it, and ``decisions`` for another maker's; else the
     first the provider lists."""
     rec = providers.record(choice, env)
-    listed = [p for p in SYSTEM_ONE_PROTOCOLS if providers.serves(rec, p)]
-    if (env.get("SYSTEM_ONE_PROTOCOL") or "").strip() in listed:
-        return env["SYSTEM_ONE_PROTOCOL"].strip()
-    typesafe = "typesafe/" in model or model.startswith("jev") or model in SYSTEM_ONE_MODELS.get(choice, [])
+    listed = [p for p in DECISION_PROTOCOLS if providers.serves(rec, p)]
+    if _setting(env, "PROTOCOL") in listed:
+        return _setting(env, "PROTOCOL")
+    typesafe = "typesafe/" in model or model.startswith("jev") or model in DECISION_MODELS.get(choice, [])
     if "systemone" in listed and "decisions" in listed:
         return "systemone" if typesafe else "decisions"
     return listed[0] if listed else "systemone"
@@ -107,11 +112,11 @@ class Judge:
 
     def __init__(self, provider: str, key: str, model: str, url: str = "", lane: str = "", name: str = "", protocol: str = ""):
         self.provider, self.key, self.model, self.url, self.name = provider, key, model, url, name
-        self.lane = lane or ("system-one" if provider == "typesafe" else "llm")
-        self.protocol = protocol or ("systemone" if self.lane == "system-one" else "chat")
+        self.lane = lane or ("decision" if provider == "typesafe" else "llm")
+        self.protocol = protocol or ("systemone" if self.lane == "decision" else "chat")
 
     def __bool__(self) -> bool:
-        if self.lane == "system-one":
+        if self.lane == "decision":
             return bool(self.key) and bool(self.model)
         return bool(self.model) and bool(self.url) and (bool(self.key) or self.provider.startswith("custom"))
 
@@ -129,9 +134,8 @@ class Judge:
     @property
     def missing(self) -> str:
         """What Settings still needs for this judge, in a phrase; '' when it can be asked."""
-        if self.lane == "system-one":
-            return " and ".join(([f"the {self.who} key"] if not self.key else [])
-                                + (["a model"] if not self.model else []))
+        if self.lane == "decision":
+            return "" if self.key and self.model else "a model"
         need = []
         if not self.url:
             need.append("an endpoint (MODEL_API_URL)")
@@ -142,31 +146,31 @@ class Judge:
         return " and ".join(need)
 
 
-def system_one_providers(env=os.environ) -> dict:
-    """System One's providers: every one that lists one of its protocols, each with its models
-    (``system_one_models``, never asked here; the first, ``model``, its default; ``live`` when the
+def decision_judge_providers(env=os.environ) -> dict:
+    """Decision's providers: every one that lists one of its protocols, each with its models
+    (``decision_judge_models``, never asked here; the first, ``model``, its default; ``live`` when the
     provider has a list to ask) and the protocol it would be asked in."""
-    out = {k: dict(d, models=system_one_models(k), model=(SYSTEM_ONE_MODELS.get(k) or [""])[0], live=k == "openrouter")
-           for k, d in _table(SYSTEM_ONE_PROTOCOLS, env, known=True).items()}
+    out = {k: dict(d, models=decision_judge_models(k), model=(DECISION_MODELS.get(k) or [""])[0], live=k == "openrouter")
+           for k, d in _table(DECISION_PROTOCOLS, env, known=True).items()}
     for k, d in out.items():
-        d["protocol"] = system_one_protocol(k, (env.get("SYSTEM_ONE_MODEL") or "").strip() or d["model"], env)
+        d["protocol"] = decision_judge_protocol(k, _setting(env, "MODEL") or d["model"], env)
     return out
 
 
-def system_one(env=os.environ) -> Judge:
-    """The System One judgement: on ``SYSTEM_ONE_PROVIDER`` (unset, or one
-    that serves no System One protocol: TypeSafe when its key is set, else
+def decision_judge(env=os.environ) -> Judge:
+    """The Decision judgement: on ``DECISION_PROVIDER`` (unset, or one
+    that serves no Decision protocol: TypeSafe when its key is set, else
     OpenRouter when its is), with that provider's key, and the model
-    ``SYSTEM_ONE_MODEL`` names or the provider's default."""
-    table = system_one_providers(env)
-    chosen = _choice(env.get("SYSTEM_ONE_PROVIDER"))
+    ``DECISION_MODEL`` names or the provider's default."""
+    table = decision_judge_providers(env)
+    chosen = _choice(_setting(env, "PROVIDER"))
     if chosen not in table:
         chosen = "openrouter" if not env.get("TYPESAFE_API_KEY") and env.get("OPENROUTER_API_KEY") else "typesafe"
     d = table[chosen]
-    model = (env.get("SYSTEM_ONE_MODEL") or "").strip() or d["model"]
-    protocol = system_one_protocol(chosen, model, env)
+    model = _setting(env, "MODEL") or d["model"]
+    protocol = decision_judge_protocol(chosen, model, env)
     return Judge(chosen, env.get(d["key"], ""), model, providers.url(providers.record(chosen, env), protocol),
-                 lane="system-one", name=d["label"], protocol=protocol)
+                 lane="decision", name=d["label"], protocol=protocol)
 
 
 def llm_providers(env=os.environ) -> dict:
@@ -203,7 +207,7 @@ def settings_placeholder() -> str:
 
 
 def judge_for(lane: str, env=os.environ) -> Judge:
-    return llm_judge(env) if lane == "llm" else system_one(env)
+    return llm_judge(env) if lane == "llm" else decision_judge(env)
 
 
 class JudgeError(Exception):
@@ -426,7 +430,7 @@ def ask(state: str, ids, key: str, truncated: bool = False, post: Optional[Calla
         key = key.key
     if not key:
         raise JudgeError(401, "no TypeSafe.ai key: set TYPESAFE_API_KEY in Settings, Judge" if provider == PROVIDER
-                         else f"no {who} key for System One: set it in Settings, Model providers")
+                         else f"no {who} key for Decision: set it in Settings, Model providers")
     asked = questions if questions is not None else Q.request_questions(ids)
     openai = protocol == "openai-decisions"
     body = {"model": model, "input": state, "questions": openai_questions(asked)} if openai else {"state": state, "model": model, "questions": asked}

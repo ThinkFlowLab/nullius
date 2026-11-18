@@ -7,7 +7,7 @@ changes save automatically; data providers and benchmark credentials use **Save*
 | Page | Sets |
 | --- | --- |
 | [Model providers](model-providers.md) | A run's key or endpoint |
-| [System One provider](system-one.md) | The System One judgement |
+| [Decision provider](decision.md) | The Decision judgement |
 | [LLM judge provider](llm-judge.md) | The second judge |
 | [Custom keys](agent-keys.md) | Agent credentials, dataset keys and benchmark tool licences |
 | [Model prices](model-prices.md) | What a run's cost is estimated from |
@@ -26,7 +26,7 @@ changes save automatically; data providers and benchmark credentials use **Save*
 | `OPENAI_API_KEY` | Runs on OpenAI |
 | `OPENROUTER_API_KEY` | Runs on OpenRouter |
 | `ANTHROPIC_API_KEY` | Standard runs whose agent speaks `messages`, and the LLM judge on Anthropic |
-| `SYSTEM_ONE_PROVIDER`, `SYSTEM_ONE_PROTOCOL`, `SYSTEM_ONE_MODEL`, `TYPESAFE_API_KEY` | [System One](system-one.md) |
+| `DECISION_PROVIDER`, `DECISION_PROTOCOL`, `DECISION_MODEL`, `TYPESAFE_API_KEY` | [Decision](decision.md) |
 | `LLM_JUDGE_PROVIDER`, `LLM_JUDGE_PROTOCOL`, `LLM_JUDGE_MODEL` | [LLM judge](llm-judge.md) |
 | `AGENT_KEYS` | Comma-separated agent key names; Harbor runs only |
 | `HOSTS` | The hosts |

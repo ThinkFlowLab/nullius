@@ -73,7 +73,7 @@
 {% endif %}
 
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
-  {% for name, label in [('overview', 'Overview'), ('judgement', 'System One judge'), ('llm-judge', 'LLM judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] if not (replaced and name in ('judgement', 'llm-judge')) %}
+  {% for name, label in [('overview', 'Overview'), ('judgement', 'Decision model'), ('llm-judge', 'LLM judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] if not (replaced and name in ('judgement', 'llm-judge')) %}
   <button id="tab-{{ name }}" role="tab" type="button" data-tab="{{ name }}" aria-controls="trial-{{ name }}" aria-selected="{{ 'true' if name == 'overview' else 'false' }}" tabindex="{{ '0' if name == 'overview' else '-1' }}">{{ label }}</button>
   {% endfor %}
 </nav>

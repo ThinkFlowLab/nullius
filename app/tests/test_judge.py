@@ -298,7 +298,7 @@ class Batch(unittest.TestCase):
         self.assertIsNone(store.load(str(self.tmp), "job", "empty"))
 
 
-    def test_the_llm_judge_keeps_its_records_apart_from_system_one(self):
+    def test_the_llm_judge_keeps_its_records_apart_from_decision_judge(self):
         import json as _json
         def chat(url, body, key):
             asked = [q for q in ("task_completed",) if f'"{q}"' in body["messages"][1]["content"]]
@@ -308,7 +308,7 @@ class Batch(unittest.TestCase):
         rec = batch.ask_and_store(str(self.tmp), "job", "t", {"trial": (["task_completed"], "the trial state", False)}, llm, post=chat)
         self.assertEqual(rec["judge"], {"provider": "openrouter", "model": "vendor/m"})
         self.assertEqual(store.load(str(self.tmp), "job", "t", lane="llm")["answers"], {"task_completed": {"noul": 0.3}})
-        self.assertIsNone(store.load(str(self.tmp), "job", "t"))                                                    # System One's is its own
+        self.assertIsNone(store.load(str(self.tmp), "job", "t"))                                                    # Decision's is its own
         self.assertTrue((self.tmp / "judgements-llm" / "job" / "t.json").is_file())
         self.assertEqual(store.for_job(str(self.tmp), "job"), {}); self.assertEqual(list(store.for_job(str(self.tmp), "job", lane="llm")), ["t"])
 

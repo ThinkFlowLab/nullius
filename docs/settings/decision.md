@@ -1,11 +1,11 @@
-# System One provider
+# Decision provider
 
-The provider and model that answer the System One judgement: questions about recorded evidence.
+The provider and model that answer the Decision judgement: questions about recorded evidence.
 
-System One asks a provider that lists a decision protocol
+Decision asks a provider that lists a decision protocol
 ([protocols](model-providers.md#protocols)).
 
-| `SYSTEM_ONE_PROVIDER` | Credential | Protocol | Default model |
+| `DECISION_PROVIDER` | Credential | Protocol | Default model |
 | --- | --- | --- | --- |
 | `typesafe` | `TYPESAFE_API_KEY` | `systemone` | `jev-latest` |
 | `openrouter` | `OPENROUTER_API_KEY` | `systemone` for TypeSafe's models and `jaredpalmer/kev-4b`, `decisions` for other makers' | `~typesafe/jev-latest` |
@@ -14,9 +14,10 @@ System One asks a provider that lists a decision protocol
 
 | Setting | Value |
 | --- | --- |
-| `SYSTEM_ONE_PROVIDER` | Unset: TypeSafe when its key is set, else OpenRouter |
-| `SYSTEM_ONE_PROTOCOL` | `systemone`, `decisions` or `openai-decisions`, on a provider that serves more than one; unset, or not served: the protocol in the table above |
-| `SYSTEM_ONE_MODEL` | A model the provider accepts, such as `typesafe/jev-1.14` |
+| `DECISION_PROVIDER` | Unset: TypeSafe when its key is set, else OpenRouter |
+| `DECISION_PROTOCOL` | `systemone`, `decisions` or `openai-decisions`, on a provider that serves more than one; unset, or not served: the protocol in the table above |
+| `DECISION_MODEL` | A model the provider accepts, such as `typesafe/jev-1.14` |
+| `SYSTEM_ONE_PROVIDER`, `SYSTEM_ONE_PROTOCOL`, `SYSTEM_ONE_MODEL` | Old names, still read |
 
 | Reply | Recorded as |
 | --- | --- |
@@ -26,7 +27,7 @@ System One asks a provider that lists a decision protocol
 
 ## Configure
 
-Add the connection in **Settings → Model providers** first. **Judges** offers only configured, compatible providers. A sole provider is selected automatically; with several, choose one and set the model. Under the provider, the card names the protocol System One uses. When the provider serves more than one, choose one under **Protocol**. Keys and endpoints stay in Model providers.
+Add the connection in **Settings → Model providers** first. **Judges** offers only configured, compatible providers. A sole provider is selected automatically; with several, choose one and set the model. Under the provider, the card names the protocol Decision uses. When the provider serves more than one, choose one under **Protocol**. Keys and endpoints stay in Model providers.
 
 On OpenRouter, the **Model** suggestions are OpenRouter's public list of decision models. Nullius gets the list without a key when you first use the field, and keeps it in the cache for 6 hours. With no network and no cache, the suggestions are a short built-in list.
 
@@ -38,8 +39,8 @@ your existing `settings.json` ([location and precedence](README.md#save)).
     ```json title="settings.json"
     {
       "TYPESAFE_API_KEY": "YOUR_TYPESAFE_KEY",
-      "SYSTEM_ONE_PROVIDER": "typesafe",
-      "SYSTEM_ONE_MODEL": "jev-latest"
+      "DECISION_PROVIDER": "typesafe",
+      "DECISION_MODEL": "jev-latest"
     }
     ```
 
@@ -48,14 +49,14 @@ your existing `settings.json` ([location and precedence](README.md#save)).
     ```json title="settings.json"
     {
       "OPENROUTER_API_KEY": "YOUR_OPENROUTER_KEY",
-      "SYSTEM_ONE_PROVIDER": "openrouter",
-      "SYSTEM_ONE_MODEL": "~typesafe/jev-latest"
+      "DECISION_PROVIDER": "openrouter",
+      "DECISION_MODEL": "~typesafe/jev-latest"
     }
     ```
 
 ## Request a judgement
 
-A trial's or a job's System One tab.
+A trial's or a job's Decision model tab.
 
 !!! warning "A judgement is a paid call"
     Configuration alone calls nothing; a batch button says how many calls it will make.
