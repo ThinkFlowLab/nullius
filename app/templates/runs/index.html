@@ -1,4 +1,4 @@
-{% from 'runs/_runtime.html' import what_ran %}
+{% from 'runs/_runtime.html' import what_ran, shard_link %}
 {% from '_tables.html' import heads, check_cell, controls %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
@@ -18,7 +18,7 @@
         {%- if kind == 'control' %} data-control="{{ r.control }}" data-state="{{ v.state if v else 'pending' }}"
         {%- else %} data-outcomes="{% if j %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"{% endif %}>
         {%- if part == 'shard' %}
-        <td><div class="la-who"><span class="la-name"><a href="{{ url_for('job', job_id=r.job_id) }}" title="{{ r.job_id }}">shard {{ r.shard }}{% if r.host %} · {{ r.host }}{% endif %}</a></span></div></td>
+        <td><div class="la-who"><span class="la-name">{{ shard_link(r) }}</span></div></td>
         {%- else %}
         <td>{% if part == 'fold' %}<div class="la-fold-who"><button class="la-fold-btn" type="button" aria-expanded="false" aria-controls="fold-{{ L.key }}-{{ r.control or '' }}-{{ r.job_id }}" aria-label="Shards of {{ r.control or (j.agent_label if j and j.agent_label else r.job_id) }}"></button>{% endif %}<div class="la-who"><span class="la-name">
           {%- if kind == 'control' %}

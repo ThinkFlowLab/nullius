@@ -14,6 +14,7 @@ import shutil
 import tempfile
 import unittest
 from contextlib import ExitStack
+from html import unescape
 from pathlib import Path
 from unittest.mock import patch
 
@@ -186,6 +187,11 @@ class LaunchShards(unittest.TestCase):
             self.addCleanup(response.close)
             body = response.get_data(as_text=True)
             self.assertEqual(re.findall(r'data-column="\d+" data-run="([^"]*)"', body), [whole.split(":", 1)[1], ""])
+            # its link under the run is every shard's, as Runs lists them
+            links = re.search(r'<span class="faint mono col-id">(.*?)</span>', body, re.S).group(1)
+            self.assertEqual([(unescape(h), re.sub(r"<[^>]+>", "", t)) for h, t in re.findall(r'<a href="([^"]+)"[^>]*>(.*?)</a>', links)],
+                             [(f"/job/{NAME}-jiuwenswarm-shard-{i}of2?workspace=s", f"shard {i} · {host}")
+                              for i, host in ((1, "this machine"), (2, "host-2"))])
             trials = re.search(r'<th class="rowhead[^"]*"[^>]*>Trials</th>\s*<td[^>]*>(\d+)', body).group(1)
             self.assertEqual(int(trials), len(UNITS))
 

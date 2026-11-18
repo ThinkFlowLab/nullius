@@ -288,15 +288,16 @@ def _fold(rows, ended, control=False) -> list:
 
 
 def offered(ws=None) -> list:
-    """The runs Compare offers from the open workspace (or ``ws``): (launch, run, the job ids it stands for),
-    newest launch first, checks included, a participant's shards one run as the Runs page folds them."""
+    """The runs Compare offers from the open workspace (or ``ws``): (launch, run, the job ids it stands for, its
+    shards' rows as Runs lists them), newest launch first, checks included, a participant's shards one run as
+    the Runs page folds them."""
     jobs, _, _, grouped = _grouped(ws)
     by_id = {j.job_id: j for j in jobs}
     out = []
     for g in grouped:
         rows = [{"job": by_id[i], "job_id": i, "state": "finished", "control": feasibility.control_of(by_id[i])} for i in g.job_ids]
         for r in _fold(rows, {}):
-            out.append((g, r["job"], [s["job_id"] for s in r.get("shards", [r])] + list(r["job"].merged_from)))
+            out.append((g, r["job"], [s["job_id"] for s in r.get("shards", [r])] + list(r["job"].merged_from), r.get("shards", [])))
     return out
 
 

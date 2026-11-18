@@ -434,7 +434,7 @@ def _options(name, dataset=""):
              "agent": job.agent_label or "—", "model": job.model_name or "", "where": _where(job.dataset),
              "dataset": job.dataset, "date": filters._dt(job.started_at), "check": job.is_control,
              "shards": len(job.merged_from) or len(ids)}
-            for launch, job, ids in _runs(name)]
+            for launch, job, ids, _ in _runs(name)]
     same = [r for r in runs if dataset and r["dataset"] == dataset]
     return {"runs": same + [r for r in runs if not (dataset and r["dataset"] == dataset)], "same": len(same)}
 
@@ -485,7 +485,7 @@ def _columns_requested():
             refs = [comparison.RunRef(active_name or _workspace_options()[0]["name"], "")]
         names = list(dict.fromkeys(ref.workspace for ref in refs))
         runs = {name: _runs(name) for name in names}
-        whole = {name: {i: job.job_id for _, job, ids in rs for i in ids} for name, rs in runs.items()}
+        whole = {name: {i: job.job_id for _, job, ids, _ in rs for i in ids} for name, rs in runs.items()}
         refs = [replace(ref, job_id=whole[ref.workspace].get(ref.job_id, ref.job_id)) for ref in refs]
         refs = [ref for k, ref in enumerate(refs) if not ref.job_id or ref not in refs[:k]]
         # never one column alone: an empty one waits beside it
@@ -495,12 +495,14 @@ def _columns_requested():
             ws = active if name == active_name else workspace.load(shared.WS_HOME, name)
             labels[name] = ws.label if ws else "Active source"
         selected = comparison.resolve([ref.value for ref in refs if ref.job_id],
-                                      {name: [job for _, job, _ in rs] for name, rs in runs.items()}, labels)
+                                      {name: [job for _, job, _, _ in rs] for name, rs in runs.items()}, labels)
         view = comparison.build(selected, request.args.get("cohort", "whole"))
     except ValueError as exc:
         abort(400, description=str(exc))
     place = {s.ref: k for k, s in enumerate(view.selected)}
-    return view, [{"ref": ref, "i": place.get(ref), "label": labels[ref.workspace]} for ref in refs]
+    shards = {(name, job.job_id): rows for name, rs in runs.items() for _, job, _, rows in rs}
+    return view, [{"ref": ref, "i": place.get(ref), "label": labels[ref.workspace],
+                   "shards": shards.get((ref.workspace, ref.job_id), [])} for ref in refs]
 
 
 @app.route("/compare/pick")

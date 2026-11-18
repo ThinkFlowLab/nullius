@@ -1,4 +1,4 @@
-{% from 'runs/_runtime.html' import what_ran %}
+{% from 'runs/_runtime.html' import what_ran, shard_link %}
 {% from 'traces/_attempts.html' import attempt_count %}
 {% from '_tables.html' import classes %}
 {% extends "base.html" %}
@@ -105,7 +105,7 @@
             </div>
           </div>
           {% if j is not none %}
-          <a class="faint mono col-id" href="{{ url_for('job', job_id=j.job_id, workspace=c.ref.workspace) }}">{{ j.job_id }}</a>
+          <span class="faint mono col-id">{% if c.shards %}{% for s in c.shards %}{{ shard_link(s, workspace=c.ref.workspace) }}{% endfor %}{% else %}<a href="{{ url_for('job', job_id=j.job_id, workspace=c.ref.workspace) }}">{{ j.job_id }}</a>{% endif %}</span>
           {% if cohort == 'matched' %}<span class="compare-excluded">{{ comparison.excluded_trials[c.i] }} of {{ selections[c.i].job.trials|length }} trials outside this cohort</span>{% endif %}
           {% endif %}
         </div>

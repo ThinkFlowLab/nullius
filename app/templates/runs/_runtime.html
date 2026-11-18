@@ -3,3 +3,8 @@
 {% macro what_ran(job) -%}
 {%- if job and job.runner %}<span class="mono" title="What ran: the runner, and the upstream commit its install resolved">{{ job.runner }}{% if job.runner_commit %} {{ job.runner_commit }}{% endif %}</span>{% endif -%}
 {%- endmacro %}
+
+{#- One shard of a sharded run, as Runs lists it: its number and the machine it ran on. -#}
+{% macro shard_link(s) -%}
+<a href="{{ url_for('job', job_id=s.job_id, **kwargs) }}" title="{{ s.job_id }}">shard {{ s.shard }}{% if s.host %} · {{ s.host }}{% endif %}</a>
+{%- endmacro %}

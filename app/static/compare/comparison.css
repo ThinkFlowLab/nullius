@@ -23,6 +23,7 @@
 .compare-col { vertical-align: top; text-transform: none; letter-spacing: 0; font-weight: 400; }
 .col-head { display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
 .col-tools { display: flex; align-items: center; gap: .15rem; }
+.col-id { display: flex; flex-wrap: wrap; gap: .2rem .8rem; }
 .col-tools .icon-btn { width: 26px; height: 26px; font-size: .9rem; text-decoration: none; }
 .compare-baseline { margin-right: auto; color: var(--accent); font-size: .7rem; letter-spacing: .07em; text-transform: uppercase; }
 .col-ws, .col-run { width: 100%; min-width: 0; padding: .45rem .6rem; border: 1px solid var(--border); border-radius: 7px; font: .82rem var(--sans); color: var(--text); background: var(--surface); text-align: left; }
