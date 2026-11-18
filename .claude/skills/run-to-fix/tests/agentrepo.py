@@ -87,6 +87,10 @@ def make_repo(root: str) -> Repo:
     return Repo(path=path, base=base, test_ref=test_ref, good=good, bad=bad)
 
 
+#: what each recorded trial cost; the failed ones cost more, as in real runs
+RECORDED_COST = {"p1__r": 0.01, "p2__r": 0.01, "p3__r": 0.01, "f1__r": 0.05, "f2__r": 0.07, "f3__r": 0.03}
+
+
 def recorded_trials() -> List[Trial]:
     out = [trial("p1__r", "bench/p1", 1.0), trial("p2__r", "bench/p2", 1.0), trial("p3__r", "bench/p3", 1.0)]
     for name in ("f1", "f2"):
@@ -94,6 +98,8 @@ def recorded_trials() -> List[Trial]:
         t.files = {"verifier/ctrf.json": '{"results": {"tests": [{"name": "test_state", "status": "failed"}]}}'}
         out.append(t)
     out.append(trial("f3__r", "bench/f3", 0.0))
+    for t in out:
+        t.cost = RECORDED_COST[t.name]
     return out
 
 

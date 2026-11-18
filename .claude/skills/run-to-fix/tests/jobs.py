@@ -30,12 +30,13 @@ class Trial:
     max_output: int
     verifier_text: str
     files: Dict[str, str]
+    cost: Optional[float]
 
 
 def trial(name: str, task: str, reward: Optional[float]) -> Trial:
-    """A trial of 5 model calls, 60 s, 100 tokens per reply, no exception, no extra files."""
+    """A trial of 5 model calls, 60 s, 100 tokens per reply, 0.01 USD, no exception, no extra files."""
     return Trial(name=name, task=task, reward=reward, exception=None, agent_s=60.0, calls=5, max_output=100,
-                 verifier_text="", files={})
+                 verifier_text="", files={}, cost=0.01)
 
 
 def iso(t: dt.datetime) -> str:
@@ -73,7 +74,7 @@ def write_trial(job_dir: str, t: Trial, agent: str, model: str, runner: str, ind
         "environment_setup": {"started_at": iso(start), "finished_at": iso(agent_start)},
         "agent_execution": {"started_at": iso(agent_start), "finished_at": iso(agent_end)},
         "agent_result": {"n_input_tokens": 1000 * t.calls, "n_output_tokens": 100 * t.calls, "n_cache_tokens": 0,
-                         "cost_usd": 0.01},
+                         "cost_usd": t.cost},
     }
     if t.reward is not None:
         res["verifier"] = {"started_at": iso(agent_end), "finished_at": iso(end)}

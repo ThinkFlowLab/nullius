@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from jobs import (NO_LIMITS, LoopCase, Trial, adapter, load, run, trial, write_job, write_json)
 
@@ -250,3 +250,64 @@ class PageLabels(LoopCase):
         metrics, page = self.compare_jobs(os.path.join(self.jobs, "a"), "trial", os.path.join(self.jobs, "b"), "trial")
         self.assertEqual([r["label"] for r in metrics["runs"]], ["before", "new"])
         self.assertIn("</span>before</th>", page)
+
+
+def priced(name: str, task: str, cost: Optional[float], test: str) -> Trial:
+    t = trial(name, task, 0.0)
+    t.cost = cost
+    t.files = {"verifier/ctrf.json": '{"results": {"tests": [{"name": "%s", "status": "failed"}]}}' % test}
+    return t
+
+
+class Prices(LoopCase):
+    """The price of an option is the recorded cost of each of its tasks, times the trials each task gets."""
+
+    def compare_groups(self, new_failures: List[Trial]) -> Tuple[dict, str]:
+        tasks = sorted({t.task for t in new_failures})
+        before = [trial(f"{t.split('/')[-1]}__b", t, 1.0) for t in tasks] + [trial(f"p{i}__b", f"bench/p{i}", 1.0) for i in range(5)]
+        new = list(new_failures) + [trial(f"p{i}__n", f"bench/p{i}", 1.0) for i in range(5)]
+        before_dir = write_job(self.jobs, "before", "alpha", "harbor", before)
+        new_dir = write_job(self.jobs, "new", "alpha", "harbor", new)
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(before_dir, None)
+        r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        return load(self.round_file("result.json"))["stop_rule"], r.out
+
+    def test_the_cheapest_option_is_the_lowest_priced_group(self) -> None:
+        costly = [priced(f"a{i}__n", f"bench/a{i}", 0.10, "test_a") for i in range(4)]
+        cheap = [priced(f"b{i}__n", f"bench/b{i}", 0.02, "test_b") for i in range(3)]
+        rule, _ = self.compare_groups(costly + cheap)
+        self.assertEqual(rule["groups_of_3_or_more"], 2)
+        option = rule["cheapest_option"]
+        self.assertEqual(option["group"], "g02")
+        self.assertAlmostEqual(option["usd"], 3 * 0.02 * 3)
+        self.assertEqual(option["unpriced_tasks"], 0)
+
+    def test_a_task_without_a_cost_takes_the_mean_of_the_others(self) -> None:
+        group = [priced("a0__n", "bench/a0", 0.02, "test_a"), priced("a1__n", "bench/a1", 0.04, "test_a"),
+                 priced("a2__n", "bench/a2", None, "test_a")]
+        rule, out = self.compare_groups(group)
+        option = rule["cheapest_option"]
+        self.assertAlmostEqual(option["usd"], (0.02 + 0.04 + 0.03) * 3)
+        self.assertEqual(option["unpriced_tasks"], 1)
+        self.assertIn("1 task priced at the mean of the others", out)
+
+    def test_no_cost_at_all_leaves_the_price_unknown(self) -> None:
+        group = [priced(f"a{i}__n", f"bench/a{i}", None, "test_a") for i in range(3)]
+        rule, _ = self.compare_groups(group)
+        self.assertIsNone(rule["cheapest_option"]["usd"])
+        self.assertTrue(any("budget" in n for n in rule["not_checked"]))
+
+
+class ResultBeforeLedger(LoopCase):
+    def test_a_result_that_cannot_be_written_leaves_the_ledger_open(self) -> None:
+        before, new = paired(5, 1, 1, 1)
+        before_dir = write_job(self.jobs, "before", "alpha", "harbor", before)
+        new_dir = write_job(self.jobs, "new", "alpha", "harbor", new)
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(before_dir, None)
+        os.makedirs(self.round_file("result.json.tmp"))
+        r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIsNone(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["result"])
