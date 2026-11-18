@@ -301,7 +301,7 @@ def judge_job_route(job_id):
     k = key(lane)
     done, failed = run_batch(todo, lambda t: judge_trial(job, t, k), lambda t: t.trial_name)
     from flask import flash
-    flash(f"{'LLM judge' if lane == 'llm' else 'Decision'}: judged {done} of {len(todo)} trial(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
+    flash(f"{'LLM judge' if lane == 'llm' else 'Decision model'}: judged {done} of {len(todo)} trial(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
     return redirect(url_for("job", job_id=job_id) + "#judgement")
 
 

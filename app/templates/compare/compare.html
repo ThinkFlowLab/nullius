@@ -144,7 +144,7 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <button class="btn sm ghost" type="submit">Judge {{ judgement.unjudged }} pair{{ '' if judgement.unjudged == 1 else 's' }}</button>
   </form>
-  {% elif judgement.unjudged %}<span class="small faint">Decision not configured: needs a model — <a href="{{ url_for('settings_page') }}#judge">choose one in Settings</a></span><button class="btn sm ghost" type="button" disabled title="Decision not configured: Settings, Judge">Judge all</button>{% endif %}
+  {% elif judgement.unjudged %}<span class="small faint">Decision model not configured: needs a model — <a href="{{ url_for('settings_page') }}#judge">choose one in Settings</a></span><button class="btn sm ghost" type="button" disabled title="Decision model not configured: Settings, Judge">Judge all</button>{% endif %}
 </div>
 {% endif %}
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Task comparison" tabindex="0">

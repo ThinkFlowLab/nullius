@@ -52,7 +52,7 @@
     <a href="#{{ c.fields[0][0].name }}" class="st-ready-i{{ ' on' if c.ready }}"><span aria-hidden="true">{{ '✓' if c.ready else '○' }}</span> {{ c.title }}<span class="sr">{{ ': set' if c.ready else ': not set' }}</span></a>
     {% endfor %}
     <a href="#providers" class="st-ready-i{{ ' on' if ns.custom }}"><span aria-hidden="true">{{ '✓' if ns.custom else '○' }}</span> Custom<span class="sr">{{ ': set' if ns.custom else ': not set' }}</span></a>
-    {% for jj, name in [(judges[0], 'Decision'), (judges[1], 'LLM judge')] %}<a href="#judge" class="st-ready-i{{ ' on' if jj }}"><span aria-hidden="true">{{ '✓' if jj else '○' }}</span> {{ name }}<span class="sr">{{ ': set' if jj else ': not set' }}</span></a>{% endfor %}
+    {% for jj, name in [(judges[0], 'Decision model'), (judges[1], 'LLM')] %}<a href="#judge" class="st-ready-i{{ ' on' if jj }}"><span aria-hidden="true">{{ '✓' if jj else '○' }}</span> {{ name }}<span class="sr">{{ ': set' if jj else ': not set' }}</span></a>{% endfor %}
     {% for item in chosen %}<a href="#HOSTS" class="st-ready-i on"><span aria-hidden="true">✓</span> <span class="mono">{{ item.split('=', 1)[0] if '=' in item.split('@', 1)[0] else item.split(':/')[0].split(':~')[0] }}</span></a>{% else %}<a href="#HOSTS" class="st-ready-i"><span aria-hidden="true">○</span> no host</a>{% endfor %}
   </div>
 </header>
@@ -222,7 +222,7 @@
     {% if srow and by.get('DECISION_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not decision }}" data-judge-card>
       <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-gavel"/></svg>Decision model</legend>
-      {{ judge_rows('DECISION', decision_providers, decision, 'Where Decision is asked') }}
+      {{ judge_rows('DECISION', decision_providers, decision, 'Where the Decision model is asked') }}
       {{ field(by['DECISION_MODEL'], 'Model', writable, decision_providers[decision.provider].models) }}
     </fieldset>
     {% endif %}

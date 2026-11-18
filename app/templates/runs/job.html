@@ -298,7 +298,7 @@
     {% if (judgement.unjudged) or (judgement.llm.unjudged) or (tq and tq.unjudged) %}
     <div class="jb">
       {# one button per judge: each judges apart, so a person asks for the one they want #}
-      {% for lane, name, n, keyed in [('decision', 'Decision', judgement.unjudged, judgement.keyed), ('llm', 'LLM judge', judgement.llm.unjudged, judgement.llm.keyed)] if n %}
+      {% for lane, name, n, keyed in [('decision', 'Decision model', judgement.unjudged, judgement.keyed), ('llm', 'LLM judge', judgement.llm.unjudged, judgement.llm.keyed)] if n %}
       {% if keyed %}
       <form method="post" action="{{ url_for('judge_job_route', job_id=job.job_id) }}" class="header-form" id="judge-all-{{ lane }}">
         <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="lane" value="{{ lane }}">
