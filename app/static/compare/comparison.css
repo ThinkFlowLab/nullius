@@ -13,7 +13,7 @@
 .col-head { display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
 .col-tools { display: flex; align-items: center; gap: .15rem; }
 .col-id { display: flex; flex-wrap: wrap; gap: .2rem .8rem; }
-.col-tools .icon-btn { width: 26px; height: 26px; font-size: .9rem; text-decoration: none; }
+.col-tools .icon-btn, .fig-head .icon-btn { width: 26px; height: 26px; font-size: .9rem; text-decoration: none; }
 .compare-baseline { margin-right: auto; color: var(--accent); font-size: .7rem; letter-spacing: .07em; text-transform: uppercase; }
 .col-ws, .col-run { width: 100%; min-width: 0; padding: .45rem .6rem; border: 1px solid var(--border); border-radius: 7px; font: .82rem var(--sans); color: var(--text); background: var(--surface); text-align: left; }
 .col-run { cursor: pointer; }
@@ -136,3 +136,17 @@
   overflow-wrap: anywhere;
 }
 .compare-table-wrap .grid.compare tr.pass-k th.rowhead { text-transform: none; letter-spacing: 0; font-family: var(--mono); }
+/* The chart cards: as many to a row as fit, one to a row on a phone; each its style, its metrics and Remove. */
+.compare-chart { margin-top: 1.2rem; }
+.figs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 27rem), 1fr)); gap: 1rem; }   /* 27rem: a Scatter's Style, X, Y and Remove on one row */
+.fig { padding: .7rem .9rem .9rem; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--surface-2); min-width: 0; }
+.fig-head { display: flex; align-items: flex-start; gap: .5rem; margin-bottom: .7rem; }
+.fig-tools { display: flex; flex-wrap: wrap; gap: .5rem; min-width: 0; }   /* the buttons wrap; Remove stays at the first row's end */
+.fig-head .btn { white-space: nowrap; }   /* a button wraps to the next row whole, its name never cut */
+.fig-head .menu { max-height: min(60vh, 26rem); overflow-y: auto; }
+.fig-head .menu legend { float: none; }   /* a group of links: its name above them */
+.fig-head .icon-btn { flex: none; margin: calc((var(--tool-h) - 26px) / 2) 0 0 auto; }   /* centred on the first row */
+.ic-letter { display: inline-grid; place-items: center; font: 600 .8rem/1 var(--sans); }   /* a letter in an icon's place */
+.fig-head .tools-menu a::before { content: ""; flex: 0 0 1em; text-align: center; color: var(--accent); }   /* every item keeps the check's slot, so the names align */
+.fig-head .tools-menu a[aria-current="true"]::before { content: "✓"; }   /* the card's style or metric */
+.fig-note { margin: 0; font-size: .84rem; color: var(--text-dim); }
