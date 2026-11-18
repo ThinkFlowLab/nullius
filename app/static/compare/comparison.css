@@ -66,6 +66,8 @@
   padding-inline: var(--compare-cell-inset);
 }
 .compare-table-wrap .grid.compare.tasks > tbody > .compare-task-row > td { vertical-align: middle; }
+/* the task table's header row, under its columns' controls: read as a table head */
+.grid.compare.tasks .compare-task-head > th { color: var(--text-dim); font-weight: 500; font-size: .78rem; border-bottom-color: var(--border); }
 .compare-task-name { display: flex; align-items: center; gap: .4rem; min-width: 0; }
 .compare-task-name .disclose { flex: none; margin: 0; min-height: 1.8rem; }
 .compare-task-label { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-width: 0; overflow: hidden; overflow-wrap: anywhere; font-size: .82rem; }

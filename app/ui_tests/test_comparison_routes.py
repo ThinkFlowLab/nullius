@@ -330,11 +330,13 @@ class ComparisonRoutes(unittest.TestCase):
                                       ("", "Dataset")])
         self.assertEqual([p for p, _ in pinned[7:]], [""] * len(pinned[7:]))
         self.assertIn('id="side-tools"', body[:body.index('<table class="grid compare" id="side"')])   # the controls row whose height the box leaves
-        # the task table: its header row pinned under its own controls row, nothing else
+        # the task table: the same column controls pinned the same way, then its own header row, nothing else
         tasks = self.get(pick=["active:run", "foreign:run"], view="tasks")
         table = tasks[tasks.index('<table class="grid compare tasks" id="tasks"'):]
-        self.assertEqual(re.findall(r'<tr( data-sticky[^>]*)?>\s*<(t[hd])', table)[0], (" data-sticky", "th"))
-        self.assertEqual(table.count("data-sticky"), 1)
+        pinned = re.findall(r'<tr( class="[^"]*")?( data-sticky(?:="wide")?)?>\s*<th[^>]*>(?:<span class="sr">)?([^<]+)<', table)
+        self.assertEqual(pinned[:4], [("", " data-sticky", "Task"), ("", ' data-sticky="wide"', "Workspace"), ("", ' data-sticky="wide"', "Run"),
+                                      (' class="compare-task-head"', " data-sticky", "Task")])
+        self.assertEqual(table.count("data-sticky"), 4)
         self.assertIn('id="tasks-tools"', tasks[:tasks.index('<table class="grid compare tasks"')])
         self.assertNotIn('data-sticky', tasks[:tasks.index('<table class="grid compare tasks"')])
 
@@ -396,8 +398,7 @@ class ComparisonRoutes(unittest.TestCase):
         side, tasks = self.get(pick=picks, cohort="matched"), self.get(pick=picks, cohort="matched", view="tasks")
         self.assertIn('id="side" style', side); self.assertNotIn('id="tasks"', side)
         self.assertIn('id="tasks" style', tasks); self.assertNotIn('id="side" style', tasks)
-        self.assertNotIn("data-run-btn", tasks)                                            # the picker is the side table's
-        self.assertIn("lists: {}", tasks)
+        self.assertIn('"value": "active:run"', tasks)                                     # its run lists, embedded as in the side view
         for body, view in ((side, None), (tasks, ["tasks"])):
             row = body[body.index('<div class="table-tools table-controls"'):body.index('<div class="table-wrap compare-table-wrap"')]
             switch = re.search(r'aria-label="Comparison view">(.*?)</nav>', row, re.S).group(1)
@@ -408,8 +409,10 @@ class ComparisonRoutes(unittest.TestCase):
             links = [query(h) for h in re.findall(r'href="([^"]+)"', row.replace(switch, "")) if not h.startswith("#")]
             self.assertEqual(len(links), 5)
             self.assertEqual([q.get("view") for q in links], [view] * 5)
-        # the side table's column links keep the cohort, and no view
+        # the column links keep the cohort, and the view
         self.assertEqual(self.links(side, "Remove column 2"), {"pick": ["active:run", "foreign:third"], "cohort": ["matched"]})
+        self.assertEqual(self.links(tasks, "Remove column 2"), {"pick": ["active:run", "foreign:third"], "cohort": ["matched"], "view": ["tasks"]})
+        self.assertEqual(self.links(tasks, "Move column 1 right"), {"pick": ["foreign:run", "active:run", "foreign:third"], "cohort": ["matched"], "view": ["tasks"]})
         # the task table's links keep the view, and the task page's links back
         task_links = [query(h) for h in re.findall(r'href="(/compare/task/[^"]+)"', tasks)]
         self.assertTrue(task_links)
@@ -426,6 +429,34 @@ class ComparisonRoutes(unittest.TestCase):
         response = self.client.get("/compare/pick", query_string={"pick": picks, "view": "tasks"})
         self.addCleanup(response.close)
         self.assertEqual(query(response.location)["view"], ["tasks"])
+
+    def test_the_tasks_view_has_the_column_controls_and_adds_a_run_in_place(self):
+        """Each column's header (Baseline, move, remove), workspace and run, as in the side view; Add a run keeps
+        the view, and its empty column is picked right there."""
+        picks = ["active:run", "foreign:run"]
+        tasks = self.get(pick=picks, view="tasks")
+        self.assertEqual(self.columns(tasks), [("", "run"), ("", "run")])
+        self.assertIn('<span class="compare-baseline">Baseline</span>', tasks)
+        self.assertEqual(re.findall(r'<option value="(\w+)" selected>', self.row(tasks, "Workspace")), ["active", "foreign"])
+        self.assertEqual(self.row(tasks, "Run").count("data-run-btn"), 2)
+        add = unescape(re.search(r'href="([^"]+)" id="compare-add"', tasks).group(1))
+        self.assertEqual(parse_qs(urlsplit(add).query), {"pick": picks + ["foreign:"], "cohort": ["whole"], "view": ["tasks"]})
+        added = self.client.get(add)
+        self.addCleanup(added.close)
+        body = added.get_data(as_text=True)
+        self.assertIn('id="tasks" style="--cols: 3"', body)
+        self.assertEqual(self.columns(body), [("", "run"), ("", "run"), (" empty", "")])
+        self.assertEqual(self.row(body, "Run").count("data-run-btn"), 3)
+        self.assertEqual(self.links(body, "Remove column 3"), {"pick": picks, "cohort": ["whole"], "view": ["tasks"]})
+        # the picker's lists are the side view's, with every pick to grey or check
+        self.assertIn('values: ["active:run", "foreign:run", "foreign:"]', body)
+        self.assertIn('"value": "foreign:run"', body)
+        # a judged column after the runs' gets an empty cell in each control row
+        with patch.object(web.compare, "_judgement", lambda view: {"rows": {}, "pairs": 0, "judged": 0, "earlier": 0, "unjudged": 0,
+                                                                     "keyed": False, "question": "q", "margin": 0.5}):
+            judged = self.get(pick=picks, view="tasks")
+        for label in ("Workspace", "Run"):
+            self.assertEqual(len(re.findall(r"<td[ >]", self.row(judged, label))), 3)
 
     def test_the_warnings_show_in_both_views(self):
         self.right.dataset = "different-dataset@1.0"

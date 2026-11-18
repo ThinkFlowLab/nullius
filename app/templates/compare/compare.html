@@ -18,6 +18,64 @@
     empty one for a column with no run. #}
 {% macro each(cell='td') %}{% for c in columns %}{% if c.i is none %}<{{ cell }} class="compare-empty"></{{ cell }}>{% else %}{{ caller(c.i) }}{% endif %}{% endfor %}{% endmacro %}
 {% set METRIC, NUM = dict(sticky=true), dict(align='right') %}
+{#- Each column's controls, the rows both tables open with: its header (Baseline, move, remove), then its workspace
+    and its run. Opens the table's tbody. `label` names the first column, `extra` the columns after the runs'. #}
+{% macro column_controls(label, extra=0) %}
+  <thead>
+    <tr data-sticky>
+      <th{{ classes(METRIC, true) }}><span class="sr">{{ label }}</span></th>
+      {% for c in columns %}
+      {% set n = loop.index %}
+      <th class="compare-col{{ ' empty' if c.i is none }}" data-column="{{ loop.index0 }}" data-run="{{ c.ref.job_id }}">
+        <div class="col-tools">
+          <span class="compare-baseline">{{ 'Baseline' if loop.first }}</span>
+          {% if c.left %}<a class="icon-btn" href="{{ c.left }}" aria-label="Move column {{ n }} left" title="Move left">←</a>{% endif %}
+          {% if c.right %}<a class="icon-btn" href="{{ c.right }}" aria-label="Move column {{ n }} right" title="Move right">→</a>{% endif %}
+          {% if c.remove %}<a class="icon-btn" href="{{ c.remove }}" aria-label="Remove column {{ n }}" title="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></a>{% endif %}
+        </div>
+      </th>
+      {% endfor %}
+      {% for _ in range(extra) %}<th></th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    <tr data-sticky="wide">
+      <th{{ classes(METRIC, true, 'rowhead') }}>Workspace</th>
+      {% for c in columns %}
+      <td class="compare-col{{ ' empty' if c.i is none }}" data-column="{{ loop.index0 }}">
+        <select class="col-ws" data-ws aria-label="Workspace of column {{ loop.index }}">
+          {% for ws in workspace_options %}<option value="{{ ws.name }}"{% if ws.name == c.ref.workspace %} selected{% endif %}>{{ ws.label }}</option>{% endfor %}
+        </select>
+      </td>
+      {% endfor %}
+      {% for _ in range(extra) %}<td></td>{% endfor %}
+    </tr>
+    <tr data-sticky="wide">
+      <th{{ classes(METRIC, true, 'rowhead') }}>Run</th>
+      {% for c in columns %}
+      {% set j = jobs[c.i] if c.i is not none else none %}
+      {% set n = loop.index %}
+      <td class="compare-col{{ ' empty' if j is none }}" data-column="{{ loop.index0 }}">
+        <div class="col-head">
+          <div class="menu-wrap">
+            <button type="button" class="col-run" data-run-btn aria-haspopup="listbox" aria-expanded="false"><span class="sr">Run of column {{ n }}: </span><span class="run-entry" data-run-label><span class="run-line">Choose a run</span></span></button>
+
+            <div class="menu run-menu" data-run-menu hidden>
+              <label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-controls="runs-{{ n }}" aria-label="Search runs" autocomplete="off" spellcheck="false"></label>
+              <ul class="run-list" role="listbox" id="runs-{{ n }}" aria-label="Runs"></ul>
+              <p class="empty-note" data-none hidden>No runs match.</p>
+            </div>
+          </div>
+          {% if j is not none %}
+          <span class="faint mono col-id">{% if c.shards %}{% for s in c.shards %}{{ shard_link(s, workspace=c.ref.workspace) }}{% endfor %}{% else %}<a href="{{ url_for('job', job_id=j.job_id, workspace=c.ref.workspace) }}">{{ j.job_id }}</a>{% endif %}</span>
+          {% if cohort == 'matched' %}<span class="compare-excluded">{{ comparison.excluded_trials[c.i] }} of {{ selections[c.i].job.trials|length }} trials outside this cohort</span>{% endif %}
+          {% endif %}
+        </div>
+      </td>
+      {% endfor %}
+      {% for _ in range(extra) %}<td></td>{% endfor %}
+    </tr>
+{% endmacro %}
 
 <div class="page-title compare-title"><h1>Comparing {{ jobs|length }} run{{ '' if jobs|length == 1 else 's' }}</h1></div>
 {% if jobs %}
@@ -55,57 +113,7 @@
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Run comparison" tabindex="0">
 <table class="grid compare" id="side" style="--cols: {{ columns|length }}">
   {{ comparison_columns() }}
-  <thead>
-    <tr data-sticky>
-      <th{{ classes(METRIC, true) }}><span class="sr">Metric</span></th>
-      {% for c in columns %}
-      {% set n = loop.index %}
-      <th class="compare-col{{ ' empty' if c.i is none }}" data-column="{{ loop.index0 }}" data-run="{{ c.ref.job_id }}">
-        <div class="col-tools">
-          <span class="compare-baseline">{{ 'Baseline' if loop.first }}</span>
-          {% if c.left %}<a class="icon-btn" href="{{ c.left }}" aria-label="Move column {{ n }} left" title="Move left">←</a>{% endif %}
-          {% if c.right %}<a class="icon-btn" href="{{ c.right }}" aria-label="Move column {{ n }} right" title="Move right">→</a>{% endif %}
-          {% if c.remove %}<a class="icon-btn" href="{{ c.remove }}" aria-label="Remove column {{ n }}" title="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></a>{% endif %}
-        </div>
-      </th>
-      {% endfor %}
-    </tr>
-  </thead>
-  <tbody>
-    <tr data-sticky="wide">
-      <th{{ classes(METRIC, true, 'rowhead') }}>Workspace</th>
-      {% for c in columns %}
-      <td class="compare-col{{ ' empty' if c.i is none }}" data-column="{{ loop.index0 }}">
-        <select class="col-ws" data-ws aria-label="Workspace of column {{ loop.index }}">
-          {% for ws in workspace_options %}<option value="{{ ws.name }}"{% if ws.name == c.ref.workspace %} selected{% endif %}>{{ ws.label }}</option>{% endfor %}
-        </select>
-      </td>
-      {% endfor %}
-    </tr>
-    <tr data-sticky="wide">
-      <th{{ classes(METRIC, true, 'rowhead') }}>Run</th>
-      {% for c in columns %}
-      {% set j = jobs[c.i] if c.i is not none else none %}
-      {% set n = loop.index %}
-      <td class="compare-col{{ ' empty' if j is none }}" data-column="{{ loop.index0 }}">
-        <div class="col-head">
-          <div class="menu-wrap">
-            <button type="button" class="col-run" data-run-btn aria-haspopup="listbox" aria-expanded="false"><span class="sr">Run of column {{ n }}: </span><span class="run-entry" data-run-label><span class="run-line">Choose a run</span></span></button>
-
-            <div class="menu run-menu" data-run-menu hidden>
-              <label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-controls="runs-{{ n }}" aria-label="Search runs" autocomplete="off" spellcheck="false"></label>
-              <ul class="run-list" role="listbox" id="runs-{{ n }}" aria-label="Runs"></ul>
-              <p class="empty-note" data-none hidden>No runs match.</p>
-            </div>
-          </div>
-          {% if j is not none %}
-          <span class="faint mono col-id">{% if c.shards %}{% for s in c.shards %}{{ shard_link(s, workspace=c.ref.workspace) }}{% endfor %}{% else %}<a href="{{ url_for('job', job_id=j.job_id, workspace=c.ref.workspace) }}">{{ j.job_id }}</a>{% endif %}</span>
-          {% if cohort == 'matched' %}<span class="compare-excluded">{{ comparison.excluded_trials[c.i] }} of {{ selections[c.i].job.trials|length }} trials outside this cohort</span>{% endif %}
-          {% endif %}
-        </div>
-      </td>
-      {% endfor %}
-    </tr>
+  {{ column_controls('Metric') }}
     {% if jobs %}
     {% macro row(label, values, hint='', sticky=none) %}
     <tr{% if sticky is not none %} data-sticky="{{ sticky }}"{% endif %}>
@@ -173,9 +181,9 @@
   </tbody>
 </table>
 </div>
-{% elif jobs %}
-<p class="subtitle">Tasks whose pass rate moved most are listed first. A blank cell means that run
-  didn't include the task.</p>
+{% else %}
+{% if jobs %}<p class="subtitle">Tasks whose pass rate moved most are listed first. A blank cell means that run
+  didn't include the task.</p>{% endif %}
 {% if judgement %}
 <div class="judgement-job" id="judgement">
   <span class="small"><strong>Judgement</strong> <span class="badge">experimental</span>
@@ -191,8 +199,8 @@
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Task comparison" tabindex="0">
 <table class="grid compare tasks" id="tasks" style="--cols: {{ columns|length }}">
   {{ comparison_columns() }}
-  <thead>
-    <tr data-sticky>
+  {{ column_controls('Task', 1 if judgement else 0) }}
+    <tr class="compare-task-head" data-sticky>
       <th{{ classes(METRIC, true) }}>Task</th>
       {% for c in columns %}
       {% set j = jobs[c.i] if c.i is not none else none %}
@@ -205,8 +213,6 @@
       {% endfor %}
       {% if judgement %}<th class="judgement-col" title="Each side scored alone on {{ judgement.question }}, 0 to 3; the higher score by at least {{ judgement.margin }} wins, else a tie">Better of two</th>{% endif %}
     </tr>
-  </thead>
-  <tbody>
     {% for taskrow in tasks %}
     {% set task_index = loop.index0 %}
     {% set row = taskrow.trials %}

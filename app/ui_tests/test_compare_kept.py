@@ -61,7 +61,7 @@ class KeptRows(unittest.TestCase):
         for cohort, rows in (("whole", WHOLE), ("matched", MATCHED)):
             side, tasks = self.get(cohort=cohort), self.get(cohort=cohort, view="tasks")
             self.assertEqual(labels(side), rows)
-            self.assertEqual(labels(tasks), [])
+            self.assertEqual(labels(tasks), rows[:2])                                   # Workspace, Run
             for body, view, current in ((side, "side", "Side by side"), (tasks, "tasks", "Task by task")):
                 # the controls row: the cohort switch, the view switch, Order, then Add a run
                 tools = re.search(rf'<div class="table-tools table-controls" id="{view}-tools">(.*?)<div class="table-wrap compare-table-wrap"', body, re.S).group(1)
@@ -74,6 +74,11 @@ class KeptRows(unittest.TestCase):
                 self.assertEqual(re.findall(r'aria-current="true">([^<]+)</a>', views), [current])
                 self.assertNotIn('class="cohort-note"', body)
                 self.assertNotIn("<h2>Task by task</h2>", body)
+                # each column's controls: Baseline, move and remove, its workspace and its run
+                self.assertIn('<span class="compare-baseline">Baseline</span>', body)
+                self.assertEqual(re.findall(r'aria-label="((?:Move|Remove) column \d[^"]*)"', body), ["Move column 1 right", "Remove column 1", "Move column 2 left", "Remove column 2"])
+                self.assertEqual(body.count("data-ws "), 2)
+                self.assertEqual(body.count("data-run-btn "), 2)
             self.assertIn('aria-label="Run comparison"', side)
             self.assertNotIn('aria-label="Task comparison"', side)
             self.assertNotIn('aria-label="Run comparison"', tasks)

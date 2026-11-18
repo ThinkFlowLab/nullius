@@ -379,8 +379,7 @@ def compare():
 
         n_differing=view.n_differing, n_shared=view.shared_tasks,
         picks=values, cohort=view.cohort, view=tasks_view, add=to(values + [columns[-1]["ref"].workspace + ":"]),
-        # the run picker is the side-by-side table's
-        lists={} if tasks_view else {n: _options(n, baseline) for n in dict.fromkeys(c["ref"].workspace for c in columns)},
+        lists={n: _options(n, baseline) for n in dict.fromkeys(c["ref"].workspace for c in columns)},
         baseline=baseline, benchmarks=[b.title if b else "—" for b in (_benchmark(j.dataset)[0] for j in chosen)],
         order_grouped=grouped, order_alternating=alternating,
         n_agents=len(by_agent),
