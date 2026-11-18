@@ -101,6 +101,13 @@ def _all() -> Dict[str, List[dict]]:
     return {k: definitions.load(k, every=True)[0] for k in ("benchmark", "agent", "capability")}
 
 
+def _shown(o: dict, v: str, values: dict) -> str:
+    """An option's value as Review shows it: its name, or for ``default`` under ``by`` the value it stands for."""
+    by = next(iter((o.get("by") or {}).items()), None)
+    v = by[1].get(values.get(by[0]), v) if v == "default" and by else v
+    return (o.get("names") or {}).get(v) or v
+
+
 def _bench_page(b: dict) -> dict:
     """A benchmark as a page shows it. ``controls``: the ones it declares,
     each with who wrote it and where it comes from - what the builder offers
@@ -149,7 +156,7 @@ def _bench_page(b: dict) -> dict:
                          "catalogue": [k for k, f in (("agent", "turn_seconds"), ("turns", "turns"), ("score", "score_seconds")) if (b.get("limits") or {}).get(f)]},
             "options": {n: {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
                             "setups": o.get("setups") or ["yours"],
-                            **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
+                            **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "names": o.get("names") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
                             "limit": bool(o.get("limit")), "by": o.get("by") or {}}
                         for n, o in (b.get("options") or {}).items()},
             "host": {n: {"summary": r["summary"], "check": r["check"], "install": hostreq.install_lines(b, [n]), "needed_by": r["needed_by"]}
@@ -754,7 +761,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                      [STEP["dataset"], "Datasets" if many else "Dataset",
                       ", ".join(f"{x.get('label') or x['id']}" + (f" · {x['units']} {nouns}" if x.get("units") else "") for x in dss)],
                      *[[STEP["dataset"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
-                        f"{v}" + ("" if k in chosen_opts else " (its default)") + f" · {', '.join(x['id'] for x in dss if per_ds[x['id']].get(k) == v)}"]
+                        _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)") + f" · {', '.join(x['id'] for x in dss if per_ds[x['id']].get(k) == v)}"]
                        for k, v in {k: v for vals in per_ds.values() for k, v in vals.items()}.items()],
                      *[row(p) for p in picks],
                      *[[STEP["agent"], "Options" + (f" of {p['o']['label']}" if several else ""),

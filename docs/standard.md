@@ -481,6 +481,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `summary`, `values` or `pattern`, `default` | What it changes, its allowed choices or input pattern, and its value when unset |
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
+| `names` | A name for some values, shown in their place; a recipe and the CLI keep the value |
 | `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, or named `files` |
 | `when` | Another option's values that make it apply |
 | `limit` | `true`: a bound of the upstream's own (steps, errors). The builder shows it in Limits, under the benchmark's name |

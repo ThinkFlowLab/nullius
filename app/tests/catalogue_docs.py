@@ -225,7 +225,8 @@ def _load(kind: str, every: bool = True) -> list:
 
 def _values(spec: dict) -> str:
     """An option's values, the default in bold; a pattern when it has no list."""
-    values = ", ".join(f"**`{v}`**" if v == spec.get("default") else f"`{v}`" for v in spec.get("values") or [])
+    named = {v: f"`{v}` ({n})" for v, n in (spec.get("names") or {}).items()}
+    values = ", ".join(f"**{named.get(v, f'`{v}`')}**" if v == spec.get("default") else named.get(v, f"`{v}`") for v in spec.get("values") or [])
     return values or f"pattern `{spec.get('pattern')}`, default `{spec.get('default')}`"
 
 

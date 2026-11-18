@@ -140,6 +140,20 @@
         "original",
         "model"
       ],
+      "names": {
+        "m3": "M3 Agent",
+        "prompt": "PromptAgent",
+        "claude": "Claude computer use",
+        "gpt54": "GPT-5.4",
+        "openai_cua": "OpenAI CUA",
+        "qwen": "Qwen",
+        "os_symphony": "OS-Symphony",
+        "evocua": "EvoCUA",
+        "autoglm": "AutoGLM",
+        "autoglm_v": "AutoGLM-V",
+        "mano": "Mano",
+        "muse_spark": "Muse Spark"
+      },
       "about": {
         "m3": "MiniMax's M3Agent: run_multienv_m3.py, MiniMax-M3 over Anthropic's Messages API, 100 steps",
         "prompt": "OSWorld's PromptAgent: run_multienv.py, GPT-4o on screenshots over Chat Completions, 15 steps",

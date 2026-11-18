@@ -569,15 +569,15 @@
           need.reranker ? `<span class="nb-tick">reranker ${esc(need.reranker)}</span>` : '',
           ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(h)}</span>`),
           v === o.default ? '<span class="nb-tag">default</span>' : ''].join('');
-        return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: v, mark: '', tip: (o.about || {})[v] || '', foot}); };
+        return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: (o.names || {})[v] || v, mark: '', tip: (o.about || {})[v] || '', foot}); };
       return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}${o.datasets.length ? ' · ' + esc(o.datasets.join(', ')) : ''}</h3></div>`
         // by the data: every value with its line (or a need) - cards of one size, the line whole; plain values - one small
         // card each, all one size, or a select past five of them (a line some have is their tooltip)
         + (o.values.some(v => ((o.needs || {})[v] || {}).embeddings || ((o.needs || {})[v] || {}).reranker || (((o.needs || {})[v] || {}).host || []).some(h => local[h]))
           ? `<div class="nb-pick-grid std-optgrid" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(tileOf).join('')}</div>`
           : o.values.length > 5
-          ? `<label class="nb-field std-optselect"><select data-bench-opt-select="${esc(n)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''} title="${esc((o.about || {})[v] || '')}">${esc(v === 'default' ? 'Default' : v + (v === o.default ? ' (default)' : ''))}</option>`).join('')}</select></label>`
-          : `<div class="std-valgrid" style="--w:${Math.max(7, ...o.values.map(v => String(v).length))}ch" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(v => `<button class="nb-tile std-val" data-bench-opt="${esc(n)}" data-bench-val="${esc(v)}" aria-pressed="${v === cur}" title="${esc((o.about || {})[v] || (v === o.default ? 'default' : v))}"><strong>${esc(v)}</strong>${v === o.default ? '<small>default</small>' : ''}</button>`).join('')}</div>`);
+          ? `<label class="nb-field std-optselect"><select data-bench-opt-select="${esc(n)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''} title="${esc((o.about || {})[v] || '')}">${esc(v === 'default' && !(o.names || {})[v] ? 'Default' : ((o.names || {})[v] || v) + (v === o.default ? ' (default)' : ''))}</option>`).join('')}</select></label>`
+          : `<div class="std-valgrid" style="--w:${Math.max(7, ...o.values.map(v => String((o.names || {})[v] || v).length))}ch" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(v => `<button class="nb-tile std-val" data-bench-opt="${esc(n)}" data-bench-val="${esc(v)}" aria-pressed="${v === cur}" title="${esc((o.about || {})[v] || (v === o.default ? 'default' : v))}"><strong>${esc((o.names || {})[v] || v)}</strong>${v === o.default ? '<small>default</small>' : ''}</button>`).join('')}</div>`);
     }).join('');
   }
   // Only credentials needing attention belong in the builder. Without a dataset's default
@@ -715,7 +715,7 @@
             hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator') : '')
         + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)',
             hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
-        + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, v, 'leaderboard')).join('') : '')
+        + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, ((b.options[k] || {}).names || {})[v] || v, 'leaderboard')).join('') : '')
         + keyLine(rec);
     }
     if (step === S.limits) {

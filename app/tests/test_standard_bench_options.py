@@ -288,6 +288,15 @@ class MachineDocker(unittest.TestCase):
                 self.assertFalse(prerequisites.ready([{"rows": rows}]))
                 self.assertTrue(prerequisites.ready([{"rows": prerequisites.check_here([], setups, which=lambda p: "/usr/bin/" + p)}]))
 
+    def test_a_value_shows_its_name_and_the_recipe_keeps_the_value(self):
+        out = recipe.compile(self.a_recipe(["original"], bench_options={"agent": "muse_spark"}))
+        self.assertIn([2, "Agent", "Muse Spark · test_small"], out["review"])
+        self.assertIn([2, "Steps per task", "100 (its default) · test_small"], out["review"])
+        self.assertIn("agent=muse_spark", out["script"])
+        b = copy.deepcopy(definitions.get("benchmark", "osworld1"))
+        b["options"]["agent"]["names"]["nobody"] = "Nobody"
+        self.assertTrue(any("agent.names" in p for p in definitions.problems(b, "benchmark")))
+
     def test_the_null_control_is_refused_as_it_starts_on_a_machine_without_docker(self):
         b = definitions.get("benchmark", "osworld1")
         with self.assertRaises(run.Refused) as e:
