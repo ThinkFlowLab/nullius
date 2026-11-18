@@ -54,6 +54,7 @@ The job's config records both, and the backend.
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -69,7 +70,7 @@ import tempfile
 from collections import Counter
 from concurrent.futures import FIRST_EXCEPTION, CancelledError, ThreadPoolExecutor, wait
 from contextlib import contextmanager
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from nullius import constraints as limits, paths, prices as price_list, progress, providers
 from nullius.redact import redact
@@ -113,6 +114,10 @@ TIMEOUT_PHASES = ("setup", "image", "agent", "verify", "score")
 MAX_TIMEOUT_SECONDS = 24 * 3600       # the longest any one phase may be given
 BACKENDS = definitions.names.BACKENDS
 _PROBED = threading.Lock()                # a run's first unit, claimed once (Run.first_probe)
+
+
+HELD: dict = {}
+LIVE: dict = {}
 
 
 class Refused(Exception):
@@ -407,7 +412,36 @@ class Licences:
         return {"kind": kind, "value": text} if text else None
 
 
+def resolve_bench_options(bench: dict, dataset: str, given: Optional[dict] = None, setup: str = "yours",
+                  which=shutil.which) -> Tuple[dict, dict]:
+    """The benchmark's options for a run on ``dataset`` and what their values need; refused before anything starts."""
+    vals, bad = definitions.bench_options_of(bench, dataset, given, setup)
+    if bad:
+        raise Refused("; ".join(bad))
+    needs = definitions.option_needs(bench, vals)
+    lacking = hostreq.problems(bench, needs["host"], which)
+    if lacking:
+        raise Refused(f"{', '.join(f'{k}={v}' for k, v in vals.items())} needs on this machine "
+                      + "; ".join(f"{n} ({why})" for n, why in lacking.items())
+                      + (". Install with: " + " && ".join(lines) if (lines := hostreq.install_lines(bench, list(lacking)))
+                         else ". Run it on a machine that has it"))
+    return vals, needs
+
+
+def pins_of(bench: dict, other: dict, provider: str, judge_model: Optional[str]) -> Dict[str, List[str]]:
+    """{model as sent: [provider slug]}: the original setup's pins and the official judge's, on a provider that pins."""
+    if provider != "openrouter":
+        return {}
+    pins = {m: list(o) for m, o in (other.get("pins") or {}).items()} if other.get("_kind") == "upstream" else {}
+    j = (bench.get("score") or {}).get("judge") or {}
+    only = (j.get("pin") or {}).get(provider)
+    if only and judge_model and judge_model == providers.served_as(j["model"], provider):
+        pins[judge_model] = list(only)
+    return pins
+
+
 class Run:
+    call_seconds: float = relay.TIMEOUT
     timeouts: Dict[str, float] = {}           # the run's own time limits by phase (__init__), none by default
     forced_turns: Optional[int] = None
     max_calls: Optional[int] = None           # the run's cap on a unit's agent's model calls (__init__), none by default
@@ -651,6 +685,8 @@ class Run:
             if stray:
                 raise Refused(f"--served-by names {', '.join(stray)}, which this run does not call: it calls "
                               + (", ".join(called) or "no model"))
+        self.route_pins = pins_of(bench, other, provider, self.judge_model)
+        self.serving.update(self.route_pins)
         self.bench_relay = None
         keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
@@ -686,6 +722,8 @@ class Run:
             raise Refused("--max-calls caps an agent's model calls: a capability's unit route carries the benchmark's reader too")
         self.max_calls = max_calls
         self.max_turns = max_turns or (bench.get("limits") or {}).get("turns") or MAX_TURNS
+        self.score_seconds = (bench.get("limits") or {}).get("score_seconds") or DRIVER_SECONDS
+        self.call_seconds = (bench.get("limits") or {}).get("call_seconds") or relay.TIMEOUT
         self.say = say
         stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
         self.shard = tuple(shard) if shard and shard[1] > 1 else None
@@ -762,8 +800,25 @@ class Run:
         return d
 
     def start(self) -> str:
+        lck, mine = os.path.join(self.job_dir, ".work", "job.lck"), object()
+        try:
+            return self._start(lck, mine)
+        finally:
+            if LIVE.get(lck) is mine:
+                del LIVE[lck]
+
+    def _start(self, lck, mine) -> str:
         t0 = time.time()
         os.makedirs(os.path.join(self.job_dir, ".work"), exist_ok=True)
+        held = HELD.get(lck) or open(lck, "a")
+        try:
+            if LIVE.setdefault(lck, mine) is not mine:
+                raise BlockingIOError
+            fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Refused(f"another run under the job name {self.name} is running: "
+                          "start this one once it ends, or under another name") from None
+        HELD[lck] = held
         self.say(f"job {self.job_dir}")
         p, control = self.progress, self.other["_kind"] == "control"
         p.emit("plan", stages=",".join((["image"] if self.backend == "container" or self.container_check else [])
@@ -1033,7 +1088,8 @@ class Run:
             if self._stopped.is_set() or self._halt.is_set():
                 return
             # each attempt whose last try ended with a try to follow (``unit``: what it held stays held)
-            todo = [name for name, res in latest.items() if name in self._counted and self.retry_if(res)]
+            todo = [name for name, res in latest.items() if name in self._counted and self.retry_if(res)
+                    and relay.asked(os.path.join(self.job_dir, name, ".work", "relay")) is None]
             if not todo:
                 return
             self.progress.emit("units", "progress", detail=f"trying {len(todo)} again: retry {retry} of {self.retries}")
@@ -1175,7 +1231,7 @@ class Run:
         if (self.embed_model or self.rerank_model) and self.bench_relay is None:
             self.bench_relay = relay.Relay(self.base, self.key, os.path.join(self.job_dir, ".work", "relay-benchmark"),
                                            prices=self.prices, model=self.rerank_model or self.embed_model, ledger=self.ledger_file(),
-                                           unit_caps=False, serving=self.serving).start()                  # embeddings and rerank: a bearer key
+                                           unit_caps=False, serving=self.serving, timeout=self.call_seconds).start()      # embeddings and rerank: a bearer key
 
     def runtimes_needed(self) -> List[str]:
         """What the agent needs in an own image that the image may not have:
@@ -1219,6 +1275,11 @@ class Run:
         trial = os.path.join(self.job_dir, self.trial_name(i, unit, r))
         name = os.path.basename(trial)
         ws, home = os.path.join(trial, "workspace"), os.path.join(trial, ".home")
+        earlier = os.path.join(trial, ".work", f"earlier.{time.time_ns()}")
+        for part in (os.path.join(".work", "relay"), "result.json", "verifier", "agent"):
+            if os.path.lexists(os.path.join(trial, part)):
+                os.makedirs(earlier, exist_ok=True)
+                os.replace(os.path.join(trial, part), os.path.join(earlier, os.path.basename(part)))
         os.makedirs(ws, exist_ok=True)
         # The workspace is a repository of its own: agents look up to the git root
         # for instructions (AGENTS.md, CLAUDE.md, their config) and, with jobs kept
@@ -1303,17 +1364,17 @@ class Run:
                 raise _Ended(cut[0], cut[1], traj)
             step = setup.get("verify") if box is not None else None
             checking = (time.time(), None)
-            self.phase(name, unit, "verify", self.phase_limit("score", DRIVER_SECONDS) + (self.step_limit("verify", step) if step else 0))
+            self.phase(name, unit, "verify", self.phase_limit("score", self.score_seconds) + (self.step_limit("verify", step) if step else 0))
             verified = self.verify(setup["verify"], box, trial) if box is not None and setup.get("verify") else None
             if self.backend == "container":     # the agent could write here (an MCP server's log folder): no link it left is read
                 container.plain_only(os.path.join(trial, "verifier"))
             try:
                 judge = self.judge(rl, tag)
-                score = self.driver().request("score", unit=unit, dir=ws, transcript=transcript, answer=answer, timeout=self.phase_limit("score", DRIVER_SECONDS),
+                score = self.driver().request("score", unit=unit, dir=ws, transcript=transcript, answer=answer, timeout=self.phase_limit("score", self.score_seconds),
                                               **judge, **({"setup": self.other["key"]} if self.upstream else {}), **({"verified": verified} if verified is not None else {}))
                 checking = (checking[0], time.time())
             except jsonl.Failed as e:
-                raise _Ended("VerifierError", str(e), retryable=not isinstance(e, jsonl.NoReply))
+                raise _Ended(_kind(e, "VerifierError"), str(e), retryable=not isinstance(e, jsonl.NoReply))
             finished = True
         except _Ended as e:
             exc = (e.kind, e.said)
@@ -1337,17 +1398,23 @@ class Run:
                 for ln in getattr(rl, "mcp_listeners", None) or []:
                     ln.stop()
         calls = rl.calls(tag) if rl is not None else []
-        failed = relay.failure(calls)
+        words = not self.bench.get("gated")
+        failed = relay.failure(calls, words, agent=True, serving=getattr(self, "route_pins", None))
         if failed and failed[0] not in (ledgers.ERROR, ledgers.UNIT_ERROR, relay.CALLS_ERROR) and exc is None \
                 and self.bench["score"]["kind"] == "pass" and score.get("reward") == 1.0:
             # a passed unit's failed last call came after its answer (jiuwenswarm's image probe, which some
             # models refuse): the pass stands, the call stays in its record. A failed or score-only unit's is
             # the endpoint's, and a cap's refusal is the cap's
             failed = None
-        if not failed and rl is not None and exc is not None and exc[0] == "VerifierError":
+        if failed and failed[0] == relay.CONTEXT_ERROR and ((score or {}).get("stopped")
+                                                          or self.upstream and exc and ": VerifierError: " in exc[1]):
+            failed = None
+        if not failed and rl is not None and getattr(self, "route_pins", None):
+            failed = relay.routes_failure([calls] + [rl.calls(f"{tag}-{side}") for side in ("judge", "simulator")], self.route_pins, words)
+        if not failed and rl is not None and exc is not None and (exc[0] == "VerifierError" or not words):
             # the judge's or the simulated user's model failing (a 429, a refused request) is the
             # unit's infrastructure, as the agent's own would be - not a miss counted against it
-            failed = next(filter(None, (relay.failure(rl.calls(f"{tag}-{side}")) for side in ("judge", "simulator"))), None)
+            failed = next(filter(None, (relay.failure(rl.calls(f"{tag}-{side}"), words) for side in ("judge", "simulator"))), None)
         if failed and (exc is None or exc[0] not in ("EnvironmentSetupError",)):
             exc = failed                     # what the endpoint said outranks how the agent took it
             score, retry_ok = None, True     # a time run out under refused calls is the provider's: tried again
@@ -1375,7 +1442,7 @@ class Run:
                               setup_end=p0 or time.time(), agent_ready=clock.get("ready"), agent_unready=clock.get("failed"),
                               checking=checking,
                               trajectory=traj, extra_logs=dict(logs or {}, **({"container-changes.txt": changes} if changes else {})),
-                              environment=environment or "", retries=retry, retryable=retry_ok, serving=getattr(self, "serving", None),
+                              environment=environment or "", retries=retry, retryable=retry_ok and not relay.route_dead(exc), serving=getattr(self, "serving", None),
                               # who served the unit: its agent's calls and its judge's and simulated user's routes
                               served_calls=calls + ([c for side in ("judge", "simulator") for c in rl.calls(f"{tag}-{side}")]
                                                     if rl is not None else []),
@@ -1463,7 +1530,7 @@ class Run:
         if getattr(self, "_halt", None) is None:
             return
         with self._said:
-            if exc and exc[0] in REFUSALS:
+            if exc and (exc[0] in REFUSALS or relay.route_dead(exc)):
                 self._refused.append(exc)
                 if len(self._refused) >= REFUSED_IN_A_ROW and self.halted is None:
                     self.halted = exc
@@ -1639,7 +1706,7 @@ class Run:
         if self.backend in ("local", "boat"):     # boat: the agent reaches it through its VM's tunnel
             rl = relay.Relay(self.base, self.key, record, prices=getattr(self, "prices", None), model=self.model, side_models=side,
                              key_header=key_header, ledger=self.ledger_file(), serving=getattr(self, "serving", None),
-                             max_calls=self.max_calls).start()
+                             timeout=self.call_seconds, max_calls=self.max_calls).start()
             rl.unit_url = rl.url(tag)
             return rl
         routes = {tag + "-judge": self.judge_model} if self.judge_model else {}
@@ -1669,6 +1736,7 @@ class Run:
                             prices=price_list.given(self.models_called(), getattr(self, "prices", None)),   # a sidecar's argv: its models' rows
                             servers=self.agent_servers(env_def), doors=doors, hosts=door.hosts if door else None,
                             ledger=self.ledger_file(), serving=getattr(self, "serving", None), max_calls=self.max_calls,
+                            timeout=self.call_seconds if self.call_seconds != relay.TIMEOUT else None,
                             network_probe=probe, probe_now=bool(probe) and self.first_probe())
         rl.mcp_listeners = listeners
         try:
@@ -2245,8 +2313,8 @@ class Run:
     def drive_upstream(self, unit, ws, tag, transcript, rl):
         """The setup's unit: the driver runs the upstream's own answerer on it
         (``answer``), asked as ``asked`` through the unit's relay, which sends
-        the run's model in its place. A reply with no text - a reasoning model
-        that spent the upstream's token budget thinking - is said as such."""
+        the run's model in its place. A last reply with no text or tool call - a reasoning model
+        that spent the upstream's token budget thinking - is said as such; a unit a guard stopped is cancelled."""
         o = self.other
         try:
             # the benchmark's other models reach the upstream's pipeline as they reach a turn or a score: their own routes
@@ -2255,7 +2323,18 @@ class Run:
                                         base_url=rl.url(tag), key=relay.PLACEHOLDER_KEY, timeout=self.agent_limit({}))
         except jsonl.Failed as e:
             calls = rl.calls(tag)
-            silent = [c for c in calls if c.get("status") == 200 and not ((c.get("reply") or {}).get("text") or "").strip()]
+            stop = relay.asked(rl.dir)
+            if stop and not _kind(e, None):
+                raise _Ended(CANCELLED, f"a guard asked the unit to stop ({stop[:200]}); {o['label']}: {e}",
+                             job.trajectory_from_exchanges([], calls, o, self.model, f"{self.name}/{unit}"))
+            own = [c for c in relay._begun(calls) if not c.get("side")][-1:]
+            failed = [((c["reply"].get("error") or {}).get("code") or "no code") for c in own if (c.get("reply") or {}).get("end") == "failed"]
+            kind = _kind(e, "ApiError" if failed else None)
+            if kind:
+                raise _Ended(kind, f"{o['label']}: {e}" + "".join(f"; {self.model}'s last reply failed ({c})" for c in failed),
+                             job.trajectory_from_exchanges([], calls, o, self.model, f"{self.name}/{unit}"))
+            silent = [c for c in own if c.get("status") == 200 and not ((c.get("reply") or {}).get("text") or "").strip()
+                      and not (c.get("reply") or {}).get("tool_calls")]
             if silent:
                 u = (silent[-1].get("reply") or {}).get("usage") or {}
                 thought = u.get("reasoning") or 0
@@ -2268,6 +2347,12 @@ class Run:
                          job.trajectory_from_exchanges([], calls, o, self.model, f"{self.name}/{unit}"), retryable=not isinstance(e, jsonl.NoReply))
         transcript.append({"role": "upstream", "setup": o["key"], "asked": self.asked, "sent": self.model})
         return out.get("answer"), job.trajectory_from_exchanges([], rl.calls(tag), o, self.model, f"{self.name}/{unit}")
+
+
+def _kind(e, otherwise):
+    """A driver's own EnvironmentSetupError, VerifierError, CancelledError or CauseUnknownError keeps its kind."""
+    m = re.match(r"\w+: (EnvironmentSetupError|VerifierError|CancelledError|CauseUnknownError): ", str(e))
+    return m.group(1) if m else otherwise
 
 
 class _Ended(Exception):

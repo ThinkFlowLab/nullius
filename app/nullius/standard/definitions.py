@@ -81,7 +81,7 @@ import os
 import re
 from typing import Callable, Dict, List, Optional, Tuple
 
-from nullius.standard import ports
+from nullius.standard import ports, relay
 from nullius import paths
 from nullius.catalogue import storage
 from . import names
@@ -1044,6 +1044,25 @@ def control(bench: dict, which: str) -> Optional[dict]:
             "_kind": "control", "_ref": which, "_here": bench.get("_here", "")}
 
 
+def comparable(orig: dict, model: str) -> bool:
+    """Whether a run of the original with ``model`` compares with the paper's: ``comparable`` a bool, or the models that do."""
+    c = orig.get("comparable", True)
+    return model in c if isinstance(c, list) else bool(c)
+
+
+def upstream_name(orig: dict, model: str, provider: str) -> str:
+    """``model`` by the name the original's upstream knows, when given as ``provider`` lists it."""
+    pre = (orig.get("providers") or {}).get(provider, "")
+    names = {pre + (orig.get("served_as") or {}).get(m, m): m for m in orig.get("models") or []}
+    return model if model in (orig.get("models") or []) else names.get(model, model)
+
+
+def paper_models(orig: dict) -> List[str]:
+    """The original's models whose runs compare with the paper's."""
+    c = orig.get("comparable", True)
+    return [m for m in orig.get("models") or [] if not isinstance(c, list) or m in c]
+
+
 def _leaderboard(d: dict) -> List[str]:
     """``leaderboard``: {says, simulator?, judge?, bench_options?, repeat?} - what the
     upstream's leaderboard fixes besides the ranked model, from its own submission
@@ -1075,12 +1094,13 @@ def _leaderboard(d: dict) -> List[str]:
 
 def _setups(s) -> List[str]:
     """``setups``: {original: {summary, models, default, served_as?, providers,
-    side_models?, units?, turn_seconds?, paper?, comparable?}, model?: {summary, runs_as}}. ``original``'s
+    side_models?, pin?, units?, turn_seconds?, paper?, comparable?}, model?: {summary, runs_as}}. ``original``'s
     ``models`` are the paper's, by the names the upstream's code knows them;
     ``side_models`` the ones its code asks besides the answerer (an extraction,
     a summary), sent as asked through served_as and the provider's prefix;
     ``providers`` the ones that serve them, each with the prefix its names
-    carry there; ``model`` needs ``original`` (its pipeline) and asks as one
+    carry there; ``pin`` {openrouter: {model: [provider slug]}}, the only
+    providers of each; ``model`` needs ``original`` (its pipeline) and asks as one
     of its models (``runs_as``)."""
     if s is None:
         return []
@@ -1099,7 +1119,7 @@ def _setups(s) -> List[str]:
             bad.append(f"{w}.summary: what runs, in a sentence")
         allowed = {"summary"}
         if k == "original":
-            allowed |= {"models", "default", "served_as", "providers", "side_models", "units", "turn_seconds", "paper", "comparable", "reference_agent"}
+            allowed |= {"models", "default", "served_as", "providers", "side_models", "pin", "units", "turn_seconds", "paper", "comparable", "reference_agent"}
             if "reference_agent" in x and (not isinstance(x["reference_agent"], str) or not x["reference_agent"].strip()):
                 bad.append(f"{w}.reference_agent: the upstream agent's display name")
             models = x.get("models")
@@ -1123,6 +1143,8 @@ def _setups(s) -> List[str]:
             pv = x.get("providers")
             if not isinstance(pv, dict) or not pv or not all(p in ("openrouter", "openai", "custom") and isinstance(v, str) for p, v in pv.items()):
                 bad.append(f"{w}.providers: {{openrouter|openai|custom: the prefix its models' names carry there}}")
+            if "pin" in x:
+                bad += _pin(x["pin"], f"{w}.pin", pv if isinstance(pv, dict) else {}, set(models + side))
             u = x.get("units")
             if u is not None and (not isinstance(u, dict) or not all(isinstance(u.get(f), str) and u[f] for f in ("noun", "nouns"))):
                 bad.append(f"{w}.units: {{noun, nouns}}, what one of its units is")
@@ -1131,8 +1153,11 @@ def _setups(s) -> List[str]:
                 bad.append(f"{w}.turn_seconds: a whole number of seconds")
             if "paper" in x and (not isinstance(x["paper"], str) or not x["paper"].strip()):
                 bad.append(f"{w}.paper: where the paper reports its numbers, in a phrase")
-            if "comparable" in x and not isinstance(x["comparable"], bool):
-                bad.append(f"{w}.comparable: false when no served model is the paper's, so its runs compare with each other only")
+            c = x.get("comparable", True)
+            if not isinstance(c, bool) and (not isinstance(c, list) or not c or len(set(c)) != len(c) or any(m not in models for m in c)
+                                            or x.get("default") not in c):
+                bad.append(f"{w}.comparable: false when no served model is the paper's, so its runs compare with each other only; "
+                           "or those of its models whose runs compare with the paper's, its default among them")
         else:
             allowed |= {"runs_as"}
             orig = s.get("original") if isinstance(s.get("original"), dict) else None
@@ -1145,6 +1170,25 @@ def _setups(s) -> List[str]:
         extra = [f for f in x if f not in allowed]
         if extra:
             bad.append(f"{w}: {', '.join(extra)} is not a field of the {k} setup")
+    return bad
+
+
+def _pin(pin, w: str, providers: dict, models: Optional[set] = None) -> List[str]:
+    """``pin``: {provider: {model: [slug]}} for a setup (``models`` given), {provider: [slug]} for a judge."""
+    if not isinstance(pin, dict) or not pin:
+        return [f"{w}: {{openrouter: ...}}, the providers that alone serve it"]
+    bad = []
+    for p, v in pin.items():
+        if p != "openrouter" or (providers and p not in providers):
+            bad.append(f"{w}: a pin is OpenRouter's provider routing, on a provider the benchmark runs on ({p!r})")
+            continue
+        pins = v if models is not None else {"_": v}
+        if not isinstance(pins, dict) or not pins:
+            bad.append(f"{w}.{p}: {{model: [provider slug, ...]}}")
+            continue
+        if models is not None and not all(m in models for m in pins):
+            bad.append(f"{w}.{p}: pins only its models and side_models")
+        bad += [f"{w}.{p}: " + b.removeprefix("_: ") for b in relay.serving_problems(pins)]
     return bad
 
 
@@ -1213,7 +1257,7 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple
         return None, f"{bench['label']} has no {which} setup"
     orig, x = s["original"], s[which]
     model = (model or "").strip()
-    side = []
+    side, pins = [], {}
     if which == "original" and "models" not in orig:      # any model, sent as the provider lists it
         if not model:
             return None, f"the original {bench['label']} needs a model: its leaderboard ranks models"
@@ -1224,7 +1268,7 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple
         model = model or orig["default"]
         if model not in orig["models"]:
             return None, (f"the original {bench['label']} runs only the paper's models ({', '.join(orig['models'])}): "
-                          f"{model} is not one - choose the model setup for another")
+                          f"{model} is not one" + (" - choose the model setup for another" if "model" in bench.get("setups", {}) else ""))
         if provider and provider not in orig["providers"]:
             return None, (f"the paper's models are not served by {provider}: the original runs on "
                           + " or ".join(orig["providers"]))
@@ -1234,13 +1278,15 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple
         sent = served(model)
         # the other models its code asks, each sent as the provider serves it; one the answerer is served as is its own
         side = [f"{m}={served(m)}" for m in orig.get("side_models") or [] if served(m) != sent]
+        pins = {served(m): list(only) for m, only in ((orig.get("pin") or {}).get(provider) or {}).items()
+                if m == model or m in (orig.get("side_models") or [])}
     else:
         if not model:
             return None, f"the model setup needs a model: the one to put in {orig['default']}'s place"
         asked, sent = x["runs_as"], model
     units = orig.get("units") or bench.get("units") or {"noun": "unit", "nouns": "units"}
-    return {"model": {"side_models": side}, "key": which, "label": f"{bench['label']} {setup_label(bench, which).lower()}",
-            "summary": x["summary"], "asked": asked, "sent": sent, "units": units, "comparable": which == "original" and x.get("comparable", True),
+    return {"model": {"side_models": side}, **({"pins": pins} if pins else {}), "key": which, "label": f"{bench['label']} {setup_label(bench, which).lower()}",
+            "summary": x["summary"], "asked": asked, "sent": sent, "units": units, "comparable": which == "original" and comparable(x, model),
             "turn_seconds": orig.get("turn_seconds"), "upstream": {}, "_kind": "upstream", "_ref": which,
             "_here": bench.get("_here", "")}, ""
 
@@ -1322,7 +1368,7 @@ def problems(d: dict, kind: str) -> List[str]:
             if not isinstance(lim, dict):
                 bad.append("limits: an object")
             else:
-                for f in ("turn_seconds", "turns"):
+                for f in ("turn_seconds", "turns", "score_seconds", "call_seconds"):
                     v = lim.get(f)
                     if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 100000):
                         bad.append(f"limits.{f}: a whole number from 1")
@@ -1330,6 +1376,8 @@ def problems(d: dict, kind: str) -> List[str]:
                 if a is not None and (not isinstance(a, str) or not a.strip()):
                     bad.append("limits.attempts: how the upstream tells one attempt of a unit from another (its seed per trial), "
                                "in a sentence - the driver is then sent attempt with setup, turn and answer")
+        if "gated" in d and not isinstance(d["gated"], bool):
+            bad.append("gated: true for a benchmark whose tasks are gated, so no provider's words about them are kept")
         s = d.get("score") or {}
         if s.get("kind") not in SCORES or not s.get("says"):
             bad.append(f"score: {{kind: one of {SCORES}, says}}")
@@ -1341,6 +1389,8 @@ def problems(d: dict, kind: str) -> List[str]:
         j = s.get("judge")
         if j is not None and (not isinstance(j, dict) or not _MODEL_NAME.match(str(j.get("model", ""))) or not j.get("says")):
             bad.append("score.judge: {model: the official judge, as the provider names it; says: what it is asked}")
+        elif j is not None and "pin" in j:
+            bad += _pin(j["pin"], "score.judge.pin", {})
         sim = d.get("simulator")
         if sim is not None:
             if not isinstance(sim, dict) or not _MODEL_NAME.match(str(sim.get("model", ""))) or not sim.get("says"):

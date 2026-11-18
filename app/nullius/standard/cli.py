@@ -9,7 +9,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--attempts K] [--option NAME=VALUE ...] [--unsandboxed | --backend container | --backend boat]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS ...] [--max-turns N] [--max-calls N] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container | --backend boat [--boat-size SIZE]]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
-    PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
+    PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N] [--bench-option NAME=VALUE ...] [--job nop|oracle=JOB_DIR ...]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
     PYTHONPATH=app python3 -m nullius.standard.cli merge JOB_DIR... -o OUT [--force]
     PYTHONPATH=app python3 -m nullius.standard.cli fidelity AGENT --model M [--provider P] [--option NAME=VALUE ...] [--passes N] --unsandboxed
@@ -636,11 +636,16 @@ def cmd_fidelity(a):
 
 def cmd_prove(a):
     b = _bench(a.benchmark)
+    jobs = options(a.job)
+    for c in jobs:
+        if c not in definitions.CONTROLS:
+            sys.exit(f"--job {c}=...: a control, {' or '.join(definitions.CONTROLS)}")
     held, spill = licences(b, from_run=a.from_run)
     try:
         got = prove.prove(b, dataset=a.dataset, limit=a.limit, jobs_root=a.jobs, provider=a.provider, judge_model=a.judge_model,
                           stamp=a.stamp, concurrency=a.concurrency, say=print, shard=_shard(a.shard), launch=a.launch,
-                          env=run_env(a.provider) if a.from_run else None, licences=held, remove_images=a.remove_images)
+                          env=run_env(a.provider) if a.from_run else None, licences=held,
+                          bench_options=options(a.bench_option), jobs=jobs, remove_images=a.remove_images)
     except run.Refused as e:
         print("refused:", e)
         return 2
@@ -765,6 +770,10 @@ def main(argv=None):
     v.add_argument("--stamp", help="the time stamp the control jobs are named with (default: now)")
     v.add_argument("--shard", metavar="I/N", help="the controls and the leak check on shard I of N only")
     v.add_argument("--launch", help="the launch id the control jobs of every shard record")
+    v.add_argument("--bench-option", action="append", metavar="NAME=VALUE",
+                   help="one of the benchmark's own options (repeatable), for the checks' driver and the controls' runs")
+    v.add_argument("--job", action="append", metavar="CONTROL=JOB_DIR",
+                   help="hold this job, a control run already over the whole dataset (a merged launch), to its bound instead of running it")
     v.add_argument("--remove-images", action="store_true",
                    help="remove each image this proof pulls or builds after its unit, so the oracle pulls it again (default: kept)")
     g = sub.add_parser("merge", help="merge the shard jobs of one launch into one job")

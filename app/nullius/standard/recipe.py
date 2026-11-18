@@ -131,9 +131,10 @@ def _bench_page(b: dict) -> dict:
             # One Original procedure, with separate reference-participant and paper-model metadata.
             "setups": [{"key": k, "label": definitions.setup_label(b, k), "summary": x["summary"],
                         "reference_agent": x.get("reference_agent", ""), "turn_seconds": x.get("turn_seconds"),
-                        "comparable": k == "original" and b["setups"]["original"].get("comparable", True), "units": (b["setups"]["original"].get("units") or b.get("units") or {}),
-                        **({"models": x["models"], "default": x["default"], "providers": list(x["providers"]),
-                            "sent": {p: {m: pre + (x.get("served_as") or {}).get(m, m) for m in x["models"]} for p, pre in x["providers"].items()}}
+                        "comparable": k == "original" and b["setups"]["original"].get("comparable", True) is not False, "units": (b["setups"]["original"].get("units") or b.get("units") or {}),
+                        **({"models": definitions.paper_models(x), "default": x["default"], "providers": list(x["providers"]),
+                            "sent": {p: {m: pre + (x.get("served_as") or {}).get(m, m) for m in definitions.paper_models(x)}
+                                     for p, pre in x["providers"].items()}}
                            if "models" in x else {"any": True, "providers": list(x["providers"])})}
                        for k, x in (b.get("setups") or {}).items() if k == "original"],
             # its own options (a search, a mode): each value with its line and what it needs; and the host requirements
@@ -142,10 +143,10 @@ def _bench_page(b: dict) -> dict:
             "leaderboard": b.get("leaderboard") or None,
             "attempts": (b.get("limits") or {}).get("attempts", ""),
             # what a unit's time limits and a conversation's length are when the recipe forces none
-            "timeouts": {"setup": run.DRIVER_SECONDS, "image": run.IMAGE_SECONDS, "score": run.DRIVER_SECONDS,
+            "timeouts": {"setup": run.DRIVER_SECONDS, "image": run.IMAGE_SECONDS, "score": (b.get("limits") or {}).get("score_seconds") or run.DRIVER_SECONDS,
                          "agent": (b.get("limits") or {}).get("turn_seconds") or run.TURN_SECONDS,
                          "turns": (b.get("limits") or {}).get("turns") or run.MAX_TURNS,
-                         "catalogue": [k for k, f in (("agent", "turn_seconds"), ("turns", "turns")) if (b.get("limits") or {}).get(f)]},
+                         "catalogue": [k for k, f in (("agent", "turn_seconds"), ("turns", "turns"), ("score", "score_seconds")) if (b.get("limits") or {}).get(f)]},
             "options": {n: {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
                             "setups": o.get("setups") or ["yours"],
                             **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
@@ -359,6 +360,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                 add("model", "Choose a model.")
                 continue
             method = "model" if recipe.get("model_choice", "any") != "paper" and "model" in (b.get("setups") or {}) else "original"
+            if method == "original":
+                picked = definitions.upstream_name(orig, picked, provider_)
             o, why_not = definitions.setup(b, method, picked, provider_)
             if o is None:
                 add("model" if orig else "agent", why_not[0].upper() + why_not[1:] + ".")
@@ -435,8 +438,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if model_choice == "paper" and needs_model and not orig.get("models") and not any(official.values()):
         add("model", "No paper models are listed for this benchmark; choose Any of your choice.")
     elif model_choice == "paper" and needs_model and orig.get("models"):
-        if recipe.get("model") not in orig["models"]:
-            add("model", "Choose one of the paper's listed models.")
+        if recipe.get("model") not in definitions.paper_models(orig):
+            add("model", "Choose one of the paper's listed models, or Any of your choice for another of the original's.")
         elif provider_ not in orig.get("providers", {}):
             add("model", "The paper's models are not listed for this provider.")
     provider = recipe.get("provider")

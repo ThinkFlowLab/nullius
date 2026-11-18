@@ -778,7 +778,7 @@
     // each field shows, greyed, the value used while it is empty; a task that declares its own keeps it
     const m = s => String(+(s / 60).toFixed(2));
     // [placeholder, declared]: the benchmark's or the agent's own reads as a value, Nullius's default stays grey
-    const def = {setup: [m(d.setup), false], image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), false]};
+    const def = {setup: [m(d.setup), false], image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), (d.catalogue || []).includes('score')]};
     const label = (k, l) => k === 'agent' ? 'Agent, whole ' + u.noun : l;
     return '<div class="nb-sectionhead nb-sectionnext"><h2>Time limits</h2></div>'
       + C.STANDARD_PHASES.map(([k, l]) => minutesRow(k, label(k, l), t[k], def[k])).join('');

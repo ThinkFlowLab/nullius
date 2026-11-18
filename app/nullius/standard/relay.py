@@ -13,10 +13,12 @@ Chat Completions, Responses and Anthropic's Messages, streamed or not. Read
 apart from the rest (:func:`reply_facts`), the reply also says, when it does,
 the serving provider that answered (``served_by``), how it ended (``end``)
 and an error it holds though its status was a success (``error``); reading
-them never changes what the caller receives, nor the rest of the record. The
+them never changes what the caller receives, nor the rest of the record but a failed Responses object's cost. The
 cost is the provider's when it says it (OpenRouter's ``usage.cost``), else an
 estimate from ``prices`` when one is given for exactly that model (the
-user's price list, ``nullius.prices``), marked as an estimate.
+user's price list, ``nullius.prices``), marked as an estimate. A Responses object answered 200 that failed (its ``end``) with no usage
+costs 0, marked as failed: the provider keeps no generation for it, and a
+key's usage compared with the relay's sum would show one billed after all.
 
 What the relay changes on the way is kept small, so a call through it costs
 what the same call made directly would: the connection to the provider is
@@ -49,6 +51,8 @@ caller gets a 402 that names the relay and the cap, and the record says
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import http.client
 import json
@@ -85,6 +89,16 @@ _NOT_RETURNED = _HOP | {"set-cookie", "set-cookie2", "content-length", "date", "
 # its next use, before any of the reply is read: worth one new connection.
 _STALE = (http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError, ConnectionAbortedError)
 ANTHROPIC_VERSION = "2023-06-01"
+ROUTE_REFUSED = (404, 503)
+ROUTE_ERROR = "ApiProviderRouteError"
+CONTEXT_ERROR = "ContextWindowExceededError"
+STOP = "stop"
+OVERFLOW = "context window"
+COMPLETION = re.compile(r"^/(?:chat/completions|completions|messages|responses)$")
+_WHOLE = ((b"\x89PNG\r\n\x1a\n", b"IEND\xaeB`\x82", "image/png"), (b"\xff\xd8\xff", b"\xff\xd9", "image/jpeg"),
+          (b"GIF87a", b";", "image/gif"), (b"GIF89a", b";", "image/gif"))
+_PROVIDER = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._()/-]{0,79}")
+_CONTEXT = re.compile(r"context[ _-]?(length|window|limit)|prompt is too long|token count .{0,40}exceeds", re.I)
 
 
 def _cut(text, n=4000):
@@ -157,7 +171,7 @@ def _usage(u: Optional[dict]) -> Optional[dict]:
         inp += cached + written
     else:
         written = (det or {}).get("cache_write_tokens") or 0
-    got = {"input": inp, "output": out, "cached": cached, "reasoning": (rdet or {}).get("reasoning_tokens") or 0}
+    got = {"input": inp, "output": out, "cached": cached, "reasoning": (rdet or {}).get("reasoning_tokens") or (rdet or {}).get("thinking_tokens") or 0}
     if written:
         got["cache_write"] = written
         hour = (u.get("cache_creation") or {}).get("ephemeral_1h_input_tokens") or 0
@@ -189,6 +203,25 @@ def _text_of_messages(msg: dict) -> (str, List[dict]):
         elif c.get("type") in ("tool_use", "server_tool_use"):
             calls.append({"name": c.get("name"), "arguments": _cut(json.dumps(c.get("input")), 2000)})
     return "".join(text), calls
+
+
+def _hollow(path: str, body: bytes) -> Optional[tuple]:
+    """A 200 to a model call that holds no reply: the status it stands for, 429 or 402 when an error it held says so, else
+    502, and its kind alone, since its words can quote the request."""
+    if not COMPLETION.search(path.split("?")[0]):
+        return None
+    try:
+        got = json.loads(body)
+    except ValueError:
+        return 502, "no reply"
+    if not isinstance(got, dict):
+        return 502, "no reply"
+    if read_reply(path, body, False):
+        return None
+    code = got["error"].get("code") if isinstance(got.get("error"), dict) else None
+    code = code if isinstance(code, int) and not isinstance(code, bool) and 400 <= code < 600 else None
+    return ((code if code in (402, 429) else 502), "an error" + (f" {code}" if code else "")) if got.get("error") \
+        else (502, "no reply")
 
 
 def read_reply(path: str, body: bytes, streamed: bool) -> dict:
@@ -245,7 +278,7 @@ def read_reply(path: str, body: bytes, streamed: bool) -> dict:
             elif d.get("type") == "input_json_delta":
                 args[i] = args.get(i, "") + (d.get("partial_json") or "")
             continue
-        if kind in ("response.completed", "response.done", "response.incomplete"):
+        if kind in ("response.completed", "response.done", "response.incomplete", "response.failed"):
             t, c = _text_of_responses(ev.get("response") or {})
             return {"text": t, "tool_calls": c, "usage": _usage((ev.get("response") or {}).get("usage"))}
         for ch in ev.get("choices") or []:
@@ -460,6 +493,23 @@ def reply_facts(path: str, body: bytes, streamed: bool) -> dict:
         return {}
 
 
+def _plain(name) -> str:
+    """A provider's name or slug, compared: lower case, letters and digits."""
+    return re.sub(r"[^a-z0-9]", "", str(name).split("/")[0].lower())
+
+
+def held(provider: str, only: List[str]) -> Optional[bool]:
+    """True when the provider that answered is one of ``only``, False when it shares nothing with them, None when
+    it cannot be told: a name is not always its slug."""
+    name = _plain(provider)
+    slugs = {_plain(p) for p in only}
+    if not name or name in slugs:
+        return True if name else None
+    if any(s.startswith(name) or name.startswith(s) for s in slugs if s):
+        return None
+    return False
+
+
 def _request_tail(req: dict) -> dict:
     """The part of a request a reader needs: the model, how many messages,
     the last two, abridged, and the reasoning effort it asked for (chat's
@@ -483,6 +533,37 @@ def _request_tail(req: dict) -> dict:
         effort = req["reasoning"].get("effort")
     return {"n_messages": len(items), "last": tail, "stream": bool(req.get("stream")),
             "reasoning_effort": effort if isinstance(effort, str) else None}
+
+
+def _image(data: str) -> Optional[str]:
+    """An inline image's type when its bytes show a whole one: its head, and its end after it."""
+    try:
+        raw = base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "image/webp" if int.from_bytes(raw[4:8], "little") + 8 <= len(raw) else None
+    if raw[:2] == b"BM":
+        return "image/bmp" if int.from_bytes(raw[2:6], "little") <= len(raw) else None
+    return next((t for head, tail, t in _WHOLE if raw.startswith(head) and tail in raw[len(head):]), None)
+
+
+def _images(x) -> List[dict]:
+    """Each inline image a request carries, as Messages or chat sends one: its declared type, the type its bytes
+    show whole (None when they show none) and its size, never a byte of it."""
+    if isinstance(x, list):
+        return [i for v in x for i in _images(v)]
+    if not isinstance(x, dict):
+        return []
+    src, url = x.get("source"), x.get("image_url")
+    url = url.get("url") if isinstance(url, dict) else url
+    if x.get("type") == "image" and isinstance(src, dict) and src.get("type") == "base64" and isinstance(src.get("data"), str):
+        said, data = src.get("media_type"), src["data"]
+    elif isinstance(url, str) and url.startswith("data:") and ";base64," in url:
+        said, data = url[5:].split(";", 1)[0], url.split(";base64,", 1)[1]
+    else:
+        return _images(list(x.values()))
+    return [{"type": str(said)[:40] if said else None, "is": _image(data), "bytes": len(data)}]
 
 
 def _digest(obj) -> str:
@@ -541,8 +622,9 @@ class _Pool:
 
     KEEP = 16                                    # idle connections kept per provider; more are closed
 
-    def __init__(self, base: str):
+    def __init__(self, base: str, timeout: float = TIMEOUT):
         u = urllib.parse.urlsplit(base)
+        self.timeout = timeout
         self.https = u.scheme == "https"
         self.host, self.port = u.hostname, u.port or (443 if self.https else 80)
         self.prefix = u.path.rstrip("/")
@@ -558,7 +640,7 @@ class _Pool:
         kind = http.client.HTTPSConnection if self.https else http.client.HTTPConnection
         with self.lock:
             self.opened += 1
-        return kind(self.host, self.port, timeout=TIMEOUT), False
+        return kind(self.host, self.port, timeout=self.timeout), False
 
     def give(self, conn, r):
         """Back to the pool when the reply was read whole and the provider
@@ -605,7 +687,7 @@ class Relay:
     def __init__(self, base: str, key: str, record_dir: str, prices: Optional[Dict[str, dict]] = None,
                  model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False,
                  ledger: Optional[str] = None, unit_caps: bool = True, serving: Optional[Dict[str, List[str]]] = None,
-                 facts: Optional[bool] = None, max_calls: Optional[int] = None):
+                 facts: Optional[bool] = None, timeout: float = TIMEOUT, max_calls: Optional[int] = None):
         """``base``: the provider's endpoint (``https://api.openai.com/v1``).
         ``model``: when given, every call is sent as this model, whatever the
         caller named - the run's model is the recipe's, not the agent's. A
@@ -628,7 +710,7 @@ class Relay:
         put on every such request in place of the caller's own. ``facts``: a
         pinned Chat Completions or Responses request asks OpenRouter for its
         routing facts, where its reply names who served it; by default when
-        ``base`` is OpenRouter's.
+        ``base`` is OpenRouter's. ``timeout``: the seconds one call may wait.
         ``max_calls``: the most model calls the agent's own route of a unit
         may make (:func:`agent_route`), each answered call counted."""
         self.fields = fields
@@ -648,7 +730,7 @@ class Relay:
         self.models: Dict[str, str] = {}
         self.embedding_models: Dict[str, str] = {}
         self.lock = threading.Lock()
-        self.pool = _Pool(self.base)
+        self.pool = _Pool(self.base, timeout)
         self.server: Optional[ThreadingHTTPServer] = None
         os.makedirs(record_dir, exist_ok=True)
 
@@ -721,8 +803,13 @@ class Relay:
             out["Authorization"] = "Bearer " + self.key
         return out
 
+    def _asked(self) -> bool:
+        return asked(self.dir) is not None
+
     def _forward(self, h: BaseHTTPRequestHandler):
-        """One call of a caller, ``h``: sent on, passed back, recorded."""
+        """One call of a caller, ``h``: sent on, passed back, recorded. A caller's own call
+        refused for its context window also leaves STOP beside the records; one made once
+        another asked by STOP is refused unsent and unrecorded."""
         bits = h.path.split("/", 2)
         if len(bits) < 3 or not _TAG.match(bits[1]):
             h.send_error(404, "no route: /<tag>/v1/...")
@@ -754,6 +841,9 @@ class Relay:
                 routing_asked = req.get("provider")
                 req["provider"] = routing(pinned)
             raw = json.dumps(req).encode()
+        if not side and not self.models.get(tag) and self._asked():
+            h.send_error(400, "the unit was asked to stop")
+            return
         if self.max_calls and agent_route(tag) and h.command == "POST" and isinstance(req, dict) and req.get("model") and not _free(rest):
             with self.lock:
                 made = self.answered.get(tag, 0)
@@ -781,6 +871,7 @@ class Relay:
         t0 = time.time()
         conn, r, back, body = None, None, [], b""
         cut = False                              # the reply was cut off: the call may have been billed
+        cut_off = None
         try:
             # a Responses reply names its provider in the routing facts alone; a Messages reply names it of itself
             facts = bool(pinned) and self.facts and rest.split("?")[0].endswith(("/chat/completions", "/responses"))
@@ -801,10 +892,17 @@ class Relay:
             except Exception as e:               # cut off mid-reply
                 status, kind, back, cut = 502, "application/json", [], True
                 body = json.dumps({"error": {"message": "the endpoint's reply was cut off: " + self._said(e)}}).encode()
+        empty = _hollow(rest, body) if status == 200 and not streamed and h.command == "POST" \
+            and not (isinstance(req, dict) and req.get("stream")) else None
+        if empty:
+            (status, inside), kind = empty, "application/json"
+            back = [(n, v) for n, v in back if n.lower() in ("retry-after", "retry-after-ms")]
+            body = json.dumps({"error": {"message": f"the endpoint answered 200 with {inside}"}}).encode()
 
         def record(body):
             rec = {"t0": t0, "t1": time.time(), "path": rest, "model": req.get("model") if isinstance(req, dict) else None,
-                   "model_asked": asked, "status": status, "request": _request_tail(req) if isinstance(req, dict) else {},
+                   "model_asked": asked, "status": status,
+                   "request": dict(_request_tail(req), sha256=_digest(req)) if isinstance(req, dict) else {},
                    "headers": sorted(k.lower() for k in forwarded(h.headers))}        # the names sent on, never a value
             if side:
                 rec["side"] = True
@@ -816,8 +914,8 @@ class Relay:
             if self.fields and isinstance(req, dict) and req:
                 rec["fields"] = request_fields(req)
             cost = None
-            if status == 200:
-                if self.max_calls and agent_route(tag) and isinstance(req, dict) and req.get("model") and not _free(rest):
+            if status == 200 or cut_off:
+                if status == 200 and self.max_calls and agent_route(tag) and isinstance(req, dict) and req.get("model") and not _free(rest):
                     with self.lock:
                         self.answered[tag] = self.answered.get(tag, 0) + 1
                 rec["reply"] = read_reply(rest, body, streamed)
@@ -827,21 +925,30 @@ class Relay:
                                          if k not in rec["reply"]})
                 except Exception:
                     pass
-                cost, how = self._cost(rec["model"], rec["reply"].get("usage"))
+                cost, how = (0.0, "failed") if rec["reply"].get("end") == "failed" and not rec["reply"].get("usage") \
+                    else self._cost(rec["model"], rec["reply"].get("usage"))
                 if cost is not None:
                     rec["cost_usd"], rec["cost_from"] = cost, how
-            else:
-                rec["error"] = _said(status, body)
+            if status != 200:
+                rec["error"] = cut_off or _said(status, body)
                 code, wait = _code(body), _retry_after(back)
                 if code:
                     rec["error_code"] = code
                 if wait is not None:
                     rec["retry_after"] = wait    # the provider's word on when to call again (pace)
+            sent = _images(req) if status in (400, 413, 422) else []
+            if sent:
+                rec["images"] = sent
+            if empty:
+                rec["answered"] = 200
             if booking is not None:
                 rec["booked_usd"] = booked
                 try:
-                    if status == 200 or cut:     # what it cost; unknown (no token count, cut off), the booking is kept whole
-                        self.ledger.settle(booking, cost, rec["model"], ((rec.get("reply") or {}).get("usage") or {}).get("output"))
+                    if status == 200 or cut or empty:  # what it cost; unknown (no token count, cut off), the booking is kept whole
+                        whole = not (cut_off or rec.get("cost_from") == "failed")
+                        known = cost if whole or (cost is not None and cost > booked) else None
+                        self.ledger.settle(booking, known, rec["model"],
+                                           ((rec.get("reply") or {}).get("usage") or {}).get("output") if whole else None)
                     else:                        # an error of the provider's, or never reached: not billed
                         self.ledger.release(booking)
                 except ledgers.Unavailable:
@@ -849,6 +956,9 @@ class Relay:
             with self.lock:
                 with open(os.path.join(self.dir, tag + ".jsonl"), "a") as f:
                     f.write(json.dumps(rec) + "\n")
+                if not side and not self.models.get(tag) and overflowed(rec):
+                    with open(os.path.join(self.dir, STOP), "a") as f:
+                        f.write(OVERFLOW + "\n")
 
         h.send_response(status)
         if not any(n.lower() == "content-type" for n, _ in back):
@@ -864,6 +974,8 @@ class Relay:
                 while True:
                     chunk = r.read1(65536)
                     if not chunk:
+                        if r.length:
+                            raise http.client.IncompleteRead(b"", r.length)
                         whole = True
                         break
                     parts.append(chunk)
@@ -872,8 +984,8 @@ class Relay:
                         h.wfile.flush()
                     except OSError:
                         pass                     # the caller went away; the record still completes
-            except Exception:
-                pass
+            except Exception as e:
+                status, cut, cut_off = 502, True, "the endpoint's reply was cut off: " + self._said(e)
             record(b"".join(parts))              # before the connection closes: the caller's end of stream
         else:
             record(body)                         # before the caller has the reply, so a reader after it finds the call
@@ -1005,16 +1117,31 @@ def _gone(h: Optional[BaseHTTPRequestHandler]) -> bool:
         return True
 
 
+def asked(record_dir: str) -> Optional[str]:
+    """What a guard's STOP in ``record_dir`` says, or None: none there, or only the context window's."""
+    try:
+        with open(os.path.join(record_dir, STOP)) as f:
+            said = next((ln.strip() for ln in f.read().splitlines() or [""] if ln.strip() != OVERFLOW), None)
+    except OSError:
+        return None
+    return None if said is None else said or STOP
+
+
 # what a unit whose agent reached the run's cap on model calls carries (``max_calls``): an agent error, counted
 # against the agent, as a timeout is (runs.classify)
 CALLS_ERROR = "UnitCallCapError"
 
 
-def failure(calls: List[dict]) -> Optional[tuple]:
+def failure(calls: List[dict], words: bool = True, agent: bool = False, serving: Optional[Dict[str, List[str]]] = None) -> Optional[tuple]:
     """When a unit's model calls ended failing, the exception a trial carries
     for it - named so ``nullius.runs.classify`` sorts it as the
     infrastructure it was - and the endpoint's words. None when the last call
-    succeeded (a failure the agent recovered from is not the unit's). A call
+    succeeded (a failure the agent recovered from is not the unit's).
+    ``words`` False: the status alone, never the provider's text, which can quote
+    a gated task. ``agent``: the agent's last call over the model's context
+    window is ``ContextWindowExceededError``, its own, whatever side call followed, and a side call's 200 does not
+    recover the agent's own. A pinned call (``serving``) no endpoint took is
+    ``ApiProviderRouteError``. Calls are taken in the order they began. A call
     the run's spending cap refused is the unit's wherever it falls: once one
     is refused, every later one is."""
     cut = next((c for c in calls if c.get("refused") == "cap"), None)
@@ -1026,10 +1153,22 @@ def failure(calls: List[dict]) -> Optional[tuple]:
     many = next((c for c in calls if c.get("refused") == "calls"), None)
     if many:                                     # its agent made the calls it was allowed: the agent's, as its time running out is
         return CALLS_ERROR, many.get("error") or ""
-    if not calls or calls[-1].get("status") == 200:
+    calls = _begun(calls)
+    ok = [i for i, c in enumerate(calls) if c.get("status") == 200]
+    after, side = max((i for i in ok if not (agent and calls[i].get("side"))), default=-1), max(ok, default=-1)
+    calls = [c for i, c in enumerate(calls) if i > after and c.get("status") != 200 and not (c.get("side") and i < side)]
+    if not calls:
         return None
+    own = next((c for c in reversed(calls) if not c.get("side")), None) if agent else None
+    if own is not None and overflowed(own):
+        said = (own.get("error") or "") if words else ("the endpoint answered 400 to the agent's call, longer than the model's "
+                                                       "context window; its words are not kept, the benchmark's tasks being gated")
+        return CONTEXT_ERROR, said
     last = calls[-1]
-    s, said = last.get("status"), last.get("error") or ""
+    s = last.get("status")
+    said = (last.get("error") or "") if words else f"the endpoint answered {s}; its words are not kept, the benchmark's tasks being gated"
+    if (serving or {}).get(last.get("model")) and s in ROUTE_REFUSED:
+        return ROUTE_ERROR, _refusal(last, said, serving)
     if s == 429:
         # OpenAI's spent credit comes as a 429 too: a usage limit, no pace mends it
         return ("ApiUsageLimitError" if last.get("error_code") == "insufficient_quota" else "RateLimitError"), said
@@ -1037,11 +1176,54 @@ def failure(calls: List[dict]) -> Optional[tuple]:
         return "ApiUsageLimitError", said        # the provider's credit spent (the relay's own refusals say so above, or are its own)
     if s in (401, 403):
         return "AgentAuthenticationError", said
-    if (s == 404 and "model" in said.lower()) or (s == 400 and _NO_MODEL.search(said)):
+    if (s == 404 and "model" in (last.get("error") or "").lower()) or (s == 400 and _NO_MODEL.search(last.get("error") or "")):
         return "ModelNotFoundError", said
     if s == 502:
         return "NetworkConnectionError", said
     return "ApiError", said
+
+
+def _begun(calls: List[dict]) -> List[dict]:
+    timed = all(isinstance(c.get("t0"), (int, float)) for c in calls)
+    return sorted(calls, key=lambda c: c["t0"]) if timed else list(calls)
+
+
+def overflowed(call: dict) -> bool:
+    """A 400 for a request longer than the model's context window, by the provider's words."""
+    return call.get("status") == 400 and bool(_CONTEXT.search(call.get("error") or ""))
+
+
+def _refusal(call: dict, said: str, serving: Dict[str, List[str]]) -> str:
+    """A pinned route's refusal: its status first (route_dead reads it), the model, its pin, then ``said``."""
+    text = f"{call.get('status')}: no endpoint of {call.get('model')} pinned to {', '.join(serving[call.get('model')])} took the call"
+    return f"{text}: {said}" if said else text
+
+
+def routes_failure(routes: List[List[dict]], serving: Dict[str, List[str]], words: bool = True) -> Optional[tuple]:
+    """:func:`route_failure` of each route's calls on its own, the first found."""
+    return next(filter(None, (route_failure(calls, serving, words) for calls in routes)), None)
+
+
+def route_dead(exc: Optional[tuple]) -> bool:
+    """A pinned route with no endpoint at all (404): every later unit would fail the same way."""
+    return bool(exc) and exc[0] == ROUTE_ERROR and str(exc[1]).startswith("404: ")
+
+
+def route_failure(calls: List[dict], serving: Dict[str, List[str]], words: bool = True) -> Optional[tuple]:
+    """A pinned route (``serving``) that failed a unit, among one route's ``calls``: a model whose last call was
+    refused, or a call its reply says another provider served, by a name that reads as one."""
+    last = {}
+    for c in _begun(calls):
+        last[c.get("model")] = c
+        by = (c.get("reply") or {}).get("served_by")
+        if serving.get(c.get("model")) and isinstance(by, str) and _PROVIDER.fullmatch(by) and held(by, serving[c.get("model")]) is False:
+            return ROUTE_ERROR, f"{c.get('status')}: {c.get('model')} pinned to {', '.join(serving[c.get('model')])} was served by {by}"
+    for c in last.values():
+        if serving.get(c.get("model")) and c.get("status") in ROUTE_REFUSED:
+            said = (c.get("error") or "") if words else \
+                f"the endpoint answered {c.get('status')}; its words are not kept, the benchmark's tasks being gated"
+            return ROUTE_ERROR, _refusal(c, said, serving)
+    return None
 
 
 # -- the relay as a process of its own: a container backend's sidecar ----------
@@ -1077,6 +1259,7 @@ def serve(argv=None) -> int:
                          "or --routing given")
     ap.add_argument("--routing", action="store_true",
                     help="the endpoint at --base routes a model to several serving providers, as OpenRouter does")
+    ap.add_argument("--timeout", type=float, default=TIMEOUT, help="seconds one call may wait for the provider's reply")
     a = ap.parse_args(argv)
     serving, bad = parse_served_by(a.served_by, "")
     if serving and not bad:
@@ -1101,7 +1284,8 @@ def serve(argv=None) -> int:
         return 2
     host, _, port = a.listen.rpartition(":")
     r = Relay(a.base, key, a.record, prices=json.loads(a.prices) if a.prices else None, model=a.model,
-              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger, serving=serving, max_calls=a.max_calls)
+              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger, serving=serving,
+              timeout=a.timeout, max_calls=a.max_calls)
     for route in a.route:
         tag, _, model = route.partition("=")
         if not _TAG.match(tag) or not model:

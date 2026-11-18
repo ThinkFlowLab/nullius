@@ -30,6 +30,8 @@ The controls are real runs, jobs like any other (named
 pages pair them as a launch's controls); the units and leak checks talk to
 the driver directly and leave nothing behind. A control calls no model, so
 it needs no key - except a judged benchmark's, whose judge still grades.
+``--bench-option`` reaches the checks' driver and each control's run;
+``--job nop=DIR`` holds a merged launch of a control to its bound.
 
 A check that passes is recorded with its date, its counts and its job; one
 that fails is taken back, as ``conform`` takes back a port - what it reached kept
@@ -41,6 +43,8 @@ with the authors' own scorer is not checked yet (``docs/standard.md``).
 """
 from __future__ import annotations
 
+import json
+import math
 import os
 import re
 import shutil
@@ -48,8 +52,7 @@ import tempfile
 import time
 from typing import Callable, Dict, List, Optional
 
-from nullius.runs import parse
-from nullius.standard import definitions, install, jsonl, retries, run, shard as shards
+from nullius.standard import definitions, install, job, jsonl, retries, run, shard as shards
 
 STAMP = "%Y-%m-%d__%H-%M-%S"
 SHORT = 12                      # characters: a reference shorter than this is not looked for
@@ -66,7 +69,8 @@ class _Driver:
     """The benchmark's driver, started as a run starts it, for the checks
     that talk to it directly (units, leak)."""
 
-    def __init__(self, bench: dict, ds: dict, work: str, licences=None):
+    def __init__(self, bench: dict, ds: dict, work: str, licences=None, options: Optional[dict] = None):
+        self.options = options if options is not None else options_for(bench, ds)
         self.up = install.upstream(bench)
         self.data = install.dataset(bench, ds, self.up)
         install.driver_packages(bench)                  # its driver.install, once: start() then finds it
@@ -81,8 +85,13 @@ class _Driver:
         env = run.base_env(home, {**extra, **credentials, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                                   "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": run.driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
                                   "NULLIUS_VERSION": str(self.bench.get("_version") or ""),
-                                  **run.option_env(definitions.bench_options_of(self.bench, self.ds["id"])[0])})   # the options at their defaults
+                                  **run.option_env(self.options)})
         return jsonl.Proc(cmd, self.bench["_here"], env, os.path.join(self.work, f"driver-{n}.log")).start()
+
+
+def options_for(bench: dict, ds: dict, given: Optional[dict] = None, which=shutil.which) -> dict:
+    """The benchmark's options on ``ds`` for a control's run, at ``given`` or their defaults."""
+    return run.resolve_bench_options(bench, ds["id"], given, "yours", which)[0]
 
 
 def units_check(driver: _Driver, ds: dict) -> dict:
@@ -209,44 +218,164 @@ def leak_check(driver: _Driver, units: List[str], family: str, in_prompt: str = 
 def control_check(bench: dict, ds: dict, which: str, *, limit: Optional[int], jobs_root: str, stamp: str,
                   provider: str, model: str, judge_model: Optional[str], env, concurrency: int,
                   say: Callable[[str], None], shard: Optional[tuple] = None, launch: Optional[str] = None,
-                  licences=None, remove_images: bool = False) -> dict:
+                  licences=None, options: Optional[dict] = None, job_dir: Optional[str] = None,
+                  ids: Optional[List[str]] = None, remove_images: bool = False) -> dict:
     """Run one control over the dataset (or its first ``limit`` units, of
-    ``shard`` when given) and hold it to its bound: the pass rate, or the mean score."""
+    ``shard`` when given) and hold it to its bound: the pass rate, or the mean score.
+    ``job_dir``: a control run already, held to the bound instead; it must cover ``ids``."""
     other = definitions.control(bench, which)
-    job_dir = run.run(bench, other, model=model, provider=provider, dataset=ds["id"], limit=limit, concurrency=concurrency,
-                      jobs_root=jobs_root, name=job_name(stamp, definitions.job_word(bench), ds["id"], which, shard), say=lambda s: say("    " + s),
-                      env=env, judge_model=judge_model, shard=shard, launch=launch, licences=licences,
-                      remove_images=remove_images, retries=1, retry_if=retries.rate_limited)   # as conform's
-    j = parse.parse_job(job_dir)
-    n = len(j.trials)
-    errored = sum(1 for t in j.trials if t.exception_type)
+    problems = []
+    if job_dir:
+        job_dir = os.path.abspath(job_dir.rstrip("/"))
+        problems += job_problems(bench, ds, which, job_dir, ids or [])
+        cfg = _config(job_dir)
+    else:
+        job_dir = run.run(bench, other, model=model, provider=provider, dataset=ds["id"], limit=limit, concurrency=concurrency,
+                          jobs_root=jobs_root, name=job_name(stamp, definitions.job_word(bench), ds["id"], which, shard),
+                          say=lambda s: say("    " + s), env=env, judge_model=judge_model, shard=shard, launch=launch,
+                          licences=licences, bench_options=options,
+                          remove_images=remove_images, retries=1, retry_if=retries.rate_limited)   # as conform's
+        cfg = {}
+    field = FIELD[bench["score"]["kind"]]
+    results = [res for _, res in trials(job_dir)]
+    n = len(results)
+    errored = sum(1 for res in results if res.get("exception_info"))
+    values = [verdict(bench, res) for res in results if not res.get("exception_info")]
+    unscored = sum(1 for v in values if v is None)
+    values = [v for v in values if v is not None]
+    top = sum(1 for v in values if v >= 1.0)
     if bench["score"]["kind"] == "pass":
-        top = sum(1 for t in j.trials if t.reward == 1.0)
         value = top / n if n else 0.0
     else:
-        scores = [t.score for t in j.trials if t.score is not None]
-        top = sum(1 for s in scores if s >= 1.0)
-        value = sum(scores) / len(scores) if scores else 0.0
+        value = sum(values) / len(values) if values else 0.0
     (bound, expected), = other["expect"].items()
     within = value <= expected if bound == "at_most" else value >= expected
-    problems = []
     if not n:
         problems.append("no unit ran")
     if errored:
         problems.append(f"{errored} unit(s) ended in an error before the score: read the job's trials")
+    if unscored:
+        problems.append(f"{unscored} unit(s) ended with no {field} from 0 to 1 and no error: read the job's trials")
     if n and not within:
         problems.append(f"{'pass rate' if bench['score']['kind'] == 'pass' else 'mean score'} {value:.4f}, expected {bound.replace('_', ' ')} {expected}")
     rec = {"ok": not problems, "passed": f"{top}/{n}", "value": round(value, 4), "expect": {bound: expected},
            "units": n, "job": os.path.basename(job_dir), "source": other["source"], "problems": problems}
-    if judge_model or (bench["score"].get("judge") or {}).get("model"):
-        rec["judge"] = judge_model or bench["score"]["judge"]["model"]
+    ran_with = _options_of(cfg) if cfg else (options or {})
+    if ran_with:
+        rec["options"] = ran_with
+    judge = (cfg.get("standard") or {}).get("judge") if cfg else judge_model or (bench["score"].get("judge") or {}).get("model")
+    if judge:
+        rec["judge"] = judge
     return rec
+
+
+FIELD = {"pass": "reward", "score": "score"}
+UNITS_FAILED = "the units check failed"
+
+
+def trials(job_dir: str) -> List[tuple]:
+    """(trial, its result.json) for each trial folder of a job; an unreadable record is {}."""
+    out = []
+    for name in sorted(os.listdir(job_dir)):
+        path = os.path.join(job_dir, name, "result.json")
+        if name.startswith(".") or not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                res = json.load(f)
+        except (OSError, ValueError):
+            res = {}
+        out.append((name, res if isinstance(res, dict) else {}))
+    return out
+
+
+def verdict(bench: dict, res: dict) -> Optional[float]:
+    """The trial's value in the field its benchmark's score kind names, when it is a finite number from 0 to 1."""
+    v = (((res.get("verifier_result") or {}).get("rewards")) or {}).get(FIELD[bench["score"]["kind"]])
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0.0 <= v <= 1.0:
+        return None
+    return float(v)
+
+
+def _options_of(cfg: dict):
+    """The benchmark options a job ran with: one set, or each distinct set of its merged shards."""
+    std = cfg.get("standard") or {}
+    if std.get("benchmark_options"):
+        return std["benchmark_options"]
+    sets, todo = [], list(std.get("merged_from") or [])
+    while todo:
+        m = todo.pop()
+        if m.get("benchmark_options") or not m.get("merged_from"):
+            sets.append(m.get("benchmark_options") or {})
+        else:
+            todo += m.get("merged_from") or []
+    distinct = {json.dumps(x, sort_keys=True): x for x in sets}
+    return [distinct[k] for k in sorted(distinct)] if any(sets) else []
+
+
+def _config(job_dir: str) -> dict:
+    try:
+        with open(os.path.join(job_dir, "config.json"), encoding="utf-8") as f:
+            got = json.load(f)
+        return got if isinstance(got, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def job_problems(bench: dict, ds: dict, which: str, job_dir: str, ids: List[str]) -> List[str]:
+    """Why ``job_dir`` is not one run of ``which`` over each unit of ``ids`` once."""
+    cfg = _config(job_dir)
+    std = cfg.get("standard") or {}
+    if cfg.get("runner") != "standard":
+        return [f"{job_dir}: not a job of the Nullius standard"]
+    want = {"benchmark": bench["key"], "benchmark version": job._version(bench).get("benchmark_version"),
+            "control": which, "dataset": f"{bench['key']}/{ds['id']}"}
+    have = {"benchmark": std.get("benchmark"), "benchmark version": std.get("benchmark_version"),
+            "control": (std.get("control") or {}).get("name"),
+            "dataset": ((cfg.get("datasets") or [{}])[0] or {}).get("name")}
+    bad = [f"its {k} is {have[k]!r}, not {want[k]!r}" for k in want if have[k] != want[k]]
+    if std.get("merged_despite"):
+        bad.append("merged despite differences: " + "; ".join(std["merged_despite"]))
+    if (std.get("repeat") or 1) > 1:
+        bad.append(f"each unit ran {std['repeat']} times")
+    ran: Dict[str, int] = {}
+    shard_jobs = {m.get("job") for m in std.get("merged_from") or []}
+    alien: Dict[str, List[str]] = {}
+    for trial, res in trials(job_dir):
+        tstd = res.get("standard") if isinstance(res.get("standard"), dict) else {}
+        own = {"benchmark": tstd.get("benchmark"), "benchmark version": tstd.get("benchmark_version"),
+               "control": (tstd.get("control") or {}).get("name"),
+               "who ran it": (tstd.get("plugged"), (res.get("agent_info") or {}).get("name")),
+               "job": tstd.get("job")}
+        expect = {"benchmark": want["benchmark"], "benchmark version": want["benchmark version"], "control": which,
+                  "who ran it": (which, which), "job": cfg.get("job_name")}
+        wrong = [k for k in expect if own[k] != expect[k]]
+        if shard_jobs and tstd.get("shard_job") not in shard_jobs:
+            wrong.append("shard")
+        for k in wrong:
+            alien.setdefault(k, []).append(trial)
+        u = str(tstd.get("unit") or trial)
+        ran[u] = ran.get(u, 0) + 1
+    for k, names in alien.items():
+        bad.append(f"{len(names)} trial(s) whose own record names another {k} than the job: {', '.join(names[:3])}")
+    known = set(ids)
+    missing = [u for u in ids if u not in ran]
+    extra = sorted(u for u in ran if u not in known)
+    twice = sorted(u for u, k in ran.items() if k > 1)
+    if missing:
+        bad.append(f"{len(missing)} of the dataset's {len(ids)} units have no trial: {', '.join(missing[:5])}" + (" ..." if len(missing) > 5 else ""))
+    if extra:
+        bad.append(f"{len(extra)} trial(s) of units the dataset does not have: {', '.join(extra[:5])}")
+    if twice:
+        bad.append(f"{len(twice)} unit(s) with more than one trial: {', '.join(twice[:5])}")
+    return [f"{os.path.basename(job_dir)}: {b}" for b in bad]
 
 
 def prove(bench: dict, *, dataset: Optional[str] = None, limit: Optional[int] = None, jobs_root: str = "jobs",
           provider: str = "openai", model: str = "", judge_model: Optional[str] = None, stamp: Optional[str] = None,
           env=None, concurrency: int = 4, write: bool = True, say: Callable[[str], None] = print,
           shard: Optional[tuple] = None, launch: Optional[str] = None, licences=None,
+          bench_options: Optional[dict] = None, jobs: Optional[Dict[str, str]] = None,
           remove_images: bool = False) -> Dict[str, dict]:
     """Every check on every dataset (or ``dataset``); with ``write``, what
     passed is recorded in the benchmark's ``proven``. ``shard`` (I, N): the
@@ -254,13 +383,26 @@ def prove(bench: dict, *, dataset: Optional[str] = None, limit: Optional[int] = 
     the units check all of them, and each record says which shard.
     ``remove_images``: each unit's own image is removed after it, so the
     oracle pulls it again (by default they stay). Returns
-    {dataset: {check: record}}, each record with ``ok`` and its ``problems``."""
+    {dataset: {check: record}}, each record with ``ok`` and its ``problems``.
+    ``jobs``: {control: job directory}, held to its bound instead of run."""
     env = env if env is not None else os.environ
     stamp = stamp or time.strftime(STAMP)
+    jobs = dict(jobs or {})
     sets = [d for d in bench["datasets"] if dataset in (None, d["id"])]
     if not sets:
         raise run.Refused(f"{bench['label']} has no dataset {dataset!r}: {[d['id'] for d in bench['datasets']]}")
     declared = [c for c in definitions.CONTROLS if c in (bench.get("controls") or {})]
+    if jobs:
+        if dataset is None and len(sets) > 1:
+            raise run.Refused("a control's job is a run on one dataset: name it (--dataset)")
+        if limit or (shard and shard[1] > 1):
+            raise run.Refused("a control's job is held over the whole dataset: no limit, no shard")
+        for c, d in jobs.items():
+            if c not in declared:
+                raise run.Refused(f"{bench['label']} declares no {c} control")
+            if not os.path.isdir(d):
+                raise run.Refused(f"{d}: no such job")
+    opts = {ds["id"]: options_for(bench, ds, bench_options) for ds in sets}
     if not declared:
         say(f"{bench['label']} declares no controls: only its units and nothing else can be checked")
     got: Dict[str, dict] = {}
@@ -270,11 +412,11 @@ def prove(bench: dict, *, dataset: Optional[str] = None, limit: Optional[int] = 
         checks: Dict[str, dict] = {}
         try:
             try:
-                driver = _Driver(bench, ds, work, licences=licences)
+                driver = _Driver(bench, ds, work, licences=licences, options=opts[ds["id"]])
             except install.InstallFailed as e:
                 raise run.Refused(f"could not install what the proof needs: {e}")
             checks["units"] = units_check(driver, ds)
-            ids = checks["units"].pop("ids")
+            every = ids = checks["units"].pop("ids")
             if shard and shard[1] > 1:
                 ids = [u for _, u in shards.select(ids, *shard)]
             ids = ids[:limit] if limit else ids
@@ -285,10 +427,18 @@ def prove(bench: dict, *, dataset: Optional[str] = None, limit: Optional[int] = 
         finally:
             shutil.rmtree(work, ignore_errors=True)
         for c in declared:
-            checks[c] = control_check(bench, ds, c, limit=limit, jobs_root=jobs_root, stamp=stamp, provider=provider,
-                                      model=model, judge_model=judge_model, env=env, concurrency=concurrency, say=say,
-                                      shard=shard if shard and shard[1] > 1 else None, launch=launch, licences=licences,
-                                      remove_images=remove_images)
+            if not checks["units"]["ok"] and not jobs.get(c):
+                checks[c] = {"ok": False, "units": 0, "source": definitions.control(bench, c)["source"],
+                             "problems": [UNITS_FAILED + ": the control was not run"]}
+            else:
+                checks[c] = control_check(bench, ds, c, limit=limit, jobs_root=jobs_root, stamp=stamp, provider=provider,
+                                          model=model, judge_model=judge_model, env=env, concurrency=concurrency, say=say,
+                                          shard=shard if shard and shard[1] > 1 else None, launch=launch, licences=licences,
+                                          options=opts[ds["id"]], job_dir=jobs.get(c), ids=every,
+                                          remove_images=remove_images)
+                if not checks["units"]["ok"]:
+                    checks[c]["problems"].append(UNITS_FAILED + ": a job's cover is held to the driver's ids, which did not pass")
+                    checks[c]["ok"] = False
             _say(say, c, checks[c])
         total = ds.get("units") if isinstance(ds.get("units"), int) else checks["units"]["units"]
         for name, r in checks.items():
