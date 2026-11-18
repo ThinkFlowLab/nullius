@@ -28,7 +28,7 @@
 {% endif %}
 
 {#- The side table's controls row: the cohort and the columns' order, then Add a run. #}
-{% macro side_views() %}<nav class="cohort-switch" aria-label="Comparison cohort">
+{% macro side_views() %}<nav class="seg-toggle" aria-label="Comparison cohort">
     <a href="{{ url_for('compare', pick=picks, cohort='whole') }}" aria-current="{{ 'true' if cohort == 'whole' else 'false' }}">Whole runs</a>
     <a href="{{ url_for('compare', pick=picks, cohort='matched') }}" aria-current="{{ 'true' if cohort == 'matched' else 'false' }}">Matched tasks</a>
   </nav>

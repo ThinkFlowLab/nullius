@@ -362,6 +362,14 @@ button.seg:hover { filter: brightness(1.25); }
 .table-buttons, .table-slot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .75rem; }
 .table-buttons { margin-left: auto; }
 .table-buttons .menu { left: auto; right: 0; }   /* opens leftwards, inside the page */
+.table-controls { --tool-h: 2.1rem; }   /* every control in the row is as tall as a small button with its icon */
+.table-controls :is(.btn, .seg-toggle, .filter-pill) { height: var(--tool-h); }
+.table-controls .filter-pill { min-height: 0; padding-block: 0; }
+/* a segmented toggle: a bordered group of links or buttons, the current one marked */
+.seg-toggle { display: inline-flex; padding: 3px; gap: 3px; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--surface); }
+.seg-toggle > * { display: inline-flex; align-items: center; padding: .3rem .75rem; border: 0; border-radius: 5px; background: transparent; font: inherit; font-size: .8rem; line-height: 1.2; color: var(--text-dim); cursor: pointer; }
+.seg-toggle > :hover { background: var(--surface-2); text-decoration: none; }
+.seg-toggle > [aria-current="true"], .seg-toggle > [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 /* a search box, its icon first (the Settings page's too) */
 .st-search { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--surface-2); color: var(--text-dim); }
 .st-search .ic { flex: none; width: 17px; height: 17px; }
