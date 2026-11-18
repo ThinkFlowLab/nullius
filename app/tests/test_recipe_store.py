@@ -102,7 +102,7 @@ class Store(unittest.TestCase):
         # the builder's earlier browser list: {id, updated, recipe}
         out = store.import_([{"id": "harbor:there", "updated": "1/2/2026", "recipe": recipe("there", limit=9)},
                              {"id": "harbor:new", "recipe": recipe("new")}, recipe("bare"), recipe("new")])
-        self.assertEqual((len(out["added"]), out["skipped"], out["rejected"]), (2, ["there", "new"], []))
+        self.assertEqual((len(out["added"]), out["skipped"], out["rejected"]), (2, [{"index": 0, "name": "there"}, {"index": 3, "name": "new"}], []))
         self.assertEqual({x["name"]: x["recipe"].get("limit") for x in store.listing()}, {"there": 1, "new": None, "bare": None})
         with self.assertRaisesRegex(ValueError, "recipe 2 of 2"):
             store.import_([recipe("fine"), {"recipe": recipe("x", "../x")}])

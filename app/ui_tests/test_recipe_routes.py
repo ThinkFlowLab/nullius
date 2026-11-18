@@ -66,7 +66,7 @@ class RecipeRoutes(unittest.TestCase):
         store.save(recipe("there", limit=1))
         j = self.send("POST", "/new-run/recipes/import", {"recipes": [{"id": "harbor:there", "recipe": recipe("there", limit=5)},
                                                                        {"id": "harbor:b", "recipe": recipe("b")}]}).get_json()
-        self.assertEqual((j["ok"], len(j["added"]), j["skipped"], j["rejected"]), (True, 1, ["there"], []))
+        self.assertEqual((j["ok"], len(j["added"]), j["skipped"], j["rejected"]), (True, 1, [{"index": 0, "name": "there"}], []))
         self.assertEqual(len(self.send("POST", "/new-run/recipes/import", recipe("c")).get_json()["added"]), 1)
         self.assertEqual(len(self.send("POST", "/new-run/recipes/import", [recipe("d")]).get_json()["added"]), 1)
         self.assertEqual(dict(self.listed())["there"], 1)

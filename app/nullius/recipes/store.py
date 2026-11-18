@@ -117,22 +117,23 @@ def import_(items: Iterable, lenient: bool = False) -> Dict[str, list]:
     """Add each recipe whose name is not saved yet; never replace one. An item is a
     recipe, or ``{"recipe": ...}`` as the builder's earlier browser list held them.
     Strict: one bad item refuses them all, before anything is written. Lenient: the
-    good ones are added and each bad one is returned with its reason."""
+    good ones are added and each bad one is returned with its reason. A skipped one is
+    returned with its index and name."""
     items = list(items)
     checked, rejected = [], []
     for n, item in enumerate(items):
         recipe = item.get("recipe") if isinstance(item, dict) and "recipe" in item else item
         try:
-            checked.append(entry(recipe))
+            checked.append((n, entry(recipe)))
         except ValueError as e:
             if not lenient:
                 raise ValueError(f"recipe {n + 1} of {len(items)}: {e}") from None
             rejected.append({"index": n, "reason": str(e)})
     taken = {x.get("name") for x in listing()}
     added, skipped = [], []
-    for item in checked:
+    for n, item in checked:
         if item["name"] in taken:
-            skipped.append(item["name"])
+            skipped.append({"index": n, "name": item["name"]})
             continue
         item = {"id": secrets.token_hex(8), **item}
         _write(item)

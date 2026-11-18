@@ -50,17 +50,18 @@ class RecipeStoreScript(unittest.TestCase):
         self.assertEqual((out["sent"][1][2], out["sent"][1][3]), ({"recipe": {"name": "a"}, "id": "0123456789abcdef"}, "tok"))
 
     def test_the_earlier_list_is_sent_once_leniently_and_its_keys_removed_after_the_server_answered(self):
-        out = self.run_js(OLD, "answer=()=>({ok:true,added:['x'],skipped:['a'],rejected:[]});const bad=await s.move();"
+        out = self.run_js(OLD, "answer=()=>({ok:true,added:['x'],skipped:[{index:0,name:'a'}],rejected:[]});const bad=await s.move();"
                                "const again=await s.move();process.stdout.write(JSON.stringify({bad,again,sent,left:[...data.keys()]}));")
         self.assertEqual(out["sent"], [["POST", "/new-run/recipes/import", {"recipes": SENT, "lenient": True}, "tok"]])
-        self.assertEqual((out["bad"], out["again"], out["left"]), (0, 0, ["nullius.recipe-draft.v1", "other"]))
+        self.assertEqual((out["bad"], out["again"]), ({"refused": 0, "taken": 1}, {"refused": 0, "taken": 0}))
+        self.assertEqual(sorted(out["left"]), ["nullius.recipe-draft.v1", "nullius.recipes.v1.rejected", "other"])   # a name already saved stays in this browser
 
     def test_the_recipes_the_server_refused_are_kept_apart_and_never_sent_again(self):
         out = self.run_js({**OLD, "nullius.recipes.v1.rejected": json.dumps(["earlier"])},
                           "answer=()=>({ok:true,added:['x','y'],skipped:[],rejected:[{index:2,reason:'r'},{index:3,reason:'r'}]});"
                           "const bad=await s.move();const again=await s.move();"
                           "process.stdout.write(JSON.stringify({bad,again,n:sent.length,sent:sent[0][2].recipes,left:[...data.keys()],kept:JSON.parse(data.get('nullius.recipes.v1.rejected'))}));")
-        self.assertEqual((out["bad"], out["again"], out["n"]), (2, 0, 1))
+        self.assertEqual((out["bad"], out["again"], out["n"]), ({"refused": 2, "taken": 0}, {"refused": 0, "taken": 0}, 1))
         self.assertEqual(out["sent"], SENT)                       # the key of earlier refusals is not sent
         self.assertEqual(sorted(out["left"]), ["nullius.recipe-draft.v1", "nullius.recipes.v1.rejected", "other"])
         self.assertEqual(out["kept"], ["earlier", {"broken": 1}, "{"])

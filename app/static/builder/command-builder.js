@@ -54,8 +54,8 @@
   // Saved recipes are the server's (/new-run/recipes, nullius/recipes/store.py); a browser on its host alone writes them.
   // move() sends what this browser kept before (nullius.recipes.v1, and the older nullius.recipes.v1.<workspace> lists)
   // to the lenient import, which skips names already saved, and removes those keys once the server answered. The
-  // recipes it refused are kept under REJECTED, never sent again; move() returns how many. On a failure the keys stay
-  // for the next visit. `request` is nulliusFetch; the tests run this under Node with stand-ins.
+  // recipes it refused or skipped are kept under REJECTED, never sent again; move() returns how many of each. On a
+  // failure the keys stay for the next visit. `request` is nulliusFetch; the tests run this under Node with stand-ins.
   function recipeStore({request, csrf, storage}) {
     const call = async (url, method, body) => {
       const res = await request(url, method ? {method, headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify(body || {})} : {});
@@ -72,11 +72,12 @@
       async move() {
         const keys = Array.from({length: storage.length}, (_, i) => storage.key(i)).filter(k => k !== REJECTED && (k === OLD || k.startsWith(OLD + '.')));
         const recipes = keys.flatMap(read);
-        if (!keys.length) return 0;
-        const bad = recipes.length ? (await call('/new-run/recipes/import', 'POST', {recipes, lenient: true})).rejected.map(x => recipes[x.index]) : [];
+        if (!keys.length) return {refused: 0, taken: 0};
+        const out = recipes.length ? await call('/new-run/recipes/import', 'POST', {recipes, lenient: true}) : {rejected: [], skipped: []};
+        const bad = [...out.rejected, ...out.skipped].map(x => recipes[x.index]);
         if (bad.length) storage.setItem(REJECTED, JSON.stringify([...(storage.getItem(REJECTED) ? read(REJECTED) : []), ...bad]));
         keys.forEach(k => storage.removeItem(k));
-        return bad.length;
+        return {refused: out.rejected.length, taken: out.skipped.length};
       },
     };
   }
@@ -1155,5 +1156,5 @@
   { const dl=document.getElementById('nb-models'); if(dl){const seen=new Set(); for(const o of [...dl.options]){const v=C.bareModel(o.value); if(!v||seen.has(v)){o.remove();continue;} seen.add(v); o.value=v;}} }
   render();
   status(opened||'');
-  (async()=>{if(schema.local)try{const bad=await store.move();if(bad)status(bad+' old recipe'+(bad>1?'s':'')+' could not be moved.');}catch(e){status('Recipes saved in this browser were not moved to Nullius: '+e.message+'. Trying again next time.');}loadSaved();})();
+  (async()=>{if(schema.local)try{const {refused,taken}=await store.move(),n=(k,w)=>k+' old recipe'+(k>1?'s':'')+w;const say=[refused&&n(refused,' could not be moved.'),taken&&n(taken,' not moved: '+(taken>1?'their names are':'its name is')+' already saved.')].filter(Boolean);if(say.length)status(say.join(' '));}catch(e){status('Recipes saved in this browser were not moved to Nullius: '+e.message+'. Trying again next time.');}loadSaved();})();
 })();
