@@ -299,6 +299,8 @@ class Bounds(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.d = load("driver", self.tmp)
         self.r = load("runner", self.tmp)
+        # Keep the lookup patched through the runner cleanups.
+        self.enterContext(mock.patch.object(self.d.shutil, "which", return_value=None))
 
     def test_the_clean_up_fits_inside_the_reap_and_the_reap_inside_the_cores_bounds(self):
         d, r = self.d, self.r
