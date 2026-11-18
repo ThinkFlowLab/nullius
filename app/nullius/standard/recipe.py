@@ -101,15 +101,6 @@ def _all() -> Dict[str, List[dict]]:
     return {k: definitions.load(k, every=True)[0] for k in ("benchmark", "agent", "capability")}
 
 
-def _bench_option(n: str, o: dict) -> dict:
-    """The builder's fields for one scoped option definition."""
-    return {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
-                            "setups": o.get("setups") or ["yours"],
-                            **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
-                            "limit": bool(o.get("limit")), "by": o.get("by") or {},
-                            **({"variants": [_bench_option(n, v) for v in o["variants"]]} if o.get("variants") else {})}
-
-
 def _bench_page(b: dict) -> dict:
     """A benchmark as a page shows it. ``controls``: the ones it declares,
     each with who wrote it and where it comes from - what the builder offers
@@ -155,7 +146,11 @@ def _bench_page(b: dict) -> dict:
                          "agent": (b.get("limits") or {}).get("turn_seconds") or run.TURN_SECONDS,
                          "turns": (b.get("limits") or {}).get("turns") or run.MAX_TURNS,
                          "catalogue": [k for k, f in (("agent", "turn_seconds"), ("turns", "turns")) if (b.get("limits") or {}).get(f)]},
-            "options": {n: _bench_option(n, o) for n, o in (b.get("options") or {}).items()},
+            "options": {n: {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
+                            "setups": o.get("setups") or ["yours"],
+                            **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
+                            "limit": bool(o.get("limit")), "by": o.get("by") or {}}
+                        for n, o in (b.get("options") or {}).items()},
             "host": {n: {"summary": r["summary"], "check": r["check"], "install": hostreq.install_lines(b, [n]), "needed_by": r["needed_by"]}
                      for n, r in hostreq.all_of(b).items()},
             "datasets": [{"id": d["id"], "label": d.get("label") or d["id"], "summary": d.get("summary", ""), "units": d.get("units"),

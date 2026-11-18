@@ -1,11 +1,12 @@
 """Computer-port boundaries with limits, retries, setup clocks and trial records."""
-import copy
 from datetime import datetime
 import json
 import importlib.util
 import os
 from pathlib import Path
 import socket
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -19,29 +20,43 @@ FIX = Path(__file__).parent / "fixtures/standard"
 
 
 class MeetingPoints(unittest.TestCase):
-    def test_both_step_options_keep_their_scopes_defaults_and_validation(self):
+    def test_one_step_option_applies_to_scripts_and_the_port(self):
         bench = definitions.get("benchmark", "osworld1")
         self.assertEqual(definitions.problems(bench, "benchmark"), [])
-        for scope, kind, default, large in (("original", "upstream", "default", True),
-                                            ("model", "upstream", "default", True),
-                                            ("yours", "agent", "100", False)):
+        for scope, kind in (("original", "upstream"), ("model", "upstream"), ("yours", "agent")):
             values, bad = definitions.bench_options_of(bench, "test_small", setup=scope, kind=kind)
-            self.assertEqual((values["max_steps"], bad), (default, []))
-            self.assertEqual(not definitions.bench_options_of(bench, "test_small", {"max_steps": "1000"},
-                                                              scope, kind=kind)[1], large)
-        self.assertNotIn("max_steps", definitions.bench_options_of(bench, "test_small", kind="control")[0])
+            self.assertEqual((values["max_steps"], bad), ("default", []))
+            for value in ("default", "1", "15", "100", "1500", "9999"):
+                values, bad = definitions.bench_options_of(bench, "test_small", {"max_steps": value}, scope, kind=kind)
+                self.assertEqual((values["max_steps"], bad), (value, []))
+            for value in ("0", "10000", "1.5"):
+                self.assertTrue(definitions.bench_options_of(bench, "test_small", {"max_steps": value}, scope, kind=kind)[1])
         option = recipe._bench_page(bench)["options"]["max_steps"]
         self.assertEqual((option["limit"], option["by"]["agent"]["m3"]), (True, "100"))
-        self.assertEqual((option["variants"][0]["setups"], option["variants"][0]["default"]), (["agent"], "100"))
+        self.assertEqual(option["setups"], ["original", "model", "yours"])
 
-    def test_scoped_definitions_are_checked_without_masking_the_primary(self):
-        bench = copy.deepcopy(definitions.get("benchmark", "osworld1"))
-        option = bench["options"]["max_steps"]
-        option["variants"][0]["default"] = "default"
-        self.assertTrue(any("max_steps.default" in e for e in definitions.problems(bench, "benchmark")))
-        option["variants"][0]["default"] = "100"
-        option["variants"][0]["setups"] = ["original"]
-        self.assertTrue(any("scopes must not overlap" in e for e in definitions.problems(bench, "benchmark")))
+    @unittest.skipUnless(shutil.which("node"), "Node is required for builder options")
+    def test_the_builder_shows_one_steps_field_for_scripts_agents_and_both(self):
+        source = (Path(__file__).resolve().parents[1] / "static/builder/command-builder.js").read_text()
+        functions = []
+        for name in ("benchOptions", "benchLimits"):
+            start = source.index("  function " + name + "(")
+            end = source.index("\n  function ", start + 1)
+            functions.append(source[start:end])
+        bench = recipe._bench_page(definitions.get("benchmark", "osworld1"))
+        program = ("const C = {chosenOf: r => r.others, datasetsOf: () => ['test_small']};"
+                   "const schema = {standardHere: {}}, esc = x => x, tile = x => x.title;"
+                   + "\n".join(functions) + "\nconst b = " + json.dumps(bench) + ";"
+                   "process.stdout.write(JSON.stringify([['original'], ['fake'], ['original', 'fake']].map(others => {"
+                   "const r = {others, bench_options: {agent: 'prompt'}};"
+                   "return ['yours', 'setup', 'shared'].map(s => benchOptions(r, b, s)).join('') + benchLimits(r, b);"
+                   "})));")
+        result = subprocess.run(["node", "-e", program], stdin=subprocess.DEVNULL, capture_output=True, text=True, check=True)
+        for page, default in zip(json.loads(result.stdout), ("15", "default", "default")):
+            self.assertEqual(page.count('data-bench-opt-select="max_steps"'), 1)
+            field = page.split('data-bench-opt-select="max_steps"', 1)[1].split('>', 1)[0]
+            self.assertIn('value=""', field)
+            self.assertIn(f'placeholder="{default}"', field)
 
     def test_kit_opts_into_cleanup_before_a_retry(self):
         kit = definitions.kit("agent.computer/v1")

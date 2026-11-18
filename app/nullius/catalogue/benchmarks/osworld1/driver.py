@@ -468,9 +468,10 @@ def _start_runner(unit, dir, instruction, until):
         sock_dir = tempfile.mkdtemp(prefix="osworld1-")  # 0700, a short path (a socket's limit): the socket, ready.json
         ready = os.path.join(sock_dir, "ready.json")
         life_r, life_w = os.pipe()
+        steps = _option("max_steps", "default", str)
         argv = [sys.executable, RUNNER_FILE, "--example", task, "--result-dir", os.path.join(where, RESULTS),
                 "--socket", os.path.join(sock_dir, "s"), "--ready", ready, "--lifeline", str(life_r),
-                "--steps", str(_option("max_steps", "100", int)), "--pause", str(_option("pause", "3.0", float)),
+                "--steps", "100" if steps == "default" else steps, "--pause", str(_option("pause", "3.0", float)),
                 "--vm", vm, "--calls", os.path.join(where, "computer-calls.jsonl"), "--held", held]
         lock = open(START_LOCK, "a")
         while True:                                  # VM starts one after another, as the setups' do

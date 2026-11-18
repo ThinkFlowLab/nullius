@@ -537,11 +537,10 @@ def render_benchmark_page(entry, cat, by_key: dict, versions: list) -> str:
         out += [VERSION_NOTE, ""] if len(versions) > 1 else []
         seen, rows, needy = set(), [], []
         for v in sorted(versions, key=lambda v: v.get("_version") != d.get("_version")):
-            for name, spec in sorted(definitions.bench_option_items(v), key=lambda item: item[0]):
-                scoped = (name, tuple(spec.get("setups") or []))
-                if scoped in seen:
+            for name, spec in sorted((v.get("options") or {}).items()):
+                if name in seen:
                     continue
-                seen.add(scoped)
+                seen.add(name)
                 rows.append([f"`{name}`", _values(spec), _cell(spec.get("summary", "")), _chips(spec.get("setups") or []) or "yours"])
                 needy += _needs_rows(name, spec)
         if rows:

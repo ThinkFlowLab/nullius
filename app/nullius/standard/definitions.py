@@ -463,14 +463,6 @@ def _when_applies(when: dict, opts: dict, values: dict) -> bool:
     return all(values.get(k, opts[k].get("default")) in vs for k, vs in when.items())
 
 
-def bench_option_items(bench: dict):
-    """Each option's independent scoped definitions, the primary definition first."""
-    for name, spec in (bench.get("options") or {}).items():
-        yield name, spec
-        for variant in spec.get("variants") or []:
-            yield name, variant
-
-
 def _bench_options(d: dict) -> List[str]:
     """A benchmark's ``options``: a choice its upstream offers a run (a search, a mode), each with a
     ``summary``, its ``values``, a ``default`` a run gets when it chooses none, and optionally the
@@ -485,25 +477,6 @@ def _bench_options(d: dict) -> List[str]:
     bad = _options({"options": opts})
     if bad or not isinstance(opts, dict):
         return bad
-    plain = {n: {k: v for k, v in o.items() if k != "variants"} for n, o in opts.items()}
-    for name, spec in opts.items():
-        variants = spec.get("variants", [])
-        if not isinstance(variants, list):
-            bad.append(f"options.{name}.variants: a list of definitions with distinct setup scopes")
-            continue
-        scopes = set(spec.get("setups") or ["yours"])
-        for variant in variants:
-            if not isinstance(variant, dict) or "variants" in variant:
-                bad.append(f"options.{name}.variants: an option definition without nested variants")
-                continue
-            on = variant.get("setups")
-            if not isinstance(on, list) or not all(isinstance(x, str) for x in on):
-                bad.append(f"options.{name}.variants: explicit setup scopes")
-                continue
-            if scopes.intersection(on) or ({"yours", "agent"} <= scopes.union(on)):
-                bad.append(f"options.{name}.variants: setup scopes must not overlap")
-            scopes.update(on)
-            bad += _bench_options(dict(d, options={**plain, name: variant}))
     ids = {x.get("id") for x in d.get("datasets") or [] if isinstance(x, dict)}
     hosts = d.get("host") or {}
     files = d.get("files") if isinstance(d.get("files"), dict) else {}
@@ -617,7 +590,7 @@ def bench_options_of(bench: dict, dataset: str, given: Optional[dict] = None, se
     to is ignored - a run of several carries one choice for all. An option applies to an agent's or a
     capability's run unless its ``setups`` say otherwise; one whose ``setups`` name ``agent`` applies to a run
     whose ``kind`` is an agent, never to a capability's or a control's."""
-    opts = {n: o for n, o in bench_option_items(bench)
+    opts = {n: o for n, o in (bench.get("options") or {}).items()
             if dataset in (o.get("datasets") or [dataset])
             and (setup in (o.get("setups") or ["yours"]) or (kind == "agent" and setup == "yours" and "agent" in (o.get("setups") or [])))}
     given = {n: v for n, v in (given or {}).items() if n in opts or n not in (bench.get("options") or {})}

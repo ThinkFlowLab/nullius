@@ -38,8 +38,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
 | `agent` | **`m3`**, `prompt`, `claude`, `gpt54`, `openai_cua`, `qwen`, `os_symphony`, `evocua`, `autoglm`, `autoglm_v`, `mano`, `muse_spark` | Which of OSWorld's own agents runs: each its script as published, with its own prompts, action format and step limit. | `original`, `model` |
-| `max_steps` | pattern `default\|[1-9][0-9]{0,3}`, default `default` | The agent script's --max_steps: the most actions it takes on a task. default: each agent's own, as its documented invocation runs it. | `original`, `model` |
-| `max_steps` | pattern `[1-9][0-9]{0,2}`, default `100` | run_single_example's max_steps for an agent: the steps of OSWorld's own loop, each one acting call of the computer port. | `agent` |
+| `max_steps` | pattern `default\|[1-9][0-9]{0,3}`, default `default` | The most actions per task. default: each OSWorld agent script's own documented invocation; 100 through the computer port. | `original`, `model`, `yours` |
 | `pause` | pattern `[0-9]{1,2}(\.[0-9]{1,2})?`, default `3.0` | run_single_example's sleep_after_execution for an agent: the seconds env.step waits after each action, 3.0 as in run_multienv_m3.py's default. | `agent` |
 | `thinking` | **`adaptive`**, `off` | M3_THINKING_MODE: adaptive, as run_multienv_m3.py's own documented invocation exports it (the model decides whether to think; temperature 1, no top_p), or off, the agent's code default when the variable is unset. | `original`, `model` |
 | `vm_provider` | **`docker`** | --provider_name: where the task's VM runs. docker only: the upstream's other providers need cloud accounts or a hypervisor of their own. | `original`, `model`, `yours` |

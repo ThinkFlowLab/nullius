@@ -192,25 +192,15 @@
     },
     "max_steps": {
       "label": "Steps per task",
-      "summary": "The agent script's --max_steps: the most actions it takes on a task. default: each agent's own, as its documented invocation runs it.",
+      "summary": "The most actions per task. default: each OSWorld agent script's own documented invocation; 100 through the computer port.",
       "setups": [
         "original",
-        "model"
+        "model",
+        "yours"
       ],
       "default": "default",
       "pattern": "default|[1-9][0-9]{0,3}",
       "limit": true,
-      "variants": [
-        {
-          "label": "Steps",
-          "summary": "run_single_example's max_steps for an agent: the steps of OSWorld's own loop, each one acting call of the computer port.",
-          "pattern": "[1-9][0-9]{0,2}",
-          "default": "100",
-          "setups": [
-            "agent"
-          ]
-        }
-      ],
       "by": {
         "agent": {
           "m3": "100",

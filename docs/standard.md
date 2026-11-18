@@ -482,7 +482,6 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `when` | Another option's values that make it apply |
 | `limit` | `true`: a bound of the upstream's own (steps, errors). The builder shows it in Limits, under the benchmark's name |
 | `by` | Its default under each value of another option, e.g. each OSWorld agent's own steps |
-| `variants` | Independent definitions of the same option for disjoint `setups`, after the primary definition; each keeps its own default and validation |
 | `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`); `["agent"]`: an agent's run alone, never a capability's or a control's |
 
 - **Temperature** in GSM8K and HumanEval's Original setups accepts a non-negative decimal, such as `0.5`. **Provider default** omits the parameter; the provider/model decides. Some models restrict overrides. In the builder, leave the input empty for provider default; the CLI accepts `--bench-option temperature=0.5` or `temperature=default`. This does not override an agent's own sampling settings.

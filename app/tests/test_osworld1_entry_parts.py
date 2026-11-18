@@ -329,7 +329,7 @@ class Bounds(unittest.TestCase):
         with open(path, "w") as f:
             f.write("import json, os, sys, time\n"
                     "a = sys.argv[1:]\nget = lambda k: a[a.index(k) + 1]\n"
-                    f"open({os.path.join(self.tmp, 'begun')!r}, 'w').close()\n"
+                    f"json.dump(a, open({os.path.join(self.tmp, 'begun')!r}, 'w'))\n"
                     f"while not os.path.exists({self.go!r}):\n    time.sleep(0.02)\n"
                     "print('INFO: Started container with ports - VNC: 1', flush=True)\n"
                     "json.dump({'ok': True, 'password': 'pw'}, open(get('--ready') + '.part', 'w'))\n"
@@ -341,6 +341,25 @@ class Bounds(unittest.TestCase):
         quiet(self.d)
         self.d.START_LOCK = os.path.join(self.tmp, "start.lock")
         self.addCleanup(lambda: [self.d._reap_runner(w, seconds=0) for w in list(self.d.RUNNERS)])
+
+    def test_the_step_option_reaches_the_runner_with_the_port_default(self):
+        from nullius.standard import definitions
+        self.stand_in_runner()
+        open(self.go, "w").close()
+        ws = os.path.join(self.tmp, "job", "trial", "workspace")
+        bench = definitions.get("benchmark", "osworld1")
+        for given, expected in (({}, "100"), ({"max_steps": "default"}, "100"),
+                                ({"max_steps": "1"}, "1"), ({"max_steps": "1500"}, "1500"),
+                                ({"max_steps": "9999"}, "9999")):
+            with self.subTest(given=given):
+                values, bad = definitions.bench_options_of(bench, "test_small", given, kind="agent")
+                self.assertEqual(bad, [])
+                with mock.patch.dict(os.environ, {"NULLIUS_OPTION_MAX_STEPS": values["max_steps"]}):
+                    self.d._start_runner("os__a", ws, "x", time.time() + 30)
+                with open(os.path.join(self.tmp, "begun")) as f:
+                    argv = json.load(f)
+                self.assertEqual(argv[argv.index("--steps") + 1], expected)
+                self.d._reap_runner(self.d._runner_dir(ws))
 
     def gate_free(self):
         with open(self.d.START_LOCK, "a") as f:
