@@ -166,3 +166,19 @@ class ReadWithoutRunAnalysis(LoopCase):
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("run-analysis", p.stderr)
         self.assertIn("runs.py", p.stderr)
+
+
+class ShellBraces(LoopCase):
+    """A {word} of lower-case letters is a placeholder; a shell variable in upper case reaches the shell."""
+
+    def test_an_upper_case_shell_variable_is_left_to_the_shell(self) -> None:
+        run_dir = healthy(self.jobs, "run", "alpha")
+        self.set_adapter(adapter("alpha", NO_LIMITS, {"classes": "make-classes ${HOME} {job_dir} {out_json}"}))
+        self.read_ok(run_dir, None)
+
+    def test_a_lower_case_shell_variable_is_refused(self) -> None:
+        run_dir = healthy(self.jobs, "run", "alpha")
+        self.set_adapter(adapter("alpha", NO_LIMITS, {"classes": "make-classes ${home} {job_dir} {out_json}"}))
+        r = self.read(run_dir, None)
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("{home}", r.err)
