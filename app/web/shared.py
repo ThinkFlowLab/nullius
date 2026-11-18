@@ -372,6 +372,24 @@ def request_memo(name: str) -> dict:
     return g.setdefault(f"_memo_{name}", {}) if has_request_context() else {}
 
 
+def _owners() -> dict:
+    """``execution.owners``, once per request: a page asks it of every job it lists."""
+    memo = request_memo("owners")
+    if "owners" not in memo:
+        memo["owners"] = execution.owners()
+    return memo["owners"]
+
+
+def run_for(job_id):
+    """``execution.for_job`` over this request's ``_owners``."""
+    return execution.for_job(job_id, _owners())
+
+
+def ended_for(job_id):
+    """``execution.ended_for`` over this request's ``_owners``."""
+    return execution.ended_for(job_id, _owners())
+
+
 def _jobs_for_workspace(name=None):
     """Read an indexed workspace without making it active or converting sources.
     Once per request and workspace: a page that asks for the jobs several

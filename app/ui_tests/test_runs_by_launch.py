@@ -174,7 +174,7 @@ class RunsByLaunch(unittest.TestCase):
         group = SimpleNamespace(job_ids=[], pending=["first", "second"], source="record", dataset="")
         first = SimpleNamespace(state="done", plan=SimpleNamespace(recipe={}, jobs=[]), refused=lambda _: None, never_ran=lambda _: False)
         second = SimpleNamespace(state="paused", plan=SimpleNamespace(recipe={}, jobs=[]), live_state=lambda _: "paused")
-        with patch.object(execution, "for_job", side_effect=lambda key: {"first": first, "second": second}[key]), \
+        with patch("web.shared.run_for", side_effect=lambda key: {"first": first, "second": second}[key]), \
              patch("web.runs._control_planned", return_value=""):
             self.assertEqual(_launch_view(group, {}, {}, {})["paused"], "second")
 

@@ -195,6 +195,22 @@ class RunSize(unittest.TestCase):
         self.assertEqual(execution.run_size(ex), first + 1000)
 
 
+class Owners(unittest.TestCase):
+    def test_several_records_naming_a_job_give_it_the_newest_and_the_first_listed_of_a_tie(self):
+        def rec(name, started, *jobs):
+            plan = execution.Plan(name=name, script="true", jobs=[{"name": j} for j in jobs])
+            return execution.Execution(plan, root=tempfile.gettempdir(), record={"id": name, "state": "done", "started": started})
+        recs = [rec("old", 1, "a", "b"), rec("tie-1", 5, "b", "c"), rec("tie-2", 5, "b", "c"), rec("new", 9, "a"), rec("older", 3, "a", "c")]
+        with patch.dict(execution.EXECUTIONS, {e.id: e for e in recs}, clear=True):
+            owner = execution.owners()
+            for job in "abcd":
+                found = [e for e in recs if any(j["name"] == job for j in e.plan.jobs)]
+                before = max(found, key=lambda e: e.started) if found else None     # for_job as it was: one scan per job
+                self.assertIs(owner.get(job), before)
+                self.assertIs(execution.for_job(job), before); self.assertIs(execution.for_job(job, owner), before)
+        self.assertEqual({j: e.id for j, e in owner.items()}, {"a": "new", "b": "tie-1", "c": "tie-1"})
+
+
 class SizeOf(unittest.TestCase):
     def test_a_file_gone_since_the_walk_counts_nothing(self):
         d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)

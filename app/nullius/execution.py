@@ -1674,25 +1674,36 @@ def active() -> List[Execution]:
     return [e for e in EXECUTIONS.values() if e.state in ALIVE]
 
 
-def for_job(job_id: str) -> Optional[Execution]:
+def owners() -> Dict[str, Execution]:
+    """Each job a plan names -> the newest execution whose script writes it; of
+    several started at once, the first listed."""
+    out: Dict[str, Execution] = {}
+    for e in EXECUTIONS.values():
+        for j in e.plan.jobs:
+            name = str(j.get("name"))
+            if name not in out or e.started > out[name].started:
+                out[name] = e
+    return out
+
+
+def for_job(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[Execution]:
     """The newest execution whose script writes this job, if any - the one
     the job page shows beside the job, or instead of it while Harbor has
-    not written it yet."""
-    found = [e for e in EXECUTIONS.values() if any(str(j.get("name")) == job_id for j in e.plan.jobs)]
-    return max(found, key=lambda e: e.started) if found else None
+    not written it yet. ``owner``: ``owners()``, when the caller holds it."""
+    return (owners() if owner is None else owner).get(job_id)
 
 
 ENDED = ("stopped", "failed", "done")
 
 
-def ended_for(job_id: str) -> Optional[tuple]:
+def ended_for(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[tuple]:
     """``(state, finished_at)`` when the run that writes this job has ended
     - stopped, failed or done - by the runner's own record; None while it
     is alive or when no run of this application wrote the job. A Harbor
     killed by a Stop leaves its feed without ``job.end`` and its result
     record with trials "running", so a page reading either alone would say
-    the job goes on; this is the fact that says otherwise."""
-    ex = for_job(job_id)
+    the job goes on; this is the fact that says otherwise. ``owner``: as ``for_job``'s."""
+    ex = for_job(job_id, owner)
     return ex.job_state(job_id) if ex is not None else None
 
 

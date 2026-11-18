@@ -51,7 +51,7 @@ def index():
                                workspaces=workspace.list_all(shared.WS_HOME))
     # A Harbor killed by a Stop (or dead with the run) leaves its result
     # record saying trials are running; the runner's record says otherwise.
-    ended = {j.job_id: execution.ended_for(j.job_id) for j in jobs}
+    ended = {j.job_id: shared.ended_for(j.job_id) for j in jobs}
     # The header, the chips and the mix bar describe the agents' trials. A
     # control (nop, oracle) is a check on the tasks, not a competitor: it is
     # listed on its own line as behaved or not (`feasibility.summary_of`),
@@ -191,7 +191,7 @@ def _state_of(job_id, j, ended):
     "running"."""
     if j is not None and ended.get(job_id):
         return _said(ended[job_id][0])
-    ex = execution.for_job(job_id)
+    ex = shared.run_for(job_id)
     if ex is not None and ex.state in execution.ALIVE:
         return ex.live_state(job_id)
     if j is None:
@@ -211,7 +211,7 @@ def _control_planned(job_id) -> str:
     """``nop`` or ``oracle`` when a job not written yet is one of the run's
     controls by its plan, else ''. A standard plan names a declared control
     by that word; its setups are ``original`` or ``model``, never one."""
-    ex = execution.for_job(job_id)
+    ex = shared.run_for(job_id)
     return "" if ex is None else next((_control_of(j) for j in ex.plan.jobs if str(j.get("name")) == job_id), "")
 
 
@@ -249,7 +249,7 @@ def _most_telling(states) -> str:
 
 
 def _host_of(job_id) -> str:
-    ex = execution.for_job(job_id)
+    ex = shared.run_for(job_id)
     return "" if ex is None else ex.plan.host.label if ex.plan.host else "this machine"
 
 
@@ -322,7 +322,7 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
     rows += [{"job": None, "job_id": i, "state": _state_of(i, None, ended)} for i in g.pending if i not in dict(waiting)]
     for r in rows:
         if r["state"] == "refused":
-            r["why"] = execution.for_job(r["job_id"]).refused(r["job_id"])
+            r["why"] = shared.run_for(r["job_id"]).refused(r["job_id"])
     rows = _fold(rows, ended)
     rate = lambda r: r["job"].adjusted_solve_rate if r["job"] is not None and r["job"].adjusted_solve_rate is not None else -1.0
     rows.sort(key=lambda r: (_STATE_ORDER.get(r["state"], 9), -rate(r), r["job_id"]))
@@ -360,14 +360,14 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
     counts = {}
     for r in leaves(controls + rows):
         counts[r["state"]] = counts.get(r["state"], 0) + 1
-    ex = execution.for_job((g.job_ids + g.pending)[0])
+    ex = shared.run_for((g.job_ids + g.pending)[0])
     return {"gone": _deletion(_runs_of(g)),
             "launch": g, "checks": checks, "verdict": verdict,
             "controls": controls, "checked": checked, "agents": rows,
             "n_tasks": n_tasks, "compare": finished,
             **_tally(g, by_id),
             "paused": next((i for i in g.job_ids + g.pending
-                            if (execution.for_job(i) is not None and execution.for_job(i).state == "paused")), None),
+                            if (shared.run_for(i) is not None and shared.run_for(i).state == "paused")), None),
             "summary": " · ".join(f"{n} {s}" for s, n in sorted(counts.items(), key=lambda kv: _STATE_ORDER.get(kv[0], 9))),
             "recipe": (g.job_ids + g.pending)[0] if g.source == "record" and ex is not None and ex.plan.recipe else None,
             "feasibility": checks[0][0].job_id if checks else None,
@@ -557,10 +557,10 @@ def upload():
 def job(job_id):
     # every job, not the one alone: its Delete (_deletable) walks the workspace anyway, and one folder first costs more
     j = shared._find_job(shared._jobs_for_request(), job_id)
-    ex = execution.for_job(job_id)
+    ex = shared.run_for(job_id)
     # this job's own state beside the run's: ended, or a part still to come while another runs
     own = ((execution.NOT_RUN, None) if ex is not None and ex.state not in execution.ALIVE and ex.never_ran(job_id)
-           else execution.ended_for(job_id) or ((ex.live_state(job_id), None)
+           else shared.ended_for(job_id) or ((ex.live_state(job_id), None)
                 if ex is not None and ex.live_state(job_id) in ("queued", execution.NOT_RUN) else None))
     if not j:
         # Started from the builder and not written by Harbor yet: the run's
@@ -573,13 +573,14 @@ def job(job_id):
     return render_template("runs/job.html", job=j, live_board=board, view=_view_of(board, j),
                            execution=ex, csrf=shared._csrf_token(),
                            judgement=judge.job_summary(j) if j.trials else None,
-                           control=feasibility.summary_of(j), ended=execution.ended_for(job_id), own=own, deletable=_deletable(job_id, ex),
+                           control=feasibility.summary_of(j), ended=shared.ended_for(job_id), own=own, deletable=_deletable(job_id, ex),
                            trial_rows=attempts.grouped(j), pass_k=attempts.for_job(j))
 
 
-def _runs_of(g, owner=execution.for_job) -> list:
+def _runs_of(g, owner=None) -> list:
     """The runs Nullius made that hold every row of the launch *g*, and no job
     outside it; [] when a row is not one of theirs. ``owner``: a job's run."""
+    owner = owner or shared.run_for
     ids = g.job_ids + g.pending
     runs = list({id(e): e for e in map(owner, ids)}.values())
     if None in runs or any(not {str(x.get("name")) for x in e.plan.jobs} <= set(ids) for e in runs):
@@ -653,7 +654,7 @@ def _held_launches() -> tuple:
     launches from it."""
     recs = sorted(execution.EXECUTIONS.values(), key=lambda e: e.started)
     held = workspace.holding_all(shared.WS_HOME, {os.path.realpath(e.dir) for e in recs})
-    owner = {str(x.get("name")): e for e in recs for x in e.plan.jobs}     # the newest run naming a job, as for_job
+    owner = execution.owners()
     by_id, every = _every()
     for j in by_id.values():                                                # a merge beside its shards: their run's
         owner.setdefault(j.job_id, next((owner[m] for m in getattr(j, "merged_from", []) if m in owner), None))
@@ -811,7 +812,7 @@ def _live_board_state(j):
     if not live.has_feed(j.dir):
         return None
     try:
-        snap = live.snapshot(j.dir, ended=execution.ended_for(j.job_id), with_timeline=True)
+        snap = live.snapshot(j.dir, ended=shared.ended_for(j.job_id), with_timeline=True)
     except live.FeedError as e:
         # A malformed line in the middle of the feed is a broken writer, not a
         # race. The page must still render — the settled sections read
@@ -836,7 +837,7 @@ def job_live(job_id):
     if not j:
         abort(404)
     if not live.has_feed(j.dir):
-        ended = execution.ended_for(job_id)
+        ended = shared.ended_for(job_id)
         if ended:
             # The preparing page must settle even if the runner never wrote a feed.
             response = jsonify({"state": "finished", "running": False, "ended_by": ended[0]})
@@ -844,7 +845,7 @@ def job_live(job_id):
             return response
         abort(404)
     try:
-        snap = live.snapshot(j.dir, ended=execution.ended_for(j.job_id), with_timeline=True)
+        snap = live.snapshot(j.dir, ended=shared.ended_for(j.job_id), with_timeline=True)
     except live.FeedError as e:
         response = jsonify({"error": f"events.jsonl is not a feed: {e}"})
         response.status_code = 422
