@@ -207,7 +207,7 @@ def _remove_vms(dir, seconds=None):
         left = None if until is None else until - time.time()
         if left is not None and left <= 0:
             raise subprocess.TimeoutExpired(argv, 0)
-        return subprocess.run(["docker", *argv], timeout=left, check=True, **kw)
+        return subprocess.run(["docker", *argv], timeout=left, **kw)
 
     mine = os.path.join(dir, "vm") + os.sep
     try:
@@ -223,7 +223,6 @@ def _remove_vms(dir, seconds=None):
             docker("rm", "-f", *ids, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         sys.stderr.write(f"driver: the unit's VMs were not all removed within {seconds} s ({dir})\n")
-        raise
 
 
 def _started(p, log, what):
@@ -624,15 +623,8 @@ def _remove_passes(where, seconds, again=True):
 def _removed(where, sock_dir, again):
     """The unit's VMs removed (_remove_passes) in a thread this driver watches: True once done here; False when this
     driver's input ended meanwhile and the removal and the socket's folder went to a reaper of its own."""
-    failed = []
-
-    def remove():
-        try:
-            _remove_passes(sock_dir, REMOVE_SECONDS, again)
-        except Exception as e:
-            failed.append(e)
-
-    worker = threading.Thread(target=remove, name="vm-removal", daemon=True)
+    worker = threading.Thread(target=_remove_passes, args=(sock_dir, REMOVE_SECONDS, again), name="vm-removal",
+                              daemon=True)
     worker.start()
     while worker.is_alive():
         if CLOSED.wait(0.1):
@@ -641,11 +633,7 @@ def _removed(where, sock_dir, again):
                 return False
             except OSError:                          # no reaper: this driver's removal goes on while it lives
                 worker.join(REMOVE_SECONDS)
-                if failed:
-                    raise failed[0]
                 return True
-    if failed:
-        raise failed[0]
     return True
 
 
