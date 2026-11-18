@@ -132,7 +132,7 @@ class Client(unittest.TestCase):
         self.assertEqual(rec["answers"]["task_completed"], {"noul": 0.93})
         self.assertEqual(rec["answers"]["failure_cause"]["choice"], "rate_limit_or_timeout"); self.assertEqual(rec["answers"]["failure_cause"]["probabilities"]["rate_limit_or_timeout"], 0.81)
         self.assertEqual(rec["answers"]["transcript_quality"]["score"], 1.7); self.assertEqual(rec["answers"]["transcript_quality"]["legend"][2], "direct, correct, well explained")
-        self.assertNotIn("not_a_question", rec["answers"]); self.assertEqual(rec["usage"], {"input_tokens": 4821, "output_tokens": 96})
+        self.assertNotIn("not_a_question", rec["answers"]); self.assertGreaterEqual(rec["usage"].pop("seconds"), 0); self.assertEqual(rec["usage"], {"input_tokens": 4821, "output_tokens": 96})   # the call timed, its wait included
         url, body, key = seen[0]
         self.assertEqual(url, client.URL); self.assertEqual(key, KEY); self.assertEqual(body["model"], "jev-latest"); self.assertEqual(body["state"], "the state")
         self.assertEqual(sorted(body["questions"]), ["failure_cause", "task_completed", "transcript_quality"])

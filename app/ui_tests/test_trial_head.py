@@ -161,6 +161,25 @@ class JudgeTabNotes(unittest.TestCase):
         self.assertEqual(self.notes("failed__x"), "1 refused · state truncated (trial)")
         self.assertIsNone(self.notes("plain__x"))
 
+    def test_the_last_call_says_its_time_model_tokens_and_cost_beside_the_button(self):
+        """After a judgement, beside the button: how long the calls took, the model, the tokens and
+        the cost, each only when the record has it."""
+        rec = record("environment_error", 0.9)
+        store.save(self.ws.dir, "r-agent", "failed__x", dict(rec, usage={"input_tokens": 1200, "output_tokens": 34,
+                                                                       "seconds": 12.4, "cost_usd": 0.0031}))
+        store.save(self.ws.dir, "r-agent", "plain__x", rec)          # an older record: no time, no cost
+
+        def said(trial):
+            response = self.client.get(f"/trial/r-agent/{trial}")
+            self.addCleanup(response.close)
+            panel = response.get_data(as_text=True).split('id="judgement"', 1)[1]
+            row = re.search(r'<div class="judge-actions">(.*?)</div>', panel, re.S).group(1)
+            self.assertIn("Judge again</button>", row) if "<form" in row else None
+            found = re.search(r'<span class="small muted judge-call">(.*?)</span>\s*$', row.strip(), re.S)
+            return text_of(found.group(1)) if found else None
+        self.assertEqual(said("failed__x"), "Judged in 12.40s · jev-latest · 1.2k tokens · $0.0031")
+        self.assertEqual(said("plain__x"), "jev-latest · 2 tokens")
+
 
 class DurationTwins(unittest.TestCase):
     """A duration reads the same wherever it is drawn: the ``secs`` filter, a
