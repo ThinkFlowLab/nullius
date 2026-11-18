@@ -9,18 +9,15 @@ from classifying import classes_of, cross_check, failure_groups, read_rows
 from reading import adapter_of, analyze, health
 from rounds import (LoopError, call_runs, ledger_round, load_ledger, now, open_round, read_input, read_json,
                     save_ledger, write_json)
+from pricing import describe, price_of, task_costs, usd
 from stats import binomial_two_sided, fisher_two_sided, verdict
 from trials import TrialRow
 
 TARGET_TRIALS = 3
 GROUP_MIN_TRIALS = 3
 STOP_RULE = ("No new round when the verdict is noise and no group of failing trials of the new run has 3 trials "
-             "or more, or when the budget left is under the price of the cheapest option: a trial run of the tasks "
-             "of the largest such group, 3 trials each, at the new run's mean cost per trial.")
-
-
-def usd(value: float) -> str:
-    return f"-${-value:.2f}" if value < 0 else f"${value:.2f}"
+             "or more, or when the budget left is under the price of the cheapest option: the lowest-priced trial run "
+             "of the tasks of one such group, 3 trials each, each task at the mean cost of its trials in the new run.")
 
 
 def page_labels(before_job: str, new_job: str) -> Tuple[str, str]:
@@ -82,20 +79,23 @@ def spent_in_round(entry: dict, record: dict, new_dir: str, new_cost: Optional[f
 
 
 def stop_rule(result_verdict: str, groups: List[dict], budget: float, spent: Optional[float],
-              cost_per_trial: Optional[float]) -> dict:
+              costs: Dict[str, float]) -> dict:
     big = [g for g in groups if g["trials"] >= GROUP_MIN_TRIALS]
     reasons, not_checked = [], []
     if result_verdict == "noise" and not big:
         reasons.append(f"the verdict is noise and no group of the new run has {GROUP_MIN_TRIALS} failing trials or more")
     cheapest = None
     if big:
-        price = big[0]["tasks"] * TARGET_TRIALS * cost_per_trial if cost_per_trial is not None else None
-        cheapest = {"what": f"a trial run of the {big[0]['tasks']} tasks of {big[0]['id']}, {TARGET_TRIALS} trials each",
-                    "usd": price}
+        priced = [(g, price_of(g["task_names"], TARGET_TRIALS, [costs])) for g in big]
+        known = [(g, p) for g, p in priced if p.usd is not None]
+        group, price = min(known, key=lambda gp: gp[1].usd) if known else priced[0]
+        cheapest = {"group": group["id"], "what": f"a trial run of the {price.tasks} tasks of {group['id']}, "
+                    f"{TARGET_TRIALS} trials each", "usd": price.usd, "trials": price.trials,
+                    "unpriced_tasks": price.unpriced_tasks, "text": describe(price)}
     left = budget - spent if spent is not None else None
     if cheapest is not None:
         if cheapest["usd"] is None or left is None:
-            not_checked.append("the budget: the new run reports no cost")
+            not_checked.append("the budget: no trial of the groups' tasks, or of the new run, reports a cost")
         elif left < cheapest["usd"]:
             reasons.append(f"the budget left, {usd(left)}, is under the price of the cheapest option, "
                            f"{usd(cheapest['usd'])}")
@@ -138,7 +138,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
     classes, signatures = classes_of(new_rows, adapter.limits)
     groups = failure_groups(new_rows, classes, signatures, None)
     spent = spent_in_round(entry, record, new_dir, runs["new"]["cost_total"])
-    rule = stop_rule(result_verdict, groups, float(record["budget_usd"]), spent, runs["new"]["cost_mean"])
+    rule = stop_rule(result_verdict, groups, float(record["budget_usd"]), spent, task_costs(new_rows))
     result = {
         "schema": "run-to-fix.result/v1", "created": now(), "round": os.path.basename(round_dir),
         "counts": "tasks for pairs; a task is solved when at least half of its trials pass. Trials for targets.",
@@ -149,15 +149,15 @@ def cmd_compare(args: argparse.Namespace) -> None:
         "test": {"name": "exact two-sided binomial test on won and lost tasks", "p": p}, "verdict": result_verdict,
         "targets": targets_of(entry.get("selection"), before_rows, new_rows),
         "predictions": predictions_of(entry.get("predictions") or [], new_rows),
-        "groups": [{k: g[k] for k in ("id", "class", "signature", "trials", "tasks")} for g in groups],
+        "groups": [{k: g[k] for k in ("id", "class", "signature", "trials", "tasks", "task_names")} for g in groups],
         "stop_rule": rule,
     }
     report = os.path.join(round_dir, "report.html")
     call_runs(["render", metrics_path, "--out", report])
+    write_json(os.path.join(round_dir, "result.json"), result)
     entry["result"] = {"verdict": result_verdict, "p": p, "won": won, "lost": lost, "stop": rule["stop"],
                        "reasons": rule["reasons"], "file": os.path.join(os.path.basename(round_dir), "result.json")}
     save_ledger(args.loop, ledger)
-    write_json(os.path.join(round_dir, "result.json"), result)
 
     for label in ("before", "new"):
         r = result["pass_rate"][label]
@@ -168,6 +168,8 @@ def cmd_compare(args: argparse.Namespace) -> None:
           f"neither {pr['neither']}")
     print(f"verdict: {result_verdict} (exact two-sided binomial test on won and lost, p = {p:.3g})")
     print(f"targets: {result['targets']['text']}")
+    if rule["cheapest_option"] is not None:
+        print(f"cheapest option: {rule['cheapest_option']['what']}, {rule['cheapest_option']['text']}")
     print("stop rule: " + ("stop: " + "; ".join(rule["reasons"]) if rule["stop"] else "go on")
           + ("" if not rule["not_checked"] else "; not checked: " + "; ".join(rule["not_checked"])))
     print(f"wrote {round_dir}: compare-metrics.json, result.json, report.html (its prose slots are open: fill them "

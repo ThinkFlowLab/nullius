@@ -7,7 +7,8 @@ import re
 from typing import Dict, List, Optional
 
 from classifying import read_rows
-from comparing import TARGET_TRIALS, passes, targets_of, trial_spent, usd
+from comparing import TARGET_TRIALS, passes, targets_of, trial_spent
+from pricing import describe, price_of, task_costs, usd
 from reading import adapter_of, health
 from rounds import LoopError, ledger_round, load_ledger, now, open_round, read_input, read_json, save_ledger, write_json, write_paid
 from trials import TrialRow
@@ -101,7 +102,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     if checked.agents != [adapter.agent]:
         raise LoopError(f"adapter.json is for the agent {adapter.agent!r}, and the trial run names "
                         + ", ".join(repr(a) for a in checked.agents))
-    job_dir = os.path.abspath(args.trial_job)
+    job_dir = checked.dir
     this_run: List[TrialRow] = read_rows(job_dir, threshold)
     costs = [r.cost_usd for r in this_run]
     runs = [t for t in entry.setdefault("trial_runs", []) if t["job_dir"] != job_dir]
@@ -117,12 +118,11 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     targets = targets_of(selection, before, rows)
     of = lambda tasks: passes([r for r in rows if r.task in set(tasks)])
     spent = trial_spent(entry)
-    cost_on_ref = sum(t["cost_usd"] for t in same)
-    per_trial = cost_on_ref / len(rows) if rows else None
+    sources = [task_costs(rows), task_costs(before)]
     left = float(record["budget_usd"]) - spent
     rerun_tasks = selection["targets"] + selection["guards"]
     full_tasks = sorted({r.task for r in before})
-    options = [{"name": "stop", "what": "nothing", "usd": 0.0, "command": None}]
+    options = [{"name": "stop", "what": "nothing", "usd": 0.0, "unpriced_tasks": 0, "text": usd(0.0), "command": None}]
     for name, tasks, repeat in (("rerun", rerun_tasks, TARGET_TRIALS), ("full", full_tasks, 1)):
         units = os.path.join(round_dir, f"{name}-tasks.txt")
         with open(units, "w", encoding="utf-8", newline="\n") as fh:
@@ -137,14 +137,15 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
                 adapter.checkout)
         what = (f"the {len(tasks)} targets and guards again, {repeat} trials each" if name == "rerun"
                 else f"a full pass of the {len(tasks)} tasks of the run, {repeat} trial each")
-        options.append({"name": name, "what": what, "usd": len(tasks) * repeat * per_trial if per_trial is not None else None,
-                        "command": command})
+        price = price_of(tasks, repeat, sources)
+        options.append({"name": name, "what": what, "usd": price.usd, "unpriced_tasks": price.unpriced_tasks,
+                        "text": describe(price), "command": command})
     build = read_json(os.path.join(round_dir, "build.json"))
     trial_record = {
         "schema": "run-to-fix.trial/v1", "created": now(), "job_dir": job_dir,
         "counts": "cost_usd is every trial run of the round; trials and the results are the trial runs on this ref",
         "trial_runs": runs, "trials": len(rows), "cost_usd": spent,
-        "cost_complete": all(t["cost_complete"] for t in runs), "cost_per_trial_usd": per_trial,
+        "cost_complete": all(t["cost_complete"] for t in runs),
         "budget_usd": float(record["budget_usd"]), "budget_left_usd": left, "targets": targets,
         "guards": of(selection["guards"]), "canaries": of(selection["canaries"]), "options": options,
         "build": build,
@@ -156,7 +157,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
                "| targets | none | none | none |"]
     for name in ("guards", "canaries"):
         results.append(f"| {name} ({len(selection[name])}) | | {share(trial_record[name])} | |")
-    option_rows = [f"| {o['name']} | {o['what']} | {usd(o['usd']) if o['usd'] is not None else 'unknown'} | "
+    option_rows = [f"| {o['name']} | {o['what']} | {o['text']} | "
                    f"{cell(o['command']) if o['command'] else 'none'} |" for o in options]
     fill_page("decision-2.md", {
         "ROUND": os.path.basename(round_dir), "LOOP": args.loop,
@@ -164,11 +165,11 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         "TRIAL_JOB": ", ".join(t["job_dir"] for t in same), "TRIALS": str(len(rows)),
         "SPENT": usd(spent) + ("" if trial_record["cost_complete"] else " at least: some trials report no cost"),
         "LEFT": usd(left), "BUDGET": usd(float(record["budget_usd"])), "RESULTS": "\n".join(results),
-        "OPTIONS": "\n".join(option_rows), "PER_TRIAL": usd(per_trial) if per_trial is not None else "unknown",
+        "OPTIONS": "\n".join(option_rows),
     }, os.path.join(round_dir, "decision-2.md"))
     print(f"wrote {round_dir}: trial.json, decision-2.md; budget left {usd(left)}")
     for o in options:
-        print(f"  {o['name']}: {o['what']}, " + (usd(o["usd"]) if o["usd"] is not None else "price unknown"))
+        print(f"  {o['name']}: {o['what']}, {o['text']}")
 
 
 def cmd_decide(args: argparse.Namespace) -> None:

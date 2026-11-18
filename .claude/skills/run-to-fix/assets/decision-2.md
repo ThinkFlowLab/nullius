@@ -11,7 +11,8 @@ Build: {{BUILD}}. Trial runs on it: {{TRIAL_JOB}}, {{TRIALS}} trials. Spent in t
 |---|---|---|---|
 {{OPTIONS}}
 
-Prices use the trial run's cost per trial, {{PER_TRIAL}}.
+Each task is priced at the mean cost of its trials in this round's trial runs on this build, else in the run that
+was read, times the trials it gets. A task with no recorded cost takes the mean of the others.
 
 ## Answer
 

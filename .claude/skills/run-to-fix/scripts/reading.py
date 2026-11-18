@@ -40,6 +40,7 @@ def full_spec(spec: str) -> str:
 class Health:
     text: str
     job: str
+    dir: str
     agents: List[str]
     refused: List[str]
 
@@ -62,7 +63,7 @@ def health(label: str, spec: str, threshold: float) -> Health:
             refused.append(f"{label}: {v}")
             refused += [f"{label}: e.g. {example}" for message, example in (job.get("error_examples") or {}).items()
                         if example and message in v]
-    return Health(text=text, job=str(job.get("job") or ""), agents=list(job.get("agents") or []), refused=refused)
+    return Health(text=text, job=str(job.get("job") or ""), dir=str(job.get("dir") or ""), agents=list(job.get("agents") or []), refused=refused)
 
 
 def analyze(runs: List[Tuple[str, str]], threshold: float, out: str) -> str:

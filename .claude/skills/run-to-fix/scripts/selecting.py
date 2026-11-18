@@ -10,7 +10,8 @@ from typing import Dict, List, Optional, Tuple
 from adapter import Adapter
 from checkout import is_ancestor, resolve, worktree, write_paid_on_ref
 from classifying import read_rows
-from comparing import TARGET_TRIALS, trial_spent, usd
+from comparing import TARGET_TRIALS, trial_spent
+from pricing import describe, price_of, task_costs, usd
 from reading import adapter_of
 from rounds import (LoopError, ledger_round, load_ledger, now, open_round, read_input, read_json, run_command,
                     save_ledger, write_json, write_paid)
@@ -88,19 +89,18 @@ def cmd_select(args: argparse.Namespace) -> None:
     guards, no_guards = guards_of(kept, {r.trial: (r.task, r.passed) for r in rows}, targets)
     pool = sorted(t for t, ok in solved.items() if ok and t not in targets and t not in guards)
     canaries = sorted(random.Random(SEED).sample(pool, min(args.canaries, len(pool))))
-    cost = read_json(os.path.join(round_dir, "metrics.json"))
-    per_trial = next(r for r in cost["runs"] if r["label"] == "run")["cost_mean"]
     sizes = {"targets": targets, "guards": targets + guards, "canaries": targets + guards + canaries}
     names = {"targets": "targets", "guards": "targets and guards", "canaries": "targets, guards and canaries"}
-    price = {k: (len(v) * TARGET_TRIALS * per_trial if per_trial is not None else None) for k, v in sizes.items()}
+    threshold = float(record["pass_threshold"])
+    on_ref = [r for t in entry.get("trial_runs") or [] if t["ref"] == ref for r in read_rows(t["job_dir"], threshold)]
+    sources = [task_costs(on_ref), task_costs(rows)]
+    price = {k: price_of(v, TARGET_TRIALS, sources) for k, v in sizes.items()}
 
     print(f"targets ({len(targets)} tasks of the kept causes): {', '.join(targets)}")
     print(f"guards: {', '.join(guards)}" if guards else f"guards: none ({no_guards or 'no passing task ran the changed code'})")
     print(f"canaries ({len(canaries)} passing tasks, seed {SEED}): {', '.join(canaries) or 'none'}")
     for k in SIZES:
-        n = len(sizes[k])
-        print(f"{names[k]}: {n} tasks, {n * TARGET_TRIALS} trials, "
-              + (usd(price[k]) if price[k] is not None else "price unknown: the run reports no cost"))
+        print(f"{names[k]}: {price[k].tasks} tasks, {price[k].trials} trials, {describe(price[k])}")
     if args.size is None:
         print("choose a size with --size targets|guards|canaries --budget-usd B --text \"the person's words\"")
         return
@@ -111,8 +111,9 @@ def cmd_select(args: argparse.Namespace) -> None:
     if args.budget_usd > left:
         raise LoopError(f"the budget of the trial run, {usd(args.budget_usd)}, is over what the round has left, "
                         f"{usd(left)} of {usd(float(record['budget_usd']))}")
-    if price[args.size] is not None and price[args.size] > args.budget_usd:
-        raise LoopError(f"{names[args.size]} cost {usd(price[args.size])}, over the budget of {usd(args.budget_usd)}")
+    chosen = price[args.size]
+    if chosen.usd is not None and chosen.usd > args.budget_usd:
+        raise LoopError(f"{names[args.size]} cost {describe(chosen)}, over the budget of {usd(args.budget_usd)}")
     tasks = sizes[args.size]
     units = os.path.join(round_dir, "trial-tasks.txt")
     with open(units, "w", encoding="utf-8", newline="\n") as fh:
@@ -122,7 +123,8 @@ def cmd_select(args: argparse.Namespace) -> None:
     entry["selection"] = {"ref": ref, "size": args.size, "targets": targets,
                           "guards": guards if args.size != "targets" else [],
                           "canaries": canaries if args.size == "canaries" else [], "repeat": TARGET_TRIALS,
-                          "seed": SEED, "price_usd": price[args.size], "budget_usd": args.budget_usd,
+                          "seed": SEED, "price_usd": chosen.usd, "unpriced_tasks": chosen.unpriced_tasks,
+                          "budget_usd": args.budget_usd,
                           "guards_reason": no_guards}
     entry["answers"].append({"about": "the trial run: its size and budget", "date": now(), "text": args.text})
     line = adapter.commands["run_tasks"]

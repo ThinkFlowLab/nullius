@@ -2,15 +2,10 @@
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 ALPHA = 0.05
 #: probabilities within this relative distance of the observed table's count as equally extreme
 TIE = 1e-7
-
-
-def standard_error(rate: float, n: int) -> Optional[float]:
-    return math.sqrt(rate * (1 - rate) / n) if n else None
 
 
 def binomial_two_sided(won: int, lost: int) -> float:
