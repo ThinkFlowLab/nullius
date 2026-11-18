@@ -1,5 +1,6 @@
 {% from '_tables.html' import table, cell, greyed %}
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}Recipes — Nullius{% endblock %}
 {% block crumb %}/ recipes{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
@@ -11,9 +12,9 @@
 
 {% block body %}
 {% set local, why = builder_data.local, builder_data.recipesWhy %}
-<div class="page-title rcp-head"><h1>Recipes</h1>
-  <button type="button" class="btn sm" id="rcp-import"{% if not local %} aria-disabled="true" title="{{ why }}"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-import"/></svg>Import</button>
-  <input type="file" accept=".json,application/json" id="rcp-file" hidden aria-label="Import a recipe JSON file"></div>
+{% set actions %}<button type="button" class="btn sm" id="rcp-import"{% if not local %} aria-disabled="true" title="{{ why }}"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-import"/></svg>Import</button>
+  <input type="file" accept=".json,application/json" id="rcp-file" hidden aria-label="Import a recipe JSON file">{% endset %}
+{{ page_head('Recipes', actions=actions) }}
 
 {% if recipes %}
 {#- a column per step of the run builder, 01 to 07, by its key in command-builder-core.js (STEP) #}
