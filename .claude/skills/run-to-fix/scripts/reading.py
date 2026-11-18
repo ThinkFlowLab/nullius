@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -14,6 +15,37 @@ from rounds import (LoopError, call_runs, last_result, ledger_round, load_ledger
 #: verdicts of `runs.py health` that make a run not analysable, matched by their opening words
 REFUSING = ("no trials ran", "every trial raised an exception", "systemic failure", "incomplete:",
             "the job never wrote a finish time")
+
+
+def git_in(cwd: str, args: List[str]) -> "subprocess.CompletedProcess[str]":
+    try:
+        return subprocess.run(["git", "-C", cwd] + args, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    except FileNotFoundError as exc:
+        raise LoopError("git is needed to check the loop folder, and it is not on PATH") from exc
+
+
+def guard_loop_folder(loop_dir: str) -> None:
+    """Refuse a loop folder inside a git work tree that git does not ignore: its round files would show as
+    untracked, and round pages hold host paths."""
+    path = os.path.realpath(loop_dir)
+    top = git_in(path, ["rev-parse", "--show-toplevel"])
+    if top.returncode == 128 and "not a git repository" in top.stderr:
+        return
+    if top.returncode != 0:
+        raise LoopError(f"git rev-parse --show-toplevel in {path} exited with code {top.returncode}: "
+                        f"{(top.stderr or top.stdout).strip()}")
+    root = os.path.realpath(top.stdout.strip())
+    if root != path:
+        rel = os.path.relpath(path, root).replace(os.sep, "/") + "/"
+        ignored = git_in(root, ["check-ignore", "-q", "--", rel])
+        if ignored.returncode == 0:
+            return
+        if ignored.returncode != 1:
+            raise LoopError(f"git check-ignore {rel} in {root} exited with code {ignored.returncode}: "
+                            f"{(ignored.stderr or ignored.stdout).strip()}")
+    raise LoopError(f"the loop folder {path} lies inside the git repository {root}, and git does not ignore it: "
+                    "every round file would show as untracked, and round pages hold host paths. Name a loop folder "
+                    f"outside the repository, or add a line for it to {root}/.gitignore.")
 
 
 def adapter_of(loop_dir: str) -> Adapter:
@@ -90,6 +122,7 @@ def gate(loop_dir: str, words: Optional[str]) -> Optional[dict]:
 
 
 def cmd_read(args: argparse.Namespace) -> None:
+    guard_loop_folder(args.loop)
     adapter = adapter_of(args.loop)
     runs = runs_py()
     specs = [("run", args.run)] + ([("baseline", args.baseline)] if args.baseline else [])
