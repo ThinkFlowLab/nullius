@@ -53,6 +53,11 @@
   --cat-edit: #f5c274;     /* L* 81 */
   --cat-execute: #758e63;  /* L* 56 */
   --cat-plan: #ca90a9;     /* L* 66 */
+  /* A series of runs, the colour of each in every chart: muted blues, teal, brown, plum, never an outcome's green,
+     red or amber. Checked with the data-viz validator on each dark --surface-2 (charcoal, graphite and midnight keep
+     these): adjacent CVD ΔE ≥ 10.1, the first five apart ≥ 8.1, normal vision ≥ 15.2, contrast ≥ 3:1. */
+  --series-1: #3a75bf; --series-2: #16a8a8; --series-3: #ad6a44; --series-4: #748ee3;
+  --series-5: #aa5d83; --series-6: #3aa0d4; --series-7: #7768be; --series-8: #38a3ba;
   --ph-verify: #f09bb8;
   --ok: #a5c5a8;
   --bad: #f26a62;
@@ -124,6 +129,9 @@
   --cat-edit: #b96c08;     /* L* 53 */
   --cat-execute: #405428;  /* L* 33 */
   --cat-plan: #984873;     /* L* 42 */
+  /* adjacent CVD ΔE ≥ 10.7, the first five apart ≥ 9.4, normal vision ≥ 15.2, contrast ≥ 3.07:1 on --surface-2 */
+  --series-1: #215da5; --series-2: #179696; --series-3: #7d3f17; --series-4: #657dd1;
+  --series-5: #7e2e59; --series-6: #1587ba; --series-7: #5e5197; --series-8: #2695ac;
   --ph-verify: #b83a72;
   --ok: #3f6e4f;
   --bad: #c62f26;
@@ -1442,6 +1450,24 @@ a.chip { text-decoration: none; }
   .ch-stack, .ch-lines { animation: none; }
   .ch-seg { transition: none; }
 }
+
+/* ---- categorical charts (templates/_charts.html) ----
+   The SVG scales with its box, so its text is sized in its own units. One mark colour, since the names say which
+   item is which; a check is hollow. */
+.fig-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--sans); }
+.fig-svg text { font-size: 13px; fill: var(--text); font-variant-numeric: tabular-nums; }
+.fig-svg text.label, .fig-svg text.axis-title { fill: var(--text-dim); }
+.fig-svg text.tick, .fig-svg text.none { fill: var(--text-faint); }
+.fig-svg text.tag { font-weight: 600; font-size: 11px; }
+.fig-svg text:is(.value, .tag) { paint-order: stroke; stroke: var(--surface-2); stroke-width: 3px; stroke-linejoin: round; }   /* a reference line under a value leaves it legible */
+.fig-svg :is(.grid, .track) { stroke: var(--border-soft); stroke-width: 1; }
+.fig-svg .ref { stroke: var(--text-dim); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.fig-svg :is(.bar, .dot, .swatch) { fill: var(--c, var(--accent)); }
+.fig-svg .dot { stroke: var(--surface-2); stroke-width: 2; }
+.fig-svg .check { fill: var(--surface-2); stroke: var(--c, var(--text-dim)); stroke-width: 1.5; }
+.fig-svg .s1 { --c: var(--series-1); } .fig-svg .s2 { --c: var(--series-2); } .fig-svg .s3 { --c: var(--series-3); }
+.fig-svg .s4 { --c: var(--series-4); } .fig-svg .s5 { --c: var(--series-5); } .fig-svg .s6 { --c: var(--series-6); }
+.fig-svg .s7 { --c: var(--series-7); } .fig-svg .s8 { --c: var(--series-8); }
 
 .topbar .btn.sm { padding: .38rem .8rem; font-size: .82rem; }
 
