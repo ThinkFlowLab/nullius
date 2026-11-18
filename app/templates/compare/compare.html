@@ -130,6 +130,7 @@
       {% endcall %}
     </tr>
     {{ row('Model', jobs|map(attribute='model_name')|list) }}
+    {{ row('Benchmark', benchmarks) }}
     <tr>
       <th{{ classes(METRIC, true, 'rowhead') }}>Dataset</th>
       {% call(i) each() %}<td title="{{ jobs[i].dataset }}">{{ jobs[i].dataset|dsname }}</td>{% endcall %}

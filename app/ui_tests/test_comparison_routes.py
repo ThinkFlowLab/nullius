@@ -279,6 +279,12 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertEqual(runs.count("data-run-btn"), 2)
         self.assertLess(body.index(">Run</th>"), body.index(">Agent</th>"))
 
+    def test_a_benchmark_row_above_the_dataset_names_each_run_s_benchmark(self):
+        self.right.dataset = "not-in-the-catalogue@1.0"
+        body = self.get()
+        self.assertEqual(self.cells(body, "Benchmark"), ["SWE-bench Verified", "—"])
+        self.assertLess(body.index(">Benchmark</th>"), body.index(">Dataset</th>"))
+
     def test_remove_reorder_and_add_are_links_that_keep_the_cohort(self):
         self.another("third")
         picks = ["active:run", "foreign:run", "foreign:third"]

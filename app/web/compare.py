@@ -379,7 +379,7 @@ def compare():
         n_differing=view.n_differing, n_shared=view.shared_tasks,
         picks=values, cohort=view.cohort, add=to(values + [columns[-1]["ref"].workspace + ":"]),
         lists={n: _options(n, baseline) for n in dict.fromkeys(c["ref"].workspace for c in columns)},
-        baseline=baseline,
+        baseline=baseline, benchmarks=[b.title if b else "—" for b in (_benchmark(j.dataset)[0] for j in chosen)],
         order_grouped=grouped, order_alternating=alternating,
         n_agents=len(by_agent),
         judgement=_judgement(view), csrf=shared._csrf_token(),
@@ -418,11 +418,16 @@ def _runs(name):
     return memo[name]
 
 
+def _benchmark(dataset):
+    """A recorded dataset's catalogue benchmark and dataset entry, None for either the catalogue lacks."""
+    cat = shared._catalog_cached()
+    d = cat and next((d for d in cat.datasets if dataset and dataset in (d.key, d.registry, d.hub)), None)
+    return d and cat.benchmark(d.benchmark), d
+
+
 def _where(dataset):
     """A recorded dataset as the catalogue names it, "Benchmark / Dataset", else its own name."""
-    cat = shared._catalog_cached()
-    d = next((d for d in cat.datasets if dataset and dataset in (d.key, d.registry, d.hub)), None)
-    b = d and cat.benchmark(d.benchmark)
+    b, d = _benchmark(dataset)
     return (b.title if b.title == d.title else f"{b.title} / {d.title}") if b else shared.dataset_title(dataset) or "—"
 
 
