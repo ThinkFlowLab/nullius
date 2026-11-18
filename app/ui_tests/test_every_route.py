@@ -173,9 +173,9 @@ class EveryRoute(unittest.TestCase):
                     url = f"{url}?{HARBOR_QUERY[raw]}"
                 resp = self.get(url)
                 attempted += 1
-                if raw == "/":
+                if raw in ("/", "/compare/pick"):              # the old picker opens Compare
                     self.assertEqual(resp.status_code, 302, url)
-                    self.assertEqual(resp.location, "/runs")
+                    self.assertEqual(resp.location, "/runs" if raw == "/" else "/compare?cohort=whole")
                 else:
                     self.assertEqual(resp.status_code, 200, url)
         self.assertGreater(attempted, 0)
@@ -198,8 +198,7 @@ class EveryRoute(unittest.TestCase):
         picks = "&".join(f"pick={self.ws_name}:{i}" for i in ids)
         task = next((t.task_base for j in jobs for t in j.trials if t.task_base), None)
         self.assertTrue(task, "no task shared by the fixture jobs")
-        for url in (f"/compare?{picks}", f"/compare/pick?{picks}",
-                    f"/compare/task/{task}?{picks}"):
+        for url in (f"/compare?{picks}", f"/compare/task/{task}?{picks}"):
             with self.subTest(url=url):
                 self.assertEqual(self.get(url).status_code, 200)
 

@@ -74,7 +74,7 @@
     if (active && (!active.select.isConnected || active.select.disabled)) close();
     for (const [select, button] of controls) if (!select.isConnected) { button.remove(); controls.delete(select); }
     document.querySelectorAll('select:not([multiple])').forEach(select => {
-      if (select.size > 1) return;
+      if (select.size > 1 || select.closest('[inert]')) return;   // an inert copy (a sticky row's placeholder) needs no menu
       let button = controls.get(select);
       if (!button) {
         button = document.createElement('button'); button.type = 'button'; button.className = 'ui-select-trigger';

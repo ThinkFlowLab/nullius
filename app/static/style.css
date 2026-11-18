@@ -362,6 +362,14 @@ button.seg:hover { filter: brightness(1.25); }
 .table-buttons, .table-slot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .75rem; }
 .table-buttons { margin-left: auto; }
 .table-buttons .menu { left: auto; right: 0; }   /* opens leftwards, inside the page */
+.table-controls { --tool-h: 2.1rem; }   /* every control in the row is as tall as a small button with its icon */
+.table-controls :is(.btn, .seg-toggle, .filter-pill) { height: var(--tool-h); }
+.table-controls .filter-pill { min-height: 0; padding-block: 0; }
+/* a segmented toggle: a bordered group of links or buttons, the current one marked */
+.seg-toggle { display: inline-flex; padding: 3px; gap: 3px; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--surface); }
+.seg-toggle > * { display: inline-flex; align-items: center; padding: .3rem .75rem; border: 0; border-radius: 5px; background: transparent; font: inherit; font-size: .8rem; line-height: 1.2; color: var(--text-dim); cursor: pointer; }
+.seg-toggle > :hover { background: var(--surface-2); text-decoration: none; }
+.seg-toggle > [aria-current="true"], .seg-toggle > [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 /* a search box, its icon first (the Settings page's too) */
 .st-search { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--surface-2); color: var(--text-dim); }
 .st-search .ic { flex: none; width: 17px; height: 17px; }
@@ -376,11 +384,11 @@ button.seg:hover { filter: brightness(1.25); }
   padding: .5rem; min-width: 168px; box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
   display: flex; flex-direction: column; gap: .1rem;
 }
-.menu label {
+.menu label, .tools-menu > a {
   display: flex; align-items: center; gap: .5rem; cursor: pointer;
   font-size: .84rem; color: var(--text-dim); padding: .3rem .45rem; border-radius: 6px;
 }
-.menu label:hover { background: var(--surface-2); color: var(--text); }
+.menu label:hover, .tools-menu > a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
 .menu input { accent-color: var(--accent); }
 .table-note { color: var(--text-faint); font-size: .8rem; }
 .table-pager { margin-top: .6rem; }
@@ -409,12 +417,6 @@ button.seg:hover { filter: brightness(1.25); }
   overflow-x: auto; overscroll-behavior-x: contain;
   border-radius: var(--radius);
 }
-/* NOTE: no sticky header here. `overflow-x: auto` makes the wrapper a scroll
-   container on BOTH axes (per spec, a non-visible overflow-x forces overflow-y
-   to compute to auto), so `top: 64px` positioned the header 64px down from the
-   wrapper — on top of the first rows — instead of pinning it to the viewport.
-   The left-pinned columns below work correctly, because the wrapper really
-   does scroll horizontally. */
 
 /* a table's .sticky-col cells stay put while it scrolls sideways, at --sticky-left (tables.js `sticky`), so a
    row never loses its identity; .sticky-edge draws the line after the last one */
@@ -425,6 +427,14 @@ button.seg:hover { filter: brightness(1.25); }
 .table-wrap .grid thead th.sticky-col { z-index: 4; background: var(--bg); }
 /* opaque sticky cells would hide the row hover, so repaint them to match */
 .table-wrap .grid tbody tr:hover td.sticky-col { background: var(--surface); }
+/* `overflow-x: auto` makes the wrapper a scroll container on both axes, so a sticky row could pin only to it: the
+   sticky rows float in a fixed box instead (tables.js `sticky`), sideways scrolled with the table, under the
+   controls row, a hidden copy holding their place */
+.table-wrap.table-float { position: fixed; z-index: 4; background: var(--bg); scrollbar-width: none; }
+.table-wrap.table-float::-webkit-scrollbar { display: none; }
+.table-float > .grid { table-layout: fixed; }
+.sticky-ghost { visibility: hidden; }
+.table-tools.sticky-tools { position: sticky; top: var(--topbar-height); z-index: 5; background: var(--bg); margin-bottom: 0; padding-bottom: .6rem; }
 
 /* compact density — same data, ~35% less width */
 .grid.compact { font-size: .88rem; }
@@ -490,16 +500,9 @@ button.seg:hover { filter: brightness(1.25); }
 .grid.compare th.rowhead, .grid.inner th.rowhead {
   color: var(--text-dim); font-weight: 500; font-size: .78rem;
   text-transform: uppercase; letter-spacing: .07em; width: 11rem; text-align: left;
-  position: sticky; left: 0; z-index: 2; background: var(--bg);
 }
-.grid.compare.tasks td:first-child {
-  position: sticky; left: 0; z-index: 2; background: var(--bg);
-  box-shadow: 1px 0 0 var(--border-soft);
-}
-.grid.compare.tasks tbody tr:hover td:first-child { background: var(--surface); }
-.grid.compare.tasks thead th:first-child {
-  position: sticky; left: 0; z-index: 3; background: var(--bg); width: 20rem;
-}
+.grid.compare.tasks thead th:first-child { width: 20rem; }
+
 /* the detail row spans the table, so its inner table must not re-scroll */
 .detail-row > td { overflow-x: auto; }
 .grid.compare tbody tr:hover { background: var(--surface); }
