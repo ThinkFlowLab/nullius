@@ -279,19 +279,52 @@ window.NulliusTable = {
   /* Sticky columns, those whose header is a .sticky-col: each cell under it
      pinned at the summed widths of the sticky columns before it. Sticky rows,
      the rows with data-sticky (data-sticky="wide": only from 900px wide, where
-     a tall row leaves room for the rest): each pinned at the summed heights
-     of the sticky rows above it, in a box no taller than the window, under
-     the table's controls row (id <table id>-tools), which sticks too. Again as
-     they resize, hide or rows come in. A row without a cell under each
-     header (a colspan, an empty row) is left as it is. */
+     a tall row leaves room for the rest): once the first scrolls above the
+     table's controls row (id <table id>-tools), which sticks, they float under
+     it in a box of the wrapper's classes until the table ends, its sideways
+     scroll kept with the table's. The rows themselves move, so their controls
+     keep working; a hidden copy holds each one's place. Again as they resize,
+     hide or rows come in. A row without a cell under each header (a colspan,
+     an empty row) is left as it is. */
   sticky(table) {
     const heads = [...table.tHead.rows[0].cells], pinned = heads.filter(th => th.classList.contains('sticky-col'));
-    const rows = () => table.querySelectorAll('tr[data-sticky]'), wide = matchMedia('(min-width: 900px)');
-    const wrap = table.closest('.table-wrap'), tools = rows().length && table.id && document.getElementById(table.id + '-tools');
+    const wrap = table.closest('.table-wrap'), wide = matchMedia('(min-width: 900px)');
+    const box = document.createElement('div'), float = table.cloneNode(false), cols = document.createElement('colgroup');
+    const rows = () => [...table.querySelectorAll('tr[data-sticky]'), ...float.rows];
+    const floats = rows().length > 0, tools = floats && table.id && document.getElementById(table.id + '-tools');
+    const active = r => r.dataset.sticky !== 'wide' || wide.matches, ghosts = new Map();   // a floating row -> the copy holding its place
+    const land = () => { ghosts.forEach((ghost, row) => ghost.replaceWith(row)); ghosts.clear(); };
+    const lift = () => {
+      const on = rows().filter(active), t = table.getBoundingClientRect();
+      const under = tools ? tools.getBoundingClientRect().bottom : parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-height'));
+      const up = on.length > 0 && Math.min(...on.map(r => (ghosts.get(r) || r).getBoundingClientRect().top)) < under && t.bottom > under;
+      if (!up || on.length !== ghosts.size || on.some(r => !ghosts.has(r))) {
+        land();
+        if (up) [...table.querySelectorAll('tr[data-sticky]')].filter(active).forEach(row => {
+          const ghost = row.cloneNode(true), into = row.parentNode.tagName === 'THEAD' ? float.tHead : float.tBodies[0];
+          [ghost, ...ghost.querySelectorAll('[id]')].forEach(e => e.removeAttribute('id'));
+          ghost.removeAttribute('data-sticky');
+          ghost.classList.add('sticky-ghost');
+          ghost.setAttribute('aria-hidden', 'true');
+          ghost.inert = true;
+          row.replaceWith(ghost);
+          into.appendChild(row);
+          ghosts.set(row, ghost);
+        });
+        seen.takeRecords();   // its own moves are no change to the table
+      }
+      box.hidden = !up;
+      if (!up) return;
+      const widths = [...table.tHead.rows[0].cells].map(c => c.getBoundingClientRect().width);
+      cols.replaceChildren(...widths.map(w => { const c = document.createElement('col'); c.style.width = w + 'px'; return c; }));
+      float.style.width = t.width + 'px';
+      Object.assign(box.style, {top: Math.min(under, t.bottom - box.offsetHeight) + 'px', left: wrap.getBoundingClientRect().left + wrap.clientLeft + 'px', width: wrap.clientWidth + 'px'});
+      box.scrollLeft = wrap.scrollLeft;
+    };
     const place = () => {
-      let left = 0, top = 0;
+      let left = 0;
       pinned.forEach(th => {
-        for (const row of table.rows) {
+        for (const row of [...table.rows, ...float.rows]) {
           if (row.cells.length !== heads.length) continue;
           const cell = row.cells[th.cellIndex];
           cell.classList.add('sticky-col');
@@ -300,19 +333,27 @@ window.NulliusTable = {
         }
         left += th.getBoundingClientRect().width;
       });
-      rows().forEach(row => {
-        const on = row.dataset.sticky !== 'wide' || wide.matches;
-        row.classList.toggle('sticky-row', on);
-        row.style.setProperty('--sticky-top', top + 'px');
-        if (on) top += row.getBoundingClientRect().height;
-      });
-      if (tools) wrap.style.setProperty('--sticky-tools', tools.getBoundingClientRect().height + 'px');
+      if (floats) lift();
     };
+    const seen = new MutationObserver(place);
     if (tools) tools.classList.add('sticky-tools');
+    if (floats) {
+      float.removeAttribute('id');
+      float.removeAttribute('data-table');
+      float.append(cols, document.createElement('thead'), document.createElement('tbody'));
+      box.className = wrap.className + ' table-float';
+      box.hidden = true;
+      box.appendChild(float);
+      wrap.before(box);
+      wrap.addEventListener('scroll', () => { box.scrollLeft = wrap.scrollLeft; });
+      box.addEventListener('scroll', () => { wrap.scrollLeft = box.scrollLeft; });
+      addEventListener('scroll', lift, {passive: true});
+      addEventListener('resize', lift);
+      wide.addEventListener('change', lift);
+    }
     const resized = new ResizeObserver(place);
-    [...pinned, table, tools].forEach(el => el && resized.observe(el));
-    new MutationObserver(place).observe(table, {childList: true, subtree: true});
-    wide.addEventListener('change', place);
+    [...pinned, table].forEach(el => resized.observe(el));
+    seen.observe(table, {childList: true, subtree: true});
     place();
   },
 

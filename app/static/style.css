@@ -417,11 +417,6 @@ button.seg:hover { filter: brightness(1.25); }
   overflow-x: auto; overscroll-behavior-x: contain;
   border-radius: var(--radius);
 }
-/* `overflow-x: auto` makes the wrapper a scroll container on BOTH axes (per
-   spec, a non-visible overflow-x forces overflow-y to compute to auto), so a
-   sticky row pins to the wrapper, never to the window. A table with sticky
-   rows therefore gets a wrapper no taller than the window under the top bar
-   and its controls row, scrolled both ways (tables.js `sticky`). */
 
 /* a table's .sticky-col cells stay put while it scrolls sideways, at --sticky-left (tables.js `sticky`), so a
    row never loses its identity; .sticky-edge draws the line after the last one */
@@ -432,18 +427,13 @@ button.seg:hover { filter: brightness(1.25); }
 .table-wrap .grid thead th.sticky-col { z-index: 4; background: var(--bg); }
 /* opaque sticky cells would hide the row hover, so repaint them to match */
 .table-wrap .grid tbody tr:hover td.sticky-col { background: var(--surface); }
-/* .sticky-row cells stay put while it scrolls down, at --sticky-top, above the sticky columns, the corners above
-   both; a collapsed border stays behind, leaving a gap, so each draws its own line instead, and the cell holding
-   the focus (an open menu) rises above the rows after it */
-.table-wrap:has(.sticky-row) { max-height: calc(100dvh - var(--topbar-height) - var(--sticky-tools, 0px)); }
-.table-wrap .grid .sticky-row > * {
-  position: sticky; top: var(--sticky-top, 0); z-index: 3; background-color: var(--bg);
-  border-bottom: 0; box-shadow: inset 0 -1px 0 var(--border-soft);
-}
-.table-wrap .grid .sticky-row > .sticky-col { z-index: 4; }
-.table-wrap .grid .sticky-row > .sticky-edge { box-shadow: 1px 0 0 var(--border-soft), inset 0 -1px 0 var(--border-soft); }
-.table-wrap .grid .sticky-row > :focus-within { z-index: 5; }
-.table-wrap .grid tbody tr.sticky-row:hover > * { background-color: var(--surface); }
+/* `overflow-x: auto` makes the wrapper a scroll container on both axes, so a sticky row could pin only to it: the
+   sticky rows float in a fixed box instead (tables.js `sticky`), sideways scrolled with the table, under the
+   controls row, a hidden copy holding their place */
+.table-wrap.table-float { position: fixed; z-index: 4; background: var(--bg); scrollbar-width: none; }
+.table-wrap.table-float::-webkit-scrollbar { display: none; }
+.table-float > .grid { table-layout: fixed; }
+.sticky-ghost { visibility: hidden; }
 .table-tools.sticky-tools { position: sticky; top: var(--topbar-height); z-index: 5; background: var(--bg); margin-bottom: 0; padding-bottom: .6rem; }
 
 /* compact density — same data, ~35% less width */

@@ -103,8 +103,6 @@
   /* Let a whole agent column enter the viewport when scrolling on a phone. */
   .compare-table-wrap .grid.compare.tasks .sticky-col,
   .compare-table-wrap .grid.inner .sticky-col { position: static; }
-  /* its pinned header keeps its first cell, pinned to the top only */
-  .compare-table-wrap .grid.compare.tasks .sticky-row > .sticky-col { position: sticky; left: auto; }
 }
 
 

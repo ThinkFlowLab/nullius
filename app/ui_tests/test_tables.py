@@ -48,6 +48,11 @@ class El {
   get textContent() { return this.text + this.children.map(c => c.textContent).join(''); }
   set textContent(v) { this.text = String(v); this.children = []; }
   appendChild(k) { if (k.parentNode) k.parentNode.children.splice(k.parentNode.children.indexOf(k), 1); k.parentNode = this; this.children.push(k); mutated(this); return k; }
+  append(...ks) { ks.forEach(k => this.appendChild(k)); }
+  replaceChildren(...ks) { this.children = []; this.append(...ks); }
+  before(k) { const p = this.parentNode; if (k.parentNode) k.parentNode.children.splice(k.parentNode.children.indexOf(k), 1); p.children.splice(p.children.indexOf(this), 0, k); k.parentNode = p; mutated(p); }
+  replaceWith(k) { this.before(k); this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); this.parentNode = null; }
+  cloneNode(deep) { return Object.assign(new El(this.tagName.toLowerCase(), this.attrs, deep ? this.children.map(k => k.cloneNode(true)) : []), {width: this.width, height: this.height, y: this.y, text: this.text}); }
   get all() { return this.children.flatMap(c => [c, ...c.all]); }
   querySelectorAll(sel) { return this.all.filter(e => e.tagName !== '#TEXT' && matches(e, sel)); }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
@@ -70,7 +75,12 @@ class El {
     if (this.tagName === 'INPUT') this.dispatch('change');
   }
   focus() { document.activeElement = this; }
-  getBoundingClientRect() { const off = this.style.display === 'none'; return {width: off ? 0 : this.width, height: off ? 0 : this.height}; }
+  // laid out at `y` on the page, scrolled by scrollY unless `fixed`
+  getBoundingClientRect() {
+    const off = this.style.display === 'none', top = (this.y || 0) - (this.fixed ? 0 : scrollY);
+    return {width: off ? 0 : this.width, height: off ? 0 : this.height, top, bottom: top + (off ? 0 : this.height), left: 0};
+  }
+  get offsetHeight() { return this.rows.reduce((n, r) => n + r.height, 0); }
   get previousElementSibling() { const s = this.parentNode.children; return s[s.indexOf(this) - 1] || null; }
   get cellIndex() { return this.parentNode.children.indexOf(this); }
   get rows() { return this.querySelectorAll('tr'); }
@@ -82,14 +92,25 @@ class El {
 global.document = new El('#doc');
 document.readyState = 'complete';
 document.getElementById = id => document.querySelector(`[id="${id}"]`);
+document.createElement = tag => new El(tag);
 global.window = global;
+const on = {};
+global.addEventListener = (t, f) => (on[t] ||= []).push(f);
+global.scrollY = 0;
+global.scrolled = y => { scrollY = y; (on.scroll || []).forEach(f => f()); };
 global.CSS = {escape: s => s};
 global.localStorage = {getItem: () => null, setItem() {}};
 const observers = [];
 global.ResizeObserver = class { constructor(f) { this.f = f; observers.push(this); } observe() {} };
+// an observer is called once the script's turn ends, as a page's is; takeRecords drops what was due
 const watched = [];
-global.MutationObserver = class { constructor(f) { this.f = f; } observe(target) { watched.push([target, this.f]); } };
-const mutated = node => watched.forEach(([target, f]) => target.contains(node) && f());
+global.MutationObserver = class { constructor(f) { this.f = f; } observe(target) { watched.push([target, this]); } takeRecords() { this.due = false; return []; } };
+const mutated = node => watched.forEach(([target, o]) => {
+  if (!target.contains(node) || o.due) return;
+  o.due = true;
+  queueMicrotask(() => { if (o.due) { o.due = false; o.f(); } });
+});
+global.tick = () => new Promise(r => setTimeout(r));
 global.media = {matches: true, on: [], addEventListener(t, f) { this.on.push(f); }};   // the window, 900px wide or more
 global.matchMedia = () => media;
 global.widen = on => { media.matches = on; media.on.forEach(f => f()); };
@@ -296,7 +317,7 @@ process.stdout.write(JSON.stringify(out));
 
 class Sticky(unittest.TestCase):
     def test_each_offset_is_the_widths_before_it(self):
-        got = node(r'''
+        got = node(r"""(async () => {
 const sticky = (k, w) => Object.assign(el('th', {class: 'sticky-col', 'data-col': k}), {width: w});
 const head = el('tr', {}, sticky('a', 35.2), sticky('b', 120), el('th', {}), sticky('d', 50));
 head.cells[3].classList.add('sticky-edge');
@@ -309,51 +330,62 @@ T.columns(table, menu, 'k');
 const at = r => r.cells.map(c => c.style['--sticky-left'] ?? null);
 const out = [at(head), at(first), first.cells.map(c => ['sticky-col', 'sticky-edge'].filter(k => c.classList.contains(k)))];
 head.cells[0].width = 40; resized(); out.push(at(first));                       // a column grows: those after it move
-const added = body.appendChild(row()); out.push(at(added));                     // a row comes in: placed as it lands
-body.appendChild(el('tr', {}, el('td', {colspan: 4})));                         // a row with fewer cells: left alone, no throw
+const added = body.appendChild(row()); await tick(); out.push(at(added));       // a row comes in: placed as it lands
+body.appendChild(el('tr', {}, el('td', {colspan: 4}))); await tick();           // a row with fewer cells: left alone, no throw
 menu.querySelector('input').click(); resized(); out.push(at(added));            // b hidden: d moves up to it
 process.stdout.write(JSON.stringify(out));
-''')
+})()""")
         self.assertEqual(got, [["0px", "35.2px", None, "155.2px"], ["0px", "35.2px", None, "155.2px"],
                                [["sticky-col"], ["sticky-col"], [], ["sticky-col", "sticky-edge"]],
                                ["0px", "40px", None, "160px"], ["0px", "40px", None, "160px"], ["0px", "40px", None, "40px"]])
 
-
-    def test_each_row_offset_is_the_heights_above_it(self):
-        got = node(r"""
-const row = (h, sticky, ...cells) => Object.assign(el('tr', sticky === undefined ? {} : {'data-sticky': sticky}, ...cells.map(c => el('td', {}, c))), {height: h});
-const head = Object.assign(el('tr', {'data-sticky': ''}, Object.assign(el('th', {class: 'sticky-col sticky-edge'}), {width: 80}), el('th', {})), {height: 30});
-const ws = row(40, 'wide', 'w', 'x'), run = row(100, 'wide', 'r', 'x'), agent = row(25, '', 'a', 'x'), model = row(20, 'wide', 'm', 'x'), rest = row(50, undefined, 'd', 'x');
+    def test_the_rows_float_under_the_controls_until_the_table_ends(self):
+        got = node(r"""(async () => {
+const row = (y, h, sticky, ...cells) => Object.assign(el('tr', sticky === undefined ? {} : {'data-sticky': sticky}, ...cells.map(c => el('td', {}, c))), {y, height: h});
+const head = Object.assign(el('tr', {'data-sticky': ''}, Object.assign(el('th', {class: 'sticky-col sticky-edge'}), {width: 80}), Object.assign(el('th', {}), {width: 200})), {y: 100, height: 30});
+const ws = row(130, 40, 'wide', 'w', 'x'), run = row(170, 100, 'wide', 'r', 'x'), agent = row(270, 25, '', 'a', 'x'), model = row(295, 20, 'wide', 'm', 'x'), rest = row(315, 50, undefined, 'd', 'x');
+const pick = run.cells[1].appendChild(el('button', {id: 'pick'}));
 const body = el('tbody', {}, ws, run, agent, model, rest);
-const table = el('table', {id: 'side'}, el('thead', {}, head), body);
-const tools = Object.assign(el('div', {id: 'side-tools'}), {height: 48}), wrap = el('div', {class: 'table-wrap'}, table);
+const table = Object.assign(el('table', {id: 'side', class: 'grid'}, el('thead', {}, head), body), {y: 100, height: 265, width: 280});
+const tools = Object.assign(el('div', {id: 'side-tools'}), {height: 48, fixed: true}), wrap = Object.assign(el('div', {class: 'table-wrap'}, table), {clientWidth: 250, clientLeft: 0});
 document.appendChild(el('main', {}, tools, wrap));
 T.sticky(table);
-const rows = [head, ws, run, agent, model, rest];
-const at = () => rows.map(r => r.classList.contains('sticky-row') ? r.style['--sticky-top'] : null);
-const out = [at(), wrap.style['--sticky-tools'], tools.classList.contains('sticky-tools'), agent.cells[0].classList.contains('sticky-col')];
-widen(false); out.push(at());                                                    // narrow: the header and the Agent row alone
-widen(true); run.height = 120; resized(); out.push(at());                        // a row grows: those under it move
-tools.height = 80; resized(); out.push(wrap.style['--sticky-tools']);          // the controls row wraps: the box shrinks
-const late = body.appendChild(row(10, '', 'l', 'x')); out.push(late.style['--sticky-top']);   // a row comes in: placed as it lands
+const box = wrap.previousElementSibling, inner = box.querySelector('table');
+const look = () => [box.hidden, inner.rows.map(r => r.cells[0].textContent || 'h'), box.style.top ?? null];
+const out = [tools.classList.contains('sticky-tools'), look()];                // at the top: in the table
+scrolled(60); out.push(look());                                                 // the header passes the controls: they float
+const ghost = table.rows[3];
+out.push([ghost.classList.contains('sticky-ghost'), ghost.getAttribute('aria-hidden'), ghost.inert, ghost.hasAttribute('data-sticky'),
+          table.querySelectorAll('[id]').length, inner.getAttribute('id'), box.contains(pick), box.querySelector('colgroup').children.map(c => c.style.width)]);
+wrap.scrollLeft = 30; wrap.dispatch('scroll'); out.push(box.scrollLeft);       // sideways with the table
+box.scrollLeft = 10; box.dispatch('scroll'); out.push(wrap.scrollLeft);        // and the table with it
+body.appendChild(row(365, 10)); await tick(); out.push(box.contains(pick));     // a row comes in: they stay up
+widen(false); out.push(look());                                                 // narrow: the header and the Agent row alone
+widen(true); scrolled(120); out.push(look());                                   // the table's end pushes them up
+scrolled(320); out.push(look(), table.rows.map(r => r.height).slice(0, 6), body.contains(pick));   // past it: back in place
+scrolled(0); out.push(look());
 process.stdout.write(JSON.stringify(out));
-""")
-        self.assertEqual(got, [["0px", "30px", "70px", "170px", "195px", None], "48px", True, True,
-                               ["0px", None, None, "30px", None, None],
-                               ["0px", "30px", "70px", "190px", "215px", None], "80px", "235px"])
+})()""")
+        self.assertEqual(got, [True, [True, [], None],
+                               [False, ["h", "w", "r", "a", "m"], "48px"],
+                               [True, "true", True, False, 0, None, True, ["80px", "200px"]],
+                               30, 10, True,
+                               [False, ["h", "a"], "48px"],
+                               [False, ["h", "w", "r", "a", "m"], "30px"],
+                               [True, [], "30px"], [30, 40, 100, 25, 20, 50], True,
+                               [True, [], "30px"]])
 
     def test_a_table_without_sticky_rows_is_left_as_it_is(self):
         got = node(r"""
 const head = el('tr', {}, Object.assign(el('th', {class: 'sticky-col'}), {width: 50}), el('th', {}));
 const first = el('tr', {}, el('td', {}), el('td', {}));
 const table = el('table', {id: 't'}, el('thead', {}, head), el('tbody', {}, first));
-const tools = el('div', {id: 't-tools'}), wrap = el('div', {class: 'table-wrap'}, table);
-document.appendChild(el('main', {}, tools, wrap));
+const tools = el('div', {id: 't-tools'}), wrap = el('div', {class: 'table-wrap'}, table), main = el('main', {}, tools, wrap);
+document.appendChild(main);
 T.sticky(table);
-process.stdout.write(JSON.stringify([[head, first].map(r => [r.classList.contains('sticky-row'), r.style['--sticky-top'] ?? null]),
-                                     tools.classList.contains('sticky-tools'), wrap.style['--sticky-tools'] ?? null]));
+process.stdout.write(JSON.stringify([main.children.length, tools.classList.contains('sticky-tools')]));
 """)
-        self.assertEqual(got, [[[False, None], [False, None]], False, None])
+        self.assertEqual(got, [2, False])
 
 class Menus(unittest.TestCase):
     def test_a_label_click_toggles_and_keeps_its_menu_open(self):
