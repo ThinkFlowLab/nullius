@@ -18,8 +18,10 @@ REFUSING = ("no trials ran", "every trial raised an exception", "systemic failur
 
 
 def git_in(cwd: str, args: List[str]) -> "subprocess.CompletedProcess[str]":
+    """git in the C locale: the guard reads git's English text, which a translated git prints in another language."""
     try:
-        return subprocess.run(["git", "-C", cwd] + args, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        return subprocess.run(["git", "-C", cwd] + args, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                              env=dict(os.environ, LC_ALL="C"))
     except FileNotFoundError as exc:
         raise LoopError("git is needed to check the loop folder, and it is not on PATH") from exc
 
