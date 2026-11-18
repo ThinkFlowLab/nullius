@@ -185,7 +185,7 @@ class LaunchShards(unittest.TestCase):
             response = self.client.get("/compare", query_string=query)
             self.addCleanup(response.close)
             body = response.get_data(as_text=True)
-            self.assertEqual(re.findall(r'data-column="\d+" data-run="([^"]*)"', body), [whole.split(":", 1)[1]])
+            self.assertEqual(re.findall(r'data-column="\d+" data-run="([^"]*)"', body), [whole.split(":", 1)[1], ""])
             trials = re.search(r'<th class="rowhead[^"]*"[^>]*>Trials</th>\s*<td[^>]*>(\d+)', body).group(1)
             self.assertEqual(int(trials), len(UNITS))
 

@@ -73,7 +73,7 @@
             <span class="compare-baseline">{{ 'Baseline' if loop.first }}</span>
             {% if c.left %}<a class="icon-btn" href="{{ c.left }}" aria-label="Move column {{ n }} left" title="Move left">←</a>{% endif %}
             {% if c.right %}<a class="icon-btn" href="{{ c.right }}" aria-label="Move column {{ n }} right" title="Move right">→</a>{% endif %}
-            <a class="icon-btn" href="{{ c.remove }}" aria-label="Remove column {{ n }}" title="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></a>
+            {% if c.remove %}<a class="icon-btn" href="{{ c.remove }}" aria-label="Remove column {{ n }}" title="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></a>{% endif %}
           </div>
           <select class="col-ws" data-ws aria-label="Workspace of column {{ n }}">
             {% for ws in workspace_options %}<option value="{{ ws.name }}"{% if ws.name == c.ref.workspace %} selected{% endif %}>{{ ws.label }}</option>{% endfor %}

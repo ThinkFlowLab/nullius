@@ -66,16 +66,18 @@ class ComparisonRoutes(unittest.TestCase):
         return [(d.group(2), d.group(1)) if d else None for d in
                 (re.search(r'<span class="delta ?([^"]*)">(.*?)</span>', c) for c in re.findall(r'<td[^>]*>(.*?)</td>', cls.row(body, label), re.S))]
 
-    def test_no_selection_is_one_empty_column_of_the_open_workspace(self):
+    def test_no_selection_is_two_empty_columns_of_the_open_workspace(self):
         response = self.client.get("/compare")
         self.assertEqual(response.status_code, 200)
         body = response.get_data(as_text=True)
-        self.assertEqual(re.findall(r'<th class="compare-col( empty)?" data-column="(\d)" data-run="([^"]*)"', body), [(" empty", "0", "")])
+        self.assertEqual(re.findall(r'<th class="compare-col( empty)?" data-column="(\d)" data-run="([^"]*)"', body),
+                         [(" empty", "0", ""), (" empty", "1", "")])
         self.assertIn('<option value="active" selected>', body)
         self.assertIn('<option value="foreign">', body)
-        self.assertNotIn('class="rowhead', body)                         # no numbers for a column with no run
+        self.assertNotIn(">Agent</th>", body)                             # no numbers for a column with no run
+        self.assertNotIn('aria-label="Remove column', body)               # a column removed would come straight back
         self.assertNotIn("<h2>Task by task</h2>", body)
-        self.assertIn('values: ["active:"]', body)
+        self.assertIn('values: ["active:", "active:"]', body)
         self.assertIn('"value": "active:run"', body)                       # its run list, embedded
 
 
@@ -238,13 +240,17 @@ class ComparisonRoutes(unittest.TestCase):
         a = re.search(r'<a [^>]*href="([^"]+)"[^>]*aria-label="' + re.escape(label) + '"', body)
         return parse_qs(urlsplit(unescape(a.group(1))).query) if a else None
 
-    def test_one_run_is_one_column_with_its_numbers_and_nothing_ranked(self):
+    def test_one_run_opens_beside_an_empty_column_with_nothing_ranked(self):
         body = self.get(pick="active:run")
-        self.assertEqual(self.columns(body), [("", "run")])
+        self.assertEqual(self.columns(body), [("", "run"), (" empty", "")])
         self.assertIn('<span class="compare-baseline">Baseline</span>', body)
-        self.assertEqual(self.cells(body, "Cost (estimated)"), ["$10.00"])
-        self.assertEqual(self.ranks(body, "Cost (estimated)"), [""])
-        self.assertEqual(self.deltas(body, "Cost (estimated)"), [None])
+        self.assertEqual(self.cells(body, "Cost (estimated)"), ["$10.00", ""])
+        self.assertEqual(self.ranks(body, "Cost (estimated)"), ["", ""])
+        self.assertEqual(self.deltas(body, "Cost (estimated)"), [None, None])
+        self.assertEqual(self.links(body, "Remove column 1"), {"pick": ["active:"], "cohort": ["whole"]})
+        self.assertIsNone(self.links(body, "Remove column 2"))
+        # the same run twice is one column, and an empty one beside it
+        self.assertEqual(self.columns(self.get(pick=["active:run", "active:run"])), [("", "run"), (" empty", "")])
 
     def test_four_columns_one_empty_follow_the_url_in_every_table(self):
         self.another("third")

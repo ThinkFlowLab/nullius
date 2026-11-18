@@ -369,7 +369,8 @@ def compare():
         return to(vs)
 
     for k, c in enumerate(columns):
-        c.update(remove=to(values[:k] + values[k + 1:]), left=k and swap(k, k - 1), right=k + 1 < len(values) and swap(k, k + 1))
+        # an empty column of two would come straight back
+        c.update(remove=(len(values) > 2 or c["ref"].job_id) and to(values[:k] + values[k + 1:]), left=k and swap(k, k - 1), right=k + 1 < len(values) and swap(k, k + 1))
     baseline = chosen[0].dataset if columns[0]["i"] == 0 else ""
     return render_template(
         "compare/compare.html", comparison=view, selections=view.selected, jobs=chosen,
@@ -487,6 +488,8 @@ def _columns_requested():
         whole = {name: {i: job.job_id for _, job, ids in rs for i in ids} for name, rs in runs.items()}
         refs = [replace(ref, job_id=whole[ref.workspace].get(ref.job_id, ref.job_id)) for ref in refs]
         refs = [ref for k, ref in enumerate(refs) if not ref.job_id or ref not in refs[:k]]
+        # never one column alone: an empty one waits beside it
+        refs += [comparison.RunRef(refs[-1].workspace, "")] * (2 - len(refs))
         labels = {}
         for name in names:
             ws = active if name == active_name else workspace.load(shared.WS_HOME, name)
