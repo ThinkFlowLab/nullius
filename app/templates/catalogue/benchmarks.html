@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}Benchmarks — Nullius{% endblock %}
 {% block crumb %}/ benchmarks{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
@@ -8,15 +9,8 @@
 {% set listed = cat.listed_benchmarks %}
 {% set count = namespace(datasets=0) %}{% for b in listed %}{% set count.datasets = count.datasets + b.datasets|length %}{% endfor %}
 <div class="bench-index">
-  <header class="bench-index-head">
-    <div>
-      <h1>Benchmarks</h1>
-      <p class="bench-count">{{ listed|length }} benchmarks · {{ count.datasets }} datasets</p>
-    </div>
-    <div class="bench-head-tools">
-      <button type="button" class="btn" id="std-how-open" aria-haspopup="dialog">+ Add a benchmark</button>
-    </div>
-  </header>
+  {% set actions %}<button type="button" class="btn sm" id="std-how-open" aria-haspopup="dialog">+ Add a benchmark</button>{% endset %}
+  {{ page_head('Benchmarks', sub=listed|length ~ ' benchmarks · ' ~ count.datasets ~ ' datasets', actions=actions) }}
 
   {#- Two routes in: the Nullius standard (a paper's own scripts as its Original setup), or Harbor. The assistant asks
       which (the import-benchmark skill); by hand, each route has its own way. #}

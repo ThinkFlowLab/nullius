@@ -184,7 +184,7 @@ class Tabs(unittest.TestCase):
                 ("/capabilities", "a capability", ".claude/skills/import-capability/SKILL.md",
                  ("nullius standard new capability my-memory", "&#34;project&#34;", "from my_memory import Store"))):
             html = self.get(url).get_data(as_text=True)
-            self.assertIn(f'<button type="button" class="btn" id="std-how-open" aria-haspopup="dialog">+ Add {a}</button>', html)
+            self.assertIn(f'<button type="button" class="btn sm" id="std-how-open" aria-haspopup="dialog">+ Add {a}</button>', html)
             self.assertIn('<dialog class="std-how" id="std-how"', html)
             self.assertLess(html.index(">With an assistant<"), html.index(">By hand<"))       # the assistant's tab first
             self.assertIn('aria-selected="true">With an assistant<', html)
@@ -210,7 +210,7 @@ class Tabs(unittest.TestCase):
 
     def test_an_agents_page_has_its_ports_and_what_it_runs(self):
         html = self.get("/agents/fake").get_data(as_text=True)
-        card = html[html.index('id="fake"'):]
+        card = html[html.index('<header class="page-head">'):]
         self.assertIn("Fake agent", card)
         self.assertIn(">1/1</b>", card)
         self.assertIn('<th scope="col">Proven</th>', card)                                           # agent.task/v1's record
@@ -223,7 +223,7 @@ class Tabs(unittest.TestCase):
         self.assertIn("<h1>Capabilities</h1>", html)
         self.assertIn('href="/capabilities/fakemem"', html)
         html = self.get("/capabilities/fakemem").get_data(as_text=True)
-        card = html[html.index('id="fakemem"'):]
+        card = html[html.index('<header class="page-head">'):]
         self.assertIn('<span class="cat-tag">memory</span>', card)
         self.assertIn("cap.memory/v1", card)
         self.assertNotIn("agent.task/v1", card)
