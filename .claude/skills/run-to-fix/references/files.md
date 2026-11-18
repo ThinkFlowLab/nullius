@@ -82,6 +82,15 @@ Every answer of the person is stored with its date and in the person's words: th
 size and budget of the trial run, the choice at stop 2, and the words that start a round after a stop rule said
 stop. The money a round has spent is the sum of its `trial_runs` plus the new run that `compare` reads.
 
+## Prices
+
+A price of a run of chosen tasks is the sum over the tasks of the mean recorded cost of each task's trials, times
+the trials the task gets. `select` and `decide --stop 2` take that cost from this round's trial runs on the same
+commit when they hold the task, else from the run that was read; the stop rule of `compare` takes it from the new
+run. A task with no recorded cost takes the mean of the priced tasks of the same run, and the price says how many
+tasks it priced that way. With no priced task, the price is unknown. `selection.price_usd` of the ledger, the options
+of `trial.json` and `cheapest_option` of `result.json` hold such prices.
+
 ## Files of a run that the loop reads
 
 | file | used for |

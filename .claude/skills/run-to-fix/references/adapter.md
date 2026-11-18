@@ -49,7 +49,10 @@ Every key is present, and a value the agent does not have is null. `read` refuse
 | `{build}` | `run_tasks` | the path `commands.build` printed; empty when `commands.build` is null |
 
 A command is one line of POSIX shell. The loop replaces each placeholder with its value quoted for the shell.
-Write each placeholder without quotes around it. When the adapter is read, the loop refuses a placeholder that a
+Write each placeholder without quotes around it. A `{word}` of lower-case letters and `_` is always read as a
+placeholder. A command line therefore holds no such word other than its placeholders: a shell variable written
+`${home}` is refused as an unknown placeholder. Write `$home` instead, or a variable in upper case such as `${HOME}`;
+both reach the shell unchanged. When the adapter is read, the loop refuses a placeholder that a
 command does not take, and a command that leaves out one it needs:
 
 | command | needs |

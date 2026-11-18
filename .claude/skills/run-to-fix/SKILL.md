@@ -18,7 +18,8 @@ causes, writing tests and fixes in the agent's code.
 
 - The `run-analysis` skill in a folder beside this one. `loop.py` calls its `runs.py` for `health`, `analyze` and
   `render`, and stops with a message naming the missing file when it is absent.
-- Python 3 with the standard library, and git. The tests of this skill ran on Python 3.12.
+- Python 3 with the standard library, git, and bash on a POSIX system: Linux or WSL. The tests of this skill ran
+  on Python 3.12.
 - A loop folder the person names, outside the repository or in a folder git ignores. `loop.py` writes only there.
 - An adapter, `adapter.json` in the loop folder: one file per agent with its checkout, its commands and the limits
   of the run (`references/adapter.md`). For an agent of the Nullius catalogue, draft it from
@@ -95,10 +96,13 @@ Merge the kept candidates into one commit of the work branch. Then:
 python3 L select --loop DIR --ref COMMIT --canaries N
 ```
 
-prints the trial run in three sizes with their price from the cost per trial of the run that was read: the targets
-(the tasks the kept causes predict), plus the guards (passing tasks whose recorded trial ran the changed code, when
-the replay reports `touched`), plus the canaries (passing tasks drawn with a fixed seed). Every task gets 3 trials. The
-person picks a size and names its budget, which cannot exceed what the round has left:
+prints the trial run in three sizes with their price: the targets (the tasks the kept causes predict), plus the
+guards (passing tasks whose recorded trial ran the changed code, when the replay reports `touched`), plus the canaries
+(passing tasks drawn with a fixed seed). Every task gets 3 trials. A price is the sum over the tasks of the mean
+recorded cost of each task's trials, times its trials. The cost comes from this round's trial runs on the same commit
+when they hold the task, else from the run that was read. A task with no recorded cost takes the mean of the others,
+and the printed line counts such tasks. The person picks a size and names its budget, which cannot exceed what the
+round has left:
 
 ```bash
 python3 L select --loop DIR --ref COMMIT --canaries N --size targets|guards|canaries --budget-usd B --text "..."
@@ -137,8 +141,9 @@ closes the round and writes `report.html` with `render` of `run-analysis`; fill 
 describes (`runs.py render --slots`, then `runs.py check`).
 
 The stop rule is fixed before a round starts. No new round when the verdict is noise and no group of failing trials
-of the new run has 3 trials or more, or when the budget left is under the price of the cheapest option, a trial run
-of the largest such group's tasks.
+of the new run has 3 trials or more, or when the budget left is under the price of the cheapest option. That option
+is the lowest-priced trial run of one such group's tasks, 3 trials each, each task at the mean cost of its trials in
+the new run; `result.json` names the group.
 
 ## When the adapter lacks a command
 
