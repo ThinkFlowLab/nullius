@@ -94,15 +94,18 @@ class ConnectionTest(unittest.TestCase):
 
     def test_the_probe_says_when_the_host_s_docker_has_userns_remap(self):
         tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)
+        for tool in ("sh", "sed", "grep", "hostname"):       # the probe's tools: no docker, podman, uv or harbor of the machine's
+            os.symlink(shutil.which(tool), os.path.join(tmp, tool))
+        env = {"PATH": tmp}
         for options, said in (("[name=seccomp,profile=builtin name=userns name=cgroupns]", True), ("[name=seccomp,profile=builtin]", False)):
             with open(os.path.join(tmp, "docker"), "w") as f:
                 f.write(f"#!/bin/sh\n[ \"$1\" = info ] && echo '{options}'\nexit 0\n")
             os.chmod(os.path.join(tmp, "docker"), 0o755)
-            env = {"PATH": tmp + os.pathsep + "/usr/bin:/bin"}
             run = lambda argv, timeout: (lambda p: (p.returncode, p.stdout, p.stderr))(
                 subprocess.run(["sh", "-c", argv[-1]], capture_output=True, text=True, env=env, timeout=timeout))
             with self.subTest(options=options):
-                self.assertEqual(hosts.test(hosts.parse("bench"), run=run)["docker_userns"], said)
+                r = hosts.test(hosts.parse("bench"), run=run)
+                self.assertEqual((r["docker_userns"], r["podman"], r["uv"], r["harbor"]), (said, False, False, False))
 
     def test_missing_tools_are_said_not_failed(self):
         r = hosts.test(hosts.parse("bench"), run=lambda a, t: (0, "ok\nuv=no\ndocker=no\npodman=no\nharbor=no\nhostname=x\n", ""))
