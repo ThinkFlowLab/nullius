@@ -23,7 +23,7 @@ FILES = {
     "computer-calls": ("Computer tool calls", "verifier/computer-calls.jsonl"),
     "computer-events": ("Desktop events", "verifier/computer-events.jsonl"),
     "computer-boxes": ("Desktop targets", "verifier/computer-boxes.json"),
-    "osworld-computer-calls": ("OSWorld computer tool calls", "verifier/osworld/computer-calls.jsonl"),
+    "osworld-runner-calls": ("OSWorld runner tool calls", ".work/osworld/computer-calls.jsonl"),
     "osworld-result": ("OSWorld result", "verifier/osworld/result.txt"),
     "osworld-runner": ("OSWorld runner log", ".work/osworld/runner.log"),
 }
