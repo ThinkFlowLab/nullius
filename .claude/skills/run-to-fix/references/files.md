@@ -39,7 +39,7 @@ round that has no `result.json`.
 | `trial.json` | stop 2 | `decide --stop 2` | the round's trial runs, the results of targets, guards and canaries, the money spent and left, the options |
 | `rerun-tasks.txt`, `full-tasks.txt` | stop 2 | `decide --stop 2` | the tasks of the two options that run something |
 | `decision-2.md` | stop 2 | `decide --stop 2` | the build, the results, the budget left and three options with their price |
-| `compare-metrics.json` | 5 | `compare` | `runs.py analyze` of the run compared against (`before`) and the new run (`new`) |
+| `compare-metrics.json` | 5 | `compare` | `runs.py analyze` of the run compared against and the new run, labelled by their job folders, or `before` and `new` when the two names are equal |
 | `result.json` | 5 | `compare` | pass rates with their standard error, pairs, the exact test and the verdict, the targets, the predictions beside their results, the groups of the new run, the stop rule |
 | `report.html` | 5 | `compare`, then the assistant | the page of `runs.py render`, with its prose slots filled by the assistant |
 
