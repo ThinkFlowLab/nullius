@@ -28,8 +28,11 @@ the runs page groups them and ``cli merge`` puts them together. A shard's
 ``limit`` is its own. ``backend``: ``local`` processes, or ``container`` - each
 unit's agent or capability in a container, ``docker`` its earlier name - which a
 host must have Docker or Podman for (``docker`` in the result: the run checks it
-before anything is sent). Each machine's constraints in Settings
-(``nullius.constraints``) go on its command.
+before anything is sent), or ``boat`` - each unit's agent or capability in a
+boat.dev VM of its own (``boat.py``), started where the run runs, with this
+machine's key.
+Each machine's constraints in Settings (``nullius.constraints``) go on its
+command.
 """
 from __future__ import annotations
 
@@ -40,7 +43,8 @@ from typing import Callable, Dict, List, Optional
 
 from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
-from nullius.standard import hostreq, definitions, ledger, match, ports, prove, relay
+from nullius.standard import boat, hostreq, definitions, ledger, match, ports, prove, relay, run
+from nullius.standard.retries import MAX_RETRIES
 
 CHOOSE_PROVIDER = "Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider."
 HARNESS = "standard"
@@ -97,6 +101,15 @@ def _all() -> Dict[str, List[dict]]:
     return {k: definitions.load(k, every=True)[0] for k in ("benchmark", "agent", "capability")}
 
 
+def _bench_option(n: str, o: dict) -> dict:
+    """The builder's fields for one scoped option definition."""
+    return {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
+                            "setups": o.get("setups") or ["yours"],
+                            **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
+                            "limit": bool(o.get("limit")), "by": o.get("by") or {},
+                            **({"variants": [_bench_option(n, v) for v in o["variants"]]} if o.get("variants") else {})}
+
+
 def _bench_page(b: dict) -> dict:
     """A benchmark as a page shows it. ``controls``: the ones it declares,
     each with who wrote it and where it comes from - what the builder offers
@@ -126,7 +139,7 @@ def _bench_page(b: dict) -> dict:
             "controls": controls,
             # One Original procedure, with separate reference-participant and paper-model metadata.
             "setups": [{"key": k, "label": definitions.setup_label(b, k), "summary": x["summary"],
-                        "reference_agent": x.get("reference_agent", ""),
+                        "reference_agent": x.get("reference_agent", ""), "turn_seconds": x.get("turn_seconds"),
                         "comparable": k == "original" and b["setups"]["original"].get("comparable", True), "units": (b["setups"]["original"].get("units") or b.get("units") or {}),
                         **({"models": x["models"], "default": x["default"], "providers": list(x["providers"]),
                             "sent": {p: {m: pre + (x.get("served_as") or {}).get(m, m) for m in x["models"]} for p, pre in x["providers"].items()}}
@@ -137,10 +150,12 @@ def _bench_page(b: dict) -> dict:
             # what the upstream's leaderboard fixes besides the ranked model (Like the leaderboard)
             "leaderboard": b.get("leaderboard") or None,
             "attempts": (b.get("limits") or {}).get("attempts", ""),
-            "options": {n: {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
-                            "setups": o.get("setups") or ["yours"],
-                            **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {}}
-                        for n, o in (b.get("options") or {}).items()},
+            # what a unit's time limits and a conversation's length are when the recipe forces none
+            "timeouts": {"setup": run.DRIVER_SECONDS, "setup_agent": (b.get("limits") or {}).get("setup_seconds") or run.DRIVER_SECONDS, "image": run.IMAGE_SECONDS, "score": run.DRIVER_SECONDS,
+                         "agent": (b.get("limits") or {}).get("turn_seconds") or run.TURN_SECONDS,
+                         "turns": (b.get("limits") or {}).get("turns") or run.MAX_TURNS,
+                         "catalogue": [k for k, f in (("agent", "turn_seconds"), ("turns", "turns")) if (b.get("limits") or {}).get(f)]},
+            "options": {n: _bench_option(n, o) for n, o in (b.get("options") or {}).items()},
             "host": {n: {"summary": r["summary"], "check": r["check"], "install": hostreq.install_lines(b, [n]), "needed_by": r["needed_by"]}
                      for n, r in hostreq.all_of(b).items()},
             "datasets": [{"id": d["id"], "label": d.get("label") or d["id"], "summary": d.get("summary", ""), "units": d.get("units"),
@@ -262,6 +277,8 @@ def _int(v, low: int, high: Optional[int] = None) -> Optional[int]:
 
 def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             docker_unusable: Optional[Callable[[], Optional[str]]] = None,
+            boat_unusable: Optional[Callable[[], Optional[str]]] = None,
+            boat_size_problem: Optional[Callable[[str], Optional[str]]] = None,
             unpriced: Optional[Callable[[List[str]], List[str]]] = None) -> dict:
     """{errors, notes, review, jobs, confirm, script, parts, model}
     for one recipe; errors name the step
@@ -274,12 +291,19 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     machine, why docker cannot run here (``container.unusable``) - a reason
     is the Where step's error. Not given, it is not asked: compiling stays a
     function of the definitions alone, and the routes that preview or start
-    a run pass it.
+    a run pass it. ``boat_unusable``: the same for the boat backend
+    (``boat.unusable``), asked with whether the run is on this machine: its
+    key, and there the programs that reach a VM (a host's are its prerequisites);
+    ``boat_size_problem``, why the account cannot start a VM of the size.
 
     ``max_usd``: the run's spending cap (``standard.ledger``), one amount for
     the whole run: its jobs that call a model - each dataset with each
     participant, on each machine - take equal shares (``--max-usd``), so
     none spends another's and the amount typed is the most the run spends.
+    ``timeouts``: {phase: minutes}, each phase's time limit forced on every
+    job (``--timeout``), empty for the default; ``turns``: the most agent
+    turns in a conversation (``--max-turns``); ``max_calls``: the most model
+    calls a unit's agent may make (``--max-calls``).
     ``max_usd_per_unit``: each unit's own cap (``--max-usd-per-unit``), given
     whole to every job that calls a model: a unit is a unit wherever it runs.
     ``unpriced``: asked, for a recipe with a cap, which of the models it
@@ -318,7 +342,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # Several may be chosen: each is its own job of the one run, one after the other.
     backend = definitions.names.backend(recipe.get("backend") or "local")
     if backend not in BACKENDS:
-        add("where", "The backend is local processes or a container.")
+        add("where", "The backend is local processes, a container or Boat.")
         backend = "local"
     what = "an agent" if side == "agent" else f"a {_bench_page(b)['kind'] or 'capability'}"
     refs = chosen_of(recipe)
@@ -445,6 +469,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         repeat = 1
     if lb and repeat < lb.get("repeat", 1):
         add("limits", f"Like the leaderboard runs each {(b.get('units') or {}).get('noun', 'unit')} at least {lb['repeat']} times.")
+    # each attempt run again up to N times when it ends in a failure a further try may mend (standard.retries)
+    retries = 0 if recipe.get("retries") in (None, "") else _int(recipe.get("retries"), 0, MAX_RETRIES)
+    if retries is None:
+        add("limits", f"Retries per attempt: a whole number from 0 to {MAX_RETRIES}.")
+        retries = 0
     sim_model = str(recipe.get("simulator_model") or "").strip()
     judge_model = str(recipe.get("judge_model") or "").strip()
     like = {"paper": "Like the paper", "leaderboard": "Like the leaderboard"}.get(model_choice)
@@ -487,6 +516,29 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     elif per_unit < 1e-6:                                     # what the command line can say: a millionth of a dollar
         add("limits", f"The spending cap per {noun} is too small.")
         per_unit = None
+    # the time limits the recipe forces, in minutes by phase (run --timeout, in seconds), and a conversation's length
+    forced: Dict[str, float] = {}
+    given_t = recipe.get("timeouts") if isinstance(recipe.get("timeouts"), dict) else {}
+    for k, v in given_t.items():
+        if v in ("", None):
+            continue
+        if k not in run.TIMEOUT_PHASES or isinstance(v, bool) or not isinstance(v, (int, float)) \
+                or not 0 < round(v * 60, 1) <= run.MAX_TIMEOUT_SECONDS:
+            add("limits", f"A time limit is a number of minutes above zero, at most {run.MAX_TIMEOUT_SECONDS // 60}, or empty for the default.")
+            continue
+        forced[k] = round(v * 60, 1)
+    calls = recipe.get("max_calls")              # the most model calls a unit's agent may make (run --max-calls)
+    if calls in ("", None):
+        calls = None
+    elif _int(calls, 1, 1000000) is None:
+        add("limits", "Model calls per unit: a whole number of at least 1, or empty for no cap.")
+        calls = None
+    turns = recipe.get("turns")
+    if turns in ("", None) or "agent.conversation/v1" not in (b.get("needs") or []):     # only a conversation has turns
+        turns = None
+    elif _int(turns, 1, 100000) is None:
+        add("limits", "Turns per conversation: a whole number of at least 1, or empty for the default.")
+        turns = None
     limit = recipe.get("limit")
     if limit not in ("", None) and _int(limit, 1) is None:
         add("limits", "The number of units is a whole number of at least 1, or empty for all of them.")
@@ -500,6 +552,16 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         why = docker_unusable()
         if why:
             add("where", f"The container backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman.")
+    elif backend == "boat" and boat_unusable is not None and (why := boat_unusable("local" in targets)):
+        add("where", f"Boat cannot run: {why}.")
+    elif backend == "boat" and boat_size_problem is not None and str(recipe.get("boat_size") or boat.SIZE) in boat.SIZES:
+        why = boat_size_problem(str(recipe.get("boat_size") or boat.SIZE))
+        if why:
+            add("where", f"Boat cannot start a {recipe.get('boat_size') or boat.SIZE} VM on this account: {why}. Choose another size.")
+    boat_size = str(recipe.get("boat_size") or boat.SIZE)
+    if backend == "boat" and boat_size not in boat.SIZES:
+        add("where", f"Choose a Boat size: {', '.join(boat.SIZES)}.")
+        boat_size = boat.SIZE
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
     spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"])
     paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])
@@ -597,13 +659,18 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         words = ["nullius", "standard", "run", definitions.ref_of(b), o["_ref"], *(["--model", m] if m else []), "--provider", provider,
                  "--dataset", d["id"], *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
                  *[w for k, v in options_for_pick(d, p).items() for w in ("--bench-option", f"{k}={v}")],
-                 *(["--repeat", str(repeat)] if repeat > 1 else []),
+                 *(["--attempts", str(repeat)] if repeat > 1 else []),
+                 *(["--retries", str(retries)] if retries else []),
                  *(["--max-usd", f"{share:.6f}".rstrip("0").rstrip(".")] if share and spends(p) else []),
                  *(["--max-usd-per-unit", f"{per_unit:.6f}".rstrip("0").rstrip(".")] if per_unit and spends(p) else []),
+                 *[w for k, v in forced.items() for w in ("--timeout", f"{k}={v:g}")],
+                 *(["--max-turns", str(turns)] if turns else []),
+                 *(["--max-calls", str(calls)] if calls and spends(p) and o.get("_kind") != "capability" else []),
                  *(["--simulator-model", sim_model] if sim_model and not p["control"] else []),
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
-                 *(["--backend", "container"] if backend == "container" else []),
+                 *(["--backend", backend] if backend != "local" else []),
+                 *(["--boat-size", boat_size] if backend == "boat" and not control and not p.get("setup") else []),
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
                  *(["--shard", f"{index}/{of}", "--launch", launch_of(d, p)] if of > 1 else []),
                  *limits.cli_words(limits.of(targets[index - 1])),
@@ -637,9 +704,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["script"] = "\n".join(pt["script"] for pt in out["shards"][0]["parts"]) if len(pairs) > 1 else out["shards"][0]["script"]
     out["parts"] = [pt for sh in out["shards"] for pt in sh["parts"]]
     out["jobs"] = [j for sh in out["shards"] for j in sh["jobs"]]
-    # docker where it runs: the container backend, or a control run in each unit's own image, whatever the backend
+    # docker where it runs: the container backend, a control run in each unit's own image, whatever the backend,
+    # or an agent's code checked on Boat (it comes back from the VM to the check container)
     own = any(definitions.own_image(definitions.environment_of(b, None, x)[1]) for x in dss)
-    out["docker"] = backend == "container" or (own and any(p["control"] for p in picks))
+    checked = backend == "boat" and (b.get("score") or {}).get("runs_code") and any(not p["control"] and not p.get("setup") for p in picks)
+    out["docker"] = backend == "container" or (own and any(p["control"] for p in picks)) or bool(checked)
     out["model"] = model
     # Nothing in the run asks a model: no key is handed to it, and none need be set.
     out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"]
@@ -696,13 +765,18 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       + (" of each dataset" if many and isinstance(limit, int) else "")
                       + (f" · {len(pairs)} jobs, one after the other" if len(pairs) > 1 else "")
                       + (f" · {repeat} attempts each (pass^1 to pass^{repeat})" if repeat > 1 else "")
+                      + (f" · up to {retries} {'retry' if retries == 1 else 'retries'} an attempt" if retries else "")
                       + (" · a setup counts " + next(p["o"]["units"]["nouns"] for p in picks if p.get("setup"))
                          if any(p.get("setup") for p in picks) and not all(p.get("setup") for p in picks) else "")],
                      *([[STEP["limits"], "Spending cap", f"${ledger.usd(cap)}"
                          + (f" in all · ${ledger.usd(share)} for each of {paying} jobs" if paying > 1 else "")]] if share else []),
                      *([[STEP["limits"], f"Spending cap per {noun}", f"${ledger.usd(per_unit)}"]] if per_unit else []),
+                     *([[STEP["limits"], "Time limits", " · ".join(f"{k} {v / 60:g} min" for k, v in forced.items())]] if forced else []),
+                     *([[STEP["limits"], "Turns per conversation", str(turns)]] if turns else []),
+                     *([[STEP["limits"], f"Model calls per {noun}", str(calls)]] if calls else []),
                      [STEP["where"], "Where", (f"{of} shards, one per machine: " if of > 1 else "")
-                      + ", ".join(where_label(t) for t in targets) + f" · {backend} backend"]]
+                      + ", ".join(where_label(t) for t in targets) + f" · {backend} backend"
+                      + (f" · {boat_size} VMs" if backend == "boat" else "")]]
     if agents_local:
         notes.append(f"{', '.join(agents_local)} {'run' if len(agents_local) > 1 else 'runs'} as you on {'each machine' if of > 1 else where_label(targets[0])}, with its permission requests granted: "
                      "the local backend is no sandbox.")
@@ -710,9 +784,13 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         notes.append(f"Each machine runs the units whose shard is its own, by their ids' hash: {of} jobs under one launch, "
                      f"{name}, put together by cli merge.")
     docker_only = [n for n, e in (b.get("environments") or {}).items() if not e.get("local_ok")]
-    if docker_only and not only_controls and backend == "local":
+    if docker_only and not only_controls and backend in ("local", "boat"):
         notes.append(f"Units in {b['label']}'s environment{'s' if len(docker_only) > 1 else ''} {', '.join(docker_only)} "
-                     "need the container backend: on local processes they are recorded as not run.")
+                     f"need the container backend: on {'local processes' if backend == 'local' else 'Boat'} they are recorded as not run.")
+    web_only = [n for n, e in (b.get("environments") or {}).items() if e.get("network") and e.get("local_ok")]
+    if web_only and side == "agent" and not only_controls and backend == "boat":
+        notes.append(f"Units in {b['label']}'s environment{'s' if len(web_only) > 1 else ''} {', '.join(web_only)} "
+                     "give the agent the public web, which a Boat VM does not yet: they are recorded as not run.")
     if any(p["control"] for p in picks) and any(definitions.own_image(e) for e in (b.get("environments") or {}).values()):
         notes.append(f"Each {(b.get('units') or {}).get('noun', 'unit')} of {b['label']} is its own image: the control "
                      "runs in it, so docker is needed where it runs, whatever the backend.")
@@ -762,7 +840,7 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
         errors.append("Choose a model or enter its ID.")
     backend = definitions.names.backend(backend)
     if backend not in BACKENDS:
-        errors.append("Choose local processes or a container for the checks.")
+        errors.append("Choose local processes, a container or Boat for the checks.")
     if kind == "agent" and backend == "local" and unsandboxed is not True:
         errors.append(f"{o['label']} runs on this machine as you while its kits run: the local backend is not a sandbox. Say yes to that to check it.")
     if not re.match(r"^\d{4}-\d{2}-\d{2}__\d{2}-\d{2}-\d{2}$", stamp or ""):
@@ -774,7 +852,7 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
     if errors:
         return {"errors": errors, "script": "", "jobs": [], "label": o["label"]}
     words = ["nullius", "standard", "conform", o["_ref"], "--model", model, "--provider", provider,
-             "--stamp", stamp, *(["--backend", "container"] if backend == "container" else []),
+             "--stamp", stamp, *(["--backend", backend] if backend != "local" else []),
              *(["--unsandboxed"] if kind == "agent" and backend == "local" else []), "--from-run"]
     command = " ".join(shlex.quote(w) for w in words) + ' --jobs "${NULLIUS_JOBS:-jobs_standard}"'
     script = ("#!/usr/bin/env bash\n"

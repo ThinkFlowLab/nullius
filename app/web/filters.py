@@ -125,10 +125,9 @@ def _ts(value):
 def _phase(value):
     """Flex weight for a phase segment, or 0 when the phase is effectively nil.
 
-    Harbor records a control's agent setup as 4.2e-05s — truthy, but it renders
-    as "0s" and would still cost a flex gap and a sub-pixel sliver, implying
-    setup time that never happened. Anything under the 0.05s that `secs` rounds
-    to zero paints nothing at all.
+    Harbor records a control's agent setup as 4.2e-05s: truthy, but a segment
+    for it would cost a flex gap and a sub-pixel sliver. Anything under 0.05s
+    paints nothing; its chip still says the time (`secs`).
     """
     value = value or 0
     return value if value >= 0.05 else 0
@@ -136,16 +135,13 @@ def _phase(value):
 
 @app.template_filter("secs")
 def _secs(value):
-    """Seconds with the precision the clock behind them has.
-
-    Show tenths below ten seconds, whole seconds below a minute, and tenths
-    of minutes above that.
+    """Seconds to two decimals, minutes to two decimals from a minute on:
+    the clock behind them is finer than that, so rounding further would
+    hide a difference it measured.
     """
     if value is None:
         return "—"
-    if value < 9.95:                       # what .1f would still show as one digit
-        return f"{value:.1f}s"
-    return f"{value:.0f}s" if value < 60 else f"{value / 60:.1f}m"
+    return f"{value:.2f}s" if value < 59.995 else f"{value / 60:.2f}m"
 
 
 @app.template_filter("nsround")
@@ -169,11 +165,11 @@ def _nsdur(value):
         return f"{value / 1_000:.0f}µs"
     if value < 1_000_000_000:
         return f"{value / 1_000_000:.2f}ms"
-    if value < 60_000_000_000:
+    if value < 59_995_000_000:
         return f"{value / 1_000_000_000:.2f}s"
-    # Hands over to `secs`'s scale at the same minute mark, so a trace covering
+    # Hands over to `secs`'s scale at the same mark and with its two decimals, so a trace covering
     # an hour reads like the phase bar above it instead of as "3600.00s".
-    return f"{value / 60_000_000_000:.1f}m"
+    return f"{value / 60_000_000_000:.2f}m"
 
 
 @app.template_filter("nsoff")
@@ -212,11 +208,6 @@ def _inject():
         # name so a workspace keeps its colour across pages and restarts.
         "workspaces": workspace.list_all(shared.WS_HOME)[:8],
         "ws_hue": lambda name: sum(ord(c) * (i + 7) for i, c in enumerate(name or "")) % 360,
-        # The open workspace's runs, for the rail's tree — from the cache index,
-        # so listing them costs one small file, not a parse.
-        "nav_runs": sorted(
-            workspace.job_index(shared.STATE["workspace"]).values(), key=lambda e: e["job_id"]
-        )[:12] if shared.STATE["workspace"] else [],
         # The catalogue's two trees in the rail: one small JSON read, cached
         # on its mtime so a page does not re-read it.
         "nav_catalog": shared._catalog_cached(),

@@ -336,7 +336,8 @@ def withheld() -> List[str]:
     names other tools give them or this application gave them before
     (``settings.INSTEAD``, those that stand for a secret), the launcher's own
     names for the run's key and endpoint, the agent keys (a Harbor run is
-    sent them by its launcher, as the key), the names a standard benchmark's
+    sent them by its launcher, as the key), the Boat key (a standard run on
+    Boat is sent it the same way), the names a standard benchmark's
     own licences go by - kept in its own store (``nullius.secrets``), although
     imported saved settings may still hold a value until it is moved in
     Custom keys - and GitHub tokens from saved settings or the
@@ -344,7 +345,7 @@ def withheld() -> List[str]:
     run gets its own endpoint's key alone. A data provider's token name is not one."""
     secret = {v.name for v in settings.VARIABLES if v.secret or v.kind in ("endpoint", "provider")} | set(settings.endpoint_names())
     return sorted(secret | {old for old, new in settings.INSTEAD.items() if new in secret}
-                  | set(KEY_NAMES + URL_NAMES) | {"GITHUB_TOKEN", "GH_TOKEN"} | set(settings.agent_key_names())
+                  | set(KEY_NAMES + URL_NAMES) | {"GITHUB_TOKEN", "GH_TOKEN", "BOAT_API_KEY"} | set(settings.agent_key_names())
                   | set(_licence_names()))
 
 
@@ -398,6 +399,10 @@ class Execution:
             self._key, self._url = "", ""
         # the agent keys Settings holds (CURSOR_API_KEY, ...): a Harbor run's agent may need its own vendor's; the standard's never gets one
         self._agent_keys = dict(agent_keys) if agent_keys is not None else (settings.agent_key_values(env) if plan.runner == "harbor" else {})
+        if plan.runner == "standard" and (plan.recipe or {}).get("backend") == "boat":
+            from nullius.standard import boat      # the Boat key, to the standard run that starts VMs with it, and to no other command
+            if boat.key(env):
+                self._agent_keys[boat.NAME] = boat.key(env)
         # the benchmark's licences a standard run on a host is sent: read from its store at each launch, unless given
         self._licences_given = licences
         self._redact: List[str] = []              # the licences' values sent, as text: never in a log line
@@ -442,6 +447,7 @@ class Execution:
         self.workspace = rec.get("workspace", "")   # the workspace its job was added to, the one a restart adds it back to
         # the trials the log has said already, (job, trial), so a restart says each once; none in a record from before
         self._seen_trials: set = {(k[0], k[1]) for k in rec.get("seen_trials") or ()}
+        self._settled: set = set()                  # the kept tries whose trial's copy was settled (settle_retried)
         if record:
             # a run still going reads its log now, to go on from it; one that ended (most of them, and
             # history only grows) when its page asks - start-up read every one, seconds and hundreds of MB
@@ -1592,7 +1598,40 @@ class Execution:
         rc, out = self._copy_back(run, timeout)
         if rc != 0:
             self.log("  the job did not sync back: " + out.strip()[-300:])
+        else:
+            settle_retried(self.jobs, self._settled)
         self._trial_lines()
+
+
+def settle_retried(jobs: str, seen: Optional[set] = None) -> None:
+    """A standard run's retry moves a trial's folder into ``retried/<trial>.try-N``
+    on the host and writes the trial again (``run.run_again``). The copy here is
+    taken without deleting, so the trial's own folder still holds the earlier
+    try's files the retry did not write again: each one the same, by size and
+    time, as the kept try's copy goes - what the retry wrote, and anything
+    written here, stays. ``seen``: the kept tries settled already, each
+    copied whole by the time it is first seen (the try had ended)."""
+    for job in os.listdir(jobs) if os.path.isdir(jobs) else ():
+        kept = os.path.join(jobs, job, "retried")
+        if not os.path.isdir(kept):
+            continue
+        for k in os.listdir(kept):
+            trial, sep, n = k.rpartition(".try-")
+            src, dest = os.path.join(kept, k), os.path.join(jobs, job, trial)
+            if not sep or not n.isdigit() or not os.path.isdir(src) or not os.path.isdir(dest) or src in (seen or ()):
+                continue
+            if seen is not None:
+                seen.add(src)
+            for d, dirs, files in os.walk(src):
+                here = os.path.join(dest, os.path.relpath(d, src))
+                for f in files:
+                    a, b = os.path.join(d, f), os.path.join(here, f)
+                    try:
+                        x, y = os.lstat(a), os.lstat(b)
+                    except OSError:
+                        continue
+                    if (x.st_size, int(x.st_mtime)) == (y.st_size, int(y.st_mtime)) and not os.path.isdir(b):
+                        os.unlink(b)
 
 
 def _probe(run: Callable, argv: List[str], timeout: float) -> tuple:
@@ -1674,6 +1713,21 @@ def run_folder(name: str, root: Optional[str] = None) -> str:
     if not _NAME.fullmatch(name or "") or os.path.realpath(path) != path or not os.path.isfile(os.path.join(path, RECORD)):
         raise ValueError(f"{name} is not a run Nullius made")
     return path
+
+
+def run_of(path: str, root: Optional[str] = None) -> Optional[str]:
+    """The name of the run Nullius made whose folder, or its ``jobs`` folder,
+    *path* is once its links are resolved; None for any other path: the one
+    folder a workspace root may be deleted as is a run's own, in the runs root."""
+    real, runs = os.path.realpath(path), os.path.realpath(root or runs_root())
+    name, _, rest = os.path.relpath(real, runs).partition(os.sep)
+    if name in (os.curdir, os.pardir) or rest not in ("", "jobs"):
+        return None
+    try:
+        run_folder(name, runs)
+    except ValueError:
+        return None
+    return name
 
 
 def size_of(path: str) -> int:

@@ -1,54 +1,145 @@
+{% from '_tables.html' import tools, pager, greyed %}
 {% extends "base.html" %}
 {% block title %}Workspaces — Nullius{% endblock %}
 {% block crumb %}/ workspaces{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='workspaces/workspaces.css') }}">
+<script src="{{ url_for('static', filename='tables.js') }}"></script>{% endblock %}
 {% block body %}
-
-
-<div class="page-title"><h1>Workspaces</h1></div>
-<p class="subtitle">A named set of run roots and what was read from them. <a href="{{ url_for('import_page', new=1) }}">New workspace →</a></p>
+<div class="page-title ws-head"><h1>Workspaces</h1>
+  <a class="btn sm" href="{{ url_for('import_page', new=1) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New workspace</a></div>
 
 {% if workspaces %}
-<table class="grid">
+{% set labels = workspaces|map(attribute='label')|list %}
+<div class="table-tools inv-cols" id="ws-tools">{{ tools([], [('name', 'Name'), ('roots', 'Roots'), ('runs', 'Runs'), ('checks', 'Checks'), ('launches', 'Launches'), ('opened', 'Last opened')]) }}</div>
+<div class="table-wrap">
+<table class="grid sortable tools inventory ws-table" id="ws-table">
   <thead>
-    <tr><th></th><th>Workspace</th><th>Name</th><th>Roots</th><th class="num" title="Parsed runs held in the cache">Cached runs</th><th>Last opened</th><th></th><th></th></tr>
+    <tr><th><span class="sr">Open</span></th><th data-col="name" data-type="text">Name</th><th data-col="roots" data-type="num">Roots</th><th data-col="runs" data-type="num" class="num">Runs</th><th data-col="checks" data-type="num" class="num">Checks</th><th data-col="launches" data-type="num" class="num">Launches</th><th data-col="opened" data-type="num">Last opened</th><th><span class="sr">Actions</span></th></tr>
   </thead>
   <tbody>
     {% for ws in workspaces %}
-    {% set current = workspace and ws.name == workspace.name %}
-    <tr class="{{ 'ws-current' if current }}">
-      <td class="ws-mark">{% if current %}<span class="ok" title="open">●</span>{% endif %}</td>
-      <td>
-        {# every workspace renames from its own row, open or not; its directory follows the name #}
-        <form method="post" action="{{ url_for('workspace_rename') }}" class="ws-rename">
+    {% set current = workspace and ws.name == workspace.name %}{% set rs = roots[ws.name] %}{% set clash = labels.count(ws.label) > 1 %}
+    <tr class="{{ 'ws-current' if current }}" data-ws="{{ ws.name }}" data-holder>
+      <td class="ws-mark">{% if current %}<span class="ok" role="img" aria-label="Open" title="Open">●</span>{% endif %}</td>
+      <td class="ws-name" data-sort="{{ ws.label }}">
+        {#- the label; the name on disk too where two labels are alike #}
+        <span class="ws-show"><span class="ws-title" title="{{ ws.name }}">{{ ws.label }}</span>{% if clash %} <small class="mono faint">{{ ws.name }}</small>{% endif %}
+          <button type="button" class="icon-btn ws-edit" aria-label="Rename workspace {{ ws.label }}" title="Rename"><svg class="ic"><use href="#i-pencil"/></svg></button></span>
+        <form method="post" action="{{ url_for('workspace_rename') }}" class="ws-rename" hidden>
           <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ ws.name }}">
-          <input type="text" name="label" value="{{ ws.label }}" aria-label="Rename the workspace {{ ws.label }}" spellcheck="false" autocomplete="off">
-          <button class="linkish" type="submit">rename</button>
+          <input type="text" name="label" value="{{ ws.label }}" required aria-label="New name of workspace {{ ws.label }}" spellcheck="false" autocomplete="off">
+          <button class="btn sm" type="submit">Save</button><button class="btn sm ghost ws-cancel" type="button">Cancel</button>
         </form>
       </td>
-      <td class="mono faint">{{ ws.name }}</td>
-      <td class="ws-roots" title="{{ ws.roots|join('&#10;') }}">{% for r in ws.roots %}<span class="mono">{{ r }}</span>{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
-      <td class="num">{{ ws.n_cached }}</td>
-      <td class="mono faint">{{ ws.opened[:16]|replace('T', ' ') }}</td>
-      <td class="arrow">
-        {% if current %}<a href="{{ url_for('index') }}">runs →</a>
-        {% else %}<form method="post" action="{{ url_for('workspace_open', name=ws.name) }}" class="header-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sm" type="submit">Open</button></form>{% endif %}
+      <td data-sort="{{ rs|length }}">
+        <button type="button" class="btn ghost sm ws-roots-btn" data-ask="ws-roots" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ rs|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ rs|length }}</button>
+        <template class="ws-roots">
+          <div class="std-how-head"><h2 id="ws-dialog-h"{% if clash %} title="{{ ws.name }}"{% endif %}>Roots of {{ ws.label }}</h2>
+            <a class="btn sm" href="{{ url_for('import_page', into=ws.name) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a root</a></div>
+          <ul class="ws-root-list">
+            {% for r in rs %}
+            <li data-holder><span class="mono">{{ r.path }}</span>
+              <span class="ws-root-acts">
+                <button type="button" class="icon-btn" data-ask="ask-unlink" aria-label="Unlink {{ r.path }}" title="Unlink from this workspace"><svg class="ic"><use href="#i-unlink"/></svg></button>
+                {%- if not r.why %}<button type="button" class="icon-btn danger" data-ask="{{ url_for('workspace_root_ask', name=ws.name, root=r.path) }}" aria-haspopup="dialog" aria-label="Delete folder {{ r.path }}" title="Delete folder"><svg class="ic"><use href="#i-trash"/></svg></button>
+                {%- else %}{{ greyed('Delete folder ' ~ r.path, 'Delete folder', r.why, 'why-' ~ ws.name ~ '-' ~ loop.index) }}{% endif %}
+              </span>
+              <template class="ask-unlink">
+                <div class="std-how-head"><h2 id="ws-dialog-h"{% if clash %} title="{{ ws.name }}"{% endif %}>Unlink a root of {{ ws.label }}</h2></div>
+                <form method="post" action="{{ url_for('workspace_unlink', name=ws.name) }}">
+                  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="root" value="{{ r.path }}">
+                  <p><span class="mono">{{ r.path }}</span> leaves {{ ws.label }}. Its files stay.</p>
+                  <div class="launch-delete-acts"><button type="button" class="btn ghost" data-back autofocus>Keep it</button><button type="submit" class="btn">Unlink</button></div>
+                </form>
+              </template>
+            </li>
+            {% else %}<li class="faint">No root.</li>{% endfor %}
+          </ul>
+        </template>
       </td>
-      <td class="ws-delete">
-        {# removes the workspace's cache, imports and export record; the job roots stay where they are #}
-        <form method="post" action="{{ url_for('workspace_delete', name=ws.name) }}" class="header-form" data-confirm="Remove the workspace {{ ws.label }}? Its cached parses, converted imports and export record go; the job directories it read stay.">
-          <input type="hidden" name="csrf" value="{{ csrf }}">
-          <button class="ws-remove" type="submit" title="Remove this workspace (its job roots are untouched)" aria-label="Remove workspace {{ ws.label }}">×</button>
-        </form>
+      <td class="num">{{ counts[ws.name].runs }}</td>
+      <td class="num">{{ counts[ws.name].checks }}</td>
+      <td class="num">{% set n = n_launches[ws.name] %}{% if n %}<a href="{{ url_for('launches_page', ws=ws.name) }}" aria-label="Launches of {{ ws.label }}: {{ n }}">{{ n }}</a>{% else %}0{% endif %}</td>
+      {#- the time as digits, UTC as every workspace records it; never opened sorts last, newest first #}
+      <td class="mono faint nowrap" data-sort="{{ ws.opened[:19]|replace('-', '')|replace(':', '')|replace('T', '') or 0 }}">{{ ws.opened[:16]|replace('T', ' ') }}</td>
+      <td class="inv-acts">
+        <button type="button" class="icon-btn danger" data-ask="ws-ask-delete" aria-haspopup="dialog" aria-label="Delete workspace {{ ws.label }}" title="Delete workspace"><svg class="ic"><use href="#i-trash"/></svg></button>
+        <template class="ws-ask-delete">
+          <div class="std-how-head"><h2 id="ws-dialog-h">Delete workspace {{ ws.label }}</h2></div>
+          <form method="post" action="{{ url_for('workspace_delete', name=ws.name) }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <p>{% set n = n_judged[ws.name] %}{% if n %}Its judgements ({{ n }}) are deleted. {% endif %}Its run folders stay on disk.</p>
+            <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete workspace</button></div>
+          </form>
+        </template>
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+</div>
+{{ pager('ws-table') }}
+<dialog class="std-how launch-delete" id="ws-dialog" aria-labelledby="ws-dialog-h"></dialog>
+<script>
+(() => {
+  // One dialog: a [data-ask] button fills it from the template of that class in its [data-holder]. An ask
+  // opened inside it (a root's Unlink or Delete) goes back to what it replaced on Keep it.
+  const d = document.getElementById('ws-dialog');
+  let opener = null, back = null;
+  // a template of the page, or, for an address, the server's answer: what a Delete takes is worked out only now
+  const content = async b => {
+    if (!b.dataset.ask.startsWith('/')) return b.closest('[data-holder]').querySelector('template.' + b.dataset.ask).content.cloneNode(true);
+    const r = await nulliusFetch(b.dataset.ask);
+    if (!r.ok) { b.title = await r.text(); return null; }
+    return document.createRange().createContextualFragment(await r.text());
+  };
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('[data-ask]');
+    if (b && d.contains(b)) {
+      const nodes = [...d.childNodes], c = await content(b);
+      if (!c) return;
+      back = {nodes, b};
+      d.replaceChildren(c);
+      d.querySelector('[autofocus]')?.focus();
+    } else if (b) {
+      const c = await content(b);
+      if (!c) return;
+      opener = b; back = null;
+      d.classList.toggle('wide', b.dataset.ask === 'ws-roots');
+      d.replaceChildren(c);
+      d.showModal();
+    } else if (e.target.closest('[data-back]') && back) {
+      d.replaceChildren(...back.nodes);
+      back.b.focus();
+      back = null;
+    } else if (e.target === d) {   // the backdrop, not the dialog's own padding
+      const r = d.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close();
+    }
+  });
+  d.addEventListener('close', () => opener?.focus());
+  const table = document.getElementById('ws-table');
+  let pages = () => {};
+  NulliusTable.toolbar(table, document.getElementById('ws-tools'), () => pages());
+  pages = NulliusTable.pager(table, 'workspaces.per');
+
+  // Rename in place: the pencil opens the field; Escape or Cancel puts the name back.
+  document.querySelectorAll('.ws-name').forEach(cell => {
+    const show = cell.querySelector('.ws-show'), form = cell.querySelector('.ws-rename'), input = form.elements.label;
+    const edit = cell.querySelector('.ws-edit');
+    const toggle = on => {
+      show.hidden = on; form.hidden = !on;
+      if (on) { input.focus(); input.select(); } else { input.value = input.defaultValue; edit.focus(); }
+    };
+    edit.addEventListener('click', () => toggle(true));
+    cell.querySelector('.ws-cancel').addEventListener('click', () => toggle(false));
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); toggle(false); } });
+  });
+})();
+</script>
 {% else %}
 <div class="alert">No workspace yet.</div>
 {% endif %}
-<script>
-  document.querySelectorAll('form[data-confirm]').forEach(f => f.addEventListener('submit', e => { if (!confirm(f.dataset.confirm)) e.preventDefault(); }));
-</script>
-
 {% endblock %}

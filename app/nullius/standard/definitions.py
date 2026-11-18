@@ -463,18 +463,47 @@ def _when_applies(when: dict, opts: dict, values: dict) -> bool:
     return all(values.get(k, opts[k].get("default")) in vs for k, vs in when.items())
 
 
+def bench_option_items(bench: dict):
+    """Each option's independent scoped definitions, the primary definition first."""
+    for name, spec in (bench.get("options") or {}).items():
+        yield name, spec
+        for variant in spec.get("variants") or []:
+            yield name, variant
+
+
 def _bench_options(d: dict) -> List[str]:
     """A benchmark's ``options``: a choice its upstream offers a run (a search, a mode), each with a
     ``summary``, its ``values``, a ``default`` a run gets when it chooses none, and optionally the
     ``datasets`` it applies to, a line ``about`` each value, what a value ``needs``: an
     ``embeddings`` model called through the run's relay, ``host`` requirements or ``files`` by name - and
-    ``when`` it applies: another option's values (a retriever's, only with a retrieval)."""
+    ``when`` it applies: another option's values (a retriever's, only with a retrieval). ``limit``:
+    a bound the upstream has of its own (its steps, its errors), offered with the run's limits; ``by``:
+    its default under each value of another option (an agent's own steps), for a default of ``default``."""
     opts = d.get("options")
     if opts is None:
         return []
     bad = _options({"options": opts})
     if bad or not isinstance(opts, dict):
         return bad
+    plain = {n: {k: v for k, v in o.items() if k != "variants"} for n, o in opts.items()}
+    for name, spec in opts.items():
+        variants = spec.get("variants", [])
+        if not isinstance(variants, list):
+            bad.append(f"options.{name}.variants: a list of definitions with distinct setup scopes")
+            continue
+        scopes = set(spec.get("setups") or ["yours"])
+        for variant in variants:
+            if not isinstance(variant, dict) or "variants" in variant:
+                bad.append(f"options.{name}.variants: an option definition without nested variants")
+                continue
+            on = variant.get("setups")
+            if not isinstance(on, list) or not all(isinstance(x, str) for x in on):
+                bad.append(f"options.{name}.variants: explicit setup scopes")
+                continue
+            if scopes.intersection(on) or ({"yours", "agent"} <= scopes.union(on)):
+                bad.append(f"options.{name}.variants: setup scopes must not overlap")
+            scopes.update(on)
+            bad += _bench_options(dict(d, options={**plain, name: variant}))
     ids = {x.get("id") for x in d.get("datasets") or [] if isinstance(x, dict)}
     hosts = d.get("host") or {}
     files = d.get("files") if isinstance(d.get("files"), dict) else {}
@@ -484,6 +513,13 @@ def _bench_options(d: dict) -> List[str]:
         if ds is not None and (not isinstance(ds, list) or not ds or any(x not in ids for x in ds)):
             bad.append(f"{w}.datasets: some of the benchmark's dataset ids")
         on = o.get("setups")
+        if "limit" in o and (not isinstance(o["limit"], bool) or "pattern" not in o):
+            bad.append(f"{w}.limit: true for a bound the upstream has of its own, a number its pattern allows")
+        by = o.get("by")
+        if by is not None and not (isinstance(by, dict) and len(by) == 1 and all(
+                k != name and k in opts and isinstance(m, dict) and set(m) == set(opts[k].get("values") or [None])
+                and all(option_problem(o, v) is None for v in m.values()) for k, m in by.items())):
+            bad.append(f"{w}.by: another option -> its every value -> this one's default under it")
         # agent: an agent's run alone, on a benchmark agents run, and never beside another scope
         if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours", "agent") for x in on)
                                or "agent" in on and (on != ["agent"] or d.get("family") != "agent")):
@@ -581,7 +617,7 @@ def bench_options_of(bench: dict, dataset: str, given: Optional[dict] = None, se
     to is ignored - a run of several carries one choice for all. An option applies to an agent's or a
     capability's run unless its ``setups`` say otherwise; one whose ``setups`` name ``agent`` applies to a run
     whose ``kind`` is an agent, never to a capability's or a control's."""
-    opts = {n: o for n, o in (bench.get("options") or {}).items()
+    opts = {n: o for n, o in bench_option_items(bench)
             if dataset in (o.get("datasets") or [dataset])
             and (setup in (o.get("setups") or ["yours"]) or (kind == "agent" and setup == "yours" and "agent" in (o.get("setups") or [])))}
     given = {n: v for n, v in (given or {}).items() if n in opts or n not in (bench.get("options") or {})}

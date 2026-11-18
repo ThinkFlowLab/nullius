@@ -322,6 +322,17 @@ def _agent():
     return name, AGENTS["agents"][name]
 
 
+def with_steps(argv, steps):
+    """The script's argv with the run's ``max_steps`` option as its --max_steps: the agent's own (its
+    invocation's, else its script's default) at ``default``."""
+    if steps == "default":
+        return argv
+    if "--max_steps" in argv:
+        i = argv.index("--max_steps")
+        return argv[:i + 1] + [steps] + argv[i + 2:]
+    return argv + ["--max_steps", steps]
+
+
 def _fill(value, slots):
     for k, v in slots.items():
         value = value.replace("{" + k + "}", v)
@@ -362,6 +373,7 @@ def answer(unit, dir, setup, model, base_url, key, **_):
         del common[i:i + (1 if flag == "--headless" else 2)]
     argv = [sys.executable, os.path.join(UP, spec["script"])] + [_fill(a, slots) for a in
                                                                  common + spec["argv"] + spec.get("model_argv", {}).get(model, [])]
+    argv = with_steps(argv, os.environ.get("NULLIUS_OPTION_MAX_STEPS", "default"))
     extra = {k: _fill(v, slots) for k, v in spec["env"].items()}
     if spec.get("aws"):
         extra.update(AGENTS["aws"])

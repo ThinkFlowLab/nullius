@@ -47,7 +47,8 @@ and its resources. The source layout stays under `app/`.
 - `app/nullius/` — its backend, one package per purpose: `runs/` (reading one
   Harbor job tree: `parse`, `classify`, `live`, `artifacts`,
   `feasibility`, `launches`, `verifier` - a verifier's report read by its
-  benchmark's report block - and the `cli`), `traces/` (`trace`, `trajectory`,
+  benchmark's report block - `attempts`, a task's attempts in one job with
+  their pass count and pass@k, and the `cli`), `traces/` (`trace`, `trajectory`,
   `conversation`, `charts`, `behavior`, `otel`), `compare/` (`comparison` and its `cli`),
   `catalogue/` (`catalog`, which loads one folder per benchmark
   under `catalogue/benchmarks/`, named by its key: its `benchmark.json` with its
@@ -61,7 +62,7 @@ and its resources. The source layout stays under `app/`.
   `feed`: the live feed any Harbor writes, from its own trial hooks),
   `importers/` (`atif` ATIF, `otel` OpenTelemetry, and the `cli`), `judge/` (`questions`, `state`, `client`, `store`, `batch`, `reconcile`, `lanes`),
   `standard/` (the Nullius standard, `docs/standard.md`: `ports`, `names` (capability vocabulary and legacy aliases), `definitions` (with an agent's or capability's versions), `match`,
-  `jsonl`, `acp`, `cancellation` (interruptible protocol waits), `relay`, `ledger` (a run's spending cap), `pins` (image digests checked against registry tags), `install`, `run`, `container` (the container backend), `setup_container` (an Original setup's driver and its Linux dependencies in Docker), `forward` (a licence server's one door from it, or a benchmark's MCP server's), `web_services` (HTTP fixtures a driver's setup declares, each behind a unit-local Docker door), `mcp_machine` and `mcp_bridge` (a benchmark's MCP server run on the machine, in its driver's environment, and the agent's bridge to it), `computer_port` and `computer_pipe` (the computer port's MCP server, served by a desktop benchmark's runner over the benchmark's own loop, and the session's stdio pipe to it), `network_requirements` (an environment's declared public web access: the schema and the connectivity check), `hostreq` (what a benchmark's options need of the machine its driver runs on: the check and the install) and `egress` (an own image's check's proxy to public addresses), `job`, `conform`, `fidelity` (ACP against the agent's own CLI), `prove` (a benchmark's controls and proofs), `shard` and `merge` (one run over many machines), `recipe` (the builder's standard recipe), `howto` (the How to add steps) and the `cli`; its
+  `jsonl`, `acp`, `cancellation` (interruptible protocol waits), `relay`, `ledger` (a run's spending cap), `retries` (what an attempt is tried again after, and how many times), `pace` (how soon the next unit starts after a rate limit), `pins` (image digests checked against registry tags), `install`, `run`, `container` (the container backend), `boat` (the boat backend: each unit's agent in a boat.dev VM), `setup_container` (an Original setup's driver and its Linux dependencies in Docker), `forward` (a licence server's one door from it, or a benchmark's MCP server's), `web_services` (HTTP fixtures a driver's setup declares, each behind a unit-local Docker door), `mcp_machine` and `mcp_bridge` (a benchmark's MCP server run on the machine, in its driver's environment, and the agent's bridge to it), `computer_port` and `computer_pipe` (the computer port's MCP server, served by a desktop benchmark's runner over the benchmark's own loop, and the session's stdio pipe to it), `network_requirements` (an environment's declared public web access: the schema and the connectivity check), `hostreq` (what a benchmark's options need of the machine its driver runs on: the check and the install) and `egress` (an own image's check's proxy to public addresses), `job`, `conform`, `fidelity` (ACP against the agent's own CLI), `prove` (a benchmark's controls and proofs), `shard` and `merge` (one run over many machines), `recipe` (the builder's standard recipe), `howto` (the How to add steps) and the `cli`; its
   `payload` snapshots the running backend and effective catalogue for a remote host;
   conformance kits under `standard/kits/`, each a benchmark: a `driver` and, for the
   tools kit, an MCP server `mcp_kit`) - the definitions it reads are in the catalogue:
@@ -71,7 +72,7 @@ and its resources. The source layout stays under `app/`.
   (the reference `agent`; JiuwenSwarm's `agent` and mini-swe-agent's `run`, the wrappers that start them) and `catalogue/capabilities/<key>/` (the keyword-memory `capability`); `workspace` (and
   `workspace_cli`, its shell command),
   `cli` and `__main__` (the unified `nullius` and `python -m nullius` commands),
-  `paths` (user config, data and cache locations), `prices` (the user's model price list: fetched on request, never by a run; what a cost is estimated from), `migrate` (explicit copying of legacy checkout storage), `settings`, `hosts`, `constraints` (what Nullius may use on each machine: one table, the container and systemd scope probes, the warnings), `execution`, `progress` (what a run is doing, one line per stage), `prerequisites` (what a recipe needs of each machine it runs on, asked before Run and again as it starts), `onboarding` (the Getting started checklist: what this machine
+  `paths` (user config, data and cache locations), `prices` (the user's model price list: fetched on request and before a capped run; what a cost is estimated from), `migrate` (explicit copying of legacy checkout storage), `settings`, `hosts`, `constraints` (what Nullius may use on each machine: one table, the container and systemd scope probes, the warnings), `execution`, `progress` (what a run is doing, one line per stage), `prerequisites` (what a recipe needs of each machine it runs on, asked before Run and again as it starts), `onboarding` (the Getting started checklist: what this machine
   says is done, and where each step is done), `gitrefs` (a repository's branches and tags,
   by `git ls-remote`), `secrets` (a benchmark's licences, kept per benchmark outside the repository, and the Hugging Face token of Data providers), `sandbox` (Docker's state, and the Docker Hub login Data providers uses) and `redact` at the top.
 - `app/templates/`, `app/static/` — the interface, grouped by the same capability
@@ -292,6 +293,18 @@ one assistant or one benchmark.
 
 Use `nullius.thinkflowlab@proton.me` for Nullius-owned contact email addresses,
 including security reports.
+
+### Documentation
+
+`docs/` is terse: fragments and tables, the fewest words that change what a
+reader chooses, does or concludes.
+
+- Keep guarantees, requirements, refusals and their fix. Drop the mechanism
+  (flags, files, protocols, how a key travels), interface narration, history
+  and asides.
+- A table cell is a line, not a paragraph. One fact lives on one page; others link.
+- A prerequisite Review already checks is not repeated.
+- `docs/standard.md` headings are never renamed: the import skills cite them.
 
 ### Attribution
 

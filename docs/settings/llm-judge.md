@@ -1,6 +1,6 @@
 # LLM judge provider
 
-The same questions as System One, answered as JSON by a chat model.
+The same questions as Decision, answered as JSON by a chat model.
 
 | Setting | Value |
 | --- | --- |
@@ -9,7 +9,7 @@ The same questions as System One, answered as JSON by a chat model.
 | Credential | [Model providers](model-providers.md); a custom provider needs its base |
 | `LLM_JUDGE_PROTOCOL` | `chat` or `messages`, on a provider that serves both; unset, or not served: `chat` where the provider serves it, else `messages` |
 
-| Differs from System One | |
+| Differs from Decision | |
 | --- | --- |
 | Answers | What the model states; no confidence value |
 | Out of range | An answer outside its question's options or range is left out |
@@ -39,7 +39,7 @@ your existing `settings.json` ([location and precedence](README.md#save)).
 
     Evidence, storage, cost.
 
-- [System One](system-one.md)
+- [Decision](decision.md)
 
     The first judgement.
 

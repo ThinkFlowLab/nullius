@@ -242,8 +242,22 @@ class Ledger:
             if doc["held"].pop(booking, None) is not None:
                 self._write(doc)
 
+    def unit_left(self, unit: str) -> Optional[float]:
+        """What ``unit`` may still spend under its own cap, every try of it
+        counted (``forget`` drops the count once no try follows); None
+        without a cap per unit. Read without the lock."""
+        try:
+            doc = self._read()
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise Unavailable(f"the spending cap's ledger could not be read: {type(e).__name__}: {e}")
+        each = doc.get("unit_max_usd")
+        if each is None:
+            return None
+        u = (doc.get("units") or {}).get(unit) or {}
+        return 0.0 if u.get("closed") else each - (u.get("spent_usd") or 0.0) - (u.get("unsettled_usd") or 0.0)
+
     def forget(self, unit: str) -> None:
-        """A unit that ended: its own count goes, so the file stays the size of the units in flight."""
+        """A unit that ended, and no try of it follows: its own count goes, so the file stays the size of the units in flight."""
         with self._locked() as doc:
             if doc["units"].pop(unit, None) is not None:
                 self._write(doc)

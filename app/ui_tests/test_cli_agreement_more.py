@@ -97,8 +97,20 @@ class Agreement(unittest.TestCase):
         self.assertIn(f'<h3 style="margin-top:0">{doc["trial"]["exception_type"]}</h3>', page)
         self.assertIn(f"<pre>{html.escape(doc['trial']['exception_message'])}</pre>", page)
         self.assertEqual(doc["trial"]["exception_message"], "401 for api_key=[REDACTED]")
-        self.assertIn("Trajectory · absent", page)
+        self.assertIn("No trajectory recorded for this trial.", page)
         self.assertIsNone(doc["trajectory"])
+
+    def test_a_trials_phases_read_in_the_shell_as_on_its_page(self):
+        """The same seconds to the same two decimals: the page's chips and the
+        shell's ``time:`` line are two readings of one result."""
+        trial = next(t for t in parse.parse_job(str(JOBS / "liveboard-oracle-x4")).trials if t.dur_verifier)
+        code, out = cli(runs_cli.main, ["show", str(JOBS), "liveboard-oracle-x4", trial.trial_name])
+        self.assertEqual(code, 0)
+        page = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", self.page(f"/trial/liveboard-oracle-x4/{trial.trial_name}"))).split())
+        for chip, word in (("Env", "env"), ("Agent", "agent"), ("Verify", "verifier")):
+            shown = re.search(rf"{chip} (\d+\.\d\ds)", page)
+            self.assertIsNotNone(shown, chip)
+            self.assertIn(f"{word} {shown.group(1)}", out)
 
     def test_an_unknown_trial_is_404_on_the_page_and_3_from_the_shell(self):
         self.assertEqual(self.client.get("/trial/1/no-such-trial").status_code, 404)
@@ -111,12 +123,11 @@ class Agreement(unittest.TestCase):
         self.assertEqual(code, 0)
         rows = json.loads(out)
         page = self.page("/workspaces")
-        listed = re.findall(r'<td class="mono faint">([^<]+)</td>', page)
-        self.assertEqual([r["name"] for r in rows], listed[::2])   # name cells; the opened stamps between
+        listed = re.findall(r'<tr class="[^"]*" data-ws="([^"]+)"', page)
+        self.assertEqual([r["name"] for r in rows], listed)
         for row in rows:
             with self.subTest(workspace=row["name"]):
-                block = page.split(f'<td class="mono faint">{row["name"]}</td>', 1)[1].split("</tr>", 1)[0]
-                self.assertIn(f'<td class="num">{row["n_cached"]}</td>', block)
+                block = page.split(f'data-ws="{row["name"]}"', 1)[1].split("</tr>", 1)[0]
                 for root in row["roots"]:
                     self.assertIn(f'<span class="mono">{html.escape(root)}</span>', block)
                 self.assertIn(row["opened"][:16].replace("T", " "), block)

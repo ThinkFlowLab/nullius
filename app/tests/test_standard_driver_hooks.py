@@ -283,7 +283,7 @@ class ThroughARun(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(trial, "ended.json")))
 
     def test_a_stopped_unit_gets_one_end_and_the_next_unit_never_starts(self):
-        def stop(r, *args):
+        def stop(r, *args, **kwargs):
             r._stopped.set()
             return "answer", None, {}
 

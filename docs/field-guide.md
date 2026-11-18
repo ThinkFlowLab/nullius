@@ -30,7 +30,9 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 - **Isolation matters.** Local agents run as your user and can read accessible scorer files. Docker conformance keeps the driver and oracle outside the agent's mounts. Public kit checks remain compatibility checks, not evidence of resistance to cheating.
 
-## Repeated attempts {#attempts}
+## Attempts and retries {#attempts}
+
+An attempt is one run of a task, counted whatever its result. A retry reruns an attempt after an infrastructure or agent failure; its last try is the trial.
 
 Standard runs with repeated, scored attempts record both measures in `pass_hat_k`. They answer different questions.
 
@@ -44,9 +46,11 @@ Chance that all k sampled attempts pass: `C(c,k) / C(n,k)`.
 
 Here n is the attempt count and c the passed count per unit; results are averaged across eligible units. Units with an exception or missing verdict are excluded. The writer uses the smallest available attempt count across eligible units and emits no series below two attempts. This is separate from the trial-level adjusted solve rate.
 
+The job page and Compare show both for any run that tried every task at least twice, leaving out a task with an infra attempt; an agent error is a fail. A task's pass rate is its passes over the attempts that ran, infra apart.
+
 ## Compare like with like {#compare}
 
-Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs; its comparison row shows the last indexed attempt.
+Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs; a task row disagrees when its pass rate or its attempts' outcomes differ, and shows the last indexed attempt.
 
 Check dataset, model, provider, agent version, limits and execution backend before attributing a difference to the agent. Matched views omit whole-run wall time because it does not measure just the selected tasks.
 
@@ -137,7 +141,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `total_input_tokens` | Prompt tokens across the run. | derived | any |
 | `total_cache_tokens` | The part of those served from cache, as each trial's `result.json` records it. | derived | any |
 | `total_output_tokens` | Completion tokens. | derived | any |
-| `total_cost_usd` | The trials' recorded costs, summed: an estimate, not a bill. Shows — when no trial recorded one. | derived | any |
+| `total_cost_usd` | The trials' recorded costs and their retried tries', summed: an estimate, not a bill. Shows — when none recorded one. | derived | any |
 | `duration_min` | The whole run, start to finish. | derived | any |
 | `budget` | A standard run's spending cap, from `result.json`: `max_usd` and `spent_usd`, whether it `stopped` the run, the units `cut_off` and `not_run`, and with a cap per unit `unit_max_usd` and `over_unit`. Empty without a cap. | measured | any |
 | `agent_label` | The agent's name: the class of a `module:Class` path, or the trials' own name when the config gives none. | measured | any |
@@ -145,6 +149,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. An imported runner's arm without that declaration is not a control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |
 | `is_running` | The job records running or pending trials. Numbers are partial; a managed execution's terminal status takes precedence on the page. | measured | any |
 | `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
+| `retries` | Retries a standard run allows each attempt (`--retries`); 0 elsewhere. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
 
 ## Trial metrics, one row per task attempt {#trials}
@@ -160,16 +165,19 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `task_broken` | On the feasibility page: `nop`, which changes nothing, failed passing tests: the task is broken as shipped, or its verifier unstable. | derived | swe-bench |
 | `patch_exists / patch_applied` | Whether a patch was produced, and whether it applied. | measured | swe-bench |
 | `dur_total` | Trial wall clock. | measured | any |
-| `dur_env / dur_agent_setup / dur_agent / dur_verifier` | The four phases Harbor records, drawn in order. An imported trial charges its whole window to `dur_agent`. | measured | any |
-| `dur_other` | `dur_total` minus the phases: on Harbor, image pull, container start and teardown; on an imported script run, the wait for the judge; on a standard run, the unit's setup, the benchmark's driver and its scorer. | derived | any |
+| `dur_env / dur_agent_setup / dur_agent / dur_verifier` | The four phases a trial records, drawn in order. An imported trial charges its whole window to `dur_agent`. | measured | any |
+| `dur_other` | `dur_total` minus the phases: waits and teardown. | derived | any |
 | `n_input_tokens` | Prompt tokens for the trial. | measured | any |
 | `n_cache_tokens` | Prompt tokens read from cache, excluding cache writes: a subset, never added to input tokens. Older standard records may include writes; stored results are not rewritten. | measured | any |
 | `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings (a search index its driver builds) are the run's, in `.work/relay-benchmark`, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
-| `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log reads *not recorded*, never 0. | inferred | any |
+| `n_retries` | Retries a standard run's attempt took. | measured | any |
+| `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log: no count, never 0. | inferred | any |
 
 ## Standard run records
+
+Computer-port tool calls and the kit's desktop events and targets are available in the trial's Records, alongside OSWorld's result and runner log. Failed tries keep their own files under `retried/`; only the final try is counted as the attempt. Desktop setup belongs to environment time, ACP startup to agent setup, and actions after the session opens to agent execution. The port's acting-step budget is independent of model-call, turn and time limits: whichever stops progress first applies; reaching the step budget still lets the agent finish its reply.
 
 These fields are stored in the standard's job and trial files ([Run a benchmark](cli/run.md)).
 
@@ -243,7 +251,7 @@ Thirteen classes. The five marked **yes** under Infrastructure leave the adjuste
 | `failed_verification` | Failed verification | no | The verifier said no, on a benchmark with no patch detail: Terminal-Bench, or one read only by its reward. |
 | `patch_not_applied` | Patch did not apply | no | Malformed context lines, or edits against the wrong revision. |
 | `no_patch` | No patch produced | no | Finished without changing anything. |
-| `agent_error` | Agent error | no | Timed out, filled its context, truncated its output, refused, exited non-zero, or reached its own spending cap. A result, counted against the agent. |
+| `agent_error` | Agent error | no | Timed out, filled its context, truncated its output, refused, exited non-zero, reached its own spending cap or its cap on model calls. A result, counted against the agent. |
 | `rate_limited` | Rate limited | yes | An HTTP 429 ended the trial. A standard unit that passed keeps its pass. |
 | `api_error` | API error | yes | Any other provider failure: overloaded, unreachable, out of quota, key rejected. A standard unit that passed keeps its pass. |
 | `setup_error` | Setup error | yes | The environment or image never came up, or the unit was not run for want of a secret or docker it needs, so the agent never ran. |

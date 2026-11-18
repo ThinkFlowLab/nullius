@@ -21,6 +21,7 @@
     "batch": "sends several actions in one step"
   },
   "driver": {
+    "unit_end": true,
     "command": [
       "python3",
       "{here}/driver.py"

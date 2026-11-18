@@ -13,7 +13,7 @@ from nullius import constraints, settings, execution, gitrefs, hosts, prerequisi
 from nullius.harbor import source as harbor_source
 from nullius.catalogue import catalog
 from nullius.recipes import launch as command_builder
-from nullius.standard import definitions, hostreq
+from nullius.standard import boat, definitions, hostreq
 from nullius.standard import recipe as standard_recipe
 
 from .core import app
@@ -54,7 +54,11 @@ def new_run():
     gpus = constraints.of(constraints.LOCAL, strict=False).get("gpu_ids")
     host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"]), gpu_ids=gpus).items()}
             for b in definitions.load("benchmark", every=True)[0] if b.get("host")}
-    data["standardHere"] = {"docker": execute.docker_problem(), "licences": _licence_states(), "host": host}
+    # boat: why it cannot run here (its key, this machine's programs); boatKey: from a host, only the key matters here
+    boat_why, boat_key = boat.unusable(), boat.unusable(here=False)
+    data["standardHere"] = {"docker": execute.docker_problem(), "boat": boat_why, "boatKey": boat_key,
+                            "boatSizes": {} if boat_key else execute.boat_sizes(),
+                            "boatSpecs": {k: v for k, v in boat.SIZES.items() if v}, "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
     data["local"] = shared_local_client()
     # ?run=<job id>: the recipe a run of this application was started from,
@@ -92,7 +96,8 @@ def new_run_runner():
     if len(json.dumps(recipe)) > 200_000:
         abort(413)
     if recipe.get("harness") == standard_recipe.HARNESS:
-        out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, unpriced=execute.unpriced)
+        out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, boat_unusable=boat.unusable,
+                                      boat_size_problem=execute.boat_size_problem, unpriced=execute.unpriced)
         # served_models: each model field's model as the run sends it, which Served by lists the providers of
         return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models")}
     return {"errors": [{"step": providers.STEP["runner"], "message": providers.GONE}],
@@ -120,7 +125,7 @@ def new_run_prerequisites():
         if out["errors"]:
             return jsonify(machines=[], ready=False, errors=[e["message"] for e in out["errors"]])
         wheres = [sh["where"] for sh in out["shards"]]
-        needs = ["engine"] if out["docker"] else []
+        needs = (["engine"] if out["docker"] else []) + (list(boat.PROGRAMS) if recipe.get("backend") == "boat" else [])
         h = out.get("host") or {}
         b = definitions.get("benchmark", h.get("benchmark", "")) if h.get("needs") else None
         setups = {n["name"]: {**n, "install": hostreq.install_lines(b, [n["name"]])}

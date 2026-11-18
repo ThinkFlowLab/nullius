@@ -530,10 +530,16 @@ def oracle(unit, dir, **_):
     return {"answer": answer}
 
 
+def end(unit, dir, **_):
+    """Release the desktop before this attempt is archived for a retry."""
+    close_all(shutdown=False)
+    return {}
+
+
 def main():
     atexit.register(REAPER.close)
     atexit.register(close_all)                   # runs first: the units go, then the reaper is let go with nothing
-    serve({"units": units, "setup": setup, "score": score, "oracle": oracle})
+    serve({"units": units, "setup": setup, "score": score, "oracle": oracle, "end": end})
 
 
 if __name__ == "__main__":

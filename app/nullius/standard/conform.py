@@ -28,7 +28,7 @@ import time
 from typing import Callable, Dict, List, Optional
 
 from nullius.runs import parse
-from nullius.standard import definitions, ports, run
+from nullius.standard import definitions, ports, retries, run
 
 
 STAMP = "%Y-%m-%d__%H-%M-%S"
@@ -137,7 +137,10 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
             job_dir = run.run(kit, other, model=model, provider=provider, jobs_root=jobs_root, concurrency=2,
                               name=job_name(stamp or time.strftime(STAMP), kit["key"], definitions.job_word(other)),
                               say=lambda s: say("  " + s), env=env, proving=True, unsandboxed=unsandboxed,
-                              backend=backend, options=options, repeat=repeat)
+                              backend=backend, options=options, repeat=repeat,
+                              # a unit the provider's rate limit refused runs once more, after its pause: a proof says
+                              # what the agent does, never how busy the endpoint was
+                              retries=1, retry_if=retries.rate_limited)
         except run.BenchmarkRefused as e:
             if which:
                 raise

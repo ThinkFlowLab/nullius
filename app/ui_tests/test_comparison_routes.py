@@ -96,7 +96,38 @@ class ComparisonRoutes(unittest.TestCase):
             self.assertIn("/trial/run/attempt-last?workspace=active", unescape(body))
             self.assertNotIn("/trial/run/attempt-first?workspace=active", unescape(body))
         self.assertEqual(self.cells(table, "Trials"), ["2", "1"])
-        self.assertIn("last indexed", detail)
+        tabs = re.findall(r'<a class="attempt-tab[^"]*" href="([^"]*)"[^>]*?( aria-current="page")?>', detail)
+        self.assertEqual([bool(current) for _, current in tabs], [False, True])
+        self.assertIn("<b>1/2</b> passed", detail)
+
+    def test_a_compared_task_counts_its_infra_attempts_apart(self):
+        limited = trial("shared", "rate_limited", trial_name="limited", exception_type="ApiRateLimitError")
+        self.left.trials = [trial("shared", trial_name="one"), trial("shared", trial_name="two"), limited]
+        expected = '<b>2/2</b> passed<span class="faint"> · 1 infra</span>'
+        self.assertIn(expected, self.get(cohort="matched"))
+        self.assertIn(expected, self.get("/compare/task/shared", cohort="matched", dataset=self.left.dataset))
+
+    def test_a_scored_task_side_by_side_shows_its_mean_not_a_pass_count(self):
+        self.left.trials = [trial("shared", "scored", trial_name=f"s-{i}", reward=None, score=v) for i, v in enumerate((.4, .8))]
+        detail = self.get("/compare/task/shared", cohort="matched", dataset=self.left.dataset)
+        self.assertIn("mean <b>0.60</b> over 2", detail)
+        self.assertNotIn("0/2", detail)
+
+    def test_each_side_of_a_compared_task_chooses_its_attempt(self):
+        first = trial("shared", "agent_error", trial_name="attempt-first")
+        last = trial("shared", trial_name="attempt-last")
+        self.left.trials = [first, last]
+        detail = unescape(self.get("/compare/task/shared", cohort="matched", dataset=self.left.dataset,
+                                   attempt="active:run/attempt-first"))
+        self.assertIn("/trial/run/attempt-first?workspace=active", detail)
+        self.assertNotIn("/trial/run/attempt-last?workspace=active", detail)
+        # the other attempt's tab keeps the right side as it is and names the left one
+        href = re.search(r'<a class="attempt-tab oc-resolved" href="([^"]*)"', detail).group(1)
+        self.assertEqual(parse_qs(urlsplit(href).query)["attempt"], ["active:run/attempt-last"])
+        # a name that is not an attempt at this task falls back to the last indexed
+        fallback = unescape(self.get("/compare/task/shared", cohort="matched", dataset=self.left.dataset,
+                                     attempt="active:run/right-only"))
+        self.assertIn("/trial/run/attempt-last?workspace=active", fallback)
 
     def test_dataset_mismatch_is_an_empty_matched_cohort_not_a_false_join(self):
         self.right.dataset = "different-dataset@1.0"
@@ -124,7 +155,7 @@ class ComparisonRoutes(unittest.TestCase):
         body = self.get(cohort="matched")
         totals = re.findall(r'<span>Total time</span><strong>(.*?)</strong>', body)
         tokens = re.findall(r'<span>Tokens</span><strong>(.*?)</strong>', body)
-        self.assertEqual(totals, ["2.1m", "—"])
+        self.assertEqual(totals, ["2.08m", "—"])
         self.assertEqual(tokens, ["130", "—"])
         self.assertIn("Token usage not recorded", body)
         self.right.agent_name = "nop"

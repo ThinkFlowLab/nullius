@@ -104,19 +104,20 @@ def ask_states(states: dict, key: str, post: Optional[Callable] = None, calibrat
 
 
 def ask_and_store(ws_dir: str, job_id: str, trial_name: str, states: dict, key, post: Optional[Callable] = None,
-                  calibration: Optional[dict] = None) -> Optional[dict]:
+                  calibration: Optional[dict] = None, started: Optional[str] = None) -> Optional[dict]:
     """`ask_states`, then the merged record saved under the trial's key -
     its answers over the version's earlier ones. Returns the record as
     stored. The pre-flight reads the workspace's own calibration unless one
     is given, so a judge that counts more tokens per character than the rule
-    of thumb is refused on its own evidence."""
+    of thumb is refused on its own evidence. `started`: the trial's own
+    start, which the record keeps (`store.save`)."""
     if calibration is None:
         calibration = store.calibration(ws_dir)
     rec = ask_states(states, key, post=post, calibration=calibration)
     if rec is not None:
         # a call over some of the kinds keeps the earlier readings for the others, as the answers are kept
-        lane = getattr(key, "lane", "system-one")                # the LLM judge's records apart from System One's
-        earlier = store.load(ws_dir, job_id, trial_name, version=rec["questions"], lane=lane) or {}
+        lane = getattr(key, "lane", "decision")                # the LLM judge's records apart from Decision's
+        earlier = store.load(ws_dir, job_id, trial_name, version=rec["questions"], lane=lane, started=started) or {}
         rec["hygiene"] = {**(earlier.get("hygiene") or {}), **rec.get("hygiene", {})}
-        store.save(ws_dir, job_id, trial_name, rec, lane=lane)
+        store.save(ws_dir, job_id, trial_name, rec, lane=lane, started=started)
     return rec

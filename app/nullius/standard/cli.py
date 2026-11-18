@@ -6,8 +6,8 @@
     PYTHONPATH=app python3 -m nullius.standard.cli pins BENCHMARK[@VERSION] [--tag TAG] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
-    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container]
+    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--attempts K] [--option NAME=VALUE ...] [--unsandboxed | --backend container | --backend boat]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS ...] [--max-turns N] [--max-calls N] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container | --backend boat [--boat-size SIZE]]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -19,6 +19,9 @@ an agent's run or conformance check there is refused without ``--unsandboxed``.
 ``--backend container`` (``docker``, its earlier name) runs each unit's agent or capability in a container whose
 only way out is the unit's relay, or a public web proxy when its environment
 declares ``network`` (``standard/container.py``), and needs no such yes.
+``--backend boat`` runs each unit's agent or capability in a boat.dev VM of its
+own, whose only way out is a tunnel to the unit's relay on this machine
+(``standard/boat.py``); its API key is Settings → Sandbox's, or ``BOAT_API_KEY``.
 A benchmark's control (``nop``, ``oracle``: its ``controls``) runs no agent
 and calls no model - only a judged benchmark's judge - so it asks for neither.
 ``prove`` runs a benchmark's controls and checks its units and that nothing
@@ -31,7 +34,7 @@ definitions (or one file); ``new`` writes a definition to fill in, or a new
 version of an agent or a capability (``new version``: the default's pins, with
 the version replaced, and nothing proven); ``fit`` says, for one benchmark, what can run it and
 why the rest cannot; ``conform`` runs the kits and writes what passed into the
-definition - the port, and each skill of its kit shown or not (``--repeat K``:
+definition - the port, and each skill of its kit shown or not (``--attempts K``:
 each check K times, held by a majority); ``run`` runs a benchmark into a job under ``--jobs`` (``jobs_standard/``),
 which the application opens like any other; ``fidelity`` drives an agent over
 ACP and through its own command, compares the requests its model was sent, and
@@ -71,13 +74,14 @@ import signal
 import sys
 import tempfile
 
+from nullius.standard.retries import MAX_RETRIES, RETRIES
 from nullius import constraints as limits, paths, prices as price_list, progress, providers, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed, just like the unified CLI does.
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
     settings.load(paths.settings_file())
 
-from nullius.standard import conform, definitions, fidelity, job, match, merge, pins, ports, prove, run, shard
+from nullius.standard import boat, conform, definitions, fidelity, job, match, merge, pins, ports, prove, run, shard
 
 ENV_FILE = paths.settings_file()
 
@@ -101,8 +105,10 @@ def run_env(provider: str, env=os.environ) -> dict:
     """The environment a run started by Nullius reads its provider from:
     ``execution``'s launcher hands every run its one key as ``OPENAI_API_KEY``
     and its endpoint as ``OPENAI_BASE_URL`` (empty for OpenAI's own), so they
-    are named here as the provider's own settings and nothing else is."""
-    out = {k: v for k, v in env.items() if k in run.KEEP}
+    are named here as the provider's own settings and nothing else is - but
+    the Boat key, handed the same way to a run on Boat: on a host, the only
+    way it has one."""
+    out = {k: v for k, v in env.items() if k in run.KEEP or k == boat.NAME}
     if env.get("OPENAI_API_KEY"):
         out[providers.key_setting(provider)] = env["OPENAI_API_KEY"]
     if provider == "custom" and env.get("OPENAI_BASE_URL"):
@@ -441,15 +447,20 @@ def cmd_new(a):
     return 0
 
 
-def options(pairs) -> dict:
+def options(pairs, flag: str = "--option", form: str = "NAME=VALUE") -> dict:
     """``--option name=value``, repeatable, as {name: value}."""
     out = {}
     for p in pairs or []:
         name, eq, value = p.partition("=")
         if not eq or not name:
-            sys.exit(f"--option {p!r}: NAME=VALUE")
+            sys.exit(f"{flag} {p!r}: {form}")
         out[name.strip()] = value.strip()
     return out
+
+
+def timeouts(pairs) -> dict:
+    """``--timeout PHASE=SECONDS``, repeatable, as {phase: seconds}; ``run`` checks the phases and the values."""
+    return options(pairs, "--timeout", "PHASE=SECONDS")
 
 
 def constraint_values(pairs) -> dict:
@@ -476,6 +487,17 @@ def prices(given) -> dict:
             sys.exit(str(e))
         out[name] = row
     return out
+
+
+def _retries(value: str) -> int:
+    """``--retries``: a whole number from 0 to ``MAX_RETRIES``."""
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a whole number")
+    if not 0 <= n <= MAX_RETRIES:
+        raise argparse.ArgumentTypeError(f"{n} is not between 0 and {MAX_RETRIES}")
+    return n
 
 
 def cmd_conform(a):
@@ -523,13 +545,24 @@ def cmd_run(a):
     if why:
         print("refused: constraints:", why)
         return 2
+    # a cap counts each call at its model's price: the public list fetched first (Settings, Model prices); a machine
+    # that cannot reach it runs uncapped where a model has no price, and says so (run.Run)
+    unreachable = None
+    if a.max_usd is not None or a.max_usd_per_unit is not None:
+        try:
+            price_list.update()
+        except ValueError as e:
+            unreachable = str(e)
     held, spill = licences(b, from_run=a.from_run)
     try:
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
-                      simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
-                      licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
-                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, constraints=given,
+                      boat_size=a.boat_size, simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
+                      licences=held, bench_options=options(a.bench_option), repeat=a.repeat, retries=a.retries,
+                      remove_images=a.remove_images,
+                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, prices_unreachable=unreachable,
+                      constraints=given,
+                      timeouts=timeouts(a.timeout), max_turns=a.max_turns, max_calls=a.max_calls,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
@@ -663,8 +696,11 @@ def main(argv=None):
         p.add_argument("--unsandboxed", action="store_true",
                        help="allow an agent, or a setup check without Docker, to execute code on this machine as you")
         p.add_argument("--backend", default="local", type=definitions.names.backend, choices=list(run.BACKENDS),
-                       help="local processes (the default), or container: each unit in a container, its relay beside it "
-                            "(docker: its earlier name)")
+                       help="local processes (the default); container: each unit in a container, its relay beside it "
+                            "(docker: its earlier name); boat: each unit's agent in a boat.dev VM of its own")
+        if name == "run":
+            p.add_argument("--boat-size", default=boat.SIZE, choices=list(boat.SIZES),
+                           help="on the boat backend, its VMs' machine type (default small: 2 vCPU, 4 GB)")
         p.add_argument("--from-run", action="store_true",
                        help="started by Nullius: the key is OPENAI_API_KEY (and OPENAI_BASE_URL), saved settings are not read")
         p.add_argument("--option", action="append", metavar="NAME=VALUE",
@@ -674,7 +710,7 @@ def main(argv=None):
         elif name == "conform":
             p.add_argument("--port", type=definitions.names.port, action="append", help="only this port's kit (repeatable)")
             p.add_argument("--stamp", help="the time stamp the kit jobs are named with (default: now)")
-            p.add_argument("--repeat", type=int, default=1, metavar="K",
+            p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
                            help="run each check K times; a check passes when it passes in most of them (default 1)")
         else:
             p.add_argument("--dataset")
@@ -685,8 +721,12 @@ def main(argv=None):
             p.add_argument("-j", "--concurrency", type=int, default=4)
             p.add_argument("--judge-model", help="a benchmark scored by a model: this judge instead of its official one")
             p.add_argument("--simulator-model", help="a benchmark whose user a model plays: this model instead of its official one")
-            p.add_argument("--repeat", type=int, default=1, metavar="K",
-                           help="run each unit K times, each an attempt of its own (the upstream's --num-trials, pass^k); default 1")
+            p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
+                           help="run each unit K times, each an attempt counted whatever its result "
+                                "(the upstream's --num-trials, pass^k); default 1")
+            p.add_argument("--retries", type=_retries, default=RETRIES, metavar="N",
+                           help="run a failed attempt again, up to N times, after the other units: never after a timeout, "
+                                f"a wrong key or model, spent credit or a cap; 0 to {MAX_RETRIES}, default {RETRIES}")
             p.add_argument("--remove-images", action="store_true",
                            help="remove each image this run pulls or builds when its last unit ends (default: kept for the next run)")
             p.add_argument("--name")
@@ -706,6 +746,14 @@ def main(argv=None):
                                 "other (repeatable; without MODEL=, the run's model); each call records which one did")
             p.add_argument("--max-usd-per-unit", type=float, metavar="USD",
                            help="each unit's own spending cap: a unit that reaches it is cut off there, and the run goes on")
+            p.add_argument("--timeout", action="append", metavar="PHASE=SECONDS",
+                           help="a unit's time limit for one phase, forced over the task's, the benchmark's and the default "
+                                "(repeatable): setup, image, agent (its whole work on the unit), verify, score")
+            p.add_argument("--max-turns", type=int, metavar="N",
+                           help="the most agent turns in a conversation, over the benchmark's limits.turns")
+            p.add_argument("--max-calls", type=int, metavar="N",
+                           help="the most model calls a unit's agent may make, the whole unit through: past it the relay refuses "
+                                "the next call and the unit is the agent's error, as a timeout is")
     v = sub.add_parser("prove", help="prove a benchmark: its controls, its units, no leak; record what passed")
     v.add_argument("benchmark")
     v.add_argument("--dataset", help="one dataset (default: each)")

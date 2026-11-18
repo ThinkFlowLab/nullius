@@ -172,7 +172,7 @@
 }
 @media (prefers-reduced-motion: reduce) { .lb *, .view-tabs * { animation: none !important; transition: none !important; } }
 
-/* a trial Harbor runs again under its own name: which attempt, and how the last one ended */
+/* an attempt retried under its own name (Harbor's max_retries, the standard's --retries): how often, and how the try before ended */
 .lb-retry { display: block; color: var(--patch_failed_tests, var(--text-dim)); font-size: 11.5px; }
 /* an ended trial, kept below the running ones */
 .lb-ended .lb-outcome { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); }

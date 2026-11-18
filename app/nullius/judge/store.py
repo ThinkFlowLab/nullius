@@ -21,14 +21,14 @@ from . import client, questions as Q
 _SAFE = re.compile(r"[^A-Za-z0-9._@+-]")
 
 
-ROOTS = {"system-one": "judgements", "llm": "judgements-llm"}     # one directory per judgement
+ROOTS = {"decision": "judgements", "llm": "judgements-llm"}     # one directory per judgement
 
 
 def _root(ws_dir: str, lane: str) -> str:
     return os.path.join(ws_dir, ROOTS.get(lane, "judgements"))
 
 
-def _path(ws_dir: str, job_id: str, trial_name: str, lane: str = "system-one") -> str:
+def _path(ws_dir: str, job_id: str, trial_name: str, lane: str = "decision") -> str:
     return os.path.join(_root(ws_dir, lane), _SAFE.sub("_", job_id), _SAFE.sub("_", trial_name) + ".json")
 
 
@@ -36,20 +36,30 @@ def _versions(version: Optional[str]) -> tuple:
     return (version,) if version else (Q.VERSION, *Q.EARLIER)
 
 
-def _pick(data: dict, version: Optional[str]) -> Optional[dict]:
+def _of(rec: Optional[dict], started: Optional[str]) -> bool:
+    """Whether a record judged the try that started at ``started``: a retry
+    runs an attempt again under its trial's name, and what was asked of the
+    try before is not this one's. A record from before tries were told
+    apart, or a check that names no start, takes it as it is."""
+    return not started or not rec or rec.get("trial_started_at") in (None, started)
+
+
+def _pick(data: dict, version: Optional[str], started: Optional[str] = None) -> Optional[dict]:
     for v in _versions(version):
         rec = data.get(v)
-        if rec:
+        if rec and _of(rec, started):
             return rec
     return None
 
 
-def load(ws_dir: str, job_id: str, trial_name: str, version: Optional[str] = None, lane: str = "system-one") -> Optional[dict]:
+def load(ws_dir: str, job_id: str, trial_name: str, version: Optional[str] = None, lane: str = "decision",
+         started: Optional[str] = None) -> Optional[dict]:
     """The record under `version`; with none named, the current version or
-    the newest earlier one that has a record."""
+    the newest earlier one that has a record. `started`: the trial's own
+    start, so a record of an earlier try under its name is none of its."""
     try:
         with open(_path(ws_dir, job_id, trial_name, lane), encoding="utf-8") as fh:
-            return _pick(json.load(fh) or {}, version)
+            return _pick(json.load(fh) or {}, version, started)
     except (OSError, ValueError):
         return None
 
@@ -59,7 +69,8 @@ def is_current(record: Optional[dict]) -> bool:
     return bool(record) and record.get("questions") == Q.VERSION
 
 
-def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "system-one") -> None:
+def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "decision",
+         started: Optional[str] = None) -> None:
     """The record under its question version; other versions kept. A
     record's answers merge over the version's earlier answers, so judging
     one question later does not drop the others."""
@@ -72,7 +83,9 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "s
         data = {}
     version = record.get("questions", Q.VERSION)
     earlier = data.get(version) or {}
-    merged = dict(record)
+    if not _of(earlier, started):
+        earlier = {}                     # an earlier try's: none of its answers are this one's
+    merged = dict(record, **({"trial_started_at": started} if started else {}))
     merged["answers"] = {**(earlier.get("answers") or {}), **(record.get("answers") or {})}
     data[version] = merged
     tmp = path + ".tmp"
@@ -81,9 +94,11 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "s
     os.replace(tmp, path)
 
 
-def for_job(ws_dir: str, job_id: str, version: Optional[str] = None, lane: str = "system-one") -> dict:
+def for_job(ws_dir: str, job_id: str, version: Optional[str] = None, lane: str = "decision",
+            started: Optional[dict] = None) -> dict:
     """Every judged trial of a job: {trial_name: record}, each the current
-    version's record or the newest earlier one, as `load` picks it."""
+    version's record or the newest earlier one, as `load` picks it.
+    `started`: {trial_name: its start}, as `load` takes it."""
     d = os.path.join(_root(ws_dir, lane), _SAFE.sub("_", job_id))
     out = {}
     try:
@@ -95,7 +110,7 @@ def for_job(ws_dir: str, job_id: str, version: Optional[str] = None, lane: str =
             continue
         try:
             with open(os.path.join(d, n), encoding="utf-8") as fh:
-                rec = _pick(json.load(fh) or {}, version)
+                rec = _pick(json.load(fh) or {}, version, (started or {}).get(n[:-5]))
         except (OSError, ValueError):
             continue
         if rec:
@@ -108,7 +123,13 @@ def job_dirs(ws_dir: str, job_ids) -> list:
     return [d for lane in ROOTS for j in job_ids if os.path.isdir(d := os.path.join(_root(ws_dir, lane), _SAFE.sub("_", j)))]
 
 
-def all_records(ws_dir: str, job_id: Optional[str] = None, lane: str = "system-one"):
+def count(ws_dir: str) -> int:
+    """The stored judgements of a workspace, every lane: one per trial and
+    lane, its versions inside. What deleting the workspace loses for good."""
+    return sum(n.endswith(".json") for lane in ROOTS for _, _, names in os.walk(_root(ws_dir, lane)) for n in names)
+
+
+def all_records(ws_dir: str, job_id: Optional[str] = None, lane: str = "decision"):
     """Every stored record, every version: yields (job_id, trial_name,
     version, record). One job's when `job_id` is given."""
     root = _root(ws_dir, lane)

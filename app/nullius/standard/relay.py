@@ -28,6 +28,14 @@ the provider's headers come back the same way (its request id, its rate
 limits). It never answers for the provider: a 429 reaches the caller and the
 record as it was sent, which is what makes rate limits measurable.
 
+Another is a run's cap on a unit's model calls (``max_calls``): the agent's
+own route (the unit's tag alone, never its judge's or its simulated user's)
+counts each call the provider answered, and once the count reaches the cap
+the next call is refused with a 402 the record says ``refused: calls``. A
+call the provider refused (a 429, an error) is not counted, so a rate limit
+never reads as the agent's steps. Calls in flight together may pass it by
+the few that were already sent.
+
 A run may pin, for a model, the serving providers that may answer it
 (``serving``, OpenRouter's routing): the relay then puts
 ``provider: {order, allow_fallbacks: false}`` on every request it sends as
@@ -92,6 +100,41 @@ def _said(status: int, body: bytes) -> str:
     except Exception:
         m = body[:200].decode("utf-8", "replace")
     return f"HTTP {status}: {m or ''}".strip()[:300]
+
+
+def _code(body: bytes) -> Optional[str]:
+    """An error reply's own code (OpenAI's ``code`` or ``type``), None when it gives none."""
+    try:
+        e = json.loads(body).get("error")
+    except Exception:
+        return None
+    if not isinstance(e, dict):
+        return None
+    code = e.get("code") if isinstance(e.get("code"), str) else e.get("type")
+    return code[:80] if isinstance(code, str) and code else None
+
+
+def _retry_after(headers) -> Optional[float]:
+    """Seconds the provider says to wait (``Retry-After``, in seconds or as a date; ``retry-after-ms``), None when unsaid."""
+    got = {n.lower(): v for n, v in headers or ()}
+    try:
+        if "retry-after-ms" in got:
+            return max(0.0, float(got["retry-after-ms"]) / 1000)
+        if "retry-after" in got:
+            v = got["retry-after"].strip()
+            try:
+                return max(0.0, float(v))
+            except ValueError:
+                from email.utils import parsedate_to_datetime
+                return max(0.0, parsedate_to_datetime(v).timestamp() - time.time())
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return None
+
+
+# a provider's words for a model it does not have: no second call finds it
+_NO_MODEL = re.compile(r"\b(not a valid model|invalid model|unknown model|no such model)\b"
+                       r"|\bmodels?\b[^.]{0,80}?\b(does not exist|not exist|not found)\b", re.I)
 
 
 def _usage(u: Optional[dict]) -> Optional[dict]:
@@ -562,7 +605,7 @@ class Relay:
     def __init__(self, base: str, key: str, record_dir: str, prices: Optional[Dict[str, dict]] = None,
                  model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False,
                  ledger: Optional[str] = None, unit_caps: bool = True, serving: Optional[Dict[str, List[str]]] = None,
-                 facts: Optional[bool] = None):
+                 facts: Optional[bool] = None, max_calls: Optional[int] = None):
         """``base``: the provider's endpoint (``https://api.openai.com/v1``).
         ``model``: when given, every call is sent as this model, whatever the
         caller named - the run's model is the recipe's, not the agent's. A
@@ -585,8 +628,12 @@ class Relay:
         put on every such request in place of the caller's own. ``facts``: a
         pinned Chat Completions or Responses request asks OpenRouter for its
         routing facts, where its reply names who served it; by default when
-        ``base`` is OpenRouter's."""
+        ``base`` is OpenRouter's.
+        ``max_calls``: the most model calls the agent's own route of a unit
+        may make (:func:`agent_route`), each answered call counted."""
         self.fields = fields
+        self.max_calls = max_calls
+        self.answered: Dict[str, int] = {}       # the calls each agent route had answered, for max_calls
         self.serving = {m: list(s) for m, s in (serving or {}).items()}
         host = (urllib.parse.urlsplit(base).hostname or "").lower()
         self.facts = (host == "openrouter.ai" or host.endswith(".openrouter.ai")) if facts is None else bool(facts)
@@ -707,6 +754,13 @@ class Relay:
                 routing_asked = req.get("provider")
                 req["provider"] = routing(pinned)
             raw = json.dumps(req).encode()
+        if self.max_calls and agent_route(tag) and h.command == "POST" and isinstance(req, dict) and req.get("model") and not _free(rest):
+            with self.lock:
+                made = self.answered.get(tag, 0)
+            if made >= self.max_calls:
+                self._refuse(h, tag, rest, req, asked, f"the unit's cap of {self.max_calls} model calls was reached: "
+                             "no further call of its agent is sent", "calls")
+                return
         booking = booked = None
         # a call that names its model is booked, whatever its route, but a token count, which costs nothing and
         # reports no usage; one that names none (a cancellation, a body that is no request) has no price to book
@@ -763,6 +817,9 @@ class Relay:
                 rec["fields"] = request_fields(req)
             cost = None
             if status == 200:
+                if self.max_calls and agent_route(tag) and isinstance(req, dict) and req.get("model") and not _free(rest):
+                    with self.lock:
+                        self.answered[tag] = self.answered.get(tag, 0) + 1
                 rec["reply"] = read_reply(rest, body, streamed)
                 # who served it, how it ended, an error under the 200: beside what was read, never in its place
                 try:
@@ -775,6 +832,11 @@ class Relay:
                     rec["cost_usd"], rec["cost_from"] = cost, how
             else:
                 rec["error"] = _said(status, body)
+                code, wait = _code(body), _retry_after(back)
+                if code:
+                    rec["error_code"] = code
+                if wait is not None:
+                    rec["retry_after"] = wait    # the provider's word on when to call again (pace)
             if booking is not None:
                 rec["booked_usd"] = booked
                 try:
@@ -874,7 +936,9 @@ class Relay:
         with self.lock:
             with open(os.path.join(self.dir, tag + ".jsonl"), "a") as f:
                 f.write(json.dumps(rec) + "\n")
-        body = json.dumps({"type": "error", "error": {"type": "spending_cap", "code": {"unit": "unit_spending_cap", "price": "unpriced_model", "ledger": "ledger_unavailable"}.get(by, "spending_cap"),
+        body = json.dumps({"type": "error", "error": {"type": "call_cap" if by == "calls" else "spending_cap",
+                                                      "code": {"unit": "unit_spending_cap", "price": "unpriced_model", "ledger": "ledger_unavailable",
+                                                               "calls": "unit_call_cap"}.get(by, "spending_cap"),
                                                       "message": "nullius relay: " + why}}).encode()
         h.send_response(402)
         for n, v in (("Content-Type", "application/json"), ("X-Nullius-Refused", by), ("Content-Length", str(len(body)))):
@@ -920,6 +984,12 @@ class Relay:
         self.pool.close()
 
 
+def agent_route(tag: str) -> bool:
+    """Whether a route is a unit's agent's own (``u0042``, ``u0042r2``): its
+    judge's and its simulated user's carry a suffix (``-judge``, ``-simulator``)."""
+    return "-" not in tag
+
+
 def _free(rest: str) -> bool:
     """A route that names a model and is not billed: a token count."""
     return rest.split("?")[0].rstrip("/").endswith("/count_tokens")
@@ -935,6 +1005,11 @@ def _gone(h: Optional[BaseHTTPRequestHandler]) -> bool:
         return True
 
 
+# what a unit whose agent reached the run's cap on model calls carries (``max_calls``): an agent error, counted
+# against the agent, as a timeout is (runs.classify)
+CALLS_ERROR = "UnitCallCapError"
+
+
 def failure(calls: List[dict]) -> Optional[tuple]:
     """When a unit's model calls ended failing, the exception a trial carries
     for it - named so ``nullius.runs.classify`` sorts it as the
@@ -948,15 +1023,21 @@ def failure(calls: List[dict]) -> Optional[tuple]:
     over = next((c for c in calls if c.get("refused") == "unit"), None)
     if over:                                     # its own cap: the unit's doing, and the run goes on
         return ledgers.UNIT_ERROR, over.get("error") or ""
+    many = next((c for c in calls if c.get("refused") == "calls"), None)
+    if many:                                     # its agent made the calls it was allowed: the agent's, as its time running out is
+        return CALLS_ERROR, many.get("error") or ""
     if not calls or calls[-1].get("status") == 200:
         return None
     last = calls[-1]
     s, said = last.get("status"), last.get("error") or ""
     if s == 429:
-        return "RateLimitError", said
+        # OpenAI's spent credit comes as a 429 too: a usage limit, no pace mends it
+        return ("ApiUsageLimitError" if last.get("error_code") == "insufficient_quota" else "RateLimitError"), said
+    if s == 402 and not last.get("refused"):
+        return "ApiUsageLimitError", said        # the provider's credit spent (the relay's own refusals say so above, or are its own)
     if s in (401, 403):
         return "AgentAuthenticationError", said
-    if s == 404 and "model" in said.lower():
+    if (s == 404 and "model" in said.lower()) or (s == 400 and _NO_MODEL.search(said)):
         return "ModelNotFoundError", said
     if s == 502:
         return "NetworkConnectionError", said
@@ -989,6 +1070,7 @@ def serve(argv=None) -> int:
     ap.add_argument("--public", help="the address url() hands out, when not the listening one")
     ap.add_argument("--prices", help="a JSON object: model -> USD per million tokens, for a cost estimate")
     ap.add_argument("--ledger", help="the file of the run's spending cap: a call is booked there before it is sent")
+    ap.add_argument("--max-calls", type=int, help="the most model calls a unit's agent route may make")
     ap.add_argument("--served-by", action="append", default=[], metavar="MODEL=SLUG[,SLUG...]",
                     help="the serving providers that may answer a request sent as MODEL, in order, and no other; "
                          "MODEL one this relay sends (--model, a --route's, a --side-model's), and --base OpenRouter's "
@@ -1019,7 +1101,7 @@ def serve(argv=None) -> int:
         return 2
     host, _, port = a.listen.rpartition(":")
     r = Relay(a.base, key, a.record, prices=json.loads(a.prices) if a.prices else None, model=a.model,
-              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger, serving=serving)
+              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger, serving=serving, max_calls=a.max_calls)
     for route in a.route:
         tag, _, model = route.partition("=")
         if not _TAG.match(tag) or not model:

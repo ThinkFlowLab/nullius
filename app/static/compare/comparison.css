@@ -115,3 +115,4 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+.compare-table-wrap .grid.compare tr.pass-k th.rowhead { text-transform: none; letter-spacing: 0; font-family: var(--mono); }

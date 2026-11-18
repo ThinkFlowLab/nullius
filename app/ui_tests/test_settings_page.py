@@ -75,7 +75,7 @@ class SettingsPage(unittest.TestCase):
         html = self.page()
         seen = re.search(r'<article[^>]*id="TYPESAFE_API_KEY".*?</article>', html, re.S).group(0)
         self.assertIn('data-source="file"', seen); self.assertIn("********", seen); self.assertNotIn("characters", seen); self.assertNotIn("not set", seen)
-        self.assertNotIn('System One <span class="st-legend-state">needs the TypeSafe key</span>', html)
+        self.assertNotIn('Decision <span class="st-legend-state">needs the TypeSafe key</span>', html)
         self.assertEqual(os.environ["TYPESAFE_API_KEY"], "ts-fake-0123456789")         # the judge sees it too, not only the page
         self.assertEqual(os.environ["MODEL_API_KEY"], "sk-fake-9876543210"); self.assertNotIn("HOSTS", os.environ)
         notice = html[html.index('id="settings-unread"'):]
@@ -135,7 +135,7 @@ class SettingsPage(unittest.TestCase):
         settings.load(self.env_file)
         html = self.page()
         judge_section = html.split('id="judge"')[1].split('id="custom-keys"')[0]
-        for prefix in ("SYSTEM_ONE", "LLM_JUDGE"):                                                     # Provider, Protocol, Model, each labelled
+        for prefix in ("DECISION", "LLM_JUDGE"):                                                     # Provider, Protocol, Model, each labelled
             labels = [judge_section.index(f'for="value-{prefix}_{part.upper()}">{part}</label>') for part in ("Provider", "Protocol", "Model")]
             self.assertEqual(labels, sorted(labels))
             self.assertIn(f'<select class="st-input" id="value-{prefix}_PROVIDER" name="value:{prefix}_PROVIDER"', judge_section)   # the shared select
@@ -150,20 +150,20 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('data-default="~typesafe/jev-latest" data-models="~typesafe/jev-latest|typesafe/jev-1.14|typesafe/jev-1.13|typesafe/jev-router|jaredpalmer/kev-4b"', html)
         self.assertNotIn("data-model-default", html)                       # the default is the model field's placeholder (judges.js)
 
-    def test_system_one_on_openrouter_offers_the_cached_list_and_asks_for_it_only_after_load(self):
+    def test_decision_judge_on_openrouter_offers_the_cached_list_and_asks_for_it_only_after_load(self):
         Path(self.env_file).write_text("OPENROUTER_API_KEY=sk-or-fromthefile\n")
         settings.load(self.env_file)
         with patch.object(providers, "decision_models", return_value=["b/decider:free", "typesafe/jev-1.14"]) as live:
             html = self.page()
             live.assert_called_with(fetch=False)                                                        # the page never waits on the network
             self.assertIn('data-models="~typesafe/jev-latest|typesafe/jev-1.14|b/decider:free" data-live', html)
-            post = lambda **kw: self.client.post("/settings/system-one/models", headers={"X-CSRF-Token": self.token(), "Origin": "http://localhost"}, **kw)
+            post = lambda **kw: self.client.post("/settings/decision/models", headers={"X-CSRF-Token": self.token(), "Origin": "http://localhost"}, **kw)
             r = post(); self.addCleanup(r.close)
             live.assert_called_with(fetch=True)
             self.assertEqual(r.get_json()["models"], [{"id": m, "name": m} for m in ("~typesafe/jev-latest", "typesafe/jev-1.14", "b/decider:free")])
             r = post(environ_overrides={"REMOTE_ADDR": "192.0.2.1"}); self.addCleanup(r.close)
             self.assertEqual(r.status_code, 403)
-            r = self.client.post("/settings/system-one/models"); self.addCleanup(r.close)
+            r = self.client.post("/settings/decision/models"); self.addCleanup(r.close)
             self.assertEqual(r.status_code, 403)                                                       # no form token
 
     def test_a_judge_s_protocol_is_a_quiet_line_unless_its_provider_lists_two(self):
@@ -173,8 +173,8 @@ class SettingsPage(unittest.TestCase):
         Path(self.env_file).write_text("ANTHROPIC_API_KEY=sk-ant-fixture0\nTYPESAFE_API_KEY=ts-fixture0\nLLM_JUDGE_PROVIDER=anthropic\n")
         settings.load(self.env_file)
         html = self.page()
-        s1, llm = (html[html.index(f'id="{p}_PROVIDER"'):html.index(f'id="{p}_MODEL"')] for p in ("SYSTEM_ONE", "LLM_JUDGE"))
-        self.assertIn('<p class="st-note" data-judge-via>via TypeSafe System One</p>', s1)
+        s1, llm = (html[html.index(f'id="{p}_PROVIDER"'):html.index(f'id="{p}_MODEL"')] for p in ("DECISION", "LLM_JUDGE"))
+        self.assertIn('<p class="st-note" data-judge-via>via TypeSafe Decision</p>', s1)
         self.assertIn('<p class="st-note" data-judge-via>via Anthropic Messages</p>', llm)
         self.assertIn('id="LLM_JUDGE_PROTOCOL" data-source="unset" data-secret="no" hidden>', llm)
         self.assertNotIn("messages<", llm); self.assertNotIn(">chat<", llm)                                   # names, never keys
@@ -1091,8 +1091,15 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('data-sandbox="/settings/sandbox"', section)
         self.assertNotIn("data-images", section)                                         # no Images card
         self.assertNotIn('name="value:', section)                                       # outside Save: nothing of it lands in the file
-        for login in ("Docker Hub", 'type="password"', "data-login", "data-logout"):      # signed in once, under Data providers
+        for login in ("Docker Hub", "data-login", "data-logout"):                          # signed in once, under Data providers
             self.assertNotIn(login, section)
+        self.assertEqual(section.count('type="password"'), 1)
+        self.assertIn('name="key" type="password"', section)
+        self.assertIn('<h3>Boat</h3>', section)
+        self.assertIn('brand/boat.svg', section)
+        self.assertIn('brand/boat-dark.svg', section)                                   # its own mark on a dark background
+        for control in ("data-boat-edit", "data-boat-remove", "data-boat-remove-yes", "data-boat-remove-keep", "data-boat-cancel", "data-boat-form autocomplete=\"off\" hidden"):
+            self.assertIn(control, section)
         self.assertNotIn('data-data-form', section)
         providers = html[html.index('id="data-providers"'):html.index('id="sandbox"')]
         self.assertIn('data-data-search', providers)
@@ -1102,7 +1109,7 @@ class SettingsPage(unittest.TestCase):
         with patch.object(sandbox, "docker_state", lambda: {"ok": True, "version": "29.0"}), \
                 patch.object(sandbox, "login_user", lambda: self.fail("asked")):
             r = self.client.get("/settings/sandbox"); self.addCleanup(r.close)
-        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"}})
+        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"}, "boat": {"set": False, "env": False}})
         seen = []
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
         with patch.object(sandbox, "login", lambda u, t: seen.append((u, t)) or {"ok": True, "user": u}):
@@ -1114,6 +1121,30 @@ class SettingsPage(unittest.TestCase):
                 self.assertEqual(self.client.post("/settings/sandbox/login", data={"username": "x", "token": "y"}, **kw).status_code, 403)
         self.assertEqual(seen, [("someone", "dckr_pat_synthetic")])
         self.assertIsNone(self.file())
+
+    def test_the_boat_key_is_saved_from_this_machines_browser_and_never_echoed(self):
+        from nullius import secrets
+        from nullius.standard import boat
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"SECRETS_DIR": folder}):
+            os.environ.pop(boat.NAME, None)
+            headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
+            url = "/settings/sandbox/boat"
+            for kwargs in ({"headers": {"Origin": "http://localhost"}},
+                           {"headers": headers, "environ_base": {"REMOTE_ADDR": "10.0.0.7"}}):
+                self.assertEqual(self.client.post(url, data={"key": "boat_synthetic"}, **kwargs).status_code, 403)
+            self.assertEqual(self.client.post(url, data={"key": " "}, headers=headers).status_code, 400)
+            response = self.client.post(url, data={"key": "boat_synthetic"}, headers=headers)
+            self.assertTrue(response.json["ok"])
+            self.assertNotIn("boat_synthetic", response.get_data(as_text=True))
+            self.assertEqual(secrets.value(boat.STORE, boat.NAME), b"boat_synthetic")
+            self.assertEqual(boat.key({}), "boat_synthetic")
+            with patch.object(sandbox, "docker_state", lambda: {"ok": True, "version": "29.0"}):
+                state = self.client.get("/settings/sandbox").json
+            self.assertEqual(state["boat"], {"set": True, "env": False})
+            self.assertNotIn("boat_synthetic", json.dumps(state))
+            self.assertIsNone(self.file())
+            self.assertTrue(self.client.post(url, data={"action": "remove"}, headers=headers).json["ok"])
+            self.assertIsNone(boat.key({}))
 
     def test_data_provider_save_is_local_guarded_and_never_echoes_token(self):
         from nullius import secrets

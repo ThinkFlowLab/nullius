@@ -33,7 +33,7 @@
       } else if (key.startsWith('value:')) names.add(key.slice(6));
     }
     // A model edit always carries the displayed provider, including a sole auto-selection.
-    for (const prefix of ['SYSTEM_ONE', 'LLM_JUDGE']) {
+    for (const prefix of ['DECISION', 'LLM_JUDGE']) {
       if (body.has('value:' + prefix + '_MODEL') || body.has('clear:' + prefix + '_MODEL')) {
         const provider = current.get('value:' + prefix + '_PROVIDER');
         if (provider) body.set('value:' + prefix + '_PROVIDER', provider);

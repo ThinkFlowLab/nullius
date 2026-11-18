@@ -79,7 +79,7 @@ Keep the whole copied definition, `model.env` and `options` included.
 
     ```bash title="Run conformance · Container backend"
     nullius standard conform my-agent \
-      --provider openai --model gpt-5-mini --backend container --repeat 3
+      --provider openai --model gpt-5-mini --backend container --attempts 3
     ```
 
 3. Which benchmarks it fits:
@@ -99,7 +99,7 @@ contribute it to the bundled catalogue, copy its whole folder into
 and refresh `python3 app/tests/catalogue_docs.py --write`.
 
 !!! warning "Conformance makes paid model calls"
-    Each check is a trial; `--repeat 3` runs each three times.
+    Each check is a trial; `--attempts 3` runs each three times.
 
 ## Another agent
 

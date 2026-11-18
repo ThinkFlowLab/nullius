@@ -49,7 +49,7 @@ import time
 from typing import Callable, Dict, List, Optional
 
 from nullius.runs import parse
-from nullius.standard import definitions, install, jsonl, run, shard as shards
+from nullius.standard import definitions, install, jsonl, retries, run, shard as shards
 
 STAMP = "%Y-%m-%d__%H-%M-%S"
 SHORT = 12                      # characters: a reference shorter than this is not looked for
@@ -217,7 +217,7 @@ def control_check(bench: dict, ds: dict, which: str, *, limit: Optional[int], jo
     job_dir = run.run(bench, other, model=model, provider=provider, dataset=ds["id"], limit=limit, concurrency=concurrency,
                       jobs_root=jobs_root, name=job_name(stamp, definitions.job_word(bench), ds["id"], which, shard), say=lambda s: say("    " + s),
                       env=env, judge_model=judge_model, shard=shard, launch=launch, licences=licences,
-                      remove_images=remove_images)
+                      remove_images=remove_images, retries=1, retry_if=retries.rate_limited)   # as conform's
     j = parse.parse_job(job_dir)
     n = len(j.trials)
     errored = sum(1 for t in j.trials if t.exception_type)

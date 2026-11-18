@@ -7,7 +7,7 @@ import shutil
 import socket
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from nullius import constraints, execution, hosts, paths, prerequisites, prices, providers, sandbox, secrets, settings
-from nullius.standard import container
+from nullius.standard import boat, container
 from nullius.standard import recipe as standard_recipe
 from nullius.judge import client
 
@@ -54,8 +54,8 @@ def settings_page():
                            prices=prices.state(),
                            machines=_machines(), constraint_table=constraints.TABLE,
                            provider_cards=provider_cards({r["name"]: r for r in rows}),
-                           ssh_hosts=hosts.scan_ssh_config(), judges=(client.system_one(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), s1_providers=client.system_one_providers(os.environ),
-                           judge_protocols={"SYSTEM_ONE": client.SYSTEM_ONE_PROTOCOLS, "LLM_JUDGE": client.LLM_PROTOCOLS}, protocols=providers.PROTOCOLS, agent_keys=settings.agent_key_names(), reserved_agent_keys=settings.reserved_agent_keys(),
+                           ssh_hosts=hosts.scan_ssh_config(), judges=(client.decision_judge(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), decision_providers=client.decision_judge_providers(os.environ),
+                           judge_protocols={"DECISION": client.DECISION_PROTOCOLS, "LLM_JUDGE": client.LLM_PROTOCOLS}, protocols=providers.PROTOCOLS, agent_keys=settings.agent_key_names(), reserved_agent_keys=settings.reserved_agent_keys(),
                            tested={k: _shown(v) for k, v in providers.tests().items() if isinstance(v, dict)})
 
 
@@ -78,14 +78,14 @@ def settings_provider_test():
     return jsonify(_shown(got))
 
 
-@app.route("/settings/system-one/models", methods=["POST"])
-def settings_system_one_models():
-    """System One's models on OpenRouter for its card, asked after the page has loaded: OpenRouter's
-    public list of decision models, kept in the cache (``client.system_one_models``)."""
+@app.route("/settings/decision/models", methods=["POST"])
+def settings_decision_judge_models():
+    """Decision's models on OpenRouter for its card, asked after the page has loaded: OpenRouter's
+    public list of decision models, kept in the cache (``client.decision_judge_models``)."""
     shared._require_csrf()
     if not _local_client():
         abort(403)
-    return jsonify(ok=True, models=[{"id": m, "name": m} for m in client.system_one_models("openrouter", fetch=True)])
+    return jsonify(ok=True, models=[{"id": m, "name": m} for m in client.decision_judge_models("openrouter", fetch=True)])
 
 
 def _size(mb: int) -> str:
@@ -249,8 +249,32 @@ def settings_host_enrol():
 
 @app.route("/settings/sandbox")
 def settings_sandbox():
-    """The Sandbox section's state, asked when the section opens: docker's."""
-    return jsonify(docker=sandbox.docker_state())
+    """The Sandbox section's state, asked when the section opens: docker's, and whether a boat key is
+    set (never the key)."""
+    return jsonify(docker=sandbox.docker_state(), boat={"set": bool(secrets.status(boat.STORE).get(boat.NAME, {}).get("set")),
+                                                        "env": bool(os.environ.get(boat.NAME))})
+
+
+@app.route("/settings/sandbox/boat", methods=["POST"])
+def settings_sandbox_boat():
+    """The boat.dev API key, saved to the owner-only store or removed. Same guards as Save."""
+    _sandbox_guard("Sandbox providers are changed")
+    action = request.form.get("action", "save")
+    try:
+        if action == "remove":
+            secrets.delete(boat.STORE, boat.NAME)
+        elif action == "save":
+            value = request.form.get("key", "").strip()
+            if not value:
+                raise ValueError("Enter the API key.")
+            secrets.set(boat.STORE, boat.NAME, value)
+        else:
+            return jsonify(ok=False, error="Unknown action."), 400
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    except OSError:
+        return jsonify(ok=False, error="Could not update the credential store."), 500
+    return jsonify(ok=True)
 
 
 @app.route("/settings/data-providers")
@@ -328,7 +352,7 @@ def settings_sandbox_logout():
 @app.route("/settings/prices/update", methods=["POST"])
 def settings_prices_update():
     """The public price list fetched and kept (``nullius.prices``): the one
-    fetch, asked for here and never by a run. Same guards as Save."""
+    fetch, asked for here (a capped run's ``cli run`` asks too). Same guards as Save."""
     _sandbox_guard("Prices are updated")
     try:
         prices.update()

@@ -461,8 +461,10 @@ def served_total(results: List[dict], also: Optional[dict] = None) -> Optional[d
 def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: str, unit: str, t0: float, t1: float,
                 produce: tuple, score: Optional[dict], exception: Optional[tuple], calls: List[dict],
                 trajectory: Optional[dict], extra_logs: Optional[dict] = None, environment: str = "",
-                image: str = "", setup_end: Optional[float] = None, checking: tuple = (None, None),
-                serving: Optional[Dict[str, List[str]]] = None, served_calls: Optional[List[dict]] = None) -> dict:
+                image: str = "", setup_end: Optional[float] = None, agent_ready: Optional[float] = None,
+                agent_unready: Optional[float] = None, checking: tuple = (None, None),
+                serving: Optional[Dict[str, List[str]]] = None, served_calls: Optional[List[dict]] = None,
+                retries: int = 0, retryable: bool = True) -> dict:
     """Write one unit's trial and return its result. ``serving``: the run's
     pin of serving providers by model; ``standard.served`` says who served
     ``served_calls`` (the unit's calls on every route of its relay: its
@@ -471,10 +473,20 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
     benchmark's environment the unit asked for (none: the base image), and
     ``image``, the one it ran in on the container backend - names only.
     ``setup_end``: when the unit's environment was ready and the agent began
-    (its setup, relay and container from ``t0``); ``checking``: the check's
-    start and end (its own step in the container, then the driver's score)."""
+    (its setup, relay and container from ``t0``); ``agent_ready``: when the
+    agent, started and in its session, was first asked - its setup from
+    ``setup_end``, its run from there; ``agent_unready``: when its start ended
+    with no session (it never answered, it exited) - its setup ends there and
+    it has no run, as Harbor writes a failed agent setup; ``checking``: the check's
+    start and end (its own step in the container, then the driver's score).
+    ``retryable``: False for an exception a further try meets again
+    whatever its name (``retries``), which its record then says."""
     os.makedirs(os.path.join(trial_dir, "agent"), exist_ok=True)
     os.makedirs(os.path.join(trial_dir, "verifier"), exist_ok=True)
+    if produce and produce[0] and agent_ready:   # its run starts once it is set up: the trace's window too
+        produce = (agent_ready, produce[1])
+    elif agent_unready:                          # it never got a session: no run to time
+        produce = (None, None)
     tot = _usage_total(calls)
     # the pages read a task's name after its last slash: a unit's own slashes
     # (a unit id like "set/12") would leave only its last part
@@ -483,6 +495,8 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
            "agent_info": {"name": other["key"], "version": str((other.get("upstream") or {}).get("version") or ""),
                           "model_info": {"name": model}},
            "environment_setup": {"started_at": iso(t0), "finished_at": iso(setup_end)} if setup_end else None,
+           "agent_setup": {"started_at": iso(setup_end), "finished_at": iso(agent_ready or agent_unready)}
+                          if setup_end and (agent_ready or agent_unready) else None,
            "agent_execution": {"started_at": iso(produce[0]), "finished_at": iso(produce[1])} if produce and produce[0] else None,
            "verifier": {"started_at": iso(checking[0]), "finished_at": iso(checking[1])} if checking and checking[0] and checking[1] else None,
            "agent_result": {"n_input_tokens": tot["input"], "n_output_tokens": tot["output"], "n_cache_tokens": tot["cached"],
@@ -490,7 +504,8 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
            "standard": {"benchmark": bench["key"], "family": bench["family"], "needs": bench["needs"], "unit": unit,
                         "plugged": other.get("_ref") or other["key"], "job": job, **_version(bench), **_control(other), **_setup(other),
                         **({"environment": environment} if environment else {}), **({"image": image} if image else {}),
-                        **({"served": who} if (who := served(calls if served_calls is None else served_calls, serving)) else {})}}
+                        **({"served": who} if (who := served(calls if served_calls is None else served_calls, serving)) else {}),
+                        **({"retries": retries} if retries else {})}}
     if score is not None:
         value = float(score.get("reward") or 0.0)
         # a pass benchmark leaves a reward, as a verifier does; a score
@@ -509,7 +524,8 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
         _write(os.path.join(trial_dir, "verifier", "score.json"),
                json.dumps(dict({k: v for k, v in score.items() if k != "parts"}, says=bench["score"]["says"]), indent=1))
     if exception:
-        res["exception_info"] = {"exception_type": exception[0], "exception_message": exception[1][:2000]}
+        res["exception_info"] = {"exception_type": exception[0], "exception_message": exception[1][:2000],
+                                 **({} if retryable else {"retryable": False})}
     _write(os.path.join(trial_dir, "agent", "calls.jsonl"), "".join(json.dumps(c) + "\n" for c in calls))
     _write(os.path.join(trial_dir, "agent", "gateway.log"),
            "".join(f"{iso(c.get('t0'))} {c.get('model')} status {c.get('status')} {c.get('error') or ''}\n" for c in calls))
@@ -525,12 +541,12 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
 
 
 def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str, provider: str, dataset: str, units: List[str],
-                 concurrency: int, granted: bool, judge: str = "", backend: str = "local", image: str = "",
+                 concurrency: int, granted: bool, judge: str = "", backend: str = "local", image: str = "", boat_size: str = "",
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
-                 bench_options: Optional[dict] = None,
+                 retries: int = 0, bench_options: Optional[dict] = None,
                  simulator: str = "", prices: Optional[dict] = None, units_file: Optional[dict] = None,
-                 constraints: Optional[dict] = None,
-                 served_by: Optional[Dict[str, List[str]]] = None):
+                 constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
+                 max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None):
     """``unsandboxed`` is true for an agent on the local backend only: in a
     container (``backend``, ``image``) it is not. ``standard.options`` holds
     every option's value, the defaults included, so two runs read side by side
@@ -538,11 +554,18 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     several machines (``shard``), which ``merge`` reads back. ``units_file``:
     the file a run's units were listed in (``run.units_file``), its name, its
     sha256 and its units, said only for such a run. ``repeat``: how
-    many times each unit was run, said only when more than once. ``judge`` and
+    many times each unit was run, each an attempt, said only when more than
+    once; ``retries``: how many times an attempt could be tried again after a
+    failure a further try might mend (``retries.retryable``), always said.
+    ``judge`` and
     ``simulator``: the models that graded and that played the user, when the
     benchmark has them. ``prices``: the rows its models' costs are
     estimated from and where the user's list came from, when it has any.
     ``constraints``: what the machine allowed the run (``nullius.constraints``), when it set any.
+    ``timeouts``, ``max_turns`` and ``max_calls``: the time limits by phase,
+    in seconds, the most turns of a conversation and the most model calls of
+    a unit's agent the run forced (``run --timeout``, ``--max-turns``,
+    ``--max-calls``), when it forced any.
     ``served_by``: by model, the serving providers the run let answer it
     (``--served-by``), said only for a run that pinned them."""
     with open(os.path.join(job_dir, "config.json"), "w") as f:
@@ -550,12 +573,15 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                    "standard": {"benchmark": bench["key"], **_version(bench), "plugged": other.get("_ref") or other["key"], "kind": other["_kind"], "provider": provider,
                                 "needs": bench["needs"], "permissions_granted": granted,
                                 "unsandboxed": granted and backend == "local", "backend": backend,
-                                **({"image": image} if image else {}), **({"judge": judge} if judge else {}),
+                                **({"image": image} if image else {}), **({"boat_size": boat_size} if boat_size else {}),
+                                **({"judge": judge} if judge else {}),
                                 **({"simulator": simulator} if simulator else {}), **({"options": options} if options else {}), **({"benchmark_options": bench_options} if bench_options else {}), **_control(other), **_setup(other),
                                 **({"launch": launch} if launch else {}), **({"shard": shard} if shard else {}),
                                 **({"units_file": units_file} if units_file else {}),
-                                **({"repeat": repeat} if repeat > 1 else {}), **({"prices": prices} if prices else {}),
+                                **({"repeat": repeat} if repeat > 1 else {}), "retries": retries, **({"prices": prices} if prices else {}),
                                 **({"constraints": constraints} if constraints else {}),
+                                **({"timeouts": timeouts} if timeouts else {}), **({"max_turns": max_turns} if max_turns else {}),
+                                **({"max_calls": max_calls} if max_calls else {}),
                                 **({"served_by": dict(sorted(served_by.items()))} if served_by else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,
@@ -566,6 +592,21 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
 #: an error kind naming the machine or the benchmark's side rather than the agent: the live board's infra_error
 _INFRA = ("Setup", "Verifier", "Api", "RateLimit", "Environment", "Docker", "Build", "Connection", "Network", "Authentication",
           "ModelNotFound")
+
+
+FEED_PHASES = (("env_setup", "environment_setup"), ("agent_setup", "agent_setup"), ("agent_run", "agent_execution"), ("verify", "verifier"))
+
+
+def feed_durations(res: dict) -> Optional[dict]:
+    """The phases a trial recorded, in the live feed's words and in seconds, read from its result so
+    the board and the trial's page say the same (Harbor's writer sends its four the same way). A
+    phase it has none of is left out; None when it recorded none."""
+    out = {}
+    for phase, key in FEED_PHASES:
+        window = res.get(key) or {}
+        if window.get("started_at") and window.get("finished_at"):
+            out[phase] = round((datetime.fromisoformat(window["finished_at"]) - datetime.fromisoformat(window["started_at"])).total_seconds(), 3)
+    return out or None
 
 
 def feed_outcome(kind: str, score: Optional[dict], exception: Optional[tuple]) -> dict:
@@ -589,8 +630,9 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
     """pass^k of a run that tried each unit several times (``repeat``), as τ-bench defines it: over
     the units, the chance that k attempts drawn from its n all passed, C(c, k) / C(n, k), averaged -
     pass^1 is the pass rate; and pass@k (``at``), the chance that one of them did, as HumanEval reads it. A unit with an attempt that ended in an error, with no verdict, is left
-    out, as the upstreams leave an infrastructure error out. None for a run of one attempt each."""
-    from math import comb
+    out, as the upstreams leave an infrastructure error out. None for a run of one attempt each.
+    The estimators are ``nullius.runs.attempts``', the ones the pages use."""
+    from nullius.runs import attempts
     per: Dict[str, List[bool]] = {}
     broken = set()
     for r in results:
@@ -602,14 +644,17 @@ def pass_hat(results: List[dict]) -> Optional[dict]:
             broken.add(u)
             continue
         per.setdefault(u, []).append(rewards["reward"] == 1.0)
-    whole = {u: v for u, v in per.items() if u not in broken}
-    n = min((len(v) for v in whole.values()), default=0)
-    if n < 2:
+    got = attempts.estimate(v for u, v in per.items() if u not in broken)
+    if got is None:
         return None
-    return {"units": len(whole), "attempts": n,
-            **{str(k): round(sum(comb(sum(v[:n]), k) / comb(n, k) for v in whole.values()) / len(whole), 4) for k in range(1, n + 1)},
-            # pass@k, as HumanEval's estimate_pass_at_k reads n attempts with c passed: 1 - C(n-c, k) / C(n, k), averaged
-            "at": {str(k): round(sum(1 - comb(n - sum(v[:n]), k) / comb(n, k) for v in whole.values()) / len(whole), 4) for k in range(1, n + 1)}}
+    return {"units": got["units"], "attempts": got["attempts"],
+            **{str(k): round(v, 4) for k, v in got["hat"].items()},
+            "at": {str(k): round(v, 4) for k, v in got["at"].items()}}
+
+
+def n_retries(results: List[dict]) -> int:
+    """The retries a job's attempts took, all together: Harbor's ``stats.n_retries``, from each trial's ``standard.retries``."""
+    return sum(int((r.get("standard") or {}).get("retries") or 0) for r in results)
 
 
 def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dict], planned: int, budget: Optional[dict] = None,
@@ -624,6 +669,7 @@ def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dic
     with open(os.path.join(job_dir, "result.json"), "w") as f:
         json.dump({"id": job, "started_at": iso(t0), "finished_at": iso(t1), "n_total_trials": planned,
                    "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
-                             "n_cancelled_trials": planned - len(results), "n_running_trials": 0, "n_pending_trials": 0},
+                             "n_cancelled_trials": planned - len(results), "n_running_trials": 0, "n_pending_trials": 0,
+                             "n_retries": n_retries(results)},
                    **({"pass_hat_k": hat} if hat else {}), **({"budget": budget} if budget else {}),
                    **({"served": who} if who else {})}, f, indent=1)
