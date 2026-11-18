@@ -367,11 +367,16 @@ def _load_jobs():
     return workspace.load_jobs(ws, STATE["job_roots"])
 
 
+def request_memo(name: str) -> dict:
+    """A dict kept for the rest of this request under *name*; a new one outside a request."""
+    return g.setdefault(f"_memo_{name}", {}) if has_request_context() else {}
+
+
 def _jobs_for_workspace(name=None):
     """Read an indexed workspace without making it active or converting sources.
     Once per request and workspace: a page that asks for the jobs several
     times (the job page's controls, the rail, a summary) walks them once."""
-    memo = g.setdefault("_jobs", {}) if has_request_context() else {}
+    memo = request_memo("jobs")
     key = name if name and not (STATE["workspace"] and name == STATE["workspace"].name) else ""
     if key in memo:
         return memo[key]
@@ -421,7 +426,7 @@ def _job_for_request(job_id):
     of a job's agents is ``<folder>~<agent>``). The whole workspace on any
     doubt: another workspace asked for, no such folder, or several."""
     ws = STATE["workspace"]
-    if ws is not None and not request.args.get("workspace") and "" not in g.get("_jobs", {}):
+    if ws is not None and not request.args.get("workspace") and "" not in request_memo("jobs"):
         names = {job_id, job_id.rsplit("~", 1)[0]}
         dirs = [d for d in parse.find_job_dirs(STATE["job_roots"]) if os.path.basename(d) in names]
         if len(dirs) == 1:

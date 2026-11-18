@@ -116,8 +116,8 @@ def _grouped(ws=None):
     have = {j.job_id for j in jobs}
     # The run records are the app's, not the workspace's: only those launched
     # into this workspace's roots, or with a job already written here, belong.
-    roots = None if ws is None else list(ws.roots) + list(ws.job_roots)
-    mine = [e for e in execution.EXECUTIONS.values() if _launched_here(e, have, roots)]
+    real = _real_roots(None if ws is None else list(ws.roots) + list(ws.job_roots))
+    mine = [e for e in execution.EXECUTIONS.values() if _launched_here(e, have, real)]
     merged = launches.merged_sources(jobs)
     jobs = [j for j in jobs if j.job_id not in merged]
     return jobs, have, mine, launches.group(jobs, {e.id: _record(e, merged) for e in mine})
@@ -151,16 +151,27 @@ def _tally(g, by_id) -> dict:
     return {"n_runs": len(written) + len(pending) - checks, "n_checks": checks}
 
 
-def _launched_here(ex, have, roots=None) -> bool:
-    """A run record belongs to the open workspace (or one of ``roots``) when its
-    job root is one of the workspace's roots (a Run adopts it there) or one of
-    its jobs is here."""
+def _real_roots(roots=None) -> set:
+    """``roots`` (the open workspace's when None), links resolved: what ``_launched_here`` matches against."""
+    if roots is None:
+        roots = list(shared.STATE.get("roots") or []) + list(shared.STATE.get("job_roots") or [])
+    return {os.path.realpath(r) for r in roots}
+
+
+def _launched_here(ex, have, real) -> bool:
+    """A run record belongs to a workspace when its job root is one of the
+    workspace's roots, ``real`` (``_real_roots``; a Run adopts it there), or
+    one of its jobs is here, ``have``. Each record's root is resolved once per
+    request, however many workspaces ask."""
     if any(str(x.get("name")) in have for x in ex.plan.jobs):
         return True
     jobs_dir = getattr(ex, "jobs", None)
-    if roots is None:
-        roots = list(shared.STATE.get("roots") or []) + list(shared.STATE.get("job_roots") or [])
-    return bool(jobs_dir) and os.path.realpath(jobs_dir) in {os.path.realpath(r) for r in roots}
+    if not jobs_dir:
+        return False
+    memo = shared.request_memo("real_jobs")
+    if jobs_dir not in memo:
+        memo[jobs_dir] = os.path.realpath(jobs_dir)
+    return memo[jobs_dir] in real
 
 
 # A launch's runs, in the order the block lists them: finished first, best
@@ -372,7 +383,7 @@ def _roots_pulse() -> str:
     Nothing is parsed; this is a handful of stats per job."""
     dirs = parse.find_job_dirs(shared.STATE["job_roots"] or [])
     have = {os.path.basename(d) for d in dirs}
-    marks = [(f"run:{e.id}", e.state, 0) for e in execution.EXECUTIONS.values() if _launched_here(e, have)]
+    marks = [(f"run:{e.id}", e.state, 0) for e in execution.EXECUTIONS.values() if _launched_here(e, have, _real_roots())]
     for d in dirs:
         feed = os.path.join(d, "events.jsonl")
         marks.append((os.path.basename(d), os.path.isfile(os.path.join(d, "result.json")),
