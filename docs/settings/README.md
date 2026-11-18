@@ -84,6 +84,7 @@ directory and installation:
 | User catalogue | `~/.local/share/nullius/catalogue/` |
 | Workspaces | `~/.local/share/nullius/workspaces/` |
 | Runs started from Review | `~/.local/share/nullius/runs/` |
+| Saved recipes | `~/.local/share/nullius/recipes/` |
 | Provider test results | `~/.local/share/nullius/provider-tests.json` |
 | Standard installs and data | `~/.local/share/nullius/standard/` |
 | Caches | `~/.cache/nullius/` |

@@ -55,14 +55,14 @@ LAUNCH = {
 }
 
 
-def payload(cat, jobs, workspace_name=""):
+def payload(cat, jobs):
     from nullius import providers
     from nullius.standard import recipe as standard
     models = sorted({j.model_name for j in jobs if j.model_name})
     dated = [j for j in jobs if j.model_name and j.started_at]
     latest = max(dated, key=lambda j: j.started_at.timestamp()).model_name if dated else ""
     return {
-        "version": 1, "workspace": workspace_name or "unassigned", "agents": AGENTS,
+        "version": 1, "agents": AGENTS,
         # Harbor and the Nullius standard: the page offers choices, the core and standard/recipe.py compile them.
         "runners": [standard.RUNNER, providers.HARBOR],
         # why a saved recipe of a runner no longer offered does not open (a benchmark's own scripts: its Original setup)

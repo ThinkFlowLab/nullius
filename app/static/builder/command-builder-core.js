@@ -829,7 +829,7 @@
   // opened for something else - a prefill from a run, or a run's own recipe.
   const OPENED_FOR = ['run','like','dataset','model','agent','n_tasks','standard','other'];
   function packDraft(state) {
-    return JSON.stringify({version: 1, at: new Date().toISOString(), recipe: state.recipe, step: state.step, steps: STEPS.length, first: 'benchmark', tab: state.tab});
+    return JSON.stringify({version: 1, at: new Date().toISOString(), recipe: state.recipe, step: state.step, steps: STEPS.length, first: 'benchmark', tab: state.tab, saved: state.saved || ''});
   }
   function unpackDraft(text, query) {
     if (!text || Object.keys(query || {}).some(k => OPENED_FOR.includes(k))) return null;
@@ -842,7 +842,7 @@
       if (Number.isInteger(d.step) && had < STEPS.length && step >= STEP.setup) step += 1;
       if (d.first !== 'benchmark' && (step === 0 || step === 1)) step = 1 - step;   // a draft from when the runner came first
       return {recipe: fromJSON(d.recipe), step: Math.min(step, STEP.review), tab: typeof d.tab === 'string' ? d.tab : 'select',
-        at: String(d.at || '')};
+        at: String(d.at || ''), saved: typeof d.saved === 'string' ? d.saved : ''};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
   return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};

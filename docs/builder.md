@@ -89,7 +89,7 @@ a declared model list keeps those published choices.
 | What | Where | When |
 | --- | --- | --- |
 | Draft | The browser, one per browser | Saved on every change; *Start over* forgets it |
-| Saved recipes | The browser | Save, Load, Delete, import and export as JSON |
+| Saved recipes | `recipes/<id>.json` under the user data directory, one file each | Any browser lists and loads them. Save and Delete work only from a browser on the application host. Saving a name that exists updates that recipe, and saving a loaded recipe under a new name renames it. Import and export as JSON. A list kept in the browser by an earlier version moves here when the builder opens on the host. Recipes the server refuses stay in the browser under `nullius.recipes.v1.rejected` |
 | A run's recipe | `runs/<name>/run.json` | Job page, *New run like this*: the same recipe, at Review |
 | A job's record | Its `config.json` and `lock.json` | *New run like this* without a kept recipe: rebuilt, what it cannot carry named |
 

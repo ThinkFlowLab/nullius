@@ -9,7 +9,7 @@
     <div class="nb-headingactions">
       <button class="nb-button" id="nb-saved-toggle" aria-haspopup="dialog" aria-controls="nb-saved">Saved recipes</button>
       <button class="nb-button" id="nb-import">Import recipe</button>
-      <button class="nb-button" id="nb-save">Save recipe</button>
+      <button class="nb-button" id="nb-save"{% if not builder_data.local %} aria-disabled="true" title="{{ builder_data.recipesWhy }}"{% endif %}>Save recipe</button>
       <button class="nb-button" id="nb-startover" title="Forget the recipe on this page and start from the defaults">Start over</button>
       <input type="file" accept=".json,application/json" id="nb-import-file" hidden aria-label="Import a recipe JSON file">
     </div>
