@@ -1409,6 +1409,9 @@ class Run:
         if failed and failed[0] == relay.CONTEXT_ERROR and ((score or {}).get("stopped")
                                                           or self.upstream and exc and ": VerifierError: " in exc[1]):
             failed = None
+        if failed and failed[0] == pacing.RATE_LIMITED and (score or {}).get("stopped") and rl is not None \
+                and relay.asked(rl.dir) is not None:
+            failed = None
         if not failed and rl is not None and getattr(self, "route_pins", None):
             failed = relay.routes_failure([calls] + [rl.calls(f"{tag}-{side}") for side in ("judge", "simulator")], self.route_pins, words)
         if not failed and rl is not None and exc is not None and (exc[0] == "VerifierError" or not words):

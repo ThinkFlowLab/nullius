@@ -116,8 +116,8 @@ class Failure(unittest.TestCase):
 
 class Calls:
     """The agent's calls ending on an overflow, then a refused side call."""
-    def __init__(self, own):
-        self.own, self.dir = own, os.devnull
+    def __init__(self, own, dir=os.devnull):
+        self.own, self.dir = own, dir
 
     def calls(self, tag):
         return [] if tag.endswith(("-judge", "-simulator")) else list(self.own)
@@ -145,12 +145,12 @@ class Unit(unittest.TestCase):
         install.HOME = self._home
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def ran(self, own, gated=True):
+    def ran(self, own, gated=True, record=os.devnull):
         b = dict(self.b, **({"gated": True} if gated else {}))
         o, why = definitions.setup(b, "original", "paper-1", "custom")
         self.assertIsNotNone(o, why)
         jobs = os.path.join(self.tmp, f"jobs-{len(os.listdir(self.tmp))}")
-        with patch.object(run.Run, "unit_relay", lambda r, *a, **k: Calls(own)):
+        with patch.object(run.Run, "unit_relay", lambda r, *a, **k: Calls(own, record)):
             job_dir = run.run(b, o, model="paper-1", provider="custom", jobs_root=jobs, say=lambda s: None,
                               env={"MODEL_API_URL": "http://127.0.0.1:9/v1", "MODEL_API_KEY": "k"})
         name = next(t for t in os.listdir(job_dir) if "__u" in t)
@@ -179,6 +179,19 @@ class Unit(unittest.TestCase):
         self.assertIsNone(said)
         self.assertEqual((ran.trials[0].outcome, ran.trials[0].reward), (classify.FAILED_VERIFICATION, 0.5))
         said, _ = self.ran([AGENT_OK, OVERFLOW, SIDE_EMPTY, {"status": 429, "error": "slow down"}])
+        self.assertEqual(said["exception_type"], "RateLimitError")
+
+    def test_an_episode_a_guard_stopped_and_the_driver_scored_keeps_its_score_after_a_429(self):
+        with open(os.path.join(self.b["_here"], "driver.py"), "w") as f:
+            f.write(STOPPED.replace('"stopped": "context window"', '"stopped": "batch cap"'))
+        record = os.path.join(self.tmp, "record")
+        os.makedirs(record)
+        with open(os.path.join(record, relay.STOP), "w") as f:
+            f.write("batch cap\n")
+        said, ran = self.ran([AGENT_OK, {"status": 429, "error": "slow down"}], record=record)
+        self.assertIsNone(said)
+        self.assertEqual((ran.trials[0].outcome, ran.trials[0].reward), (classify.FAILED_VERIFICATION, 0.5))
+        said, _ = self.ran([AGENT_OK, {"status": 429, "error": "slow down"}])
         self.assertEqual(said["exception_type"], "RateLimitError")
 
     def test_an_episode_the_overflow_ended_whose_evaluation_failed_is_the_checks(self):
