@@ -20,7 +20,6 @@ MATCHED = [label for label in WHOLE if label != "Run wall time"]
 DETAIL = ["Outcome", "Score", "Fail → Pass", "Pass → Pass", "Agent time", "Env / Verify", "Steps", "Tool calls", "Failed calls", "Tool mix", "First edit",
           "Edit → test cycles", "Redundant reads", "Retried failed calls", "Exploration per edit", "Prompt size",
           "Fresh prompt", "Cached", "Cached ratio", "Output tokens", "Cost (estimated)", "Files edited", "Broke"]
-SECTIONS = ["Task by task"]
 
 
 def labels(body):
@@ -58,26 +57,33 @@ class KeptRows(unittest.TestCase):
         return response.get_data(as_text=True)
 
     def test_every_row_and_section_is_kept(self):
-        whole, matched = self.get(cohort="whole"), self.get(cohort="matched")
-        self.assertEqual(labels(whole), WHOLE)
-        self.assertEqual(labels(matched), MATCHED)
-        for body in (whole, matched):
-            for section in SECTIONS:
-                self.assertIn(f"<h2>{section}</h2>", body)
-            # the controls row: the cohort switch, its two links, their labels and cohort= values, then Add a run
-            tools = re.search(r'<div class="table-tools table-controls" id="side-tools">(.*?)<div class="table-wrap compare-table-wrap"', body, re.S).group(1)
-            switch = re.search(r'<nav class="seg-toggle" aria-label="Comparison cohort">(.*?)</nav>', tools, re.S).group(1)
-            self.assertIn('id="compare-add"', tools)
-            self.assertIn('<use href="#i-reorder"/></svg>Order</button>', tools)
-            self.assertEqual(re.findall(r'<a href="[^"]+">([^<]+)</a>', tools.split("data-order-btn")[1]), ["Group by agent", "Alternate agents"])
-            self.assertEqual(re.findall(r'cohort=(\w+)"[^>]*>([^<]+)</a>', switch), [("whole", "Whole runs"), ("matched", "Matched tasks")])
-            self.assertNotIn('class="cohort-note"', body)
-            self.assertIn("Open trials side by side", body)
-            self.assertIn('data-detail-url="/compare/detail/0?', body)
-        self.assertIn('id="judgement"', matched)
-        self.assertIn("Better of two", matched)
+        """Side by side holds the summary rows, Task by task the task table, its detail rows and its judgement."""
+        for cohort, rows in (("whole", WHOLE), ("matched", MATCHED)):
+            side, tasks = self.get(cohort=cohort), self.get(cohort=cohort, view="tasks")
+            self.assertEqual(labels(side), rows)
+            self.assertEqual(labels(tasks), [])
+            for body, view, current in ((side, "side", "Side by side"), (tasks, "tasks", "Task by task")):
+                # the controls row: the cohort switch, the view switch, Order, then Add a run
+                tools = re.search(rf'<div class="table-tools table-controls" id="{view}-tools">(.*?)<div class="table-wrap compare-table-wrap"', body, re.S).group(1)
+                switch = re.search(r'<nav class="seg-toggle" aria-label="Comparison cohort">(.*?)</nav>', tools, re.S).group(1)
+                views = re.search(r'<nav class="seg-toggle" aria-label="Comparison view">(.*?)</nav>', tools, re.S).group(1)
+                self.assertIn('id="compare-add"', tools)
+                self.assertIn('<use href="#i-reorder"/></svg>Order</button>', tools)
+                self.assertEqual(re.findall(r'<a href="[^"]+">([^<]+)</a>', tools.split("data-order-btn")[1]), ["Group by agent", "Alternate agents"])
+                self.assertEqual(re.findall(r'cohort=(\w+)[^"]*"[^>]*>([^<]+)</a>', switch), [("whole", "Whole runs"), ("matched", "Matched tasks")])
+                self.assertEqual(re.findall(r'aria-current="true">([^<]+)</a>', views), [current])
+                self.assertNotIn('class="cohort-note"', body)
+                self.assertNotIn("<h2>Task by task</h2>", body)
+            self.assertIn('aria-label="Run comparison"', side)
+            self.assertNotIn('aria-label="Task comparison"', side)
+            self.assertNotIn('aria-label="Run comparison"', tasks)
+            self.assertIn("Open trials side by side", tasks)
+            self.assertIn('data-detail-url="/compare/detail/0?', tasks)
+        tasks = self.get(cohort="matched", view="tasks")
+        self.assertIn('id="judgement"', tasks)
+        self.assertIn("Better of two", tasks)
+        self.assertNotIn('id="judgement"', self.get(cohort="matched"))
         self.assertEqual(labels(self.get("/compare/detail/0", cohort="matched")), DETAIL)
-
 
 if __name__ == "__main__":
     unittest.main()

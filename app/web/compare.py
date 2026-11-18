@@ -351,7 +351,8 @@ def compare():
         for ref in tier
         if ref is not None
     ]
-    summary = summary_rows(chosen, baseline=columns[0]["i"] == 0) if view.cohort == "whole" or view.shared_tasks else []
+    tasks_view = _view()
+    summary = summary_rows(chosen, baseline=columns[0]["i"] == 0) if not tasks_view and (view.cohort == "whole" or view.shared_tasks) else []
     # There is no truthful wall-clock interval for a subset of parallel trials.
     # Whole-run intervals keep their existing ranking, explicitly labelled.
     if view.cohort == "matched":
@@ -361,7 +362,7 @@ def compare():
             if row["label"] == "Wall time":
                 row.update(label="Run wall time", hint="The recorded wall-clock interval of the full run")
     values = [c["ref"].value for c in columns]
-    to = lambda vs: url_for("compare", pick=vs, cohort=view.cohort)
+    to = lambda vs: url_for("compare", pick=vs, cohort=view.cohort, view=tasks_view)
 
     def swap(a, b):
         vs = list(values)
@@ -377,12 +378,13 @@ def compare():
         tasks=view.tasks, summary=summary, columns=columns, workspace_options=_workspace_options(),
 
         n_differing=view.n_differing, n_shared=view.shared_tasks,
-        picks=values, cohort=view.cohort, add=to(values + [columns[-1]["ref"].workspace + ":"]),
-        lists={n: _options(n, baseline) for n in dict.fromkeys(c["ref"].workspace for c in columns)},
+        picks=values, cohort=view.cohort, view=tasks_view, add=to(values + [columns[-1]["ref"].workspace + ":"]),
+        # the run picker is the side-by-side table's
+        lists={} if tasks_view else {n: _options(n, baseline) for n in dict.fromkeys(c["ref"].workspace for c in columns)},
         baseline=baseline, benchmarks=[b.title if b else "—" for b in (_benchmark(j.dataset)[0] for j in chosen)],
         order_grouped=grouped, order_alternating=alternating,
         n_agents=len(by_agent),
-        judgement=_judgement(view), csrf=shared._csrf_token(),
+        judgement=tasks_view and _judgement(view), csrf=shared._csrf_token(),
     )
 
 
@@ -468,6 +470,11 @@ def _workspace_options():
     return options
 
 
+def _view():
+    """This URL's view: "tasks" for the task table, None (no parameter) for the side-by-side table."""
+    return "tasks" if request.args.get("view") == "tasks" else None
+
+
 def _comparison_requested():
     return _columns_requested()[0]
 
@@ -513,7 +520,7 @@ def _columns_requested():
 @app.route("/compare/pick")
 def compare_picker():
     """The old picker's links: its picks as columns."""
-    return redirect(url_for("compare", pick=request.args.getlist("pick"), cohort=request.args.get("cohort", "whole")))
+    return redirect(url_for("compare", pick=request.args.getlist("pick"), cohort=request.args.get("cohort", "whole"), view=_view()))
 
 
 def trace_panel(t, chart_filter=None):
@@ -549,13 +556,13 @@ def compare_task(task):
     """Full detail of the same last indexed attempt shown in the task table."""
     view, columns = _columns_requested()
     if not view.selected:
-        return redirect(url_for("compare", pick=[c["ref"].value for c in columns], cohort=view.cohort))
+        return redirect(url_for("compare", pick=[c["ref"].value for c in columns], cohort=view.cohort, view=_view()))
     dataset = request.args.get("dataset")
     matches = [row for row in view.tasks if row.task == task and (dataset is None or row.dataset == dataset)]
     if len(matches) != 1:
         if len(matches) > 1:
             flash("That task name occurs in different datasets. Choose its dataset row first.", "error")
-            return redirect(url_for("compare", pick=view.references, cohort=view.cohort))
+            return redirect(url_for("compare", pick=view.references, cohort=view.cohort, view=_view()))
         abort(404, description="This task is not in the selected comparison cohort.")
     row = matches[0]
     # One legend state for every side: a kind switched off in a chart is off in
@@ -581,7 +588,7 @@ def compare_task(task):
         if group and group.n > 1:
             others = [q for q in chosen_query if q.rsplit("/", 1)[0] != selection.value]
             links = [{"trial": x, "current": x.trial_name == t.trial_name,
-                      "href": url_for("compare_task", task=task, pick=picks, cohort=view.cohort,
+                      "href": url_for("compare_task", task=task, pick=picks, cohort=view.cohort, view=_view(),
                                       dataset=row.dataset, attempt=others + [f"{selection.value}/{x.trial_name}"],
                                       **cfilt.query)}
                      for x in group.trials]
@@ -591,6 +598,6 @@ def compare_task(task):
                        **trace_panel(t, cfilt)})
     return render_template(
         "compare/compare_task.html", task=task, dataset=row.dataset, panels=panels,
-        comparison=view, picks=picks, cohort=view.cohort, chosen=chosen_query,
+        comparison=view, picks=picks, cohort=view.cohort, view=_view(), chosen=chosen_query,
         chart_filter=cfilt, no_filter=trace.Filter(),
     )

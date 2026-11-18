@@ -27,26 +27,31 @@
 </p>
 {% endif %}
 
-{#- The side table's controls row: the cohort and the columns' order, then Add a run. #}
+{#- The controls row: the cohort, the view and the columns' order, then Add a run. #}
 {% macro side_views() %}<nav class="seg-toggle" aria-label="Comparison cohort">
-    <a href="{{ url_for('compare', pick=picks, cohort='whole') }}" aria-current="{{ 'true' if cohort == 'whole' else 'false' }}">Whole runs</a>
-    <a href="{{ url_for('compare', pick=picks, cohort='matched') }}" aria-current="{{ 'true' if cohort == 'matched' else 'false' }}">Matched tasks</a>
+    <a href="{{ url_for('compare', pick=picks, cohort='whole', view=view) }}" aria-current="{{ 'true' if cohort == 'whole' else 'false' }}">Whole runs</a>
+    <a href="{{ url_for('compare', pick=picks, cohort='matched', view=view) }}" aria-current="{{ 'true' if cohort == 'matched' else 'false' }}">Matched tasks</a>
+  </nav>
+  <nav class="seg-toggle" aria-label="Comparison view">
+    <a href="{{ url_for('compare', pick=picks, cohort=cohort) }}" aria-current="{{ 'false' if view else 'true' }}">Side by side</a>
+    <a href="{{ url_for('compare', pick=picks, cohort=cohort, view='tasks') }}" aria-current="{{ 'true' if view else 'false' }}">Task by task</a>
   </nav>
   {% if n_agents > 1 %}<div class="menu-wrap">
     <button class="btn ghost sm" type="button" data-order-btn aria-haspopup="true" aria-expanded="false" title="Order columns"><svg class="ic" aria-hidden="true"><use href="#i-reorder"/></svg>Order</button>
     <div class="menu tools-menu" hidden>
-      <a href="{{ url_for('compare', pick=order_grouped, cohort=cohort) }}">Group by agent</a>
-      <a href="{{ url_for('compare', pick=order_alternating, cohort=cohort) }}">Alternate agents</a>
+      <a href="{{ url_for('compare', pick=order_grouped, cohort=cohort, view=view) }}">Group by agent</a>
+      <a href="{{ url_for('compare', pick=order_alternating, cohort=cohort, view=view) }}">Alternate agents</a>
     </div>
   </div>{% endif %}{% endmacro %}
 {% macro side_actions() %}<a class="btn ghost sm" href="{{ add }}" id="compare-add"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a run</a>{% endmacro %}
 {#- one block, so the controls row sticks only as far as the table #}
 <div>
-{{ controls('side', [], sort=false, views=side_views, actions=side_actions) }}
+{{ controls(view or 'side', [], sort=false, views=side_views, actions=side_actions) }}
 {% if jobs %}
 {% if cohort == 'matched' and not n_shared %}<p class="alert warn">No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
 {% if comparison.datasets_known and not comparison.datasets_match %}<p class="compare-warn">The recorded datasets differ: pick runs of the baseline's dataset to compare the same tasks.</p>{% endif %}
 {% endif %}
+{% if not view %}
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Run comparison" tabindex="0">
 <table class="grid compare" id="side" style="--cols: {{ columns|length }}">
   {{ comparison_columns() }}
@@ -168,10 +173,7 @@
   </tbody>
 </table>
 </div>
-</div>
-
-{% if jobs %}
-<h2>Task by task</h2>
+{% elif jobs %}
 <p class="subtitle">Tasks whose pass rate moved most are listed first. A blank cell means that run
   didn't include the task.</p>
 {% if judgement %}
@@ -179,7 +181,7 @@
   <span class="small"><strong>Judgement</strong> <span class="badge">experimental</span>
     · {{ judgement.judged }} of {{ judgement.pairs }} matched pair{{ '' if judgement.pairs == 1 else 's' }} judged{% if judgement.unjudged %}, {{ judgement.unjudged }} not judged{% endif %}{% if judgement.earlier %} ({{ judgement.earlier }} under an earlier vocabulary){% endif %}</span>
   {% if judgement.unjudged and judgement.keyed %}
-  <form method="post" action="{{ url_for('judge_compare_route', pick=picks, cohort=cohort) }}" class="header-form" id="judge-all">
+  <form method="post" action="{{ url_for('judge_compare_route', pick=picks, cohort=cohort, view=view) }}" class="header-form" id="judge-all">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <button class="btn sm ghost" type="submit">Judge {{ judgement.unjudged }} pair{{ '' if judgement.unjudged == 1 else 's' }}</button>
   </form>
@@ -187,16 +189,16 @@
 </div>
 {% endif %}
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Task comparison" tabindex="0">
-<table class="grid compare tasks" style="--cols: {{ columns|length }}">
+<table class="grid compare tasks" id="tasks" style="--cols: {{ columns|length }}">
   {{ comparison_columns() }}
   <thead>
-    <tr>
+    <tr data-sticky>
       <th{{ classes(METRIC, true) }}>Task</th>
       {% for c in columns %}
       {% set j = jobs[c.i] if c.i is not none else none %}
-      <th class="draggable-col{{ ' compare-empty' if j is none }}" draggable="true" data-job="{{ c.ref.value }}" title="Drag to reorder">
+      <th class="draggable-col{{ ' compare-empty' if j is none }}" draggable="true" data-job="{{ c.ref.value }}" title="{{ j.job_id ~ ': ' if j is not none }}drag to reorder">
         {%- if j is not none %}
-        {{ j.agent_label or j.job_id }}
+        {{ j.agent_label or j.job_id }}{% if j.model_name %} · {{ j.model_name }}{% endif %}
         {%- if j.is_control %} <span class="chip-control">control</span>{% endif %}
         {%- endif %}
       </th>
@@ -269,7 +271,7 @@
       <td colspan="{{ columns|length + 1 + (1 if judgement else 0) }}">
         <div class="detail-body" data-detail-url="{{ url_for('compare_detail_row', index=task_index, pick=picks, cohort=cohort) }}"><p class="faint small">Loading…</p></div>
         <p class="detail-more">
-          <a class="btn ghost sm" href="{{ url_for('compare_task', task=taskrow.task, dataset=taskrow.dataset, pick=picks, cohort=cohort) }}">Open trials side by side →</a>
+          <a class="btn ghost sm" href="{{ url_for('compare_task', task=taskrow.task, dataset=taskrow.dataset, pick=picks, cohort=cohort, view=view) }}">Open trials side by side →</a>
         </p>
       </td>
     </tr>
@@ -278,6 +280,7 @@
 </table>
 </div>
 {% endif %}
+</div>
 
 <script>
   NulliusCompare.wire({values: {{ picks|tojson }}, lists: {{ lists|tojson }}, dataset: {{ baseline|tojson }},
@@ -330,9 +333,11 @@
         const at = next.indexOf(target) + (after ? 1 : 0);
         next.splice(at, 0, dragged);
 
-        const url = new URL('{{ url_for("compare") }}', location.origin);
+        // this URL, its other parameters (the cohort, the view) kept
+        const url = new URL(location.href);
+        url.searchParams.delete('pick');
+        url.searchParams.delete('job');
         next.forEach(id => url.searchParams.append('pick', id));
-        url.searchParams.set('cohort', {{ cohort|tojson }});
         location.href = url;
       });
     });

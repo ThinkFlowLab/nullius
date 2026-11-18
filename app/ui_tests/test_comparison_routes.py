@@ -93,9 +93,8 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertNotIn("right-only", matched)
 
     def test_record_links_keep_duplicate_run_ids_in_their_own_workspace(self):
-        body = self.get(cohort="matched")
-        urls = [urlsplit(attrs["href"]) for tag, attrs in Elements(body).elements
-                if tag == "a" and "href" in attrs]
+        urls = [urlsplit(attrs["href"]) for body in (self.get(cohort="matched"), self.get(cohort="matched", view="tasks"))
+                for tag, attrs in Elements(body).elements if tag == "a" and "href" in attrs]
         run_links = [parse_qs(url.query).get("workspace", []) for url in urls if url.path == "/job/run"]
         self.assertIn(["active"], run_links)
         self.assertIn(["foreign"], run_links)
@@ -105,6 +104,7 @@ class ComparisonRoutes(unittest.TestCase):
             query = parse_qs(url.query)
             self.assertEqual(query["pick"], ["active:run", "foreign:run"])
             self.assertEqual(query["cohort"], ["matched"])
+            self.assertEqual(query["view"], ["tasks"])
             self.assertEqual(query["dataset"], [self.left.dataset])
 
     def test_last_indexed_attempt_is_the_same_in_the_table_and_detail(self):
@@ -113,7 +113,7 @@ class ComparisonRoutes(unittest.TestCase):
         self.left.trials = [first, last]
         table = self.get(cohort="matched")
         detail = self.get("/compare/task/shared", cohort="matched", dataset=self.left.dataset)
-        for body in (table, detail):
+        for body in (self.get(cohort="matched", view="tasks"), detail):
             self.assertIn("/trial/run/attempt-last?workspace=active", unescape(body))
             self.assertNotIn("/trial/run/attempt-first?workspace=active", unescape(body))
         self.assertEqual(self.cells(table, "Trials"), ["2", "1"])
@@ -125,7 +125,7 @@ class ComparisonRoutes(unittest.TestCase):
         limited = trial("shared", "rate_limited", trial_name="limited", exception_type="ApiRateLimitError")
         self.left.trials = [trial("shared", trial_name="one"), trial("shared", trial_name="two"), limited]
         expected = '<b>2/2</b> passed<span class="faint"> · 1 infra</span>'
-        self.assertIn(expected, self.get(cohort="matched"))
+        self.assertIn(expected, self.get(cohort="matched", view="tasks"))
         self.assertIn(expected, self.get("/compare/task/shared", cohort="matched", dataset=self.left.dataset))
 
     def test_a_scored_task_side_by_side_shows_its_mean_not_a_pass_count(self):
@@ -162,7 +162,7 @@ class ComparisonRoutes(unittest.TestCase):
     def test_legacy_multiselect_becomes_qualified_and_preserves_order(self):
         other = replace(self.right, job_id="other", trials=[replace(t, job_id="other") for t in self.right.trials])
         self.jobs["active"] = [self.left, other]
-        response = self.client.get("/compare", query_string=[("job", "other"), ("job", "run")])
+        response = self.client.get("/compare", query_string=[("job", "other"), ("job", "run"), ("view", "tasks")])
         self.assertEqual(response.status_code, 200)
         body = response.get_data(as_text=True)
         self.assertLess(body.index('data-job="active:other"'), body.index('data-job="active:run"'))
@@ -173,14 +173,14 @@ class ComparisonRoutes(unittest.TestCase):
                                   n_output_tokens=30, n_cache_tokens=80)]
         self.right.trials = [trial("shared", dur_total=None, n_input_tokens=0,
                                    n_output_tokens=0, n_cache_tokens=0)]
-        body = self.get(cohort="matched")
+        body = self.get(cohort="matched", view="tasks")
         totals = re.findall(r'<span>Total time</span><strong>(.*?)</strong>', body)
         tokens = re.findall(r'<span>Tokens</span><strong>(.*?)</strong>', body)
         self.assertEqual(totals, ["2.08m", "—"])
         self.assertEqual(tokens, ["130", "—"])
         self.assertIn("Token usage not recorded", body)
         self.right.agent_name = "nop"
-        control = self.get(cohort="matched")
+        control = self.get(cohort="matched", view="tasks")
         self.assertEqual(re.findall(r'<span>Tokens</span><strong>(.*?)</strong>', control), ["130", "0"])
 
     def test_controls_are_never_ranked_in_matched_metrics(self):
@@ -206,7 +206,7 @@ class ComparisonRoutes(unittest.TestCase):
         # The summary row and the task's detail row - asked for when its row
         # opens - both carry the label with its explanation, and the detail's
         # cost cell is the same dash.
-        self.assertIn('data-detail-url="/compare/detail/0?', table)
+        self.assertIn('data-detail-url="/compare/detail/0?', self.get(cohort="matched", view="tasks"))
         detail = self.get("/compare/detail/0", cohort="matched")
         for body in (table, detail):
             self.assertEqual(body.count('title="An estimate: priced by the agent from its price table'), 1)
@@ -260,6 +260,7 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertEqual(self.cells(body, "Cost (estimated)"), ["$3.00", "$2.00", "", "$3.00"])
         self.assertIn('style="--cols: 4"', body)
         # the task table: a cell a column, the empty one empty, in the same order
+        body = self.get(pick=picks, cohort="matched", view="tasks")
         task = re.search(r'<tr class="compare-task-row[^"]*">(.*?)</tr>', body, re.S).group(1)
         cells = re.findall(r'<td( class="[^"]*")?>', task)[1:]
         self.assertEqual([c for c in cells], ["", "", ' class="compare-empty"', ""])
@@ -307,6 +308,7 @@ class ComparisonRoutes(unittest.TestCase):
         row = body[body.index('<div class="table-tools table-controls" id="side-tools">'):body.index('<div class="table-wrap compare-table-wrap"')]
         self.assertEqual(re.findall(r'data-slot="(\w+)"|aria-label="([^"]+)"|href="#(i-\w+)"|>([A-Z][\w ]+)</(?:a|button)>', row),
                          [("views", "", "", ""), ("", "Comparison cohort", "", ""), ("", "", "", "Whole runs"), ("", "", "", "Matched tasks"),
+                          ("", "Comparison view", "", ""), ("", "", "", "Side by side"), ("", "", "", "Task by task"),
                           ("", "", "i-reorder", ""), ("", "", "", "Order"), ("", "", "", "Group by agent"), ("", "", "", "Alternate agents"),
                           ("actions", "", "", ""), ("", "", "i-plus", ""), ("", "", "", "Add a run")])
         # Order opens a menu of the two one-off reorders, links that keep the cohort
@@ -319,16 +321,22 @@ class ComparisonRoutes(unittest.TestCase):
         # one agent: nothing to order
         self.assertNotIn("data-order-btn", self.get(pick=["active:run"]))
 
-    def test_the_side_table_pins_its_head_and_identity_rows_the_task_table_none(self):
+    def test_the_side_table_pins_its_head_and_identity_rows_the_task_table_its_head(self):
         body = self.get(pick=["active:run", "foreign:run"])
-        side = body[body.index('<table class="grid compare" id="side"'):body.index("<h2>Task by task</h2>")]
+        side = body[body.index('<table class="grid compare" id="side"'):]
         pinned = re.findall(r'<tr( data-sticky(?:="wide")?)?>\s*<th[^>]*>(?:<span class="sr">)?([^<]+)<', side)
         self.assertEqual(pinned[:7], [(" data-sticky", "Metric"), (' data-sticky="wide"', "Workspace"), (' data-sticky="wide"', "Run"),
                                       (" data-sticky", "Agent"), (' data-sticky="wide"', "Model"), (' data-sticky="wide"', "Benchmark"),
                                       ("", "Dataset")])
         self.assertEqual([p for p, _ in pinned[7:]], [""] * len(pinned[7:]))
-        self.assertNotIn("data-sticky", body[body.index("<h2>Task by task</h2>"):])
         self.assertIn('id="side-tools"', body[:body.index('<table class="grid compare" id="side"')])   # the controls row whose height the box leaves
+        # the task table: its header row pinned under its own controls row, nothing else
+        tasks = self.get(pick=["active:run", "foreign:run"], view="tasks")
+        table = tasks[tasks.index('<table class="grid compare tasks" id="tasks"'):]
+        self.assertEqual(re.findall(r'<tr( data-sticky[^>]*)?>\s*<(t[hd])', table)[0], (" data-sticky", "th"))
+        self.assertEqual(table.count("data-sticky"), 1)
+        self.assertIn('id="tasks-tools"', tasks[:tasks.index('<table class="grid compare tasks"')])
+        self.assertNotIn('data-sticky', tasks[:tasks.index('<table class="grid compare tasks"')])
 
     def test_each_column_s_difference_from_the_baseline_in_the_row_s_unit(self):
         self.another("cheap", trials=[trial("shared", cost_usd=1, n_input_tokens=1500, job_id="cheap"),
@@ -380,6 +388,69 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(urlsplit(response.location).path, "/compare")
         self.assertEqual(parse_qs(urlsplit(response.location).query), {"pick": ["active:run", "foreign:run"], "cohort": ["matched"]})
+
+    def test_the_view_is_side_by_side_or_task_by_task_and_every_link_keeps_it(self):
+        self.another("third", agent_name="agent:C")
+        picks = ["active:run", "foreign:run", "foreign:third"]
+        query = lambda h: parse_qs(urlsplit(unescape(h)).query)
+        side, tasks = self.get(pick=picks, cohort="matched"), self.get(pick=picks, cohort="matched", view="tasks")
+        self.assertIn('id="side" style', side); self.assertNotIn('id="tasks"', side)
+        self.assertIn('id="tasks" style', tasks); self.assertNotIn('id="side" style', tasks)
+        self.assertNotIn("data-run-btn", tasks)                                            # the picker is the side table's
+        self.assertIn("lists: {}", tasks)
+        for body, view in ((side, None), (tasks, ["tasks"])):
+            row = body[body.index('<div class="table-tools table-controls"'):body.index('<div class="table-wrap compare-table-wrap"')]
+            switch = re.search(r'aria-label="Comparison view">(.*?)</nav>', row, re.S).group(1)
+            # the view switch keeps the cohort and the picks
+            self.assertEqual([query(h) for h in re.findall(r'href="([^"]+)"', switch)],
+                             [{"pick": picks, "cohort": ["matched"]}, {"pick": picks, "cohort": ["matched"], "view": ["tasks"]}])
+            # the cohort switch, Order and Add a run keep the view
+            links = [query(h) for h in re.findall(r'href="([^"]+)"', row.replace(switch, "")) if not h.startswith("#")]
+            self.assertEqual(len(links), 5)
+            self.assertEqual([q.get("view") for q in links], [view] * 5)
+        # the side table's column links keep the cohort, and no view
+        self.assertEqual(self.links(side, "Remove column 2"), {"pick": ["active:run", "foreign:third"], "cohort": ["matched"]})
+        # the task table's links keep the view, and the task page's links back
+        task_links = [query(h) for h in re.findall(r'href="(/compare/task/[^"]+)"', tasks)]
+        self.assertTrue(task_links)
+        self.assertEqual({tuple(q["view"]) for q in task_links}, {("tasks",)})
+        page = self.get("/compare/task/shared", pick=picks, cohort="matched", view="tasks", dataset=self.left.dataset)
+        back = [query(h) for h in re.findall(r'href="(/compare\?[^"]+)"', page)]
+        self.assertEqual(len(back), 2)
+        self.assertEqual([q["view"] for q in back], [["tasks"]] * 2)
+        self.assertIn("url.searchParams.set('view', \"tasks\")", page)
+        self.assertNotIn("searchParams.set('view'", self.get("/compare/task/shared", pick=picks, cohort="matched", dataset=self.left.dataset))
+        # anything but view=tasks is side by side
+        self.assertIn('id="side" style', self.get(pick=picks, view="other"))
+        # the old picker keeps it
+        response = self.client.get("/compare/pick", query_string={"pick": picks, "view": "tasks"})
+        self.addCleanup(response.close)
+        self.assertEqual(query(response.location)["view"], ["tasks"])
+
+    def test_the_warnings_show_in_both_views(self):
+        self.right.dataset = "different-dataset@1.0"
+        for view in (None, "tasks"):
+            body = self.get(cohort="matched", **({"view": view} if view else {}))
+            self.assertIn('<p class="alert warn">No shared cohort is available.', body)
+            self.assertEqual(len(re.findall(r'<p class="compare-warn">[^<\n]+</p>', body)), 1)
+
+    def test_the_judge_form_and_its_redirect_keep_the_view(self):
+        import os
+        judge = web.judge
+        with patch.dict(os.environ, TYPESAFE_API_KEY="ts-fake"), \
+             patch.object(judge, "judge_side", lambda *a, **k: {}), \
+             patch.object(judge, "pairs_of", lambda view: [(row.task, *row.trials) for row in view.tasks]), \
+             patch.object(judge, "_sides_todo", lambda view: []):
+            tasks = self.get(cohort="matched", view="tasks")
+            action = unescape(re.search(r'<form method="post" action="([^"]+)" class="header-form" id="judge-all">', tasks).group(1))
+            self.assertEqual(parse_qs(urlsplit(action).query)["view"], ["tasks"])
+            with self.client.session_transaction() as sess:
+                sess["csrf"] = "route-token"
+            response = self.client.post(action, data={"csrf": "route-token"})
+            self.addCleanup(response.close)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(parse_qs(urlsplit(response.location).query)["view"], ["tasks"])
+        self.assertTrue(response.location.endswith("#judgement"))
 
 
 class ScoredRunsCompared(unittest.TestCase):
