@@ -23,6 +23,7 @@ Decision asks a provider that lists a decision protocol
 | --- | --- |
 | A question the model refuses | `refusals` in the record, never an answer; the trial page counts them |
 | The provider's own cost (`usage.cost`) | `usage.cost_usd` |
+| The calls' time | `usage.seconds`; the judge tab shows it beside the button |
 | HTTP 402 | Said as such: the key's credit is spent, or the model is not free |
 
 ## Configure
