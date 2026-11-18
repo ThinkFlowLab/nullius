@@ -19,7 +19,7 @@ class Website(unittest.TestCase):
     def test_computer_port_links_to_the_step_option_without_repeating_its_default(self):
         page = (SITE.parents[1] / "docs/ports/agent-computer-v1.md").read_text()
         row = next(line for line in page.splitlines() if line.startswith("| The step budget |"))
-        self.assertIn("[OSWorld1](../benchmarks/supported/osworld1.md#options)", row)
+        self.assertIn("[OSWorld1's `max_steps`](../benchmarks/supported/osworld1.md#options)", row)
         self.assertNotIn("`default`", row)
         self.assertNotIn("100", row)
 
