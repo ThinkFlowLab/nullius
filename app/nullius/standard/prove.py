@@ -339,7 +339,7 @@ def job_problems(bench: dict, ds: dict, which: str, job_dir: str, ids: List[str]
     if (std.get("repeat") or 1) > 1:
         bad.append(f"each unit ran {std['repeat']} times")
     if std.get("pins_replaced"):
-        bad.append(f"--served-by replaced the definition's providers of {', '.join(std['pins_replaced'])}")
+        bad.append(f"--served-by replaced the benchmark's pin of {', '.join(std['pins_replaced'])}")
     ran: Dict[str, int] = {}
     shard_jobs = {m.get("job") for m in std.get("merged_from") or []}
     alien: Dict[str, List[str]] = {}
@@ -439,7 +439,7 @@ def prove(bench: dict, *, dataset: Optional[str] = None, limit: Optional[int] = 
                                           options=opts[ds["id"]], job_dir=jobs.get(c), ids=every,
                                           remove_images=remove_images)
                 if not checks["units"]["ok"]:
-                    checks[c]["problems"].append(UNITS_FAILED + ": a job's cover is held to the driver's ids, which did not pass")
+                    checks[c]["problems"].append(UNITS_FAILED + ", so this job cannot be checked against the dataset")
                     checks[c]["ok"] = False
             _say(say, c, checks[c])
         total = ds.get("units") if isinstance(ds.get("units"), int) else checks["units"]["units"]

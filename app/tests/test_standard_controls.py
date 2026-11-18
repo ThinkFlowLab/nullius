@@ -460,12 +460,12 @@ class ProveOptions(unittest.TestCase):
         got = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"nop": whole})["kit"]
         self.assertFalse(got["units"]["ok"])
         self.assertFalse(got["nop"]["ok"])
-        self.assertIn("the units check failed: a job's cover is held to the driver's ids, which did not pass", got["nop"]["problems"])
+        self.assertIn("the units check failed, so this job cannot be checked against the dataset", got["nop"]["problems"])
         kept = self.b["proven"]["kit"]
         self.assertNotIn("nop", kept)
         self.assertNotIn("units", kept)
         self.assertEqual(kept["failed"]["nop"]["job"], "nop-merged")
-        self.assertIn("the units check failed: a job's cover is held to the driver's ids, which did not pass",
+        self.assertIn("the units check failed, so this job cannot be checked against the dataset",
                       kept["failed"]["nop"]["problems"])
 
     def test_a_control_is_not_run_nor_kept_when_the_units_check_fails(self):

@@ -47,7 +47,7 @@ model: **Served by** on the builder's Model step, hidden while its provider list
 is pending or has exactly one entry unless the field already has a pin, or
 [`--served-by`](../cli/run.md#serving-providers). An empty or failed list keeps
 the row visible; two endpoints of one provider count as two entries. A model the
-benchmark pins starts with the benchmark's providers.
+benchmark pins starts with its pin.
 
 ## Configure a provider
 

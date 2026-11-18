@@ -1162,11 +1162,11 @@ def failure(calls: List[dict], words: bool = True, agent: bool = False, serving:
     own = next((c for c in reversed(calls) if not c.get("side")), None) if agent else None
     if own is not None and overflowed(own):
         said = (own.get("error") or "") if words else ("the endpoint answered 400 to the agent's call, longer than the model's "
-                                                       "context window; its words are not kept, the benchmark's tasks being gated")
+                                                       "context window (provider text not kept: gated benchmark)")
         return CONTEXT_ERROR, said
     last = calls[-1]
     s = last.get("status")
-    said = (last.get("error") or "") if words else f"the endpoint answered {s}; its words are not kept, the benchmark's tasks being gated"
+    said = (last.get("error") or "") if words else f"the endpoint answered {s} (provider text not kept: gated benchmark)"
     if (serving or {}).get(last.get("model")) and s in ROUTE_REFUSED:
         return ROUTE_ERROR, _refusal(last, said, serving)
     if s == 429:
@@ -1221,7 +1221,7 @@ def route_failure(calls: List[dict], serving: Dict[str, List[str]], words: bool 
     for c in last.values():
         if serving.get(c.get("model")) and c.get("status") in ROUTE_REFUSED:
             said = (c.get("error") or "") if words else \
-                f"the endpoint answered {c.get('status')}; its words are not kept, the benchmark's tasks being gated"
+                f"the endpoint answered {c.get('status')} (provider text not kept: gated benchmark)"
             return ROUTE_ERROR, _refusal(c, said, serving)
     return None
 

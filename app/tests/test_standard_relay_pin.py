@@ -215,14 +215,14 @@ class Definition(unittest.TestCase):
         self.assertEqual((r.route_pins, r.pins_replaced, said), ({SONNET: ["anthropic"]}, {}, []))
         r = make(served_by={"m-1": ["prov-a"], SONNET: ["google-vertex"]})
         self.assertEqual((r.serving, r.route_pins, r.pins_replaced), ({"m-1": ["prov-a"], SONNET: ["google-vertex"]}, {}, {SONNET: ["anthropic"]}))
-        self.assertEqual(said, [f"--served-by {SONNET}=google-vertex replaces the definition's anthropic: not as in the paper"])
+        self.assertEqual(said, [f"--served-by {SONNET}=google-vertex replaces the benchmark's pin anthropic: not as in the paper"])
         self.assertIs(r.other["comparable"], False)
         self.assertNotIn("comparable", make().other)
         job.write_config(tmp, job="j", bench=b, other=r.other, model="m-1", provider="openrouter", dataset="d", units=[],
                          concurrency=1, granted=True, served_by=r.serving, pins_replaced=r.pins_replaced)
         with open(os.path.join(tmp, "config.json")) as f:
             self.assertEqual(json.load(f)["standard"]["pins_replaced"], {SONNET: ["anthropic"]})
-        self.assertIn(f"{os.path.basename(tmp)}: --served-by replaced the definition's providers of {SONNET}",
+        self.assertIn(f"{os.path.basename(tmp)}: --served-by replaced the benchmark's pin of {SONNET}",
                       prove.job_problems(b, {"id": "all"}, "nop", tmp, []))
 
     def test_the_recipe_gives_each_fields_pin_and_review_says_when_served_by_replaces_it(self):

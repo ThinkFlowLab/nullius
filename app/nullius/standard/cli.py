@@ -773,7 +773,7 @@ def main(argv=None):
     v.add_argument("--bench-option", action="append", metavar="NAME=VALUE",
                    help="one of the benchmark's own options (repeatable), for the checks' driver and the controls' runs")
     v.add_argument("--job", action="append", metavar="CONTROL=JOB_DIR",
-                   help="hold this job, a control run already over the whole dataset (a merged launch), to its bound instead of running it")
+                   help="a finished control job over the whole dataset, checked against its bound instead of running the control")
     v.add_argument("--remove-images", action="store_true",
                    help="remove each image this proof pulls or builds after its unit, so the oracle pulls it again (default: kept)")
     g = sub.add_parser("merge", help="merge the shard jobs of one launch into one job")

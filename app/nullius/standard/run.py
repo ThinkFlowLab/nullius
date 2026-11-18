@@ -689,7 +689,7 @@ class Run:
         self.route_pins = {m: o for m, o in pins.items() if self.serving.get(m, o) == o}
         self.pins_replaced = {m: o for m, o in pins.items() if m not in self.route_pins}
         for m, o in self.pins_replaced.items():
-            say(f"--served-by {m}={','.join(self.serving[m])} replaces the definition's {','.join(o)}: not as in the paper")
+            say(f"--served-by {m}={','.join(self.serving[m])} replaces the benchmark's pin {','.join(o)}: not as in the paper")
         if self.pins_replaced:
             self.other = {**other, "comparable": False}
         self.serving = {**pins, **self.serving}
