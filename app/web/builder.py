@@ -30,6 +30,46 @@ from . import execute
 @app.route("/new-run")
 def new_run():
     """Build a Harbor recipe; never execute it from this route."""
+    data = _builder_data()
+    # ?run=<job id>: the recipe a run of this application was started from,
+    # opened as it was. ?like=<job id>, the job page's "New run like
+    # this": that recipe when the run kept one, else what the job recorded -
+    # its launch, its Harbor and what its trials say ran - for the recipe core
+    # to rebuild a recipe from (fromJob). ?saved=<id>: a saved recipe, as the
+    # Saved recipes dialog loads it. Individual query fields also prefill the form.
+    like = request.args.get("like")
+    run = request.args.get("run") or (like if like and _kept_recipe(like) else None)
+    if run:
+        ex = execution.for_job(run)
+        if ex is None or not ex.plan.recipe:
+            abort(404)
+        data["loadRecipe"] = ex.plan.recipe
+        data["loadRun"] = run
+    elif like:
+        job = shared._find_job(shared._jobs_for_request(), like)
+        if job is None:
+            abort(404)
+        data["loadLike"] = {"job": job.job_id, "agent": job.agent_name, "launch": job.launch,
+                            "harbor": {"version": job.harbor_version, "editable": job.harbor_editable},
+                            "env": next((t.env_type for t in job.trials if t.env_type), "")}
+    elif request.args.get("saved"):
+        data["loadSaved"] = next((x for x in recipe_store.listing() if x["id"] == request.args["saved"]), None)
+        if data["loadSaved"] is None:
+            abort(404)
+    return render_template("builder/new_run.html", builder_data=data)
+
+
+@app.route("/recipes")
+def recipes_page():
+    """The saved recipes as a table, a column per step. The page checks each one as the builder checks a loaded
+    recipe: a Harbor one in the recipe core, a standard one by the compile of its Review step, done here."""
+    items = recipe_store.listing()
+    compiled = {x["id"]: _standard_compile(x["recipe"]) for x in items if x["recipe"].get("harness") == standard_recipe.HARNESS}
+    return render_template("builder/recipes.html", recipes=items, compiled=compiled, builder_data=_builder_data())
+
+
+def _builder_data() -> dict:
+    """What the recipe core reads (command-builder-core.js): the vocabulary, this machine and Settings."""
     data = command_builder.payload(catalog.load(), shared._load_jobs())
     # Execution sets these credential variables from Settings.
     data["credentialVars"] = {"key": "API_TOKEN", "url": "API_URL"}
@@ -62,27 +102,7 @@ def new_run():
     data["csrf"] = shared._csrf_token()
     data["local"] = shared_local_client()
     data["recipesWhy"] = WRITE_HERE
-    # ?run=<job id>: the recipe a run of this application was started from,
-    # opened as it was. ?like=<job id>, the job page's "New run like
-    # this": that recipe when the run kept one, else what the job recorded -
-    # its launch, its Harbor and what its trials say ran - for the recipe core
-    # to rebuild a recipe from (fromJob). Individual query fields also prefill the form.
-    like = request.args.get("like")
-    run = request.args.get("run") or (like if like and _kept_recipe(like) else None)
-    if run:
-        ex = execution.for_job(run)
-        if ex is None or not ex.plan.recipe:
-            abort(404)
-        data["loadRecipe"] = ex.plan.recipe
-        data["loadRun"] = run
-    elif like:
-        job = shared._find_job(shared._jobs_for_request(), like)
-        if job is None:
-            abort(404)
-        data["loadLike"] = {"job": job.job_id, "agent": job.agent_name, "launch": job.launch,
-                            "harbor": {"version": job.harbor_version, "editable": job.harbor_editable},
-                            "env": next((t.env_type for t in job.trials if t.env_type), "")}
-    return render_template("builder/new_run.html", builder_data=data)
+    return data
 
 
 @app.route("/new-run/runner", methods=["POST"])
@@ -97,12 +117,16 @@ def new_run_runner():
     if len(json.dumps(recipe)) > 200_000:
         abort(413)
     if recipe.get("harness") == standard_recipe.HARNESS:
-        out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, boat_unusable=boat.unusable,
-                                      boat_size_problem=execute.boat_size_problem, unpriced=execute.unpriced)
-        # served_models: each model field's model as the run sends it, which Served by lists the providers of
-        return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models")}
+        return _standard_compile(recipe)
     return {"errors": [{"step": providers.STEP["runner"], "message": providers.GONE}],
             "notes": [], "review": []}, 404
+
+
+def _standard_compile(recipe: dict) -> dict:
+    out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, boat_unusable=boat.unusable,
+                                  boat_size_problem=execute.boat_size_problem, unpriced=execute.unpriced)
+    # served_models: each model field's model as the run sends it, which Served by lists the providers of
+    return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models")}
 
 
 @app.route("/new-run/prerequisites", methods=["POST"])

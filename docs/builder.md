@@ -93,6 +93,15 @@ a declared model list keeps those published choices.
 | A run's recipe | `runs/<name>/run.json` | Job page, *New run like this*: the same recipe, at Review |
 | A job's record | Its `config.json` and `lock.json` | *New run like this* without a kept recipe: rebuilt, what it cannot carry named |
 
+The **Recipes** page (Manage, *Recipes*) lists the saved recipes, a column per
+step. Each row opens its recipe in the builder, shows it step by step with its
+JSON (*Info*), duplicates it under a free name, exports its JSON or deletes it.
+*Import* adds a recipe file, or a list, and refuses the whole file when one
+recipe is bad. A row whose recipe names something this Nullius does not have,
+such as a benchmark, an agent or a provider without a key, shows *Cannot run
+here*. Its tooltip gives the builder's reason for each step. Import, Duplicate
+and Delete work only from a browser on the application host.
+
 ## Run
 
 ![Run](diagrams/builder-run.svg)

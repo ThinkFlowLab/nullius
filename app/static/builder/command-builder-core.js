@@ -827,7 +827,7 @@
   // another page and coming back finds the recipe as it was left. Pure halves:
   // the page owns the storage. A draft does not come back when the page was
   // opened for something else - a prefill from a run, or a run's own recipe.
-  const OPENED_FOR = ['run','like','dataset','model','agent','n_tasks','standard','other'];
+  const OPENED_FOR = ['run','like','saved','dataset','model','agent','n_tasks','standard','other'];
   function packDraft(state) {
     return JSON.stringify({version: 1, at: new Date().toISOString(), recipe: state.recipe, step: state.step, steps: STEPS.length, first: 'benchmark', tab: state.tab, saved: state.saved || ''});
   }

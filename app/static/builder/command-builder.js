@@ -113,6 +113,7 @@
   let opened = '', savedId = '';   // savedId: the saved recipe this page holds, which a save updates (renames)
   if (schema.loadRecipe) { try { recipe = C.fromJSON(schema.loadRecipe); step = REVIEW; opened = 'Opened the recipe of run “' + schema.loadRun + '”. Run gives it a new name.'; } catch (e) { opened = 'This run’s recipe cannot be read: ' + e.message; } }
   else if (schema.loadLike) { const o = C.fromJob(schema.loadLike); recipe = o.recipe; step = REVIEW; opened = o.notes.join(' '); }
+  else if (schema.loadSaved) { try { recipe = C.fromJSON(schema.loadSaved.recipe); savedId = schema.loadSaved.id; step = REVIEW; opened = 'Loaded “' + schema.loadSaved.name + '”.'; } catch (e) { opened = 'This saved recipe cannot be read: ' + e.message; } }
   // An unsupported draft opens nothing; its rejection is shown as a toast.
   else { let d = null; try { d = C.unpackDraft(localStorage.getItem(draftKey), query); } catch {} if (d && d.recipe) { recipe = d.recipe; step = d.step; tab = d.tab; savedId = d.saved; } else if (d && d.gone) opened = d.gone; }
   const saveDraft = () => { try { localStorage.setItem(draftKey, C.packDraft({recipe, step, tab, saved: savedId})); } catch {} };
