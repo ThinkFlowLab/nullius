@@ -1409,8 +1409,9 @@ class Run:
         if failed and failed[0] == relay.CONTEXT_ERROR and ((score or {}).get("stopped")
                                                           or self.upstream and exc and ": VerifierError: " in exc[1]):
             failed = None
-        if failed and failed[0] == pacing.RATE_LIMITED and (score or {}).get("stopped") and rl is not None \
-                and relay.asked(rl.dir) is not None:
+        if failed and failed[0] not in (ledgers.ERROR, ledgers.UNIT_ERROR) and (score or {}).get("stopped") not in (None, "", relay.OVERFLOW) \
+                and rl is not None and relay.asked(rl.dir) is not None \
+                and [(c.get("status"), c.get("error_code") == "insufficient_quota") for c in relay._begun(calls) if not c.get("side")][-1:] == [(429, False)]:
             failed = None
         if not failed and rl is not None and getattr(self, "route_pins", None):
             failed = relay.routes_failure([calls] + [rl.calls(f"{tag}-{side}") for side in ("judge", "simulator")], self.route_pins, words)

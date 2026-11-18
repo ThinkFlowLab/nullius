@@ -188,11 +188,31 @@ class Unit(unittest.TestCase):
         os.makedirs(record)
         with open(os.path.join(record, relay.STOP), "w") as f:
             f.write("batch cap\n")
-        said, ran = self.ran([AGENT_OK, {"status": 429, "error": "slow down"}], record=record)
-        self.assertIsNone(said)
-        self.assertEqual((ran.trials[0].outcome, ran.trials[0].reward), (classify.FAILED_VERIFICATION, 0.5))
-        said, _ = self.ran([AGENT_OK, {"status": 429, "error": "slow down"}])
+        limited = {"status": 429, "error": "slow down"}
+        for calls in ([AGENT_OK, limited], [AGENT_OK, limited, {"status": 502, "error": "down", "side": True}]):
+            said, ran = self.ran(calls, record=record)
+            self.assertIsNone(said, calls)
+            self.assertEqual((ran.trials[0].outcome, ran.trials[0].reward), (classify.FAILED_VERIFICATION, 0.5))
+            with open(os.path.join(ran.trials[0].dir, "result.json")) as f:
+                self.assertEqual(json.load(f)["verifier_result"]["stopped"], "batch cap")
+        said, _ = self.ran([AGENT_OK, limited])
         self.assertEqual(said["exception_type"], "RateLimitError")
+        said, _ = self.ran([AGENT_OK, dict(limited, error_code="insufficient_quota")], record=record)
+        self.assertEqual(said["exception_type"], "ApiUsageLimitError")
+        for own in (AGENT_OK, {"status": 401, "error": "no"}, {"status": 502, "error": "down"}):
+            said, _ = self.ran([own, dict(limited, side=True)], record=record)
+            self.assertEqual(said["exception_type"], "RateLimitError", own)
+        with open(os.path.join(record, relay.STOP), "w") as f:
+            f.write("context window\n")
+        self.assertEqual(self.ran([AGENT_OK, limited], record=record)[0]["exception_type"], "RateLimitError")
+        with open(os.path.join(self.b["_here"], "driver.py"), "w") as f:
+            f.write(STOPPED)
+        with open(os.path.join(record, relay.STOP), "a") as f:
+            f.write("batch cap\n")
+        self.assertEqual(self.ran([AGENT_OK, limited], record=record)[0]["exception_type"], "RateLimitError")
+        with open(os.path.join(self.b["_here"], "driver.py"), "w") as f:
+            f.write(STOPPED.replace(', "stopped": "context window"', ""))
+        self.assertEqual(self.ran([AGENT_OK, limited], record=record)[0]["exception_type"], "RateLimitError")
 
     def test_an_episode_the_overflow_ended_whose_evaluation_failed_is_the_checks(self):
         with open(os.path.join(self.b["_here"], "driver.py"), "w") as f:
