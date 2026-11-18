@@ -177,8 +177,6 @@ How the agent worked, not whether it won. Computed over layer 3.
 
 ## Standard run records
 
-Computer-port tool calls and the kit's desktop events and targets are available in the trial's Records, alongside OSWorld's result and runner log. Failed tries keep their own files under `retried/`; only the final try is counted as the attempt. Desktop setup belongs to environment time, ACP startup to agent setup, and actions after the session opens to agent execution. The port's acting-step budget is independent of model-call, turn and time limits: whichever stops progress first applies; reaching the step budget still lets the agent finish its reply.
-
 These fields are stored in the standard's job and trial files ([Run a benchmark](cli/run.md)).
 
 | Field | What it is | Source | Works on |
