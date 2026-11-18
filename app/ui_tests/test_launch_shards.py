@@ -8,6 +8,7 @@ every shard has its row. Jobs are written as a standard run writes them
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -187,6 +188,8 @@ class LaunchShards(unittest.TestCase):
             self.addCleanup(response.close)
             body = response.get_data(as_text=True)
             self.assertEqual(re.findall(r'data-column="\d+" data-run="([^"]*)"', body), [whole.split(":", 1)[1], ""])
+            # and the picks the run lists compare against name it whole, so its entry is greyed in another column
+            self.assertEqual(json.loads(re.search(r"NulliusCompare.wire\(\{values: (\[.*?\])", body).group(1)), [whole, "s:"])
             # its link under the run is every shard's, as Runs lists them
             links = re.search(r'<span class="faint mono col-id">(.*?)</span>', body, re.S).group(1)
             self.assertEqual([(unescape(h), re.sub(r"<[^>]+>", "", t)) for h, t in re.findall(r'<a href="([^"]+)"[^>]*>(.*?)</a>', links)],

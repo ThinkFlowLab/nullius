@@ -92,10 +92,38 @@ process.stdout.write(JSON.stringify(out));
 
         self.assertTrue(got["lines"])
         self.assertEqual(got["none"], [[], True])
-        self.assertEqual(got["all"], ["r1", "r2", "r3"])
+        self.assertEqual(got["all"], ["Already in column 1", "r2", "r3"])     # column 1's run, greyed and skipped
         self.assertEqual(got["active"], "runs-1-1")
         self.assertEqual(got["picked"], "/compare?cohort=matched&pick=a%3Ar1&pick=a%3Ar2")
         self.assertEqual(got["clicked"], "/compare?cohort=matched&pick=a%3Ar1&pick=a%3Ar3")
+
+    def test_a_run_another_column_shows_is_greyed_and_cannot_be_picked(self):
+        got = node(r'''
+// column 1 holds the sharded run r2 (the page's picks name a sharded run by its whole run), column 2 r1, column 3 nothing
+const [one, two, empty] = page([column(0, 'r2', 'a'), column(1, 'r1', 'a'), column(2, '', 'a')],
+  {values: ['a:r2', 'a:r1', 'a:'], lists: {a: {runs: RUNS, same: 0}}, dataset: '', runs: '/compare/runs'});
+const state = th => th.querySelectorAll('[role="option"]').map(o => [o.dataset.value, o.getAttribute('aria-disabled'), o.getAttribute('aria-checked'), o.getAttribute('title')]);
+const out = {one: state(one), empty: state(empty)};
+two.querySelector('[data-run-btn]').click();
+out.first = two.querySelector('input').getAttribute('aria-activedescendant');
+key(two, 'ArrowDown'); out.down = two.querySelector('input').getAttribute('aria-activedescendant');
+key(two, 'ArrowUp'); out.up = two.querySelector('input').getAttribute('aria-activedescendant');
+two.querySelectorAll('[role="option"]')[1].click(); out.clicked = location.went || null;
+type(two, 'codex'); out.searched = shown(two);
+key(two, 'Enter'); out.entered = location.went || null;
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got["one"], [["a:r1", "true", None, "Already in column 2"],
+                                      ["a:r2", None, "true", "r2"],             # its own run: checked, not greyed
+                                      ["a:r3", None, None, "r3"]])
+        self.assertEqual(got["empty"], [["a:r1", "true", None, "Already in column 2"],
+                                        ["a:r2", "true", None, "Already in column 1"],
+                                        ["a:r3", None, None, "r3"]])
+        # the arrows skip column 1's run: r1 (its own) and r3 only
+        self.assertEqual((got["first"], got["down"], got["up"]), ("runs-1-0", "runs-1-2", "runs-1-0"))
+        self.assertIsNone(got["clicked"])                                      # a click on it does nothing
+        self.assertEqual(got["searched"], ["Already in column 1"])            # search still finds it
+        self.assertIsNone(got["entered"])                                      # and Enter does nothing
 
     def test_a_modal_over_the_page_leaves_the_opened_list_open(self):
         got = node(r'''

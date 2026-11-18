@@ -58,8 +58,9 @@ window.NulliusCompare = {
     const none = menu.querySelector('[data-none]');
     let at = -1;
     const shown = () => [...list.querySelectorAll('[role="option"]')].filter(o => !o.hidden);
+    const able = () => shown().filter(o => o.getAttribute('aria-disabled') !== 'true');
     const mark = i => {
-      const os = shown();
+      const os = able();
       at = Math.max(Math.min(i, os.length - 1), os.length ? 0 : -1);
       os.forEach((o, j) => o.setAttribute('aria-selected', String(j === at)));
       if (at < 0) q.removeAttribute('aria-activedescendant');
@@ -71,14 +72,23 @@ window.NulliusCompare = {
       none.hidden = shown().length > 0;
       mark(0);
     };
-    const show = data => { this.fill(list, data.runs, data.same, list.id); search(); };
+    const show = data => {
+      this.fill(list, data.runs, data.same, list.id);
+      // the page's picks name whole runs (a shard's id stands for its run): another column's is greyed, this one's checked
+      list.querySelectorAll('[role="option"]').forEach(o => {
+        const j = cfg.values.indexOf(o.dataset.value);
+        if (j === k) o.setAttribute('aria-checked', 'true');
+        else if (j >= 0) { o.setAttribute('aria-disabled', 'true'); o.setAttribute('title', `Already in column ${j + 1}`); }
+      });
+      search();
+    };
     const pick = o => { location.href = this.url(cfg.values, k, o.dataset.value); };
     q.addEventListener('input', search);
     q.addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); mark(at + (e.key === 'ArrowDown' ? 1 : -1)); }
-      else if (e.key === 'Enter' && shown()[at]) { e.preventDefault(); pick(shown()[at]); }
+      else if (e.key === 'Enter' && able()[at]) { e.preventDefault(); pick(able()[at]); }
     });
-    list.addEventListener('click', e => { const o = e.target.closest('[role="option"]'); if (o) pick(o); });
+    list.addEventListener('click', e => { const o = e.target.closest('[role="option"]'); if (o && o.getAttribute('aria-disabled') !== 'true') pick(o); });
     // fixed under its button (the table's scroll box would clip it), placed before it opens and takes the focus,
     // so the focus never scrolls the table
     const place = () => {
