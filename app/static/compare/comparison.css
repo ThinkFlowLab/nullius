@@ -19,7 +19,7 @@
 .compare-warn {
  color: var(--patch_failed_tests); font-size: .86rem; margin: -.6rem 0 1.4rem; }
 
-/* A column's header: its tools, its workspace and its run; an empty column greyed, with no numbers. */
+/* A column's tools in its header, its workspace and run in the rows below; an empty column greyed, with no numbers. */
 .compare-col { vertical-align: top; text-transform: none; letter-spacing: 0; font-weight: 400; }
 .col-head { display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
 .col-tools { display: flex; align-items: center; gap: .15rem; }

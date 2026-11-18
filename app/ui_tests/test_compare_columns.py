@@ -20,14 +20,14 @@ global.nulliusFetch = url => { fetched.push(url); return Promise.resolve({ok: tr
 const C = window.NulliusCompare;
 const run = (id, agent, launch, extra = {}) => ({value: 'a:' + id, id, agent, model: 'm', where: 'Bench / set', date: 'Sep 01  10:00', launch, check: false, shards: 1, ...extra});
 const RUNS = [run('r1', 'claude-code', 'L2'), run('r2', 'codex', 'L2', {shards: 3}), run('r3', 'nop', 'L1', {check: true, model: ''})];
-// a column's header as compare.html writes it
+// a column's cells as compare.html writes them, in its rows: its header, its workspace, its run (held together here)
 const column = (k, run, ws) => {
   const select = el('select', {'data-ws': ''}, el('option', {value: 'a'}), el('option', {value: 'b'}));
   select.value = ws;
-  return el('th', {'data-column': k, 'data-run': run}, select,
-    el('div', {class: 'menu-wrap'}, el('button', {'data-run-btn': ''}, el('span', {'data-run-label': ''})),
+  return el('tbody', {}, el('th', {'data-column': k, 'data-run': run}), el('td', {'data-column': k}, select),
+    el('td', {'data-column': k}, el('div', {class: 'menu-wrap'}, el('button', {'data-run-btn': ''}, el('span', {'data-run-label': ''})),
       el('div', {'data-run-menu': '', hidden: true}, el('input', {type: 'search'}), el('ul', {role: 'listbox', id: `runs-${k}`}),
-         el('p', {'data-none': '', hidden: true}))));
+         el('p', {'data-none': '', hidden: true})))));
 };
 const page = (cols, cfg) => { cols.forEach(th => document.appendChild(th)); C.wire(cfg); return cols; };
 const shown = th => th.querySelectorAll('[role="option"]').filter(o => !o.hidden).map(o => o.getAttribute('title'));

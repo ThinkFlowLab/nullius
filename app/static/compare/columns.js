@@ -49,11 +49,12 @@ window.NulliusCompare = {
     });
   },
 
-  /* One column's header `th`: its workspace select, its run button and the searchable list it opens. Returns
-     open(), which opens the list. */
-  column(th, cfg) {
-    const k = +th.dataset.column, ws = th.querySelector('[data-ws]'), btn = th.querySelector('[data-run-btn]');
-    const menu = th.querySelector('[data-run-menu]'), q = menu.querySelector('input'), list = menu.querySelector('[role="listbox"]');
+  /* One column's `cells`, its header `th` first: its workspace select, its run button and the searchable list it
+     opens. Returns open(), which opens the list. */
+  column(cells, cfg) {
+    const th = cells[0], find = s => cells.map(c => c.querySelector(s)).find(Boolean);
+    const k = +th.dataset.column, ws = find('[data-ws]'), btn = find('[data-run-btn]');
+    const menu = find('[data-run-menu]'), q = menu.querySelector('input'), list = menu.querySelector('[role="listbox"]');
     const none = menu.querySelector('[data-none]');
     let at = -1;
     const shown = () => [...list.querySelectorAll('[role="option"]')].filter(o => !o.hidden);
@@ -106,11 +107,12 @@ window.NulliusCompare = {
     return () => btn.click();
   },
 
-  /* Every column of the page; the first without a run opens its list. */
+  /* Every column of the page, its cells in the rows they share; the first without a run opens its list. */
   wire(cfg) {
-    const heads = [...document.querySelectorAll('[data-column]')];
-    const opens = heads.map(th => this.column(th, cfg));
-    const empty = heads.findIndex(th => !th.dataset.run);
+    const cols = [];
+    document.querySelectorAll('[data-column]').forEach(c => (cols[+c.dataset.column] ||= []).push(c));
+    const opens = cols.map(cells => this.column(cells, cfg));
+    const empty = cols.findIndex(cells => !cells[0].dataset.run);
     if (empty >= 0) opens[empty]();
   },
 };

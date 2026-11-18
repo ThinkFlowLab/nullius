@@ -272,6 +272,13 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertEqual(side.count('class="cmp-head draggable-col"'), 3)
         self.assertEqual(re.findall(r'Cost \(estimated\)</dt>\s*<dd[^>]*>(.*?)</dd>', side, re.S), ["$3.00", "$2.00", "$3.00"])
 
+    def test_workspace_and_run_are_rows_of_the_table_a_cell_a_column(self):
+        body = self.get(pick=["active:run", "foreign:"])
+        workspaces, runs = self.row(body, "Workspace"), self.row(body, "Run")
+        self.assertEqual(re.findall(r'<option value="(\w+)" selected>', workspaces), ["active", "foreign"])
+        self.assertEqual(runs.count("data-run-btn"), 2)
+        self.assertLess(body.index(">Run</th>"), body.index(">Agent</th>"))
+
     def test_remove_reorder_and_add_are_links_that_keep_the_cohort(self):
         self.another("third")
         picks = ["active:run", "foreign:run", "foreign:third"]

@@ -65,19 +65,36 @@
     <tr>
       <th{{ classes(METRIC, true) }}><span class="sr">Metric</span></th>
       {% for c in columns %}
+      {% set n = loop.index %}
+      <th class="compare-col{{ ' empty' if c.i is none }}" data-column="{{ loop.index0 }}" data-run="{{ c.ref.job_id }}">
+        <div class="col-tools">
+          <span class="compare-baseline">{{ 'Baseline' if loop.first }}</span>
+          {% if c.left %}<a class="icon-btn" href="{{ c.left }}" aria-label="Move column {{ n }} left" title="Move left">←</a>{% endif %}
+          {% if c.right %}<a class="icon-btn" href="{{ c.right }}" aria-label="Move column {{ n }} right" title="Move right">→</a>{% endif %}
+          {% if c.remove %}<a class="icon-btn" href="{{ c.remove }}" aria-label="Remove column {{ n }}" title="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></a>{% endif %}
+        </div>
+      </th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th{{ classes(METRIC, true, 'rowhead') }}>Workspace</th>
+      {% for c in columns %}
+      <td class="compare-col{{ ' empty' if c.i is none }}" data-column="{{ loop.index0 }}">
+        <select class="col-ws" data-ws aria-label="Workspace of column {{ loop.index }}">
+          {% for ws in workspace_options %}<option value="{{ ws.name }}"{% if ws.name == c.ref.workspace %} selected{% endif %}>{{ ws.label }}</option>{% endfor %}
+        </select>
+      </td>
+      {% endfor %}
+    </tr>
+    <tr>
+      <th{{ classes(METRIC, true, 'rowhead') }}>Run</th>
+      {% for c in columns %}
       {% set j = jobs[c.i] if c.i is not none else none %}
       {% set n = loop.index %}
-      <th class="compare-col{{ ' empty' if j is none }}" data-column="{{ loop.index0 }}" data-run="{{ c.ref.job_id }}">
+      <td class="compare-col{{ ' empty' if j is none }}" data-column="{{ loop.index0 }}">
         <div class="col-head">
-          <div class="col-tools">
-            <span class="compare-baseline">{{ 'Baseline' if loop.first }}</span>
-            {% if c.left %}<a class="icon-btn" href="{{ c.left }}" aria-label="Move column {{ n }} left" title="Move left">←</a>{% endif %}
-            {% if c.right %}<a class="icon-btn" href="{{ c.right }}" aria-label="Move column {{ n }} right" title="Move right">→</a>{% endif %}
-            {% if c.remove %}<a class="icon-btn" href="{{ c.remove }}" aria-label="Remove column {{ n }}" title="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></a>{% endif %}
-          </div>
-          <select class="col-ws" data-ws aria-label="Workspace of column {{ n }}">
-            {% for ws in workspace_options %}<option value="{{ ws.name }}"{% if ws.name == c.ref.workspace %} selected{% endif %}>{{ ws.label }}</option>{% endfor %}
-          </select>
           <div class="menu-wrap">
             <button type="button" class="col-run" data-run-btn aria-haspopup="listbox" aria-expanded="false"><span class="sr">Run of column {{ n }}: </span><span class="run-entry" data-run-label><span class="run-line">Choose a run</span></span></button>
 
@@ -92,11 +109,9 @@
           {% if cohort == 'matched' %}<span class="compare-excluded">{{ comparison.excluded_trials[c.i] }} of {{ selections[c.i].job.trials|length }} trials outside this cohort</span>{% endif %}
           {% endif %}
         </div>
-      </th>
+      </td>
       {% endfor %}
     </tr>
-  </thead>
-  <tbody>
     {% if jobs %}
     {% macro row(label, values, hint='') %}
     <tr>
