@@ -1,5 +1,4 @@
 /* Comparison controls share the shell's theme and leave data colours alone. */
-.compare-title { justify-content: space-between; align-items: center; }
 .cohort-note { margin: 1rem 0 1.6rem; padding: 1rem 1.2rem; background: var(--surface-2); border-radius: 7px; color: var(--text-dim); font-size: .85rem; line-height: 1.7; }
 .cohort-note p { margin: 0; }
 .cohort-note p + p { margin-top: .55rem; }

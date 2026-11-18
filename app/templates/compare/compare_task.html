@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from 'traces/_attempts.html' import attempt_count %}
+{% from '_page.html' import page_head %}
 {% block title %}{{ task }} side by side — Nullius{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">
 <style>
@@ -22,7 +23,7 @@
 
 {% block body %}
 
-<div class="page-title"><h1 class="mono">{{ task }}</h1></div>
+{{ page_head(task, mono=true) }}
 <p class="subtitle">{{ panels|length }} runs side by side<span class="dot">·</span>
   <a href="{{ url_for('compare', pick=picks, cohort=cohort, view=view) }}">back to the comparison</a><span class="dot">·</span>
   <span class="faint">drag a column header to reorder</span></p>
