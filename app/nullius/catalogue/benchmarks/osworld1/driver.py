@@ -53,7 +53,8 @@ unit and run of this commit. Units on one machine start their VMs one after
 another - each waits until the one before has logged its container started -
 since the provider fails a start that queues more than 10 s for its port lock;
 the VMs then run side by side. Each unit passes the image as a link in its own
-folder (vm/Ubuntu.qcow2), so every container it starts - a second VM of an
+folder (vm/Ubuntu.qcow2), inside the setup's unique socket folder for an agent
+through the port, so every container it starts - a second VM of an
 agent's own included - mounts its image from that folder. A unit stopped by
 Nullius (its time ran out) has its script's processes killed and those
 containers removed by a reaper of its own session, which outlives this driver.
@@ -300,7 +301,7 @@ def vm_image():
     return VM
 
 
-def _workspace(dir):
+def _workspace(dir, vm_root=None):
     """The unit's folder as the upstream's root for the paths its tasks name (evaluation_examples/settings/...),
     with the logs/ folder a script's log handlers open; answers the unit's link to the VM image, which the
     docker provider mounts by the path it is given (the reaper's mark)."""
@@ -308,7 +309,7 @@ def _workspace(dir):
     if not os.path.lexists(link):
         os.symlink(os.path.join(UP, "evaluation_examples"), link)
     os.makedirs(os.path.join(dir, "logs"), exist_ok=True)
-    vm = os.path.join(dir, "vm", os.path.basename(VM))
+    vm = os.path.join(vm_root or dir, "vm", os.path.basename(VM))
     os.makedirs(os.path.dirname(vm), exist_ok=True)
     if not os.path.lexists(vm):
         os.symlink(vm_image(), vm)
@@ -456,7 +457,6 @@ def _start_runner(unit, dir, instruction, until):
     domain, eid, example = _task(unit)
     where = _runner_dir(dir)
     os.makedirs(where, exist_ok=True)
-    vm = _workspace(where)
     task = os.path.join(where, f"{domain}__{eid}.json")
     with open(task, "w", encoding="utf-8") as f:
         json.dump(example, f)
@@ -465,7 +465,8 @@ def _start_runner(unit, dir, instruction, until):
     log = os.path.join(where, "runner.log")
     sock_dir = life_r = life_w = lock = p = None
     try:                                             # until RUNNERS holds it, what was made here is undone here
-        sock_dir = tempfile.mkdtemp(prefix="osworld1-")  # 0700, a short path (a socket's limit): the socket, ready.json
+        sock_dir = tempfile.mkdtemp(prefix="osworld1-")  # 0700, unique to this setup: the socket, ready.json and VM link
+        vm = _workspace(where, sock_dir)
         ready = os.path.join(sock_dir, "ready.json")
         life_r, life_w = os.pipe()
         steps = _option("max_steps", "default", str)
@@ -622,7 +623,7 @@ def _remove_passes(where, seconds, again=True):
 def _removed(where, sock_dir, again):
     """The unit's VMs removed (_remove_passes) in a thread this driver watches: True once done here; False when this
     driver's input ended meanwhile and the removal and the socket's folder went to a reaper of its own."""
-    worker = threading.Thread(target=_remove_passes, args=(where, REMOVE_SECONDS, again), name="vm-removal",
+    worker = threading.Thread(target=_remove_passes, args=(sock_dir, REMOVE_SECONDS, again), name="vm-removal",
                               daemon=True)
     worker.start()
     while worker.is_alive():
@@ -678,7 +679,7 @@ def _reap_now(where):
             pass
         p.wait()
     if shutil.which("docker") is not None:
-        _remove_vms(where, FALLBACK_SECONDS)
+        _remove_vms(entry["sock_dir"], FALLBACK_SECONDS)
     shutil.rmtree(entry["sock_dir"], ignore_errors=True)
 
 
@@ -705,7 +706,7 @@ def reap_runner(pid, start, where, sock_dir, seconds):
         except OSError:
             pass
     if shutil.which("docker") is not None:
-        _remove_passes(where, REMOVE_SECONDS)       # again, for a create the engine had accepted before the kill
+        _remove_passes(sock_dir, REMOVE_SECONDS)    # again, for a create the engine had accepted before the kill
     shutil.rmtree(sock_dir, ignore_errors=True)
 
 
