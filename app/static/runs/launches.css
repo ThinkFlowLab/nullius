@@ -1,8 +1,6 @@
 /* The Runs page: runs grouped by the launch that made them. A launch is one block - its task checks, its agents
    on one 0-100% scale, raw as a tick on the adjusted bar - and the flat table is the second view. */
-.runs-head { justify-content: space-between; }
-.runs-acts { display: inline-flex; flex-wrap: wrap; gap: 8px; }
-.runs-glance { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -1.2rem 0 1rem; font-size: 13px; color: var(--text-dim); }
+.runs-glance { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 1rem; font-size: 13px; color: var(--text-dim); }
 .runs-glance b { color: var(--text); font-weight: 500; }
 .runs-glance .st-paused b, .runs-glance .st-stopping b { color: var(--patch_failed_tests); }
 .runs-glance .st-stopped b, .runs-glance .st-failed b, .runs-glance .st-not b { color: var(--bad); }

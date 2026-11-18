@@ -86,7 +86,7 @@ class ControlsApart(unittest.TestCase):
         return response.get_data(as_text=True)
 
     def header(self, html):
-        return text_of(re.search(r'<p class="subtitle" id="counts".*?</p>', html, re.S).group(0))
+        return text_of(re.search(r'<div class="page-head-sub">.*?</div>', html, re.S).group(0))
 
     def row(self, html, job_id):
         rows = [r for r in re.findall(r'<tr [^>]*>.*?</tr>', html, re.S) if '<td data-col="run"><a href="/job/%s">' % job_id in r]
@@ -189,7 +189,7 @@ class ControlsApart(unittest.TestCase):
     # -- the job page -----------------------------------------------------------
     def test_the_job_page_of_a_control_reads_its_header_the_same_way(self):
         html = self.get("/job/tau-x-nop")
-        header = re.search(r'<header class="run-header">.*?</header>', html, re.S).group(0)
+        header = re.search(r'<header class="page-head">.*?</header>', html, re.S).group(0)
         self.assertIn('id="control-verdict" data-state="ok"', header)
         self.assertIn("5/5 rejected ✓", text_of(header))
         self.assertIn("Feasibility · nop + oracle", text_of(header))

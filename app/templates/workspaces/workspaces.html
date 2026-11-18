@@ -1,5 +1,6 @@
 {% from '_tables.html' import table, cell, greyed %}
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}Workspaces — Nullius{% endblock %}
 {% block crumb %}/ workspaces{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
@@ -10,8 +11,8 @@
 {% macro ws_tr(ws) %} class="{{ 'ws-current' if workspace and ws.name == workspace.name }}" data-ws="{{ ws.name }}" data-search="{{ ws.label }} {{ ws.name }}" data-holder{% endmacro %}
 
 {% block body %}
-<div class="page-title ws-head"><h1>Workspaces</h1>
-  <a class="btn sm" href="{{ url_for('import_page', new=1) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New workspace</a></div>
+{% set actions %}<a class="btn sm" href="{{ url_for('import_page', new=1) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New workspace</a>{% endset %}
+{{ page_head('Workspaces', actions=actions) }}
 
 {% if workspaces %}
 {% set labels = workspaces|map(attribute='label')|list %}

@@ -1,6 +1,7 @@
 {% from '_tables.html' import table, cell, greyed %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}Launches — Nullius{% endblock %}
 {% block crumb %}/ launches{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">
@@ -26,7 +27,7 @@
 {% macro entry(e) %}{% if e[1] %}<a href="{{ e[1] }}">{{ e[0] }}</a>{% else %}{{ e[0] }}{% endif %}{% endmacro %}
 
 {% block body %}
-<div class="page-title"><h1>Launches</h1></div>
+{{ page_head('Launches') }}
 
 {% if rows %}
 {% set cols = [dict(key='state', label='State', type='num', align='left', sticky=true, sr=true, fixed=true), dict(key='launch', label='Launch', sticky=true, menu=false, width='expand'),

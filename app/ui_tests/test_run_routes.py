@@ -1002,7 +1002,7 @@ class WorkspacesPage(unittest.TestCase):
         self.assertNotIn('<small class="mono faint">', row)                                          # no two labels alike
         self.assertNotIn("workspaces/open", html.split('id="workspaces" data-table>', 1)[1])   # no Open, no "runs →"
         self.assertNotIn("runs →", html)
-        self.assertRegex(html, r'<div class="page-title ws-head"><h1>Workspaces</h1>\s*<a class="btn sm" href="/import\?new=1">.*?New workspace</a>')
+        self.assertRegex(html, r'<h1>Workspaces</h1>\s*<div class="page-head-actions"><a class="btn sm" href="/import\?new=1">.*?New workspace</a>')
 
     def test_two_labels_alike_show_their_names(self):
         twin = workspace.create(self.home, [], label="witty pelican")
@@ -1110,7 +1110,7 @@ class WorkspacesPage(unittest.TestCase):
         web.shared.adopt_roots([str(d / "jobs")])
         listed = self.cell(self.ws, 2), self.cell(self.ws, 3)
         page = self.get("/runs").get_data(as_text=True)
-        header = re.search(r'data-runs="(\d+)"', page).group(1), re.search(r"(\d+) checks\s*</p>", page).group(1)
+        header = re.search(r'data-runs="(\d+)"', page).group(1), re.search(r"(\d+) checks\s*</span>", page).group(1)
         rows = [LaunchesPage.cells(self, r) for r in re.findall(r'<tr data-launch="[^"]+"(.*?)</tr>', self.get("/launches").get_data(as_text=True), re.S)
                 if self.ws.name in re.search(r'data-f-ws="([^"]*)"', r).group(1).split("\n")]
         launched = str(sum(int(r["runs"]) for r in rows)), str(sum(int(r["checks"]) for r in rows))
