@@ -35,7 +35,8 @@ def new_run():
     # opened as it was. ?like=<job id>, the job page's "New run like
     # this": that recipe when the run kept one, else what the job recorded -
     # its launch, its Harbor and what its trials say ran - for the recipe core
-    # to rebuild a recipe from (fromJob). Individual query fields also prefill the form.
+    # to rebuild a recipe from (fromJob). ?saved=<id>: a saved recipe, as the
+    # Saved recipes dialog loads it. Individual query fields also prefill the form.
     like = request.args.get("like")
     run = request.args.get("run") or (like if like and _kept_recipe(like) else None)
     if run:
@@ -51,7 +52,20 @@ def new_run():
         data["loadLike"] = {"job": job.job_id, "agent": job.agent_name, "launch": job.launch,
                             "harbor": {"version": job.harbor_version, "editable": job.harbor_editable},
                             "env": next((t.env_type for t in job.trials if t.env_type), "")}
+    elif request.args.get("saved"):
+        data["loadSaved"] = next((x for x in recipe_store.listing() if x["id"] == request.args["saved"]), None)
+        if data["loadSaved"] is None:
+            abort(404)
     return render_template("builder/new_run.html", builder_data=data)
+
+
+@app.route("/recipes")
+def recipes_page():
+    """The saved recipes as a table, a column per step. The page checks each one as the builder checks a loaded
+    recipe: a Harbor one in the recipe core, a standard one by the compile of its Review step, done here."""
+    items = recipe_store.listing()
+    compiled = {x["id"]: _standard_compile(x["recipe"]) for x in items if x["recipe"].get("harness") == standard_recipe.HARNESS}
+    return render_template("builder/recipes.html", recipes=items, compiled=compiled, builder_data=_builder_data())
 
 
 def _builder_data() -> dict:
