@@ -221,3 +221,34 @@ class LoopFolderInARepository(LoopCase):
         self.assertNotEqual(r.code, 0)
         self.assertIn(os.path.realpath(self.repo), r.err)
         self.assertFalse(os.path.exists(os.path.join(self.repo, "round-01")))
+
+
+STUB_GIT = """#!/bin/sh
+if [ "$LC_ALL" = "C" ]; then
+  echo "fatal: not a git repository (or any of the parent directories): .git" >&2
+else
+  echo "fatal: ni ceci ni aucun de ses repertoires parents n'est un depot git : .git" >&2
+fi
+exit 128
+"""
+
+
+class LoopFolderWithATranslatedGit(LoopCase):
+    """The guard reads git's English text, so it runs git in the C locale."""
+
+    def test_a_folder_outside_a_repository_passes_under_a_french_locale(self) -> None:
+        bin_dir = os.path.join(self.tmp, "bin")
+        os.makedirs(bin_dir)
+        stub = os.path.join(bin_dir, "git")
+        with open(stub, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(STUB_GIT)
+        os.chmod(stub, 0o755)
+        run_dir = healthy(self.jobs, "run", "alpha")
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", LC_ALL="fr_FR.UTF-8", LANG="fr_FR.UTF-8",
+                   PATH=bin_dir + os.pathsep + os.environ.get("PATH", ""))
+        p = subprocess.run([sys.executable, LOOP, "read", "--loop", self.loop, "--run", run_dir, "--budget-usd", "1",
+                            "--pass-threshold", "1"], capture_output=True, text=True, env=env,
+                           stdin=subprocess.DEVNULL, timeout=120)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertTrue(os.path.isfile(self.round_file("input.json")))
