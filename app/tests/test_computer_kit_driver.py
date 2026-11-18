@@ -813,6 +813,23 @@ class Shutdown(unittest.TestCase):
         self.enterContext(mock.patch.object(desktop, "_CLIENTS_CLOSED", False, create=True))
         self.enterContext(mock.patch.object(desktop, "_CLIENTS", set()))
 
+    def test_unit_end_reports_a_failed_desktop_removal_after_closing_every_unit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            u = driver.Unit("see", os.path.join(tmp, "workspace"))
+            u.folder = tempfile.mkdtemp(dir=tmp)
+            folder = u.folder
+            u.desktop = mock.Mock()
+            u.desktop.remove.side_effect = desktop.DesktopError("desktop removal failed")
+            other = mock.Mock()
+            with mock.patch.dict(driver.OPEN, {"see": u, "click": other}, clear=True), \
+                    mock.patch.object(desktop, "end_clients") as clients, mock.patch.object(driver.REAPER, "tell"):
+                with self.assertRaisesRegex(desktop.DesktopError, "desktop removal failed"):
+                    driver.end("see", tmp)
+                self.assertEqual(driver.OPEN, {})
+            other.close.assert_called_once_with()
+            clients.assert_called_once_with(closing=False)
+            self.assertFalse(os.path.exists(folder))
+
     def test_shutdown_ends_clients_after_every_unit_was_scored(self):
         p = mock.Mock()
         with mock.patch.dict(driver.OPEN, {}, clear=True), mock.patch.object(desktop, "_CLIENTS", {p}):

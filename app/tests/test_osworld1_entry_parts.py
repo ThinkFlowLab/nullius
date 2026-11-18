@@ -543,6 +543,38 @@ class Bounds(unittest.TestCase):
         self.d.RUNNERS[where] = {"p": p, "sock_dir": sock, "life": None, "start": self.d._start_time(p.pid)}
         return where, p, sock
 
+    def test_unit_end_reports_a_vm_removal_timeout_and_keeps_it_for_the_reaper(self):
+        where, p, sock = self.owned_runner()
+        ws = os.path.join(self.tmp, "trial", "workspace")
+        with mock.patch.object(self.d.shutil, "which", return_value="docker"), \
+                mock.patch.object(self.d.subprocess, "run", side_effect=subprocess.TimeoutExpired("docker", 0.1)):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                self.d.end("os__a", ws)
+        self.assertIn(where, self.d.RUNNERS)
+        self.assertTrue(os.path.isdir(sock))
+        with mock.patch.object(self.d, "_spawn_reaper") as reap:
+            self.d._reap_at_exit()
+        self.assertEqual(reap.call_args.args[2:4], (where, sock))
+        self.assertEqual(self.d.RUNNERS, {})
+
+    def test_unit_end_reports_a_failed_vm_removal_command(self):
+        where, p, sock = self.owned_runner()
+        run = subprocess.run
+
+        def docker(argv, **kw):
+            if argv[1] == "ps":
+                return subprocess.CompletedProcess(argv, 0, stdout="container\n")
+            if argv[1] == "inspect":
+                return subprocess.CompletedProcess(argv, 0, stdout=os.path.join(sock, "vm", "Ubuntu.qcow2"))
+            self.assertEqual(argv[1:3], ["rm", "-f"])
+            return run([sys.executable, "-c", "raise SystemExit(1)"], **kw)
+
+        with mock.patch.object(self.d.shutil, "which", return_value="docker"), \
+                mock.patch.object(self.d.subprocess, "run", side_effect=docker):
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.d.end("os__a", os.path.join(self.tmp, "trial", "workspace"))
+        self.assertIn(where, self.d.RUNNERS)
+
     def test_a_removal_the_drivers_end_cuts_is_handed_to_a_reaper(self):
         where, p, sock = self.owned_runner()
         release = threading.Event()
@@ -594,7 +626,8 @@ class Bounds(unittest.TestCase):
         os.chmod(os.path.join(bin_dir, "docker"), 0o755)
         t0 = time.monotonic()
         with mock.patch.dict(os.environ, {"PATH": bin_dir + os.pathsep + os.environ.get("PATH", "")}):
-            self.d._remove_vms(self.tmp, 0.5)
+            with self.assertRaises(subprocess.TimeoutExpired):
+                self.d._remove_vms(self.tmp, 0.5)
         self.assertLess(time.monotonic() - t0, 5)
 
 

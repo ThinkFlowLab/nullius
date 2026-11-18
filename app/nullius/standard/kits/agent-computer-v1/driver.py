@@ -352,12 +352,16 @@ def close_all(*, shutdown=True):
     with OPEN_LOCK:
         held = list(OPEN.values())
         OPEN.clear()
+    failed = None
     for u in held:
         try:
             u.close()
         except Exception as e:
+            failed = e
             sys.stderr.write(f"computer kit: {u.unit} could not be let go: {e}\n")
     desktop.end_clients(closing=shutdown)
+    if failed is not None:
+        raise failed
 
 
 def job_of(dir):
