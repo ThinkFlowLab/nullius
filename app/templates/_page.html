@@ -1,0 +1,17 @@
+{#- The page head: every page's title, styled in style.css ("the page head"), the shape the table toolkit
+    (_tables.html) and the card toolkit (_cards.html) sit under. #}
+
+{# A page's head: its `title`, the one h1, flush left; under it at most one line, `sub` (counts, an id, a badge or
+   pills, never a sentence); right of the title's line, `actions`, the page's buttons, each as tall as a table's
+   controls (--tool-h) and centred on that line, under `sub` on a narrow screen. `sub`, `actions` and `mark` are
+   markup, as a `{% set %}` block writes it; `mark` goes before the title (a benchmark's or an agent's logo).
+   `mono` sets the title as code (a task name); `id` names the h1. #}
+{% macro page_head(title, sub='', actions='', mark='', mono=false, id='') %}
+<header class="page-head">
+  <h1{% if id %} id="{{ id }}"{% endif %}{% if mono %} class="mono"{% endif %}>{% if mark|trim %}<span class="page-head-mark" aria-hidden="true">{{ mark }}</span>{% endif %}{{ title }}</h1>
+  {%- if sub|trim %}
+  <div class="page-head-sub">{{ sub }}</div>{% endif %}
+  {%- if actions|trim %}
+  <div class="page-head-actions">{{ actions }}</div>{% endif %}
+</header>
+{%- endmacro %}

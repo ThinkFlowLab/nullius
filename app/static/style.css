@@ -5,6 +5,8 @@
    base.html chooses the theme before paint; every asset remains local. */
 :root {
   --topbar-height: 56px;
+  --tool-h: 2.1rem;                               /* a page's buttons and a table's controls: as tall as a small button with its icon */
+  --h1-size: clamp(1.75rem, 2.5vw, 2.15rem);
   --nav-hover: #32363d;
   --nav-text: #d6d9df;
   color-scheme: dark;
@@ -257,7 +259,25 @@ h1, h2, h3 { font-weight: 500; letter-spacing: -0.01em; }
 main { max-width: none; margin: 0; padding: 2.6rem clamp(1.25rem, 3vw, 3rem) 5rem; }
 
 .page-title { display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap; }
-h1 { font-size: clamp(1.75rem, 2.5vw, 2.15rem); font-weight: 500; line-height: 1.22; letter-spacing: -.04em; margin: 0; }
+h1 { font-size: var(--h1-size); font-weight: 500; line-height: 1.22; letter-spacing: -.04em; margin: 0; }
+
+/* the page head (templates/_page.html): the title flush left, one line under it, the page's buttons right of the
+   title's first line and centred on it; on a narrow screen the buttons go under, flush left. One gap under it. */
+.page-head { --h1-line: calc(var(--h1-size) * 1.22); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem 1.5rem; margin: 0 0 1.5rem; }
+.page-head > h1 { grid-column: 1; grid-row: 1; overflow-wrap: anywhere; }
+.page-head-mark { display: inline-flex; align-items: center; height: var(--h1-line); margin-right: .45em; vertical-align: top; }
+.page-head .page-head-mark > * { width: calc(var(--h1-size) * .9); height: calc(var(--h1-size) * .9); }
+.page-head-sub { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; min-width: 0; color: var(--text-dim); font-size: .9rem; line-height: 1.5; }
+.page-head-sub .mono { color: var(--text); overflow-wrap: anywhere; }
+.page-head-actions { grid-column: 2; grid-row: 1; align-self: start; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .5rem;
+  margin-top: calc((var(--h1-line) - var(--tool-h)) / 2); }
+.page-head-actions :is(.btn, .nb-button) { height: var(--tool-h); padding-block: 0; }
+main .page-head + * { margin-top: 0; }   /* the head's gap is the only one */
+@media (max-width: 640px) {
+  .page-head { grid-template-columns: minmax(0, 1fr); }
+  .page-head-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; margin-top: .25rem; }
+}
+@media (pointer: coarse) { .page-head { --tool-h: 2.75rem; } }
 h2 { font-size: 1.05rem; margin: 2rem 0 .75rem; }
 h3 { font-size: .72rem; margin: 1.25rem 0 .6rem; color: var(--text-dim);
      text-transform: uppercase; letter-spacing: .09em; font-weight: 500; }
@@ -362,7 +382,6 @@ button.seg:hover { filter: brightness(1.25); }
 .table-buttons, .table-slot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .75rem; }
 .table-buttons { margin-left: auto; }
 .table-buttons .menu { left: auto; right: 0; }   /* opens leftwards, inside the page */
-.table-controls { --tool-h: 2.1rem; }   /* every control in the row is as tall as a small button with its icon */
 .table-controls :is(.btn, .seg-toggle, .filter-pill) { height: var(--tool-h); }
 .table-controls .filter-pill { min-height: 0; padding-block: 0; }
 /* a segmented toggle: a bordered group of links or buttons, the current one marked */
