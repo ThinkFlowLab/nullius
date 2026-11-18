@@ -242,6 +242,19 @@ class AgentSide(unittest.TestCase):
         self.assertEqual(d.request("score", unit=UNIT, dir=self.ws, transcript=[], answer="")["reward"], 1.0)
         self.assertEqual([t["action"] for t in self.traj()], ["FAIL"])
 
+    def test_a_step_with_an_end_ends_the_task_in_that_step(self):
+        self.task["evaluator"] = {"func": "infeasible"}
+        d = self.driver(max_steps="3", pause="0.1")
+        s = self.session(self.setup(d))
+        self.assertEqual(value(s.call("step", actions=[CLICK], response="no such menu", end="fail")),
+                         {"steps_left": 2, "done": True})
+        self.assertEqual(s.call("click", x=1, y=1)["content"][0]["text"], "the task has ended (fail)")
+        s.close()
+        score = d.request("score", unit=UNIT, dir=self.ws, transcript=[], answer="")
+        self.assertEqual(score["reward"], 1.0)                 # the evaluator reads FAIL as the last action
+        self.assertEqual([(t["step_num"], t["action"], t["response"]) for t in self.traj()],
+                         [(1, CLICK, "no such menu"), (1, "FAIL", "no such menu")])
+
     def test_the_steps_option_is_the_loops_budget(self):
         d = self.driver(max_steps="2", pause="0.1")
         s = self.session(self.setup(d))

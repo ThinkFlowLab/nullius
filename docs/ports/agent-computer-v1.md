@@ -31,11 +31,11 @@ One call is one step. Points use `x` and `y` in screenshot pixels at the screen'
 | `type` | `text` | The text typed key by key |
 | `key` | `keys`: a list pressed together, such as `["ctrl", "s"]` | The chord |
 | `wait` | none | No action, the pause alone |
-| `step` | `actions`: a list of texts, each Python run in the desktop with `pyautogui` and `time` imported, or `WAIT`; `response`, the agent's words, optional; `screenshot`, default false | The actions in order, as one step. An empty list is a step with no action |
+| `step` | `actions`: a list of texts, each Python run in the desktop with `pyautogui` and `time` imported, or `WAIT`; `response`, the agent's words, optional; `screenshot`, default false; `end`, optional: `done` or `fail` | The actions in order, as one step. An empty list is a step with no action. With `end`, the task then ends in that step, as by `done` or `fail` |
 | `done` | `message`, optional | The task is complete |
 | `fail` | `reason`, optional | The task cannot be done |
 
-A call of `click`, `move`, `drag`, `scroll`, `type`, `key`, `wait` or `step` answers once its actions have run and their pauses have passed, with `{steps_left, done}`; `done` is true once the task takes no more calls. Each adds the screen as a PNG image; `step` adds it only when `screenshot` is true. `done` and `fail` return `{steps_left, done}` with no image as the benchmark takes them, before it runs them: the benchmark's loop asks for nothing after them.
+A call of `click`, `move`, `drag`, `scroll`, `type`, `key`, `wait` or `step` answers once its actions have run and their pauses have passed, with `{steps_left, done}`; `done` is true once the task takes no more calls. Each adds the screen as a PNG image; `step` adds it only when `screenshot` is true. `done` and `fail` return `{steps_left, done}` with no image as the benchmark takes them, before it runs them: the benchmark's loop asks for nothing after them. A `step` with `end` answers once its actions have run, with `done` true, and the benchmark then takes its end. `DONE` or `FAIL` among the actions is refused.
 
 ## Rules
 
@@ -46,7 +46,7 @@ A call of `click`, `move`, `drag`, `scroll`, `type`, `key`, `wait` or `step` ans
 | The limits | In `initialize`'s `instructions`, in `info`, and as `steps_left` in every acting result |
 | The step budget | [OSWorld1's `max_steps`](../benchmarks/supported/osworld1.md#options). The benchmark's loop stops at its budget. After the last step, every tool but `info` answers with an error, and the benchmark evaluates the desktop as it is. An acting call sent while every step is taken is refused at once |
 | Model calls | A benchmark may bound the agent's model calls at its step budget |
-| The turn's end | A turn that ends with neither `done` nor `fail` ends the task, and the benchmark evaluates the desktop as it is. The driver tells the runner in one message. That message ends the wait for the agent's next call. The actions of a step not yet run are not run, and that call is refused. A `done` or `fail` taken before the message still reaches the benchmark. Each step left then passes with no action. The benchmark's loop counts those steps up to its budget, and its own records list no action for them. The call log holds the agent's own steps |
+| The turn's end | A turn that ends with neither `done` nor `fail` ends the task, and the benchmark evaluates the desktop as it is. The driver tells the runner in one message. That message ends the wait for the agent's next call. The actions of a step not yet run are not run, and that call is refused, its `end` with it. A `done` or `fail` taken before the message still reaches the benchmark. Each step left then passes with no action. The benchmark's loop counts those steps up to its budget, and its own records list no action for them. The call log holds the agent's own steps |
 | Input | Pointer and keyboard input goes through the acting tools. Input sent through `python` is outside the port |
 | One at a time | The server runs one desktop operation at a time, in the order the calls arrive. A call sent during a step waits for it |
 | Before the desktop is ready | `initialize`, `tools/list` and `info` answer at once; any other call waits. The session starts once the desktop is ready |

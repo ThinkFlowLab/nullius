@@ -300,7 +300,11 @@ class Tools(Port):
                                   ("type", {"text": ""}, "text is a text, not empty"),
                                   ("scroll", {"x": 1, "y": 1, "dy": 0}, "dy or dx is not 0"),
                                   ("step", {"actions": ["DONE"]}, "the task's end is the tool done or fail"),
+                                  ("step", {"actions": ["FAIL"], "end": "fail"}, "the task's end is the tool done or fail"),
                                   ("step", {"actions": "pyautogui.click()"}, "actions is a list"),
+                                  ("step", {"actions": [], "end": "stop"}, "end is one of done, fail"),
+                                  ("step", {"actions": [], "end": "DONE"}, "end is one of done, fail"),
+                                  ("step", {"actions": [], "end": True}, "end is a text"),
                                   ("upload", {"path": "a", "data": "!!"}, "data is base64"),
                                   ("upload", {"path": "a", "sha256": "ABC"}, "sha256 is 64 lowercase")]:
             self.assertIn(words, error(c.call(tool, **args)), tool)
@@ -407,6 +411,36 @@ class TurnEnd(Port):
         self.assertEqual(self.evaluated(), 1)
         self.assertEqual(self.ran, ["FAIL", ("evaluated", 1)])
         self.assertIn("the task has ended (fail)", error(c.call("click", x=1, y=1)))
+
+    def test_a_step_with_an_end_runs_its_actions_then_ends_the_task_in_that_one_step(self):
+        for end, final in (("done", "DONE"), ("fail", "FAIL")):
+            with self.subTest(end=end):
+                c = self.start(steps=5)
+                c.call("click", x=1, y=1)
+                got = c.call("step", actions=["pyautogui.press('a')", "WAIT"], response="last", end=end)
+                self.assertEqual((value(got), image(got)), ({"steps_left": 3, "done": True}, None))
+                self.assertEqual(self.evaluated(), 2)                    # the click's step, then the step and its end
+                self.assertEqual(self.ran, ["pyautogui.click(1, 1, clicks=1, button='left')", "pyautogui.press('a')",
+                                            "WAIT", final, ("evaluated", 2)])
+                self.assertEqual(error(c.call("click", x=1, y=1)), f"the task has ended ({end})")
+                self.assertEqual(error(c.call("screenshot")), f"the task has ended ({end})")
+                self.assertEqual(value(c.call("info"))["steps_left"], 3)
+
+    def test_a_step_with_an_end_and_no_action_is_the_end_alone(self):
+        c = self.start(steps=3)
+        got = c.call("step", actions=[], end="fail", screenshot=True)
+        self.assertEqual((value(got), image(got)), ({"steps_left": 2, "done": True}, PNG))
+        self.assertEqual(self.evaluated(), 1)
+        self.assertEqual(self.ran, ["FAIL", ("evaluated", 1)])
+
+    def test_a_step_with_an_end_on_the_last_step_ends_by_its_end_not_by_the_budget(self):
+        c = self.start(steps=2)
+        c.call("click", x=1, y=1)
+        self.assertEqual(value(c.call("step", actions=["pyautogui.press('a')"], end="done")),
+                         {"steps_left": 0, "done": True})
+        self.assertEqual(self.evaluated(), 2)
+        self.assertEqual(self.ran[-2:], ["DONE", ("evaluated", 2)])
+        self.assertEqual(error(c.call("click", x=1, y=1)), "the task has ended (done)")
 
     def test_a_turn_end_on_the_lifeline_ends_the_turn_and_its_close_stops_the_runner(self):
         self.start(steps=2)
@@ -759,6 +793,12 @@ class Descriptions(Bare):
         self.assertIn("click, move, drag, scroll, type, key and wait return the screen as a PNG image", instructions)
         self.assertIn("step does when screenshot is true", instructions)
         self.assertIn("done and fail answer before they run, with no image", instructions)
+        self.assertIn("A step with end, done or fail, runs its actions and then ends the task, in that one step",
+                      instructions)
+        self.assertIn("With end, done or fail, the actions run and then the task ends, in this one step",
+                      listed["step"]["description"])
+        self.assertEqual(listed["step"]["inputSchema"]["properties"]["end"]["enum"], ["done", "fail"])
+        self.assertEqual(listed["step"]["inputSchema"]["required"], ["actions"])
 
 
 class Wires(Bare):
@@ -985,6 +1025,50 @@ class TurnEndAndSteps(Bare):
                 self.assertEqual(list(actions), [action])
                 self.assertEqual(final.answers[0][0]["done"], True)
                 self.assertEqual(b.predict("", {}), ("", []))
+
+
+class StepEnd(Bare):
+    def test_one_predict_hands_the_actions_then_the_end_once_the_call_is_answered(self):
+        b = self.bridge()
+        call = self.call(b, "step", actions=["first()", "second()"], response="words", end="done")
+        response, actions = b.predict("", {})
+        self.assertEqual((response, next(actions), next(actions)), ("words", "first()", "second()"))
+        self.assertEqual(call.answers, [])                       # held while the loop runs the second action
+        self.assertEqual(next(actions), "DONE")
+        self.assertEqual(call.answers, [({"steps_left": 4, "done": True}, None, None)])
+        self.assertEqual(list(actions), [])
+        self.assertEqual((b.used, b.ended), (1, "the task has ended (done)"))
+
+    def test_a_step_whose_actions_the_loop_did_not_run_to_their_end_hands_no_end(self):
+        b = self.bridge()
+        call = self.call(b, "step", actions=["first()", "second()"], end="fail")
+        _, actions = b.predict("", {})
+        self.assertEqual(next(actions), "first()")
+        actions.close()                                          # the loop gave the step up: an action failed
+        self.assertEqual(call.answers, [(None, None, "the step was not run to its end")])
+        self.assertIsNone(b.ended)
+        click = self.call(b, "click", x=1, y=1)                  # the task goes on
+        _, actions = b.predict("", {})
+        self.assertEqual(list(actions), ["pyautogui.click(1, 1, clicks=1, button='left')"])
+        self.assertEqual(click.answers[0][0], {"steps_left": 3, "done": False})
+
+    def test_the_turns_end_during_the_actions_refuses_the_step_and_its_end(self):
+        b = self.bridge()
+        call = self.call(b, "step", actions=["first()", "second()"], end="done")
+        _, actions = b.predict("", {})
+        self.assertEqual(next(actions), "first()")
+        b.end_turn()
+        self.assertEqual(list(actions), [])
+        self.assertEqual(call.answers, [(None, None, "the agent's turn has ended")])
+        self.assertEqual(b.predict("", {}), ("", []))
+
+    def test_a_step_with_no_end_hands_no_end(self):
+        b = self.bridge()
+        call = self.call(b, "step", actions=["first()"])
+        _, actions = b.predict("", {})
+        self.assertEqual(list(actions), ["first()"])
+        self.assertEqual(call.answers, [({"steps_left": 4, "done": False}, None, None)])
+        self.assertIsNone(b.ended)
 
 
 class Uploads(Bare):
@@ -1249,6 +1333,18 @@ class UpstreamLoop(unittest.TestCase):
         self.assertEqual([e["seconds"] for e in events if e["event"] == "wait"], [60, 20])
         with open(self.log) as f:
             self.assertEqual([json.loads(line)["tool"] for line in f], ["screenshot", "click", "step", "done"])
+
+    def test_a_step_with_an_end_is_one_step_of_the_upstreams_loop(self):
+        p, c = self.run_unit(steps=5)
+        self.assertEqual(value(c.call("click", x=10, y=20))["steps_left"], 4)
+        self.assertEqual(value(c.call("step", actions=["pyautogui.press('enter')"], response="enter", end="done")),
+                         {"steps_left": 3, "done": True})
+        result, traj, events = self.ended(p)
+        self.assertEqual(result, "1.0\n")
+        self.assertEqual([(t["step_num"], t["action"], t["response"]) for t in traj],
+                         [(1, "pyautogui.click(10, 20, clicks=1, button='left')", ""),
+                          (2, "pyautogui.press('enter')", "enter"), (2, "DONE", "enter")])
+        self.assertEqual([e["last"] for e in events if e["event"] == "evaluate"], ["DONE"])
 
     def test_a_turn_that_ends_with_no_done_has_the_desktop_evaluated_as_it_is(self):
         p, c = self.run_unit(steps=4)

@@ -429,6 +429,26 @@ class Wiring(FakeUnits):
         self.assertFalse(u.loop.is_alive())
         self.assertEqual(got["detail"]["steps_used"], 0)
 
+    def test_a_step_with_an_end_is_one_step_and_ends_the_kits_loop(self):
+        for end in ("done", "fail"):
+            with self.subTest(end=end):
+                ws, s = self.unit("type")
+                u = driver.OPEN["type"]
+                c = driver.Client(s["mcp"][0]["args"][0])
+                x, y = driver.centre(u.boxes["field"])
+                actions = [f"pyautogui.click({x}, {y})", f"pyautogui.write({u.expected['word']!r})",
+                           "pyautogui.hotkey('enter')"]
+                got = c.call("step", {"actions": actions, "response": "typed", "end": end})
+                self.assertEqual(got, (False, {"steps_left": u.steps - 1, "done": True}))
+                u.loop.join(5)
+                self.assertFalse(u.loop.is_alive(), "the kit's loop went on after the step's end")
+                self.assertEqual(c.call("click", {"x": x, "y": y}), (True, f"the task has ended ({end})"))
+                c.close()
+                scored = driver.score("type", ws, [], "")
+                self.assertTrue(scored["passed"], scored)
+                self.assertEqual((scored["detail"]["steps_used"], scored["detail"]["actions"]), (1, 3))
+                self.assertEqual(u.final, "typed")
+
     def test_a_client_that_types_through_python_fails(self):
         ws, s = self.unit("type")
         u = driver.OPEN["type"]
@@ -788,6 +808,27 @@ class EarnedPasses(FakeUnits):
         c.close()
         self.assertEqual([c["isError"] for c in u.calls()], [True, False])
         self.assertTrue(driver.score("click", ws, [], "done")["passed"])
+
+    def test_a_step_whose_action_did_not_end_in_time_takes_no_end_and_the_next_goes_on(self):
+        ws, s = self.unit("click")
+        u = driver.OPEN["click"]
+        fake = FakeDesktop.made[-1]
+        late = [True]
+
+        def act(code, seconds=None):
+            if late.pop() if late else False:
+                return {"start": 1.0, "end": 2.0, "reply": None}
+            return FakeDesktop.act(fake, code, seconds)
+        fake.act = act
+        c = driver.Client(s["mcp"][0]["args"][0])
+        self.assertEqual(c.call("step", {"actions": ["time.sleep(1000)", "WAIT"], "end": "done"}),
+                         (True, "the step was not run to its end"))
+        self.assertTrue(u.loop.is_alive(), "the kit's loop took the end of a step not run to its end")
+        self.assertFalse(c.call("click", dict(zip("xy", driver.centre(u.boxes[u.expected["target"]]))))[0])
+        c.close()
+        got = driver.score("click", ws, [], "done")
+        self.assertTrue(got["passed"], got)
+        self.assertEqual(got["detail"]["steps_used"], 2)
 
     def test_the_reference_reads_the_words_from_the_screenshot_and_fails_without_one(self):
         ws, s = self.unit("see")

@@ -12,7 +12,8 @@ imports it with the package's folder on its path.
 - ``Bridge``: the loop's agent. Each ``predict`` hands the loop the actions of the agent's next acting call (one
   step), and serves the reading calls that come before it, in the thread of the loop: one desktop operation at a time,
   in the order the calls arrived. An acting call is held until the loop has run its actions and their pause, then
-  answered. Once the steps are used up, every call but ``info`` is refused. The turn's end (``end_turn``) ends the
+  answered; a ``step`` with an ``end`` then hands the loop its DONE or FAIL, in the same step. Once the steps are used
+  up, every call but ``info`` is refused. The turn's end (``end_turn``) ends the
   wait for the agent's next call and the actions of a step not yet run; a ``done`` or ``fail`` already taken still
   reaches the loop, and each later ``predict`` gives the loop no action.
 - ``Server``: the MCP server over a Unix socket: JSON-RPC 2.0, one message a line; every connection of the unit's
@@ -155,13 +156,18 @@ def tools(screen):
                        "items": {"type": "string", "minLength": 1, "maxLength": 32}}}, ["keys"])),
         ("wait", "One step: no action, the pause alone. Returns the screen as a PNG image after the pause.", obj({})),
         ("step", "One step of several actions, run in order: each is a line of Python run in the desktop with "
-                 "pyautogui and time imported, or WAIT. An empty list is a step with no action. Returns the screen "
-                 "as a PNG image after the actions and pauses when screenshot is true.",
+                 "pyautogui and time imported, or WAIT. An empty list is a step with no action. With end, done or "
+                 "fail, the actions run and then the task ends, in this one step. Returns the screen as a PNG image "
+                 "after the actions and pauses when screenshot is true.",
          obj({"actions": {"type": "array", "items": {
                  "type": "string", "pattern": NOT_BLANK,
                  "not": {"pattern": f"^{BLANK}*(DONE|FAIL){BLANK}*$",
-                         "description": "the task's end is the tool done or fail, not an action of step"}}},
-              "response": {"type": "string"}, "screenshot": {"type": "boolean"}}, ["actions"])),
+                         "description": "the task's end is the tool done or fail, or the argument end, not an action "
+                                        "of step"}}},
+              "response": {"type": "string"}, "screenshot": {"type": "boolean"},
+              "end": {"type": "string", "enum": ["done", "fail"],
+                      "description": "Once the actions have run: done, the task is complete; fail, it cannot be done"}},
+             ["actions"])),
         ("done", "The last step: the task is complete. Returns {steps_left, done}, with no image.",
          obj({"message": {"type": "string"}})),
         ("fail", "The last step: the task cannot be done. Returns {steps_left, done}, with no image.",
@@ -244,13 +250,14 @@ def _valid(value, schema, tool, name):
 
 class Call:
     """One tools/call: its tool and arguments, when it came, and how it is answered (once). ``checked`` adds what
-    the call stands for: its arguments as checked, its actions, its response, whether its answer has the screen, and
-    an upload's data, decoded."""
+    the call stands for: its arguments as checked, its actions, its response, whether its answer has the screen, a
+    step's end (``done``, ``fail`` or None), and an upload's data, decoded."""
 
     def __init__(self, tool, args, reply):
         self.tool, self.args, self._reply = tool, args, reply
         self.start = time.time()
         self.clean, self.actions, self.response, self.screen, self.data = {}, [], "", False, None
+        self.end = None
         self.answered = False
         self._lock = threading.Lock()
 
@@ -288,6 +295,7 @@ def checked(call, screen) -> None:
         call.actions = ["WAIT"]
     elif tool == "step":
         call.actions, call.response, call.screen = list(a["actions"]), a.get("response", ""), a.get("screenshot", False)
+        call.end = a.get("end")
     elif tool in FINAL:
         call.actions, call.response = [FINAL[tool]], a.get("message" if tool == "done" else "reason", "")
     elif tool == "upload" and "data" in a:
@@ -404,7 +412,8 @@ class Bridge:
 
     def _run(self, call):
         """The call's actions, one at a time as the loop asks, none once the turn has ended; once the loop asks past
-        the last, it has run them all and their pause, and the call is answered."""
+        the last, it has run them all and their pause, and the call is answered. A step with an end then gives the
+        loop its DONE or FAIL, in the same step; one not run to its end gives none."""
         ran = False
         try:
             for action in call.actions:
@@ -415,11 +424,16 @@ class Bridge:
                 ran = True
         finally:
             self._ran(call, ran)
+        if ran and call.end:
+            yield FINAL[call.end]
 
     def _ran(self, call, ran):
         with self.change:
             self.running = None
-            refused = self._end("the steps are used up") if self.used >= self.steps else []
+            if ran and call.end:                     # the task has ended, as after done or fail
+                refused = self._end(f"the task has ended ({call.end})")
+            else:
+                refused = self._end("the steps are used up") if self.used >= self.steps else []
             value = {"steps_left": self.steps - self.used, "done": self.ended is not None}
             turn_ended = self.turn_ended
         if not ran:
@@ -540,7 +554,8 @@ class Bridge:
                 f"Look at a screenshot before the first pointing action. Each call of click, move, drag, scroll, "
                 f"type, key, wait, step, done or fail is one step. After the actions and their {self.pause:g} s pauses, "
                 f"click, move, drag, scroll, type, key and wait return the screen as a PNG image; step does when "
-                f"screenshot is true. done and fail answer before they run, with no image. "
+                f"screenshot is true. done and fail answer before they run, with no image. A step with end, done "
+                f"or fail, runs its actions and then ends the task, in that one step. "
                 f"There are {self.steps} steps in all, and steps_left in each acting answer. Once they are used "
                 f"up, every call but info is refused. Pointer and keyboard input goes through those tools, not through "
                 f"python. A turn that ends with neither done nor fail ends the task as the desktop then is.")
