@@ -571,7 +571,7 @@ class Bounds(unittest.TestCase):
 
         with mock.patch.object(self.d.shutil, "which", return_value="docker"), \
                 mock.patch.object(self.d.subprocess, "run", side_effect=docker):
-            with self.assertRaises(subprocess.CalledProcessError):
+            with self.assertRaisesRegex(RuntimeError, "VMs were not all removed"):
                 self.d.end("os__a", os.path.join(self.tmp, "trial", "workspace"))
         self.assertIn(where, self.d.RUNNERS)
 
@@ -629,6 +629,110 @@ class Bounds(unittest.TestCase):
             with self.assertRaises(subprocess.TimeoutExpired):
                 self.d._remove_vms(self.tmp, 0.5)
         self.assertLess(time.monotonic() - t0, 5)
+
+
+class VMRemoval(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.d = load("driver", self.tmp)
+        self.ws = os.path.join(self.tmp, "trial", "workspace")
+        self.where = self.d._runner_dir(self.ws)
+        self.sock = tempfile.mkdtemp(dir=self.tmp)
+        self.d.RUNNERS[self.where] = {"p": types.SimpleNamespace(returncode=0), "sock_dir": self.sock, "life": None}
+        self.mounts = {"other": os.path.join(self.tmp, "other", "vm", "Ubuntu.qcow2"),
+                       "mine": os.path.join(self.sock, "vm", "Ubuntu.qcow2")}
+        self.now, self.listed, self.removed = 0, [], []
+        self.errors, self.vanish, self.keep = {}, {}, False
+        for patcher in (mock.patch.object(self.d.subprocess, "run", side_effect=self.docker),
+                        mock.patch.object(self.d.shutil, "which", return_value="docker"),
+                        mock.patch.object(self.d.time, "time", side_effect=lambda: self.now),
+                        mock.patch.object(self.d.time, "sleep", side_effect=self.sleep)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+    def docker(self, argv, **kw):
+        command, out = argv[1], ""
+        errors = self.errors.get(command, [])
+        code = errors.pop(0) if errors else 0
+        if command == "ps":
+            self.listed.append(self.now)
+            out = " ".join(self.mounts)
+        elif command == "inspect":
+            cid = argv[-1]
+            if self.vanish.get(command) == cid:
+                self.mounts.pop(cid, None)
+                code = 1
+            out = self.mounts.get(cid, "")
+        else:
+            self.assertEqual(argv[1:3], ["rm", "-f"])
+            blocked = code
+            for cid in argv[3:]:
+                if self.vanish.get(command) == cid:
+                    self.mounts.pop(cid, None)
+                    code = 1
+                elif not self.keep and not blocked:
+                    self.removed.append(cid)
+                    self.mounts.pop(cid, None)
+        if code and kw.get("check"):
+            raise subprocess.CalledProcessError(code, argv, output=out)
+        return subprocess.CompletedProcess(argv, code, stdout=out)
+
+    def test_another_units_container_vanishing_before_inspect_does_not_fail_end(self):
+        self.vanish["inspect"] = "other"
+        self.assertEqual(self.d.end("os__a", self.ws), {})
+        self.assertEqual((self.mounts, self.removed, self.d.RUNNERS), ({}, ["mine"], {}))
+        self.assertFalse(os.path.exists(self.sock))
+
+    def test_a_container_vanishing_before_rm_does_not_fail_end(self):
+        self.mounts = {"vanished": self.mounts["mine"], **self.mounts}
+        self.vanish["rm"] = "vanished"
+        self.assertEqual(self.d.end("os__a", self.ws), {})
+        self.assertEqual((list(self.mounts), self.removed, self.d.RUNNERS), (["other"], ["mine"], {}))
+
+    def test_a_vm_still_listed_after_every_pass_fails_even_when_rm_succeeds(self):
+        self.keep = True
+        with self.assertRaisesRegex(RuntimeError, "VMs were not all removed"):
+            self.d._remove_passes(self.sock, 30)
+        self.assertEqual(sorted(set(self.listed)), [0, 2, 8, 20])
+        self.assertIn("mine", self.mounts)
+
+    def test_a_failed_removal_is_retried_in_every_later_pass(self):
+        self.errors["rm"] = [1]
+        self.d._remove_passes(self.sock, 30)
+        self.assertEqual(sorted(set(self.listed)), [0, 2, 8, 20])
+        self.assertEqual((list(self.mounts), self.removed), (["other"], ["mine"]))
+
+    def test_a_failed_list_is_retried_in_every_later_pass(self):
+        self.errors["ps"] = [1]
+        self.d._remove_passes(self.sock, 30)
+        self.assertEqual(sorted(set(self.listed)), [0, 2, 8, 20])
+        self.assertEqual((list(self.mounts), self.removed), (["other"], ["mine"]))
+
+    def test_an_unreadable_final_list_fails_end(self):
+        for errors in ([1], [0, 1]):
+            with self.subTest(errors=errors):
+                self.errors["ps"] = errors.copy()
+                with self.assertRaises(subprocess.CalledProcessError):
+                    self.d.end("os__a", self.ws)
+                self.assertIn(self.where, self.d.RUNNERS)
+                self.assertTrue(os.path.isdir(self.sock))
+
+    def test_a_list_that_never_answers_still_gets_every_pass(self):
+        self.errors["ps"] = [1] * 4
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.d._remove_passes(self.sock, 30)
+        self.assertEqual(self.listed, [0, 2, 8, 20])
+
+    def test_a_pass_that_exhausts_the_budget_fails(self):
+        def slow_sleep(seconds):
+            self.now += 30
+        with mock.patch.object(self.d.time, "sleep", side_effect=slow_sleep):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                self.d._remove_passes(self.sock, 30)
 
 
 class Texts(unittest.TestCase):
