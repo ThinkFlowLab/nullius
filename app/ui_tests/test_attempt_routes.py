@@ -180,7 +180,7 @@ class AttemptRoutes(unittest.TestCase):
         self.assertIn('<span class="k">Benchmark</span><span class="v" title="terminal-bench">', above(every))
         self.assertIn('<span class="th-model mono">fixture-model</span>', above(every))
         for html in (one, every):
-            self.assertLess(html.index('<div class="page-title trial-title">'), html.index('<div class="trial-head">'))
+            self.assertLess(html.index('<header class="page-head">'), html.index('<div class="trial-head">'))
         # an attempt's numbers are its own: under the tabs on its page, in the table here
         self.assertNotIn('class="th-strip"', above(one))
         self.assertLess(one.index('<div class="attempt-head">'), one.index('class="th-strip"'))

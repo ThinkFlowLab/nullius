@@ -14,7 +14,7 @@ body:has(.settings-modal[open]) { overflow: hidden; }
 .settings-embedded .shell, :root[data-rail] .settings-embedded .shell { display: block; height: 100%; min-height: 0; }
 .settings-embedded main { height: 100dvh; min-height: 0; padding: 24px; box-sizing: border-box; }
 .settings-embedded .st-page { height: 100%; min-height: 0; }
-.settings-embedded .st-head { display: none; }
+.settings-embedded :is(.page-head, .st-ready) { display: none; }
 .settings-embedded .st-layout { flex: 1; min-height: 0; flex-wrap: nowrap; gap: 24px; align-items: stretch; }
 .settings-embedded .st-index { flex: 0 0 190px; position: static; min-height: 0; overflow-y: auto; border: 0; background: transparent; padding: 0; }
 .settings-embedded .st-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 0 8px 16px 4px; }
