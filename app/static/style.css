@@ -259,7 +259,6 @@ h1, h2, h3 { font-weight: 500; letter-spacing: -0.01em; }
    readable however wide the screen is. */
 main { max-width: none; margin: 0; padding: 2.6rem clamp(1.25rem, 3vw, 3rem) 5rem; }
 
-.page-title { display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap; }
 h1 { font-size: var(--h1-size); font-weight: 500; line-height: 1.22; letter-spacing: -.04em; margin: 0; }
 
 /* the page head (templates/_page.html): the title flush left, one line under it, the page's buttons right of the
@@ -288,7 +287,6 @@ h3 .total { margin-left: .15rem; color: var(--text); font-weight: 600; text-tran
 .muted { color: var(--text-dim); }
 .dot { color: var(--text-faint); margin: 0 .5rem; }
 
-/* Run details, actions and recorded configuration each own a row. */
 /* Judgement: the judge's answers beside the evidence. */
 .judgement-head { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 6px; }
 .judgement-head h2 { margin: 0 0 .2rem; }
@@ -347,16 +345,11 @@ tr.tone-good .jbar .fill { background: #4cc26a; } tr.tone-warn .jbar .fill { bac
 .judgement-sides > span { display: inline-flex; gap: 4px; align-items: baseline; }
 .judgement-job { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0 16px; padding: 10px 14px; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--surface); }
 .judgement-job .header-form { margin-left: auto; }
-.run-header { display: grid; gap: 16px; margin-bottom: 28px; }
-.run-header h1 { overflow-wrap: anywhere; }
 .run-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; color: var(--text-dim); font-size: 14px; line-height: 1.7; }
 .run-meta > span { min-width: 0; overflow-wrap: anywhere; }
 .run-meta > span + span::before { content: "·"; color: var(--text-faint); margin-right: 14px; }
 .run-meta > .mono { color: var(--text); }
-.run-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.run-actions .btn { min-height: 36px; font-size: 13px; padding: 8px 13px; white-space: normal; text-align: center; }
-@media(max-width:640px){.run-meta > span + span::before{display:none}.run-header{gap:14px;margin-bottom:24px}.run-meta{font-size:13px}.run-actions{gap:8px}}
-@media(pointer:coarse){.run-actions .btn{min-height:44px}}
+@media(max-width:640px){.run-meta > span + span::before{display:none}.run-meta{font-size:13px}}
 
 .bar {
   display: flex; height: 8px; border-radius: 99px; overflow: hidden;
@@ -1270,7 +1263,6 @@ input[type=text].invalid:focus { box-shadow: inset 0 0 0 1px var(--bad); }
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
   border-radius: 8px; padding: .65rem .85rem; font-size: .85rem; margin-bottom: 1rem;
 }
-.page-title + .alert { margin-top: 1rem; }   /* the gap the controls row leaves when a table shows */
 .alert .mono { color: var(--text); }
 .alert.error {
   background: color-mix(in srgb, var(--agent_error) 12%, var(--surface));
