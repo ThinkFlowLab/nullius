@@ -35,6 +35,17 @@ class MeetingPoints(unittest.TestCase):
         self.assertEqual((option["limit"], option["by"]["agent"]["m3"]), (True, "100"))
         self.assertEqual(option["setups"], ["original", "model", "yours"])
 
+    def test_step_option_also_applies_to_controls_and_capabilities_that_do_not_read_it(self):
+        """The shared yours scope includes the null control and capability runs."""
+        bench = definitions.get("benchmark", "osworld1")
+        for kind in ("control", "capability"):
+            with self.subTest(kind=kind):
+                values, bad = definitions.bench_options_of(bench, "test_small", setup="yours", kind=kind)
+                self.assertEqual((values["max_steps"], bad), ("default", []))
+                values, bad = definitions.bench_options_of(bench, "test_small", {"max_steps": "1500"},
+                                                           "yours", kind=kind)
+                self.assertEqual((values["max_steps"], bad), ("1500", []))
+
     @unittest.skipUnless(shutil.which("node"), "Node is required for builder options")
     def test_the_builder_shows_one_steps_field_for_scripts_agents_and_both(self):
         source = (Path(__file__).resolve().parents[1] / "static/builder/command-builder.js").read_text()
