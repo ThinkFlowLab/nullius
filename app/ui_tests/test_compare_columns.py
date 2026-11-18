@@ -156,4 +156,3 @@ setTimeout(() => process.stdout.write(JSON.stringify({fetched, replaced, listed:
         self.assertEqual(got["replaced"], ["/compare?cohort=matched&pick=a%3Ar1&pick=b%3A"])   # only the empty column's URL moves
         self.assertEqual(got["kept"], "r1")                                    # a column keeps its run until another is picked
         self.assertTrue(got["open"])                                           # its list opens on the new runs
-

@@ -56,7 +56,6 @@ Check dataset, model, provider, agent version, limits and execution backend befo
 
 The first column is the baseline. Under each summary number of the other columns, Δ is its difference from the baseline's, in the row's unit: percentage points for a rate, the row's own unit for counts, tokens, cost and time. It is coloured by the row's direction, uncoloured for a check (`nop`, `oracle`), and absent when either value is missing. A run sharded over several machines is one column holding every shard's trials.
 
-
 ## Reading the provenance column {#provenance}
 
 Each field is marked by how Nullius obtains it. Missing evidence is not a zero.

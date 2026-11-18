@@ -199,7 +199,6 @@ class EveryRoute(unittest.TestCase):
         task = next((t.task_base for j in jobs for t in j.trials if t.task_base), None)
         self.assertTrue(task, "no task shared by the fixture jobs")
         for url in (f"/compare?{picks}", f"/compare/task/{task}?{picks}"):
-
             with self.subTest(url=url):
                 self.assertEqual(self.get(url).status_code, 200)
 

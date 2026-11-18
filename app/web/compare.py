@@ -69,7 +69,6 @@ def rank_cells(raw, direction, allow_single=False, cells=None, exclude=None):
     reported = [i for i in entrants if raw[i] is not None]
     values = [raw[i] for i in reported]
     if not direction or n < 2 or len(values) < (1 if allow_single else 2):
-
         return [""] * n
 
     shown = list(cells) if cells else [None] * n
@@ -376,7 +375,6 @@ def compare():
     return render_template(
         "compare/compare.html", comparison=view, selections=view.selected, jobs=chosen,
         tasks=view.tasks, summary=summary, columns=columns, workspace_options=_workspace_options(),
-
         n_differing=view.n_differing, n_shared=view.shared_tasks,
         picks=values, cohort=view.cohort, view=tasks_view, add=to(values + [columns[-1]["ref"].workspace + ":"]),
         lists={n: _options(n, baseline) for n in dict.fromkeys(c["ref"].workspace for c in columns)},
@@ -451,7 +449,6 @@ def compare_runs():
     baseline's, listed first."""
     active = shared.STATE["workspace"]
     name = request.args.get("workspace", active.name if active else "")
-
     if name not in {o["name"] for o in _workspace_options()}:
         abort(404, description="That workspace is unavailable.")
     return jsonify(_options(name, request.args.get("dataset", "")))
