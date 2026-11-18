@@ -667,7 +667,7 @@ def _inventory(g, runs, wss, by_id) -> dict:
     its Delete would take is asked only when it opens (``launch_ask``)."""
     return {"launch": g, "runs": runs, "why": _undeletable(runs), "shards": len(runs), "state": _most_telling(map(_run_state, runs)),
             **_tally(g, by_id), "machines": list(dict.fromkeys(e.plan.host.label if e.plan.host else "this machine" for e in runs)),
-            "bytes": sum(execution.size_of(e.dir) for e in runs), "workspaces": wss,
+            "bytes": sum(map(execution.run_size, runs)), "workspaces": wss,
             # the agents its jobs recorded, and those its records name for jobs not written yet
             "agents": sorted({by_id[i].agent_label for i in g.job_ids if by_id[i].agent_label} | {str(x["agent"]) for e in runs for x in e.plan.jobs if x.get("agent")})}
 

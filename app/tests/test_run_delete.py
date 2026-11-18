@@ -171,6 +171,30 @@ class RunDelete(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.root, "s1"))); self.assertTrue(os.path.isdir(s2))
 
 
+class RunSize(unittest.TestCase):
+    setUp, run_ = RunDelete.setUp, RunDelete.run_
+
+    def _grow(self):
+        with open(os.path.join(self.jobs, "job-a", "tau3-bench__t0__abc", "result.json"), "a") as fh:
+            fh.write(" " * 1000)
+
+    def test_an_ended_run_is_walked_again_once_it_moves_and_delete_always_asks_afresh(self):
+        ex = execution.Execution(execution.Plan(name="r1", script="true"), root=self.root, record={"state": "done"})
+        first = execution.run_size(ex)
+        self.assertEqual(first, execution.size_of(ex.dir))
+        self._grow()                                            # deep in a trial: the listing keeps what it read
+        self.assertEqual(execution.run_size(ex), first)
+        self.assertEqual(execution.deletion(["r1"], self.home, self.root)["bytes"], first + 1000)
+        _write_json(os.path.join(ex.dir, "nullius.log"), {})    # its folder moves: walked again
+        self.assertEqual(execution.run_size(ex), execution.size_of(ex.dir))
+
+    def test_a_run_still_going_is_walked_at_each_ask(self):
+        ex = execution.Execution(execution.Plan(name="r1", script="true"), root=self.root, record={"state": "running"})
+        first = execution.run_size(ex)
+        self._grow()
+        self.assertEqual(execution.run_size(ex), first + 1000)
+
+
 class SizeOf(unittest.TestCase):
     def test_a_file_gone_since_the_walk_counts_nothing(self):
         d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)

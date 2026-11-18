@@ -1762,6 +1762,37 @@ def size_of(path: str) -> int:
     return total
 
 
+# Sizes of ended runs' folders, by folder: (what they were read at, bytes).
+_SIZES: Dict[str, tuple] = {}
+_SIZES_LOCK = threading.Lock()
+
+
+def run_size(ex: "Execution") -> int:
+    """``size_of`` the run's folder, as the Launches page lists it: walked at
+    each ask while the run is alive; once it has ended, again only when its
+    state, its record, its folder or its jobs folder moved. What Delete asks
+    (``deletion``) walks the folder afresh.
+    shortcut: a file changed deep in an ended run alone (a trace view saved on
+    its trial page) is counted from the next move of those; walk the job folders too if that matters."""
+    if ex.state in ALIVE:
+        return size_of(ex.dir)
+
+    def mtime(path):
+        try:
+            return os.stat(path).st_mtime_ns
+        except OSError:
+            return None
+    seen = (ex.state, ex.finished, *map(mtime, (ex.dir, os.path.join(ex.dir, RECORD), ex.jobs)))
+    with _SIZES_LOCK:
+        known = _SIZES.get(ex.dir)
+    if known is not None and known[0] == seen:
+        return known[1]
+    size = size_of(ex.dir)
+    with _SIZES_LOCK:
+        _SIZES[ex.dir] = (seen, size)
+    return size
+
+
 def _deletable(name: str, root: Optional[str]) -> tuple:
     """A run's folder and record, when it is a run that has ended; ValueError
     (alive, or not a run) or OSError (its record unreadable) otherwise."""
