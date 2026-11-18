@@ -1,14 +1,14 @@
 {% from 'runs/_execution.html' import execution_strip %}
 {% from 'traces/_attempts.html' import attempt_count %}
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}{{ job.job_id }} — Nullius{% endblock %}
 {% block crumb %}/ {{ job.job_id }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/live-board.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='runs/board.css') }}">{% endblock %}
 {% block body %}
 
-<header class="run-header">
-  <div class="page-title"><h1>{{ job.job_id }}</h1></div>
+{% set meta %}
   <div class="run-meta" aria-label="Run details">
     {% if job.agent_label %}<span>{{ job.agent_label }}{% if job.agent_version %} <span class="mono faint" title="Resolved agent version, recorded in the trial's agent_info">v{{ job.agent_version }}</span>{% endif %}</span>{% endif %}
     <span class="mono">{{ job.model_name }}</span>
@@ -21,17 +21,16 @@
     <span>{{ job.trials|length }}{% if job.n_planned and job.n_planned != job.trials|length %} of {{ job.n_planned }} planned{% endif %} trials</span>
     {% if job.n_retries %}<span class="warn" title="Trials Harbor restarted after an error">{{ job.n_retries }} retried</span>{% endif %}
     {% if job.duration_min %}<span>{{ job.duration_min|runtime }}</span>{% endif %}
-  </div>
-  <div class="run-actions" role="group" aria-label="Run actions">
+  </div>{% endset %}
+{% set actions %}
     {% if execution and execution.plan.recipe %}<a class="btn sm ghost" href="{{ url_for('new_run', run=job.job_id) }}"
       title="Open the run builder with the recipe this run was started from, every setting as it was; Run gives it a new name">New run like this</a>
     {% else %}<a class="btn sm ghost" href="{{ url_for('new_run', like=job.job_id, workspace=request.args.get('workspace') or none) }}"
       title="Open the run builder with what this run recorded: its agents and their parameters, model, dataset and task filter, limits, timeouts and Harbor; anything a recipe cannot say is named there">New run like this</a>{% endif %}
     {% set controls = feasibility_controls(job) %}{% if controls %}<a class="btn sm ghost" href="{{ url_for('feasibility_page', job_id=job.job_id) }}" title="What the {{ controls|join(' and ') }} control{{ 's' if controls|length > 1 else '' }} said about each task: can an empty solution fail and a reference solution pass">Feasibility · {{ controls|join(' + ') }}</a>{% endif %}
     {% if job.harbor_command %}<button class="btn sm ghost" type="button" data-copy="{{ job.harbor_command }}"
-      title="{{ job.harbor_command }}">Copy command</button>{% endif %}
-  </div>
-</header>
+      title="{{ job.harbor_command }}">Copy command</button>{% endif %}{% endset %}
+{{ page_head(job.job_id, sub=meta, actions=actions) }}
 
 {% if execution %}{{ execution_strip(execution, csrf, own=own if execution.plan.steps()|length > 1 else none, deletable=deletable) }}{% endif %}
 {% if job.is_preparing and not live_board and not ended %}

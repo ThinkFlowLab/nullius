@@ -1,5 +1,6 @@
 {% from 'runs/_runtime.html' import what_ran, shard_link %}
 {% from '_tables.html' import heads, check_cell, controls %}
+{% from '_page.html' import page_head %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Runs — Nullius{% endblock %}
@@ -71,18 +72,14 @@
 
 {% block body %}
 
-<div class="page-title runs-head"><h1>Runs</h1>
-  <span class="runs-acts">
-    <a class="btn sm ghost" href="{{ url_for('import_page') }}">Import</a>
-    <a class="btn sm" href="{{ url_for('new_run') }}">New run</a>
-  </span></div>
-{# Runs and trials are agents only: a control's trials are a check on the tasks, not results.
-   The checks are counted apart, as each launch counts them. #}
-<p class="subtitle" id="counts"
-   data-runs="{{ n_agent_runs }}" data-trials="{{ n_trials }}">
-  {{ launches|length }} launch{{ '' if launches|length == 1 else 'es' }}<span class="dot">·</span>{{ n_agent_runs }} run{{ '' if n_agent_runs == 1 else 's' }}<span class="dot">·</span>{{ n_trials }} trial{{ '' if n_trials == 1 else 's' }}
-  {%- if n_checks %}<span class="dot">·</span>{{ n_checks }} check{{ '' if n_checks == 1 else 's' }}{% endif %}
-</p>
+{#- Runs and trials are agents only: a control's trials are a check on the tasks, not results.
+    The checks are counted apart, as each launch counts them. #}
+{% set counts %}<span id="counts" data-runs="{{ n_agent_runs }}" data-trials="{{ n_trials }}">
+  {{- launches|length }} launch{{ '' if launches|length == 1 else 'es' }}<span class="dot">·</span>{{ n_agent_runs }} run{{ '' if n_agent_runs == 1 else 's' }}<span class="dot">·</span>{{ n_trials }} trial{{ '' if n_trials == 1 else 's' }}
+  {%- if n_checks %}<span class="dot">·</span>{{ n_checks }} check{{ '' if n_checks == 1 else 's' }}{% endif %}</span>{% endset %}
+{% set actions %}<a class="btn sm ghost" href="{{ url_for('import_page') }}">Import</a>
+  <a class="btn sm" href="{{ url_for('new_run') }}">New run</a>{% endset %}
+{{ page_head('Runs', sub=counts, actions=actions) }}
 <p class="runs-glance" id="glance">
   {%- if workspace %}<span>in <b>{{ workspace.label }}</b></span>{% endif -%}
   {%- for s, n in states|dictsort %}<span class="st-{{ s }}"><b>{{ n }}</b> {{ s }}</span>{% endfor -%}

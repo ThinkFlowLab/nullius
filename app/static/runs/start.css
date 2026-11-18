@@ -1,9 +1,7 @@
 /* Runs with no workspace open: build a run, or bring the ones made elsewhere,
    or open a workspace already here. Colours are the app's tokens (style.css). */
 .start { width: 100%; max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
-.start-head { display: flex; flex-direction: column; gap: 8px; }
-.start-head h1 { margin: 0; }
-.start-head p { margin: 0; font-size: 15px; color: var(--text-dim); }
+.start > .page-head { margin-bottom: calc(var(--head-gap) - 28px); }   /* the column's gap is part of the head's */
 .start-ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 18px; }
 .start-card { display: flex; flex-direction: column; gap: 14px; padding: clamp(24px, 2vw, 36px); border: 1px solid var(--border-soft); border-radius: 14px; background: var(--surface); color: var(--text); }
 .start-ic { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent-strong); }
@@ -24,8 +22,6 @@
 .start-all { font-size: 13px; }
 .start .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
-.start-title { display: flex; align-items: center; gap: 12px; }
-.start-count { border: 1px solid var(--border-soft); border-radius: 20px; padding: 3px 9px; font-size: 12px; color: var(--text-dim); }
 .start-card { min-height: clamp(256px, 22vh, 320px); box-shadow: var(--shadow); }
 .start-ic { flex: none; width: 42px; height: 42px; border: 1px solid color-mix(in srgb, var(--accent) 15%, transparent); }
 .start-ic .ic { width: 22px; height: 22px; }

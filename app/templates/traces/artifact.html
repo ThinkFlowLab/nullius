@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}{{ artifact.label }} — Nullius{% endblock %}
 {% block crumb %}/ runs / {{ job.job_id }} / {{ trial.task_base }} / artifacts{% endblock %}
 {% block body %}
 {% set download = url_for('artifact_download', job_id=job.job_id, trial_name=trial.trial_name, key=artifact.key, workspace=request.args.get('workspace')) %}
 <p><a class="btn ghost sm" href="{{ url_for('trial', job_id=job.job_id, trial_name=trial.trial_name, tab='artifacts', workspace=request.args.get('workspace')) }}">← Artifacts</a></p>
-<div class="page-title"><h1>{{ artifact.label }}</h1></div>
-<p class="subtitle"><span class="mono">{{ artifact.filename }}</span> · source record · credential-shaped values redacted</p>
+{% set sub %}<span class="mono">{{ artifact.filename }}</span> · source record · credential-shaped values redacted{% endset %}
+{{ page_head(artifact.label, sub=sub) }}
 {% if artifact.truncated %}<p class="alert">This record exceeds the viewer’s 16 MiB limit. The first portion is available here; the original file is intact.</p>{% endif %}
 <div class="table-tools artifact-tools" aria-label="Artifact pages">
   <span class="table-note">Page {{ artifact.page }} of {{ artifact.pages }} · characters {{ artifact.start + 1 if artifact.characters else 0 }}–{{ artifact.end }} of {{ artifact.characters }}</span>

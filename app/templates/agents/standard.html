@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% set plural = 'Agents' if kind == 'agent' else 'Capabilities' %}
 {% block title %}{{ plural }} — Nullius{% endblock %}
 {% block crumb %}/ {{ plural|lower }}{% endblock %}
@@ -8,16 +9,8 @@
 {% block body %}
 {# The standard's agents (or capabilities) as cards, as the benchmarks are; a card opens its own page. docs/standard.md #}
 <div class="bench-index">
-  <header class="bench-index-head">
-    <div>
-      <h1>{{ plural }}</h1>
-      <p class="bench-count">{{ items|length }} {{ plural|lower if items|length != 1 else kind }} ·
-        {% if kind == 'agent' %}driven over ACP, the benchmark's tools served over MCP{% else %}driven over JSON lines{% endif %} · every model call through the relay</p>
-    </div>
-    <div class="bench-head-tools">
-      <button type="button" class="btn" id="std-how-open" aria-haspopup="dialog">+ Add {{ 'an agent' if kind == 'agent' else 'a capability' }}</button>
-    </div>
-  </header>
+  {% set actions %}<button type="button" class="btn sm" id="std-how-open" aria-haspopup="dialog">+ Add {{ 'an agent' if kind == 'agent' else 'a capability' }}</button>{% endset %}
+  {{ page_head(plural, sub=items|length ~ ' ' ~ (plural|lower if items|length != 1 else kind), actions=actions) }}
 
   {% from "catalogue/add_dialog.html" import add_dialog %}
   {% set a = 'an agent' if kind == 'agent' else 'a capability' %}

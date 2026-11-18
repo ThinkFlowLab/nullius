@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}{{ entry.label ~ ' kit' if entry else 'Kits' }} — Nullius{% endblock %}
 {% block crumb %}/ <a href="{{ url_for('kits_page') }}">kits</a>{% if entry %} / {{ entry.label }}{% endif %}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
@@ -7,8 +8,10 @@
 {% block body %}
 {% if entry %}
 {% set d = entry.d %}
-<div class="std-index"><section class="std-card">
-  <div class="std-head"><div><h1>{{ entry.label }} kit</h1><div class="std-tags"><code class="std-tag">{{ entry.port }}</code><span class="std-tag">v{{ entry.version }}</span><span class="std-tag">{{ d.datasets|sum(attribute='units') }} checks</span></div></div></div>
+<div class="std-index">
+  {% set tags %}<code class="std-tag">{{ entry.port }}</code><span class="std-tag">v{{ entry.version }}</span><span class="std-tag">{{ d.datasets|sum(attribute='units') }} checks</span>{% endset %}
+  {{ page_head(entry.label ~ ' kit', sub=tags) }}
+  <section class="std-card">
   <p class="std-summary">{{ d.summary }}</p>
   <section class="std-source"><h2>Pass criteria</h2><p>{{ d.score.says }}.</p><p>Every basic check must pass to prove this port.</p></section>
   {% if d.get('skills') %}<section class="std-source"><h2>Skills</h2><dl class="std-source-grid">{% for name, description in d.skills.items() %}<div><dt>{{ name }}</dt><dd>{{ description }}</dd></div>{% endfor %}</dl><p>Skills are recorded separately from the basic port proof.</p></section>{% endif %}
@@ -37,7 +40,7 @@
 </div>
 {% else %}
 <div class="bench-index">
-  <header class="bench-index-head"><div><h1>Kits</h1><p class="bench-count">{{ items|length }} conformance kits</p></div></header>
+  {{ page_head('Kits', sub=items|length ~ ' conformance kits') }}
   {#- A card's fields (web/agents.py `_kit_card`); the family's pills filter them. #}
   {% set cols = [dict(key='family', label='Family', card='tag', class='std-tag', filter='pills'), dict(key='version', label='Version', card='meta'),
                  dict(key='title', label='Name', card='title'), dict(key='port', label='Port', card='text', style='code'),

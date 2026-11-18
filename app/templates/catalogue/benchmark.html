@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% from "catalogue/use_bundle.html" import use_bundle %}
 {% block title %}{{ b.title }} — Nullius{% endblock %}
 {% block crumb %}/ <a href="{{ url_for('benchmarks_page') }}">benchmarks</a> / {{ b.key }}{% endblock %}
@@ -7,20 +8,16 @@
 {% set ds = cat.datasets_of(b) %}{% set tasks = cat.tasks_of(b) %}{% set files = cat.files(b.key) %}
 {% set ways = (['the Nullius standard'] if 'standard' in b.harness else []) + (['Harbor'] if 'harbor' in b.harness else []) %}{% set runs_with = ways|join(' or ') if ways else 'no harness here' %}
 <article class="bench-page" data-route-case="{{ b.route_case }}">
-  <header class="bench-head">
-    <div class="bench-head-copy">
-      <div class="bench-tags">{% if b.category %}<span class="cat-tag">{{ b.category }}</span>{% endif %}<span class="origin-tag {{ b.origin }}">{{ b.label }}</span></div>
-      <h1><svg class="bench-mark" aria-hidden="true"><use href="{{ url_for('static', filename='catalogue/marks.svg') }}#bm-{{ b.key }}"/></svg>{{ b.title }}</h1>
-      {% if b.domain %}<p class="bench-domain">{{ b.domain }}</p>{% endif %}
-    </div>
-    <div class="bench-actions">
-      {% if b.usable_routes %}<a class="btn" href="{{ url_for('new_run', standard=b.key) if 'standard' in b.harness else url_for('new_run', dataset=(b.datasets[0] if b.datasets else none)) }}">Build a run <span aria-hidden="true">→</span></a>{% endif %}
-      {% if b.citation %}<a class="btn ghost" href="#citation">Cite</a>{% endif %}
-      {% if editable %}<a class="btn ghost" href="{{ url_for('benchmark_edit', key=b.key) }}">Edit</a>{% endif %}
+  {% set mark %}<svg class="bench-mark"><use href="{{ url_for('static', filename='catalogue/marks.svg') }}#bm-{{ b.key }}"/></svg>{% endset %}
+  {% set tags %}{% if b.category %}<span class="cat-tag">{{ b.category }}</span>{% endif %}<span class="origin-tag {{ b.origin }}">{{ b.label }}</span>{% endset %}
+  {% set actions %}
+      {% if b.usable_routes %}<a class="btn sm" href="{{ url_for('new_run', standard=b.key) if 'standard' in b.harness else url_for('new_run', dataset=(b.datasets[0] if b.datasets else none)) }}">Build a run <span aria-hidden="true">→</span></a>{% endif %}
+      {% if b.citation %}<a class="btn ghost sm" href="#citation">Cite</a>{% endif %}
+      {% if editable %}<a class="btn ghost sm" href="{{ url_for('benchmark_edit', key=b.key) }}">Edit</a>{% endif %}
       {#- deleting asks first, in place: the button opens the question, never a dialog #}
       {% if restore_bundle %}{% if local %}{{ use_bundle('benchmarks', b.key, csrf) }}{% endif %}
       {% elif editable and deletable %}<details class="bench-delete">
-        <summary class="btn ghost danger">Delete</summary>
+        <summary class="btn ghost sm danger">Delete</summary>
         <form method="post" action="{{ url_for('benchmark_delete', key=b.key) }}" class="bench-delete-ask">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <span>Delete <b>{{ b.key }}</b> and its folder? Runs made from it stay.</span>
@@ -28,8 +25,9 @@
           <button type="button" class="btn ghost" onclick="this.closest('details').open = false">Keep it</button>
         </form>
       </details>{% endif %}
-    </div>
-  </header>
+  {% endset %}
+  {{ page_head(b.title, sub=tags, actions=actions, mark=mark) }}
+  {% if b.domain %}<p class="bench-domain">{{ b.domain }}</p>{% endif %}
   {% if b.blocker %}<p class="bench-blocked" role="note">No usable route — {{ b.blocker }}</p>{% endif %}
 
   <div class="bench-body">

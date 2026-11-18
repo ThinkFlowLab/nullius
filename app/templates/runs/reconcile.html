@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}Classifier vs judge · {{ job.job_id }} — Nullius{% endblock %}
 {% block crumb %}/ <a href="{{ url_for('job', job_id=job.job_id) }}">{{ job.job_id }}</a> / classifier vs judge{% endblock %}
 {% block head %}
@@ -15,13 +16,12 @@
 </style>
 {% endblock %}
 {% block body %}
-<header class="run-header">
-  <div class="page-title"><h1>Classifier vs judge <span class="badge">experimental</span></h1><span class="mono">{{ job.job_id }}</span></div>
+{% set sub %}<span class="badge">experimental</span><span class="mono">{{ job.job_id }}</span>{% endset %}
+{{ page_head('Classifier vs judge', sub=sub) }}
   <p class="subtitle" id="reconcile-meaning">
     The <strong>recorded outcome</strong> is the classifier's deterministic reading of the exception, verifier and patch; the judge's
     <span class="mono">failure_cause</span> is its reading of the transcript. Where they <strong>disagree</strong> is listed first. The recorded outcome never changes.
   </p>
-</header>
 
 {% if not view.applies %}
 <div class="alert warn" id="reconcile-not-applicable">This is a control run ({{ job.agent_label }}): its outcomes are a check on the tasks and the verifier, not an agent's attempt, so a failure cause over its transcript has nothing to reconcile with.</div>

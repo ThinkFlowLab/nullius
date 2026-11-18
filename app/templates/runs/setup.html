@@ -1,17 +1,14 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}{{ 'New workspace' if mode == 'new' else 'Import runs' }} — Nullius{% endblock %}
 {% block crumb %}/ {{ 'new workspace' if mode == 'new' else 'import' }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
 {% block body %}
 <div class="setup-wrap import-setup">
+  {{ page_head('Add runs to ' ~ (target or workspace).label if mode == 'add' else 'New workspace' if mode == 'new' else 'Import runs') }}
   {% if mode == 'add' %}
-  <h1>Add runs to {{ (target or workspace).label }}</h1>
   <p class="subtitle">Harbor{% if IMPORTERS %}, {{ IMPORTERS|join(' and ') }}{% endif %} output, recognised by shape.</p>
-  {% elif mode == 'new' %}
-  <h1>New workspace</h1>
-  <p class="subtitle">Point it at run folders on this machine, or drop them here.</p>
   {% else %}
-  <h1>Import runs</h1>
   <p class="subtitle">Point it at run folders on this machine, or drop them here.</p>
   {% endif %}
 

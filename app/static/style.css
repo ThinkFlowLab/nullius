@@ -5,6 +5,9 @@
    base.html chooses the theme before paint; every asset remains local. */
 :root {
   --topbar-height: 56px;
+  --tool-h: 2.1rem;                               /* a page's buttons and a table's controls: as tall as a small button with its icon */
+  --h1-size: clamp(1.75rem, 2.5vw, 2.15rem);
+  --head-gap: 1.5rem;                             /* under a page's head, on every page */
   --nav-hover: #32363d;
   --nav-text: #d6d9df;
   color-scheme: dark;
@@ -256,18 +259,34 @@ h1, h2, h3 { font-weight: 500; letter-spacing: -0.01em; }
    readable however wide the screen is. */
 main { max-width: none; margin: 0; padding: 2.6rem clamp(1.25rem, 3vw, 3rem) 5rem; }
 
-.page-title { display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap; }
-h1 { font-size: clamp(1.75rem, 2.5vw, 2.15rem); font-weight: 500; line-height: 1.22; letter-spacing: -.04em; margin: 0; }
+h1 { font-size: var(--h1-size); font-weight: 500; line-height: 1.22; letter-spacing: -.04em; margin: 0; }
+
+/* the page head (templates/_page.html): the title flush left, one line under it, the page's buttons right of the
+   title's first line and centred on it; on a narrow screen the buttons go under, flush left. One gap under it. */
+.page-head { --h1-line: calc(var(--h1-size) * 1.22); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem 1.5rem; margin: 0 0 var(--head-gap); }
+.page-head > h1 { grid-column: 1; grid-row: 1; overflow-wrap: anywhere; }
+.page-head-mark { display: inline-flex; align-items: center; height: var(--h1-line); margin-right: .45em; vertical-align: top; }
+.page-head .page-head-mark > * { width: calc(var(--h1-size) * .9); height: calc(var(--h1-size) * .9); }
+.page-head-sub { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; min-width: 0; color: var(--text-dim); font-size: .9rem; line-height: 1.5; }
+.page-head-sub .mono { color: var(--text); overflow-wrap: anywhere; }
+.page-head-actions { position: relative; grid-column: 2; grid-row: 1; align-self: start; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .5rem;
+  margin-top: calc((var(--h1-line) - var(--tool-h)) / 2); }
+.page-head-actions :is(.btn, .nb-button) { height: var(--tool-h); padding-block: 0; }
+main .page-head + * { margin-top: 0; }   /* the head's gap is the only one */
+@media (max-width: 640px) {
+  .page-head { grid-template-columns: minmax(0, 1fr); }
+  .page-head-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; margin-top: .25rem; }
+}
+@media (pointer: coarse) { .page-head { --tool-h: 2.75rem; } }
 h2 { font-size: 1.05rem; margin: 2rem 0 .75rem; }
 h3 { font-size: .72rem; margin: 1.25rem 0 .6rem; color: var(--text-dim);
      text-transform: uppercase; letter-spacing: .09em; font-weight: 500; }
 h3 .total { margin-left: .15rem; color: var(--text); font-weight: 600; text-transform: none; letter-spacing: normal; }
 .subtitle { color: var(--text-dim); font-size: .9rem; line-height: 1.75; margin: .75rem 0 1.75rem; max-width: 105ch; }
-.subtitle .mono { color: var(--text); }
+.subtitle .mono { color: var(--text); overflow-wrap: anywhere; }
 .muted { color: var(--text-dim); }
 .dot { color: var(--text-faint); margin: 0 .5rem; }
 
-/* Run details, actions and recorded configuration each own a row. */
 /* Judgement: the judge's answers beside the evidence. */
 .judgement-head { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 6px; }
 .judgement-head h2 { margin: 0 0 .2rem; }
@@ -326,16 +345,11 @@ tr.tone-good .jbar .fill { background: #4cc26a; } tr.tone-warn .jbar .fill { bac
 .judgement-sides > span { display: inline-flex; gap: 4px; align-items: baseline; }
 .judgement-job { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0 16px; padding: 10px 14px; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--surface); }
 .judgement-job .header-form { margin-left: auto; }
-.run-header { display: grid; gap: 16px; margin-bottom: 28px; }
-.run-header h1 { overflow-wrap: anywhere; }
 .run-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; color: var(--text-dim); font-size: 14px; line-height: 1.7; }
 .run-meta > span { min-width: 0; overflow-wrap: anywhere; }
 .run-meta > span + span::before { content: "·"; color: var(--text-faint); margin-right: 14px; }
 .run-meta > .mono { color: var(--text); }
-.run-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.run-actions .btn { min-height: 36px; font-size: 13px; padding: 8px 13px; white-space: normal; text-align: center; }
-@media(max-width:640px){.run-meta > span + span::before{display:none}.run-header{gap:14px;margin-bottom:24px}.run-meta{font-size:13px}.run-actions{gap:8px}}
-@media(pointer:coarse){.run-actions .btn{min-height:44px}}
+@media(max-width:640px){.run-meta > span + span::before{display:none}.run-meta{font-size:13px}}
 
 .bar {
   display: flex; height: 8px; border-radius: 99px; overflow: hidden;
@@ -362,7 +376,6 @@ button.seg:hover { filter: brightness(1.25); }
 .table-buttons, .table-slot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .75rem; }
 .table-buttons { margin-left: auto; }
 .table-buttons .menu { left: auto; right: 0; }   /* opens leftwards, inside the page */
-.table-controls { --tool-h: 2.1rem; }   /* every control in the row is as tall as a small button with its icon */
 .table-controls :is(.btn, .seg-toggle, .filter-pill) { height: var(--tool-h); }
 .table-controls .filter-pill { min-height: 0; padding-block: 0; }
 /* a segmented toggle: a bordered group of links or buttons, the current one marked */
@@ -1149,7 +1162,6 @@ pre.msg { color: var(--text); max-height: 220px; }
 .cat-other .cat-dot, .chip.cat-other::before { background: var(--text-faint); }
 
 .setup-wrap { max-width: 720px; margin: 7vh auto 0; text-align: center; }
-.setup-wrap h1 { font-size: 2rem; }
 .setup-wrap .subtitle { justify-content: center; font-size: .95rem; }
 .setup-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 2.25rem 2.5rem; margin-top: 1.75rem; text-align: left; }
 .field-label { font-size: .74rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text-dim); font-weight: 500; margin-bottom: .55rem; }
@@ -1251,7 +1263,6 @@ input[type=text].invalid:focus { box-shadow: inset 0 0 0 1px var(--bad); }
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
   border-radius: 8px; padding: .65rem .85rem; font-size: .85rem; margin-bottom: 1rem;
 }
-.page-title + .alert { margin-top: 1rem; }   /* the gap the controls row leaves when a table shows */
 .alert .mono { color: var(--text); }
 .alert.error {
   background: color-mix(in srgb, var(--agent_error) 12%, var(--surface));

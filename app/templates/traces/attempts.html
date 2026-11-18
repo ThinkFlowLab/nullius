@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% from 'traces/_attempts.html' import attempt_tabs, attempt_count %}
 {% from 'traces/_head.html' import ran_cards %}
 {% block title %}{{ trial.task_base }}, all attempts — Nullius{% endblock %}
@@ -8,7 +9,7 @@
 {# the head of an attempt's page (traces/trial.html): the name, what ran, then the tabs, so a tab
    changes what is under it and nothing above #}
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
-<div class="page-title trial-title"><h1>{{ trial.task_base }}</h1></div>
+{{ page_head(trial.task_base, mono=true) }}
 <div class="trial-head">{{ ran_cards(job, trial, imported_from, agent_mark) }}</div>
 <div class="attempt-head">
   <span class="attempt-count">{{ attempt_count(attempts) }}</span>
