@@ -182,3 +182,42 @@ class ShellBraces(LoopCase):
         r = self.read(run_dir, None)
         self.assertNotEqual(r.code, 0)
         self.assertIn("{home}", r.err)
+
+
+class LoopFolderInARepository(LoopCase):
+    """read refuses a loop folder that git would list as untracked, before it writes anything."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.repo = os.path.join(self.tmp, "repo")
+        os.makedirs(self.repo)
+        subprocess.run(["git", "init", "-q", self.repo], check=True, capture_output=True)
+        self.run_dir = healthy(self.jobs, "run", "alpha")
+
+    def loop_at(self, path: str) -> None:
+        os.makedirs(path, exist_ok=True)
+        self.loop = path
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+
+    def test_a_folder_git_does_not_ignore_is_refused(self) -> None:
+        self.loop_at(os.path.join(self.repo, "loops", "agent"))
+        r = self.read(self.run_dir, None)
+        self.assertNotEqual(r.code, 0)
+        self.assertIn(os.path.realpath(self.repo), r.err)
+        self.assertIn("outside the repository", r.err)
+        self.assertIn(".gitignore", r.err)
+        self.assertEqual(sorted(os.listdir(self.loop)), ["adapter.json"])
+
+    def test_a_folder_git_ignores_is_read(self) -> None:
+        self.loop_at(os.path.join(self.repo, "loops", "agent"))
+        with open(os.path.join(self.repo, ".gitignore"), "w", encoding="utf-8") as fh:
+            fh.write("loops/\n")
+        self.read_ok(self.run_dir, None)
+        self.assertTrue(os.path.isfile(self.round_file("input.json")))
+
+    def test_the_repository_root_is_refused(self) -> None:
+        self.loop_at(self.repo)
+        r = self.read(self.run_dir, None)
+        self.assertNotEqual(r.code, 0)
+        self.assertIn(os.path.realpath(self.repo), r.err)
+        self.assertFalse(os.path.exists(os.path.join(self.repo, "round-01")))
