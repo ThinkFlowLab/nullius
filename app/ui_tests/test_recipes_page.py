@@ -41,7 +41,8 @@ class RecipesPage(unittest.TestCase):
     def test_the_page_has_its_link_a_column_per_step_and_a_row_per_recipe(self):
         html = self.page()
         self.assertIn('href="/recipes" data-label="Recipes"', html)
-        self.assertIn("No saved recipe yet.", html)
+        self.assertIn('No saved recipe yet. <a href="/new-run">Build one', html)
+        self.assertIn("No saved recipe yet.</div>", self.page(environ_base=REMOTE))   # it could not save one
         self.assertIn('id="rcp-import"><svg', html)                  # Import stays, with nothing saved yet
         ids = [store.save(recipe(t))["id"] for t in ("one", "two")]
         html = self.page()

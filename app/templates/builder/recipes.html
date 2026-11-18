@@ -37,7 +37,7 @@
   {%- endif %}
 {% endcall %}
 {% else %}
-<div class="alert">No saved recipe yet.</div>
+<div class="alert">No saved recipe yet.{% if local %} <a href="{{ url_for('new_run') }}">Build one <span aria-hidden="true">→</span></a>{% endif %}</div>
 {% endif %}
 <dialog class="std-how launch-delete" id="rcp-dialog" aria-labelledby="rcp-dialog-h"></dialog>
 <script id="rcp-data" type="application/json">{{ dict(schema=builder_data, recipes=recipes, compiled=compiled)|tojson }}</script>
