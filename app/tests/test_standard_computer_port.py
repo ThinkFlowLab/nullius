@@ -570,9 +570,9 @@ mode = sys.argv[2]
 stop = cp.Stop(float(sys.argv[3]), last=lambda: print("last resort", flush=True))
 stop.install()
 if mode == "lifeline":
-    threading.Thread(target=cp.lifeline, args=(int(sys.argv[4]),), daemon=True).start()
-    print("waiting", flush=True)
-    try:
+    try:                                    # as in a runner: the clean-up holds before the lifeline can stop it
+        threading.Thread(target=cp.lifeline, args=(int(sys.argv[4]),), daemon=True).start()
+        print("waiting", flush=True)
         time.sleep(30)
     finally:
         print("stopped", flush=True)
