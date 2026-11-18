@@ -376,11 +376,11 @@ button.seg:hover { filter: brightness(1.25); }
   padding: .5rem; min-width: 168px; box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
   display: flex; flex-direction: column; gap: .1rem;
 }
-.menu label {
+.menu label, .tools-menu > a {
   display: flex; align-items: center; gap: .5rem; cursor: pointer;
   font-size: .84rem; color: var(--text-dim); padding: .3rem .45rem; border-radius: 6px;
 }
-.menu label:hover { background: var(--surface-2); color: var(--text); }
+.menu label:hover, .tools-menu > a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
 .menu input { accent-color: var(--accent); }
 .table-note { color: var(--text-faint); font-size: .8rem; }
 .table-pager { margin-top: .6rem; }

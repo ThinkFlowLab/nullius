@@ -136,7 +136,7 @@ window.NulliusTable = {
       const open = menu.hidden;
       menu.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
-      if (open) menu.querySelector('input:not(:disabled), button')?.focus();
+      if (open) menu.querySelector('input:not(:disabled), button, a[href]')?.focus();
     });
     document.addEventListener('click', e => { if (!menu.hidden && away(e.target)) close(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { close(); btn.focus(); } });

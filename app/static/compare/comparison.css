@@ -1,6 +1,5 @@
 /* Comparison controls share the shell's theme and leave data colours alone. */
 .compare-title { justify-content: space-between; align-items: center; }
-.cohort-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; }
 .cohort-switch { display: inline-flex; padding: 4px; gap: 4px; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--surface); }
 .cohort-switch a { padding: .5rem .9rem; border-radius: 5px; font-size: .84rem; color: var(--text-dim); }
 .cohort-switch a:hover { background: var(--surface-2); text-decoration: none; }
@@ -12,10 +11,6 @@
 .compare-excluded { color: var(--text-faint); font-size: .73rem; margin-top: .35rem; }
 .compare-attempts { display: block; color: var(--text-faint); font-size: .72rem; margin-top: .4rem; }
 .compare-task-dataset { display: block; color: var(--text-faint); font: .7rem var(--sans); margin: .3rem 0 0 1.5rem; }
-@media (max-width: 640px) {
-  .cohort-tools { align-items: flex-start; flex-direction: column; }
-}
-.compare-tools { flex-wrap: wrap; }
 .compare-warn {
  color: var(--patch_failed_tests); font-size: .86rem; margin: -.6rem 0 1.4rem; }
 

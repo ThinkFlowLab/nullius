@@ -106,8 +106,11 @@ window.NulliusCompare = {
     if (mine) this.entry(btn.querySelector('[data-run-label]'), mine);
   },
 
-  /* Every column of the page, its cells in the rows they share. A list opens only on its button. */
+  /* Every column of the page, its cells in the rows they share, and the Order menu. A list opens only on its
+     button. */
   wire(cfg) {
+    const order = document.querySelector('[data-order-btn]');
+    if (order) NulliusTable.menu(order, order.nextElementSibling);
     const cols = [];
     document.querySelectorAll('[data-column]').forEach(c => (cols[+c.dataset.column] ||= []).push(c));
     cols.forEach(cells => this.column(cells, cfg));

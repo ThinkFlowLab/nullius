@@ -1,6 +1,6 @@
 {% from 'runs/_runtime.html' import what_ran, shard_link %}
 {% from 'traces/_attempts.html' import attempt_count %}
-{% from '_tables.html' import classes %}
+{% from '_tables.html' import classes, controls %}
 {% extends "base.html" %}
 {% block title %}Compare {{ jobs|length }} run{{ '' if jobs|length == 1 else 's' }} — Nullius{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">
@@ -26,12 +26,21 @@
   <strong class="{{ 'warn' if n_differing else 'muted' }}">{{ n_differing }} where they disagree</strong>
 </p>
 {% endif %}
-<div class="cohort-tools">
-  <nav class="cohort-switch" aria-label="Comparison cohort">
+
+{#- The side table's controls row: the cohort and the columns' order, then Add a run. #}
+{% macro side_views() %}<nav class="cohort-switch" aria-label="Comparison cohort">
     <a href="{{ url_for('compare', pick=picks, cohort='whole') }}" aria-current="{{ 'true' if cohort == 'whole' else 'false' }}">Whole runs</a>
     <a href="{{ url_for('compare', pick=picks, cohort='matched') }}" aria-current="{{ 'true' if cohort == 'matched' else 'false' }}">Matched tasks</a>
   </nav>
-</div>
+  {% if n_agents > 1 %}<div class="menu-wrap">
+    <button class="btn ghost sm" type="button" data-order-btn aria-haspopup="true" aria-expanded="false" title="Order columns"><svg class="ic" aria-hidden="true"><use href="#i-reorder"/></svg>Order</button>
+    <div class="menu tools-menu" hidden>
+      <a href="{{ url_for('compare', pick=order_grouped, cohort=cohort) }}">Group by agent</a>
+      <a href="{{ url_for('compare', pick=order_alternating, cohort=cohort) }}">Alternate agents</a>
+    </div>
+  </div>{% endif %}{% endmacro %}
+{% macro side_actions() %}<a class="btn ghost sm" href="{{ add }}" id="compare-add"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a run</a>{% endmacro %}
+{{ controls('side', [], sort=false, views=side_views, actions=side_actions) }}
 {% if jobs %}
 <div class="cohort-note">
   {% if cohort == 'matched' %}
@@ -46,18 +55,6 @@
 </div>
 {% if comparison.datasets_known and not comparison.datasets_match %}<p class="compare-warn">The recorded datasets differ: pick runs of the baseline's dataset to compare the same tasks.</p>{% endif %}
 {% endif %}
-
-<h2>Side by side</h2>
-<div class="table-tools compare-tools">
-
-  {% if n_agents > 1 %}
-  <span class="table-note">Order columns:</span>
-  <a class="btn ghost sm" href="{{ url_for('compare', pick=order_grouped, cohort=cohort) }}">Group by agent</a>
-  <a class="btn ghost sm" href="{{ url_for('compare', pick=order_alternating, cohort=cohort) }}">Alternate agents</a>
-  {% endif %}
-  <span class="header-spacer"></span>
-  <a class="btn ghost sm" href="{{ add }}" id="compare-add"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a run</a>
-</div>
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Run comparison" tabindex="0">
 <table class="grid compare" style="--cols: {{ columns|length }}">
   {{ comparison_columns() }}

@@ -301,6 +301,24 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertEqual(self.cells(swapped, "Cost (estimated)"), ["$12.00", "$10.00"])
         self.assertEqual(self.columns(swapped), [("", "run"), ("", "run")])
 
+    def test_the_controls_row_holds_the_cohort_the_order_and_add_a_run(self):
+        self.another("third")
+        body = self.get(pick=["active:run", "foreign:run", "foreign:third"], cohort="matched")
+        row = body[body.index('<div class="table-tools table-controls" id="side-tools">'):body.index('<div class="cohort-note">')]
+        self.assertEqual(re.findall(r'data-slot="(\w+)"|aria-label="([^"]+)"|href="#(i-\w+)"|>([A-Z][\w ]+)</(?:a|button)>', row),
+                         [("views", "", "", ""), ("", "Comparison cohort", "", ""), ("", "", "", "Whole runs"), ("", "", "", "Matched tasks"),
+                          ("", "", "i-reorder", ""), ("", "", "", "Order"), ("", "", "", "Group by agent"), ("", "", "", "Alternate agents"),
+                          ("actions", "", "", ""), ("", "", "i-plus", ""), ("", "", "", "Add a run")])
+        # Order opens a menu of the two one-off reorders, links that keep the cohort
+        menu = re.search(r'data-order-btn.*?<div class="menu tools-menu" hidden>(.*?)</div>', row, re.S).group(1)
+        self.assertEqual([parse_qs(urlsplit(unescape(h)).query)["cohort"] for h in re.findall(r'<a href="([^"]+)">', menu)], [["matched"], ["matched"]])
+        self.assertIn('id="compare-add"', row)
+        self.assertNotIn("data-search", row)
+        self.assertNotIn("Sort by", row)
+        self.assertLess(body.index('id="side-tools"'), body.index('aria-label="Run comparison"'))
+        # one agent: nothing to order
+        self.assertNotIn("data-order-btn", self.get(pick=["active:run"]))
+
     def test_each_column_s_difference_from_the_baseline_in_the_row_s_unit(self):
         self.another("cheap", trials=[trial("shared", cost_usd=1, n_input_tokens=1500, job_id="cheap"),
                                       trial("other", cost_usd=1, n_input_tokens=1500, job_id="cheap")])

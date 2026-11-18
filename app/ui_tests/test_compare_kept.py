@@ -20,7 +20,7 @@ MATCHED = [label for label in WHOLE if label != "Run wall time"]
 DETAIL = ["Outcome", "Score", "Fail → Pass", "Pass → Pass", "Agent time", "Env / Verify", "Steps", "Tool calls", "Failed calls", "Tool mix", "First edit",
           "Edit → test cycles", "Redundant reads", "Retried failed calls", "Exploration per edit", "Prompt size",
           "Fresh prompt", "Cached", "Cached ratio", "Output tokens", "Cost (estimated)", "Files edited", "Broke"]
-SECTIONS = ["Side by side", "Task by task"]
+SECTIONS = ["Task by task"]
 
 
 def labels(body):
@@ -64,8 +64,12 @@ class KeptRows(unittest.TestCase):
         for body in (whole, matched):
             for section in SECTIONS:
                 self.assertIn(f"<h2>{section}</h2>", body)
-            # the cohort switch: its two links, their labels and cohort= values
-            switch = re.search(r'<nav class="cohort-switch" aria-label="Comparison cohort">(.*?)</nav>', body, re.S).group(1)
+            # the controls row: the cohort switch, its two links, their labels and cohort= values, then Add a run
+            tools = re.search(r'<div class="table-tools table-controls" id="side-tools">(.*?)<div class="cohort-note">', body, re.S).group(1)
+            switch = re.search(r'<nav class="cohort-switch" aria-label="Comparison cohort">(.*?)</nav>', tools, re.S).group(1)
+            self.assertIn('id="compare-add"', tools)
+            self.assertIn('<use href="#i-reorder"/></svg>Order</button>', tools)
+            self.assertEqual(re.findall(r'<a href="[^"]+">([^<]+)</a>', tools.split("data-order-btn")[1]), ["Group by agent", "Alternate agents"])
             self.assertEqual(re.findall(r'cohort=(\w+)"[^>]*>([^<]+)</a>', switch), [("whole", "Whole runs"), ("matched", "Matched tasks")])
             self.assertIn('class="cohort-note"', body)
             self.assertIn("Open trials side by side", body)
