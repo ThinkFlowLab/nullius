@@ -277,13 +277,19 @@ window.NulliusTable = {
   },
 
   /* Sticky columns, those whose header is a .sticky-col: each cell under it
-     pinned at the summed widths of the sticky columns before it, again as
+     pinned at the summed widths of the sticky columns before it. Sticky rows,
+     the rows with data-sticky (data-sticky="wide": only from 900px wide, where
+     a tall row leaves room for the rest): each pinned at the summed heights
+     of the sticky rows above it, in a box no taller than the window, under
+     the table's controls row (id <table id>-tools), which sticks too. Again as
      they resize, hide or rows come in. A row without a cell under each
      header (a colspan, an empty row) is left as it is. */
   sticky(table) {
     const heads = [...table.tHead.rows[0].cells], pinned = heads.filter(th => th.classList.contains('sticky-col'));
+    const rows = () => table.querySelectorAll('tr[data-sticky]'), wide = matchMedia('(min-width: 900px)');
+    const wrap = table.closest('.table-wrap'), tools = rows().length && table.id && document.getElementById(table.id + '-tools');
     const place = () => {
-      let left = 0;
+      let left = 0, top = 0;
       pinned.forEach(th => {
         for (const row of table.rows) {
           if (row.cells.length !== heads.length) continue;
@@ -294,10 +300,19 @@ window.NulliusTable = {
         }
         left += th.getBoundingClientRect().width;
       });
+      rows().forEach(row => {
+        const on = row.dataset.sticky !== 'wide' || wide.matches;
+        row.classList.toggle('sticky-row', on);
+        row.style.setProperty('--sticky-top', top + 'px');
+        if (on) top += row.getBoundingClientRect().height;
+      });
+      if (tools) wrap.style.setProperty('--sticky-tools', tools.getBoundingClientRect().height + 'px');
     };
+    if (tools) tools.classList.add('sticky-tools');
     const resized = new ResizeObserver(place);
-    pinned.forEach(th => resized.observe(th));
+    [...pinned, table, tools].forEach(el => el && resized.observe(el));
     new MutationObserver(place).observe(table, {childList: true, subtree: true});
+    wide.addEventListener('change', place);
     place();
   },
 
@@ -349,11 +364,11 @@ window.NulliusTable = {
   },
 };
 
-/* Every table with sticky columns, every table of the table macro and every collection of the cards macro, set up
+/* Every table with sticky columns or rows, every table of the table macro and every collection of the cards macro, set up
    once the page is read. */
 const nulliusTables = () => {
   document.querySelectorAll('table.grid').forEach(t => {
-    if (t.querySelector('.sticky-col')) NulliusTable.sticky(t);
+    if (t.querySelector('.sticky-col, [data-sticky]')) NulliusTable.sticky(t);
     if (t.hasAttribute('data-table')) NulliusTable.wire(t);
   });
   document.querySelectorAll('[data-cards]').forEach(c => NulliusTable.cards(c));

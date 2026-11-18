@@ -27,7 +27,7 @@ const matches = (e, sel) => sel.split(',').some(one => (one.trim().match(/:not\(
 class El {
   constructor(tag, attrs = {}, kids = []) {
     Object.assign(this, {tagName: tag.toUpperCase(), attrs: {}, children: [], parentNode: null, on: {}, hidden: false, checked: false,
-                         disabled: false, value: '', indeterminate: false, width: 0, text: ''});
+                         disabled: false, value: '', indeterminate: false, width: 0, height: 0, text: ''});
     this.style = {setProperty(k, v) { this[k] = v; }};
     const cls = new Set();
     this.classList = {contains: c => cls.has(c), add: c => cls.add(c), remove: c => cls.delete(c), toggle: (c, on = !cls.has(c)) => (on ? cls.add(c) : cls.delete(c), on)};
@@ -70,7 +70,7 @@ class El {
     if (this.tagName === 'INPUT') this.dispatch('change');
   }
   focus() { document.activeElement = this; }
-  getBoundingClientRect() { return {width: this.style.display === 'none' ? 0 : this.width}; }
+  getBoundingClientRect() { const off = this.style.display === 'none'; return {width: off ? 0 : this.width, height: off ? 0 : this.height}; }
   get previousElementSibling() { const s = this.parentNode.children; return s[s.indexOf(this) - 1] || null; }
   get cellIndex() { return this.parentNode.children.indexOf(this); }
   get rows() { return this.querySelectorAll('tr'); }
@@ -90,6 +90,9 @@ global.ResizeObserver = class { constructor(f) { this.f = f; observers.push(this
 const watched = [];
 global.MutationObserver = class { constructor(f) { this.f = f; } observe(target) { watched.push([target, this.f]); } };
 const mutated = node => watched.forEach(([target, f]) => target.contains(node) && f());
+global.media = {matches: true, on: [], addEventListener(t, f) { this.on.push(f); }};   // the window, 900px wide or more
+global.matchMedia = () => media;
+global.widen = on => { media.matches = on; media.on.forEach(f => f()); };
 global.el = (tag, attrs, ...kids) => new El(tag, attrs, kids);
 global.resized = () => observers.forEach(o => o.f());
 require(process.argv[1]);
@@ -316,6 +319,42 @@ process.stdout.write(JSON.stringify(out));
                                ["0px", "40px", None, "160px"], ["0px", "40px", None, "160px"], ["0px", "40px", None, "40px"]])
 
 
+    def test_each_row_offset_is_the_heights_above_it(self):
+        got = node(r"""
+const row = (h, sticky, ...cells) => Object.assign(el('tr', sticky === undefined ? {} : {'data-sticky': sticky}, ...cells.map(c => el('td', {}, c))), {height: h});
+const head = Object.assign(el('tr', {'data-sticky': ''}, Object.assign(el('th', {class: 'sticky-col sticky-edge'}), {width: 80}), el('th', {})), {height: 30});
+const ws = row(40, 'wide', 'w', 'x'), run = row(100, 'wide', 'r', 'x'), agent = row(25, '', 'a', 'x'), model = row(20, 'wide', 'm', 'x'), rest = row(50, undefined, 'd', 'x');
+const body = el('tbody', {}, ws, run, agent, model, rest);
+const table = el('table', {id: 'side'}, el('thead', {}, head), body);
+const tools = Object.assign(el('div', {id: 'side-tools'}), {height: 48}), wrap = el('div', {class: 'table-wrap'}, table);
+document.appendChild(el('main', {}, tools, wrap));
+T.sticky(table);
+const rows = [head, ws, run, agent, model, rest];
+const at = () => rows.map(r => r.classList.contains('sticky-row') ? r.style['--sticky-top'] : null);
+const out = [at(), wrap.style['--sticky-tools'], tools.classList.contains('sticky-tools'), agent.cells[0].classList.contains('sticky-col')];
+widen(false); out.push(at());                                                    // narrow: the header and the Agent row alone
+widen(true); run.height = 120; resized(); out.push(at());                        // a row grows: those under it move
+tools.height = 80; resized(); out.push(wrap.style['--sticky-tools']);          // the controls row wraps: the box shrinks
+const late = body.appendChild(row(10, '', 'l', 'x')); out.push(late.style['--sticky-top']);   // a row comes in: placed as it lands
+process.stdout.write(JSON.stringify(out));
+""")
+        self.assertEqual(got, [["0px", "30px", "70px", "170px", "195px", None], "48px", True, True,
+                               ["0px", None, None, "30px", None, None],
+                               ["0px", "30px", "70px", "190px", "215px", None], "80px", "235px"])
+
+    def test_a_table_without_sticky_rows_is_left_as_it_is(self):
+        got = node(r"""
+const head = el('tr', {}, Object.assign(el('th', {class: 'sticky-col'}), {width: 50}), el('th', {}));
+const first = el('tr', {}, el('td', {}), el('td', {}));
+const table = el('table', {id: 't'}, el('thead', {}, head), el('tbody', {}, first));
+const tools = el('div', {id: 't-tools'}), wrap = el('div', {class: 'table-wrap'}, table);
+document.appendChild(el('main', {}, tools, wrap));
+T.sticky(table);
+process.stdout.write(JSON.stringify([[head, first].map(r => [r.classList.contains('sticky-row'), r.style['--sticky-top'] ?? null]),
+                                     tools.classList.contains('sticky-tools'), wrap.style['--sticky-tools'] ?? null]));
+""")
+        self.assertEqual(got, [[[False, None], [False, None]], False, None])
+
 class Menus(unittest.TestCase):
     def test_a_label_click_toggles_and_keeps_its_menu_open(self):
         got = node(LAUNCHES + r'''
@@ -384,6 +423,12 @@ class Macros(unittest.TestCase):
                       '<td data-col="a" data-sort="x" class="sticky-col">a=x</td><td data-col="b" class="align-right sticky-col sticky-edge">b=x</td>'
                       '<td data-col="c" class="align-center">c=x</td><td data-col="acts">acts=x</td></tr>', html)   # each cell its column's
         self.assertIn('<p class="empty-note" data-empty="t" hidden>No rows match.</p>', html)
+
+    def test_a_sticky_head_pins_its_row_and_holds_its_controls_to_the_table(self):
+        source = "{% call(r, c) table('t', [dict(key='a', label='A')], [], none, sticky_head=on) %}{% endcall %}"
+        plain, pinned = (re.sub(r">\s+<", "><", self.render(source, on=on)).strip() for on in (False, True))
+        self.assertEqual(pinned.replace("<tr data-sticky>", "<tr>"), "<div>" + plain + "</div>")
+        self.assertIn("<tr data-sticky>", pinned)
 
     def test_a_card_only_field_stays_off_the_table(self):
         html = self.page([dict(key="a", label="A", card="title"), dict(key="logo", label="Logo", card="icon", table=False)])
