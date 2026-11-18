@@ -65,13 +65,13 @@ class KeptRows(unittest.TestCase):
             for section in SECTIONS:
                 self.assertIn(f"<h2>{section}</h2>", body)
             # the controls row: the cohort switch, its two links, their labels and cohort= values, then Add a run
-            tools = re.search(r'<div class="table-tools table-controls" id="side-tools">(.*?)<div class="cohort-note">', body, re.S).group(1)
+            tools = re.search(r'<div class="table-tools table-controls" id="side-tools">(.*?)<div class="table-wrap compare-table-wrap"', body, re.S).group(1)
             switch = re.search(r'<nav class="seg-toggle" aria-label="Comparison cohort">(.*?)</nav>', tools, re.S).group(1)
             self.assertIn('id="compare-add"', tools)
             self.assertIn('<use href="#i-reorder"/></svg>Order</button>', tools)
             self.assertEqual(re.findall(r'<a href="[^"]+">([^<]+)</a>', tools.split("data-order-btn")[1]), ["Group by agent", "Alternate agents"])
             self.assertEqual(re.findall(r'cohort=(\w+)"[^>]*>([^<]+)</a>', switch), [("whole", "Whole runs"), ("matched", "Matched tasks")])
-            self.assertIn('class="cohort-note"', body)
+            self.assertNotIn('class="cohort-note"', body)
             self.assertIn("Open trials side by side", body)
             self.assertIn('data-detail-url="/compare/detail/0?', body)
         self.assertIn('id="judgement"', matched)

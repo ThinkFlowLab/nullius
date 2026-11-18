@@ -153,7 +153,7 @@ class ComparisonRoutes(unittest.TestCase):
     def test_dataset_mismatch_is_an_empty_matched_cohort_not_a_false_join(self):
         self.right.dataset = "different-dataset@1.0"
         body = self.get(cohort="matched")
-        self.assertIn("No shared cohort is available", body)
+        self.assertIn('<p class="alert warn">No shared cohort is available.', body)
         self.assertFalse(self.cells(body, "Raw rate"))
         ambiguous = self.client.get("/compare/task/shared", query_string={"pick": ["active:run", "foreign:run"]})
         self.assertEqual(ambiguous.status_code, 302)
@@ -304,7 +304,7 @@ class ComparisonRoutes(unittest.TestCase):
     def test_the_controls_row_holds_the_cohort_the_order_and_add_a_run(self):
         self.another("third")
         body = self.get(pick=["active:run", "foreign:run", "foreign:third"], cohort="matched")
-        row = body[body.index('<div class="table-tools table-controls" id="side-tools">'):body.index('<div class="cohort-note">')]
+        row = body[body.index('<div class="table-tools table-controls" id="side-tools">'):body.index('<div class="table-wrap compare-table-wrap"')]
         self.assertEqual(re.findall(r'data-slot="(\w+)"|aria-label="([^"]+)"|href="#(i-\w+)"|>([A-Z][\w ]+)</(?:a|button)>', row),
                          [("views", "", "", ""), ("", "Comparison cohort", "", ""), ("", "", "", "Whole runs"), ("", "", "", "Matched tasks"),
                           ("", "", "i-reorder", ""), ("", "", "", "Order"), ("", "", "", "Group by agent"), ("", "", "", "Alternate agents"),

@@ -8,7 +8,7 @@
 .compare-attempts { display: block; color: var(--text-faint); font-size: .72rem; margin-top: .4rem; }
 .compare-task-dataset { display: block; color: var(--text-faint); font: .7rem var(--sans); margin: .3rem 0 0 1.5rem; }
 .compare-warn {
- color: var(--patch_failed_tests); font-size: .86rem; margin: -.6rem 0 1.4rem; }
+ color: var(--patch_failed_tests); font-size: .86rem; margin: 0 0 1.4rem; }
 
 /* A column's tools in its header, its workspace and run in the rows below; an empty column greyed, with no numbers. */
 .compare-col { vertical-align: top; text-transform: none; letter-spacing: 0; font-weight: 400; }

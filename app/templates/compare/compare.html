@@ -44,17 +44,7 @@
 <div>
 {{ controls('side', [], sort=false, views=side_views, actions=side_actions) }}
 {% if jobs %}
-<div class="cohort-note">
-  {% if cohort == 'matched' %}
-  <p><strong>{{ n_shared }} matched task{{ '' if n_shared == 1 else 's' }}.</strong> Rates, cost and tokens include every attempt on those tasks. The full run’s wall time is omitted.</p>
-  {% else %}
-  <p>These numbers describe each full run, including tasks the other runs did not cover. Switch to matched tasks to compare the same recorded task IDs.</p>
-  {% endif %}
-  {% if not comparison.datasets_known %}<p>A run has no recorded dataset identity. Its task names are kept separate because their identity cannot be verified.</p>{% endif %}
-  {% if cohort == 'matched' and not n_shared %}<p>No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
-  {% if comparison.repeated_trials|sum %}<p>Some tasks have repeated attempts. A task row counts every attempt, infra apart, and disagrees when its pass rate or how its attempts ended differs; its outcome is the last indexed attempt.</p>{% endif %}
-  <p>Adjusted rate excludes only rate limits, API errors, setup errors and spending caps. Unknown outcomes stay in its denominator. Controls are never ranked.</p>
-</div>
+{% if cohort == 'matched' and not n_shared %}<p class="alert warn">No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
 {% if comparison.datasets_known and not comparison.datasets_match %}<p class="compare-warn">The recorded datasets differ: pick runs of the baseline's dataset to compare the same tasks.</p>{% endif %}
 {% endif %}
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Run comparison" tabindex="0">
