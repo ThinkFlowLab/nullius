@@ -4,7 +4,7 @@
   // Served by: a row after each model field's, on OpenRouter alone: the serving providers that may answer that model,
   // in order (recipe.py, served_by). Its picker is the Model row's (model-picker.js, list="nb-served"): typing filters
   // the model's providers (POST /new-run/endpoints), a pick or a slug typed and Enter joins the list under it, each
-  // removable. Empty: any provider. What a row shows is C.servedRow's; `compiled()` is the server's last compile and
+  // removable. Empty: any provider, or the definition's pin. What a row shows is C.servedRow's; `compiled()` is the server's last compile and
   // the key of the recipe it was made for (C.servedKey). The tests run this under Node, with stand-ins for the page.
   function servedRows({C, root, r, compiled, esc, button, providers}) {
     const NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
@@ -34,8 +34,9 @@
     };
     const chips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick"><span class="std-served-slug">${esc(slug) || '“”'}</span>`
       + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
+    const title = (rec, role) => `Tried in this order, and no other provider. Empty: ${C.servedPin(role, known(rec), rec).join(', ') || 'any'}.`;
     const field = (rec, role) => { if (!C.servedRoles(rec).includes(role)) return ''; const s = row(rec, role);
-      return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any."${s.visible ? '' : ' hidden'}>Served by<input list="nb-served" aria-label="Served by, ${NAME[role]}" data-served-by="${role}" data-served-model="${esc(s.model)}" data-served-pending="${s.pending}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
+      return `<label class="nb-field std-served" title="${title(rec, role)}"${s.visible ? '' : ' hidden'}>Served by<input list="nb-served" aria-label="Served by, ${NAME[role]}" data-served-by="${role}" data-served-model="${esc(s.model)}" data-served-pending="${s.pending}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
         + `<span class="nb-chips std-served-list" data-served-list="${role}" data-of="${esc(JSON.stringify(s.chosen))}">${chips(role, s.chosen)}</span></label>`; };
     // each Served by drawn again in place, as the recipe holds it now: its list, and the model its providers are listed
     // for. The rest of the form stays as it is: the keyboard stays where it is, and an open menu stays open.
@@ -43,13 +44,13 @@
       const rec = r();
       root.querySelectorAll('input[data-served-by]').forEach(input => {
         const role = input.dataset.servedBy, s = row(rec, role), list = root.querySelector(`[data-served-list="${role}"]`);
-        input.closest('.std-served').hidden = !C.servedRoles(rec).includes(role) || !s.visible;
+        Object.assign(input.closest('.std-served'), {hidden: !C.servedRoles(rec).includes(role) || !s.visible, title: title(rec, role)});
         Object.assign(input.dataset, {servedModel: s.model, servedPending: String(s.pending), chosen: s.chosen.join(',')});
         input.placeholder = s.placeholder;
         if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = chips(role, s.chosen); }
       });
     }
-    return {field, sync, acceptCompile};
+    return {field, sync, acceptCompile, pin: (rec, role) => C.servedPin(role, known(rec), rec)};
   }
   // Saved recipes are the server's (/new-run/recipes, nullius/recipes/store.py); a browser on its host alone writes them.
   // move() sends what this browser kept before (nullius.recipes.v1, and the older nullius.recipes.v1.<workspace> lists)
@@ -205,7 +206,7 @@
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
   let runnerOut = null, runnerKey = '', runnerTimer, runnerServed = null;
   // Served by's rows (servedRows above), given the models the server last named and what decided them (C.servedCompiled)
-  const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders});
+  const {field: servedField, sync: syncServed, acceptCompile, pin: servedPin} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -1042,7 +1043,7 @@
     if(d.modelChoice){C.setModelChoice(r(),d.modelChoice);renderForm();refreshPlan();return;}
     // a provider taken out of a Served by. Its row's label does not then focus the field (its menu would open); by
     // key, the keyboard goes back to that field
-    if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);syncServed();refreshPlan();if(event.detail===0)root.querySelector(`input[data-served-by="${d.servedRole}"]`)?.focus();return;}
+    if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove,servedPin(r(),d.servedRole));syncServed();refreshPlan();if(event.detail===0)root.querySelector(`input[data-served-by="${d.servedRole}"]`)?.focus();return;}
     if(d.benchOpt!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOpt]||{};rec.bench_options={...(rec.bench_options||{})};if(d.benchVal===o.default)delete rec.bench_options[d.benchOpt];else rec.bench_options[d.benchOpt]=d.benchVal;renderForm();refreshPlan();return;}
     if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check');return;}
     if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install');return;}
@@ -1132,7 +1133,7 @@
     if(el.type==='number'&&(el.dataset.field||el.dataset.stdMinutes||el.dataset.benchOptSelect)&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
   });
   // a provider picked in a Served by, or slugs typed there and Enter: they join its list, after the ones there
-  root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);syncServed();refreshPlan();});
+  root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail,servedPin(r(),role));syncServed();refreshPlan();});
   root.addEventListener('change',async event=>{
     const el=event.target,d=el.dataset;
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}

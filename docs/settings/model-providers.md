@@ -46,7 +46,8 @@ On OpenRouter, whose base is fixed, a run may choose the serving providers of a
 model: **Served by** on the builder's Model step, hidden while its provider list
 is pending or has exactly one entry unless the field already has a pin, or
 [`--served-by`](../cli/run.md#serving-providers). An empty or failed list keeps
-the row visible; two endpoints of one provider count as two entries.
+the row visible; two endpoints of one provider count as two entries. A model the
+benchmark pins starts with the benchmark's providers.
 
 ## Configure a provider
 

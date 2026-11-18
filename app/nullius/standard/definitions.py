@@ -1100,7 +1100,7 @@ def _setups(s) -> List[str]:
     a summary), sent as asked through served_as and the provider's prefix;
     ``providers`` the ones that serve them, each with the prefix its names
     carry there; ``pin`` {openrouter: {model: [provider slug]}}, the only
-    providers of each; ``model`` needs ``original`` (its pipeline) and asks as one
+    providers of each unless --served-by gives others; ``model`` needs ``original`` (its pipeline) and asks as one
     of its models (``runs_as``)."""
     if s is None:
         return []

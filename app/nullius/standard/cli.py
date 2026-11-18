@@ -564,7 +564,7 @@ def cmd_run(a):
                       constraints=given,
                       timeouts=timeouts(a.timeout), max_turns=a.max_turns, max_calls=a.max_calls,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
-                      **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
+                      **({"served_by": run.served_by(a.served_by, other.get("sent") or a.model or "")} if a.served_by else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
         print("refused:", e)

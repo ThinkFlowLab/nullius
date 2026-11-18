@@ -685,8 +685,14 @@ class Run:
             if stray:
                 raise Refused(f"--served-by names {', '.join(stray)}, which this run does not call: it calls "
                               + (", ".join(called) or "no model"))
-        self.route_pins = pins_of(bench, other, provider, self.judge_model)
-        self.serving.update(self.route_pins)
+        pins = pins_of(bench, other, provider, self.judge_model)
+        self.route_pins = {m: o for m, o in pins.items() if self.serving.get(m, o) == o}
+        self.pins_replaced = {m: o for m, o in pins.items() if m not in self.route_pins}
+        for m, o in self.pins_replaced.items():
+            say(f"--served-by {m}={','.join(self.serving[m])} replaces the definition's {','.join(o)}: not as in the paper")
+        if self.pins_replaced:
+            self.other = {**other, "comparable": False}
+        self.serving = {**pins, **self.serving}
         self.bench_relay = None
         keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
@@ -900,7 +906,7 @@ class Run:
                          # a shard of a list splits the listed units: they are its whole
                          shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit)
                          if self.shard else None, units_file=self.units_file,
-                         repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving,
+                         repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving, pins_replaced=self.pins_replaced,
                          timeouts=self.timeouts, max_turns=self.forced_turns, max_calls=self.max_calls,
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
         # every unit once, then every unit again: a repeat cut short still has each unit's first run

@@ -15,7 +15,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from nullius.runs import classify
-from nullius.standard import definitions, install, relay, run
+from nullius.providers import STEP
+from nullius.standard import definitions, install, job, prove, recipe, relay, run
 
 M3, SONNET = "minimax/minimax-m3", "anthropic/claude-sonnet-4.6"
 PINS = {M3: ["minimax"], SONNET: ["anthropic"]}
@@ -198,18 +199,52 @@ class Definition(unittest.TestCase):
                         other, _ = definitions.setup(b, which, "", "openrouter")
                         self.assertNotIn("pins", other or {})
 
-    def test_the_definitions_pin_holds_whatever_served_by_says(self):
+    def test_served_by_replaces_the_definitions_pin_and_says_so(self):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         self.addCleanup(setattr, install, "HOME", install.HOME)
         install.HOME = os.path.join(tmp, "home")
         b = definitions.get("benchmark", "fakebench", ROOT)
         b = dict(b, score=dict(b["score"], judge={"model": SONNET, "says": "a verdict", "pin": {"openrouter": ["anthropic"]}}))
+        said = []
         make = lambda **kw: run.Run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="openrouter",
-                                    env={"OPENROUTER_API_KEY": "k"}, unsandboxed=True, jobs_root=tmp, say=lambda s: None, **kw)
-        self.assertEqual(make().serving, {SONNET: ["anthropic"]})
+                                    env={"OPENROUTER_API_KEY": "k"}, unsandboxed=True, jobs_root=tmp, say=said.append, **kw)
+        r = make()
+        self.assertEqual((r.serving, r.route_pins, r.pins_replaced), ({SONNET: ["anthropic"]}, {SONNET: ["anthropic"]}, {}))
+        r = make(served_by={SONNET: ["anthropic"]})
+        self.assertEqual((r.route_pins, r.pins_replaced, said), ({SONNET: ["anthropic"]}, {}, []))
         r = make(served_by={"m-1": ["prov-a"], SONNET: ["google-vertex"]})
-        self.assertEqual((r.serving, r.route_pins), ({"m-1": ["prov-a"], SONNET: ["anthropic"]}, {SONNET: ["anthropic"]}))
+        self.assertEqual((r.serving, r.route_pins, r.pins_replaced), ({"m-1": ["prov-a"], SONNET: ["google-vertex"]}, {}, {SONNET: ["anthropic"]}))
+        self.assertEqual(said, [f"--served-by {SONNET}=google-vertex replaces the definition's anthropic: not as in the paper"])
+        self.assertIs(r.other["comparable"], False)
+        self.assertNotIn("comparable", make().other)
+        job.write_config(tmp, job="j", bench=b, other=r.other, model="m-1", provider="openrouter", dataset="d", units=[],
+                         concurrency=1, granted=True, served_by=r.serving, pins_replaced=r.pins_replaced)
+        with open(os.path.join(tmp, "config.json")) as f:
+            self.assertEqual(json.load(f)["standard"]["pins_replaced"], {SONNET: ["anthropic"]})
+        self.assertIn(f"{os.path.basename(tmp)}: --served-by replaced the definition's providers of {SONNET}",
+                      prove.job_problems(b, {"id": "all"}, "nop", tmp, []))
+
+    def test_the_recipe_gives_each_fields_pin_and_review_says_when_served_by_replaces_it(self):
+        from tests.test_standard_recipe_served_by import a_recipe, defs, judged
+        b = judged()
+        d = defs(dict(b, score=dict(b["score"], judge=dict(b["score"]["judge"], pin={"openrouter": ["anthropic"]}))))
+        paper = [STEP["model"], "Served by", "not as in the paper"]
+        for served, words, row in ((None, "--served-by openai/gpt-4o-mini=anthropic", False), ({"judge": ["anthropic"]}, "--served-by openai/gpt-4o-mini=anthropic", False),
+                                   ({"judge": ["google-vertex"]}, "--served-by openai/gpt-4o-mini=google-vertex", True)):
+            with self.subTest(served=served):
+                out = recipe.compile(a_recipe(**({"served_by": served} if served else {})), d)
+                self.assertEqual((out["errors"], out["served_pins"]), ([], {"judge": ["anthropic"]}))
+                self.assertIn(words, out["script"])
+                self.assertEqual(paper in out["review"], row)
+                self.assertIn(f"judge served by {(served or {}).get('judge', ['anthropic'])[0]}", next(r[2] for r in out["review"] if r[1] == "Model"))
+        self.assertEqual(recipe.compile(a_recipe(), defs(judged()))["served_pins"], {})
+        both = recipe.compile(a_recipe(others=["fake", "nop"]), d)
+        self.assertTrue(all("--served-by openai/gpt-4o-mini=anthropic" in p["script"] for p in both["parts"]))
+        out = recipe.compile(a_recipe(model="openai/gpt-4o-mini", served_by={"model": ["google-vertex"]}), d)
+        self.assertEqual((out["errors"], out["served_pins"]), ([], {"model": ["anthropic"], "judge": ["anthropic"]}))
+        self.assertIn([STEP["model"], "Served by", "not as in the paper"], out["review"])
+        self.assertIn("model served by google-vertex · judge served by google-vertex", next(r[2] for r in out["review"] if r[1] == "Model"))
 
 
 class Wired(unittest.TestCase):
