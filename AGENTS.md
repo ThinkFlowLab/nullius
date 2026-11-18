@@ -79,6 +79,7 @@ and its resources. The source layout stays under `app/`.
   names (`runs/`, `traces/`, `builder/`, …; `base.html`, `style.css` and the fonts at the top), including the command
   builder's JavaScript, which owns the generated recipes. `app/templates/_tables.html` and
   `app/static/tables.js` are the table toolkit: one column list builds a table's headers, cells and controls.
+  `app/templates/_cards.html` lays the same field list out as cards, one slot per field.
 - `app/tests/`, `app/ui_tests/` — the backend suite and the route suite.
   Beside the backend tests sit scripts run by hand:
   `app/tests/field_contract.py`, which refreshes the `field_contract.json` the

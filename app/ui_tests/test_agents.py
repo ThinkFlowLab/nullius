@@ -55,7 +55,7 @@ class Tabs(unittest.TestCase):
         with patch.object(definitions, "load", _LOAD):
             for url in ("/agents", "/capabilities"):
                 html = self.get(url).get_data(as_text=True)
-                cards = re.findall(r'<a[^>]*class="bench-card[^"]*"[^>]*>(.*?)</a>', html, re.S)
+                cards = re.findall(r'<article class="bench-card"[^>]*>(.*?)</article>', html, re.S)
                 self.assertTrue(cards)
                 self.assertIn("Example", cards[0])
                 tree = html.split('data-tree="nav-' + ("agent" if url == "/agents" else "capability") + '"', 1)[1]
@@ -82,9 +82,16 @@ class Tabs(unittest.TestCase):
             self.assertIn(f'/static/catalogue/agents/{key}.svg', html)
         self.assertIn('/static/brand/marks.svg#openai', html)
         self.assertIn('/static/brand/marks.svg#harbor', html)
-        # Personal entries without a bundled mark remain legible.
+        # Beside the logos, an agent without one shows its initials; where none has a logo, no card has an icon.
+        self.assertIn('<span class="ws-avatar std-mark small" aria-hidden="true">EX</span><a class="card-link" href="/agents/reference">', html)
         fixture_html = self.get("/agents").get_data(as_text=True)
-        self.assertIn('std-mark small', fixture_html)
+        self.assertIn('<div class="bench-card-title"><a class="card-link" href="/agents/fake">Fake agent</a></div>', fixture_html)
+        self.assertNotIn('std-mark', fixture_html)
+        with patch.object(definitions, "load", _LOAD):
+            capabilities = self.get("/capabilities").get_data(as_text=True)
+        self.assertNotIn('std-mark', capabilities)                                         # capabilities have no logos: no letters either
+        self.assertIn('<input type="search" data-search placeholder="Name, protocol, summary"', capabilities)
+        self.assertIn('data-search="Mem0 mem0 memory', capabilities)
 
     def test_jiuwenswarm_default_shows_its_search_proof_and_can_run_gaia(self):
         from urllib.parse import unquote
@@ -121,6 +128,15 @@ class Tabs(unittest.TestCase):
         from nullius.standard import ports
         from html import unescape
         page = self.get("/kits").get_data(as_text=True)
+        self.assertIn('<input type="search" data-search placeholder="Name, port, check"', page)       # the search and the family filter
+        self.assertIn('<div class="filter-pills" role="group" aria-label="Family" data-pills="family">', page)   # the family's pills, no button
+        self.assertIn('<button type="button" class="filter-pill" data-value="capability" aria-pressed="false">Capabilities</button>', page)
+        self.assertNotIn('data-filter-menu', page)
+        self.assertNotIn('data-tools-btn="filter"', page)
+        self.assertIn('data-keys="agent-task-v1" data-f-family="agent&#10;"', page)
+        self.assertIn('<p class="empty-note" data-empty="kits" hidden>No kits match.</p>', page)
+        self.assertIn('<dl class="bench-stats"><div><dt>Checks</dt><dd>3</dd></div></dl>', page)
+        self.assertNotIn('bench-card-title"><span', page)                                       # kits have no icon
         for port, info in ports.PORTS.items():
             if not info["kit"]:
                 continue
@@ -156,9 +172,9 @@ class Tabs(unittest.TestCase):
         self.assertIn("<h1>Agents</h1>", html)
         card = html[html.index('id="fake"'):]
         self.assertIn('href="/agents/fake"', card)
-        self.assertIn("<b>2/7</b><span>ports proven</span>", card)                    # task and workspace, of the seven agent ports
-        self.assertIn("<b>1/1</b><span>benchmarks it runs</span>", card)
-        self.assertNotIn("agent.task/v1", card[:card.index("</a>")])                  # the detail is on its page
+        self.assertIn("<dt>Ports proven</dt><dd>2/7</dd>", card)                      # task and workspace, of the seven agent ports
+        self.assertIn("<dt>Benchmarks it runs</dt><dd>1/1</dd>", card)
+        self.assertNotIn("agent.task/v1", card[:card.index("</article>")])            # the detail is on its page
         self.assertEqual(self.get("/agents/nope").status_code, 404)
 
     def test_the_add_dialog_builds_a_prompt_and_keeps_the_steps_by_hand_for_each_kind(self):

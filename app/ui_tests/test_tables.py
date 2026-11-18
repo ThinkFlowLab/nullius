@@ -12,7 +12,7 @@ import jinja2
 APP = Path(__file__).resolve().parents[1]
 
 # A stand-in DOM: elements built by el(tag, attrs, ...children), selectors of one compound each
-# (tag, .class, [attr], [attr="v"], :checked, :not(:disabled)), events that bubble to the document.
+# (tag, .class, [attr], [attr="v"] or [attr=v], :checked, :not(:disabled)), events that bubble to the document.
 DOM = r'''
 const camel = k => k.replace(/-(\w)/g, (_, c) => c.toUpperCase()), kebab = k => k.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
 const simple = (e, s) => {
@@ -20,7 +20,7 @@ const simple = (e, s) => {
   if (s === ':checked') return e.checked;
   if (s === ':disabled') return e.disabled;
   if (s[0] === '.') return e.classList.contains(s.slice(1));
-  if (s[0] === '[') { const [, k, v] = s.match(/^\[([\w-]+)(?:="([^"]*)")?\]$/); return e.hasAttribute(k) && (v === undefined || e.getAttribute(k) === v); }
+  if (s[0] === '[') { const [, k, v] = s.match(/^\[([\w-]+)(?:="?([^"\]]*)"?)?\]$/); return e.hasAttribute(k) && (v === undefined || e.getAttribute(k) === v); }
   return e.tagName === s.toUpperCase();
 };
 const matches = (e, sel) => sel.split(',').some(one => (one.trim().match(/:not\([^)]*\)|\[[^\]]*\]|[.:]?[\w-]+/g) || []).every(s => simple(e, s)));
@@ -95,18 +95,28 @@ global.resized = () => observers.forEach(o => o.f());
 require(process.argv[1]);
 const T = window.NulliusTable;
 
+// A column's choices as the controls macro writes them: `only` the value chosen at load, if any.
+const fieldOf = ([col, values], only = {}) => el('fieldset', {'data-filter-menu': col}, el('span', {}, el('button', {'data-all': col}), el('button', {'data-none': col})),
+  ...values.map(v => el('label', {}, el('input', {type: 'checkbox', 'data-value': v, ...(col in only && only[col] !== v ? {} : {checked: true})}), ' ' + v)));
+const pillsOf = ([col, values], only = {}) => el('div', {'data-pills': col}, el('button', {class: 'filter-pill', 'data-all': col, 'aria-pressed': String(!(col in only))}),
+  ...values.map(v => el('button', {class: 'filter-pill', 'data-value': v, 'aria-pressed': String(only[col] === v)}, v)));
+const dropdownOf = (c, only) => el('div', {}, el('button', {'data-dropdown': ''}, c[0], el('span', {class: 'tools-count', hidden: true})), el('div', {class: 'menu', hidden: true}, fieldOf(c, only)));
+
 // A table as the table macro writes it: `id`; columns [key, type]; rows, each {search, f-<col>, cells}; `filter`: a
-// column and its values; `search`; `sort`; `noun`, what the live region counts.
-global.build = ({id, cols, rows, filter, search = true, sort = true, check = false, noun = 'rows'}) => {
+// column and its values, or a list of them, in the Filter menu; `dropdowns` and `pills`: lists of them, in those forms;
+// `only`: column -> its value chosen at load; `search`; `sort`; `noun`, what the live region counts.
+global.build = ({id, cols, rows, filter, dropdowns = [], pills = [], only = {}, search = true, sort = true, check = false, noun = 'rows'}) => {
   const radio = (k, v) => el('label', {}, el('input', {type: 'radio', name: `${id}-sort-${k}`, [`data-sort-${k}`]: '', value: v}), ' ' + v);
+  const button = !filter ? [] : typeof filter[0] === 'string' ? [filter] : filter;
   const tools = el('div', {id: id + '-tools'},
     ...(search ? [el('label', {}, el('input', {type: 'search', 'data-search': ''}))] : []),
-    ...(filter ? [el('button', {'data-tools-btn': 'filter'}, 'Filter', el('span', {class: 'tools-count', hidden: true})),
-                  el('div', {'data-tools': 'filter', hidden: true}, el('button', {'data-clear': ''}),
-                     el('fieldset', {'data-filter-menu': filter[0]}, ...filter[1].map(v => el('label', {}, el('input', {type: 'checkbox', 'data-value': v, checked: true}), ' ' + v))))] : []),
+    ...dropdowns.map(c => dropdownOf(c, only)),
+    ...(button.length ? [el('button', {'data-tools-btn': 'filter'}, 'Filter', el('span', {class: 'tools-count', hidden: true})),
+                         el('div', {'data-tools': 'filter', hidden: true}, el('button', {'data-clear': ''}), ...button.map(c => fieldOf(c, only)))] : []),
     ...(sort ? [el('button', {'data-tools-btn': 'sort'}),
                 el('div', {'data-tools': 'sort', hidden: true}, el('fieldset', {}, radio('col', ''), ...cols.map(([k]) => radio('col', k))),
-                   el('fieldset', {}, radio('dir', 'asc'), radio('dir', 'desc')))] : []));
+                   el('fieldset', {}, radio('dir', 'asc'), radio('dir', 'desc')))] : []),
+    ...pills.map(c => pillsOf(c, only)));
   const head = el('tr', {}, ...(check ? [el('th', {}, el('input', {type: 'checkbox', 'data-check-all': ''}))] : []),
                   ...cols.map(([k, type]) => el('th', {'data-col': k, 'data-type': type}, k)));
   const body = el('tbody', {}, ...rows.map(r => el('tr', Object.fromEntries(Object.entries(r).filter(([k]) => k !== 'cells').map(([k, v]) => [k === 'search' ? 'data-search' : 'data-' + k, v])),
@@ -184,6 +194,83 @@ setTimeout(() => {
         self.assertEqual(html.count("aria-live"), 1)                                             # one live region a table
         self.assertIn('data-noun="rows"', html)
         self.assertNotIn('role="status"', html)
+
+
+# Thirty rows of a state and a kind; the kind in pills, a dropdown and the Filter menu, the state in the Filter menu.
+FORMS = r'''
+const kinds = ['a', 'b', 'c'];
+const rows = Array.from({length: 30}, (_, i) => ({search: `L${i}`, 'f-state': i % 2 ? 'finished' : 'failed', 'f-kind': kinds[i % 3], cells: [`L${i}`]}));
+const make = (only = {}) => build({id: 't', cols: [['launch', 'text']], rows, only,
+                                    filter: [['state', ['failed', 'finished']], ['kind', kinds]], dropdowns: [['kind', kinds]], pills: [['kind', kinds]]});
+// each form's view of the kind: the pills pressed, the dropdown's and the Filter menu's boxes ticked; the dropdown's
+// count, the Filter's; the pager's note
+const look = t => {
+  const row = t.tools.querySelector('[data-pills]'), [drop, menu] = t.tools.querySelectorAll('[data-filter-menu="kind"]');
+  const ticked = v => v.querySelectorAll('input').filter(b => b.checked).map(b => b.dataset.value).join('');
+  const count = b => b.querySelector('.tools-count').hidden ? '' : b.querySelector('.tools-count').textContent;
+  return [row.querySelectorAll('button').filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.dataset.value ?? 'All').join(''),
+          ticked(drop), ticked(menu), count(t.tools.querySelector('[data-dropdown]')), count(t.tools.querySelector('[data-tools-btn="filter"]')), t.note()];
+};
+const pill = (t, v) => t.tools.querySelector('[data-pills]').querySelector(v ? `[data-value="${v}"]` : '[data-all]').click();
+const drop = t => t.tools.querySelector('[data-dropdown]').parentNode.querySelector('.menu');
+'''
+
+
+class FilterForms(unittest.TestCase):
+    """Pills, a dropdown and the Filter menu: three views of one choice per column."""
+
+    def test_the_forms_stay_in_step(self):
+        got = node(FORMS + r'''
+const t = make(), out = {start: look(t)};
+t.per.value = '10'; t.per.dispatch('change'); t.pager.querySelector('[data-next]').click(); out.page2 = t.note();
+pill(t, 'a'); out.a = [look(t), t.shown()[0]];                                            // back to the first page
+pill(t, 'b'); out.ab = look(t);                                                           // pills add up
+drop(t).querySelector('[data-value="a"]').click(); out.dropped = look(t);
+pill(t, 'b'); out.none = look(t);                                                         // the last one off: All
+pill(t, 'a'); pill(t, 'b'); pill(t, 'c'); out.every = look(t);                            // every one on: All
+pill(t, 'c'); t.tools.querySelector('[data-tools="filter"]').querySelector('[data-value="finished"]').click(); out.two = look(t);
+drop(t).querySelector('[data-all]').click(); out.all = look(t);
+t.tools.querySelector('[data-tools="filter"]').querySelector('[data-none="kind"]').click(); out.nothing = [look(t), t.empty()];
+pill(t, 'c'); t.tools.querySelector('[data-clear]').click(); out.clear = look(t);       // every column
+pill(t, 'b'); pill(t, null); out.pillAll = look(t);
+const dd = t.tools.querySelector('[data-dropdown]');
+dd.click(); out.open = [drop(t).hidden, dd.getAttribute('aria-expanded'), document.activeElement === drop(t).querySelector('button')];
+document.dispatch('keydown', {key: 'Escape'}); out.closed = [drop(t).hidden, document.activeElement === dd];
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got["start"], ["All", "abc", "abc", "", "", "1–25 of 30"])
+        self.assertEqual(got["page2"], "11–20 of 30")
+        self.assertEqual(got["a"], [["a", "a", "a", "1", "1", "1–10 of 10"], "L0"])
+        self.assertEqual(got["ab"], ["ab", "ab", "ab", "2", "1", "1–10 of 20"])
+        self.assertEqual(got["dropped"], ["b", "b", "b", "1", "1", "1–10 of 10"])
+        self.assertEqual(got["none"], ["All", "abc", "abc", "", "", "1–10 of 30"])
+        self.assertEqual(got["every"], got["none"])
+        self.assertEqual(got["two"], ["c", "c", "c", "1", "2", "1–5 of 5"])                   # the Filter counts its columns
+        self.assertEqual(got["all"], ["All", "abc", "abc", "", "1", "1–10 of 15"])
+        self.assertEqual(got["nothing"], [["", "", "", "0", "2", ""], True])                  # None: no pill pressed, nothing shows
+        self.assertEqual(got["clear"], ["All", "abc", "abc", "", "", "1–10 of 30"])
+        self.assertEqual(got["pillAll"], got["clear"])
+        self.assertEqual(got["open"], [False, "true", True])
+        self.assertEqual(got["closed"], [True, True])
+
+    def test_a_count_shows_on_a_narrowed_button_only(self):
+        got = node(FORMS + r'''
+const t = make(), dd = t.tools.querySelector('[data-dropdown]'), fb = t.tools.querySelector('[data-tools-btn="filter"]');
+const mark = b => [b.classList.contains('narrowed'), b.querySelector('.tools-count').hidden ? null : b.querySelector('.tools-count').textContent];
+const out = [[mark(dd), mark(fb)]];
+drop(t).querySelector('[data-none]').click(); out.push([mark(dd), mark(fb)]);              // None: 0 chosen, narrowed
+drop(t).querySelector('[data-all]').click(); out.push([mark(dd), mark(fb)]);
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got, [[[False, None], [False, None]], [[True, "0"], [True, "1"]], [[False, None], [False, None]]])
+
+    def test_a_preset_shows_in_every_form(self):
+        got = node(FORMS + r'''
+const t = make({kind: 'b'}), out = [look(t)];
+pill(t, null); out.push(look(t));
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got, [["b", "b", "b", "1", "1", "1–10 of 10"], ["All", "abc", "abc", "", "", "1–25 of 30"]])
 
 
 class Checks(unittest.TestCase):
@@ -298,6 +385,12 @@ class Macros(unittest.TestCase):
                       '<td data-col="c" class="align-center">c=x</td><td data-col="acts">acts=x</td></tr>', html)   # each cell its column's
         self.assertIn('<p class="empty-note" data-empty="t" hidden>No rows match.</p>', html)
 
+    def test_a_card_only_field_stays_off_the_table(self):
+        html = self.page([dict(key="a", label="A", card="title"), dict(key="logo", label="Logo", card="icon", table=False)])
+        self.assertNotIn('data-col="logo"', html)
+        self.assertNotIn('value="logo"', html)
+        self.assertIn('<td data-col="a" data-sort="x">a=x</td></tr>', html)
+
     def test_the_cells_follow_the_columns(self):
         cols = [dict(key=k, label=k.upper()) for k in "abc"]
         for order in (cols, cols[::-1]):
@@ -309,7 +402,7 @@ class Macros(unittest.TestCase):
              "{% macro views() %}{{ two('v1', 'v2') }}{% endmacro %}{% macro actions() %}{{ two('a1', 'a2') }}{% endmacro %}"
              "{% macro nothing() %} {% endmacro %}")
 
-    def controls(self, call):
+    def slotted(self, call):
         return re.sub(r">\s+<", "><", self.render("{% from '_tables.html' import controls %}" + self.SLOTS + call))
 
     def test_a_controls_row_places_its_slots_around_the_buttons(self):
@@ -317,16 +410,71 @@ class Macros(unittest.TestCase):
         for call in (f"{{{{ controls('t', {cols}, search='Find', columns=true, choices={{'x': [('a', 'A')]}}, views=views, actions=actions) }}}}",
                      f"{{% call(r, c) table('t', {cols}, [], none, search='Find', columns=true, choices={{'x': [('a', 'A')]}}, views=views, actions=actions) %}}{{% endcall %}}"):
             with self.subTest(call=call[:12]):
-                html = self.controls(call)
+                html = self.slotted(call)
                 self.assertEqual(re.findall(r'data-search|data-slot="(\w+)"|data-tools-btn="(\w+)"|<button>(\w+)</button>', html),
                                  [("", "", ""), ("views", "", ""), ("", "", "v1"), ("", "", "v2"), ("", "columns", ""), ("", "filter", ""),
                                   ("", "sort", ""), ("actions", "", ""), ("", "", "a1"), ("", "", "a2")])
                 self.assertEqual(html.count('class="table-slot"'), 2)                  # each slot one group, spaced as the buttons
                 self.assertIn('<div class="table-buttons"><div class="table-slot" data-slot="views">', html)
         for call in ("{{ controls('t', [dict(key='x', label='X')]) }}", "{{ controls('t', [dict(key='x', label='X')], views=nothing, actions=nothing) }}"):
-            self.assertNotIn("data-slot", self.controls(call))                         # none asked, or one writing nothing: no group
+            self.assertNotIn("data-slot", self.slotted(call))                         # none asked, or one writing nothing: no group
         css = (APP / "static" / "style.css").read_text()
         self.assertIn(".table-buttons, .table-slot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .75rem; }", css)
+
+    def controls(self, cols, **kw):
+        return re.sub(r">\s+<", "><", self.env.from_string("{% from '_tables.html' import controls %}{{ controls('t', cols, sort=false, **kw) }}")
+                      .render(cols=cols, kw=kw))
+
+    def test_each_column_in_the_forms_it_names(self):
+        cols = [dict(key="a", label="A"), dict(key="b", label="B", filter="dropdown"), dict(key="c", label="C", filter="pills"),
+                dict(key="d", label="D", filter=["pills", "button"])]
+        choices = {k: [("x", "X"), ("y", "Y")] for k in "abcd"}
+        html = self.controls(cols, choices=choices)
+        menu = html.split('data-tools="filter"')[1].split("</fieldset></div>")[0]
+        self.assertEqual(re.findall(r'data-filter-menu="(\w)"', menu), ["a", "d"])                    # the Filter menu: a, by default, and d
+        self.assertEqual(re.findall(r"<legend>(\w)</legend>", menu), ["A", "D"])                         # its groups keep their legends
+        self.assertIn('<div class="menu-wrap"><button class="btn ghost sm" type="button" data-dropdown aria-haspopup="true" aria-expanded="false">'
+                      'B<span class="tools-count" hidden></span><svg class="ic dd-chev" aria-hidden="true"><use href="#i-chev"/></svg></button><div class="menu tools-menu" hidden><fieldset data-filter-menu="b" aria-label="B"><span class="tools-all">', html)   # no legend: the button names it
+        self.assertLess(html.index("data-dropdown"), html.index('data-tools-btn="filter"'))      # the dropdowns before the Filter
+        self.assertEqual(html.count("dd-chev"), 1)                                                  # a chevron on the dropdown only
+        self.assertNotIn("dd-chev", html.split('data-tools-btn="filter"')[1])
+        self.assertEqual(html.count("<svg"), 2)                                                     # no filter_icon, no icon: the chevron and the Filter's
+        self.assertEqual(re.findall(r'data-pills="(\w)"', html), ["c", "d"])
+        self.assertIn('<div class="filter-pills" role="group" aria-label="C" data-pills="c"><button type="button" class="filter-pill" data-all="c" aria-pressed="true">All</button>'
+                      '<button type="button" class="filter-pill" data-value="x" aria-pressed="false">X</button>'
+                      '<button type="button" class="filter-pill" data-value="y" aria-pressed="false">Y</button></div>', html)
+        self.assertLess(html.index('class="table-buttons"'), html.index("data-pills"))            # the pills under the buttons
+        only = self.controls(cols, choices=choices, only={"c": "y", "b": "y"})
+        self.assertIn('data-all="c" aria-pressed="false">All</button><button type="button" class="filter-pill" data-value="x" aria-pressed="false">X</button>'
+                      '<button type="button" class="filter-pill" data-value="y" aria-pressed="true">Y</button>', only)
+        self.assertIn('<input type="checkbox" data-value="x"> X</label><label><input type="checkbox" data-value="y" checked> Y', only.split('data-filter-menu="b"')[1])
+
+    def test_a_filter_icon_leads_its_dropdown_and_its_pills(self):
+        cols = [dict(key="b", label="B", filter="dropdown", filter_icon="origin"), dict(key="c", label="C", filter="pills", filter_icon="runner")]
+        html = self.controls(cols, choices={k: [("x", "X")] for k in "bc"})
+        self.assertIn('aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-origin"/></svg>B<span class="tools-count"', html)
+        self.assertIn('<div class="filter-pills" role="group" aria-label="C" data-pills="c"><svg class="ic" aria-hidden="true"><use href="#i-runner"/></svg>'
+                      '<button type="button" class="filter-pill" data-all="c"', html)
+        bad = self.controls([dict(key="c", label="C", filter=["pills", "dropdown"], filter_icon='x"><b>')], choices={"c": [("x", "X")]})
+        self.assertNotIn("<b>", bad)
+        self.assertEqual(bad.count('<use href="#i-x&#34;&gt;&lt;b&gt;"/>'), 2)
+
+    def test_without_a_filter_button_there_is_none(self):
+        cols = [dict(key="c", label="C", filter="pills")]
+        html = self.controls(cols, choices={"c": [("x", "X")]})
+        self.assertNotIn("data-tools-btn", html)
+        self.assertNotIn("table-buttons", html)                                                        # nothing to hold
+        self.assertNotIn("data-filter-menu", html)
+        with self.assertRaises(jinja2.UndefinedError):                                                 # a form it does not know
+            self.controls([dict(key="c", label="C", filter="chips")], choices={"c": [("x", "X")]})
+
+    def test_the_forms_escape_names_and_values(self):
+        bad = '<b>"x"</b>'
+        html = self.controls([dict(key="c", label=bad, filter=["pills", "dropdown"])], choices={"c": [(bad, bad)]}, only={"c": bad})
+        self.assertNotIn("<b>", html)
+        self.assertIn('role="group" aria-label="&lt;b&gt;&#34;x&#34;&lt;/b&gt;"', html)
+        self.assertIn('data-value="&lt;b&gt;&#34;x&#34;&lt;/b&gt;" aria-pressed="true">&lt;b&gt;&#34;x&#34;&lt;/b&gt;</button>', html)
+        self.assertIn('aria-expanded="false">&lt;b&gt;&#34;x&#34;&lt;/b&gt;<span class="tools-count"', html)
 
     def test_names_and_values_are_escaped(self):
         html = self.page([dict(key="a", label='<b>"A"</b>', title="x<y"), dict(key="n", label="N", sr=True)], rows=[{"name": '<i>&"'}])

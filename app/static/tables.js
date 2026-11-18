@@ -1,6 +1,6 @@
 /* The table toolkit's script: each function is a feature a table.grid opts
    into (the macros of templates/_tables.html; their styles in style.css,
-   "the table toolkit"). */
+   "the table toolkit"), and the card toolkit's (templates/_cards.html). */
 window.NulliusTable = {
   /* A header with data-type sorts its column on a click or Enter; num sorts
      descending first. A cell's data-sort wins over its text. A header that
@@ -50,37 +50,50 @@ window.NulliusTable = {
     return resort;
   },
 
-  /* The value lists (data-filter-menu) under `scope`, the controls macro's
-     Filter menu. `allowed`: column -> the Set of values ticked, or null when
-     all are. A row passes when, for each column, one of its values
-     (data-f-<col>, one per line) is ticked; a box unticked at load filters
-     from the start. `changed` runs after each change, a list's change event
-     included. */
+  /* The filters under `scope`, the controls macro's: value lists
+     (data-filter-menu) and rows of pills (data-pills). `allowed`: column ->
+     the Set of values chosen, or null when all are; every list and row of a
+     column shows that one state. A row passes when, for each column, one of
+     its values (data-f-<col>, one per line) is chosen; a choice made at load
+     filters from the start. `changed` runs after each change, a list's
+     change event included. */
   filters(scope, changed) {
-    const allowed = {};
-    scope.querySelectorAll('[data-filter-menu]').forEach(menu => {
-      const col = menu.dataset.filterMenu;
-      const boxes = () => [...menu.querySelectorAll('input[data-value]')];
-      const read = () => {
-        const on = boxes().filter(b => b.checked).map(b => b.dataset.value);
-        allowed[col] = on.length === boxes().length ? null : new Set(on);   // all ticked: no filter
-      };
-      const sync = () => { read(); changed(); };
-      read();
-      menu.addEventListener('change', sync);
-      menu.addEventListener('click', e => {
-        if (e.target.closest('[data-all]')) { boxes().forEach(b => b.checked = true); sync(); }
-        if (e.target.closest('[data-none]')) { boxes().forEach(b => b.checked = false); sync(); }
+    const allowed = {}, views = [...scope.querySelectorAll('[data-filter-menu], [data-pills]')];
+    const col = v => v.dataset.filterMenu ?? v.dataset.pills;
+    const values = v => [...v.querySelectorAll('[data-value]')];
+    const draw = () => views.forEach(v => {
+      const set = allowed[col(v)];
+      values(v).forEach(b => { if (b.matches('input')) b.checked = !set || set.has(b.dataset.value); else b.setAttribute('aria-pressed', String(Boolean(set?.has(b.dataset.value)))); });
+      v.querySelector('.filter-pill[data-all]')?.setAttribute('aria-pressed', String(!set));
+    });
+    // All chosen means "no filter": keeps the active markers honest.
+    const choose = (v, on) => { allowed[col(v)] = on && on.size < values(v).length ? on : null; };
+    const set = (v, on) => { choose(v, on); draw(); changed(); };
+    const chosen = v => new Set(values(v).filter(b => b.checked || b.getAttribute('aria-pressed') === 'true').map(b => b.dataset.value));
+    views.forEach(v => {
+      if (!(col(v) in allowed)) { const on = chosen(v); choose(v, v.dataset.pills !== undefined && !on.size ? null : on); }
+      if (v.dataset.pills !== undefined) {
+        // a pill toggles its value; none left is All
+        v.addEventListener('click', e => {
+          const b = e.target.closest('[data-value]'), now = allowed[col(v)];
+          if (e.target.closest('[data-all]')) return set(v, null);
+          if (!b) return;
+          const on = new Set(now || []);
+          on.has(b.dataset.value) ? on.delete(b.dataset.value) : on.add(b.dataset.value);
+          set(v, on.size ? on : null);
+        });
+        return;
+      }
+      v.addEventListener('change', () => set(v, chosen(v)));
+      v.addEventListener('click', e => {
+        if (e.target.closest('[data-all]')) set(v, null);
+        if (e.target.closest('[data-none]')) set(v, new Set());
       });
     });
+    draw();
     const passes = row => Object.entries(allowed).every(([col, set]) =>
       !set || (row.getAttribute('data-f-' + col) ?? '').split('\n').some(v => set.has(v)));
-    const clear = () => {
-      scope.querySelectorAll('[data-filter-menu]').forEach(menu => {
-        menu.querySelectorAll('input[data-value]').forEach(b => b.checked = true);
-        allowed[menu.dataset.filterMenu] = null;
-      });
-    };
+    const clear = () => { Object.keys(allowed).forEach(c => { allowed[c] = null; }); draw(); };
     return {allowed, passes, clear};
   },
 
@@ -124,15 +137,16 @@ window.NulliusTable = {
     btn.addEventListener('focusout', left);
   },
 
-  /* A table's search box, Filter and Sort by menus (the controls macro),
-     under `tools`; each optional. Search keeps the rows whose data-search
-     holds every word of the query, in any order and case; Escape clears it. Filter counts the columns it
-     narrows; Sort by sets the sort, and follows a header click. `changed`
-     runs after any of them. Returns {passes, resort}, as filters and sortable
-     do. */
-  toolbar(table, tools, changed) {
-    const [fbtn, fmenu, sbtn, smenu] = ['filter', 'sort'].flatMap(k =>
-      [tools.querySelector(`[data-tools-btn="${k}"]`), tools.querySelector(`[data-tools="${k}"]`)]);
+  /* A controls row's search box and filters (the controls macro), under
+     `tools`; each optional. Search keeps the rows (or cards) whose
+     data-search holds every word of the query, in any order and case;
+     Escape clears it. A column narrows when it does not show every value;
+     the Filter button or a dropdown holding such a column is marked
+     .narrowed and counts: the Filter button the columns it narrows, a
+     dropdown the values chosen (after None, 0). Clear filters clears every
+     column. `changed` runs after any of them. Returns passes(row). */
+  narrow(tools, changed) {
+    const [fbtn, fmenu] = [tools.querySelector('[data-tools-btn="filter"]'), tools.querySelector('[data-tools="filter"]')];
     const q = tools.querySelector('[data-search]');
     if (q) {
       q.addEventListener('input', changed);
@@ -142,19 +156,29 @@ window.NulliusTable = {
       const text = (row.dataset.search ?? '').toLowerCase();
       return !q || q.value.toLowerCase().split(/\s+/).every(w => text.includes(w));
     };
-    const count = fbtn?.querySelector('.tools-count');
-    const mark = () => {
-      const n = Object.values(f.allowed).filter(Boolean).length;
-      count.textContent = n || '';
-      count.hidden = !n;
-    };
+    const menus = [...(fmenu ? [[fbtn, fmenu, () => 1]] : []),
+                   ...[...tools.querySelectorAll('[data-dropdown]')].map(b => [b, b.parentNode.querySelector('.menu'), set => set.size])];
+    const mark = () => menus.forEach(([btn, menu, n]) => {
+      const sets = [...menu.querySelectorAll('[data-filter-menu]')].map(v => f.allowed[v.dataset.filterMenu]).filter(Boolean);
+      const count = btn.querySelector('.tools-count');
+      btn.classList.toggle('narrowed', sets.length > 0);
+      count.textContent = sets.length ? sets.reduce((sum, set) => sum + n(set), 0) : '';
+      count.hidden = !sets.length;
+    });
     const narrowed = () => { mark(); changed(); };
-    const f = fmenu ? this.filters(fmenu, narrowed) : {allowed: {}, passes: () => true};
-    if (fmenu) {
-      mark();
-      fmenu.querySelector('[data-clear]').addEventListener('click', () => { f.clear(); narrowed(); });
-      this.menu(fbtn, fmenu);
-    }
+    const f = this.filters(tools, narrowed);
+    mark();
+    menus.forEach(([btn, menu]) => this.menu(btn, menu));
+    fmenu?.querySelector('[data-clear]').addEventListener('click', () => { f.clear(); narrowed(); });
+    return row => f.passes(row) && found(row);
+  },
+
+  /* A table's controls row: narrow's search and Filter, and the Sort by
+     menu, which sets the sort and follows a header click. Returns
+     {passes, resort}, as narrow and sortable do. */
+  toolbar(table, tools, changed) {
+    const passes = this.narrow(tools, changed);
+    const [sbtn, smenu] = [tools.querySelector('[data-tools-btn="sort"]'), tools.querySelector('[data-tools="sort"]')];
     const heads = [...table.tHead.rows[0].cells];
     const sync = () => {
       if (!smenu) return;
@@ -173,7 +197,7 @@ window.NulliusTable = {
       sync();
       this.menu(sbtn, smenu);
     }
-    return {passes: row => f.passes(row) && found(row), resort};
+    return {passes, resort};
   },
 
   /* A table of the table macro (data-table): its controls row (id
@@ -191,6 +215,40 @@ window.NulliusTable = {
     let first = () => {};
     const t = this.toolbar(table, tools, () => first());
     first = this.pager(table, table.id + '.per', t.passes, ticks);
+  },
+
+  /* A collection of the cards macro (data-cards): its controls row (id
+     <id>-tools) shows the cards (data-card) that pass, the note when none
+     does; a data-group holding cards hides when none of them shows, and its
+     data-group-n counts those that do. After a change, a screen reader hears
+     how many show once the changes pause, counted in the live region's
+     data-noun. A click anywhere on a card but on a control of its own
+     follows the card's link, in a new tab or window with the keys or the
+     button a link takes; a click that ends a text selection does not. */
+  cards(root) {
+    const items = [...root.querySelectorAll('[data-card]')], empty = document.querySelector(`[data-empty="${CSS.escape(root.id)}"]`);
+    const live = document.querySelector(`[data-live="${CSS.escape(root.id)}"]`), say = this.voice(live);
+    const follow = e => {
+      const link = e.target.closest('[data-card]')?.querySelector('.card-link');
+      if (!link || e.target.closest('a, button, input, select, textarea, label, summary, [role=button]') || !getSelection().isCollapsed) return;
+      if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) window.open(link.href, '_blank', 'noopener');
+      else if (e.button === 0) link.click();
+    };
+    root.addEventListener('click', follow);
+    root.addEventListener('auxclick', follow);
+    const draw = () => {
+      items.forEach(c => { c.hidden = !passes(c); });
+      root.querySelectorAll('[data-group]').forEach(g => {
+        const n = [...g.querySelectorAll('[data-card]')].filter(c => !c.hidden).length, count = g.querySelector('[data-group-n]');
+        g.hidden = !n;
+        if (count) count.textContent = n;
+      });
+      const n = items.filter(c => !c.hidden).length;
+      empty.hidden = n > 0;
+      say(n ? `${n} of ${items.length} ${live.dataset.noun}` : empty.textContent);
+    };
+    const passes = this.narrow(document.getElementById(root.id + '-tools'), draw);
+    draw();
   },
 
   /* A checkbox column (a `check` column, check_cell in each row): the header
@@ -238,6 +296,17 @@ window.NulliusTable = {
     place();
   },
 
+  /* A live region: say(text) reads out the last text once the changes
+     pause; the first, the page's own drawing at load, is not read out. */
+  voice(live) {
+    let t, loaded = false;
+    return text => {
+      clearTimeout(t);
+      if (loaded) t = setTimeout(() => { live.textContent = text; }, 300);
+      loaded = true;
+    };
+  },
+
   /* A table's pages (the pager macro named after its id): the rows `passes`
      lets through, a page of them at a time, the page's size remembered per
      viewer under `key`; its empty note shows when none passes. After a
@@ -248,7 +317,8 @@ window.NulliusTable = {
   pager(table, key, passes = () => true, drawn = () => {}) {
     const bar = document.querySelector(`[data-pager="${CSS.escape(table.id)}"]`), empty = document.querySelector(`[data-empty="${CSS.escape(table.id)}"]`);
     const [per, note, prev, next, live] = ['[data-per]', '[data-note]', '[data-prev]', '[data-next]', '[data-live]'].map(s => bar.querySelector(s));
-    let page = 0, said, loaded = false;
+    let page = 0;
+    const say = this.voice(live);
     try { const n = localStorage.getItem(key); if (n !== null && [...per.options].some(o => o.value === n)) per.value = n; } catch {}
     const draw = () => {
       const rows = [...table.tBodies[0].rows], hit = rows.filter(passes), n = +per.value || hit.length || 1;
@@ -259,8 +329,7 @@ window.NulliusTable = {
       prev.disabled = page === 0;
       next.disabled = (page + 1) * n >= hit.length;
       empty.hidden = hit.length > 0;
-      clearTimeout(said);
-      if (loaded) said = setTimeout(() => { live.textContent = hit.length ? `${note.textContent} ${live.dataset.noun}` : empty.textContent; }, 300);
+      say(hit.length ? `${note.textContent} ${live.dataset.noun}` : empty.textContent);
       drawn();
     };
     const first = () => { page = 0; draw(); };
@@ -271,15 +340,18 @@ window.NulliusTable = {
     prev.addEventListener('click', () => { page--; draw(); });
     next.addEventListener('click', () => { page++; draw(); });
     draw();
-    loaded = true;
     return first;
   },
 };
 
-/* Every table with sticky columns, and every table of the table macro, set up once the page is read. */
-const nulliusTables = () => document.querySelectorAll('table.grid').forEach(t => {
-  if (t.querySelector('.sticky-col')) NulliusTable.sticky(t);
-  if (t.hasAttribute('data-table')) NulliusTable.wire(t);
-});
+/* Every table with sticky columns, every table of the table macro and every collection of the cards macro, set up
+   once the page is read. */
+const nulliusTables = () => {
+  document.querySelectorAll('table.grid').forEach(t => {
+    if (t.querySelector('.sticky-col')) NulliusTable.sticky(t);
+    if (t.hasAttribute('data-table')) NulliusTable.wire(t);
+  });
+  document.querySelectorAll('[data-cards]').forEach(c => NulliusTable.cards(c));
+};
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', nulliusTables);
 else nulliusTables();

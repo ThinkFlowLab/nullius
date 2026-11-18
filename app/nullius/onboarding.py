@@ -34,7 +34,7 @@ SECTIONS = [
     ]},
     {"id": "bench", "name": "Pick a benchmark", "page": "benchmarks_page", "where": "Benchmarks", "subs": [
         {"id": "browse", "text": "Browse the catalogue", "visit": r"^/benchmarks/?$",
-         "target": [[".bench-filters, #bench-find", "Filter by category, runner or origin"]]},
+         "target": [["#benchmarks-tools", "Search or filter by category, runner or origin"]]},
         {"id": "open", "text": "Open a benchmark's page", "visit": r"^/benchmarks/(?!new)[^/]+$",
          "target": [[".bench-card", "Open a benchmark"]]},
     ]},

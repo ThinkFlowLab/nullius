@@ -25,8 +25,8 @@ import re
 from playwright.sync_api import sync_playwright
 
 SHOWN = ", ".join(["#nullius-builder .nb-tile strong", "#nullius-builder h2", "#nullius-builder h3",
-                   "#nullius-builder .nb-tile-line", "#nullius-builder .nb-subtab", ".bench-card strong",
-                   ".bench-card p", ".std-card p"])
+                   "#nullius-builder .nb-tile-line", "#nullius-builder .nb-subtab", ".bench-card dt",
+                   ".bench-card dd", ".bench-card-domain:not(.std-clamp)", ".std-card p"])
 CUT = """() => [...document.querySelectorAll('""" + SHOWN + """')]
   .filter(e => e.offsetParent && (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1))
   .map(e => e.textContent.trim().slice(0, 80))"""

@@ -220,7 +220,7 @@ class Routes(unittest.TestCase):
                     self.assertIn(key, ids)
         self.assertIn("Official", html)
         self.assertEqual('data-shelf="community"' in html, any(b.origin == "community" for b in cat.listed_benchmarks))   # a shelf only when something is on it
-        self.assertIn("<b>500</b><span>tasks</span>", html)
+        self.assertIn("<dt>Tasks</dt><dd>500</dd>", html)
         # Datasets belong on their benchmark's page.
         response = self.client.get("/datasets")
         self.addCleanup(response.close)

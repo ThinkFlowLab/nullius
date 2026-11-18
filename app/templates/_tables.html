@@ -8,7 +8,8 @@
    `check`: blank, a checkbox that ticks every visible row (check_cell in each row); `sr`: the label for a screen
    reader only; `title`: its tooltip; `menu` false: not in the Columns menu; `fixed`: in it, always on; `off`: off
    until the viewer chooses; `width` in a table macro's table: 'fit' (default), as wide as its widest cell on one
-   line, or 'expand', the rest of the width, wrapping. #}
+   line, or 'expand', the rest of the width, wrapping; `table` false: on cards only (_cards.html, where `card` names
+   the slot a field fills), never in a table. #}
 
 {#- The class attribute of a column's header or cell: its alignment, whether it is pinned, `edge` whether it is the
     last pinned; `extra` adds to it. #}
@@ -33,6 +34,7 @@
    writes that cell with the cell macro. Opt-ins: `search`, `columns`, `choices`, `only`, `views`, `actions` as
    controls'; `empty` and `noun` as pager's. #}
 {% macro table(id, cols, rows, tr, class='', search='', columns=false, choices={}, only={}, empty='No rows match.', noun='rows', views=none, actions=none) %}
+{%- set cols = cols|rejectattr('table', 'sameas', false)|list %}
 {{ controls(id, cols, search, columns, choices, only, views, actions) }}
 {%- for c in cols if c.width == 'expand' %}
 <style>#{{ id }} > * > tr > :nth-child({{ cols.index(c) + 1 }}) { width: auto; min-width: var(--expand-min); white-space: normal; overflow-wrap: anywhere; }</style>
@@ -61,31 +63,34 @@
 
 {# A table's controls row (static/tables.js `toolbar`) over the columns `cols`; each feature on only
    when asked. `search`: the search box's name and placeholder, over each row's data-search text; `columns`: the
-   Columns menu; `choices`: column -> its (value, label) pairs, a Filter menu of them; `only`: column -> the one value
-   ticked at load, the others unticked; then the Sort by menu. `views` and `actions`: macros writing a page's own
+   Columns menu; `choices`: column -> its (value, label) pairs to filter by; `only`: column -> the one value chosen
+   at load; then the Sort by menu, unless `sort` is false. `views` and `actions`: macros writing a page's own
    buttons, each any number of them, run by the page: views (how the table looks) before Columns, actions (on the
-   rows or the selection) last. The search goes left, the buttons right. `id`: the table's. #}
-{% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none) %}
+   rows or the selection) last. The search goes left, the buttons right. A column's
+   `filter` says where its choices go, one form or a list of them: 'button' (the default), in the Filter menu;
+   'dropdown', a menu of its own; 'pills', a row of toggles under the controls. A column's `filter_icon`, a sprite id
+   without its `i-`, leads its dropdown's button and its pills. `id`: the table's. #}
+{% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none, sort=true) %}
+{%- set by = {'button': [], 'dropdown': [], 'pills': []} %}{% for c in cols if c.key in choices %}{% for f in ([c.filter] if c.filter is string else c.filter or ['button']) %}{% set _ = by[f].append(c) %}{% endfor %}{% endfor %}
 <div class="table-tools table-controls" id="{{ id }}-tools">
   {% if search %}<label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-search placeholder="{{ search }}" aria-label="{{ search }}" autocomplete="off" spellcheck="false"></label>{% endif %}
-  <div class="table-buttons">
+  {% if columns or by.dropdown or by.button or sort or views or actions %}<div class="table-buttons">
   {{ slot('views', views) }}
   {% if columns %}<div class="menu-wrap">{{ columns_button() }}{{ columns_menu(cols) }}</div>{% endif %}
-  {% if choices %}<div class="menu-wrap">
+  {% for c in by.dropdown %}<div class="menu-wrap">
+    <button class="btn ghost sm" type="button" data-dropdown aria-haspopup="true" aria-expanded="false">{{ icon(c) }}{{ c.label }}<span class="tools-count" hidden></span><svg class="ic dd-chev" aria-hidden="true"><use href="#i-chev"/></svg></button>
+    <div class="menu tools-menu" hidden>{{ values(c, choices[c.key], only, legend=false) }}</div>
+  </div>
+  {% endfor %}
+  {% if by.button %}<div class="menu-wrap">
     <button class="btn ghost sm" type="button" data-tools-btn="filter" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter<span class="tools-count" hidden></span></button>
     <div class="menu tools-menu" data-tools="filter" hidden>
       <button type="button" class="linkish tools-clear" data-clear>Clear filters</button>
-      {% for c in cols if c.key in choices %}
-      <fieldset data-filter-menu="{{ c.key }}">
-        <legend>{{ c.label }}</legend>
-        <span class="tools-all"><button type="button" class="linkish" data-all="{{ c.key }}">All</button><button type="button" class="linkish" data-none="{{ c.key }}">None</button></span>
-        {% for value, text in choices[c.key] %}<label><input type="checkbox" data-value="{{ value }}"{% if c.key not in only or only[c.key] == value %} checked{% endif %}> {{ text }}</label>{% endfor %}
-      </fieldset>
-      {% endfor %}
+      {% for c in by.button %}{{ values(c, choices[c.key], only) }}{% endfor %}
     </div>
   </div>
   {% endif %}
-  <div class="menu-wrap">
+  {% if sort %}<div class="menu-wrap">
     <button class="btn ghost sm" type="button" data-tools-btn="sort" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-sort"/></svg>Sort by</button>
     <div class="menu tools-menu" data-tools="sort" hidden>
       <fieldset>
@@ -99,15 +104,34 @@
         <label><input type="radio" name="{{ id }}-sort-dir" data-sort-dir value="desc"> Descending</label>
       </fieldset>
     </div>
-  </div>
+  </div>{% endif %}
   {{ slot('actions', actions) }}
+  </div>{% endif %}
+  {% for c in by.pills %}
+  <div class="filter-pills" role="group" aria-label="{{ c.label }}" data-pills="{{ c.key }}">
+    {{ icon(c) }}<button type="button" class="filter-pill" data-all="{{ c.key }}" aria-pressed="{{ 'false' if c.key in only else 'true' }}">All</button>
+    {%- for value, text in choices[c.key] %}<button type="button" class="filter-pill" data-value="{{ value }}" aria-pressed="{{ 'true' if only.get(c.key) == value else 'false' }}">{{ text }}</button>{% endfor %}
   </div>
+  {% endfor %}
 </div>
 {% endmacro %}
 
 {#- A controls row's slot `name`: what the macro `fill` writes, in a group spaced as the buttons; nothing when it
     writes nothing. #}
 {% macro slot(name, fill) %}{% set html = fill() if fill else '' %}{% if html|trim %}<div class="table-slot" data-slot="{{ name }}">{{ html }}</div>{% endif %}{% endmacro %}
+
+{#- A column's `filter_icon`, if it has one. #}
+{% macro icon(c) %}{% if c.filter_icon %}<svg class="ic" aria-hidden="true"><use href="#i-{{ c.filter_icon }}"/></svg>{% endif %}{% endmacro %}
+
+{#- A column's choices as checkboxes, in the Filter menu or a dropdown: all ticked, or only its `only` value. #}
+{# `legend=false` in a dropdown, whose button already names the category #}
+{% macro values(c, choices, only, legend=true) %}
+      <fieldset data-filter-menu="{{ c.key }}"{% if not legend %} aria-label="{{ c.label }}"{% endif %}>
+        {% if legend %}<legend>{{ c.label }}</legend>{% endif %}
+        <span class="tools-all"><button type="button" class="linkish" data-all="{{ c.key }}">All</button><button type="button" class="linkish" data-none="{{ c.key }}">None</button></span>
+        {% for value, text in choices %}<label><input type="checkbox" data-value="{{ value }}"{% if c.key not in only or only[c.key] == value %} checked{% endif %}> {{ text }}</label>{% endfor %}
+      </fieldset>
+{% endmacro %}
 
 {# A Columns menu (static/tables.js `columns`): its button, and the menu of `cols`' definitions, each a checkbox that
    shows or hides the cells of that data-col. The menu opens under the .menu-wrap that holds it. #}
@@ -128,7 +152,7 @@
    and the page before and after; `empty` shows when no row passes. After a change, what is shown is read out once
    typing pauses, counted in `noun`. #}
 {% macro pager(table, empty='No rows match.', noun='rows') %}
-<p class="empty-note" data-empty="{{ table }}" hidden>{{ empty }}</p>
+{{ empty_note(table, empty) }}
 <div class="table-tools table-pager" data-pager="{{ table }}">
   <label class="table-note">Show <select data-per><option>10</option><option selected>25</option><option>100</option><option value="0">All</option></select></label>
   <span class="header-spacer"></span>
@@ -138,6 +162,9 @@
   <span class="sr" data-live data-noun="{{ noun }}" aria-live="polite"></span>
 </div>
 {% endmacro %}
+
+{#- The note shown when no row of the table (or card of the collection) `id` passes. #}
+{% macro empty_note(id, text) %}<p class="empty-note" data-empty="{{ id }}" hidden>{{ text }}</p>{% endmacro %}
 
 {#- A button that cannot act here: greyed, still focusable, `why` its description and, after `action` when given, its
     tooltip; `id` names the description. An icon button by default; `class` and `text` make it another, such as a
