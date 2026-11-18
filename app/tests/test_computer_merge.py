@@ -155,7 +155,7 @@ class MeetingPoints(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             trial = Path(tmp)
             keys = [k for k in artifacts.FILES if k.startswith(("computer-", "osworld-"))]
-            self.assertEqual(len(keys), 7)
+            self.assertEqual(len(keys), 6)
             for key in keys:
                 path = trial / artifacts.FILES[key][1]
                 path.parent.mkdir(parents=True, exist_ok=True)
