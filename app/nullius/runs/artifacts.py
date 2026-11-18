@@ -20,13 +20,6 @@ FILES = {
     # files a trial writes to reach a page: the others were already
     # here, or are read at parse.
     "manifest": ("Artifact manifest", "artifacts/manifest.json"),
-    "computer-calls": ("Computer tool calls", "verifier/computer-calls.jsonl"),
-    "computer-events": ("Desktop events", "verifier/computer-events.jsonl"),
-    "computer-boxes": ("Desktop targets", "verifier/computer-boxes.json"),
-    "osworld-computer-calls": ("OSWorld computer tool calls", "verifier/osworld/computer-calls.jsonl"),
-    "osworld-result": ("OSWorld result", "verifier/osworld/result.txt"),
-    "osworld-runner": ("OSWorld runner log", ".work/osworld/runner.log"),
-    "osworld-runner-calls": ("OSWorld runner tool calls", ".work/osworld/computer-calls.jsonl"),
 }
 CHUNK_SIZE = 8_000
 MAX_READ = 16 * 1024 * 1024

@@ -129,21 +129,6 @@ class RecordDownload(unittest.TestCase):
         self.assertEqual(len(cut.get_data(as_text=True)), 40)
         self.assertEqual(whole.get_data(as_text=True)[:40], cut.get_data(as_text=True))
 
-    def test_computer_records_appear_on_the_trial_and_use_the_same_download_guard(self):
-        from pathlib import Path
-        trial = Path(self.job.trials[0].dir)
-        path = trial / "verifier/computer-calls.jsonl"
-        path.parent.mkdir(exist_ok=True)
-        path.write_text('{"tool":"click","note":"sk-abcdefgh1234567890"}\n')
-        page = self.get("/trial/tb-agent/good__x")
-        self.assertIn("Computer tool calls", page.get_data(as_text=True))
-        download = self.get("/trial/tb-agent/good__x/artifact/computer-calls/download")
-        self.assertEqual(download.status_code, 200)
-        self.assertIn("[REDACTED]", download.get_data(as_text=True))
-        self.assertNotIn("abcdefgh", download.get_data(as_text=True))
-        path.unlink()
-        path.symlink_to(trial.parent / "outside.jsonl")
-        self.assertEqual(self.get("/trial/tb-agent/good__x/artifact/computer-calls/download").status_code, 404)
 
 
 class JudgeTabNotes(unittest.TestCase):
