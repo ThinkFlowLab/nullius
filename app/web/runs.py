@@ -112,7 +112,7 @@ def _grouped(ws=None):
     shows: the runs grouped by the launch that made them (nullius.runs.launches)
     - the builder's run record, else the same dataset within half an hour.
     ``ws``: another workspace's, read from its cache without opening it."""
-    jobs = shared._load_jobs() if ws is None else workspace.load_jobs(ws, ws.job_roots or ws.roots)
+    jobs = shared._load_jobs() if ws is None else workspace.load_jobs(ws, ws.job_roots or ws.roots, shared.run_ends())
     have = {j.job_id for j in jobs}
     # The run records are the app's, not the workspace's: only those launched
     # into this workspace's roots, or with a job already written here, belong.

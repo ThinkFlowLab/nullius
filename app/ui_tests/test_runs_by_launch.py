@@ -60,7 +60,7 @@ class RunsByLaunch(unittest.TestCase):
         self.stack.enter_context(patch.object(workspace, "job_index", return_value={}))
         self.stack.enter_context(patch.object(workspace, "load", side_effect=lambda home, name: self.ws))
         self.jobs = [self.later, self.strong, self.nop, self.weak, self.oracle]
-        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: self.jobs))
+        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: self.jobs))
         self.stack.enter_context(patch.object(web.shared, "_jobs_for_request", side_effect=lambda: self.jobs))
         self.stack.enter_context(patch.dict(execution.EXECUTIONS, {}, clear=True))
         self.client = web.app.test_client()

@@ -364,7 +364,7 @@ def _load_jobs():
     ws = STATE["workspace"]
     if ws is None:
         return []
-    return workspace.load_jobs(ws, STATE["job_roots"])
+    return workspace.load_jobs(ws, STATE["job_roots"], run_ends())
 
 
 def request_memo(name: str) -> dict:
@@ -390,6 +390,15 @@ def ended_for(job_id):
     return execution.ended_for(job_id, _owners())
 
 
+def run_ends():
+    """Each job a run of this application writes -> that run's ``job_state``, the ``runs`` of
+    ``workspace.load_jobs``. Once per request: the Workspaces page reads every workspace."""
+    memo = request_memo("run_ends")
+    if "run_ends" not in memo:
+        memo["run_ends"] = {name: e.job_state(name) for name, e in _owners().items()}
+    return memo["run_ends"]
+
+
 def _jobs_for_workspace(name=None):
     """Read an indexed workspace without making it active or converting sources.
     Once per request and workspace: a page that asks for the jobs several
@@ -404,7 +413,7 @@ def _jobs_for_workspace(name=None):
         ws = workspace.load(WS_HOME, name)
         if ws is None:
             abort(404)
-        jobs = workspace.load_jobs(ws, ws.job_roots or ws.roots)
+        jobs = workspace.load_jobs(ws, ws.job_roots or ws.roots, run_ends())
     memo[key] = jobs
     return jobs
 
@@ -448,7 +457,7 @@ def _job_for_request(job_id):
         names = {job_id, job_id.rsplit("~", 1)[0]}
         dirs = [d for d in parse.find_job_dirs(STATE["job_roots"]) if os.path.basename(d) in names]
         if len(dirs) == 1:
-            job = _find_job(parse.split_agents([workspace.load_job(ws, dirs[0])[0]]), job_id)
+            job = _find_job(parse.split_agents([workspace.load_job(ws, dirs[0], runs=run_ends())[0]]), job_id)
             if job is not None:
                 return job
     return _find_job(_jobs_for_request(), job_id)

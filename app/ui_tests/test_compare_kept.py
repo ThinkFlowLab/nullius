@@ -47,7 +47,7 @@ class KeptRows(unittest.TestCase):
         self.stack.enter_context(patch.object(workspace, "list_all", return_value=list(ws.values())))
         self.stack.enter_context(patch.object(workspace, "job_index", return_value={}))
         self.stack.enter_context(patch.object(workspace, "load", side_effect=lambda home, name: ws.get(name)))
-        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda w, roots: jobs[w.name]))
+        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda w, roots, runs=None: jobs[w.name]))
         self.client = web.app.test_client()
 
     def get(self, path="/compare", **query):

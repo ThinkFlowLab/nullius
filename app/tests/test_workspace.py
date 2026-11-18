@@ -362,6 +362,27 @@ class Cache(unittest.TestCase):
             job, from_cache = workspace.load_job(self.ws, self.job_dir)
             self.assertFalse(from_cache); self.assertEqual(job.trials[1].reward, reward)
 
+    def test_a_host_run_s_trial_copied_after_its_job_is_read_once_the_run_ends(self):
+        """A host run's copy can bring the job's final result.json with a trial's
+        file still mid-write, and the next copy correct the trial alone."""
+        self._end()
+        workspace.load_job(self.ws, self.job_dir, runs={"job-a": None})       # the stale trial parsed, its run going on
+        time.sleep(0.01)
+        self._rewrite_trial(1.0)
+        done = {"job-a": ("done", "2026-09-04T01:06:00Z")}                     # marked done after its last copy
+        job, from_cache = workspace.load_job(self.ws, self.job_dir, runs=done)
+        self.assertFalse(from_cache); self.assertEqual(job.trials[1].reward, 1.0)
+        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
+            again, from_cache = workspace.load_job(self.ws, self.job_dir, runs=done)
+        self.assertIs(again, job); self.assertTrue(from_cache)
+
+    def test_a_job_no_run_writes_is_read_by_its_head(self):
+        self._end()
+        first, _ = workspace.load_job(self.ws, self.job_dir, runs={"job-b": None})
+        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
+            again, from_cache = workspace.load_job(self.ws, self.job_dir, runs={"job-b": None})
+        self.assertIs(again, first); self.assertTrue(from_cache)
+
     def test_index_lists_runs_without_a_parse(self):
         self.assertEqual(workspace.job_index(self.ws), {})
         workspace.load_job(self.ws, self.job_dir)
