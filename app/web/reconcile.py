@@ -37,7 +37,7 @@ def view_of(job, threshold: float) -> dict:
 
 @app.route("/job/<job_id>/reconcile")
 def reconcile_page(job_id):
-    j = shared._find_job(shared._jobs_for_request(), job_id)
+    j = shared._job_for_request(job_id)
     if not j:
         abort(404)
     return render_template("runs/reconcile.html", job=j, view=view_of(j, threshold_requested()),

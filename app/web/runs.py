@@ -544,6 +544,7 @@ def upload():
 
 @app.route("/job/<job_id>", methods=["GET", "HEAD"])
 def job(job_id):
+    # every job, not the one alone: its Delete (_deletable) walks the workspace anyway, and one folder first costs more
     j = shared._find_job(shared._jobs_for_request(), job_id)
     ex = execution.for_job(job_id)
     # this job's own state beside the run's: ended, or a part still to come while another runs
@@ -820,7 +821,7 @@ def job_live(job_id):
     the cache on every request or, worse, hit it and show a board that stopped.
     Folding a few thousand lines is cheap enough to do every second.
     """
-    j = shared._find_job(shared._jobs_for_request(), job_id)
+    j = shared._job_for_request(job_id)
     if not j:
         abort(404)
     if not live.has_feed(j.dir):

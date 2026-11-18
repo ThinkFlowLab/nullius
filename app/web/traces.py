@@ -111,7 +111,7 @@ def _trial_evidence(job_id, trial_name, tries=False):
     """Resolve URL identifiers through parsed runs, never as filesystem paths.
     ``tries``: an attempt's earlier try too, ``<trial>.try-N``: evidence to
     read, never a trial to judge."""
-    job = shared._find_job(shared._jobs_for_request(), job_id)
+    job = shared._job_for_request(job_id)
     if job is None:
         abort(404)
     trial = _find_trial(job, trial_name) or (_find_try(job, trial_name) if tries else None)

@@ -290,7 +290,7 @@ def judge_trial_route(job_id, trial_name):
 def judge_job_route(job_id):
     """Judge the job's unjudged trials with one judge, the form's ``lane``
     (Decision unless it names the LLM judge): the click is the request."""
-    job = shared._find_job(shared._jobs_for_request(), job_id)
+    job = shared._job_for_request(job_id)
     if job is None:
         abort(404)
     lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "decision"

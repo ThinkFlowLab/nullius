@@ -16,7 +16,7 @@ from . import shared
 def judge_tasks_route(job_id):
     """Ask the instruction score of every task of the job that has none, on the click of the button."""
     from . import judge
-    job = shared._find_job(shared._jobs_for_request(), job_id)
+    job = shared._job_for_request(job_id)
     if job is None:
         abort(404)
     todo = judge.tasks_todo(job)

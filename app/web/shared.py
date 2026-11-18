@@ -12,6 +12,7 @@ from flask import abort, flash, g, has_request_context, request, session
 from markupsafe import Markup, escape
 from werkzeug.exceptions import Forbidden
 from nullius import importers as harnesses
+from nullius.runs import parse
 from nullius import execution
 from nullius.catalogue import catalog
 from nullius import workspace
@@ -412,6 +413,22 @@ def _preserve_record_workspace(endpoint, values):
 
 def _find_job(jobs, job_id):
     return next((j for j in jobs if j.job_id == job_id), None)
+
+
+def _job_for_request(job_id):
+    """``_find_job(_jobs_for_request(), job_id)``, reading only the job's own
+    folder when the open workspace has exactly one of that name (a view of one
+    of a job's agents is ``<folder>~<agent>``). The whole workspace on any
+    doubt: another workspace asked for, no such folder, or several."""
+    ws = STATE["workspace"]
+    if ws is not None and not request.args.get("workspace") and "" not in g.get("_jobs", {}):
+        names = {job_id, job_id.rsplit("~", 1)[0]}
+        dirs = [d for d in parse.find_job_dirs(STATE["job_roots"]) if os.path.basename(d) in names]
+        if len(dirs) == 1:
+            job = _find_job(parse.split_agents([workspace.load_job(ws, dirs[0])[0]]), job_id)
+            if job is not None:
+                return job
+    return _find_job(_jobs_for_request(), job_id)
 
 
 def _safe_dest(base: str, rel: str) -> str | None:
