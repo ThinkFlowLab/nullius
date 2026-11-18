@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from classifying import classes_of, cross_check, failure_groups, read_rows
 from reading import adapter_of, analyze, health
@@ -21,6 +21,13 @@ STOP_RULE = ("No new round when the verdict is noise and no group of failing tri
 
 def usd(value: float) -> str:
     return f"-${-value:.2f}" if value < 0 else f"${value:.2f}"
+
+
+def page_labels(before_job: str, new_job: str) -> Tuple[str, str]:
+    """The names of the two runs on the round page: their job folders, or before and new when the names are equal."""
+    if before_job and new_job and before_job != new_job:
+        return before_job, new_job
+    return "before", "new"
 
 
 def rate_of(run: dict) -> dict:
@@ -114,12 +121,13 @@ def cmd_compare(args: argparse.Namespace) -> None:
                         + ", ".join(repr(a) for a in checked.agents))
 
     metrics_path = os.path.join(round_dir, "compare-metrics.json")
-    print(analyze([("before", against["job_dir"]), ("new", args.new)], threshold, metrics_path))
+    labels = page_labels(os.path.basename(against["job_dir"]), checked.job)
+    print(analyze([(labels[0], against["job_dir"]), (labels[1], args.new)], threshold, metrics_path))
     metrics = read_json(metrics_path)
-    runs: Dict[str, dict] = {r["label"]: r for r in metrics["runs"]}
+    runs: Dict[str, dict] = dict(zip(("before", "new"), metrics["runs"]))
     new_dir = runs["new"]["dir"]
     before_rows, new_rows = read_rows(against["job_dir"], threshold), read_rows(new_dir, threshold)
-    cross_check(metrics_path, [("before", before_rows), ("new", new_rows)])
+    cross_check(metrics_path, [(labels[0], before_rows), (labels[1], new_rows)])
 
     pair = metrics["pairs"][0]
     won, lost = pair["second_only"], pair["first_only"]
