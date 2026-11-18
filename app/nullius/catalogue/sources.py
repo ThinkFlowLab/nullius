@@ -52,16 +52,20 @@ def _files(defined: List[dict]) -> List[dict]:
     return out
 
 
-def _data_source(here) -> Optional[tuple]:
+def _data_source(here, key: str = "") -> Optional[tuple]:
     """The Hugging Face dataset a driver downloads itself, ``data-source.json``
-    beside its definition: (repository, revision), or None."""
+    beside its definition: (repository, revision), or None. A dataset's own
+    entry there (``datasets.<key>``) may name its repository and revision,
+    for a driver that reads several."""
     if not here:
         return None
     try:
         with open(os.path.join(here, "data-source.json")) as f:
             src = json.load(f)
-        repo, rev = src["repository"], src["revision"]
-    except (OSError, ValueError, TypeError, KeyError):
+        norm = key.replace("-", "_")
+        own = next((v for k, v in (src.get("datasets") or {}).items() if k.replace("-", "_") == norm), None) or {}
+        repo, rev = own.get("repository", src.get("repository")), own.get("revision", src.get("revision"))
+    except (OSError, ValueError, TypeError, AttributeError):
         return None
     ok = isinstance(repo, str) and _HF_REPO.match(repo) and isinstance(rev, str) and _REVISION.match(rev)
     return (repo, rev) if ok else None
@@ -98,7 +102,7 @@ def of(dataset, harness: List[str], standard: Optional[dict] = None, only: bool 
     rows = []
     if standard:
         rows.append(dict(_own(standard.get("upstream") or {}, _matching(standard.get("datasets") or [], dataset.key, only), "Nullius",
-                              _data_source(standard.get("_here"))),
+                              _data_source(standard.get("_here"), dataset.key)),
                          way="standard", label="Nullius"))
     if "harbor" in harness and (dataset.hub or dataset.registry):
         rows.append({"way": "harbor", "label": "Harbor", "from": "Harbor hub" if dataset.hub else "Harbor registry",
