@@ -17,7 +17,7 @@ class StandardWhere(CompilerCase):
         schema = dict(self.schema, hosts=[], standardHere={"docker": docker, "licences": {}, "host": {}})
         program = ("const schema=" + json.dumps(schema) + ";const C=require(" + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ")(schema);\n"
                    + line("esc") + line("button") + cut("  const tile = t =>", "  const picker = ")
-                   + cut("  const consentBox = ", "  async function hostReq(")
+                   + cut("  const consentBox = ", "  async function hostReq(") + cut("  function benchOptions(", "  // Only credentials")
                    + "const out={};for(const b of C.standard().benchmarks)for(const backend of ['local','docker']){"
                    + "const r=C.createStandard(b.key);r.backend=backend;" + edit
                    + "try{out[b.key+' '+backend]=standardWhere(r);}catch(e){out[b.key+' '+backend]=String(e);}}"
@@ -61,6 +61,8 @@ class StandardWhere(CompilerCase):
         html = self.draw(None)["osworld1 local"]
         self.assertIn("<h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small>", html)
         self.assertIn("<b>docker</b>: Docker on the machine the driver runs on", html)
+        self.assertIn('VM provider</h3></div><p class="nb-fixed" title="the upstream', html)
+        self.assertNotIn("VM provider</h3>", self.draw(None, "r.others=[];")["osworld1 local"])
 
 
 if __name__ == "__main__":

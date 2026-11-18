@@ -157,7 +157,7 @@ def _bench_page(b: dict) -> dict:
             "options": {n: {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
                             "setups": o.get("setups") or ["yours"],
                             **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"]}), "default": o.get("default"), "about": o.get("about") or {}, "names": o.get("names") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
-                            "limit": bool(o.get("limit")), "by": o.get("by") or {}}
+                            "limit": bool(o.get("limit")), "step": o.get("step") or "", "by": o.get("by") or {}}
                         for n, o in (b.get("options") or {}).items()},
             "host": {n: {"summary": r["summary"], "check": r["check"], "install": hostreq.install_lines(b, [n]), "needed_by": r["needed_by"]}
                      for n, r in hostreq.all_of(b).items()},
@@ -760,9 +760,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                      [STEP["runner"], "Runner", "Nullius"],
                      [STEP["dataset"], "Datasets" if many else "Dataset",
                       ", ".join(f"{x.get('label') or x['id']}" + (f" · {x['units']} {nouns}" if x.get("units") else "") for x in dss)],
-                     *[[STEP["dataset"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
+                     *[[STEP["limits" if (b.get("options") or {})[k].get("limit") else "dataset" if (b.get("options") or {})[k].get("step") else "agent"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
                         _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)") + f" · {', '.join(x['id'] for x in dss if per_ds[x['id']].get(k) == v)}"]
-                       for k, v in {k: v for vals in per_ds.values() for k, v in vals.items()}.items()],
+                       for k, v in {k: v for vals in per_ds.values() for k, v in vals.items()}.items() if (b.get("options") or {})[k].get("step") != "where"],
                      *[row(p) for p in picks],
                      *[[STEP["agent"], "Options" + (f" of {p['o']['label']}" if several else ""),
                         ", ".join(f"{k} {v}" + ("" if k in p["given"] else " (its default)") for k, v in p["opts"].items())]
@@ -790,7 +790,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                      *([[STEP["limits"], f"Model calls per {noun}", str(calls)]] if calls else []),
                      [STEP["where"], "Where", (f"{of} shards, one per machine: " if of > 1 else "")
                       + ", ".join(where_label(t) for t in targets) + f" · {backend} backend"
-                      + (f" · {boat_size} VMs" if backend == "boat" else "")]]
+                      + (f" · {boat_size} VMs" if backend == "boat" else "")
+                      + "".join(f" · {w.get('label') or k.replace('_', ' ').capitalize()} {(w.get('names') or {}).get(v) or v}" for k, v in {k: v for vals in per_ds.values() for k, v in vals.items()}.items()
+                                if (w := (b.get("options") or {})[k]).get("step") == "where")]]
     if agents_local:
         notes.append(f"{', '.join(agents_local)} {'run' if len(agents_local) > 1 else 'runs'} as you on {'each machine' if of > 1 else where_label(targets[0])}, with its permission requests granted: "
                      "the local backend is no sandbox.")

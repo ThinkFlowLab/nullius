@@ -219,6 +219,7 @@
     },
     "vm_provider": {
       "label": "VM provider",
+      "step": "where",
       "summary": "--provider_name: where the task's VM runs. docker only: the upstream's other providers need cloud accounts or a hypervisor of their own.",
       "values": [
         "docker"

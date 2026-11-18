@@ -485,6 +485,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, or named `files` |
 | `when` | Another option's values that make it apply |
 | `limit` | `true`: a bound of the upstream's own (steps, errors). The builder shows it in Limits, under the benchmark's name |
+| `step` | `where`: where the work runs, such as the VMs' provider, asked on Where, one value as fixed; `dataset`: what its datasets need, asked on Dataset for the datasets it applies to |
 | `by` | Its default under each value of another option, e.g. each OSWorld agent's own steps |
 | `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`) |
 

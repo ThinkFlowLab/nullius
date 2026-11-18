@@ -470,7 +470,7 @@ def _bench_options(d: dict) -> List[str]:
     ``embeddings`` model called through the run's relay, ``host`` requirements or ``files`` by name - and
     ``when`` it applies: another option's values (a retriever's, only with a retrieval). ``limit``:
     a bound the upstream has of its own (its steps, its errors), offered with the run's limits; ``by``:
-    its default under each value of another option (an agent's own steps), for a default of ``default``. ``names``: a name for some of its values, shown in their place."""
+    its default under each value of another option (an agent's own steps), for a default of ``default``. ``names``: a name for some of its values, shown in their place. ``step``: ``where`` for a choice of where the work runs, ``dataset`` for one its datasets need, the builder step that asks it."""
     opts = d.get("options")
     if opts is None:
         return []
@@ -490,6 +490,8 @@ def _bench_options(d: dict) -> List[str]:
             bad.append(f"{w}.setups: where it applies - some of original, model, yours (an agent or a capability)")
         if "limit" in o and (not isinstance(o["limit"], bool) or "pattern" not in o):
             bad.append(f"{w}.limit: true for a bound the upstream has of its own, a number its pattern allows")
+        if o.get("step", "dataset") != "dataset" and (o["step"] != "where" or "values" not in o) or "step" in o and o.get("limit"):
+            bad.append(f"{w}.step: where, a choice of where the work runs among its values, or dataset")
         by = o.get("by")
         if by is not None and not (isinstance(by, dict) and len(by) == 1 and all(
                 k != name and k in opts and isinstance(m, dict) and set(m) == set(opts[k].get("values") or [None])
