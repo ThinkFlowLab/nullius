@@ -73,11 +73,12 @@ class StandardWhere(CompilerCase):
         program = ("const schema=" + json.dumps(schema) + ";const C=require(" + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ")(schema);\n"
                    + line("esc") + line("button") + cut("  const tile = t =>", "  const picker = ") + cut("  function benchOptions(", "  // Only credentials")
                    + "const out={};for(const k of ['osworld2','gsm8k']){const r=C.createStandard(k);out[k]=benchOptions(r,C.standardBench(r),'shared')+benchOptions(r,C.standardBench(r),'setup')+benchOptions(r,C.standardBench(r));}"
+                   + "const r=C.createStandard('osworld2'),b=C.standardBench(r);r.datasets=['offline36'];out.offline=benchOptions(r,b,'dataset');r.datasets=['test_v2'];out.all=benchOptions(r,b,'dataset');"
                    + "process.stdout.write(JSON.stringify(out));")
         html = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
         self.assertIn('title="Disk write limit for each VM. e.g. 16"', html["osworld2"])
-        self.assertIn("needs Docker</span>", html["osworld2"])
         self.assertIn('placeholder="Provider default"', html["gsm8k"])
+        self.assertEqual(("Website host suffix" in html["offline"], "Website host suffix" in html["all"]), (False, True))
 
 
 if __name__ == "__main__":

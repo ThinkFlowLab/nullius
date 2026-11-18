@@ -1000,14 +1000,18 @@ def _command(dir, model, base_url, key, vm):
     meta = os.path.join(dir, "test_unit.json")
     slots = {"model": model, "base_url": base_url, "key": key, "vm": vm, "up": UP, "meta": meta,
              "results": os.path.join(dir, RESULTS), "examples": EXAMPLES,
-             "base": _base(base_url),
-             "max_steps": os.environ.get("NULLIUS_OPTION_MAX_STEPS", "100")}
+             "base": _base(base_url)}
     common, drop = list(AGENTS["common"]), spec.get("drop", [])
     for flag in drop:
         i = common.index(flag)
         del common[i:i + (1 if flag == "--headless" else 2)]
     argv = [sys.executable, os.path.join(UP, spec["script"])] + [_fill(a, slots) for a in
                                                                  common + spec["argv"] + spec.get("model_argv", {}).get(model, [])]
+    steps = os.environ.get("NULLIUS_OPTION_MAX_STEPS", "default")
+    if steps != "default" and "--max_steps" in argv:
+        argv[argv.index("--max_steps") + 1] = steps
+    elif steps != "default":
+        argv += ["--max_steps", steps]
     extra = {k: _fill(v, slots) for k, v in spec["env"].items()}
     if name == "m3":
         thinking = os.environ.get("NULLIUS_OPTION_THINKING", "off")

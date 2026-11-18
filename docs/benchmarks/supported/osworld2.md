@@ -37,8 +37,8 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
-| `agent` | **`m3`**, `muse_spark` | Which of OSWorld-V2's own agents runs: each its script as published, with its own prompts, tools and history, asking the model it is published with. | `original` |
-| `max_steps` | **`100`**, `300`, `500` | The agent's step limit. | `original` |
+| `agent` | **`m3` (MiniMax M3)**, `muse_spark` (Muse Spark) | Which of OSWorld-V2's own agents runs: each its script as published, with its own prompts, tools and history, asking the model it is published with. | `original` |
+| `max_steps` | e.g. `500`, default `default` | The agent's step limit. default: each agent's own, as its wrapper runs it. | `original` |
 | `thinking` | **`off`**, `adaptive` | Whether M3 thinks. The paper ran it adaptive. | `original` |
 | `vm_provider` | **`docker`** | Where the VMs run. | `original`, `yours` |
 | `websites` | e.g. `10.213.0.1.nip.io`, default `none` | Where the mock websites, and GitLab with them, are served. Needed by the tasks that use them. | `original`, `yours` |
@@ -55,7 +55,7 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 
 ## Nullius limitations
 
-- Not the paper's M3 setup: another release, no residential proxy, and 100 steps with thinking off by default; Steps 500 and Thinking adaptive restore the budget.
+- Not the paper's M3 setup: another release, no residential proxy, and 100 steps with thinking off by default; Steps per task 500 and Thinking adaptive restore the budget.
 - Muse Spark's published score came from newer upstream code: scores here do not compare with it.
 - The LLM grader (21 tasks) and the simulated user (6) are Claude Sonnet 4.6: the run's provider must serve it.
 - 29 tasks use the public internet: their outcome can change with the live sites.

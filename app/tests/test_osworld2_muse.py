@@ -103,13 +103,19 @@ class Driver(unittest.TestCase):
             self.answer("m3", "MiniMax-M3", thinking="adaptive")
         self.assertEqual(self.runs[-1][1]["M3_THINKING_MODE"], "adaptive")
 
-    def test_every_agent_takes_the_steps_option(self):
-        self.assertIsNone(definitions.option_problem(bench()["options"]["max_steps"], "300"))
+    def test_every_agent_takes_the_steps_option_and_its_own_by_default(self):
+        own = bench()["options"]["max_steps"]["by"]["agent"]
+        self.assertEqual(own, {"m3": "100", "muse_spark": "500"})
         for agent, model in (("m3", "MiniMax-M3"), ("muse_spark", MUSE)):
-            with self.subTest(agent), self.assertRaises(Started):
-                self.answer(agent, model, max_steps="300")
-            argv = self.runs[-1][0]
-            self.assertEqual(argv[argv.index("--max_steps") + 1], "300")
+            for steps, sent in (("default", own[agent]), ("50", "50")):
+                with self.subTest(agent, steps=steps), self.assertRaises(Started):
+                    self.answer(agent, model, max_steps=steps)
+                argv = self.runs[-1][0]
+                self.assertEqual(argv[argv.index("--max_steps") + 1], sent)
+        spec = self.driver.AGENTS["agents"]["m3"]
+        with mock.patch.dict(spec, argv=[a for a in spec["argv"] if a not in ("--max_steps", "100")]), self.assertRaises(Started):
+            self.answer("m3", "MiniMax-M3", max_steps="50")
+        self.assertEqual(self.runs[-1][0][-2:], ["--max_steps", "50"])
 
     def test_a_model_of_the_other_agent_is_refused_before_the_vm_naming_its_agent(self):
         for agent, model, other in (("m3", MUSE, "muse_spark"), ("muse_spark", "MiniMax-M3", "m3")):

@@ -129,27 +129,29 @@
       "setups": [
         "original"
       ],
+      "names": {
+        "m3": "MiniMax M3",
+        "muse_spark": "Muse Spark"
+      },
       "about": {
-        "m3": "MiniMax M3, as in the paper",
-        "muse_spark": "Meta Muse Spark"
+        "m3": "as in the paper"
       }
     },
     "max_steps": {
-      "label": "Steps",
-      "summary": "The agent's step limit.",
-      "values": [
-        "100",
-        "300",
-        "500"
-      ],
-      "default": "100",
+      "label": "Steps per task",
+      "summary": "The agent's step limit. default: each agent's own, as its wrapper runs it.",
       "setups": [
         "original"
       ],
-      "about": {
-        "100": "M3's upstream default",
-        "300": "below the paper's budget",
-        "500": "as in the paper; Muse Spark's published budget"
+      "default": "default",
+      "pattern": "default|[1-9][0-9]{0,3}",
+      "example": "500",
+      "limit": true,
+      "by": {
+        "agent": {
+          "m3": "100",
+          "muse_spark": "500"
+        }
       }
     },
     "thinking": {
@@ -175,6 +177,7 @@
     },
     "vm_provider": {
       "label": "VM provider",
+      "step": "where",
       "summary": "Where the VMs run.",
       "values": [
         "docker"
@@ -195,8 +198,15 @@
     },
     "websites": {
       "label": "Website host suffix",
+      "step": "dataset",
+      "datasets": [
+        "websites35",
+        "websites98",
+        "test_v2_offline_no_internet",
+        "test_v2"
+      ],
       "summary": "Where the mock websites, and GitLab with them, are served. Needed by the tasks that use them.",
-      "pattern": "none|(?=.{3,200}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+",
+      "pattern": "none|(?=.{3,200}$)[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?)+",
       "example": "10.213.0.1.nip.io",
       "default": "none",
       "setups": [

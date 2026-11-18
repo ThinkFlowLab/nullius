@@ -4,9 +4,9 @@ How OSWorld2's units are run and scored here, where that differs from the upstre
 
 ## Against the paper
 
-The paper (Table 3) ran M3 on release osworld-v2-2026.06.24, on AWS with a residential proxy, 500 steps and thinking on. This entry runs release osworld-v2.1, whose task files differ for 80 of the 108 tasks, on the docker provider with no residential proxy, and by default 100 steps with thinking off. Steps 500 and Thinking adaptive restore the budget only. Nullius labels a run comparable with the paper by its model alone: check the release, dataset, steps, thinking and who served the model (Served by) before comparing scores.
+The paper (Table 3) ran M3 on release osworld-v2-2026.06.24, on AWS with a residential proxy, 500 steps and thinking on. This entry runs release osworld-v2.1, whose task files differ for 80 of the 108 tasks, on the docker provider with no residential proxy, and by default 100 steps with thinking off. Steps per task 500 and Thinking adaptive restore the budget only. Nullius labels a run comparable with the paper by its model alone: check the release, dataset, steps, thinking and who served the model (Served by) before comparing scores.
 
-Muse Spark runs as published at this release, Steps 500 being its published budget. Its published score came from newer upstream code, Meta's own API and grader: scores here do not compare with it.
+Muse Spark runs as published at this release, by default with its published budget of 500 steps. Its published score came from newer upstream code, Meta's own API and grader: scores here do not compare with it.
 
 Neither agent's history is shortened beyond the upstream's own screenshot trimming. In a run on OpenRouter pinned to MiniMax with Thinking adaptive, M3's history filled its window after about 220 steps: the call that overflows ends the episode, and the task's evaluate() scores the VM as it is.
 

@@ -12,7 +12,7 @@
     "Partial credit: each task scores 0 to 1; the score is the mean."
   ],
   "limitations": [
-    "Not the paper's M3 setup: another release, no residential proxy, and 100 steps with thinking off by default; Steps 500 and Thinking adaptive restore the budget.",
+    "Not the paper's M3 setup: another release, no residential proxy, and 100 steps with thinking off by default; Steps per task 500 and Thinking adaptive restore the budget.",
     "Muse Spark's published score came from newer upstream code: scores here do not compare with it.",
     "The LLM grader (21 tasks) and the simulated user (6) are Claude Sonnet 4.6: the run's provider must serve it.",
     "29 tasks use the public internet: their outcome can change with the live sites.",

@@ -56,7 +56,7 @@ COMPOSE_VERSION = (2, 24, 4)
 _HELD = []
 _SITE = []
 COOKIE = "nullius-osworld2-ready"
-SUFFIX = re.compile(r"(?=.{3,200}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+")
+SUFFIX = re.compile(r"(?=.{3,200}$)[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?)+")
 GROUPS = (("pulled", ("caddy", "overleaf_web_mongo", "overleaf_web_mongo_init", "overleaf_web_redis",
                        "overleaf_web_admin_bootstrap"), 7),
           ("overleaf", ("overleaf_web_app", "overleaf_collab_compiler"), 12),
