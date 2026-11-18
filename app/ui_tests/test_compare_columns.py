@@ -69,7 +69,9 @@ process.stdout.write(JSON.stringify(out));
     def test_search_words_in_any_order_and_the_keys_pick_a_run(self):
         got = node(r'''
 const [, th] = page([column(0, 'r1', 'a'), column(1, '', 'b')], {values: ['a:r1', 'b:'], lists: {a: {runs: RUNS, same: 0}, b: {runs: RUNS, same: 0}}, dataset: '', runs: '/compare/runs'});
-const out = {open: !th.querySelector('[data-run-menu]').hidden, focus: document.activeElement === th.querySelector('input')};
+const out = {closed: th.querySelector('[data-run-menu]').hidden};
+th.querySelector('[data-run-btn]').click();
+out.open = !th.querySelector('[data-run-menu]').hidden; out.focus = document.activeElement === th.querySelector('input');
 type(th, 'M CODEX'); out.words = shown(th);
 type(th, 'shards'); out.shards = shown(th);
 type(th, 'check'); out.checks = shown(th);
@@ -83,7 +85,8 @@ key(th, 'Enter'); out.picked = location.went;
 th.querySelectorAll('[role="option"]')[2].click(); out.clicked = location.went;
 process.stdout.write(JSON.stringify(out));
 ''')
-        self.assertEqual((got["open"], got["focus"]), (True, True))           # the empty column opens its list
+        self.assertTrue(got["closed"])                                        # an empty column's list waits for its button
+        self.assertEqual((got["open"], got["focus"]), (True, True))           # which opens it, the search focused
         self.assertEqual(got["words"], ["r2"])
         self.assertEqual((got["shards"], got["checks"]), (["r2"], ["r3"]))     # what an entry shows is searched
 
@@ -98,6 +101,7 @@ process.stdout.write(JSON.stringify(out));
         got = node(r'''
 const [th] = page([column(0, '', 'a')], {values: ['a:'], lists: {a: {runs: RUNS, same: 0}}, dataset: '', runs: '/compare/runs'});
 const box = th.querySelector('input'), list = th.querySelector('[data-run-menu]');
+th.querySelector('[data-run-btn]').click();
 // the first-visit guide: a modal dialog that takes the focus, then a click on its answer
 const answer = el('button', {}), guide = el('div', {role: 'dialog', 'aria-modal': 'true'}, answer);
 document.appendChild(guide);

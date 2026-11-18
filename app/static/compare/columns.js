@@ -50,7 +50,7 @@ window.NulliusCompare = {
   },
 
   /* One column's `cells`, its header `th` first: its workspace select, its run button and the searchable list it
-     opens. Returns open(), which opens the list. */
+     opens. */
   column(cells, cfg) {
     const th = cells[0], find = s => cells.map(c => c.querySelector(s)).find(Boolean);
     const k = +th.dataset.column, ws = find('[data-ws]'), btn = find('[data-run-btn]');
@@ -104,15 +104,12 @@ window.NulliusCompare = {
     show(cfg.lists[ws.value] || {runs: [], same: 0});
     const mine = (cfg.lists[ws.value]?.runs || []).find(r => r.value === cfg.values[k]);
     if (mine) this.entry(btn.querySelector('[data-run-label]'), mine);
-    return () => btn.click();
   },
 
-  /* Every column of the page, its cells in the rows they share; the first without a run opens its list. */
+  /* Every column of the page, its cells in the rows they share. A list opens only on its button. */
   wire(cfg) {
     const cols = [];
     document.querySelectorAll('[data-column]').forEach(c => (cols[+c.dataset.column] ||= []).push(c));
-    const opens = cols.map(cells => this.column(cells, cfg));
-    const empty = cols.findIndex(cells => !cells[0].dataset.run);
-    if (empty >= 0) opens[empty]();
+    cols.forEach(cells => this.column(cells, cfg));
   },
 };
