@@ -109,7 +109,7 @@ nav:
       - Settings:
           - Overview: settings/README.md
           - Model providers: settings/model-providers.md
-          - System One provider: settings/system-one.md
+          - Decision provider: settings/decision.md
           - LLM judge provider: settings/llm-judge.md
           - Custom keys: settings/agent-keys.md
           - Model prices: settings/model-prices.md

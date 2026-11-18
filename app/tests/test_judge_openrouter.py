@@ -26,9 +26,9 @@ def fake(status, data):
 
 
 class Configured(unittest.TestCase):
-    def test_system_one_and_the_llm_judge_are_set_apart(self):
-        self.assertFalse(client.system_one({})); self.assertTrue(client.system_one({"TYPESAFE_API_KEY": "ts-1"}))
-        self.assertEqual(client.system_one({}).lane, "system-one")
+    def test_decision_judge_and_the_llm_judge_are_set_apart(self):
+        self.assertFalse(client.decision_judge({})); self.assertTrue(client.decision_judge({"TYPESAFE_API_KEY": "ts-1"}))
+        self.assertEqual(client.decision_judge({}).lane, "decision")
         j = client.llm_judge({"OPENROUTER_API_KEY": "sk-or-1"})
         self.assertEqual((j.provider, j.lane, j.url), ("openrouter", "llm", "https://openrouter.ai/api/v1/chat/completions"))
         self.assertFalse(j); self.assertEqual(j.missing, "a model")                                         # no model: not ready
@@ -55,12 +55,12 @@ class Configured(unittest.TestCase):
         self.assertEqual((gone.provider, gone.key), ("custom", "default-key"))
 
 
-class SystemOneOnOpenRouter(unittest.TestCase):
-    def test_system_one_is_asked_where_settings_say_with_the_model_named(self):
-        self.assertEqual(client.system_one({"OPENROUTER_API_KEY": "sk-or-1"}).provider, "openrouter")          # the only key: OpenRouter
-        self.assertEqual(client.system_one({"OPENROUTER_API_KEY": "sk-or-1", "TYPESAFE_API_KEY": "ts-1"}).provider, "typesafe")
-        j = client.system_one({"OPENROUTER_API_KEY": "sk-or-1", "SYSTEM_ONE_PROVIDER": "openrouter", "SYSTEM_ONE_MODEL": "jaredpalmer/kev-4b"})
-        self.assertEqual((j.lane, j.url, j.model), ("system-one", "https://openrouter.ai/api/v1/systemone", "jaredpalmer/kev-4b"))
+class DecisionOnOpenRouter(unittest.TestCase):
+    def test_decision_judge_is_asked_where_settings_say_with_the_model_named(self):
+        self.assertEqual(client.decision_judge({"OPENROUTER_API_KEY": "sk-or-1"}).provider, "openrouter")          # the only key: OpenRouter
+        self.assertEqual(client.decision_judge({"OPENROUTER_API_KEY": "sk-or-1", "TYPESAFE_API_KEY": "ts-1"}).provider, "typesafe")
+        j = client.decision_judge({"OPENROUTER_API_KEY": "sk-or-1", "DECISION_PROVIDER": "openrouter", "DECISION_MODEL": "jaredpalmer/kev-4b"})
+        self.assertEqual((j.lane, j.url, j.model), ("decision", "https://openrouter.ai/api/v1/systemone", "jaredpalmer/kev-4b"))
         sent = []
         def post(url, body, key):
             sent.append((url, body, key))
@@ -68,10 +68,10 @@ class SystemOneOnOpenRouter(unittest.TestCase):
         rec = client.ask("the state", ["task_completed"], j, post=post)
         url, body, key = sent[0]
         self.assertEqual((url, key, body["model"]), ("https://openrouter.ai/api/v1/systemone", "sk-or-1", "jaredpalmer/kev-4b"))
-        self.assertIn("questions", body); self.assertEqual(body["state"], "the state")                         # the System One contract, not a chat
+        self.assertIn("questions", body); self.assertEqual(body["state"], "the state")                         # the Decision contract, not a chat
         self.assertEqual(rec["judge"], {"provider": "openrouter", "model": "jaredpalmer/kev-4b"})
         self.assertEqual(rec["answers"], {"task_completed": {"noul": 0.81}})
-        self.assertEqual(client.system_one({"OPENROUTER_API_KEY": "k", "SYSTEM_ONE_PROVIDER": "openrouter"}).model, "~typesafe/jev-latest")
+        self.assertEqual(client.decision_judge({"OPENROUTER_API_KEY": "k", "DECISION_PROVIDER": "openrouter"}).model, "~typesafe/jev-latest")
 
 
 class OpenRouterJudge(unittest.TestCase):

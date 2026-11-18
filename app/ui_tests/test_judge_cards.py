@@ -46,7 +46,7 @@ doc['nullius-settings-saved']({detail: {providers: []}}); out.push(view());
 process.stdout.write(JSON.stringify(out));
 '''
 
-# System One on OpenRouter: the list drawn with the page, then the live one asked when the field is first used.
+# Decision on OpenRouter: the list drawn with the page, then the live one asked when the field is first used.
 LIVE = PROGRAM.split("require(process.argv[1]);")[0].replace(
     "['openrouter', {available: 'true', protocol: 'chat', protocols: 'chat'}, 'OpenRouter']",
     "['openrouter', {available: 'true', protocol: 'systemone', protocols: 'systemone|decisions', models: '~typesafe/jev-latest', live: ''}, 'OpenRouter']"
@@ -83,9 +83,9 @@ class JudgeCard(unittest.TestCase):
         self.assertEqual(got[6], {"provider": "", "hidden": True, "protocol": "messages", "named": "", "protocolRow": False,
                                   "via": "", "none": True, "model": False})                               # none left: Add a provider
 
-    def test_system_one_on_openrouter_asks_the_live_list_once_when_the_field_is_used(self):
+    def test_decision_judge_on_openrouter_asks_the_live_list_once_when_the_field_is_used(self):
         got = json.loads(subprocess.run([self.node, "-e", LIVE, str(SCRIPT)], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(got["asked"], [["/settings/system-one/models", {"provider": "openrouter"}]])        # once, for both uses
+        self.assertEqual(got["asked"], [["/settings/decision/models", {"provider": "openrouter"}]])        # once, for both uses
         self.assertEqual(got["shown"], [["~typesafe/jev-latest", "b/decider:free"]] * 2)
 
 

@@ -47,13 +47,13 @@
     if (model) model.placeholder = on?.dataset.default || '';
   }
   // A provider with no list of its own here: its catalogue, asked once when the field is first used; a live list
-  // (System One on OpenRouter) replaces the one drawn with the page. Typing a model still works.
+  // (Decision on OpenRouter) replaces the one drawn with the page. Typing a model still works.
   const catalogues = new Map();
   async function offerCatalogue(card, model) {
     const on = chosen(card);
     if (!on || (on.dataset.models && !('live' in on.dataset)) || !model.list) return;
     const provider = on.value.replace(/^local(?=$|:)/, 'custom');   // local:<id>, a named endpoint, is the builder's custom:<id>
-    const url = 'live' in on.dataset ? '/settings/system-one/models' : '/new-run/models';
+    const url = 'live' in on.dataset ? '/settings/decision/models' : '/new-run/models';
     if (!catalogues.has(url + provider)) {
       catalogues.set(url + provider, nulliusFetch(url, {method: 'POST', headers: {'Content-Type': 'application/json',
         'X-CSRF-Token': document.querySelector('#settings-form [name=csrf]').value}, body: JSON.stringify({provider})})

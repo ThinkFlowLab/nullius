@@ -52,7 +52,7 @@
     <a href="#{{ c.fields[0][0].name }}" class="st-ready-i{{ ' on' if c.ready }}"><span aria-hidden="true">{{ '✓' if c.ready else '○' }}</span> {{ c.title }}<span class="sr">{{ ': set' if c.ready else ': not set' }}</span></a>
     {% endfor %}
     <a href="#providers" class="st-ready-i{{ ' on' if ns.custom }}"><span aria-hidden="true">{{ '✓' if ns.custom else '○' }}</span> Custom<span class="sr">{{ ': set' if ns.custom else ': not set' }}</span></a>
-    {% for jj, name in [(judges[0], 'System One'), (judges[1], 'LLM judge')] %}<a href="#judge" class="st-ready-i{{ ' on' if jj }}"><span aria-hidden="true">{{ '✓' if jj else '○' }}</span> {{ name }}<span class="sr">{{ ': set' if jj else ': not set' }}</span></a>{% endfor %}
+    {% for jj, name in [(judges[0], 'Decision model'), (judges[1], 'LLM')] %}<a href="#judge" class="st-ready-i{{ ' on' if jj }}"><span aria-hidden="true">{{ '✓' if jj else '○' }}</span> {{ name }}<span class="sr">{{ ': set' if jj else ': not set' }}</span></a>{% endfor %}
     {% for item in chosen %}<a href="#HOSTS" class="st-ready-i on"><span aria-hidden="true">✓</span> <span class="mono">{{ item.split('=', 1)[0] if '=' in item.split('@', 1)[0] else item.split(':/')[0].split(':~')[0] }}</span></a>{% else %}<a href="#HOSTS" class="st-ready-i"><span aria-hidden="true">○</span> no host</a>{% endfor %}
   </div>
 </header>
@@ -80,7 +80,7 @@
       {% for b in benchmark_access %}{% set access_search.words = access_search.words ~ ' ' ~ b.title %}{% for s in b.needs %}{% set access_search.words = access_search.words ~ ' ' ~ s.name ~ ' ' ~ s.summary %}{% endfor %}{% endfor %}
       {{ section_link('data-providers', 'Data providers', 'cloud-down', 'hugging face huggingface hf_token docker hub login registry token dataset pull limit') }}
       {{ section_link('custom-keys', 'Custom keys', 'key', access_search.words) }}
-      {{ section_link('judge', 'Judges', 'scale', 'typesafe system one llm model judgement') }}
+      {{ section_link('judge', 'Judges', 'scale', 'typesafe decision llm model judgement') }}
       {{ section_link('prices', 'Model prices', 'dollar', 'cost price estimate usd tokens list update') }}
     </div>
     <div class="st-nav-group">
@@ -186,7 +186,7 @@
       <h2 id="judge-h">Judges</h2>
       <p>Choose the judges that evaluate trial evidence.</p>
     </div>
-    {% set s1, llm = judges %}
+    {% set decision, llm = judges %}
 
     {#- Provider, then Protocol when the provider lists two this judge speaks (else a quiet line), then Model. -#}
     {% macro judge_rows(prefix, choices, judge, label) %}
@@ -218,18 +218,18 @@
       </div>
     </article>
     {% endmacro %}
-    {% set srow = by.get('SYSTEM_ONE_PROVIDER') %}
-    {% if srow and by.get('SYSTEM_ONE_MODEL') %}
-    <fieldset class="st-card{{ ' st-card-unset' if not s1 }}" data-judge-card>
-      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-gavel"/></svg>System One</legend>
-      {{ judge_rows('SYSTEM_ONE', s1_providers, s1, 'Where System One is asked') }}
-      {{ field(by['SYSTEM_ONE_MODEL'], 'Model', writable, s1_providers[s1.provider].models) }}
+    {% set srow = by.get('DECISION_PROVIDER') %}
+    {% if srow and by.get('DECISION_MODEL') %}
+    <fieldset class="st-card{{ ' st-card-unset' if not decision }}" data-judge-card>
+      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-gavel"/></svg>Decision model</legend>
+      {{ judge_rows('DECISION', decision_providers, decision, 'Where the Decision model is asked') }}
+      {{ field(by['DECISION_MODEL'], 'Model', writable, decision_providers[decision.provider].models) }}
     </fieldset>
     {% endif %}
     {% set prow = by.get('LLM_JUDGE_PROVIDER') %}
     {% if prow and by.get('LLM_JUDGE_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not llm }}" data-judge-card>
-      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-text"/></svg>LLM judge</legend>
+      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-text"/></svg>LLM</legend>
       {{ judge_rows('LLM_JUDGE', llm_providers, llm, "The LLM judge's provider") }}
       {{ field(by['LLM_JUDGE_MODEL'], 'Model', writable, []) }}
     </fieldset>

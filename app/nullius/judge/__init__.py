@@ -1,5 +1,5 @@
 """Judgement: structured, confidence-scored answers about a recorded trial
-from a judge model (TypeSafe.ai System One), shown beside the deterministic
+from a judge model (TypeSafe.ai Decision), shown beside the deterministic
 evidence and never in its place.
 
 The contract: the question

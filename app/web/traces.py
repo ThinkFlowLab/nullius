@@ -310,7 +310,7 @@ def trial_attempts(job_id, trial_name):
                            imported_from=_imported_from(j))
 
 
-def _judgement_panel(job, trial, lane="system-one"):
+def _judgement_panel(job, trial, lane="decision"):
     from . import judge
     return judge.panel(job, trial, lane)
 
