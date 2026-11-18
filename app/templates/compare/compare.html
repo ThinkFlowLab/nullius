@@ -40,6 +40,8 @@
     </div>
   </div>{% endif %}{% endmacro %}
 {% macro side_actions() %}<a class="btn ghost sm" href="{{ add }}" id="compare-add"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a run</a>{% endmacro %}
+{#- one block, so the controls row sticks only as far as the table #}
+<div>
 {{ controls('side', [], sort=false, views=side_views, actions=side_actions) }}
 {% if jobs %}
 <div class="cohort-note">
@@ -56,10 +58,10 @@
 {% if comparison.datasets_known and not comparison.datasets_match %}<p class="compare-warn">The recorded datasets differ: pick runs of the baseline's dataset to compare the same tasks.</p>{% endif %}
 {% endif %}
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Run comparison" tabindex="0">
-<table class="grid compare" style="--cols: {{ columns|length }}">
+<table class="grid compare" id="side" style="--cols: {{ columns|length }}">
   {{ comparison_columns() }}
   <thead>
-    <tr>
+    <tr data-sticky>
       <th{{ classes(METRIC, true) }}><span class="sr">Metric</span></th>
       {% for c in columns %}
       {% set n = loop.index %}
@@ -75,7 +77,7 @@
     </tr>
   </thead>
   <tbody>
-    <tr>
+    <tr data-sticky="wide">
       <th{{ classes(METRIC, true, 'rowhead') }}>Workspace</th>
       {% for c in columns %}
       <td class="compare-col{{ ' empty' if c.i is none }}" data-column="{{ loop.index0 }}">
@@ -85,7 +87,7 @@
       </td>
       {% endfor %}
     </tr>
-    <tr>
+    <tr data-sticky="wide">
       <th{{ classes(METRIC, true, 'rowhead') }}>Run</th>
       {% for c in columns %}
       {% set j = jobs[c.i] if c.i is not none else none %}
@@ -110,14 +112,14 @@
       {% endfor %}
     </tr>
     {% if jobs %}
-    {% macro row(label, values, hint='') %}
-    <tr>
+    {% macro row(label, values, hint='', sticky=none) %}
+    <tr{% if sticky is not none %} data-sticky="{{ sticky }}"{% endif %}>
       <th{{ classes(METRIC, true, 'rowhead') }} {% if hint %}title="{{ hint }}"{% endif %}>{{ label }}</th>
       {% call(i) each() %}<td>{{ values[i] }}</td>{% endcall %}
     </tr>
     {% endmacro %}
 
-    <tr>
+    <tr data-sticky>
       <th{{ classes(METRIC, true, 'rowhead') }}>Agent</th>
       {% call(i) each() %}{% set j = jobs[i] %}
       <td><span class="strong">{{ j.agent_label or '—' }}</span>
@@ -126,8 +128,8 @@
         {%- if j.reasoning_effort %} <span class="faint">· effort {{ j.reasoning_effort }}</span>{% endif %}</td>
       {% endcall %}
     </tr>
-    {{ row('Model', jobs|map(attribute='model_name')|list) }}
-    {{ row('Benchmark', benchmarks) }}
+    {{ row('Model', jobs|map(attribute='model_name')|list, sticky='wide') }}
+    {{ row('Benchmark', benchmarks, sticky='wide') }}
     <tr>
       <th{{ classes(METRIC, true, 'rowhead') }}>Dataset</th>
       {% call(i) each() %}<td title="{{ jobs[i].dataset }}">{{ jobs[i].dataset|dsname }}</td>{% endcall %}
@@ -175,6 +177,7 @@
     {% endif %}
   </tbody>
 </table>
+</div>
 </div>
 
 {% if jobs %}

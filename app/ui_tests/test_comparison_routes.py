@@ -319,6 +319,17 @@ class ComparisonRoutes(unittest.TestCase):
         # one agent: nothing to order
         self.assertNotIn("data-order-btn", self.get(pick=["active:run"]))
 
+    def test_the_side_table_pins_its_head_and_identity_rows_the_task_table_none(self):
+        body = self.get(pick=["active:run", "foreign:run"])
+        side = body[body.index('<table class="grid compare" id="side"'):body.index("<h2>Task by task</h2>")]
+        pinned = re.findall(r'<tr( data-sticky(?:="wide")?)?>\s*<th[^>]*>(?:<span class="sr">)?([^<]+)<', side)
+        self.assertEqual(pinned[:7], [(" data-sticky", "Metric"), (' data-sticky="wide"', "Workspace"), (' data-sticky="wide"', "Run"),
+                                      (" data-sticky", "Agent"), (' data-sticky="wide"', "Model"), (' data-sticky="wide"', "Benchmark"),
+                                      ("", "Dataset")])
+        self.assertEqual([p for p, _ in pinned[7:]], [""] * len(pinned[7:]))
+        self.assertNotIn("data-sticky", body[body.index("<h2>Task by task</h2>"):])
+        self.assertIn('id="side-tools"', body[:body.index('<table class="grid compare" id="side"')])   # the controls row whose height the box leaves
+
     def test_each_column_s_difference_from_the_baseline_in_the_row_s_unit(self):
         self.another("cheap", trials=[trial("shared", cost_usd=1, n_input_tokens=1500, job_id="cheap"),
                                       trial("other", cost_usd=1, n_input_tokens=1500, job_id="cheap")])
