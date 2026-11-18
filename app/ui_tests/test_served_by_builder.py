@@ -87,8 +87,8 @@ class TheStep(unittest.TestCase):
         self.assertTrue(served_css)
         self.assertFalse([line for line in served_css if 'border-left' in line or 'margin-left' in line])
         # a pick joins the list (never replaces it); a removal is one place of it; a field of several opens on a click
-        self.assertIn("root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail,servedPin(r(),role));", self.SCRIPT)
-        self.assertIn('if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove,servedPin(r(),d.servedRole));', self.SCRIPT)
+        self.assertIn("root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);", self.SCRIPT)
+        self.assertIn('if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);', self.SCRIPT)
         self.assertIn("if (severalOf(input)) input.addEventListener('click', () => { if(active?.input !== input)void open(input); });", self.PICKER)
 
     def test_the_compile_route_gives_each_fields_model_as_the_run_sends_it(self):
@@ -147,19 +147,6 @@ class TheRows(CompilerCase):
         self.assertEqual(out[1]['chips'], ['together'])
         self.assertEqual((out[2]['chosen'], out[2]['placeholder'], out[2]['chips']), ('', 'any provider', []))
         self.assertEqual(out[3], ['input[data-served-by]', '[data-served-list="model"]'])
-
-    def test_a_definitions_pin_is_the_rows_default_and_the_users_list_replaces_it(self):
-        """With no list of its own a row shows the definition's pin (served_pins); a pick or a removal starts from it,
-        and the last one taken out brings the pin back. A saved list stays."""
-        out = self.js(self.SETUP + 'compiled={out:{served_models:{model:"openai/gpt-4o-2024-08-06"},served_pins:{model:["minimax"]}},key:C.servedKey(r)};'
-                      'const pin=rows.pin(r,"model"),got=[];rows.sync();got.push([seen().chips,r.served_by===undefined]);'
-                      'C.addServed(r,"model","deepinfra",pin);rows.sync();got.push([seen().chips,r.served_by.model]);'
-                      'C.removeServed(r,"model",0,pin);C.removeServed(r,"model",0,pin);rows.sync();got.push([seen().chips,r.served_by===undefined]);'
-                      'C.setServed(r,"model",["parasail"]);rows.sync();got.push(seen().chips);process.stdout.write(JSON.stringify(got));')
-        self.assertEqual(out, [[['minimax'], True], [['minimax', 'deepinfra'], ['minimax', 'deepinfra']], [['minimax'], True], ['parasail']])
-        shared = self.js(self.SETUP + 'const out={served_models:{model:"m",judge:"m"},served_pins:{model:["a"],judge:["a"]}};const got=[C.servedPin("judge",out,r)];'
-                         'C.setServed(r,"model",["g"]);got.push(C.servedPin("judge",out,r),C.servedPin("model",out,r));process.stdout.write(JSON.stringify(got));')
-        self.assertEqual(shared, [['a'], ['g'], ['a']])
 
     def test_the_list_waits_for_the_model_the_run_sends(self):
         """A pin added or taken out keeps the model the server compiled (the run sends `openai/gpt-4o-2024-08-06`, the field

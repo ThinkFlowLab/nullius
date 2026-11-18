@@ -316,13 +316,12 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     ``served_by``: on OpenRouter, the serving providers each model field
     pins, ``{model|simulator|judge: [slug, ...]}``, checked as ``--served-by``
     is and compiled into it for each job that calls that model, by the name
-    the run sends it as. ``served_pins``: by field, the definition's pin
-    (``run.pins_of``), what a field is sent with when no field names its model."""
+    the run sends it as."""
     d = defs or _all()
     errors, notes = [], []
     add = lambda step, message: errors.append({"step": STEP[step], "message": message})
     out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
-           "served_models": {}, "served_pins": {}}
+           "served_models": {}}
     name = str(recipe.get("name") or "")
     if not _NAME.match(name):
         add("limits", "The recipe's name may hold letters, digits, dots, dashes and underscores.")
@@ -620,15 +619,6 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # each field's model as the run sends it, for the builder to ask its providers under that name
     out["served_models"] = {role: next((sent_of(p)[role] for p in sorted(picks, key=lambda q: q["control"]) if sent_of(p)[role]), None)
                             for role in roles}
-    # a field with no Served by of its own takes the definition's pin (run.pins_of), on every job that calls its model
-    paper: Dict[str, List[str]] = {}
-    for p in sorted(picks, key=lambda q: q["control"]):
-        pins = run.pins_of(b, p["o"], provider_, sent_of(p)["judge"])
-        for role, m in sent_of(p).items():
-            if m in pins:
-                paper.setdefault(role, pins[m])
-                by_model.setdefault(m, pins[m])
-    out["served_pins"] = paper
 
     def pinned(p: dict) -> Dict[str, List[str]]:
         """The --served-by of one job: the pins of the models it calls."""
@@ -771,9 +761,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       else f"{providers.label(providers.choice(provider, str(recipe.get('endpoint') or '')))} · " + (model if needs_model else ", ".join(p["o"]["sent"] for p in picks if p.get("setup")) or "the judge only")
                       + (f" · user simulator {sim_model or (b.get('simulator') or {}).get('model')}" + (" (leaderboard)" if lb.get("simulator") else "" if sim_model else " (official)") if b.get("simulator") else "")
                       + (f" · judge {judge_model or b['score']['judge']['model']}" + ("" if judge_model else " (official)") if (b.get("score") or {}).get("judge") else "")
-                      + "".join(f" · {SERVED_LABEL[r_]} served by {', '.join(by_model[m])}" for r_, m in out["served_models"].items() if m in by_model)],
-                     *([[STEP["model"], "Served by", "not as in the paper"]]
-                       if any(by_model.get(out["served_models"][r_]) != s for r_, s in paper.items()) else []),
+                      + "".join(f" · {SERVED_LABEL[r_]} served by {', '.join(s)}" for r_, s in served.items())],
                      [STEP["limits"], "Scope", f"{'first ' + str(n) if isinstance(limit, int) else 'all ' + str(total or '')} {nouns}"
                       + (" of each shard" if of > 1 and isinstance(limit, int) else "") + f" · {conc} at a time".replace("  ", " ")
                       + (" of each dataset" if many and isinstance(limit, int) else "")

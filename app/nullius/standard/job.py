@@ -568,8 +568,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                  retries: int = 0, bench_options: Optional[dict] = None,
                  simulator: str = "", prices: Optional[dict] = None, units_file: Optional[dict] = None,
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
-                 max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None,
-                 pins_replaced: Optional[Dict[str, List[str]]] = None):
+                 max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None):
     """``unsandboxed`` is true for an agent on the local backend only: in a
     container (``backend``, ``image``) it is not. ``standard.options`` holds
     every option's value, the defaults included, so two runs read side by side
@@ -590,8 +589,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     a unit's agent the run forced (``run --timeout``, ``--max-turns``,
     ``--max-calls``), when it forced any.
     ``served_by``: by model, the serving providers the run let answer it
-    (``--served-by``), said only for a run that pinned them. ``pins_replaced``: the definition's pins
-    ``--served-by`` replaced, by model, said only when it did."""
+    (``--served-by``), said only for a run that pinned them."""
     with open(os.path.join(job_dir, "config.json"), "w") as f:
         json.dump({"job_name": job, "runner": "standard", "runner_label": "Nullius",
                    "standard": {"benchmark": bench["key"], **_version(bench), "plugged": other.get("_ref") or other["key"], "kind": other["_kind"], "provider": provider,
@@ -606,8 +604,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"constraints": constraints} if constraints else {}),
                                 **({"timeouts": timeouts} if timeouts else {}), **({"max_turns": max_turns} if max_turns else {}),
                                 **({"max_calls": max_calls} if max_calls else {}),
-                                **({"served_by": dict(sorted(served_by.items()))} if served_by else {}),
-                                **({"pins_replaced": pins_replaced} if pins_replaced else {})},
+                                **({"served_by": dict(sorted(served_by.items()))} if served_by else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,
                    "agents": [{"name": other["key"], "model_name": model}],

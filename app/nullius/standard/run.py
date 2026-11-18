@@ -428,18 +428,6 @@ def resolve_bench_options(bench: dict, dataset: str, given: Optional[dict] = Non
     return vals, needs
 
 
-def pins_of(bench: dict, other: dict, provider: str, judge_model: Optional[str]) -> Dict[str, List[str]]:
-    """{model as sent: [provider slug]}: the original setup's pins and the official judge's, on a provider that pins."""
-    if provider != "openrouter":
-        return {}
-    pins = {m: list(o) for m, o in (other.get("pins") or {}).items()} if other.get("_kind") == "upstream" else {}
-    j = (bench.get("score") or {}).get("judge") or {}
-    only = (j.get("pin") or {}).get(provider)
-    if only and judge_model and judge_model == providers.served_as(j["model"], provider):
-        pins[judge_model] = list(only)
-    return pins
-
-
 class Run:
     call_seconds: float = relay.TIMEOUT
     timeouts: Dict[str, float] = {}           # the run's own time limits by phase (__init__), none by default
@@ -685,14 +673,6 @@ class Run:
             if stray:
                 raise Refused(f"--served-by names {', '.join(stray)}, which this run does not call: it calls "
                               + (", ".join(called) or "no model"))
-        pins = pins_of(bench, other, provider, self.judge_model)
-        self.route_pins = {m: o for m, o in pins.items() if self.serving.get(m, o) == o}
-        self.pins_replaced = {m: o for m, o in pins.items() if m not in self.route_pins}
-        for m, o in self.pins_replaced.items():
-            say(f"--served-by {m}={','.join(self.serving[m])} replaces the benchmark's pin {','.join(o)}: not as in the paper")
-        if self.pins_replaced:
-            self.other = {**other, "comparable": False}
-        self.serving = {**pins, **self.serving}
         self.bench_relay = None
         keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
@@ -906,7 +886,7 @@ class Run:
                          # a shard of a list splits the listed units: they are its whole
                          shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit)
                          if self.shard else None, units_file=self.units_file,
-                         repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving, pins_replaced=self.pins_replaced,
+                         repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving,
                          timeouts=self.timeouts, max_turns=self.forced_turns, max_calls=self.max_calls,
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
         # every unit once, then every unit again: a repeat cut short still has each unit's first run
@@ -1405,7 +1385,7 @@ class Run:
                     ln.stop()
         calls = rl.calls(tag) if rl is not None else []
         words = not self.bench.get("gated")
-        failed = relay.failure(calls, words, agent=True, serving=getattr(self, "route_pins", None))
+        failed = relay.failure(calls, words, agent=True)
         if failed and failed[0] not in (ledgers.ERROR, ledgers.UNIT_ERROR, relay.CALLS_ERROR) and exc is None \
                 and self.bench["score"]["kind"] == "pass" and score.get("reward") == 1.0:
             # a passed unit's failed last call came after its answer (jiuwenswarm's image probe, which some
@@ -1419,8 +1399,6 @@ class Run:
                 and rl is not None and relay.asked(rl.dir) is not None \
                 and [(c.get("status"), c.get("error_code") == "insufficient_quota") for c in relay._begun(calls) if not c.get("side")][-1:] == [(429, False)]:
             failed = None
-        if not failed and rl is not None and getattr(self, "route_pins", None):
-            failed = relay.routes_failure([calls] + [rl.calls(f"{tag}-{side}") for side in ("judge", "simulator")], self.route_pins, words)
         if not failed and rl is not None and exc is not None and (exc[0] == "VerifierError" or not words):
             # the judge's or the simulated user's model failing (a 429, a refused request) is the
             # unit's infrastructure, as the agent's own would be - not a miss counted against it
@@ -1452,7 +1430,7 @@ class Run:
                               setup_end=p0 or time.time(), agent_ready=clock.get("ready"), agent_unready=clock.get("failed"),
                               checking=checking,
                               trajectory=traj, extra_logs=dict(logs or {}, **({"container-changes.txt": changes} if changes else {})),
-                              environment=environment or "", retries=retry, retryable=retry_ok and not relay.route_dead(exc), serving=getattr(self, "serving", None),
+                              environment=environment or "", retries=retry, retryable=retry_ok, serving=getattr(self, "serving", None),
                               # who served the unit: its agent's calls and its judge's and simulated user's routes
                               served_calls=calls + ([c for side in ("judge", "simulator") for c in rl.calls(f"{tag}-{side}")]
                                                     if rl is not None else []),
@@ -1540,7 +1518,7 @@ class Run:
         if getattr(self, "_halt", None) is None:
             return
         with self._said:
-            if exc and (exc[0] in REFUSALS or relay.route_dead(exc)):
+            if exc and exc[0] in REFUSALS:
                 self._refused.append(exc)
                 if len(self._refused) >= REFUSED_IN_A_ROW and self.halted is None:
                     self.halted = exc

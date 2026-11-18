@@ -113,15 +113,8 @@
   // server compiled it for this recipe (`compiled`; none while not known, and never the name shown: the list is not
   // asked under a name the run may not send, and the row waits), its slugs in order, and its placeholder. Without a
   // pin it waits for the list too, then hides only for one entry. A failed or empty list still allows a typed slug.
-  // A field with no Served by of its own is sent with another field's list for the same model, else the definition's pin
-  // (recipe.py, served_pins).
-  function servedPin(role, compiled, r) {
-    const sent = (compiled || {}).served_models || {}, own = r && r.served_by || {};
-    const other = SERVED_ROLES.find(k => k !== role && own[k] && sent[k] && sent[k] === sent[role]);
-    return other ? own[other] : ((compiled || {}).served_pins || {})[role] || [];
-  }
   function servedRow(r, role, shown, compiled, providers) {
-    const chosen = (r.served_by || {})[role] || servedPin(role, compiled, r), model = servedModelOf(role, '', compiled);
+    const chosen = (r.served_by || {})[role] || [], model = servedModelOf(role, '', compiled);
     const visible = !!chosen.length || !!providers && (!providers.ok || providers.models.length !== 1);
     return {shown, model, pending: !model && !!shown, chosen, visible, placeholder: chosen.length ? 'Add a provider' : 'any provider'};
   }
@@ -133,13 +126,13 @@
     return r;
   }
   // A pick, or slugs typed ("a, b"), join the field's list after the ones there, in order, each once; a removal takes
-  // out the one at its place, and the last one gone leaves the field empty: any provider, or the definition's pin.
-  function addServed(r, role, slugs, pin = []) {
-    const list = [...((r.served_by || {})[role] || pin)];
+  // out the one at its place, and the last one gone leaves the field empty: any provider.
+  function addServed(r, role, slugs) {
+    const list = [...((r.served_by || {})[role] || [])];
     for (const s of (Array.isArray(slugs) ? slugs : servedList(slugs)).map(x => String(x).trim())) if (s && !list.includes(s)) list.push(s);
     return setServed(r, role, list);
   }
-  const removeServed = (r, role, at, pin = []) => setServed(r, role, ((r.served_by || {})[role] || pin).filter((_, i) => i !== Number(at)));
+  const removeServed = (r, role, at) => setServed(r, role, ((r.served_by || {})[role] || []).filter((_, i) => i !== Number(at)));
   function createStandard(benchmark = '', other = '') {
     const st = standard(), b = st.benchmarks.find(x => x.key === benchmark) || st.benchmarks[0];
     const r = {version: 1, harness: 'standard', name: 'standard-experiment', title: 'Standard experiment', benchmark: '', datasets: [], others: [],
@@ -852,5 +845,5 @@
         at: String(d.at || ''), saved: typeof d.saved === 'string' ? d.saved : ''};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,servedPin,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });

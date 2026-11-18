@@ -89,15 +89,12 @@ _NOT_RETURNED = _HOP | {"set-cookie", "set-cookie2", "content-length", "date", "
 # its next use, before any of the reply is read: worth one new connection.
 _STALE = (http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError, ConnectionAbortedError)
 ANTHROPIC_VERSION = "2023-06-01"
-ROUTE_REFUSED = (404, 503)
-ROUTE_ERROR = "ApiProviderRouteError"
 CONTEXT_ERROR = "ContextWindowExceededError"
 STOP = "stop"
 OVERFLOW = "context window"
 COMPLETION = re.compile(r"^/(?:chat/completions|completions|messages|responses)$")
 _WHOLE = ((b"\x89PNG\r\n\x1a\n", b"IEND\xaeB`\x82", "image/png"), (b"\xff\xd8\xff", b"\xff\xd9", "image/jpeg"),
           (b"GIF87a", b";", "image/gif"), (b"GIF89a", b";", "image/gif"))
-_PROVIDER = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._()/-]{0,79}")
 _CONTEXT = re.compile(r"context[ _-]?(length|window|limit)|prompt is too long|token count .{0,40}exceeds", re.I)
 
 
@@ -491,23 +488,6 @@ def reply_facts(path: str, body: bytes, streamed: bool) -> dict:
         return _facts(path, body, streamed)
     except Exception:
         return {}
-
-
-def _plain(name) -> str:
-    """A provider's name or slug, compared: lower case, letters and digits."""
-    return re.sub(r"[^a-z0-9]", "", str(name).split("/")[0].lower())
-
-
-def held(provider: str, only: List[str]) -> Optional[bool]:
-    """True when the provider that answered is one of ``only``, False when it shares nothing with them, None when
-    it cannot be told: a name is not always its slug."""
-    name = _plain(provider)
-    slugs = {_plain(p) for p in only}
-    if not name or name in slugs:
-        return True if name else None
-    if any(s.startswith(name) or name.startswith(s) for s in slugs if s):
-        return None
-    return False
 
 
 def _request_tail(req: dict) -> dict:
@@ -1132,7 +1112,7 @@ def asked(record_dir: str) -> Optional[str]:
 CALLS_ERROR = "UnitCallCapError"
 
 
-def failure(calls: List[dict], words: bool = True, agent: bool = False, serving: Optional[Dict[str, List[str]]] = None) -> Optional[tuple]:
+def failure(calls: List[dict], words: bool = True, agent: bool = False) -> Optional[tuple]:
     """When a unit's model calls ended failing, the exception a trial carries
     for it - named so ``nullius.runs.classify`` sorts it as the
     infrastructure it was - and the endpoint's words. None when the last call
@@ -1140,8 +1120,7 @@ def failure(calls: List[dict], words: bool = True, agent: bool = False, serving:
     ``words`` False: the status alone, never the provider's text, which can quote
     a gated task. ``agent``: the agent's last call over the model's context
     window is ``ContextWindowExceededError``, its own, whatever side call followed, and a side call's 200 does not
-    recover the agent's own. A pinned call (``serving``) no endpoint took is
-    ``ApiProviderRouteError``. Calls are taken in the order they began. A call
+    recover the agent's own. Calls are taken in the order they began. A call
     the run's spending cap refused is the unit's wherever it falls: once one
     is refused, every later one is."""
     cut = next((c for c in calls if c.get("refused") == "cap"), None)
@@ -1167,8 +1146,6 @@ def failure(calls: List[dict], words: bool = True, agent: bool = False, serving:
     last = calls[-1]
     s = last.get("status")
     said = (last.get("error") or "") if words else f"the endpoint answered {s} (provider text not kept: gated benchmark)"
-    if (serving or {}).get(last.get("model")) and s in ROUTE_REFUSED:
-        return ROUTE_ERROR, _refusal(last, said, serving)
     if s == 429:
         # OpenAI's spent credit comes as a 429 too: a usage limit, no pace mends it
         return ("ApiUsageLimitError" if last.get("error_code") == "insufficient_quota" else "RateLimitError"), said
@@ -1191,39 +1168,6 @@ def _begun(calls: List[dict]) -> List[dict]:
 def overflowed(call: dict) -> bool:
     """A 400 for a request longer than the model's context window, by the provider's words."""
     return call.get("status") == 400 and bool(_CONTEXT.search(call.get("error") or ""))
-
-
-def _refusal(call: dict, said: str, serving: Dict[str, List[str]]) -> str:
-    """A pinned route's refusal: its status first (route_dead reads it), the model, its pin, then ``said``."""
-    text = f"{call.get('status')}: no endpoint of {call.get('model')} pinned to {', '.join(serving[call.get('model')])} took the call"
-    return f"{text}: {said}" if said else text
-
-
-def routes_failure(routes: List[List[dict]], serving: Dict[str, List[str]], words: bool = True) -> Optional[tuple]:
-    """:func:`route_failure` of each route's calls on its own, the first found."""
-    return next(filter(None, (route_failure(calls, serving, words) for calls in routes)), None)
-
-
-def route_dead(exc: Optional[tuple]) -> bool:
-    """A pinned route with no endpoint at all (404): every later unit would fail the same way."""
-    return bool(exc) and exc[0] == ROUTE_ERROR and str(exc[1]).startswith("404: ")
-
-
-def route_failure(calls: List[dict], serving: Dict[str, List[str]], words: bool = True) -> Optional[tuple]:
-    """A pinned route (``serving``) that failed a unit, among one route's ``calls``: a model whose last call was
-    refused, or a call its reply says another provider served, by a name that reads as one."""
-    last = {}
-    for c in _begun(calls):
-        last[c.get("model")] = c
-        by = (c.get("reply") or {}).get("served_by")
-        if serving.get(c.get("model")) and isinstance(by, str) and _PROVIDER.fullmatch(by) and held(by, serving[c.get("model")]) is False:
-            return ROUTE_ERROR, f"{c.get('status')}: {c.get('model')} pinned to {', '.join(serving[c.get('model')])} was served by {by}"
-    for c in last.values():
-        if serving.get(c.get("model")) and c.get("status") in ROUTE_REFUSED:
-            said = (c.get("error") or "") if words else \
-                f"the endpoint answered {c.get('status')} (provider text not kept: gated benchmark)"
-            return ROUTE_ERROR, _refusal(c, said, serving)
-    return None
 
 
 # -- the relay as a process of its own: a container backend's sidecar ----------

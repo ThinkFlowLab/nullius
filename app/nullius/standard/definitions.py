@@ -81,7 +81,7 @@ import os
 import re
 from typing import Callable, Dict, List, Optional, Tuple
 
-from nullius.standard import ports, relay
+from nullius.standard import ports
 from nullius import paths
 from nullius.catalogue import storage
 from . import names
@@ -1100,13 +1100,12 @@ def _leaderboard(d: dict) -> List[str]:
 
 def _setups(s) -> List[str]:
     """``setups``: {original: {summary, models, default, served_as?, providers,
-    side_models?, pin?, units?, turn_seconds?, paper?, comparable?}, model?: {summary, runs_as}}. ``original``'s
+    side_models?, units?, turn_seconds?, paper?, comparable?}, model?: {summary, runs_as}}. ``original``'s
     ``models`` are the paper's, by the names the upstream's code knows them;
     ``side_models`` the ones its code asks besides the answerer (an extraction,
     a summary), sent as asked through served_as and the provider's prefix;
     ``providers`` the ones that serve them, each with the prefix its names
-    carry there; ``pin`` {openrouter: {model: [provider slug]}}, the only
-    providers of each unless --served-by gives others; ``model`` needs ``original`` (its pipeline) and asks as one
+    carry there; ``model`` needs ``original`` (its pipeline) and asks as one
     of its models (``runs_as``)."""
     if s is None:
         return []
@@ -1125,7 +1124,7 @@ def _setups(s) -> List[str]:
             bad.append(f"{w}.summary: what runs, in a sentence")
         allowed = {"summary"}
         if k == "original":
-            allowed |= {"models", "default", "served_as", "providers", "side_models", "pin", "units", "turn_seconds", "paper", "comparable", "reference_agent"}
+            allowed |= {"models", "default", "served_as", "providers", "side_models", "units", "turn_seconds", "paper", "comparable", "reference_agent"}
             if "reference_agent" in x and (not isinstance(x["reference_agent"], str) or not x["reference_agent"].strip()):
                 bad.append(f"{w}.reference_agent: the upstream agent's display name")
             models = x.get("models")
@@ -1149,8 +1148,6 @@ def _setups(s) -> List[str]:
             pv = x.get("providers")
             if not isinstance(pv, dict) or not pv or not all(p in ("openrouter", "openai", "custom") and isinstance(v, str) for p, v in pv.items()):
                 bad.append(f"{w}.providers: {{openrouter|openai|custom: the prefix its models' names carry there}}")
-            if "pin" in x:
-                bad += _pin(x["pin"], f"{w}.pin", pv if isinstance(pv, dict) else {}, set(models + side))
             u = x.get("units")
             if u is not None and (not isinstance(u, dict) or not all(isinstance(u.get(f), str) and u[f] for f in ("noun", "nouns"))):
                 bad.append(f"{w}.units: {{noun, nouns}}, what one of its units is")
@@ -1176,25 +1173,6 @@ def _setups(s) -> List[str]:
         extra = [f for f in x if f not in allowed]
         if extra:
             bad.append(f"{w}: {', '.join(extra)} is not a field of the {k} setup")
-    return bad
-
-
-def _pin(pin, w: str, providers: dict, models: Optional[set] = None) -> List[str]:
-    """``pin``: {provider: {model: [slug]}} for a setup (``models`` given), {provider: [slug]} for a judge."""
-    if not isinstance(pin, dict) or not pin:
-        return [f"{w}: {{openrouter: ...}}, the providers that alone serve it"]
-    bad = []
-    for p, v in pin.items():
-        if p != "openrouter" or (providers and p not in providers):
-            bad.append(f"{w}: a pin is OpenRouter's provider routing, on a provider the benchmark runs on ({p!r})")
-            continue
-        pins = v if models is not None else {"_": v}
-        if not isinstance(pins, dict) or not pins:
-            bad.append(f"{w}.{p}: {{model: [provider slug, ...]}}")
-            continue
-        if models is not None and not all(m in models for m in pins):
-            bad.append(f"{w}.{p}: pins only its models and side_models")
-        bad += [f"{w}.{p}: " + b.removeprefix("_: ") for b in relay.serving_problems(pins)]
     return bad
 
 
@@ -1263,7 +1241,7 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple
         return None, f"{bench['label']} has no {which} setup"
     orig, x = s["original"], s[which]
     model = (model or "").strip()
-    side, pins = [], {}
+    side = []
     if which == "original" and "models" not in orig:      # any model, sent as the provider lists it
         if not model:
             return None, f"the original {bench['label']} needs a model: its leaderboard ranks models"
@@ -1284,14 +1262,12 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple
         sent = served(model)
         # the other models its code asks, each sent as the provider serves it; one the answerer is served as is its own
         side = [f"{m}={served(m)}" for m in orig.get("side_models") or [] if served(m) != sent]
-        pins = {served(m): list(only) for m, only in ((orig.get("pin") or {}).get(provider) or {}).items()
-                if m == model or m in (orig.get("side_models") or [])}
     else:
         if not model:
             return None, f"the model setup needs a model: the one to put in {orig['default']}'s place"
         asked, sent = x["runs_as"], model
     units = orig.get("units") or bench.get("units") or {"noun": "unit", "nouns": "units"}
-    return {"model": {"side_models": side}, **({"pins": pins} if pins else {}), "key": which, "label": f"{bench['label']} {setup_label(bench, which).lower()}",
+    return {"model": {"side_models": side}, "key": which, "label": f"{bench['label']} {setup_label(bench, which).lower()}",
             "summary": x["summary"], "asked": asked, "sent": sent, "units": units, "comparable": which == "original" and comparable(x, model),
             "turn_seconds": orig.get("turn_seconds"), "upstream": {}, "_kind": "upstream", "_ref": which,
             "_here": bench.get("_here", "")}, ""
@@ -1395,8 +1371,6 @@ def problems(d: dict, kind: str) -> List[str]:
         j = s.get("judge")
         if j is not None and (not isinstance(j, dict) or not _MODEL_NAME.match(str(j.get("model", ""))) or not j.get("says")):
             bad.append("score.judge: {model: the official judge, as the provider names it; says: what it is asked}")
-        elif j is not None and "pin" in j:
-            bad += _pin(j["pin"], "score.judge.pin", {})
         sim = d.get("simulator")
         if sim is not None:
             if not isinstance(sim, dict) or not _MODEL_NAME.match(str(sim.get("model", ""))) or not sim.get("says"):

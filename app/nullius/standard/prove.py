@@ -338,8 +338,6 @@ def job_problems(bench: dict, ds: dict, which: str, job_dir: str, ids: List[str]
         bad.append("merged despite differences: " + "; ".join(std["merged_despite"]))
     if (std.get("repeat") or 1) > 1:
         bad.append(f"each unit ran {std['repeat']} times")
-    if std.get("pins_replaced"):
-        bad.append(f"--served-by replaced the benchmark's pin of {', '.join(std['pins_replaced'])}")
     ran: Dict[str, int] = {}
     shard_jobs = {m.get("job") for m in std.get("merged_from") or []}
     alien: Dict[str, List[str]] = {}
