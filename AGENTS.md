@@ -77,7 +77,8 @@ and its resources. The source layout stays under `app/`.
   by `git ls-remote`), `secrets` (a benchmark's licences, kept per benchmark outside the repository, and the Hugging Face token of Data providers), `sandbox` (Docker's state, and the Docker Hub login Data providers uses) and `redact` at the top.
 - `app/templates/`, `app/static/` — the interface, grouped by the same capability
   names (`runs/`, `traces/`, `builder/`, …; `base.html`, `style.css` and the fonts at the top), including the command
-  builder's JavaScript, which owns the generated recipes.
+  builder's JavaScript, which owns the generated recipes. `app/templates/_tables.html` and
+  `app/static/tables.js` are the table toolkit: one column list builds a table's headers, cells and controls.
 - `app/tests/`, `app/ui_tests/` — the backend suite and the route suite.
   Beside the backend tests sit scripts run by hand:
   `app/tests/field_contract.py`, which refreshes the `field_contract.json` the

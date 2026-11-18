@@ -1,5 +1,6 @@
-/* A table.grid's sortable headers and per-column value filters, shared by the
-   tables that have them. */
+/* The table toolkit's script: each function is a feature a table.grid opts
+   into (the macros of templates/_tables.html; their styles in style.css,
+   "the table toolkit"). */
 window.NulliusTable = {
   /* A header with data-type sorts its column on a click or Enter; num sorts
      descending first. A cell's data-sort wins over its text. A header that
@@ -49,23 +50,20 @@ window.NulliusTable = {
     return resort;
   },
 
-  /* The value lists (data-filter-menu) under `scope`: the filter_button
-     macro's, each opened by its caret, or the tools macro's. `allowed`:
-     column -> the Set of values ticked, or null when all are. A row passes
-     when, for each column, one of its values (data-f-<col>, one per line) is
-     ticked; a box unticked at load filters from the start. `changed` runs
-     after each change. */
+  /* The value lists (data-filter-menu) under `scope`, the controls macro's
+     Filter menu. `allowed`: column -> the Set of values ticked, or null when
+     all are. A row passes when, for each column, one of its values
+     (data-f-<col>, one per line) is ticked; a box unticked at load filters
+     from the start. `changed` runs after each change, a list's change event
+     included. */
   filters(scope, changed) {
     const allowed = {};
     scope.querySelectorAll('[data-filter-menu]').forEach(menu => {
       const col = menu.dataset.filterMenu;
       const boxes = () => [...menu.querySelectorAll('input[data-value]')];
-      const btn = scope.querySelector(`.filter-btn[data-filter="${col}"]`);
       const read = () => {
         const on = boxes().filter(b => b.checked).map(b => b.dataset.value);
-        // All checked means "no filter": keeps the active marker honest.
-        allowed[col] = on.length === boxes().length ? null : new Set(on);
-        btn?.classList.toggle('on', Boolean(allowed[col]));
+        allowed[col] = on.length === boxes().length ? null : new Set(on);   // all ticked: no filter
       };
       const sync = () => { read(); changed(); };
       read();
@@ -73,19 +71,6 @@ window.NulliusTable = {
       menu.addEventListener('click', e => {
         if (e.target.closest('[data-all]')) { boxes().forEach(b => b.checked = true); sync(); }
         if (e.target.closest('[data-none]')) { boxes().forEach(b => b.checked = false); sync(); }
-      });
-      if (!btn) return;
-      btn.addEventListener('click', e => {
-        e.stopPropagation();          // the th itself sorts; don't sort on filter
-        const open = menu.hidden;
-        scope.querySelectorAll('.filter-menu').forEach(m => m.hidden = true);
-        menu.hidden = !open;
-        btn.setAttribute('aria-expanded', String(open));
-      });
-      menu.addEventListener('click', e => e.stopPropagation());
-      document.addEventListener('click', () => {
-        menu.hidden = true;
-        btn.setAttribute('aria-expanded', 'false');
       });
     });
     const passes = row => Object.entries(allowed).every(([col, set]) =>
@@ -95,48 +80,35 @@ window.NulliusTable = {
         menu.querySelectorAll('input[data-value]').forEach(b => b.checked = true);
         allowed[menu.dataset.filterMenu] = null;
       });
-      scope.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('on'));
     };
     return {allowed, passes, clear};
   },
 
-  /* A Columns menu: `btn` opens `menu` (none: the caller opens it), whose
-     checkboxes (data-col) show or hide the table's cells of that data-col,
-     remembered per viewer under `key`; a disabled one stays on. `hidden`: the
-     columns off until the viewer chooses. Returns show(), to apply the choice
-     to rows put in since. */
-  columns(table, btn, menu, key, hidden = []) {
+  /* A Columns menu (opened by `menu`): its checkboxes (data-col) show or
+     hide the table's cells of that data-col, remembered per viewer under
+     `key`; a disabled one stays on, a data-off one is off until the viewer
+     chooses. Returns show(), to apply the choice to rows put in since. */
+  columns(table, menu, key) {
     const boxes = [...menu.querySelectorAll('input[data-col]')];
     let stored = null;
     try { stored = JSON.parse(localStorage.getItem(key) || 'null'); } catch {}
     const show = () => boxes.forEach(cb =>
       table.querySelectorAll(`[data-col="${cb.dataset.col}"]`).forEach(el => { el.style.display = cb.checked ? '' : 'none'; }));
     boxes.forEach(cb => {
-      cb.checked = cb.disabled || (stored ? stored.includes(cb.dataset.col) : !hidden.includes(cb.dataset.col));
+      cb.checked = cb.disabled || (stored ? stored.includes(cb.dataset.col) : !cb.hasAttribute('data-off'));
       cb.addEventListener('change', () => {
         show();
         try { localStorage.setItem(key, JSON.stringify(boxes.filter(b => b.checked).map(b => b.dataset.col))); } catch {}
       });
     });
     show();
-    if (!btn) return show;
-    btn.addEventListener('click', () => {
-      const open = menu.hidden;
-      menu.hidden = !open;
-      btn.setAttribute('aria-expanded', String(open));
-    });
-    document.addEventListener('click', e => {
-      if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) {
-        menu.hidden = true;
-        btn.setAttribute('aria-expanded', 'false');
-      }
-    });
     return show;
   },
 
   /* A toolbar's popover: `btn` opens `menu` and puts the focus in it; a click
      elsewhere or Tab out of it closes it, and Escape too, giving the focus
-     back to `btn`. */
+     back to `btn`. A click on a label's text moves the focus to a focusable
+     ancestor (the page's <main>): that is not leaving. */
   menu(btn, menu) {
     const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
     btn.addEventListener('click', () => {
@@ -147,19 +119,29 @@ window.NulliusTable = {
     });
     document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) close(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { close(); btn.focus(); } });
-    const left = e => { if (e.relatedTarget && !menu.contains(e.relatedTarget) && !btn.contains(e.relatedTarget)) close(); };
+    const left = e => { const to = e.relatedTarget; if (to && !menu.contains(to) && !btn.contains(to) && !to.contains(menu)) close(); };
     menu.addEventListener('focusout', left);
     btn.addEventListener('focusout', left);
   },
 
-  /* A table's Filter and Sort by menus (the tools macro), under `tools`, in
-     place of header carets. Filter counts the columns it narrows; Sort by
-     sets the sort, and follows a header click. `changed` runs after either.
-     A toolbar without Filter (the macro given no filters) only sorts.
-     Returns {passes, resort}, as filters and sortable do. */
+  /* A table's search box, Filter and Sort by menus (the controls macro),
+     under `tools`; each optional. Search keeps the rows whose data-search
+     holds every word of the query, in any order and case; Escape clears it. Filter counts the columns it
+     narrows; Sort by sets the sort, and follows a header click. `changed`
+     runs after any of them. Returns {passes, resort}, as filters and sortable
+     do. */
   toolbar(table, tools, changed) {
     const [fbtn, fmenu, sbtn, smenu] = ['filter', 'sort'].flatMap(k =>
       [tools.querySelector(`[data-tools-btn="${k}"]`), tools.querySelector(`[data-tools="${k}"]`)]);
+    const q = tools.querySelector('[data-search]');
+    if (q) {
+      q.addEventListener('input', changed);
+      q.addEventListener('keydown', e => { if (e.key === 'Escape' && q.value) { e.preventDefault(); q.value = ''; changed(); } });
+    }
+    const found = row => {
+      const text = (row.dataset.search ?? '').toLowerCase();
+      return !q || q.value.toLowerCase().split(/\s+/).every(w => text.includes(w));
+    };
     const count = fbtn?.querySelector('.tools-count');
     const mark = () => {
       const n = Object.values(f.allowed).filter(Boolean).length;
@@ -175,30 +157,98 @@ window.NulliusTable = {
     }
     const heads = [...table.tHead.rows[0].cells];
     const sync = () => {
+      if (!smenu) return;
       const {col, dir} = resort.state(), on = col === null ? '' : heads[col].dataset.col;
       smenu.querySelectorAll('[data-sort-col]').forEach(r => { r.checked = r.value === on; });
       smenu.querySelectorAll('[data-sort-dir]').forEach(r => { r.checked = Boolean(on) && r.value === (dir > 0 ? 'asc' : 'desc'); r.disabled = !on; });
     };
     const resort = this.sortable(table, () => { sync(); changed(); });
-    smenu.addEventListener('change', e => {
-      const idx = heads.findIndex(h => h.dataset.col === smenu.querySelector('[data-sort-col]:checked').value);
-      if (idx < 0) return resort.set(null);
-      const dir = e.target.matches('[data-sort-dir]') ? (e.target.value === 'asc' ? 1 : -1) : (heads[idx].dataset.type === 'num' ? -1 : 1);
-      resort.set(idx, dir);
+    if (smenu) {
+      smenu.addEventListener('change', e => {
+        const idx = heads.findIndex(h => h.dataset.col === smenu.querySelector('[data-sort-col]:checked').value);
+        if (idx < 0) return resort.set(null);
+        const dir = e.target.matches('[data-sort-dir]') ? (e.target.value === 'asc' ? 1 : -1) : (heads[idx].dataset.type === 'num' ? -1 : 1);
+        resort.set(idx, dir);
+      });
+      sync();
+      this.menu(sbtn, smenu);
+    }
+    return {passes: row => f.passes(row) && found(row), resort};
+  },
+
+  /* A table of the table macro (data-table): its controls row (id
+     <table id>-tools), its Columns menu and checkbox column when it has
+     them, and its pages; choices kept per viewer under <table id>.cols and
+     .per. */
+  wire(table) {
+    const tools = document.getElementById(table.id + '-tools');
+    const cmenu = tools.querySelector('[data-tools="columns"]');
+    if (cmenu) {
+      this.columns(table, cmenu, table.id + '.cols');
+      this.menu(tools.querySelector('[data-tools-btn="columns"]'), cmenu);
+    }
+    const ticks = table.querySelector('[data-check-all]') ? this.checks(table) : () => {};
+    let first = () => {};
+    const t = this.toolbar(table, tools, () => first());
+    first = this.pager(table, table.id + '.per', t.passes, ticks);
+  },
+
+  /* A checkbox column (a `check` column, check_cell in each row): the header
+     ticks or unticks every visible row, and shows all, none or some of them
+     ticked. Returns sync(), to run when rows show or hide. */
+  checks(table) {
+    const all = table.querySelector('[data-check-all]');
+    const shown = () => [...table.tBodies[0].rows].filter(r => !r.hidden).map(r => r.querySelector('[data-check]')).filter(Boolean);
+    const sync = () => {
+      const boxes = shown(), n = boxes.filter(b => b.checked).length;
+      all.checked = boxes.length > 0 && n === boxes.length;
+      all.indeterminate = n > 0 && n < boxes.length;
+    };
+    table.addEventListener('change', e => {
+      if (e.target === all) shown().forEach(b => { b.checked = all.checked; });
+      else if (!e.target.matches('[data-check]')) return;
+      sync();
     });
     sync();
-    this.menu(sbtn, smenu);
-    return {passes: f.passes, resort};
+    return sync;
+  },
+
+  /* Sticky columns, those whose header is a .sticky-col: each cell under it
+     pinned at the summed widths of the sticky columns before it, again as
+     they resize, hide or rows come in. A row without a cell under each
+     header (a colspan, an empty row) is left as it is. */
+  sticky(table) {
+    const heads = [...table.tHead.rows[0].cells], pinned = heads.filter(th => th.classList.contains('sticky-col'));
+    const place = () => {
+      let left = 0;
+      pinned.forEach(th => {
+        for (const row of table.rows) {
+          if (row.cells.length !== heads.length) continue;
+          const cell = row.cells[th.cellIndex];
+          cell.classList.add('sticky-col');
+          cell.classList.toggle('sticky-edge', th.classList.contains('sticky-edge'));
+          cell.style.setProperty('--sticky-left', left + 'px');
+        }
+        left += th.getBoundingClientRect().width;
+      });
+    };
+    const resized = new ResizeObserver(place);
+    pinned.forEach(th => resized.observe(th));
+    new MutationObserver(place).observe(table, {childList: true, subtree: true});
+    place();
   },
 
   /* A table's pages (the pager macro named after its id): the rows `passes`
      lets through, a page of them at a time, the page's size remembered per
-     viewer under `key`; `empty` shows when none passes. Returns first(), to
-     run after a filter or a sort: it shows the first page. */
-  pager(table, key, passes = () => true, empty = null) {
-    const bar = document.querySelector(`[data-pager="${CSS.escape(table.id)}"]`);
-    const [per, note, prev, next] = ['[data-per]', '[data-note]', '[data-prev]', '[data-next]'].map(s => bar.querySelector(s));
-    let page = 0;
+     viewer under `key`; its empty note shows when none passes. After a
+     change, not at load, a screen reader hears what shows once the changes
+     pause, counted in the live region's data-noun. `drawn` runs after each
+     page. Returns first(), to run after a filter or a sort: it
+     shows the first page. */
+  pager(table, key, passes = () => true, drawn = () => {}) {
+    const bar = document.querySelector(`[data-pager="${CSS.escape(table.id)}"]`), empty = document.querySelector(`[data-empty="${CSS.escape(table.id)}"]`);
+    const [per, note, prev, next, live] = ['[data-per]', '[data-note]', '[data-prev]', '[data-next]', '[data-live]'].map(s => bar.querySelector(s));
+    let page = 0, said, loaded = false;
     try { const n = localStorage.getItem(key); if (n !== null && [...per.options].some(o => o.value === n)) per.value = n; } catch {}
     const draw = () => {
       const rows = [...table.tBodies[0].rows], hit = rows.filter(passes), n = +per.value || hit.length || 1;
@@ -208,7 +258,10 @@ window.NulliusTable = {
       note.textContent = hit.length ? `${page * n + 1}–${Math.min(hit.length, page * n + n)} of ${hit.length}` : '';
       prev.disabled = page === 0;
       next.disabled = (page + 1) * n >= hit.length;
-      if (empty) empty.hidden = hit.length > 0;
+      empty.hidden = hit.length > 0;
+      clearTimeout(said);
+      if (loaded) said = setTimeout(() => { live.textContent = hit.length ? `${note.textContent} ${live.dataset.noun}` : empty.textContent; }, 300);
+      drawn();
     };
     const first = () => { page = 0; draw(); };
     per.addEventListener('change', () => {
@@ -218,6 +271,15 @@ window.NulliusTable = {
     prev.addEventListener('click', () => { page--; draw(); });
     next.addEventListener('click', () => { page++; draw(); });
     draw();
+    loaded = true;
     return first;
   },
 };
+
+/* Every table with sticky columns, and every table of the table macro, set up once the page is read. */
+const nulliusTables = () => document.querySelectorAll('table.grid').forEach(t => {
+  if (t.querySelector('.sticky-col')) NulliusTable.sticky(t);
+  if (t.hasAttribute('data-table')) NulliusTable.wire(t);
+});
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', nulliusTables);
+else nulliusTables();

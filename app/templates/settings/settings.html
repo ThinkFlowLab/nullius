@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_tables.html' import blank %}
 {% block title %}Settings — Nullius{% endblock %}
 {% block crumb %}/ settings{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='settings/settings.css') }}">{% endblock %}
@@ -301,7 +302,7 @@
     {% macro never(icon, why) %}<button type="button" class="host-act" disabled aria-label="{{ why }}" title="{{ why }}"><svg class="ic" aria-hidden="true"><use href="#i-{{ icon }}"/></svg></button>{% endmacro %}
     <article class="st-field st-hosts st-constraints" id="HOSTS" data-source="{{ hosts_row.source }}" data-secret="no" data-test="{{ url_for('settings_host_test') }}"{% if ro %} data-readonly{% endif %}>
       <table class="host-table">
-        <thead><tr><th scope="col"><span class="sr">Status</span></th><th scope="col">Host</th><th scope="col" class="host-engine">Engine</th><th scope="col" class="host-capacity">Capacity</th><th scope="col"><span class="sr">Actions</span></th></tr></thead>
+        <thead><tr>{{ blank('Status') }}<th scope="col">Host</th><th scope="col" class="host-engine">Engine</th><th scope="col" class="host-capacity">Capacity</th>{{ blank('Actions') }}</tr></thead>
       {% for m in machines %}{% set mi = loop.index %}{% set t = (m.found or {}).get('test') or {} %}
       {#- a machine: its row, then a row per panel, one open at a time (hosts.js) -#}
       <tbody class="host-row" data-machine="{{ m.entry }}"{% if m.host %} data-entry="{{ m.entry }}"{% endif %}>

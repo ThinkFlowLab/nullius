@@ -1,5 +1,5 @@
 {% from 'runs/_runtime.html' import what_ran %}
-{% from '_tables.html' import filter_button %}
+{% from '_tables.html' import heads, check_cell, controls %}
 {% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
 {% extends "base.html" %}
 {% block title %}Runs — Nullius{% endblock %}
@@ -161,61 +161,20 @@
   {{ dialogs() }}
 </div>
 
+{#- All runs' own buttons in its controls row: the density, and Compare, greyed until two runs are ticked. #}
+{% macro density() %}<button class="btn ghost sm" id="density-btn" aria-pressed="false" title="Fit more columns on screen">⇔ Compact</button>{% endmacro %}
+{% macro compare_button() %}<form action="{{ url_for('compare') }}" method="get" id="compare-form" class="compare-bar">
+    <span class="table-note" id="pick-note"></span>
+    <button class="btn sm" type="submit" id="compare-btn" aria-disabled="true" aria-describedby="compare-why" title="Tick two or more runs to compare">Compare</button><span class="sr" id="compare-why">Tick two or more runs to compare</span>
+  </form>{% endmacro %}
 <div id="view-all"{% if view != 'all' %} hidden{% endif %}>
-<div class="table-tools">
-  <div class="menu-wrap">
-    <button class="btn ghost sm" id="col-btn" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-table"/></svg>Columns</button>
-  </div>
-  <div class="menu-wrap">
-    <button class="btn ghost sm" id="density-btn" aria-pressed="false" title="Fit more columns on screen">⇔ Compact</button>
-    <div class="menu" id="col-menu" hidden>
-      {% for col, label in COLUMNS %}
-      <label><input type="checkbox" data-col="{{ col }}"> {{ label }}</label>
-      {% endfor %}
-    </div>
-  </div>
-  <span class="table-note" id="filter-note"></span>
-  <span class="header-spacer"></span>
-  <form action="{{ url_for('compare') }}" method="get" id="compare-form" class="compare-bar">
-    <span class="table-note" id="pick-note">Tick two or more runs to compare</span>
-    <button class="btn sm" type="submit" id="compare-btn" disabled>Compare</button>
-  </form>
-</div>
+{{ controls('runs', COLUMNS, search='Search by run, agent, model, benchmark or dataset', columns=true, choices=choices, views=density, actions=compare_button) }}
 
 <div class="table-wrap">
 <table class="grid sortable" id="runs">
   <thead>
     <tr>
-      <th class="pick-col">
-        <input type="checkbox" id="pick-all" aria-label="Select all runs for comparison"
-               title="Select / unselect all">
-      </th>
-      <th data-col="run" data-type="text">Run</th>
-      <th data-col="agent" data-type="text">Agent{{ filter_button('agent', choices.agent) }}</th>
-      <th data-col="version" data-type="text" title="The agent's version as the run recorded it, or the runner and its commit">Version</th>
-      <th data-col="start" data-type="num">Start</th>
-      <th data-col="end" data-type="num">End</th>
-      <th data-col="time" data-type="num" class="num">Time</th>
-      <th data-col="model" data-type="text">
-        Model{{ filter_button('model', choices.model) }}
-      </th>
-      <th data-col="dataset" data-type="text">
-        Dataset{{ filter_button('dataset', choices.dataset) }}
-      </th>
-      <th data-col="mix" data-type="num">Mix</th>
-      <th data-col="trials" data-type="num" class="num">Trials</th>
-      <th data-col="solved" data-type="num" class="num">Solved</th>
-      <th data-col="raw" data-type="num" class="num" title="Solved ÷ all trials">Raw</th>
-      <th data-col="adjusted" data-type="num" class="num"
-          title="Solved ÷ trials that actually ran (excludes infra failures)">Adjusted</th>
-      <th data-col="infra" data-type="num" class="num"
-          title="Trials that never got a fair attempt — rate limits and setup failures. Excluded from Adjusted.">Infra errors</th>
-      <th data-col="broke" data-type="num" class="num"
-          title="Trials whose patch broke previously-passing tests">Broke tests</th>
-      <th data-col="tokens" data-type="num" class="num"
-          title="Input + output tokens across the run">Tokens</th>
-      <th data-col="cost" data-type="num" class="num"
-          title="Only recorded by agents that report it">Cost</th>
+      {{ heads([dict(key='pick', label='Select all runs for comparison', check=true, sticky=true)] + COLUMNS) }}
     </tr>
   </thead>
   <tbody>
@@ -223,11 +182,10 @@
     {# A control row carries no outcomes to filter by: the chips count the
        agents' trials, and a nop's rejections are not failed verifications. #}
     {% set v = verdicts[j.job_id] %}
-    <tr data-outcomes="{% if not v %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"
+    <tr data-search="{{ [j.job_id, j.agent_label, j.model_name, j.runner, j.dataset, j.dataset|dsname]|select|unique|join(' ') }}" data-outcomes="{% if not v %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"
         data-f-dataset="{{ j.dataset }}" data-f-model="{{ j.model_name }}"
         data-f-agent="{{ j.agent_label }}"{% if v %} class="control-row" data-control="{{ v.control }}" data-state="{{ v.state }}"{% endif %}>
-      <td class="pick-col"><input type="checkbox" class="pick-run" value="{{ j.job_id }}"
-             aria-label="Compare {{ j.job_id }}"></td>
+      {{ check_cell('Compare ' ~ j.job_id, j.job_id) }}
       <td data-col="run"><a href="{{ url_for('job', job_id=j.job_id) }}">{{ j.job_id }}</a>
         {%- if j.is_preparing %} <span class="badge"
           title="Launched: Harbor has written this run's configuration and nothing else yet. No trial has started; the row will change on its own.">preparing</span>
@@ -241,7 +199,7 @@
       <td data-col="version">{% if j.runner %}{{ what_ran(j) }}{% elif j.agent_version %}<span class="mono small">{{ j.agent_version }}</span>{% else %}<span class="faint">—</span>{% endif %}</td>
       <td data-col="start" data-sort="{{ j.started_at|ts }}" class="faint nowrap">{{ j.started_at|dt }}</td>
       <td data-col="end" data-sort="{{ j.finished_at|ts }}" class="faint nowrap">{{ j.finished_at|dt }}</td>
-      <td data-col="time" data-sort="{{ j.duration_min or -1 }}" class="num faint">
+      <td data-col="time" data-sort="{{ j.duration_min or -1 }}" class="align-right faint">
         {%- if j.duration_min %}{{ j.duration_min|runtime }}{% else %}—{% endif -%}
       </td>
       <td data-col="model" class="mono faint">{{ j.model_name }}</td>
@@ -265,7 +223,7 @@
       {% endif %}
       {# present/planned exposes a partial run; the tooltip carries Harbor's
          retry and error counters, which have nowhere else to live. #}
-      <td data-col="trials" data-sort="{{ j.trials|length }}" class="num"
+      <td data-col="trials" data-sort="{{ j.trials|length }}" class="align-right"
           title="{{ j.trials|length }} on disk{% if j.n_planned %} of {{ j.n_planned }} planned{% endif %}{% if j.n_retries %} · {{ j.n_retries }} retried{% endif %}{% if j.n_errored_trials %} · {{ j.n_errored_trials }} errored{% endif %}">
         {{- j.trials|length }}{% if j.n_planned and j.n_planned != j.trials|length %}<small class="faint">/{{ j.n_planned }}</small>{% endif -%}
       </td>
@@ -275,41 +233,41 @@
          All three sort at -2 — below the agents and below a run nothing
          scored (-1) — so the columns keep the controls apart. #}
       {% set ctl_title = v.control ~ " is a Harbor control: it must be " ~ v.expected ~ " on every task — " ~ v.label ~ ". Not a score." %}
-      <td data-col="solved" data-sort="-2" class="control-verdict {{ v.state }}" title="{{ ctl_title }}">{{ v.label }}</td>
-      <td data-col="raw" data-sort="-2" class="num faint" title="{{ ctl_title }}">—</td>
-      <td data-col="adjusted" data-sort="-2" class="num faint" title="{{ ctl_title }}">—</td>
+      <td data-col="solved" data-sort="-2" class="align-right control-verdict {{ v.state }}" title="{{ ctl_title }}">{{ v.label }}</td>
+      <td data-col="raw" data-sort="-2" class="align-right faint" title="{{ ctl_title }}">—</td>
+      <td data-col="adjusted" data-sort="-2" class="align-right faint" title="{{ ctl_title }}">—</td>
       {% elif j.scored_only %}
       {# A benchmark that gives a score and no pass or fail: the mean score where the rate would be, and nothing solved #}
       {% set score_title = "This benchmark gives a score and no pass or fail: the mean score" ~ (" over its " ~ j.n_scored_parts ~ " scored" if j.n_scored_parts else "") ~ ", no solve rate" %}
-      <td data-col="solved" data-sort="-1" class="num faint" title="{{ score_title }}">—</td>
-      <td data-col="raw" data-sort="-1" class="num faint" title="{{ score_title }}">—</td>
-      <td data-col="adjusted" data-sort="{{ j.mean_score }}" class="num strong" title="{{ score_title }}">{{ '%.2f'|format(j.mean_score) }}</td>
+      <td data-col="solved" data-sort="-1" class="align-right faint" title="{{ score_title }}">—</td>
+      <td data-col="raw" data-sort="-1" class="align-right faint" title="{{ score_title }}">—</td>
+      <td data-col="adjusted" data-sort="{{ j.mean_score }}" class="align-right strong" title="{{ score_title }}">{{ '%.2f'|format(j.mean_score) }}</td>
       {% else %}
-      <td data-col="solved" data-sort="{{ j.n_resolved }}" class="num">{{ j.n_resolved }}</td>
+      <td data-col="solved" data-sort="{{ j.n_resolved }}" class="align-right">{{ j.n_resolved }}</td>
       {# A run nothing scored (a standalone trajectory, a span export) has no
          rate, not a rate of zero: it shows absence and sorts below a measured 0%. #}
-      <td data-col="raw" data-sort="{{ -1 if j.raw_solve_rate is none else j.raw_solve_rate }}" class="num faint"
+      <td data-col="raw" data-sort="{{ -1 if j.raw_solve_rate is none else j.raw_solve_rate }}" class="align-right faint"
           {%- if j.raw_solve_rate is none %} title="No trial in this run carries a verdict"{% endif %}>{{ j.raw_solve_rate|pct }}</td>
-      <td data-col="adjusted" data-sort="{{ -1 if j.adjusted_solve_rate is none else j.adjusted_solve_rate }}" class="num {{ 'faint' if j.adjusted_solve_rate is none else 'strong' }}"
+      <td data-col="adjusted" data-sort="{{ -1 if j.adjusted_solve_rate is none else j.adjusted_solve_rate }}" class="align-right {{ 'faint' if j.adjusted_solve_rate is none else 'strong' }}"
           {%- if j.adjusted_solve_rate is none %} title="No trial in this run carries a verdict"{% endif %}>{{ j.adjusted_solve_rate|pct }}</td>
       {% endif %}
       {# Zero infra errors is a measured fact, and a good one — every trial has
          an outcome, so the count is always knowable. #}
-      <td data-col="infra" data-sort="{{ j.n_infra }}" class="num {% if j.n_infra %}warn{% else %}faint{% endif %}">{{ j.n_infra }}</td>
+      <td data-col="infra" data-sort="{{ j.n_infra }}" class="align-right {% if j.n_infra %}warn{% else %}faint{% endif %}">{{ j.n_infra }}</td>
       {# Zero regressions is only a fact for a benchmark that checks for them.
          Where none were reported the column shows absence, not a reassuring 0. #}
-      <td data-col="broke" data-sort="{{ j.n_regressions }}" class="num">
+      <td data-col="broke" data-sort="{{ j.n_regressions }}" class="align-right">
         {%- if j.n_regressions %}<span class="badge danger" title="Broke previously-passing tests">⚠ {{ j.n_regressions }}</span>
         {%- elif j.reports_regressions %}<span class="faint">0</span>
         {%- else %}<span class="faint" title="This benchmark does not report previously-passing tests">—</span>{% endif -%}
       </td>
       <td data-col="tokens" data-sort="{{ j.total_input_tokens + j.total_output_tokens }}"
-          class="num faint"
+          class="align-right faint"
           title="in {{ j.total_input_tokens }} · cached {{ j.total_cache_tokens }} · out {{ j.total_output_tokens }}">
         {{ (j.total_input_tokens + j.total_output_tokens)|tokens(j.kind) }}</td>
       {# A control's real $0.00 sorts as zero; an unmeasured agent sorts last. #}
       <td data-col="cost" data-sort="{{ j.total_cost_usd if j.total_cost_usd is not none else (0 if j.is_control else -1) }}"
-          class="num {{ '' if (j.total_cost_usd or j.is_control) else 'faint' }}">{{ j.total_cost_usd|usd(j.kind) }}</td>
+          class="align-right {{ '' if (j.total_cost_usd or j.is_control) else 'faint' }}">{{ j.total_cost_usd|usd(j.kind) }}</td>
     </tr>
     {% endfor %}
   </tbody>
@@ -346,12 +304,12 @@
   sent.set('tbody', table.tBodies[0].innerHTML);
   const counts = document.getElementById('counts');
   let head = counts.innerHTML;
-  const note = document.getElementById('filter-note');
   const emptyNote = document.getElementById('empty-note');
   const clearBtn = document.getElementById('clear-filter');
-  const HIDDEN_BY_DEFAULT = ['end', 'model', 'dataset', 'raw'];
 
-  const showCols = NulliusTable.columns(table, document.getElementById('col-btn'), document.getElementById('col-menu'), 'runs.cols', HIDDEN_BY_DEFAULT);
+  const tools = document.getElementById('runs-tools'), query = tools.querySelector('[data-search]'), cmenu = tools.querySelector('[data-tools="columns"]');
+  const showCols = NulliusTable.columns(table, cmenu, 'runs.cols');
+  NulliusTable.menu(tools.querySelector('[data-tools-btn="columns"]'), cmenu);
   const densityBtn = document.getElementById('density-btn');
   const setDensity = on => {
     table.classList.toggle('compact', on);
@@ -365,19 +323,15 @@
     localStorage.setItem('runs.compact', on ? '1' : '0');
   });
 
-  const sortRows = NulliusTable.sortable(table);
-
-  /* ---- filters: outcome (from the bar/chips) + per-column value menus ----
-     A run matches an outcome if ANY of its trials had it. Column filters are
-     sets of allowed values; all must pass. */
+  /* ---- filters: an outcome (from the bar/chips), and the controls row's search, Filter and Sort by ----
+     A run matches an outcome if ANY of its trials had it. */
   let active = null;
-  const columns = NulliusTable.filters(document, () => applyFilter());
-  const colFilters = columns.allowed;   // col -> Set of allowed values, or null for "all"
+  const t = NulliusTable.toolbar(table, tools, () => applyFilter());
 
   function applyFilter() {
     let shown = 0;
     rows.forEach(r => {
-      const hit = (!active || r.dataset.outcomes.split(' ').includes(active)) && columns.passes(r);
+      const hit = (!active || r.dataset.outcomes.split(' ').includes(active)) && t.passes(r);
       r.hidden = !hit;
       if (hit) shown++;
     });
@@ -386,13 +340,12 @@
     // the launch view's rows: dimmed rather than hidden, so a launch keeps its shape
     document.querySelectorAll('.launch-agents tbody tr').forEach(r =>
       r.classList.toggle('dim', !!active && !(r.dataset.outcomes || '').split(' ').includes(active)));
-    const filtered = active || Object.values(colFilters).some(Boolean);
+    const filtered = active || query.value.trim() || tools.querySelector('[data-tools="filter"] input[data-value]:not(:checked)');
     clearBtn.hidden = !filtered;
     emptyNote.hidden = shown > 0;
     // agents only, as the header counts them
     const runRows = rows.filter(r => !r.classList.contains('control-row'));
     const agents = runRows.filter(r => !r.hidden).length;
-    note.textContent = filtered ? `${agents} of ${runRows.length} runs` : '';
     if (filtered) counts.textContent = `${agents} of ${counts.dataset.runs} run${counts.dataset.runs === '1' ? '' : 's'} shown`;
     else counts.innerHTML = head;
     syncPicks();   // the header checkbox tracks visible rows only
@@ -418,22 +371,18 @@
   const form = document.getElementById('compare-form');
   const compareBtn = document.getElementById('compare-btn');
   const pickNote = document.getElementById('pick-note');
-  let picks = [...document.querySelectorAll('.pick-run')];
+  let picks = [...table.querySelectorAll('[data-check]')];
+  // the header box ticks the visible rows, and shows all, none or some of them ticked
+  const ticks = NulliusTable.checks(table);
 
-  const pickAll = document.getElementById('pick-all');
-  const selectable = () => picks.filter(p => !p.closest('tr').hidden);
-
+  // greyed while fewer than two are ticked: still focusable, its reason its tooltip and description
+  const why = compareBtn.title;
   function syncPicks() {
-    const on = picks.filter(p => p.checked);
-    compareBtn.disabled = on.length < 2;
-    pickNote.textContent = on.length
-      ? `${on.length} selected`
-      : 'Tick two or more runs to compare';
-    // Header box reflects the visible rows: all, none, or partial.
-    const vis = selectable();
-    const hit = vis.filter(p => p.checked).length;
-    pickAll.checked = vis.length > 0 && hit === vis.length;
-    pickAll.indeterminate = hit > 0 && hit < vis.length;
+    const on = picks.filter(p => p.checked), ready = on.length >= 2;
+    if (ready) ['aria-disabled', 'aria-describedby', 'title'].forEach(a => compareBtn.removeAttribute(a));
+    else Object.entries({'aria-disabled': 'true', 'aria-describedby': 'compare-why', title: why}).forEach(([a, v]) => compareBtn.setAttribute(a, v));
+    pickNote.textContent = on.length ? `${on.length} selected` : '';
+    ticks();
     // Rebuild the querystring: ?job=…&job=… in the order they were ticked.
     form.querySelectorAll('input[name="job"]').forEach(i => i.remove());
     on.forEach(p => {
@@ -444,18 +393,13 @@
       form.appendChild(hidden);
     });
   }
-  table.addEventListener('change', e => { if (e.target.matches('.pick-run')) syncPicks(); });
-
-  // Select/unselect all — scoped to rows the current filter leaves visible.
-  pickAll.addEventListener('change', () => {
-    selectable().forEach(p => p.checked = pickAll.checked);
-    syncPicks();
-  });
+  table.addEventListener('change', e => { if (e.target.matches('[data-check], [data-check-all]')) syncPicks(); });
+  form.addEventListener('submit', e => { if (compareBtn.hasAttribute('aria-disabled')) e.preventDefault(); });
 
   clearBtn.addEventListener('click', () => {
     active = null;
-    columns.clear();
-    applyFilter();
+    query.value = '';
+    tools.querySelector('[data-clear]').click();   // clears the Filter menu, then filters again
   });
 
   /* ---- the list keeps up by itself ----
@@ -513,14 +457,15 @@
     });
   }
   function refreshRows(fresh) {
-    document.querySelectorAll('.filter-menu').forEach(menu => {
-      const col = menu.dataset.filterMenu;
-      const next = fresh.querySelector(`[data-filter-menu="${col}"]`);
+    // each Filter list takes the values the runs have now, ticked as before; a new one ticked unless the list narrows
+    tools.querySelectorAll('[data-filter-menu]').forEach(menu => {
+      const next = fresh.querySelector(`#runs-tools [data-filter-menu="${CSS.escape(menu.dataset.filterMenu)}"]`);
       if (!next) return;
+      const boxes = [...menu.querySelectorAll('input[data-value]')], all = boxes.every(b => b.checked);
+      const on = new Set(boxes.filter(b => b.checked).map(b => b.dataset.value));
       menu.innerHTML = next.innerHTML;
-      menu.querySelectorAll('input[data-value]').forEach(b => {
-        b.checked = !colFilters[col] || colFilters[col].has(b.dataset.value);
-      });
+      menu.querySelectorAll('input[data-value]').forEach(b => { b.checked = all || on.has(b.dataset.value); });
+      menu.dispatchEvent(new Event('change'));
     });
     const html = fresh.querySelector('#runs tbody').innerHTML;
     if (sent.get('tbody') === html) return;
@@ -528,10 +473,10 @@
     const ticked = picks.filter(p => p.checked).map(p => p.value);
     table.tBodies[0].innerHTML = html;
     rows = [...table.tBodies[0].rows];
-    picks = [...document.querySelectorAll('.pick-run')];
+    picks = [...table.querySelectorAll('[data-check]')];
     picks.forEach(p => { p.checked = ticked.includes(p.value); });
     showCols();
-    sortRows();
+    t.resort();
   }
   function refreshHead(fresh) {
     document.getElementById('glance').replaceWith(fresh.getElementById('glance'));

@@ -233,11 +233,6 @@
 .st-index a span { color: inherit; font-size: 15px; }
 .st-index a .ic { flex: none; width: 17px; height: 17px; }
 .st-index [hidden] { display: none; }
-.st-search { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--surface-2); color: var(--text-dim); }
-.st-search .ic { flex: none; width: 17px; height: 17px; }
-.st-search input { min-width: 0; width: 100%; padding: 0; border: 0; background: transparent; color: var(--text); font: 13px var(--sans); }
-.st-search input:focus-visible { outline: none; }
-.st-search:focus-within { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .st-search-empty { padding: 8px 12px; font-size: 13px; color: var(--text-dim); }
 .st-theme-options { display: flex; flex-wrap: wrap; gap: 8px; }
 .st-theme-options .btn[aria-pressed="true"] { border-color: transparent; background: var(--accent-soft); color: var(--text); }
