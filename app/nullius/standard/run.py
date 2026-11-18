@@ -1231,21 +1231,22 @@ class Run:
         """How long a unit's ``setup`` may take (:func:`setup_request`)."""
         return setup_request(self.bench, self.other["_kind"])[1]
 
-    def unit_ended(self, unit: str, ws: str) -> None:
+    def unit_ended(self, unit: str, ws: str) -> bool:
         """A driver that asks for it (``driver.unit_end``) is told that a unit an agent ran has ended, scored or not -
         also when the run was stopped - so that what its setup started for the agent ends now. The driver the unit
         used is asked, never a new one, and only while it runs with no request the stop left unanswered (that
         request's late reply would be read as this one's); its answer is waited for ``END_SECONDS`` at most, and a
-        failure is no unit's."""
+        failure is no unit's. Returns whether the request failed."""
         if self.other.get("_kind") != "agent" or not (self.bench.get("driver") or {}).get("unit_end"):
-            return
+            return False
         d = getattr(self.local, "driver", None)
         if d is None or d.p is None or d.p.poll() is not None or d.unanswered:
-            return
+            return False
         try:
             d.request("end", unit=unit, dir=ws, timeout=END_SECONDS, force=True)
         except Exception:                        # noqa: BLE001 - the unit's result is written; its clean-up is not its result
-            pass
+            return True
+        return False
 
     def trial_name(self, i: int, unit: str, r: int = 1) -> str:
         return f"{_slug(unit)}__u{i:04d}" + (f"r{r}" if self.repeat > 1 else "")
@@ -1269,10 +1270,8 @@ class Run:
         finally:
             asked, self.local.set_up = self.local.set_up, None
             if asked is not None:
-                self.unit_ended(*asked)
-                if "agent.computer/v1" in self.bench.get("needs", []):
-                    # The next try may reuse this trial path: finish the driver's desktop and server before
-                    # the trial is archived, then give the next try a fresh driver too.
+                if self.unit_ended(*asked) and "agent.computer/v1" in self.bench.get("needs", []):
+                    # A failed end leaves the agent's desktop for the driver's exit cleanup.
                     d = getattr(self.local, "driver", None)
                     if d is not None:
                         d.close()

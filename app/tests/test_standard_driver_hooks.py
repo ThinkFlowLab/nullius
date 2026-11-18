@@ -306,6 +306,27 @@ class ThroughARun(unittest.TestCase):
         return jsonl.Proc([sys.executable, "-c", code, *args], here, dict(os.environ), os.path.join(here, "driver.log"),
                           stopped=stopped)
 
+    def test_only_an_agents_failed_end_closes_the_computer_driver(self):
+        for kind in ("agent", "control", "upstream"):
+            for failed in (False, True):
+                with self.subTest(kind=kind, failed=failed):
+                    r = self.ending()
+                    r.bench["needs"] = ["agent.computer/v1"]
+                    r.other = {"_kind": kind}
+                    d = r.local.driver = mock.Mock(unanswered=False)
+                    d.p.poll.return_value = None
+                    d.request.side_effect = run.jsonl.Failed("end failed") if failed else None
+
+                    def unit(*args):
+                        r.local.set_up = ("a", self.tmp)
+                        return {"reward": 1}
+
+                    with mock.patch.object(r, "_unit", side_effect=unit):
+                        self.assertEqual(r.unit(0, "a"), {"reward": 1})
+                    self.assertEqual(d.request.called, kind == "agent")
+                    self.assertEqual(d.close.called, kind == "agent" and failed)
+                    self.assertIs(r.local.driver, None if kind == "agent" and failed else d)
+
     def test_an_end_never_starts_a_driver(self):
         r = self.ending()
         r.local.driver = None

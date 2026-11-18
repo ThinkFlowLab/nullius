@@ -109,9 +109,8 @@ class MeetingPoints(unittest.TestCase):
                 if seen:
                     before = seen[0]
                     self.assertFalse(Path(before["socket"]).exists())
-                    for pid in (before["pid"], before["driver"]):
-                        with self.assertRaises(ProcessLookupError):
-                            os.kill(pid, 0)
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(before["pid"], 0)
                 seen.append(json.loads((trial / "setup.json").read_text()))
                 if inert:
                     kwargs["clock"]["ready"] = time.time()
