@@ -146,10 +146,10 @@
     {% endif %}
     <tr>
       <th{{ classes(METRIC, true, 'rowhead') }}>Outcome mix</th>
-      {% call(i) each() %}{% set j = jobs[i] %}
+      {% call(i) each() %}{% set j = jobs[i] %}{% set oc = j.counts %}
       <td><span class="minibar">
-        {%- for k in ORDER %}{% if j.counts[k] %}<span class="seg oc-{{ k }}" style="flex:{{ j.counts[k] }}"
-          title="{{ LABELS[k] }}: {{ j.counts[k] }}"></span>{% endif %}{% endfor -%}
+        {%- for k in ORDER %}{% if oc[k] %}<span class="seg oc-{{ k }}" style="flex:{{ oc[k] }}"
+          title="{{ LABELS[k] }}: {{ oc[k] }}"></span>{% endif %}{% endfor -%}
       </span></td>
       {% endcall %}
     </tr>

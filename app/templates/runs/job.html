@@ -6,7 +6,7 @@
 {% block crumb %}/ {{ job.job_id }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/live-board.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='runs/board.css') }}">{% endblock %}
-{% block body %}
+{% block body %}{% set oc = job.counts %}
 
 {% set meta %}
   <div class="run-meta" aria-label="Run details">
@@ -227,14 +227,14 @@
     <div class="lab">Outcomes</div>
     <div class="slot">
       <div class="mix run-mix" role="group" aria-label="Outcome mix: each segment filters the trials">
-        {% for k in ORDER %}{% if job.counts[k] %}<a class="mseg fx hl oc-{{ k }}" style="flex:{{ job.counts[k] }}" data-o="{{ k }}" href="?outcome={{ k }}" tabindex="-1"
-          aria-label="{{ LABELS[k] }}: {{ job.counts[k] }}" data-tip="{{ LABELS[k] }}: {{ job.counts[k] }}"></a>{% endif %}{% endfor %}
+        {% for k in ORDER %}{% if oc[k] %}<a class="mseg fx hl oc-{{ k }}" style="flex:{{ oc[k] }}" data-o="{{ k }}" href="?outcome={{ k }}" tabindex="-1"
+          aria-label="{{ LABELS[k] }}: {{ oc[k] }}" data-tip="{{ LABELS[k] }}: {{ oc[k] }}"></a>{% endif %}{% endfor %}
       </div>
     </div>
     <div class="run-outcome-filters" role="group" aria-label="Filter trials by outcome">
-    {% for k in ORDER %}{% if job.counts[k] %}{% set h = 45 + 30 * ((nlines.get(k) or 1) - 1) %}
+    {% for k in ORDER %}{% if oc[k] %}{% set h = 45 + 30 * ((nlines.get(k) or 1) - 1) %}
       <a class="row lg fx hl oc-{{ k }}" data-o="{{ k }}" href="?outcome={{ k }}"{% if h != 45 %} style="height:{{ h }}px"{% endif %}
-         data-tip="{{ DESCRIPTIONS[k] }}"><i class="sw"></i><b>{{ job.counts[k] }}</b><span>{{ LABELS[k] }}{% if k in INFRA %}<span class="infra">infra</span>{% endif %}</span></a>
+         data-tip="{{ DESCRIPTIONS[k] }}"><i class="sw"></i><b>{{ oc[k] }}</b><span>{{ LABELS[k] }}{% if k in INFRA %}<span class="infra">infra</span>{% endif %}</span></a>
     {% endif %}{% endfor %}
     </div>
     <div class="row tot"><b>{{ job.trials|length }}</b><span>Trials{% if job.n_planned and job.n_planned != job.trials|length %} of {{ job.n_planned }} planned{% endif %}</span></div>
@@ -341,7 +341,7 @@
     <h2 id="trials-heading" tabindex="-1">Trials</h2><span class="cnt" id="trial-count">{{ job.trials|length }}</span>
     <div class="facet" data-k="o"><details><summary class="fsum"><span class="k">Outcome</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu">
-        {% for k in ORDER %}{% if job.counts[k] %}<a class="fx" data-o="{{ k }}" href="?outcome={{ k }}"><i class="sw oc-{{ k }}"></i><span>{{ LABELS[k] }}</span><b>{{ job.counts[k] }}</b></a>{% endif %}{% endfor %}
+        {% for k in ORDER %}{% if oc[k] %}<a class="fx" data-o="{{ k }}" href="?outcome={{ k }}"><i class="sw oc-{{ k }}"></i><span>{{ LABELS[k] }}</span><b>{{ oc[k] }}</b></a>{% endif %}{% endfor %}
       </div></details><button class="x plain" type="button" hidden aria-label="Remove the outcome filter">✕</button></div>
     {% if judgement and judgement.causes %}
     <div class="facet j" data-k="c"><details><summary class="fsum"><span class="k">Judge cause</span><span class="v">All</span><span class="car">▾</span></summary>
@@ -478,7 +478,7 @@
   <details id="definitions">
     <summary><span class="tw"></span>Definitions<span class="end"><span>outcomes · rates · judge</span></span></summary>
     <dl class="gl">
-      {% for k in ORDER %}{% if job.counts[k] %}<dt class="oc-{{ k }}"><i class="sw"></i>{{ LABELS[k] }}{% if k in INFRA %} <span class="infra">infra</span>{% endif %}</dt><dd>{{ DESCRIPTIONS[k] }}</dd>{% endif %}{% endfor %}
+      {% for k in ORDER %}{% if oc[k] %}<dt class="oc-{{ k }}"><i class="sw"></i>{{ LABELS[k] }}{% if k in INFRA %} <span class="infra">infra</span>{% endif %}</dt><dd>{{ DESCRIPTIONS[k] }}</dd>{% endif %}{% endfor %}
       <dt class="gs">Adjusted rate</dt><dd>Solves divided by the trials that actually ran: it drops the outcomes marked <span class="infra">infra</span>, which failed before the agent could be judged. The raw rate is Harbor's mean over every trial, shown beside it only when the two differ. A run in which no trial carries a verdict shows —, never 0%.</dd>
       {% if not control %}<dt>Solved meter</dt><dd>One unit per trial that ran, solves filled; an infra trial is a hollow unit after a gap. Past 12 trials the units become one bar. A hovered trial row lights its unit.</dd>{% endif %}
       <dt>Tokens · Total</dt><dd>Under each trial's value a thin bar from zero, on one scale for the column: the largest trial fills its track. Total is the trial start to finish and includes overhead that Env, Agent and Verify do not.</dd>
