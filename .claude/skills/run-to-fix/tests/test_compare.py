@@ -218,3 +218,35 @@ class StopRule(LoopCase):
         self.assertEqual(answers[0]["about"], "continue after the stop rule of round-01")
         self.assertEqual(answers[0]["text"], words)
         self.assertRegex(answers[0]["date"], r"^\d{4}-\d{2}-\d{2}T")
+
+
+class PageLabels(LoopCase):
+    """The page of a round names the two runs by their job folders; result.json keeps its keys."""
+
+    def compare_jobs(self, before_root: str, before_name: str, new_root: str, new_name: str) -> Tuple[dict, str]:
+        before, new = paired(5, 2, 1, 1)
+        os.makedirs(before_root, exist_ok=True)
+        os.makedirs(new_root, exist_ok=True)
+        before_dir = write_job(before_root, before_name, "alpha", "harbor", before)
+        new_dir = write_job(new_root, new_name, "alpha", "harbor", new)
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(before_dir, None)
+        r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        with open(self.round_file("report.html"), encoding="utf-8") as fh:
+            return load(self.round_file("compare-metrics.json")), fh.read()
+
+    def test_the_labels_are_the_job_names(self) -> None:
+        metrics, page = self.compare_jobs(self.jobs, "agent-old", self.jobs, "agent-new")
+        self.assertEqual([r["label"] for r in metrics["runs"]], ["agent-old", "agent-new"])
+        self.assertIn("</span>agent-old</th>", page)
+        self.assertIn("</span>agent-new</th>", page)
+        self.assertNotIn("</span>before</th>", page)
+        result = load(self.round_file("result.json"))
+        self.assertEqual(set(result["pass_rate"]), {"before", "new"})
+        self.assertEqual((result["pairs"]["won"], result["pairs"]["lost"]), (2, 1))
+
+    def test_two_jobs_of_one_name_keep_before_and_new(self) -> None:
+        metrics, page = self.compare_jobs(os.path.join(self.jobs, "a"), "trial", os.path.join(self.jobs, "b"), "trial")
+        self.assertEqual([r["label"] for r in metrics["runs"]], ["before", "new"])
+        self.assertIn("</span>before</th>", page)
