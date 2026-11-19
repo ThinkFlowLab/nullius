@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
+import sys
+import time
 
 from agentrepo import RepoCase, git, make_repo
-from jobs import load, run, write
+from jobs import LOOP, load, run, write
 
 
 class Candidate(RepoCase):
@@ -323,3 +326,45 @@ class PaidScriptsRun(RepoCase):
         self.assertEqual(self.marker("replay.marker"), [self.repo.good])
         self.assertEqual(git(self.repo.path, ["worktree", "list", "--porcelain"]).count("worktree "), 1)
         self.assertEqual(os.listdir(os.path.join(self.loop, "worktrees")), [])
+
+
+class Cancellation(RepoCase):
+    """A loop stopped by SIGTERM or Ctrl+C stops the adapter command it runs and removes its worktree."""
+
+    def stop_during_a_command(self, signum: int) -> None:
+        pid_file = os.path.join(self.tmp, "command.pid")
+        commands = self.commands()
+        commands["test_one"] = f"cd {{worktree}} && echo $$ > {pid_file} && exec sleep 60 # {{test}}"
+        self.start(commands, ["run_tasks"])
+        self.candidate("good", self.repo.good, self.repo.test_ref, "outcome")
+        proc = subprocess.Popen([sys.executable, LOOP, "check", "--loop", self.loop, "--candidate", "good"],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+        deadline = time.monotonic() + 30
+        while not (os.path.isfile(pid_file) and open(pid_file).read().strip()) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        command_pid = int(open(pid_file).read())
+        proc.send_signal(signum)
+        _, err = proc.communicate(timeout=60)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("stopped", err)
+        deadline = time.monotonic() + 10
+        while self.alive(command_pid) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        self.assertFalse(self.alive(command_pid))
+        self.assertEqual(git(self.repo.path, ["worktree", "list", "--porcelain"]).count("worktree "), 1)
+        self.assertEqual(os.listdir(os.path.join(self.loop, "worktrees")), [])
+        self.assertFalse(os.path.exists(self.round_file("candidates/good/checks.json")))
+
+    def alive(self, pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        return True
+
+    def test_sigterm(self) -> None:
+        self.stop_during_a_command(signal.SIGTERM)
+
+    def test_ctrl_c(self) -> None:
+        self.stop_during_a_command(signal.SIGINT)
