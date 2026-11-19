@@ -141,7 +141,7 @@ class AgentOptions(unittest.TestCase):
     def test_the_builder_places_the_option_with_selected_agents(self):
         source = (Path(__file__).resolve().parents[1] / "static/builder/command-builder.js").read_text()
         function = source[source.index("  function benchOptions("):source.index("\n  function ", source.index("  function benchOptions(") + 1)]
-        program = """const C = {chosenOf: r => r.others, dsIds: () => ['all']};
+        program = """const C = {chosenOf: r => r.others, runsOf: r => r.others, ownAgentsOf: () => [], dsIds: () => ['all']};
 const schema = {standardHere: {}}, esc = x => x, tile = x => x.title;
 """ + function + """
 const b = {options: {steps: {label: 'Steps', summary: 'Steps', values: ['10'], default: '10', datasets: [], setups: ['agent'], step: ''}}};

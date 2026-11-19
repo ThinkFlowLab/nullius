@@ -427,8 +427,8 @@
   // ones that have not proved the ports it needs shown greyed, with the reasons - a model and a scope. The server
   // compiles the choices (POST /new-run/runner, nullius/standard/recipe.py).
   // what a unit is: the benchmark's, or a setup's own when only setups run (a conversation, where the paper batches its questions)
-  const unitsOf = rec => { const b = C.standardBench(rec) || {}, own = (b.setups || []).filter(x => C.chosenOf(rec).includes(x.key));
-    return own.length && own.length === C.chosenOf(rec).length ? own[0].units : b.units || {noun: 'unit', nouns: 'units'}; };
+  const unitsOf = rec => { const b = C.standardBench(rec) || {}, runs = C.runsOf(rec), own = (b.setups || []).filter(x => runs.includes(x.key));
+    return own.length && own.length === runs.length ? own[0].units : b.units || {noun: 'unit', nouns: 'units'}; };
   // the first clause of a long description, for a line; the whole goes in its title
   // settings as sub-tabs, one a chosen way of running that has any: [key, label, html]; the open one kept while it is there
   let setTab = '';
@@ -576,14 +576,19 @@
   // A benchmark's own options (a search, a mode), for the chosen datasets they apply to, and what a value needs of this
   // machine. Those an agent's or capability's run takes ('yours') on the Agent step, with the agents; those only a setup
   // takes (a retriever, a top-k of the paper's pipeline) in that setup's tab, once it is chosen.
-  function benchOptions(rec, b, scope = 'yours') {
+  // A benchmark with agents of its own: its agent option is each one's own choice, and an option whose `when` names
+  // agents is in the tab of each of them (scope 'own', `agent` the one); else the options of `scope`.
+  function benchOptions(rec, b, scope = 'yours', agent = null) {
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
-    const chosen = C.chosenOf(rec);
+    const chosen = C.runsOf(rec), owned = C.ownAgentsOf(b).length > 0;
+    const given = {...(rec.bench_options || {}), ...(agent ? {agent: agent.agent} : {})};
     return Object.entries(b.options || {}).filter(([, o]) => !o.limit && o.step === (['where', 'dataset'].includes(scope) ? scope : ''))   // a bound of the upstream's own is with the limits
+      .filter(([n, o]) => !owned || (n !== 'agent' && (scope === 'own') === !!(o.when || {}).agent))
       .filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
       // one that applies only under another's values (a top-k, only with a retrieval) is left out otherwise
-      .filter(([, o]) => Object.entries(o.when || {}).every(([k, vs]) => vs.includes((rec.bench_options || {})[k] ?? (b.options[k] || {}).default)))
+      .filter(([, o]) => Object.entries(o.when || {}).every(([k, vs]) => vs.includes(given[k] ?? (b.options[k] || {}).default)))
       .filter(([, o]) => {
+        if (scope === 'own') return true;
         const on = o.setups || ['yours'];
         if (o.step) return on.some(s => s === 'yours' ? chosen.some(k => !(b.setups || []).some(x => x.key === k)) : chosen.includes(s));
         const shared = on.includes('yours') && on.includes('original');
@@ -641,7 +646,7 @@
     return !t.length ? '' : t.every(n => n === t[0]) && t.length > 1 ? `${t[0]} tasks each` : `${t.reduce((a, n) => a + n, 0)} tasks`; };
   const pickChip = (attr, v, label, on) => `<button type="button" class="nb-pick-chip" data-${attr}="${esc(v)}" aria-pressed="${on}">${esc(label)}</button>`;
   // one tile: {attr, key, on, title, mark, cat, origin, line, meta, foot, find, fam, data (more attributes), tip (its title)}
-  const tile = t => `<button class="nb-tile${t.disabled ? ' nb-tile-unfit' : ''}" data-${t.attr}="${esc(t.key)}" aria-pressed="${t.on}"${t.data || ''}${t.disabled ? ` disabled aria-disabled="true" title="${esc(t.why || '')}"` : t.tip ? ` title="${esc(t.tip)}"` : ''} data-cat="${esc(t.cat || '')}" data-fam="${esc(t.fam || '')}" data-find="${esc((t.find || t.title).toLowerCase())}">`
+  const tile = t => `<button class="nb-tile${t.disabled ? ' nb-tile-unfit' : ''}" data-${t.attr}="${esc(t.key)}" aria-pressed="${t.on}"${t.data || ''}${t.disabled ? ` disabled aria-disabled="true" title="${esc(t.why || '')}"` : t.tip ? ` title="${esc(t.tip)}"` : ''} data-cat="${esc(t.cat || '')}" data-fam="${esc(t.fam || '')}"${t.elsewhere ? ' data-elsewhere="1"' : ''} data-find="${esc((t.find || t.title).toLowerCase())}">`
     + `<span class="nb-tile-head">${t.mark ? `<span class="nb-mark">${t.mark}</span>` : ''}<strong>${esc(t.title)}</strong><span class="nb-tile-check" aria-hidden="true">${t.on ? '✓' : ''}</span></span>`
     + (t.cat || t.origin || t.fam ? `<span class="nb-tile-tags">${t.cat ? `<span class="nb-tile-cat">${esc(t.cat)}</span>` : ''}${t.origin === 'community' ? '<span class="nb-tile-community">Community</span>' : ''}${t.famLabel ? `<span class="nb-tile-fam">${esc(t.famLabel)}</span>` : ''}</span>` : '')
     + (t.line ? `<span class="nb-tile-line">${esc(t.line)}</span>` : '') + (t.note ? `<span class="nb-tile-note">${esc(t.note)}</span>` : '')
@@ -656,6 +661,8 @@
       + `<label class="nb-pick-find"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input type="search" data-pick-find value="${esc(pick.q)}" placeholder="Search ${noun === 'capability' ? 'capabilities' : noun + 's'}" aria-label="Search ${noun === 'capability' ? 'capabilities' : noun + 's'}" autocomplete="off"></label>`
       + (cats.length > 1 ? `<div class="nb-pick-chips" role="group" aria-label="Category">${pickChip('pick-cat', '', 'All', !pick.cat)}${cats.map(c => pickChip('pick-cat', c, c, pick.cat === c)).join('')}</div>` : '')
       + (fams ? `<div class="nb-pick-chips" role="group" aria-label="Runs">${pickChip('pick-fam', '', 'Any', !pick.fam)}${fams.map(([v, l]) => pickChip('pick-fam', v, l, pick.fam === v)).join('')}</div>` : '')
+      // other benchmarks' own agents, greyed: shown until the viewer hides them
+      + (tiles.some(t => t.elsewhere) ? `<div class="nb-pick-chips" role="group" aria-label="Other benchmarks">${pickChip('pick-elsewhere', '', "Other benchmarks' agents", !pick.hide)}</div>` : '')
       + `</div><div class="nb-pick-grid">${tiles.map(tile).join('')}</div><p class="nb-pick-none" hidden>No ${noun} matches.</p></div>`;
   };
   function applyPick() {
@@ -664,11 +671,12 @@
     let shown = 0;
     box.querySelectorAll('.nb-tile').forEach(t => {
       const on = t.getAttribute('aria-pressed') === 'true';
-      const fits = (!pick.cat || t.dataset.cat === pick.cat) && (!pick.fam || t.dataset.fam === pick.fam) && words.every(w => t.dataset.find.includes(w));
+      const fits = (!pick.cat || t.dataset.cat === pick.cat) && (!pick.fam || t.dataset.fam === pick.fam) && !(pick.hide && t.dataset.elsewhere) && words.every(w => t.dataset.find.includes(w));
       t.hidden = !fits && !on; if (!t.hidden) shown++;
     });
     box.querySelectorAll('[data-pick-cat]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pickCat === pick.cat));
     box.querySelectorAll('[data-pick-fam]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pickFam === pick.fam));
+    box.querySelectorAll('[data-pick-elsewhere]').forEach(b => b.setAttribute('aria-pressed', !pick.hide));
     box.querySelector('.nb-pick-none').hidden = shown > 0;
   }
   function modelChoiceCards(rec) {
@@ -689,8 +697,8 @@
             + ((b.controls || []).some(c => c.key === 'oracle') ? checkChip('no leak', (x.proofs || {}).leak, (x.failed || {}).leak, 'nothing of the reference shows before the run') : '')})).join('')}</div>`
         + benchOptions(rec, b, 'dataset') + credentialWarnings(b, b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)));
     if (step === S.agent) {
-      const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && !o.setup);
-      const setups = all.filter(o => o.setup), controls = all.filter(o => o.control);
+      const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && (!o.setup || o.own));
+      const setups = all.filter(o => o.setup && !o.own), controls = all.filter(o => o.control);
       const ds = b.datasets.find(x => C.datasetsOf(rec).includes(x.id)) || b.datasets[0];
       // an agent or a capability as a tile: its name, a skill it failed or a fidelity that differs as a tick; one that has not
       // proved a port the benchmark needs greyed, the ports it lacks named (the reasons whole in its title)
@@ -700,11 +708,12 @@
         const fid = o.fidelity && o.fidelity.verdict !== 'same' ? `<span class="nb-tick ${o.fidelity.verdict === 'same' ? 'ok' : 'no'}" title="ACP ${o.fidelity.verdict === 'same' ? 'gives its model the same requests as its own CLI' : 'differs from its own CLI: ' + esc(o.fidelity.verdict)}">ACP ${o.fidelity.verdict === 'same' ? '= CLI ✓' : '≠ CLI'}</span>` : '';
         const older = b.needs.some(p => o.proven[p] && o.proven[p].older) ? '<span class="nb-tick no" title="proven on an older kit: worth running again">older kit</span>' : '';
         return {attr: 'std-other', key: o.key, on: ok && C.chosenOf(rec).includes(o.key), disabled: !ok, why: o.why.join('; '), title: o.label + (o.version && !o.label.includes(o.version) ? ' ' + o.version : ''),
-          mark: agent ? agentMark(o.key, o.label) : esc(o.label[0]), cat: o.protocol, fam: ok ? 'fit' : 'unfit', tip: o.summary, note: ok ? '' : 'Lacks ' + (lacks.map(p => p.replace(/^[^.]+\./, '').replace(/\/v\d+$/, '').replace(/[-_]/g, ' ')).join(', ') || 'a port it needs'),
+          mark: agent ? agentMark(o.key, o.label) : esc(o.label[0]), cat: o.own ? 'reference' : o.protocol, fam: ok ? 'fit' : 'unfit', tip: o.summary, elsewhere: o.elsewhere,
+          note: ok ? '' : o.benchmark ? 'Belongs to ' + o.benchmark_label : 'Lacks ' + (lacks.map(p => p.replace(/^[^.]+\./, '').replace(/\/v\d+$/, '').replace(/[-_]/g, ' ')).join(', ') || 'a port it needs'),
           foot: fid + skills + older, find: [o.label, o.key, o.version, o.protocol, o.summary].join(' ')};
       };
       // each chosen agent's options, at its vendor's default unless changed: {ref: {name: word}}
-      const chosen = others.filter(o => C.chosenOf(rec).includes(o.key) && !o.why.length);
+      const chosen = others.filter(o => C.chosenOf(rec).includes(o.key) && !o.why.length), mine = chosen.filter(o => !o.own);
       const optionsOf = o => { const mine = (rec.options || {})[o.key] || {}, opts = Object.entries(o.options || {});
         return !opts.length ? '' : `<div class="std-options">` + opts.map(([n, x]) => {
           const cur = mine[n] ?? x.default;
@@ -722,15 +731,15 @@
         return tile({attr: 'std-other', key: o.key, on: C.chosenOf(rec).includes(o.key), mark: o.key === 'nop' ? '∅' : '≡', title: o.label,
           tip: o.summary + (b.judged ? ' The judge still runs.' : ''), foot: controlChip(c)}); };
       const setupsNamed = ls => ls.filter(l => !ls.some(m => m !== l && l.startsWith(m))).join(' and ');
-      const onSetups = setups.filter(o => C.chosenOf(rec).includes(o.key));
+      const onSetups = setups.filter(o => C.chosenOf(rec).includes(o.key)).concat(chosen.some(o => o.own) ? [{label: 'Original'}] : []);
       return `<div class="nb-sectionhead"><h2>Who runs it?</h2></div>`
         + picker([...setups.map(setupTile), ...others.map(tileOf)], [['fit', 'Can run it'], ['unfit', 'Cannot']], agent ? 'agent' : 'capability')
         + (others.length || setups.length ? '' : note('None yet', 'Bring one in with the /import-standard skill, or by hand: docs/standard.md.'))
         + settingsTabs([
             ...(chosen.length || onSetups.length ? [['shared', 'Every ' + yoursWord, benchOptions(rec, b, 'shared')]] : []),
             ...(onSetups.length ? [['setup', b.label + ' · ' + setupsNamed(onSetups.map(o => o.label)), benchOptions(rec, b, 'setup')]] : []),
-            ...(chosen.length ? [['yours', agent ? 'Selected agents' : 'Selected capabilities', benchOptions(rec, b)]] : []),
-            ...chosen.map(o => [o.key, o.label, optionsOf(o)])])
+            ...(mine.length ? [['yours', agent ? 'Selected agents' : 'Selected capabilities', benchOptions(rec, b)]] : []),
+            ...chosen.map(o => [o.key, o.label, o.own ? benchOptions(rec, b, 'own', o) : optionsOf(o)])])
         + (controls.length ? `<div class="nb-sectionhead std-controlshead std-sethead"><h3>Checks</h3></div><div class="nb-pick-grid">${controls.map(controlTile).join('')}</div>` : '')
         ;
     }
@@ -778,8 +787,10 @@
   // of the benchmark's name after the run's scope and its time limits: those the chosen datasets and participants
   // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).
   function benchLimits(rec, b) {
-    const chosen = C.chosenOf(rec), yours = chosen.some(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k));
-    const given = rec.bench_options || {}, of = k => given[k] ?? (b.options[k] || {}).default;
+    const chosen = C.runsOf(rec), yours = chosen.some(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k));
+    // a default by agent: the chosen own agents' one when they share it
+    const own = [...new Set(C.ownChosen(rec).map(a => a.agent))], given = rec.bench_options || {};
+    const of = k => k === 'agent' && own.length ? (own.length === 1 ? own[0] : '') : given[k] ?? (b.options[k] || {}).default;
     const rows = Object.entries(b.options || {}).filter(([, o]) => o.limit).sort(([, x], [, y]) => x.label.localeCompare(y.label))
       .filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
       .filter(([, o]) => (o.setups || ['yours']).some(s => s === 'yours' ? yours : chosen.includes(s)))
@@ -800,7 +811,7 @@
   function agentDefault(rec, b) {
     const d = b.timeouts || {}, m = s => String(+(s / 60).toFixed(2)), benchwide = (d.catalogue || []).includes('agent');
     const ofOne = k => { const s = (b.setups || []).find(x => x.key === k); return s && s.turn_seconds ? [s.turn_seconds, true] : [d.agent, benchwide]; };
-    const each = C.chosenOf(rec).filter(k => !(b.controls || []).some(x => x.key === k)).map(ofOne);
+    const each = C.runsOf(rec).filter(k => !(b.controls || []).some(x => x.key === k)).map(ofOne);
     const all = each.length ? each : [[d.agent, benchwide]];
     if (all.some(x => x[0] !== all[0][0])) return ['per setup', true];
     return [m(all[0][0]), all[0][1]];
@@ -812,7 +823,7 @@
     // each field shows, greyed, the value used while it is empty; a task that declares its own keeps it
     const m = s => String(+(s / 60).toFixed(2));
     // [placeholder, declared]: the benchmark's or the agent's own reads as a value, Nullius's default stays grey
-    const setupSeconds = C.chosenOf(rec).map(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k) && b.family === 'agent' ? (d.setup_agent || d.setup) : d.setup);
+    const setupSeconds = C.runsOf(rec).map(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k) && b.family === 'agent' ? (d.setup_agent || d.setup) : d.setup);
     const setup = setupSeconds.length && setupSeconds.some(s => s !== setupSeconds[0]) ? ['per setup', true]
       : [m(setupSeconds[0] || d.setup), (setupSeconds[0] || d.setup) !== d.setup];
     const def = {setup, image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), (d.catalogue || []).includes('score')]};
@@ -1086,6 +1097,7 @@
     if(d.copyCode!==undefined){const t=b.closest('.std-code').querySelector('code').textContent;try{await navigator.clipboard.writeText(t);b.textContent='Copied';}catch{b.textContent='Select it';}setTimeout(()=>{b.textContent='Copy';},1500);return;}
     if(d.pickCat!==undefined){pickOf().cat=d.pickCat;applyPick();return;}
     if(d.pickFam!==undefined){pickOf().fam=d.pickFam;applyPick();return;}
+    if(d.pickElsewhere!==undefined){pickOf().hide=!pickOf().hide;applyPick();return;}
     if(d.agent){const on=r().agents.includes(d.agent);r().agents=on?r().agents.filter(id=>id!==d.agent):[...r().agents,d.agent];renderForm();refreshPlan();return;}
     else if(d.href){location.href=d.href;return;}
     else if(b.id==='nb-add-custom-agent'){r().customAgents.push('');r().agents.push('custom-'+(r().customAgents.length-1));renderForm();refreshPlan();root.querySelector('[data-custom-agent="'+(r().customAgents.length-1)+'"]')?.focus();return;}

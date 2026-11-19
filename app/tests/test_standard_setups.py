@@ -315,7 +315,8 @@ class Recipe(unittest.TestCase):
     def test_the_upstream_agents_a_setup_runs_name_its_participant(self):
         out = self.compiled(benchmark="osworld1", datasets=["test_small"], others=["original"], model_choice="paper", model="MiniMax-M3")
         self.assertEqual(out["errors"], [])
-        self.assertIn([recipe.STEP["agent"], "Participant", "OSWorld's agents"], out["review"])
+        self.assertIn([recipe.STEP["agent"], "Participant", "M3 Agent · OSWorld1's own"], out["review"])
+        self.assertNotIn("Agent", [r[1] for r in out["review"]])                     # the agent is the participant, not an option
 
     def test_paper_filter_also_applies_to_a_memory_capability(self):
         out = self.compiled(others=["mem0"], model_choice="paper", model="gpt-3.5-turbo-16k")

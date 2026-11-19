@@ -92,7 +92,6 @@
   "setups": {
     "original": {
       "summary": "OSWorld-V2's own agent, M3 or Muse Spark, as published, on a Docker VM.",
-      "reference_agent": "OSWorld-V2 agents",
       "models": [
         "MiniMax-M3",
         "muse-spark-1.3"

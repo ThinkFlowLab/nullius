@@ -31,7 +31,7 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `osworld2` | Original · OSWorld-V2 agents · Like the paper or Any of your choice | `agent`, `max_steps`, `thinking`, `vm_provider`, `websites`, `write_iops`, `write_mbps` |
+| `osworld2` | Original · its own agents · Like the paper or Any of your choice | `agent`, `max_steps`, `thinking`, `vm_provider`, `websites`, `write_iops`, `write_mbps` |
 
 ## Options
 

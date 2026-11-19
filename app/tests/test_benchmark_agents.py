@@ -9,7 +9,7 @@ import shutil
 import tempfile
 import unittest
 
-from nullius.standard import definitions, match
+from nullius.standard import definitions, match, recipe
 
 BENCHES = os.path.join(definitions.CATALOGUE, "benchmarks")
 
@@ -113,6 +113,56 @@ class Fits(unittest.TestCase):
         self.assertEqual(t["osworld2"]["osworld1:openai-cua"], ["OpenAI CUA belongs to OSWorld1"])
         self.assertEqual(t["gsm8k"]["osworld2:muse-spark"], ["Muse Spark belongs to OSWorld2"])
         self.assertNotIn("osworld1:openai-cua", t.get("locomo", {}))       # a capability benchmark takes none
+
+
+
+RECIPE = {"harness": "standard", "name": "os", "benchmark": "osworld1", "datasets": ["test_small"], "provider": "openrouter",
+          "model": "computer-use-preview", "model_choice": "paper", "where": "local", "backend": "local"}
+
+
+class Recipes(unittest.TestCase):
+    def compiled(self, **change):
+        out = recipe.compile(dict(RECIPE, **change))
+        return out
+
+    def test_the_builder_offers_them_as_agents(self):
+        got = {a["key"]: a for a in recipe.choices()["agents"]}
+        cua = got["osworld1:openai-cua"]
+        self.assertEqual((cua["benchmark"], cua["agent"], cua["models"], cua["protocol"]),
+                         ("osworld1", "openai_cua", ["computer-use-preview"], "its own script"))
+
+    def test_an_own_agent_compiles_to_the_command_of_the_agent_option(self):
+        old = self.compiled(others=["original"], bench_options={"agent": "openai_cua", "max_steps": "20"})
+        new = self.compiled(others=["osworld1:openai-cua"], bench_options={"max_steps": "20"})
+        self.assertEqual((old["errors"], new["errors"]), ([], []))
+        self.assertEqual(new["shards"][0]["command"], old["shards"][0]["command"])
+        self.assertEqual(new["script"], old["script"])
+        self.assertIn("run osworld1 original --model computer-use-preview --provider openrouter --dataset test_small -j 1 "
+                      "--bench-option agent=openai_cua --bench-option thinking=adaptive --bench-option max_steps=20", new["script"])
+
+    def test_a_recipe_from_before_is_read_as_its_agent(self):
+        self.assertEqual(recipe.with_own_agents(dict(RECIPE, others=["original", "nop"], bench_options={"agent": "openai_cua", "pause": "1"}),
+                                                bench())["others"], ["osworld1:openai-cua", "nop"])
+        first = recipe.with_own_agents(dict(RECIPE, others=["original"]), bench())
+        self.assertEqual((first["others"], first["bench_options"]), (["osworld1:m3"], {}))
+        said = [e["message"] for e in self.compiled(others=["original"], bench_options={"agent": "nope"})["errors"]]
+        self.assertEqual(said, ["Choose an agent for OSWorld1: osworld1:nope is not one of its own."])
+
+    def test_two_of_its_agents_are_two_jobs_named_by_their_keys(self):
+        out = self.compiled(others=["osworld1:m3", "osworld1:openai-cua"], model="MiniMax-M3", model_choice="any")
+        self.assertEqual(out["errors"], [])
+        self.assertEqual([j["name"] for j in out["jobs"]], ["os-m3", "os-openai-cua"])
+        self.assertIn("--bench-option agent=m3 ", out["shards"][0]["command"])
+        self.assertIn("--bench-option agent=openai_cua ", out["shards"][0]["command"])
+
+    def test_like_the_paper_names_the_agent_a_model_is_not_published_with(self):
+        said = [e for e in self.compiled(others=["osworld1:openai-cua"], model="MiniMax-M3")["errors"]]
+        self.assertEqual(said, [{"step": recipe.STEP["model"],
+                                 "message": "OpenAI CUA is published with computer-use-preview: choose one of them, or Any of your choice for another."}])
+
+    def test_another_benchmarks_agent_is_refused_with_its_reason(self):
+        said = [e["message"] for e in self.compiled(others=["osworld2:m3"])["errors"]]
+        self.assertEqual(said, ["MiniMax M3 cannot run OSWorld1: MiniMax M3 belongs to OSWorld2."])
 
 
 if __name__ == "__main__":
