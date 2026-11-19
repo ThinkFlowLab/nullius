@@ -1657,6 +1657,26 @@ class WindowClosure(unittest.TestCase):
         self.bridge._begin(None)
         self.addCleanup(self.bridge.finish)
 
+    def test_prepare_records_redact_actions_and_file_names_without_changing_the_call(self):
+        secret = "sk-" + "x" * 24
+        name = secret + ".txt"
+        actions = [f"open('agent/{name}', 'w').write({secret!r})", "WAIT"]
+        self.bridge.prepared = os.path.join(self.desktop.root, "prepare.jsonl")
+        replies = []
+        call = cp.Call("prepare", {"actions": actions, "files": [name]},
+                       lambda c, v, i, e: replies.append((v, e)))
+        cp.checked(call, self.bridge.screen, self.bridge.folder)
+        self.bridge._serve(call)
+        self.assertEqual(replies, [({"files": {name: base64.b64encode(secret.encode()).decode()}}, None)])
+        with open(self.bridge.prepared) as f:
+            records = [json.loads(line) for line in f]
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(set(record), {"start", "actions", "files"})
+        self.assertIsInstance(record["start"], float)
+        self.assertEqual(record["actions"], [a.replace(secret, "[REDACTED]") for a in actions])
+        self.assertEqual(record["files"], ["[REDACTED].txt"])
+
     def submit(self, tool):
         args = {"actions": ["print(1)"], "files": ["/agent/a"]} if tool == "prepare" else {
             "path": "/agent/a", "data": "YQ=="}

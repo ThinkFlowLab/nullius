@@ -55,6 +55,8 @@ import threading
 import time
 from typing import Optional, Protocol
 
+from nullius.redact import redact
+
 PROTOCOL = "2025-06-18"
 LINE_BYTES = 24 * 1024 * 1024                        # one message either way, its newline counted
 OUT_BYTES = 2 * LINE_BYTES                           # answers waiting for a connection's client to read them
@@ -527,8 +529,8 @@ class Bridge:
         does nothing), then its files read. An action the desktop did not end in time stops it."""
         if self.prepared:
             with open(self.prepared, "a", encoding="utf-8") as f:
-                f.write(json.dumps({"start": time.time(), "actions": call.actions,
-                                    "files": [named for named, _ in call.files or []]}) + "\n")
+                f.write(json.dumps({"start": time.time(), "actions": [redact(code) for code in call.actions],
+                                    "files": [redact(named) for named, _ in call.files or []]}) + "\n")
         for i, code in enumerate(call.actions):
             if code.strip() != "WAIT" and self.desktop.python(PREPARE.format(code=code)) is None:
                 raise Refused(f"the desktop did not end actions[{i}] in time; the actions after it were not run")
