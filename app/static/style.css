@@ -1874,3 +1874,15 @@ select.ui-select-native { display: none !important; }
 /* the judge's button under its badge, what its last call took beside it */
 .judge-actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin: .6rem 0 1rem; }
 .judge-actions .header-form { margin: 0; }
+
+/* a placeholder while content loads (.skel, reusable); the whole page's, while the next page loads (page-loading.js) */
+.skel { background: var(--surface-2); border-radius: 6px; animation: skel-pulse 1.6s ease-in-out infinite; }
+@keyframes skel-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+main[aria-busy="true"] > :not(.page-skeleton) { display: none; }
+.page-skeleton { display: grid; gap: .6rem; }
+.skel-title { height: calc(var(--h1-size) * 1.22); width: min(20rem, 70%); }
+.skel-line { height: .95rem; width: min(32rem, 90%); }
+.skel-row { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 var(--head-gap); }
+.skel-btn { height: var(--tool-h); width: 6.5rem; }
+.skel-block { height: 3.75rem; }
