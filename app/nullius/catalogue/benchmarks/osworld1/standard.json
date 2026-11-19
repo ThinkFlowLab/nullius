@@ -254,7 +254,10 @@
         "docker": {
           "host": [
             "docker"
-          ]
+          ],
+          "vm": {
+            "memory_gb": 4
+          }
         }
       }
     },

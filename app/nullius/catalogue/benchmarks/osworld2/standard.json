@@ -192,7 +192,10 @@
           "host": [
             "docker",
             "scoring_programs"
-          ]
+          ],
+          "vm": {
+            "memory_gb": 4
+          }
         }
       }
     },
@@ -246,8 +249,8 @@
       ]
     },
     "scoring_programs": {
-      "label": "Scoring programs",
-      "summary": "ImageMagick, ffmpeg and tesseract, used to score 6 tasks.",
+      "label": "Scoring tools",
+      "summary": "ImageMagick · FFmpeg · Tesseract",
       "check": [
         "identify",
         "convert",

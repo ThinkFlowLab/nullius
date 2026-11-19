@@ -231,7 +231,8 @@ def _values(spec: dict) -> str:
 
 
 def _needs_rows(name: str, spec: dict) -> list:
-    return [[f"`{name}`", f"`{val}`", "; ".join(f"{k}: {', '.join(w) if isinstance(w, list) else w}" for k, w in need.items())]
+    said = lambda k, w: f"a {w['memory_gb']:g} GB VM per unit" if k == "vm" else ", ".join(w) if isinstance(w, list) else w
+    return [[f"`{name}`", f"`{val}`", "; ".join(f"{k}: {said(k, w)}" for k, w in need.items())]
             for val, need in (spec.get("needs") or {}).items()]
 
 

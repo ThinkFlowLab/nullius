@@ -94,11 +94,15 @@ def _builder_data() -> dict:
     gpus = constraints.of(constraints.LOCAL, strict=False).get("gpu_ids")
     host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"]), gpu_ids=gpus).items()}
             for b in definitions.load("benchmark", every=True)[0] if b.get("host")}
-    # boat: why it cannot run here (its key, this machine's programs); boatKey: from a host, only the key matters here
-    boat_why, boat_key = boat.unusable(), boat.unusable(here=False)
-    data["standardHere"] = {"docker": execute.docker_problem(), "boat": boat_why, "boatKey": boat_key,
-                            "boatSizes": {} if boat_key else execute.boat_sizes(),
-                            "boatSpecs": {k: v for k, v in boat.SIZES.items() if v}, "licences": _licence_states(), "host": host}
+    # boat: why its sandboxes cannot run from here (its key, this machine's programs), else what its account
+    # says: the sizes it offers, each with its spec and why it cannot start one, and its VMs at once
+    boat_why = boat.unusable()
+    account = {} if boat_why else execute.boat_account()
+    types = account.get("types") or {}
+    data["standardHere"] = {"docker": execute.docker_problem(), "boat": boat_why,
+                            "boatSizes": [{"key": k, "label": z["label"], "spec": boat.spec(k), "memory_gb": z.get("memory_gb"),
+                                           "why": types.get(k)} for k, z in boat.SIZES.items() if not types or k in types],
+                            "boatSlots": account.get("slots"), "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
     data["local"] = shared_local_client()
     data["recipesWhy"] = WRITE_HERE

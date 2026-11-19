@@ -547,7 +547,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     limit = recipe.get("limit")
     if limit not in ("", None) and _int(limit, 1) is None:
         add("limits", "The number of units is a whole number of at least 1, or empty for all of them.")
-    conc = _int(recipe.get("concurrency") or 1, 1, MAX_CONCURRENT)       # empty: one at a time
+    # empty: one at a time; on Boat, as many as the account runs at once (the run caps it to that, boat.slots)
+    conc = _int(recipe.get("concurrency") or (MAX_CONCURRENT if backend == "boat" else 1), 1, MAX_CONCURRENT)
     if conc is None:
         add("limits", f"Units at a time: a whole number from 1 to {MAX_CONCURRENT}.")
     targets, why_not = where_of(recipe.get("where", "local"))
@@ -557,7 +558,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         why = docker_unusable()
         if why:
             add("where", f"The container backend cannot run on this machine: {why}. Choose local processes, or a host with Docker or Podman.")
-    elif backend == "boat" and boat_unusable is not None and (why := boat_unusable("local" in targets)):
+    elif backend == "boat" and targets != ["local"]:
+        add("where", "Hosts and Boat sandboxes do not mix: choose Hosts, or Sandboxes alone.")
+    elif backend == "boat" and boat_unusable is not None and (why := boat_unusable(True)):
         add("where", f"Boat cannot run: {why}.")
     elif backend == "boat" and boat_size_problem is not None and str(recipe.get("boat_size") or boat.SIZE) in boat.SIZES:
         why = boat_size_problem(str(recipe.get("boat_size") or boat.SIZE))
@@ -567,6 +570,22 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if backend == "boat" and boat_size not in boat.SIZES:
         add("where", f"Choose a Boat size: {', '.join(boat.SIZES)}.")
         boat_size = boat.SIZE
+    # a benchmark whose units boot a VM of their own (OSWorld's guest): the VM starts on the machine the
+    # driver runs on, which a container cannot do, and on Boat inside a VM big enough to hold it
+    if b and definitions.boots_vms(b) and backend == "container":
+        add("where", f"{b['label']} starts each unit's VM on the machine: choose local processes.")
+    guest = max([definitions.vm_memory_gb(b, v) for v in per_ds.values()] or [0])
+    if backend == "boat" and not boat.fits(boat_size, guest):
+        add("where", f"A {boat.SIZES[boat_size]['label']} VM is too small for {b['label']}, whose units boot a {guest:g} GB VM: choose a larger size.")
+    # on Boat each unit's agent or capability runs in its VM (run.Run refuses the rest): a setup or a check runs
+    # on a machine, and the computer port's socket is on this one, out of a VM's reach
+    # A benchmark booting VMs of its own runs each unit whole in a VM (boat_units), with a relay container in each VM
+    computer = run.computer_port(b)
+    whole = definitions.boots_vms(b)
+    elsewhere = [definitions.setup_label(b, "original") if p.get("setup") else p["o"]["label"] for p in picks
+                 if not whole and (p["control"] or p.get("setup") or (computer and side == "agent"))]
+    if backend == "boat" and elsewhere:
+        add("where", f"{', '.join(elsewhere)} cannot run in a Boat VM yet: choose Hosts.")
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
     spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"])
     paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])
@@ -675,7 +694,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
                  *(["--backend", backend] if backend != "local" else []),
-                 *(["--boat-size", boat_size] if backend == "boat" and not control and not p.get("setup") else []),
+                 *(["--boat-size", boat_size] if backend == "boat" and (whole or not control and not p.get("setup")) else []),
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
                  *(["--shard", f"{index}/{of}", "--launch", launch_of(d, p)] if of > 1 else []),
                  *limits.cli_words(limits.of(targets[index - 1])),
@@ -718,7 +737,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # Nothing in the run asks a model: no key is handed to it, and none need be set.
     out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"]
     # what the machines must have for the chosen options (``host``): the Where step and its test show it, Run checks it
-    on_host = needs["host"]
+    on_host = [] if backend == "boat" and whole else needs["host"]     # each VM installs them (boat_units.prepare)
     if backend == "container" and any(p.get("setup") for p in picks):
         # a container setup's image installs what has an install; nothing else reaches its container
         imaged = hostreq.in_image(b, on_host)
@@ -766,7 +785,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       + (f" · judge {judge_model or b['score']['judge']['model']}" + ("" if judge_model else " (official)") if (b.get("score") or {}).get("judge") else "")
                       + "".join(f" · {SERVED_LABEL[r_]} served by {', '.join(s)}" for r_, s in served.items())],
                      [STEP["limits"], "Scope", f"{'first ' + str(n) if isinstance(limit, int) else 'all ' + str(total or '')} {nouns}"
-                      + (" of each shard" if of > 1 and isinstance(limit, int) else "") + f" · {conc} at a time".replace("  ", " ")
+                      + (" of each shard" if of > 1 and isinstance(limit, int) else "")
+                      + (" · as many at a time as Boat allows" if backend == "boat" and not recipe.get("concurrency") else f" · {conc} at a time")
                       + (" of each dataset" if many and isinstance(limit, int) else "")
                       + (f" · {len(pairs)} jobs, one after the other" if len(pairs) > 1 else "")
                       + (f" · {repeat} attempts each (pass^1 to pass^{repeat})" if repeat > 1 else "")
@@ -779,9 +799,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                      *([[STEP["limits"], "Time limits", " · ".join(f"{k} {v / 60:g} min" for k, v in forced.items())]] if forced else []),
                      *([[STEP["limits"], "Turns per conversation", str(turns)]] if turns else []),
                      *([[STEP["limits"], f"Model calls per {noun}", str(calls)]] if calls else []),
-                     [STEP["where"], "Where", (f"{of} shards, one per machine: " if of > 1 else "")
-                      + ", ".join(where_label(t) for t in targets) + f" · {backend} backend"
-                      + (f" · {boat_size} VMs" if backend == "boat" else "")
+                     [STEP["where"], "Where", (f"Boat sandboxes · one {boat.SIZES[boat_size]['label']} VM per {noun}" if backend == "boat"
+                      else (f"{of} shards, one per machine: " if of > 1 else "")
+                      + ", ".join(where_label(t) for t in targets) + f" · {backend} backend")
                       + "".join(f" · {w.get('label') or k.replace('_', ' ').capitalize()} {(w.get('names') or {}).get(v) or v}" for k, v in {k: v for vals in per_ds.values() for k, v in vals.items()}.items()
                                 if (w := (b.get("options") or {})[k]).get("step") == "where")]]
     if agents_local:

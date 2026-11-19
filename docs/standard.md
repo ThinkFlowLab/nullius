@@ -181,15 +181,20 @@ A rootful Docker with `userns-remap` maps the uids of each container to sub-uids
 
 `--backend boat`: each unit's agent or capability in its own [boat.dev](https://boat.dev) VM. Driver, relay, spending cap and scoring stay with the run.
 
-A computer-port run is refused before any unit: its server's local socket cannot be reached from the agent's VM. Choose local processes or the container backend.
+Except for VM benchmarks below, computer-port runs, Original setups and checks require Hosts.
+
+VM benchmarks such as OSWorld run each task entirely inside Boat, including scoring. Model keys and declared benchmark credentials enter those VMs.
+
+For these runs, spending caps are split equally across tasks; unused shares cannot transfer. Use a dataset and limit instead of `--units` or `--shard`.
 
 | Piece | Rule |
 | --- | --- |
 | Key | Settings → Sandbox, or `BOAT_API_KEY` |
-| VM | One per unit, `--boat-size` (`small` by default). Always deleted. Free trial: 2 hours at most |
-| Units at a time | Capped by the account's VM limit. The run warns when it cannot start every unit |
+| VM | One per unit, `--boat-size` (`small` by default). Always deleted. Free trial: 2 hours at most. VM benchmarks need more RAM than their guest VM |
+| Machines | Runs from this machine; never mixed with hosts |
+| Units at a time | The account's VM limit; a recipe may set fewer. The run warns when it cannot start every unit |
 | Agent time | Excludes the VM's start-up |
-| Isolation | The agent reaches loopback only: no internet, no DNS, no model key |
+| Isolation | Agent-only VMs reach loopback only: no internet, no DNS, no model key. VM benchmarks isolate the whole task |
 | Files | A link into your home or keys refuses the unit. Links out of the workspace are not copied back |
 | Code checks | A `runs_code` check needs Docker where the run runs |
 | Not run | Units needing the public web, their own image, a licence file or server of this machine, or MCP servers. No GPUs |
@@ -489,7 +494,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
 | `names` | A name for some values, shown in their place; a recipe and the CLI keep the value |
-| `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, or named `files` |
+| `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, named `files`, or on a Where option the `vm` each unit boots (`{"memory_gb": 4}`) |
 | `when` | Another option's values that make it apply |
 | `limit` | `true`: a bound of the upstream's own (steps, errors). The builder shows it in Limits, under the benchmark's name |
 | `step` | `where`: where the work runs, such as the VMs' provider, asked on Where, one value as fixed; `dataset`: what its datasets need, asked on Dataset for the datasets it applies to |

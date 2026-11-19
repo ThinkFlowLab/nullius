@@ -523,9 +523,23 @@ class StandardPieces(unittest.TestCase):
         self.assertEqual([(c["key"], c["source"], c["proven"], c["failed"]) for c in ds["controls"]],
                          [("nop", "nullius", None, None), ("oracle", "adapter", None, None)])
         # no benchmark here needs a machine setup
+        sizes = [{"key": "small", "label": "Small", "spec": "2 vCPU, 4 GB", "memory_gb": 4, "why": None},
+                 {"key": "default", "label": "Default", "spec": "4 vCPU, 8 GB", "memory_gb": 8, "why": None},
+                 {"key": "large", "label": "Large", "spec": "", "memory_gb": None, "why": None},
+                 {"key": "xlarge", "label": "XLarge", "spec": "", "memory_gb": None, "why": None}]
         self.assertEqual(schema["standardHere"], {"docker": None, "boat": "no Boat API key: set it in Settings → Sandbox",
-                                                  "boatKey": "no Boat API key: set it in Settings → Sandbox", "boatSizes": {}, "boatSpecs": {"small": "2 vCPU, 4 GB", "default": "4 vCPU, 8 GB"},
-                                                  "licences": {}, "host": {}})
+                                                  "boatSizes": sizes, "boatSlots": None, "licences": {}, "host": {}})
+
+    def test_the_builder_offers_the_boat_sizes_and_vms_at_once_its_account_says(self):
+        from nullius.standard import boat
+        self.fixture()
+        account = {"types": {"small": None, "default": None, "large": "not during the free trial"}, "slots": 2}
+        with patch.object(boat, "unusable", lambda here=True: None), patch.object(web.execute, "boat_account", lambda: account):
+            html = self.get("/new-run").get_data(as_text=True)
+        here = json.loads(re.search(r'<script id="nb-schema" type="application/json">(.*?)</script>', html, re.S).group(1))["standardHere"]
+        self.assertEqual(here["boatSlots"], 2)
+        self.assertEqual([(z["key"], z["why"]) for z in here["boatSizes"]],
+                         [("small", None), ("default", None), ("large", "not during the free trial")])     # xlarge: not the account's
 
     def test_docker_is_refused_on_the_where_step_with_this_machines_reason(self):
         self.fixture()

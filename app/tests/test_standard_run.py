@@ -330,6 +330,19 @@ class RunTest(unittest.TestCase):
         self.assertEqual(p.returncode, 143)
         self.assertTrue(os.path.exists(done))
 
+    def test_local_agent_calls_a_separate_container_relay(self):
+        from tests import docker_tier
+        why = docker_tier.why_not()
+        if why:
+            self.skipTest(why)
+        directory = self.go("fakebench", "fake", relay_container=True)
+        got, _ = self.outcomes(directory)
+        self.assertEqual(got["good"].outcome, classify.RESOLVED)
+        self.assertEqual(got["model"].outcome, classify.FAILED_VERIFICATION)
+        self.assertTrue(self.relay_calls(directory))
+        self.assert_no_key(directory)
+        self.assert_unit_relays(directory)
+
     def test_an_agent_run_reads_back_with_its_outcomes(self):
         job_dir = self.go("fakebench", "fake")
         got, j = self.outcomes(job_dir)

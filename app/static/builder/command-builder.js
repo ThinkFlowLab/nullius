@@ -457,42 +457,66 @@
     return `<span class="std-ctl std-checkchip"><b>${esc(name)}</b>${proofSpan(p)}</span>`; };
   // The yes to an agent running as you: asked only for the local backend, where it is no sandbox.
   const consentBox = rec => `<label class="nb-field nb-consent"><span><input type="checkbox" data-std-unsandboxed ${rec.unsandboxed ? 'checked' : ''}> Run it as me, not sandboxed</span></label>`;
-  // The standard's Where step: one machine or several (one shard each), and the backend on them.
+  // A benchmark whose units each boot a VM of their own (OSWorld's guest): a Where option has a value declaring
+  // one (needs.<value>.vm); vmMemory, that VM's memory in GB under the chosen values, 0 for none.
+  const bootsVms = b => Object.values((b || {}).options || {}).some(o => o.step === 'where' && Object.values(o.needs || {}).some(n => n && n.vm));
+  const vmMemory = (rec, b) => Math.max(0, ...Object.entries((b || {}).options || {}).filter(([, o]) => o.step === 'where')
+    .map(([n, o]) => (((o.needs || {})[(rec.bench_options || {})[n] ?? o.default] || {}).vm || {}).memory_gb || 0));
+  // Boat's sizes as the account offers them (nullius/standard/boat.py, SIZES), each with why it cannot be chosen:
+  // the account cannot start one, or it is too small to boot the unit's own VM (boat.fits).
+  const boatSizes = (rec, b) => { const mem = vmMemory(rec, b);
+    return ((schema.standardHere || {}).boatSizes || []).map(z => z.why ? {...z, note: 'Not on this account', why: 'Not on this account: ' + z.why}
+      : mem && typeof z.memory_gb === 'number' && z.memory_gb <= mem ? {...z, note: 'Too small', why: `Too small for ${b.label}'s ${mem} GB VM`} : {...z, why: ''}); };
+  // The standard's Where step. Machines: hosts (this machine, Settings hosts; one shard each) or Boat sandboxes (a VM
+  // per unit, as many at once as the account runs), never both. How it runs: on hosts, local processes or a container;
+  // in a sandbox, or for a benchmark whose units boot VMs of their own (which a container cannot start), fixed.
   function standardWhere(rec) {
     const here = schema.standardHere || {}, list = C.whereList(rec), H = schema.hosts || [], b = C.standardBench(rec);
+    const sandboxes = rec.backend === 'boat', vms = bootsVms(b), noun = unitsOf(rec).noun;
+    if (vms && rec.backend === 'container') rec.backend = 'local';          // recipe.py refuses it: nothing to choose
     const backend = rec.backend || 'local';
     const selected = C.standardOthers(rec).filter(o => C.chosenOf(rec).includes(o.key));
     const dockerWhy = list.includes('local') && here.docker ? 'Not on this machine: ' + here.docker : '';
     // Review's rule (nullius/standard/recipe.py): a setup's image installs what has an install; nothing else reaches its container
     const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
     const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
-    // boat: started where the run runs, with this machine's key (Settings → Sandbox); a host's programs are its prerequisites
-    const boatWhy = (list.includes('local') ? here.boat : here.boatKey) || '';
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
+    const kind = (v, label, why = '') => `<button type="button" data-std-machines="${v}" aria-pressed="${(v === 'boat') === sandboxes}"${why ? ` disabled aria-disabled="true" title="${esc(why)}"` : ''}>${label}</button>`;
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));
-    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? icon('terminal') : v === 'boat' ? '<img class="agent-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="agent-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">' : icon('container'), title: t, tip: sub});
+    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : v === 'local' ? 'Not sandboxed' : `Each ${noun} in a container`, mark: v === 'local' ? icon('terminal') : icon('container'), title: t, tip: sub});
     const dockerOnly = Object.entries((b || {}).environments || {}).filter(([, e]) => !e.local_ok).map(([n]) => n);
     const web = agentRun && Object.values((b || {}).environments || {}).some(e => e.network);   // an agent's public web proxy
+    // a VM benchmark's provider of one value goes on the fixed line; several are its cards (benchOptions)
+    const provider = vms && Object.values(b.options || {}).find(o => o.step === 'where' && o.values && o.values.length === 1 && Object.values(o.needs || {}).some(n => n && n.vm));
+    // what a sandbox cannot run (recipe.py): a setup or a check runs on a machine; the computer port's socket is on this one
+    // a benchmark booting VMs of its own runs each unit whole in a VM, with a relay container in each VM (boat_units)
+    const outside = !sandboxes ? [] : selected.filter(o => !vms && (o.setup || o.control || ((b.needs || []).some(p => p.startsWith('agent.computer/')) && b.family === 'agent'))).map(o => o.label);
+    let sizes = '';
+    if (sandboxes && !here.boat) {
+      const offered = boatSizes(rec, b), fit = offered.find(z => !z.why);
+      if (fit && !offered.some(z => z.key === (rec.boat_size || 'small') && !z.why)) rec.boat_size = fit.key;
+      const size = rec.boat_size || 'small';
+      sizes = '<div class="nb-sectionhead std-wherehead"><h3>VM size</h3></div>'
+        + `<div class="nb-pick-grid std-backends std-boat-sizes">${offered.map(z => tile({attr: 'std-boat-size', key: z.key, on: size === z.key && !z.why,
+          disabled: !!z.why, why: z.why, note: z.note || z.spec, title: z.label})).join('')}</div>`;
+    }
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
-      + `<div class="nb-pick-grid nb-where">${machine('local', 'This machine', 'Nullius runs it here, in runs/' + rec.name + '.')}${H.map(h => machine(h.entry, h.label, 'Over ssh: the standard\'s code at this commit is sent there, uv put there if missing; its job comes back as it runs.')).join('')}</div>`
-      + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
-      + (b ? benchOptions(rec, b, 'where') : '') + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
-      + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
-      + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
-        : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy)
-      + how('boat', 'Boat', 'Sandboxed: each unit in a Boat VM of its own, whose only way out is its relay.', boatWhy) + '</div>'
-      + (backend === 'boat' && !boatWhy ? boatSizes(rec) : '')
+      + `<div class="std-machines" role="group" aria-label="Machines">${kind('hosts', 'Hosts')}${kind('boat', 'Sandboxes', here.boat || '')}</div>`
+      + (sandboxes ? `<div class="std-boat-card"><strong>Boat</strong><span>One VM per ${esc(noun)}</span>${here.boatSlots ? `<span class="std-boat-slots">${here.boatSlots} at once on this account</span>` : ''}${here.boat ? `<span class="nb-error">${esc(here.boat)}</span>` : ''}</div>` + sizes
+        : `<div class="nb-pick-grid nb-where std-hosts">${machine('local', 'This machine', 'Runs here')}${H.map(h => machine(h.entry, h.label, 'Over SSH')).join('')}</div>`
+        + (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : ''))
+      + '<div class="nb-sectionhead std-wherehead"><h3>Isolation</h3></div>'
+      + (sandboxes || vms
+        ? `<div class="nb-fixed std-isolation"><span>${vms ? `Each ${esc(noun)} in its own VM` : `The agent alone in each ${esc(noun)}'s VM`}</span>`
+          + `<small>${vms ? (provider ? (sandboxes ? `${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, inside the ${esc(noun)}'s Boat VM` : `${esc(provider.label)}: ${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}`) : '') : 'Answers and keys stay on this machine'}</small></div>`
+        : `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
+          + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
+            : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>')
+      + (b ? benchOptions(rec, b, 'where') : '')
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
-      + (dockerOnly.length && backend !== 'container' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - on ${backend === 'boat' ? 'Boat' : 'local processes'} their units are recorded as not run.</p>` : '')
-      + hostSetup(rec);
-  }
-  const BOAT_SIZES = [['small', 'Small'], ['default', 'Default'], ['large', 'Large'], ['xlarge', 'XLarge']];
-  function boatSizes(rec) {
-    const here = schema.standardHere || {}, why = here.boatSizes || {}, spec = here.boatSpecs || {}, size = rec.boat_size || 'small';
-    const card = ([v, t]) => tile({attr: 'std-boat-size', key: v, on: size === v && !why[v], disabled: !!why[v],
-      note: why[v] ? 'Not on this account' : spec[v] || '', title: t});
-    return '<div class="nb-sectionhead std-wherehead"><h3>VM size</h3></div>'
-      + `<div class="nb-pick-grid std-backends std-boat-sizes">${BOAT_SIZES.map(card).join('')}</div>`;
+      + (outside.length ? `<p class="nb-note nb-error">${esc(outside.join(', '))} cannot run in a Boat VM yet: choose Hosts.</p>` : '')
+      + (dockerOnly.length && backend !== 'container' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - ${sandboxes ? 'in a Boat VM' : 'on local processes'} their units are recorded as not run.</p>` : '')
+      + (sandboxes ? '' : hostSetup(rec));
   }
   // What the chosen options of the benchmark need: an embedding model, requirements of the machine (standard.json host).
   function optionNeeds(rec) {
@@ -508,7 +532,7 @@
   }
   // The machines' setup for those requirements: each chosen machine's state, a check, an install on an explicit
   // click (sudo -n: a machine whose sudo asks for a password is told the commands instead), the commands to copy.
-  const hostState = {};                                       // entry -> {missing, error, said}
+  const hostState = {};                                       // benchmark:entry:requirement -> {missing, error, said}
   function hostSetup(rec) {
     const b = C.standardBench(rec), need = optionNeeds(rec).host;
     if (!b || !need.length) return '';
@@ -517,31 +541,36 @@
     if ((rec.backend || 'local') === 'container' && chosen.length && chosen.every(o => o.setup)) return '';
     const reqs = need.map(n => [n, (b.host || {})[n]]).filter(([, r]) => r);
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
-    // what installs them; none for a machine's own hardware (a GPU), which no package puts there
-    const lines = reqs.flatMap(([n]) => b.host[n].install).filter((x, i, a) => a.indexOf(x) === i);
-    const line = w => {
-      const st = hostState[w] || (w === 'local' ? {missing: Object.fromEntries(need.filter(n => local[n]).map(n => [n, local[n]]))} : null);
-      const gone = st && st.missing ? Object.entries(st.missing).filter(([n]) => need.includes(n)) : [];
-      const state = !st ? '<span class="nb-tick">not checked</span>' : st.error ? `<span class="nb-tick no">${esc(st.error)}</span>`
-        : gone.length ? `<span class="nb-tick no">${esc(gone.map(([, ps]) => ps.join(', ')).join(', '))}</span>` : '<span class="nb-tick ok">ready ✓</span>';
-      return `<li><b>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</b> ${state} ${button('Check', `data-hostreq-check="${esc(w)}"`, 'nb-inlinebutton')}${lines.length && (gone.length || (st && st.error)) ? ' ' + button('Install for me', `data-hostreq-install="${esc(w)}"`, 'nb-inlinebutton') : ''}${st && st.said ? ` <small>${esc(st.said)}</small>` : ''}</li>`;
-    };
-    return `<div class="nb-sectionhead std-wherehead"><h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small></div>`
-      + reqs.map(([n, r]) => `<p class="nb-note"><b>${esc(r.label)}</b>: ${esc(r.summary)}</p>`).join('')
-      + `<ul class="nb-hostreq">${C.whereList(rec).map(line).join('')}</ul>`
-      + (lines.length ? `<div class="std-code"><div class="std-code-head"><span>or run it yourself, on each machine</span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div>` : '');
+    return reqs.map(([name, req]) => {
+      const lines = req.install || [];
+      const machines = C.whereList(rec);
+      const rows = machines.map(w => {
+        const st = hostState[b.key + ':' + w + ':' + name] || (w === 'local' ? {missing: local[name] ? {[name]: local[name]} : {}} : null);
+        const missing = st && st.missing && st.missing[name];
+        const state = !st ? 'Not checked' : st.error ? st.error : missing && missing.length ? 'Missing' : 'Ready';
+        const attrs = `data-hostreq-name="${esc(name)}"`;
+        return `<div class="std-hostreq-row">${machines.length > 1 || w !== 'local' ? `<strong>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</strong>` : ''}`
+          + `<span class="std-hostreq-names">${esc(req.summary || req.label)}</span>`
+          + `<div class="std-hostreq-actions"><span class="${!st || st.error || missing && missing.length ? 'nb-error' : ''}"${missing ? ` title="${esc(missing.join(', '))}"` : ''}>${esc(state)}</span>`
+          + button('Check', `data-hostreq-check="${esc(w)}" ${attrs}`, 'nb-button')
+          + (lines.length && (missing && missing.length || st && st.error) ? button('Install', `data-hostreq-install="${esc(w)}" ${attrs}`, 'nb-button nb-primary') : '')
+          + `</div>${st && st.said ? `<small>${esc(st.said)}</small>` : ''}</div>`;
+      }).join('');
+      return `<div class="nb-sectionhead std-wherehead"><h3>${esc(req.label)}</h3></div><div class="std-hostreq">${rows}`
+        + (lines.length ? `<details><summary>Install manually</summary><div class="std-code"><div class="std-code-head"><span></span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div></details>` : '') + '</div>';
+    }).join('');
   }
-  async function hostReq(entry, what) {
-    const rec = r(), b = C.standardBench(rec);
-    hostState[entry] = {...(hostState[entry] || {}), said: what === 'install' ? 'installing…' : 'checking…', error: ''};
+  async function hostReq(entry, what, name) {
+    const rec = r(), b = C.standardBench(rec), key = b.key + ':' + entry + ':' + name;
+    hostState[key] = {...(hostState[key] || {}), said: what === 'install' ? 'Installing…' : 'Checking…', error: ''};
     renderForm();
     try {
       const res = await nulliusFetch('/new-run/host/' + what, {method: 'POST', headers: {'X-CSRF-Token': schema.csrf},
-        body: new URLSearchParams({entry, benchmark: b.key, requirements: optionNeeds(rec).host.join(',')})});
+        body: new URLSearchParams({entry, benchmark: b.key, requirements: name})});
       const j = await res.json();
-      if (what === 'install' && j.ok) return hostReq(entry, 'check');
-      hostState[entry] = j.ok ? {missing: j.missing || {}} : {...(hostState[entry] || {}), error: j.error || ('HTTP ' + res.status), said: j.manual ? 'run the commands below by hand' : ''};
-    } catch (e) { hostState[entry] = {error: String(e)}; }
+      if (what === 'install' && j.ok) return hostReq(entry, 'check', name);
+      hostState[key] = j.ok ? {missing: j.missing || {}} : {...(hostState[key] || {}), error: j.error || ('HTTP ' + res.status), said: j.manual ? 'Use Install manually below' : ''};
+    } catch (e) { hostState[key] = {error: String(e)}; }
     renderForm();
   }
   // A benchmark's own options (a search, a mode), for the chosen datasets they apply to, and what a value needs of this
@@ -565,6 +594,7 @@
       })
       .map(([n, o]) => {
       const cur = (rec.bench_options || {})[n] ?? o.default;
+      if (scope === 'where' && o.values.length === 1 && Object.values(o.needs || {}).some(x => x && x.vm)) return '';   // on the How it runs line
       if (scope === 'where' && o.values.length === 1) return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}</h3></div><p class="nb-fixed"${(o.about || {})[cur] ? ` title="${esc(o.about[cur])}"` : ''}>${esc((o.names || {})[cur] || cur)}</p>`;
       if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}${o.example ? esc(' e.g. ' + o.example) : ''}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(o.default === 'default' && !o.limit ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
       const tileOf = v => { const need = (o.needs || {})[v] || {};
@@ -727,7 +757,7 @@
       const ds = sets.length === 1 ? sets[0] : null, all = ds && ds.units ? String(ds.units) : 'all';
       return '<div class="nb-sectionhead"><h2>Scope</h2></div><div class="nb-two">'
         + field('Number of ' + u.nouns, 'limit', rec.limit, {type: 'number', min: 1, placeholder: all, hint: 'The first ones' + per + ', in its order.'})
-        + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: '1'}) + '</div>'
+        + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: rec.backend === 'boat' ? String((schema.standardHere || {}).boatSlots || 'Boat\'s limit') : '1'}) + '</div>'
         + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
         + field('Retries per attempt', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0'}) + '</div>'
         // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
@@ -970,7 +1000,7 @@
   root.addEventListener('submit',event=>{if(event.target.id==='nb-save-form'){event.preventDefault();save();}});
   // Running from here: the runner script is posted with the target; the page follows the log until the run ends.
   const runPanel=()=>{
-    const rec=r(), where=C.whereList(rec).map(w=>w==='local'?'this machine':C.machineLabel(w)).join(' + ');
+    const rec=r(), where=C.isStandard(rec)&&rec.backend==='boat'?'Boat sandboxes':C.whereList(rec).map(w=>w==='local'?'this machine':C.machineLabel(w)).join(' + ');
     if(!schema.local)return note('Run from the application host','Runs start from a browser on the machine Nullius runs on.');
     // A provider not set in Settings: Run waits and says why.
     const blocked=C.providerBlocker(rec);
@@ -1051,8 +1081,8 @@
     // key, the keyboard goes back to that field
     if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);syncServed();refreshPlan();if(event.detail===0)root.querySelector(`input[data-served-by="${d.servedRole}"]`)?.focus();return;}
     if(d.benchOpt!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOpt]||{};rec.bench_options={...(rec.bench_options||{})};if(d.benchVal===o.default)delete rec.bench_options[d.benchOpt];else rec.bench_options[d.benchOpt]=d.benchVal;renderForm();refreshPlan();return;}
-    if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check');return;}
-    if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install');return;}
+    if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check',d.hostreqName);return;}
+    if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install',d.hostreqName);return;}
     if(d.copyCode!==undefined){const t=b.closest('.std-code').querySelector('code').textContent;try{await navigator.clipboard.writeText(t);b.textContent='Copied';}catch{b.textContent='Select it';}setTimeout(()=>{b.textContent='Copy';},1500);return;}
     if(d.pickCat!==undefined){pickOf().cat=d.pickCat;applyPick();return;}
     if(d.pickFam!==undefined){pickOf().fam=d.pickFam;applyPick();return;}
@@ -1072,6 +1102,8 @@
     else if(d.stdOther){const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(d.stdOther)?c.filter(k=>k!==d.stdOther):[...c,d.stdOther];delete rec.other;if(rec.options)delete rec.options[d.stdOther];}
     // the standard's machines: each a toggle, one at least; several split the run into shards
     else if(d.stdWhere){const rec=r(),list=C.whereList(rec),on=list.includes(d.stdWhere),next=on?list.filter(w=>w!==d.stdWhere):[...list,d.stdWhere];if(!next.length)return;rec.where=next.length>1?next:next[0];}
+    // hosts or Boat sandboxes: a sandbox run starts from this machine alone
+    else if(d.stdMachines){const rec=r();if(d.stdMachines==='boat'){rec.backend='boat';rec.where='local';}else if(rec.backend==='boat')rec.backend='local';}
     else if(d.stdBackend){r().backend=d.stdBackend;}
     else if(d.stdBoatSize){r().boat_size=d.stdBoatSize;}
     else if(d.harborSource){r().source=d.harborSource;}
