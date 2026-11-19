@@ -150,7 +150,8 @@
       "setups": [
         "original"
       ],
-      "pattern": "default|(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?"
+      "pattern": "default|(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?",
+      "example": "0.5"
     },
     "subject": {
       "summary": "TeleQnA's question category: every one, or one alone (the task's subject argument).",
@@ -296,8 +297,8 @@
       ],
       "default": "soft",
       "about": {
-        "soft": "The first number only: \\boxed{3} and \\boxed{C3} both match C3. The upstream's default.",
-        "hard": "The whole text, case aside: only \\boxed{C3} matches C3."
+        "soft": "The first number in the box: 3 and C3 both match C3. The upstream's default.",
+        "hard": "The whole box, case aside: only C3 matches C3."
       },
       "setups": [
         "original",

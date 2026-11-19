@@ -186,6 +186,18 @@ class BenchmarksList(PageCase):
 
 
 class BenchmarkPage(PageCase):
+    def test_a_proof_short_of_the_full_mark_has_no_green_tick_and_says_its_bound(self):
+        # Open Telco's oracle must score at least 93%: 3GPP TSG's scorer cannot read RAN_AH1, so its rows stop short
+        html = self.page_html("open-telco")
+        row = lambda label: re.search(r'<th scope="row">%s<.*?</tr>' % re.escape(label), html, re.S).group(0)
+        self.assertIn('<span class="std-proof std-proof-part" title="93.55%, at least 93% needed · proven on', row("3GPP TSG · Full"))
+        self.assertIn("✓ 1871/2000</span>", row("3GPP TSG · Full"))
+        self.assertIn('<span class="std-proof std-proof-part" title="94%, at least 93% needed · proven on', row("3GPP TSG · Lite"))
+        self.assertIn("the reference answers: must score at least 93% - made by Nullius", row("3GPP TSG · Lite"))
+        self.assertIn('<span class="std-proof std-proof-ok" title="proven on', row("TeleQnA · Lite"))      # every unit: green
+        self.assertNotIn("std-proof-part", row("TeleQnA · Lite"))
+        self.assertIn("no answer at all: must score nothing", row("TeleQnA · Lite"))
+
     def test_a_benchmark_on_both_runners_opens_the_builder(self):
         self.assertEqual(self.route_case("swe-bench-verified"), "multi-route")
         html, text = self.page_html("swe-bench-verified"), self.page("swe-bench-verified")

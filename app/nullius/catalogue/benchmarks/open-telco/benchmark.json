@@ -20,8 +20,7 @@
   ],
   "limitations": [
     "An agent gets TeleMath's system prompt and the question as one prompt: ACP has no system message.",
-    "TeleLogs' majority vote across epochs (maj@k) is not computed; several attempts give pass@k instead.",
-    "Inspect retries an Original call that is rate-limited until the question's time runs out: it ends as a timeout, not rate-limited."
+    "TeleLogs' majority vote across epochs (maj@k) is not computed; several attempts give pass@k instead."
   ],
   "datasets": [
     {

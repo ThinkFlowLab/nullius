@@ -124,6 +124,28 @@ class FailedProof(unittest.TestCase):
         self.assertNotIn("failed", self.b["proven"]["all"])
         self.assertEqual(prove.status(self.b)["all"]["oracle"]["proven"]["passed"], "4/4")
 
+    def test_a_proof_within_a_bound_short_of_the_full_mark_says_so_and_the_bound(self):
+        # an oracle lowered for answers its scorer cannot read, a nop a judge sometimes passes: proven, and short of the mark
+        self.b["controls"] = {"nop": dict(CONTROLS["nop"], expect={"at_most": 0.07}),
+                              "oracle": dict(CONTROLS["oracle"], expect={"at_least": 0.93})}
+        prove.record(self.b, {"all": {"oracle": {"ok": True, "passed": "1871/2000", "value": 0.9355, "expect": {"at_least": 0.93}, "units": 2000},
+                                      "nop": {"ok": True, "passed": "20/500", "value": 0.04, "expect": {"at_most": 0.07}, "units": 500}}})
+        row = prove.status(self.b)["all"]
+        self.assertEqual((row["oracle"]["must"], row["oracle"]["short"]), ("at least 93%", "93.55%, at least 93% needed"))
+        self.assertEqual((row["nop"]["must"], row["nop"]["short"]), ("at most 7%", "4%, at most 7% allowed"))
+        with patch.object(recipe, "_all", lambda: {"benchmark": [self.b], "agent": [], "capability": []}):
+            b = recipe.choices()["benchmarks"][0]
+        self.assertEqual([(c["key"], c["must"]) for c in b["controls"]], [("nop", "at most 7%"), ("oracle", "at least 93%")])
+        self.assertEqual([c["short"] for c in b["datasets"][0]["controls"]], ["4%, at most 7% allowed", "93.55%, at least 93% needed"])
+        # at the full mark, under the same lowered bound, it is a plain pass; at the default bound, it must score everything
+        prove.record(self.b, {"all": {"oracle": {"ok": True, "passed": "2000/2000", "value": 1.0, "expect": {"at_least": 0.93}, "units": 2000},
+                                      "nop": {"ok": True, "passed": "0/500", "value": 0.0, "expect": {"at_most": 0.07}, "units": 500}}})
+        self.assertEqual([prove.status(self.b)["all"][c]["short"] for c in ("nop", "oracle")], ["", ""])
+        self.b["controls"] = CONTROLS
+        self.assertEqual([prove.status(self.b)["all"][c]["must"] for c in ("nop", "oracle")], ["nothing", "everything"])
+        self.assertEqual(prove.short_of(None, {"at_least": 1.0}), "")
+        self.assertEqual(prove.short_of({"passed": "3/3"}, {"at_least": 1.0}), "")      # an older record, with no value
+
 
 class AgentPage(unittest.TestCase):
     def test_each_proof_carries_its_kit_and_an_older_kit_says_so(self):

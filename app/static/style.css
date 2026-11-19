@@ -1727,6 +1727,7 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 .std-checkchip { border-color: var(--border-soft); color: var(--text-dim); }
 .std-proof { font: 11px/1.6 var(--sans); overflow: hidden; text-overflow: ellipsis; }
 .std-proof-ok { color: var(--ok); }
+.std-proof-part { color: var(--patch_failed_tests); }
 .std-proof-no { color: var(--bad); }
 .std-proof-none { color: var(--text-faint); }
 .std-fidelity.ok { color: var(--ok) !important; }

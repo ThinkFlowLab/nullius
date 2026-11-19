@@ -116,7 +116,7 @@ def _bench_page(b: dict) -> dict:
     ``proofs``, the units and leak checks the same way (``prove.status``)."""
     kinds = sorted({p.split(".", 1)[1].split("/")[0] for p in b.get("needs") or []}) if b["family"] == "capability" else []
     status = prove.status(b)
-    controls = [{k: c[k] for k in ("key", "label", "source", "from", "expect")}
+    controls = [{**{k: c[k] for k in ("key", "label", "source", "from", "expect")}, "must": prove.must_score(c["expect"])}
                 for c in (definitions.control(b, w) for w in definitions.CONTROLS) if c]
     versioned = definitions.version_of(b) is not None
     return {"key": b["key"], "label": b["label"], "summary": b["summary"], "family": b["family"], "kind": kinds[0] if kinds else "",
@@ -163,7 +163,7 @@ def _bench_page(b: dict) -> dict:
                      for n, r in hostreq.all_of(b).items()},
             "datasets": [{"id": d["id"], "label": d.get("label") or d["id"], "summary": d.get("summary", ""), "units": d.get("units"),
                           "environment": d.get("environment") or "",
-                          "controls": [dict(c, proven=status[d["id"]][c["key"]]["proven"], failed=status[d["id"]][c["key"]]["failed"])
+                          "controls": [dict(c, **{k: status[d["id"]][c["key"]][k] for k in ("proven", "short", "failed")})
                                        for c in controls],
                           "proofs": {k: status[d["id"]][k]["proven"] for k in ("units", "leak")},
                           "failed": {k: status[d["id"]][k]["failed"] for k in ("units", "leak") if status[d["id"]][k]["failed"]}}
