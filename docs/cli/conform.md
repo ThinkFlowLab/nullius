@@ -1,6 +1,6 @@
 # Conform an agent or a capability
 
-Run each port's conformance kit; a port enters `offers` only through a pass, recorded in the definition.
+Run each port's conformance kit; a port enters `offers` only through a pass, recorded in [proofs.json](../standard.md#what-is-proven).
 
 ```bash title="Conform"
 nullius standard conform <other>[@version] --model M [--provider P] [--port PORT]... \

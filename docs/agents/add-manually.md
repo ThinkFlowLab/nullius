@@ -18,16 +18,17 @@ import json
 import shutil
 from pathlib import Path
 from nullius import paths, settings
-from nullius.standard.contract import definitions
+from nullius.standard.contract import definitions, proofs
 
 settings.load(paths.settings_file())
 source = Path(definitions.entry_dir("agent", "goose"))
 target = Path(paths.catalogue_dir()) / "agents" / "my-agent"
 shutil.copytree(source, target)
 path = target / "agent.json"
-definition = json.loads(path.read_text())
-definition.update(key="my-agent", label="My Goose", offers=[], proven={})
+definition = proofs.strip(json.loads(path.read_text()))
+definition.update(key="my-agent", label="My Goose")
 path.write_text(json.dumps(definition, indent=2) + "\n")
+(target / "proofs.json").unlink(missing_ok=True)
 print(path)
 PYCODE
 nullius_catalogue=$(nullius paths --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["catalogue"])')
@@ -90,7 +91,7 @@ Keep the whole copied definition, `model.env` and `options` included.
 
 | Rule | |
 | --- | --- |
-| Success | Passing checks write `offers` and `proven`, never by hand; the kit jobs under `jobs_standard/` |
+| Success | Passing checks write [proofs.json](../standard.md#what-is-proven), never by hand; the kit jobs under `jobs_standard/` |
 | The builder | The same ports and proofs as `fit` |
 
 To

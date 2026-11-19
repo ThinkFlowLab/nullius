@@ -187,7 +187,8 @@ class Problems(unittest.TestCase):
                 json.dump(edited, f)
             definitions.save(second, lambda cur: cur.update(proven=dict(cur.get("proven") or {}, b={"nop": {"on": "2"}})))
             with open(path) as f:
-                saved = json.load(f)
+                self.assertEqual(json.load(f), edited)
+            saved = definitions.read_document(path, "benchmark")
         self.assertEqual(sorted(saved["proven"]), ["a", "b"])
         self.assertEqual(saved["summary"], "Edited meanwhile.")
         self.assertEqual(sorted(second["proven"]), ["a", "b"])           # the caller sees what was written

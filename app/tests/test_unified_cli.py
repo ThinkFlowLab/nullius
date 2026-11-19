@@ -164,7 +164,7 @@ class CatalogueCommands(unittest.TestCase):
         self.assertEqual(json.loads((self.entry / "agent.json").read_text()), self.original)
         self.assertEqual((path.parent / "agent.py").read_bytes(), (self.entry / "agent.py").read_bytes())
         self.assertEqual(json.loads(path.read_text())["versions"]["2"],
-                         {"install": {"pip": ["example==2"]}, "proven": {}})
+                         {"install": {"pip": ["example==2"]}})
         with self.assertRaisesRegex(SystemExit, "already"):
             standard_cli.new_version("example", "2")
 

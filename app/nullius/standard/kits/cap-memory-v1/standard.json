@@ -38,45 +38,15 @@
     "kind": "pass",
     "says": "the recalled memory holds the fact"
   },
-  "proven": {
-    "kit": {
-      "units": {
-        "units": 2,
-        "passed": "2 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 2,
-        "looked_for": 2,
-        "short": 0,
-        "passed": "2/2"
-      },
-      "nop": {
-        "passed": "0/2",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 2
-      },
-      "oracle": {
-        "passed": "2/2",
-        "value": 1.0,
-        "expect": {
-          "at_least": 1.0
-        },
-        "units": 2
-      }
-    }
-  },
   "check_details": {
     "m1": {
       "label": "Recall a place",
-      "task": "Store six sessions, including “My sister Ines moved to Lisbon in March.” Ask where Ines moved.",
+      "task": "Store six sessions, including \u201cMy sister Ines moved to Lisbon in March.\u201d Ask where Ines moved.",
       "passes": "The recalled memory contains Lisbon, ignoring case."
     },
     "m2": {
       "label": "Recall an exact name",
-      "task": "Store six sessions, including “The boat at the cabin is named tern-river-9.” Ask what the boat is named.",
+      "task": "Store six sessions, including \u201cThe boat at the cabin is named tern-river-9.\u201d Ask what the boat is named.",
       "passes": "The recalled memory contains tern-river-9, ignoring case."
     }
   }

@@ -1,0 +1,27 @@
+{
+  "schema": "nullius.proofs/v1",
+  "kind": "agent",
+  "key": "swe-agent",
+  "versions": {
+    "1.1.0": {
+      "offers": [
+        "agent.workspace/v1"
+      ],
+      "proven": {
+        "agent.workspace/v1": {
+          "passed": "2/2",
+          "model": "openai/gpt-4.1",
+          "provider": "openrouter",
+          "version": "1.1.0",
+          "kit_version": 1,
+          "backend": "container",
+          "fixture": {
+            "image": "docker.io/swebench/sweb.eval.x86_64.django_1776_django-17087@sha256:fef77b052bf6729f7b6326b3b485b8a63ac1dc39b6e1c7040242aa2d3b2dc656",
+            "user": "0",
+            "kit": "agent-workspace-v1"
+          }
+        }
+      }
+    }
+  }
+}

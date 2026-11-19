@@ -1,0 +1,22 @@
+{
+  "schema": "nullius.proofs/v1",
+  "kind": "agent",
+  "key": "terminus-2",
+  "versions": {
+    "0.24.0": {
+      "offers": [
+        "agent.workspace/v1"
+      ],
+      "proven": {
+        "agent.workspace/v1": {
+          "passed": "2/2",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "0.24.0",
+          "kit_version": 1,
+          "backend": "docker"
+        }
+      }
+    }
+  }
+}

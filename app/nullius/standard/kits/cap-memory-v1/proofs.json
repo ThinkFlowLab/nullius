@@ -1,0 +1,39 @@
+{
+  "schema": "nullius.proofs/v1",
+  "kind": "benchmark",
+  "key": "cap-memory-v1",
+  "versions": {
+    "": {
+      "proven": {
+        "kit": {
+          "units": {
+            "units": 2,
+            "passed": "2 ids, the same twice, unique"
+          },
+          "leak": {
+            "units": 2,
+            "looked_for": 2,
+            "short": 0,
+            "passed": "2/2"
+          },
+          "nop": {
+            "passed": "0/2",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 2
+          },
+          "oracle": {
+            "passed": "2/2",
+            "value": 1.0,
+            "expect": {
+              "at_least": 1.0
+            },
+            "units": 2
+          }
+        }
+      }
+    }
+  }
+}

@@ -302,9 +302,9 @@ class BenchmarkPage(PageCase):
             self.assertNotIn("Native", text); self.assertNotIn("runner.json", text)
 
     def test_the_page_shows_its_folder(self):
-        self.assertIn("benchmarks/longmemeval/ ├─ benchmark.json ├─ driver.py ├─ standard.json └─ upstream-settings.json", self.page("longmemeval"))
-        self.assertIn("benchmarks/swe-bench-verified/ ├─ benchmark.json ├─ driver.py ├─ images.json ├─ standard.json └─ upstream-settings.json", self.page("swe-bench-verified"))
-        self.assertIn("benchmarks/terminal-bench/ ├─ benchmark.json ├─ driver.py ├─ standard.json └─ upstream-settings.json", self.page("terminal-bench"))
+        self.assertIn("benchmarks/longmemeval/ ├─ benchmark.json ├─ driver.py ├─ proofs.json ├─ standard.json └─ upstream-settings.json", self.page("longmemeval"))
+        self.assertIn("benchmarks/swe-bench-verified/ ├─ benchmark.json ├─ driver.py ├─ images.json ├─ proofs.json ├─ standard.json └─ upstream-settings.json", self.page("swe-bench-verified"))
+        self.assertIn("benchmarks/terminal-bench/ ├─ benchmark.json ├─ driver.py ├─ proofs.json ├─ standard.json └─ upstream-settings.json", self.page("terminal-bench"))
 
     def test_an_option_with_a_pattern_shows_its_example_not_the_pattern(self):
         for key in ("osworld2", "gsm8k", "humaneval", "gaia", "osworld1", "tau3-bench"):
