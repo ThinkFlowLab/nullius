@@ -341,9 +341,9 @@ class Cancellation(RepoCase):
                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                 env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
         deadline = time.monotonic() + 30
-        while not (os.path.isfile(pid_file) and open(pid_file).read().strip()) and time.monotonic() < deadline:
+        while not self.read_pid(pid_file) and time.monotonic() < deadline:
             time.sleep(0.1)
-        command_pid = int(open(pid_file).read())
+        command_pid = int(self.read_pid(pid_file))
         proc.send_signal(signum)
         _, err = proc.communicate(timeout=60)
         self.assertNotEqual(proc.returncode, 0)
@@ -355,6 +355,12 @@ class Cancellation(RepoCase):
         self.assertEqual(git(self.repo.path, ["worktree", "list", "--porcelain"]).count("worktree "), 1)
         self.assertEqual(os.listdir(os.path.join(self.loop, "worktrees")), [])
         self.assertFalse(os.path.exists(self.round_file("candidates/good/checks.json")))
+
+    def read_pid(self, path: str) -> str:
+        if not os.path.isfile(path):
+            return ""
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().strip()
 
     def alive(self, pid: int) -> bool:
         try:
