@@ -27,7 +27,8 @@
       "locked": true
     },
     "participant": true,
-    "unit_end": true
+    "unit_end": true,
+    "task_given": true
   },
   "mcp_servers": {
     "computer": {

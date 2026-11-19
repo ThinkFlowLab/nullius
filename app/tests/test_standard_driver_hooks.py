@@ -462,3 +462,101 @@ class ThroughARun(unittest.TestCase):
             failed = json.load(f)["exception_info"]
         self.assertEqual(failed["exception_type"], "EnvironmentSetupError")
         self.assertIn("setup: no reply in 1 s", failed["exception_message"])
+
+
+# A driver that is told when the agent is given its task: it marks the trial, and records each score's answer.
+GIVEN_DRIVER = '''import json, os, time
+from nullius.standard.jsonl import serve
+def setup(unit, dir, **told):
+    with open(os.path.join(os.path.dirname(dir), "told.json"), "w") as f:
+        json.dump(told, f)
+    return {"prompt": "hi"}
+def task_given(unit, dir):
+    with open(os.path.join(os.path.dirname(dir), "given"), "a") as f:
+        f.write(json.dumps({"unit": unit, "dir": dir}) + "\\n")
+    return {}
+def score(unit, dir, transcript, answer):
+    with open(os.path.join(os.path.dirname(dir), "answer.txt"), "w") as f:
+        f.write(answer)
+    return {"reward": 1.0, "passed": True, "detail": {}}
+serve({"units": lambda dataset: {"units": ["a"]}, "setup": setup, "task_given": task_given, "score": score})
+'''
+
+
+class TaskGiven(unittest.TestCase):
+    """The run tells a driver that asks (driver.task_given) that the agent is being given its task, and waits for its
+    answer, before the first prompt of an ACP agent and before a command agent starts: a real run, the fake ACP agent
+    and a command of the test's."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self._home = install.HOME
+        install.HOME = os.path.join(self.tmp, "home")
+        self.addCleanup(setattr, install, "HOME", self._home)
+        self.env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}
+
+    def given(self):
+        return sorted(str(p) for p in Path(self.tmp).rglob("given"))
+
+    def trial(self, other, code=GIVEN_DRIVER, **bench):
+        here = os.path.join(self.tmp, "bench")
+        os.makedirs(here, exist_ok=True)
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(code)
+        jobs = tempfile.mkdtemp(dir=self.tmp)
+        job = run.run(dict(BENCH, _here=here, _kind="benchmark", **bench), other, model="m-1", provider="custom",
+                      jobs_root=jobs, concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True)
+        return next(os.path.join(job, d) for d in os.listdir(job) if "__u" in d)
+
+    def test_the_flag_is_true_or_false(self):
+        self.assertEqual(definitions.problems(dict(BENCH, driver=dict(BENCH["driver"], task_given=True)), "benchmark"), [])
+        self.assertIn("driver.task_given: true or false - whether the driver is told when the agent is given its task",
+                      definitions.problems(dict(BENCH, driver=dict(BENCH["driver"], task_given="yes")), "benchmark"))
+
+    def test_an_acp_agent_is_sent_its_task_once_the_driver_has_taken_it(self):
+        seen, prompt = [], run.acp.Client.prompt
+
+        def watched(client, *a, **kw):
+            seen.append(self.given())
+            return prompt(client, *a, **kw)
+        with mock.patch.object(run.acp.Client, "prompt", watched):
+            trial = self.trial(definitions.get("agent", "fake", ROOT), driver=dict(BENCH["driver"], task_given=True))
+        mark = os.path.join(trial, "given")
+        self.assertEqual(seen, [[mark]])
+        with open(mark) as f:
+            self.assertEqual(json.loads(f.read()), {"unit": "a", "dir": os.path.join(trial, "workspace")})
+        with open(os.path.join(trial, "answer.txt")) as f:
+            self.assertEqual(f.read(), "HI")
+
+    def test_a_command_agent_starts_once_the_driver_has_taken_its_task(self):
+        counting = [sys.executable, "-c", "import pathlib, sys; print(len(list(pathlib.Path(sys.argv[1]).rglob('given'))))",
+                    self.tmp, "{prompt}"]
+        command = dict(definitions.get("agent", "fake", ROOT), start={"command": counting})
+        trial = self.trial(command, driver=dict(BENCH["driver"], task_given=True))
+        with open(os.path.join(trial, "answer.txt")) as f:
+            self.assertEqual(f.read(), "1")
+
+    def test_a_driver_that_does_not_ask_and_a_control_are_told_nothing(self):
+        trial = self.trial(definitions.get("agent", "fake", ROOT))
+        with open(os.path.join(trial, "answer.txt")) as f:
+            self.assertEqual(f.read(), "HI")
+        controls = {"nop": {"source": "nullius", "from": "nothing"}}
+        control = definitions.control(dict(BENCH, controls=controls), "nop")
+        self.trial(control, driver=dict(BENCH["driver"], task_given=True), controls=controls)
+        self.assertEqual(self.given(), [])
+
+    def test_a_driver_that_fails_it_ends_the_unit_before_the_task_is_sent(self):
+        seen, prompt = [], run.acp.Client.prompt
+
+        def watched(client, *a, **kw):
+            seen.append(True)
+            return prompt(client, *a, **kw)
+        failing = GIVEN_DRIVER.replace("    return {}\ndef score", "    raise ValueError('no window')\ndef score")
+        with mock.patch.object(run.acp.Client, "prompt", watched):
+            trial = self.trial(definitions.get("agent", "fake", ROOT), failing, driver=dict(BENCH["driver"], task_given=True))
+        with open(os.path.join(trial, "result.json")) as f:
+            failed = json.load(f)["exception_info"]
+        self.assertEqual(failed["exception_type"], "EnvironmentSetupError")
+        self.assertIn("the benchmark was not told that the task is given", failed["exception_message"])
+        self.assertEqual(seen, [])

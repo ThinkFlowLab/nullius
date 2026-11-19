@@ -28,7 +28,7 @@ Every agent in the catalogue, the ports each version has proven, and the benchma
 | `agent.conversation/v1` | Conversation | Several prompts in one session, each answered in its own turn, the earlier ones remembered. |
 | `agent.search/v1` | Search | Search an HTTP collection, retrieve a source and answer with its evidence using the agent's available tools. |
 | `agent.browser/v1` | Browser | A browser reached through an MCP server Nullius starts. |
-| `agent.computer/v1` | Computer use | A desktop the agent sees in screenshots and drives with mouse and keyboard actions. |
+| `agent.computer/v1` | Computer use | A desktop the agent sees in screenshots and drives with mouse and keyboard actions, reached through steps alone: what the agent learns of it comes in a step's answer. |
 
 <table>
 <thead><tr><th rowspan="2">Agent</th><th colspan="6" class="group">Ports</th><th colspan="3" class="group">Tools, the skills of <code>agent.tools/v1</code></th></tr><tr><th>One task</th><th>Workspace files</th><th>MCP tools</th><th>Conversation</th><th>Search</th><th>Computer use</th><th>decoys</th><th>chain</th><th>retry</th></tr></thead>
