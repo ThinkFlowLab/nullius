@@ -234,7 +234,7 @@ window.NulliusTable = {
      button a link takes; a click that ends a text selection does not. A pick
      card's title is a toggle (data-pick, aria-pressed): a click, Space or
      Enter flips it and sends nullius-pick {value, pressed} from it; the page
-     keeps the choice. Sort by, when it has one, sorts the cards within their
+     keeps the choice. A chosen card shows whatever the search and filters say. Sort by, when it has one, sorts the cards within their
      grids as a table's rows. */
   cards(root) {
     const items = [...root.querySelectorAll('[data-card]')], empty = document.querySelector(`[data-empty="${CSS.escape(root.id)}"]`);
@@ -256,7 +256,7 @@ window.NulliusTable = {
       b.dispatchEvent(new CustomEvent('nullius-pick', {bubbles: true, detail: {value: b.dataset.pick, pressed}}));
     });
     const draw = () => {
-      items.forEach(c => { c.hidden = !passes(c); });
+      items.forEach(c => { c.hidden = !passes(c) && !c.querySelector('[data-pick][aria-pressed="true"]'); });
       root.querySelectorAll('[data-group]').forEach(g => {
         const n = [...g.querySelectorAll('[data-card]')].filter(c => !c.hidden).length, count = g.querySelector('[data-group-n]');
         g.hidden = !n;

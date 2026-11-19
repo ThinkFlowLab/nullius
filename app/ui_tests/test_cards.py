@@ -251,6 +251,23 @@ process.stdout.write(JSON.stringify(out));
 """)
         self.assertEqual(got, ["codex", "codex m3"])     # Runs on everything narrows nothing: From's default holds
 
+    def test_a_chosen_card_shows_whatever_the_filters_say(self):
+        got = node(r"""
+const card = (id, from, on) => el('article', {'data-card': '', id, 'data-f-from': from + '\n', 'data-search': id},
+  el('div', {}, el('button', {class: 'card-link', 'data-pick': id, 'aria-pressed': String(on)}, id)));
+const tools = el('div', {id: 'c-tools'}, el('input', {'data-search': ''}),
+  el('fieldset', {'data-filter-menu': 'from'}, ...['bundled', 'benchmark'].map(v => el('input', {type: 'checkbox', 'data-value': v}))));
+tools.querySelectorAll('[data-value]').forEach(i => { i.checked = i.dataset.value === 'bundled'; });
+const root = el('div', {id: 'c', 'data-cards': ''}, card('codex', 'bundled', false), card('m3', 'benchmark', true), card('cua', 'benchmark', false));
+document.appendChild(el('main', {}, tools, root, el('p', {'data-empty': 'c', hidden: true}), el('span', {'data-live': 'c', 'data-noun': 'cards'})));
+T.cards(root);
+const shown = () => root.querySelectorAll('[data-card]').filter(c => !c.hidden).map(c => c.id).join(' ');
+const out = [shown()];
+const q = tools.querySelector('[data-search]'); q.value = 'codex'; q.dispatch('input'); out.push(shown());
+process.stdout.write(JSON.stringify(out));
+""")
+        self.assertEqual(got, ["codex m3", "codex m3"])  # m3 is chosen: neither From nor the search hides it
+
 
 if __name__ == "__main__":
     unittest.main()
