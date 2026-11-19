@@ -1674,25 +1674,45 @@ def active() -> List[Execution]:
     return [e for e in EXECUTIONS.values() if e.state in ALIVE]
 
 
-def for_job(job_id: str) -> Optional[Execution]:
+def owners() -> Dict[str, Execution]:
+    """Each job a plan names -> the newest execution whose script writes it; of
+    several started at once, the first listed."""
+    out: Dict[str, Execution] = {}
+    for e in EXECUTIONS.values():
+        for j in e.plan.jobs:
+            name = str(j.get("name"))
+            if name not in out or e.started > out[name].started:
+                out[name] = e
+    return out
+
+
+def run_ends(owner: Optional[Dict[str, Execution]] = None) -> Dict[str, Optional[tuple]]:
+    """Each job a run writes -> its ``job_state`` once the whole run has ended,
+    None while the run is alive: the ``runs`` of ``workspace.load_jobs``. A
+    part's end is written down before the run's last copy from its host.
+    ``owner``: ``owners()``, when the caller holds it."""
+    return {name: None if e.state in ALIVE else e.job_state(name)
+            for name, e in (owners() if owner is None else owner).items()}
+
+
+def for_job(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[Execution]:
     """The newest execution whose script writes this job, if any - the one
     the job page shows beside the job, or instead of it while Harbor has
-    not written it yet."""
-    found = [e for e in EXECUTIONS.values() if any(str(j.get("name")) == job_id for j in e.plan.jobs)]
-    return max(found, key=lambda e: e.started) if found else None
+    not written it yet. ``owner``: ``owners()``, when the caller holds it."""
+    return (owners() if owner is None else owner).get(job_id)
 
 
 ENDED = ("stopped", "failed", "done")
 
 
-def ended_for(job_id: str) -> Optional[tuple]:
+def ended_for(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[tuple]:
     """``(state, finished_at)`` when the run that writes this job has ended
     - stopped, failed or done - by the runner's own record; None while it
     is alive or when no run of this application wrote the job. A Harbor
     killed by a Stop leaves its feed without ``job.end`` and its result
     record with trials "running", so a page reading either alone would say
-    the job goes on; this is the fact that says otherwise."""
-    ex = for_job(job_id)
+    the job goes on; this is the fact that says otherwise. ``owner``: as ``for_job``'s."""
+    ex = for_job(job_id, owner)
     return ex.job_state(job_id) if ex is not None else None
 
 
@@ -1762,6 +1782,37 @@ def size_of(path: str) -> int:
     return total
 
 
+# Sizes of ended runs' folders, by folder: (what they were read at, bytes).
+_SIZES: Dict[str, tuple] = {}
+_SIZES_LOCK = threading.Lock()
+
+
+def run_size(ex: "Execution") -> int:
+    """``size_of`` the run's folder, as the Launches page lists it: walked at
+    each ask while the run is alive; once it has ended, again only when its
+    state, its record, its folder or its jobs folder moved. What Delete asks
+    (``deletion``) walks the folder afresh.
+    shortcut: a file changed deep in an ended run alone (a trace view saved on
+    its trial page) is counted from the next move of those; walk the job folders too if that matters."""
+    if ex.state in ALIVE:
+        return size_of(ex.dir)
+
+    def mtime(path):
+        try:
+            return os.stat(path).st_mtime_ns
+        except OSError:
+            return None
+    seen = (ex.state, ex.finished, *map(mtime, (ex.dir, os.path.join(ex.dir, RECORD), ex.jobs)))
+    with _SIZES_LOCK:
+        known = _SIZES.get(ex.dir)
+    if known is not None and known[0] == seen:
+        return known[1]
+    size = size_of(ex.dir)
+    with _SIZES_LOCK:
+        _SIZES[ex.dir] = (seen, size)
+    return size
+
+
 def _deletable(name: str, root: Optional[str]) -> tuple:
     """A run's folder and record, when it is a run that has ended; ValueError
     (alive, or not a run) or OSError (its record unreadable) otherwise."""
@@ -1781,7 +1832,7 @@ def deletable(names: List[str], root: Optional[str] = None) -> None:
         _deletable(n, root)
 
 
-def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable) -> dict:
+def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, ends: dict) -> dict:
     path, rec = _deletable(name, root)
     plan = rec.get("plan") or {}
     # a run refused at the name check never made the host folder: one of that name there is not its own
@@ -1789,7 +1840,7 @@ def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable) 
     held = []
     for ws, roots in holding(path):
         dirs = parse.find_job_dirs(roots)
-        ids = [j.job_id for j in workspace.load_jobs(ws, roots)]
+        ids = [j.job_id for j in workspace.load_jobs(ws, roots, ends)]
         # a job of the same id from another root shares these judgements: they stay
         others = {e.get("job_id") for d, e in workspace.job_index(ws).items() if d not in dirs}
         judged = judgements.job_dirs(ws.dir, [i for i in ids if i.split("~")[0] not in others])
@@ -1807,7 +1858,8 @@ def deletion(names: List[str], home: str, root: Optional[str] = None, holding: O
     a run: nothing goes then. ``holding``: a run folder's ``workspace.holding``,
     when the caller has it already."""
     holding = holding or (lambda path: workspace.holding(home, path))
-    runs = [_run_deletion(n, home, root, holding) for n in dict.fromkeys(names)]
+    ends = run_ends()
+    runs = [_run_deletion(n, home, root, holding, ends) for n in dict.fromkeys(names)]
     copies: Dict[str, int] = {}
     for r in runs:
         if r["host"]:

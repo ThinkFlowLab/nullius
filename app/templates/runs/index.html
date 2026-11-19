@@ -14,10 +14,10 @@
 
 {#- One row of a launch's table: a task check (`kind` 'control') or an agent; `part` 'fold' for a participant's
     shards as one row, 'shard' for one of them, '' for a run of one job. #}
-{% macro launch_row(r, g, kind, part='', first=False) %}{% set L = g.launch %}{% set j = r.job %}{% set v = r.verdict %}
+{% macro launch_row(r, g, kind, part='', first=False) %}{% set L = g.launch %}{% set j = r.job %}{% set v = r.verdict %}{% set oc = j.counts if j else none %}
       <tr class="{{ 'la-control ' if kind == 'control' }}st-{{ r.state }}{{ ' la-' ~ part if part }}{{ ' la-first' if first }}"
         {%- if kind == 'control' %} data-control="{{ r.control }}" data-state="{{ v.state if v else 'pending' }}"
-        {%- else %} data-outcomes="{% if j %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"{% endif %}>
+        {%- else %} data-outcomes="{% if j %}{% for k in ORDER %}{% if oc[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"{% endif %}>
         {%- if part == 'shard' %}
         <td><div class="la-who"><span class="la-name">{{ shard_link(r) }}</span></div></td>
         {%- else %}
@@ -45,9 +45,9 @@
           {%- elif j and j.adjusted_solve_rate is not none %}
           <div class="la-rate"><b>{{ j.adjusted_solve_rate|pct }}</b><span class="la-scale" title="Adjusted {{ j.adjusted_solve_rate|pct }} (the bar), raw {{ j.raw_solve_rate|pct }} (the tick)"><i style="width:{{ '%.1f'|format(100 * j.adjusted_solve_rate) }}%"></i><s style="left:{{ '%.1f'|format(100 * j.raw_solve_rate) }}%"></s></span></div>
           {%- else %}<div class="la-rate na"><b>—</b><span class="la-scale"></span></div>{% endif %}
-          {%- if j and j.trials and not j.scored_only and j.counts.unknown and j.counts.unknown * 4 >= j.trials|length %}<span class="la-flag" title="Trials the classifier could not give an outcome: no verifier record, no exception">⚠ {{ j.counts.unknown }} of {{ j.trials|length }} have no verdict</span>{% endif %}</td>
+          {%- if j and j.trials and not j.scored_only and oc.unknown and oc.unknown * 4 >= j.trials|length %}<span class="la-flag" title="Trials the classifier could not give an outcome: no verifier record, no exception">⚠ {{ oc.unknown }} of {{ j.trials|length }} have no verdict</span>{% endif %}</td>
         {%- endif %}
-        <td class="lh-mix">{% if j and j.trials %}<span class="la-mix" role="img" aria-label="{% for k in ORDER %}{% if j.counts[k] %}{{ LABELS[k] }} {{ j.counts[k] }}{{ ', ' if not loop.last }}{% endif %}{% endfor %}">{% for k in ORDER %}{% if j.counts[k] %}<span class="oc-{{ k }}" style="flex:{{ j.counts[k] }}"></span>{% endif %}{% endfor %}</span>{% else %}<span class="la-mix"></span>{% endif %}</td>
+        <td class="lh-mix">{% if j and j.trials %}<span class="la-mix" role="img" aria-label="{% for k in ORDER %}{% if oc[k] %}{{ LABELS[k] }} {{ oc[k] }}{{ ', ' if not loop.last }}{% endif %}{% endfor %}">{% for k in ORDER %}{% if oc[k] %}<span class="oc-{{ k }}" style="flex:{{ oc[k] }}"></span>{% endif %}{% endfor %}</span>{% else %}<span class="la-mix"></span>{% endif %}</td>
         {%- if kind == 'control' %}
         <td class="num"><span class="faint" title="A check on the tasks, not a score">—</span></td>
         {%- else %}
@@ -178,8 +178,8 @@
     {% for j in jobs %}
     {# A control row carries no outcomes to filter by: the chips count the
        agents' trials, and a nop's rejections are not failed verifications. #}
-    {% set v = verdicts[j.job_id] %}
-    <tr data-search="{{ [j.job_id, j.agent_label, j.model_name, j.runner, j.dataset, j.dataset|dsname]|select|unique|join(' ') }}" data-outcomes="{% if not v %}{% for k in ORDER %}{% if j.counts[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"
+    {% set v = verdicts[j.job_id] %}{% set oc = j.counts %}
+    <tr data-search="{{ [j.job_id, j.agent_label, j.model_name, j.runner, j.dataset, j.dataset|dsname]|select|unique|join(' ') }}" data-outcomes="{% if not v %}{% for k in ORDER %}{% if oc[k] %}{{ k }} {% endif %}{% endfor %}{% if j.n_regressions %}regression{% endif %}{% endif %}"
         data-f-dataset="{{ j.dataset }}" data-f-model="{{ j.model_name }}"
         data-f-agent="{{ j.agent_label }}"{% if v %} class="control-row" data-control="{{ v.control }}" data-state="{{ v.state }}"{% endif %}>
       {{ check_cell('Compare ' ~ j.job_id, j.job_id) }}
@@ -213,8 +213,8 @@
       </td>
       {% else %}
       <td data-col="mix" data-sort="{{ j.n_resolved }}">
-        <span class="minibar" title="{% for k in ORDER %}{% if j.counts[k] %}{{ LABELS[k] }}: {{ j.counts[k] }}&#10;{% endif %}{% endfor %}">
-          {%- for k in ORDER %}{% if j.counts[k] %}<span class="seg oc-{{ k }}" style="flex:{{ j.counts[k] }}"></span>{% endif %}{% endfor -%}
+        <span class="minibar" title="{% for k in ORDER %}{% if oc[k] %}{{ LABELS[k] }}: {{ oc[k] }}&#10;{% endif %}{% endfor %}">
+          {%- for k in ORDER %}{% if oc[k] %}<span class="seg oc-{{ k }}" style="flex:{{ oc[k] }}"></span>{% endif %}{% endfor -%}
         </span>
       </td>
       {% endif %}

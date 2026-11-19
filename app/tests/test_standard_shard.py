@@ -315,8 +315,7 @@ class Fold(unittest.TestCase):
             first = launches.fold([workspace.load_job(ws, d)[0] for d in dirs])
             self.assertEqual(launches.fold([workspace.load_job(ws, d)[0] for d in dirs]), first)
             self.assertEqual(check.call_count, 1)
-            trial = os.path.join(dirs[1], sorted(n for n in os.listdir(dirs[1]) if n.startswith("t-"))[0], "result.json")
-            with open(trial, "a") as f:
+            with open(os.path.join(dirs[1], "result.json"), "a") as f:     # an ended shard is read again by its own record
                 f.write("\n")
             launches.fold([workspace.load_job(ws, d)[0] for d in dirs])
             self.assertEqual(check.call_count, 2)

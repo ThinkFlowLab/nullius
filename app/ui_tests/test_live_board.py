@@ -98,7 +98,7 @@ class LiveBoard(unittest.TestCase):
         self.stack.enter_context(patch.object(workspace, "job_index", return_value={}))
         self.stack.enter_context(patch.object(workspace, "load", side_effect=lambda home, name: self.ws))
         self.stack.enter_context(patch.object(workspace, "load_jobs",
-                                              side_effect=lambda ws, roots: [self.running, self.ended, self.no_feed]))
+                                              side_effect=lambda ws, roots, runs=None: [self.running, self.ended, self.no_feed]))
         for obj, name in [(web.shared, "open_workspace"), (web.shared, "_import_roots"), (workspace, "save"), (workspace, "touch")]:
             self.stack.enter_context(patch.object(obj, name, side_effect=AssertionError(f"read-only route called {name}")))
         self.client = web.app.test_client()
@@ -156,7 +156,7 @@ class LiveBoard(unittest.TestCase):
         complete = text[: text.rfind("\n") + 1]
         (broken / "events.jsonl").write_text(complete + "this is not json\n" + complete.splitlines()[0] + "\n", encoding="utf-8")
         job = parse.parse_job(str(broken))
-        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: [job]):
+        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: [job]):
             page = self.client.get("/job/broken-run"); self.addCleanup(page.close)
             self.assertEqual(page.status_code, 200)
             html = page.get_data(as_text=True)
@@ -172,7 +172,7 @@ class LiveBoard(unittest.TestCase):
         job_with_feed(self.root, "oracle-x4")
         shutil.copy(FIXTURE / "harbor-oracle-x4" / "events.jsonl", recorded / "events.jsonl")
         job = parse.parse_job(str(recorded))
-        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: [job]):
+        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: [job]):
             r = self.client.get("/job/oracle-x4/live"); self.addCleanup(r.close)
             self.assertEqual(r.status_code, 200)
             s = r.get_json()
@@ -196,7 +196,7 @@ class LiveBoard(unittest.TestCase):
                                               "datasets": [{"name": "tau3-demo", "n_tasks": 3}], "n_concurrent_trials": 3})
         job = parse.parse_job(str(launched))
         self.assertTrue(job.is_preparing)
-        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: [job]):
+        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: [job]):
             runs = self.client.get("/runs"); self.addCleanup(runs.close)
             html = runs.get_data(as_text=True)
             self.assertIn(">preparing</span>", html)
@@ -257,7 +257,7 @@ class LiveBoard(unittest.TestCase):
         (launched / "events.jsonl").write_text("\n".join(text[:2]) + "\n", encoding="utf-8")    # as a poller saw it at 08:00:20
         job = parse.parse_job(str(launched))
         self.assertTrue(job.is_preparing)                                  # no result record yet
-        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: [job]):
+        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: [job]):
             r = self.client.get("/job/prepare-run/live"); self.addCleanup(r.close)
             snap = r.get_json()
             self.assertEqual((snap["state"], snap["running"], snap["preparing"]["stage"], snap["trials"]), ("preparing", False, "image", []))
@@ -291,7 +291,7 @@ class LiveBoard(unittest.TestCase):
                          (120, 60, 0.0004, 1, True, True))
         self.assertIsNotNone(cases["lme-arm"].duration_min)
         self.assertEqual((cases["lme-arm"].runner_judge, cases["lme-arm"].questions_from), ("official gpt-4o · evaluate_qa.py", "longmemeval_s"))
-        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: list(cases.values())):
+        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: list(cases.values())):
             for job_id, opens, base in (("lme-running", "live", ""), ("lme-arm", "results", "/job/lme-arm")):
                 with self.subTest(job_id):
                     page = self.client.get("/job/" + job_id); self.addCleanup(page.close)
@@ -332,7 +332,7 @@ class LiveBoard(unittest.TestCase):
         shutil.copytree(NATIVE / "parts-arm", arm)
         job = parse.parse_job(str(arm))
         self.assertEqual(sorted((t.trial_name, t.outcome_label, t.score, t.n_parts) for t in job.trials), [("t1", "Scored", 0.5, 2), ("t2", "Scored", 1.0, 1)])
-        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: [job]):
+        with patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: [job]):
             page = self.client.get("/job/parts-arm"); self.addCleanup(page.close)
             html = page.get_data(as_text=True)
             self.assertEqual(page.status_code, 200)
