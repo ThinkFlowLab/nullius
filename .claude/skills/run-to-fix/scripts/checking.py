@@ -146,15 +146,16 @@ def suite_failures(adapter: Adapter, name: str, outcome: Outcome) -> List[str]:
 
 def check_suite(adapter: Adapter, args: argparse.Namespace, round_dir: str, cdir: str, base: str, ref: str) -> dict:
     cache = os.path.join(round_dir, "base", "suite.json")
-    if os.path.isfile(cache) and read_json(cache)["ref"] == base:
-        base_failures = read_json(cache)["failures"]
+    stored = read_json(cache) if os.path.isfile(cache) else {}
+    if stored.get("ref") == base and stored.get("adapter_sha256") == adapter.sha256:
+        base_failures = stored["failures"]
     else:
         o = on_ref(adapter, args.loop, round_dir, "test", base, {}, os.path.join(round_dir, "base", "suite.log"),
                    args.command_timeout_s)
         if o.ran is None:
             return {"ran": False, "reason": o.reason}
         base_failures = suite_failures(adapter, "base_ref", o)
-        write_json(cache, {"ref": base, "failures": base_failures})
+        write_json(cache, {"ref": base, "adapter_sha256": adapter.sha256, "failures": base_failures})
     o = on_ref(adapter, args.loop, round_dir, "test", ref, {}, os.path.join(cdir, "suite.log"), args.command_timeout_s)
     if o.ran is None:
         return {"ran": False, "reason": o.reason}
@@ -207,7 +208,8 @@ def check_replay(adapter: Adapter, args: argparse.Namespace, round_dir: str, bef
         out = replay_file(round_dir, sha, against)
         if os.path.isfile(out):
             stored = read_json(out)
-            if stored.get("_loop_ref") == sha and stored.get("_loop_before_ref") == against:
+            if (stored.get("_loop_ref") == sha and stored.get("_loop_before_ref") == against
+                    and stored.get("_loop_adapter_sha256") == adapter.sha256):
                 labels[when] = replay_labels(out, rows)
                 continue
         values = {"ref": sha, "before_ref": against, "base_ref": base, "job_dir": job_dir, "out_json": out}
@@ -221,7 +223,7 @@ def check_replay(adapter: Adapter, args: argparse.Namespace, round_dir: str, bef
             return {"ran": False, "reason": o.reason}
         ensure_ok("replay", o)
         data = replay_labels(out, rows)
-        write_json(out, dict(data, _loop_ref=sha, _loop_before_ref=against))
+        write_json(out, dict(data, _loop_ref=sha, _loop_before_ref=against, _loop_adapter_sha256=adapter.sha256))
         labels[when] = data
     success = adapter.replay_success_labels
     before, after = false_successes(labels["before"], rows, success), false_successes(labels["after"], rows, success)
@@ -246,6 +248,10 @@ def cmd_check(args: argparse.Namespace) -> None:
     record = read_input(round_dir)
     cdir = os.path.join(round_dir, "candidates", args.candidate)
     cand = load_candidate(os.path.join(cdir, "candidate.json"))
+    # a check that fails part way must not leave the success of an earlier check to be read
+    stale = os.path.join(cdir, "checks.json")
+    if os.path.exists(stale):
+        os.remove(stale)
     job_dir = record["run"]["job_dir"]
     rows = read_rows(job_dir, float(record["pass_threshold"]))
     base = resolve(adapter.checkout, adapter.base_ref)
