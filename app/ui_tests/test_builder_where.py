@@ -38,18 +38,23 @@ class StandardWhere(CompilerCase):
                 self.assertTrue(html.startswith("<div"), html)
                 self.assertIn('aria-pressed="true"', card(html, "boat"))
                 self.assertIn('aria-pressed="false"', card(html, "hosts"))
-                self.assertIn("<strong>Sandboxes</strong>", html)
-                self.assertIn("Boat · 2 at once", html)                     # the account's VMs at once, from its API
+                self.assertIn(">Sandboxes</button>", html)
+                self.assertIn("2 at once on this account", html)                     # the account's VMs at once, from its API
                 self.assertNotIn("data-std-where", html)                       # no host to add to a sandbox run
                 self.assertNotIn("data-std-backend", html)                     # nothing to choose: the VM is the sandbox
                 self.assertNotIn("not sandboxed", html.lower())
-                self.assertRegex(html, r'<p class="nb-fixed">Each [a-z -]+ in its own VM')
+                self.assertIn('class="nb-fixed std-isolation"', html)
                 self.assertIn('data-std-boat-size="large" aria-pressed="false" disabled aria-disabled="true" title="Not on this account: not during the free trial"', html)
         for name, html in hosts.items():
             with self.subTest(name):
                 self.assertIn('aria-pressed="true"', card(html, "hosts"))
                 self.assertIn('data-std-where="local"', html)
                 self.assertNotIn("data-std-boat-size", html)
+        ordinary = boxes["humaneval boat"]
+        self.assertIn("The agent alone in each problem's VM", ordinary)
+        self.assertIn("Answers and keys stay on this machine", ordinary)
+        self.assertIn('class="std-boat-card"', ordinary)
+        self.assertNotIn("shards, merged", ordinary)
         self.assertNotIn("at once", self.draw(None, backends=("boat",), slots=None)["gsm8k boat"])   # the API said nothing: no number
         gone = self.draw(None, backends=("boat",), boat="no Boat API key: set it in Settings → Sandbox")["gsm8k boat"]
         self.assertIn('disabled aria-disabled="true" title="no Boat API key: set it in Settings → Sandbox"', card(gone, "boat"))
@@ -60,13 +65,13 @@ class StandardWhere(CompilerCase):
             with self.subTest(key):
                 hosts = self.draw(None)[key + " local"]
                 self.assertNotIn("data-std-backend", hosts)
-                self.assertIn('<p class="nb-fixed">Each task in its own VM · VM provider: Docker</p>', hosts)
+                self.assertIn('<span>Each task in its own VM</span><small>VM provider: Docker</small>', hosts)
                 self.assertEqual(hosts.count("VM provider"), 1)
                 boxes = self.draw(None, backends=("boat",))[key + " boat"]
                 label = "OSWorld1" if key == "osworld1" else "OSWorld2"
                 self.assertIn(f'data-std-boat-size="small" aria-pressed="false" disabled aria-disabled="true" title="Too small for {label}&#39;s 4 GB VM"', boxes)
                 self.assertIn('data-std-boat-size="default" aria-pressed="true"', boxes)     # the smallest that fits, chosen for it
-                self.assertIn('<p class="nb-fixed">Each task in its own VM · VM provider: Docker</p>', boxes)
+                self.assertIn("<span>Each task in its own VM</span><small>Docker, inside the task's Boat VM</small>", boxes)
                 self.assertNotIn("cannot run in a Boat VM", boxes)
         # Null controls run whole in each VM, including OSWorld2's grader.
         nop = self.draw(None, "r.others=['nop'];", backends=("boat",))

@@ -466,7 +466,6 @@
   const boatSizes = (rec, b) => { const mem = vmMemory(rec, b);
     return ((schema.standardHere || {}).boatSizes || []).map(z => z.why ? {...z, note: 'Not on this account', why: 'Not on this account: ' + z.why}
       : mem && typeof z.memory_gb === 'number' && z.memory_gb <= mem ? {...z, note: 'Too small', why: `Too small for ${b.label}'s ${mem} GB VM`} : {...z, why: ''}); };
-  const BOAT_MARK = '<img class="agent-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="agent-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">';
   // The standard's Where step. Machines: hosts (this machine, Settings hosts; one shard each) or Boat sandboxes (a VM
   // per unit, as many at once as the account runs), never both. How it runs: on hosts, local processes or a container;
   // in a sandbox, or for a benchmark whose units boot VMs of their own (which a container cannot start), fixed.
@@ -481,10 +480,9 @@
     const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
     const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
-    const kind = (v, t, mark, meta, tip, why) => tile({attr: 'std-machines', key: v, on: (v === 'boat') === sandboxes && !why, disabled: !!why, why,
-      note: why ? 'Not usable here' : '', mark, title: t, meta, tip});
+    const kind = (v, label, why = '') => `<button type="button" data-std-machines="${v}" aria-pressed="${(v === 'boat') === sandboxes}"${why ? ` disabled aria-disabled="true" title="${esc(why)}"` : ''}>${label}</button>`;
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));
-    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? icon('terminal') : icon('container'), title: t, tip: sub});
+    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : v === 'local' ? 'Not sandboxed' : `Each ${noun} in a container`, mark: v === 'local' ? icon('terminal') : icon('container'), title: t, tip: sub});
     const dockerOnly = Object.entries((b || {}).environments || {}).filter(([, e]) => !e.local_ok).map(([n]) => n);
     const web = agentRun && Object.values((b || {}).environments || {}).some(e => e.network);   // an agent's public web proxy
     // a VM benchmark's provider of one value goes on the fixed line; several are its cards (benchOptions)
@@ -502,15 +500,15 @@
           disabled: !!z.why, why: z.why, note: z.note || z.spec, title: z.label})).join('')}</div>`;
     }
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
-      + `<div class="nb-pick-grid std-backends std-machines">${kind('hosts', 'Hosts', icon('machine'), H.length ? `This machine + ${H.length} ${H.length > 1 ? 'hosts' : 'host'}` : 'This machine', 'One shard per machine.', '')}`
-      + kind('boat', 'Sandboxes', BOAT_MARK, here.boatSlots ? `Boat · ${here.boatSlots} at once` : 'Boat', `One Boat VM per ${noun}.`, here.boat || '') + '</div>'
-      + (sandboxes ? sizes
-        : '<div class="nb-sectionhead std-wherehead"><h3>Machines</h3></div>'
-        + `<div class="nb-pick-grid nb-where">${machine('local', 'This machine', 'Nullius runs it here, in runs/' + rec.name + '.')}${H.map(h => machine(h.entry, h.label, 'Over ssh: the standard\'s code at this commit is sent there, uv put there if missing; its job comes back as it runs.')).join('')}</div>`
-        + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}.</p>`))
-      + '<div class="nb-sectionhead std-wherehead"><h3>How it runs</h3></div>'
+      + `<div class="std-machines" role="group" aria-label="Machines">${kind('hosts', 'Hosts')}${kind('boat', 'Sandboxes', here.boat || '')}</div>`
+      + (sandboxes ? `<div class="std-boat-card"><strong>Boat</strong><span>One VM per ${esc(noun)}</span>${here.boatSlots ? `<span class="std-boat-slots">${here.boatSlots} at once on this account</span>` : ''}${here.boat ? `<span class="nb-error">${esc(here.boat)}</span>` : ''}</div>` + sizes
+        : `<div class="nb-pick-grid nb-where std-hosts">${machine('local', 'This machine', 'Runs here')}${H.map(h => machine(h.entry, h.label, 'Over SSH')).join('')}</div>`
+        + `<p class="nb-note">${list.length} ${list.length === 1 ? 'shard' : 'shards, merged into one job'}</p>`
+        + (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : ''))
+      + '<div class="nb-sectionhead std-wherehead"><h3>Isolation</h3></div>'
       + (sandboxes || vms
-        ? `<p class="nb-fixed">Each ${esc(noun)} in its own VM${provider ? ` · ${esc(provider.label)}: ${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}` : ''}</p>`
+        ? `<div class="nb-fixed std-isolation"><span>${vms ? `Each ${esc(noun)} in its own VM` : `The agent alone in each ${esc(noun)}'s VM`}</span>`
+          + `<small>${vms ? (provider ? (sandboxes ? `${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, inside the ${esc(noun)}'s Boat VM` : `${esc(provider.label)}: ${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}`) : '') : 'Answers and keys stay on this machine'}</small></div>`
         : `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
           + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
             : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>')
