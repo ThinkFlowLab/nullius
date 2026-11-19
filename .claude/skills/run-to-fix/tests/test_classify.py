@@ -463,3 +463,21 @@ class FoundClassConfinement(LoopCase):
         self.assertNotEqual(r.code, 0)
         self.assertIn("outside the trial", r.err)
         self.assertFalse(os.path.exists(self.round_file("trials.csv")))
+
+
+#: the trajectory of the standard path: one step per agent message, with no usage per step
+STEPS_WITHOUT_USAGE = json.dumps({"schema_version": "ATIF-v1.6", "steps": [
+    {"step_id": i, "source": "agent", "message": "step"} for i in range(31)]})
+
+
+class StandardModelCalls(LoopCase):
+    def test_the_count_of_the_standard_wins_over_the_steps_of_the_trajectory(self) -> None:
+        t = trial("s1__s", "made-up-bench/s1", 0.0)
+        t.calls = 20
+        t.files = {"agent/trajectory.json": STEPS_WITHOUT_USAGE}
+        run_dir = write_job(self.jobs, "run", "alpha", "standard", [t, trial("p__s", "made-up-bench/p", 1.0)])
+        self.set_adapter(adapter("alpha", {"step_limit": 30}, {}))
+        self.read_ok(run_dir, None)
+        self.classify_ok()
+        row = self.by_trial()["s1__s"]
+        self.assertEqual((row["model_calls"], row["class"]), ("20", "verifier_failed"))
