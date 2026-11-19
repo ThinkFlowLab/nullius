@@ -119,7 +119,7 @@ def runs_on_standard(job_dir: str) -> bool:
     """Whether a job ran on the Nullius standard, by the runner its config.json names."""
     path = os.path.join(job_dir, "config.json")
     if not os.path.isfile(path):
-        raise TrialError(f"{path} is missing, and the loop reads the kind of a job from it")
+        raise TrialError(f"{path} is missing; the loop reads the kind of a job from that file")
     config = read_json(path)
     if not isinstance(config, dict):
         raise TrialError(f"{path} is not an object")
