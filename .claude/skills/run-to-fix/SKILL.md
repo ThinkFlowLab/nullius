@@ -159,7 +159,7 @@ writes `result.json`: the pass rates with their standard error; the tasks both r
 the targets' trials with Fisher's exact test; each prediction of stage 3 beside its result; and the stop rule. When
 some trials of the new run report no cost, the budget part of the stop rule is not checked, unless the person gives the
 run's cost with `--new-cost-usd`. `read` records the text of the stop rule, and `compare` refuses a round whose recorded
-rule is not the rule of the skill it runs. It
+rule is not the rule of the skill it runs: keep that loop folder as it is and start a new one. It
 closes the round and writes `report.html` with `render` of `run-analysis`; fill its prose slots as that skill
 describes (`runs.py render --slots`, then `runs.py check`).
 

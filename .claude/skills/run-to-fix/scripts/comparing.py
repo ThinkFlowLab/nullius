@@ -123,7 +123,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
     record = read_input(round_dir)
     if record.get("stop_rule") != STOP_RULE:
         raise LoopError("the stop rule of this round, recorded in input.json when read started it, is not the stop "
-                        "rule of this version of the skill; start a new round with loop.py read")
+                        "rule of this version of the skill; keep this loop folder as it is and start a new loop folder")
     threshold = float(record["pass_threshold"])
     against = record["run"] if args.against == "run" else record["baseline"]
     if against is None:
