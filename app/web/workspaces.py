@@ -135,6 +135,7 @@ def workspace_rename():
     name = request.form.get("name") or (open_ws.name if open_ws is not None else "")
     label = (request.form.get("label") or "").strip()
     is_open = open_ws is not None and open_ws.name == name
+    back = url_for("workspaces_page", view=request.form.get("view") or None)   # the view it was renamed from
     ws = open_ws if is_open else workspace.load(shared.WS_HOME, name)
     if ws is None:
         flash(Markup(f'No workspace called <span class="mono">{escape(name)}</span>.'), "error")
@@ -143,10 +144,10 @@ def workspace_rename():
             workspace.rename(shared.WS_HOME, ws, label)
         except OSError as exc:
             flash(Markup(f'<span class="mono">{escape(ws.label)}</span> could not be renamed: {escape(exc.strerror or str(exc))}.'), "error")
-            return redirect(url_for("workspaces_page"))
+            return redirect(back)
         if is_open:
             shared.open_workspace(ws)                   # its imports moved with it: read from where it is now
-    return redirect(url_for("workspaces_page"))
+    return redirect(back)
 
 
 @app.route("/workspaces/delete/<name>", methods=["POST"])

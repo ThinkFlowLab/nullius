@@ -15,6 +15,13 @@
 {% macro launches(ws) %}{% set n = n_launches[ws.name] %}{% if n %}<a class="btn ghost sm count-btn" href="{{ url_for('launches_page', ws=ws.name) }}" aria-label="Launches of {{ ws.label }}: {{ n }}" title="Launches of {{ ws.label }}"><svg class="ic" aria-hidden="true"><use href="#i-launches"/></svg>{{ n }}</a>
   {%- else %}{{ greyed('Launches of ' ~ ws.label ~ ': 0', '', 'No launches in ' ~ ws.label, 'none-' ~ ws.name, icon='launches', class='btn ghost sm count-btn', text='0') }}{% endif %}{% endmacro %}
 {% macro roots(ws) %}<button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="{{ url_for('workspace_roots', name=ws.name) }}" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ ws.roots|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ ws.roots|length }}</button>{% endmacro %}
+{#- A workspace's rename: the pencil, and the form it swaps in for the name (the page's script); `view` the one to return to. #}
+{% macro pencil(ws) %}<button type="button" class="icon-btn ws-edit" aria-label="Rename workspace {{ ws.label }}" title="Rename"><svg class="ic"><use href="#i-pencil"/></svg></button>{% endmacro %}
+{% macro rename(ws, view=none) %}<form method="post" action="{{ url_for('workspace_rename') }}" class="ws-rename" hidden>
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ ws.name }}">{% if view %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
+          <input type="text" name="label" value="{{ ws.label }}" required aria-label="New name of workspace {{ ws.label }}" spellcheck="false" autocomplete="off">
+          <button class="btn sm" type="submit">Save</button><button class="btn sm ghost ws-cancel" type="button">Cancel</button>
+        </form>{% endmacro %}
 {% macro opened(ws) %}{{ ws.opened[:19]|replace('-', '')|replace(':', '')|replace('T', '') or 0 }}{% endmacro %}
 
 {% block body %}
@@ -34,7 +41,7 @@
 {% set items = [] %}
 {% for ws in workspaces %}{% set current = workspace and ws.name == workspace.name %}
   {%- set open %}{% if current %}<span class="ok" role="img" aria-label="Open" title="Open">●</span>{% endif %}{% endset %}
-  {%- set _ = items.append(dict(open=open, name=ws.label, disk=ws.name if labels.count(ws.label) > 1 else '', runs=counts[ws.name].runs, checks=counts[ws.name].checks,
+  {%- set _ = items.append(dict(open=open, name=dict(text=ws.label, class='ws-name', after=pencil(ws) ~ rename(ws, 'cards')), disk=ws.name if labels.count(ws.label) > 1 else '', runs=counts[ws.name].runs, checks=counts[ws.name].checks,
         opened=dict(text=ws.opened[:16]|replace('T', ' '), value=opened(ws)), launches=dict(text=launches(ws), value=n_launches[ws.name]),
         roots=dict(text=roots(ws), value=ws.roots|length),
         actions=dict(text=trash, class='danger', title='Delete workspace', attrs={'data-ask': 'ws-ask-delete', 'data-label': ws.label, 'data-action': url_for('workspace_delete', name=ws.name), 'data-judged': n_judged[ws.name], 'aria-haspopup': 'dialog', 'aria-label': 'Delete workspace ' ~ ws.label}),
@@ -49,12 +56,8 @@
 
         {#- the label; the name on disk too where two labels are alike #}
         <span class="ws-show"><span class="ws-title" title="{{ ws.name }}">{{ ws.label }}</span>{% if clash %} <small class="mono faint">{{ ws.name }}</small>{% endif %}
-          <button type="button" class="icon-btn ws-edit" aria-label="Rename workspace {{ ws.label }}" title="Rename"><svg class="ic"><use href="#i-pencil"/></svg></button></span>
-        <form method="post" action="{{ url_for('workspace_rename') }}" class="ws-rename" hidden>
-          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ ws.name }}">
-          <input type="text" name="label" value="{{ ws.label }}" required aria-label="New name of workspace {{ ws.label }}" spellcheck="false" autocomplete="off">
-          <button class="btn sm" type="submit">Save</button><button class="btn sm ghost ws-cancel" type="button">Cancel</button>
-        </form>
+          {{ pencil(ws) }}</span>
+        {{ rename(ws) }}
       {% endcall %}
     {%- elif c.key == 'runs' %}{% call cell(c) %}{{ counts[ws.name].runs }}{% endcall %}
     {%- elif c.key == 'checks' %}{% call cell(c) %}{{ counts[ws.name].checks }}{% endcall %}
@@ -138,10 +141,10 @@
 
   // Rename in place: the pencil opens the field; Escape or Cancel puts the name back.
   document.querySelectorAll('.ws-name').forEach(cell => {
-    const show = cell.querySelector('.ws-show'), form = cell.querySelector('.ws-rename'), input = form.elements.label;
+    const shows = cell.querySelectorAll('.ws-show, .card-link, .ws-edit'), form = cell.querySelector('.ws-rename'), input = form.elements.label;
     const edit = cell.querySelector('.ws-edit');
-    const toggle = on => {
-      show.hidden = on; form.hidden = !on;
+    const toggle = on => {   // a row's name and pencil, or a card's
+      shows.forEach(s => { s.hidden = on; }); form.hidden = !on;
       if (on) { input.focus(); input.select(); } else { input.value = input.defaultValue; edit.focus(); }
     };
     edit.addEventListener('click', () => toggle(true));
