@@ -15,6 +15,7 @@ Every file is written under the loop folder; see references/files.md.
 from __future__ import annotations
 
 import argparse
+import signal
 import sys
 from typing import List
 
@@ -25,7 +26,7 @@ from comparing import cmd_compare
 from deciding import cmd_answer, cmd_decide
 from found import RuleError
 from reading import cmd_read
-from rounds import LoopError
+from rounds import LoopError, stop_on_signal
 from selecting import cmd_select
 from trials import TrialError
 
@@ -94,11 +95,16 @@ def main(argv: List[str]) -> int:
                     help="the person's figure for what the new run cost, when its trials do not all report one")
     cp.set_defaults(func=cmd_compare)
     args = ap.parse_args(argv)
+    # SIGTERM raises as Ctrl+C does, so a running adapter command is stopped and its worktree removed
+    signal.signal(signal.SIGTERM, stop_on_signal)
     try:
         args.func(args)
     except (LoopError, AdapterError, RuleError, TrialError) as exc:
         print(f"run-to-fix: {exc}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        print("run-to-fix: stopped by Ctrl+C; the command it ran is stopped", file=sys.stderr)
+        return 130
     return 0
 
 

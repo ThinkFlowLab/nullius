@@ -23,6 +23,14 @@ class LoopError(Exception):
     """The loop cannot go on; the message says why and what to do."""
 
 
+class Stopped(LoopError):
+    """A signal stopped the loop; the command it ran is stopped and its worktree removed on the way out."""
+
+
+def stop_on_signal(signum: int, frame: object) -> None:
+    raise Stopped(f"stopped by {signal.Signals(signum).name}; the command it ran is stopped")
+
+
 def now() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -139,6 +147,10 @@ def run_command(line: str, values: Dict[str, str], cwd: str, log_path: str, time
             os.killpg(proc.pid, signal.SIGKILL)
             proc.wait()
             code = None
+        except (Stopped, KeyboardInterrupt):
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+            raise
     with open(log_path, encoding="utf-8", errors="replace") as fh:
         lines = fh.read().splitlines()
     return Ran(code=code, tail="\n".join(lines[-TAIL_LINES:]), log=log_path)
