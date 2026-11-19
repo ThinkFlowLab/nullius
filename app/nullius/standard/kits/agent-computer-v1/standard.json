@@ -19,7 +19,7 @@
     "scroll": "scrolls a list to read what it shows at first below its edge",
     "recover": "reads an acting call's error and acts again",
     "batch": "sends several actions in one step",
-    "late": "looks again with a step to find what appeared after the task was given"
+    "late": "looks again with a step to find what appeared after the task was given. This check does not bound the number of presses."
   },
   "driver": {
     "unit_end": true,

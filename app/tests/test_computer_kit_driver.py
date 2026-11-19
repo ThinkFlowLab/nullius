@@ -154,6 +154,7 @@ class Definition(unittest.TestCase):
         self.assertEqual(list(kit["check_details"]), list(driver.UNITS))
         self.assertEqual(kit["basic"], list(checks.BASIC))
         self.assertEqual(set(kit["skills"]), set(driver.UNITS) - set(checks.BASIC))
+        self.assertIn("This check does not bound the number of presses.", kit["skills"]["late"])
         self.assertEqual(kit["environments"]["desktop"], dict(desktop.KIT["environments"]["desktop"],
                                                              summary=kit["environments"]["desktop"]["summary"]))
         self.assertEqual(kit["mcp_servers"]["computer"]["command"], ["python3", "{here}/pipe.py"])     # a file of its folder
