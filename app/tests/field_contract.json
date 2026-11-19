@@ -110,6 +110,59 @@
    "usable"
   ]
  },
+ "categorical": {
+  "Mark": [
+   "cls",
+   "h",
+   "r",
+   "shape",
+   "title",
+   "w",
+   "x",
+   "x2",
+   "y",
+   "y2"
+  ],
+  "Metric": [
+   "fmt",
+   "label",
+   "values"
+  ],
+  "Panel": [
+   "height",
+   "marks",
+   "table",
+   "texts",
+   "title",
+   "viewbox",
+   "width"
+  ],
+  "Style": [
+   "axes",
+   "draw",
+   "label"
+  ],
+  "Text": [
+   "anchor",
+   "cls",
+   "leading",
+   "lines",
+   "x",
+   "y"
+  ],
+  "Value": [
+   "baseline",
+   "check",
+   "label",
+   "name",
+   "note",
+   "reading",
+   "series",
+   "tag",
+   "text",
+   "value"
+  ]
+ },
  "charts": {
   "Bar": [
    "count",

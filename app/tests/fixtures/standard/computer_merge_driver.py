@@ -14,6 +14,9 @@ from nullius.standard import computer_port as port, jsonl
 
 
 class Desktop:
+    def python(self, code):
+        return {"status": "success", "output": "made\n", "error": "", "returncode": 0}
+
     def capture(self):
         return b"fixture image"
 
@@ -22,7 +25,7 @@ class Desktop:
 
 
 def desktop(socket, log, inert=False):
-    bridge = port.Bridge(Desktop(), 2, 0, (1920, 1080), 1)
+    bridge = port.Bridge(Desktop(), 2, 0, (1920, 1080), "/tmp/agent")
     if inert:
         Path(socket).touch()
         server = port.Server.__new__(port.Server)

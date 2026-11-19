@@ -48,6 +48,21 @@ class SourcesTest(unittest.TestCase):
         self.assertEqual((row["from"], row["name"], row["pin"]), ("Hugging Face", "org/data", "0123456"))
         self.assertEqual(row["href"], f"https://huggingface.co/datasets/org/data/tree/{COMMIT}")
 
+    def test_a_driver_that_downloads_from_two_repositories_names_each_datasets_own(self):
+        lite, full = catalog.Dataset(key="qa-lite", title="Lite"), catalog.Dataset(key="qa-full", title="Full")
+        other = "f" * 40
+        with tempfile.TemporaryDirectory() as here:
+            std = {"_here": here, "upstream": {"repository": "https://github.com/org/evals", "tested": COMMIT},
+                   "datasets": [{"id": "qa-lite", "units": 3}, {"id": "qa-full", "units": 9}]}
+            with open(os.path.join(here, "data-source.json"), "w") as f:
+                json.dump({"datasets": {"qa-lite": {"repository": "org/lite", "revision": COMMIT},
+                                        "qa_full": {"repository": "org/full", "revision": other}}}, f)
+            (a,), (b,) = sources.of(lite, ["standard"], std, only=False), sources.of(full, ["standard"], std, only=False)
+            self.assertEqual((a["from"], a["name"], a["pin"]), ("Hugging Face", "org/lite", "0123456"))
+            self.assertEqual((b["name"], b["href"]), ("org/full", f"https://huggingface.co/datasets/org/full/tree/{other}"))
+            unnamed = catalog.Dataset(key="qa-other", title="Other")       # no repository of its own, none for all
+            self.assertEqual(sources.of(unnamed, ["standard"], std, only=False)[0]["from"], "GitHub")
+
     def test_no_harbor_row_without_a_harbor_name(self):
         d = catalog.Dataset(key="main", title="Main", source="GitHub")
         self.assertEqual(sources.of(d, ["harbor"]), [])

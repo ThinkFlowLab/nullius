@@ -129,6 +129,11 @@ class BenchmarkRefused(Refused):
     """This benchmark cannot run here; another benchmark may still run."""
 
 
+def computer_port(bench: dict) -> bool:
+    """Whether the benchmark needs the computer port."""
+    return any(str(p).startswith("agent.computer/") for p in bench.get("needs") or [])
+
+
 def setup_request(bench: dict, kind: str, attempt: Optional[int] = None) -> tuple:
     """What a unit's ``setup`` is sent besides the unit and its folder, and how long it may take, for a unit that
     ``kind`` runs (agent, capability, control): ``attempt`` when the benchmark tells attempts apart
@@ -542,7 +547,7 @@ class Run:
             # a setup or a check runs on the machine; on Boat it would run here unasked, beside the VMs
             raise Refused(f"{other['label']} runs on a machine, not in a Boat VM: run it on this machine or a host "
                           "(--backend local or container)")
-        if backend == "boat" and other.get("_kind") == "agent" and "agent.computer/v1" in bench.get("needs", []):
+        if backend == "boat" and other.get("_kind") == "agent" and computer_port(bench):
             raise BenchmarkRefused("the computer port uses a socket on this machine, which an agent in a Boat VM "
                                    "cannot reach: choose local processes or the container backend")
         if backend == "boat":
@@ -1301,6 +1306,18 @@ class Run:
             return True
         return False
 
+    def task_given(self, unit: str, ws: str) -> None:
+        """A driver that asks for it (``driver.task_given``) is told, and has answered, before the agent is sent its
+        task: its first prompt, or its command, which holds it. A computer port closes its window before the task
+        there. A failure ends the unit as its environment's, the task never sent."""
+        if self.other.get("_kind") != "agent" or not (self.bench.get("driver") or {}).get("task_given"):
+            return
+        try:
+            self.driver().request("task_given", unit=unit, dir=ws, timeout=END_SECONDS)
+        except jsonl.Failed as e:
+            raise _Ended("EnvironmentSetupError", f"the benchmark was not told that the task is given: {e}",
+                         retryable=not isinstance(e, jsonl.NoReply))
+
     def trial_name(self, i: int, unit: str, r: int = 1) -> str:
         return f"{_slug(unit)}__u{i:04d}" + (f"r{r}" if self.repeat > 1 else "")
 
@@ -1323,7 +1340,7 @@ class Run:
         finally:
             asked, self.local.set_up = self.local.set_up, None
             if asked is not None:
-                if self.unit_ended(*asked) and "agent.computer/v1" in self.bench.get("needs", []):
+                if self.unit_ended(*asked) and computer_port(self.bench):
                     # A failed end leaves the agent's desktop for the driver's exit cleanup.
                     d = getattr(self.local, "driver", None)
                     if d is not None:
@@ -2289,6 +2306,8 @@ class Run:
                     opened = not first.get("done")
                     if opened:
                         prompt = prompt + "\n\n" + first["message"]
+                if opened:
+                    self.task_given(unit, ws)    # before the first prompt: the window from the session's start closes
                 for _ in range(self.max_turns if opened else 0):
                     transcript.append({"role": "user", "text": prompt})
                     try:
@@ -2332,6 +2351,7 @@ class Run:
     def _command_agent(self, a, env, ws, home, setup, transcript, log, tag, unit, rl, box=None):
         cmd = install.words(a["start"]["command"], {"here": a["_here"], "install": self.inst, "prompt": setup["prompt"]})
         cmd, env = self.place(rl, cmd, env, ws, home, interactive=False, box=box)
+        self.task_given(unit, ws)                # its command holds its task: its session starts with no window
         transcript.append({"role": "user", "text": setup["prompt"]})
         t = time.time()
         try:

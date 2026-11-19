@@ -116,7 +116,7 @@ def _bench_page(b: dict) -> dict:
     ``proofs``, the units and leak checks the same way (``prove.status``)."""
     kinds = sorted({p.split(".", 1)[1].split("/")[0] for p in b.get("needs") or []}) if b["family"] == "capability" else []
     status = prove.status(b)
-    controls = [{k: c[k] for k in ("key", "label", "source", "from", "expect")}
+    controls = [{**{k: c[k] for k in ("key", "label", "source", "from", "expect")}, "must": prove.must_score(c["expect"])}
                 for c in (definitions.control(b, w) for w in definitions.CONTROLS) if c]
     versioned = definitions.version_of(b) is not None
     return {"key": b["key"], "label": b["label"], "summary": b["summary"], "family": b["family"], "kind": kinds[0] if kinds else "",
@@ -163,7 +163,7 @@ def _bench_page(b: dict) -> dict:
                      for n, r in hostreq.all_of(b).items()},
             "datasets": [{"id": d["id"], "label": d.get("label") or d["id"], "summary": d.get("summary", ""), "units": d.get("units"),
                           "environment": d.get("environment") or "",
-                          "controls": [dict(c, proven=status[d["id"]][c["key"]]["proven"], failed=status[d["id"]][c["key"]]["failed"])
+                          "controls": [dict(c, **{k: status[d["id"]][c["key"]][k] for k in ("proven", "short", "failed")})
                                        for c in controls],
                           "proofs": {k: status[d["id"]][k]["proven"] for k in ("units", "leak")},
                           "failed": {k: status[d["id"]][k]["failed"] for k in ("units", "leak") if status[d["id"]][k]["failed"]}}
@@ -580,7 +580,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # on Boat each unit's agent or capability runs in its VM (run.Run refuses the rest): a setup or a check runs
     # on a machine, and the computer port's socket is on this one, out of a VM's reach
     # A benchmark booting VMs of its own runs each unit whole in a VM (boat_units), with a relay container in each VM
-    computer = "agent.computer/v1" in (b.get("needs") or [])
+    computer = run.computer_port(b)
     whole = definitions.boots_vms(b)
     elsewhere = [definitions.setup_label(b, "original") if p.get("setup") else p["o"]["label"] for p in picks
                  if not whole and (p["control"] or p.get("setup") or (computer and side == "agent"))]

@@ -1346,6 +1346,8 @@ def problems(d: dict, kind: str) -> List[str]:
                 bad.append("driver.participant: true or false - whether setup is told the participant's kind")
             if "unit_end" in drv and not isinstance(drv["unit_end"], bool):
                 bad.append("driver.unit_end: true or false - whether the driver is told each unit's end")
+            if "task_given" in drv and not isinstance(drv["task_given"], bool):
+                bad.append("driver.task_given: true or false - whether the driver is told when the agent is given its task")
         bad += _mcp_servers(d.get("mcp_servers"), isinstance(drv, dict) and "install" in drv)
         ds = d.get("datasets")
         if not isinstance(ds, list) or not ds:
