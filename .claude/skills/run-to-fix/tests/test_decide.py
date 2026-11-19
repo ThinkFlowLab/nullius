@@ -510,3 +510,26 @@ class TrialRunIdentity(Flow):
         self.assertIn(f"{self.repo.good[:12]}, as the person states", self.page("decision-2.md"))
         self.assertEqual(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"][0]["code_from"],
                          "the person")
+
+
+class AmountsAreFinite(Flow):
+    def test_select_refuses_a_budget_that_is_not_an_amount(self) -> None:
+        self.kept()
+        r = self.select(["--size", "targets", "--budget-usd", "nan", "--text", "an invalid cap"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("--budget-usd", r.err)
+        self.assertFalse(os.path.exists(self.round_file("trial-tasks.txt")))
+
+    def test_stop_two_refuses_a_cost_that_is_not_an_amount(self) -> None:
+        job = self.chosen()
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref(),
+                 "--trial-cost-usd", "inf"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("--trial-cost-usd", r.err)
+
+    def test_compare_refuses_a_cost_that_is_not_an_amount(self) -> None:
+        job = self.chosen()
+        r = run(["compare", "--loop", self.loop, "--new", job, "--against", "run", "--new-cost-usd", "nan"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("--new-cost-usd", r.err)
+        self.assertFalse(os.path.exists(self.round_file("result.json")))

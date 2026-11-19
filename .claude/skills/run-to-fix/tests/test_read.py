@@ -278,3 +278,14 @@ class BudgetHasNoDefault(LoopCase):
         self.assertNotEqual(r.code, 0)
         self.assertIn("--budget-usd", r.err)
         self.assertFalse(os.path.exists(os.path.join(self.loop, "round-01")))
+
+
+class BudgetIsAnAmount(LoopCase):
+    def test_read_refuses_a_budget_that_is_not_an_amount(self) -> None:
+        run_dir = healthy(self.jobs, "run", "alpha")
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        for value in ("nan", "inf", "-1"):
+            r = run(["read", "--loop", self.loop, "--run", run_dir, "--budget-usd", value, "--pass-threshold", "1"])
+            self.assertNotEqual(r.code, 0, value)
+            self.assertIn("--budget-usd", r.err)
+        self.assertFalse(os.path.exists(os.path.join(self.loop, "round-01")))
