@@ -658,7 +658,7 @@ it is published with. It speaks no port, so it has no `offers` or `proven`.
 | Derived, never written | Where it comes from (`from`: `benchmark`; a catalogue agent's is `bundled` or `yours`) and `only_for`, its benchmark. A written `only_for` names that benchmark alone |
 | `options.agent` | `standard.json` writes its `label`, `summary` and `setups`; the loader rebuilds `values` (each entry's `start.driver.agent`, in order), `names`, `about` and `default` (the first), so `when`, `by`, `--bench-option agent=...` and `NULLIUS_OPTION_AGENT` read as before |
 | Checked | Each entry's `models` are among `setups.original.models`; each upstream name once |
-| Offered | On the Agents page behind its From filter, and in the builder beside the catalogue's agents; another benchmark greys it with the reason |
+| Offered | On the Agents page behind its From filter (its Runs on filter lists each benchmark's agents, as the builder enables them), and in the builder beside the catalogue's agents; another benchmark greys it with the reason |
 | Run | As the Original setup, its upstream name as the agent option: `nullius standard run osworld1 original --bench-option agent=openai_cua`. Its jobs name it by its key (`openai-cua`); an older job, recorded as `original`, is read the same way from its agent option |
 
 ### Every setting, inventoried

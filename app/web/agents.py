@@ -100,18 +100,25 @@ def _page(kind: str):
 
 
 def _choices(kind: str, entries: list) -> dict:
-    """An agent list's filters: how Nullius talks to it, and the ports it proves; none for capabilities."""
+    """A list's filters: the benchmarks each entry runs (its ``fits``, what Benchmarks it runs counts); for
+    agents also how Nullius talks to it, the ports it proves and where it comes from."""
+    runs_on = list(dict.fromkeys((f["key"], f["label"]) for e in entries for f in e["fits"]))
     if kind != "agent":
-        return {}
+        return {"runs_on": runs_on} if runs_on else {}
     proven = {p["port"] for e in entries for p in e["ports"] if p["state"] == "proven"}
     have = {e["d"].get("from") for e in entries}
     return {"protocol": [(x, x[:1].upper() + x[1:]) for x in dict.fromkeys(e["protocol"] for e in entries)],
             "proves": [(p, spec.get("label") or p) for p, spec in ports.PORTS.items() if p in proven],
-            "from": [(k, v) for k, v in definitions.FROM.items() if k in have]}
+            "from": [(k, v) for k, v in definitions.FROM.items() if k in have], "runs_on": runs_on}
 
 
 # The From filter's default: the catalogue's own agents; a benchmark's own are one click away.
 ONLY = {"agent": {"from": ["bundled", "yours"]}}
+
+
+def _runs_on(e: dict) -> list:
+    """The benchmarks an entry runs, by its fits: the Runs on filter's values."""
+    return [{"text": f["label"], "value": f["key"]} for f in e["fits"] if not f["why"]]
 
 
 def _card(kind: str, e: dict) -> dict:
@@ -126,7 +133,7 @@ def _card(kind: str, e: dict) -> dict:
                 "protocol": e["protocol"], "icon": agent_mark_url(d["key"]), "title": d["label"], "summary": d.get("summary"),
                 "from": {"text": definitions.FROM["benchmark"], "value": "benchmark"}, "benchmark": d["benchmark_label"],
                 "uses": "Computer use" if computer else None, "models": ", ".join(d.get("models") or []),
-                "hide": ["ports", "runs", "installs"]}
+                "runs_on": _runs_on(e), "hide": ["ports", "runs", "installs"]}
     version, n = (d.get("upstream") or {}).get("version"), len(d.get("_versions") or ())
     return {"href": url_for("agent_page" if kind == "agent" else "feature_page", key=d["key"]), "id": d["key"],
             "search": " ".join([d["label"], d["key"], d.get("kind", ""), e["protocol"], d.get("summary", "")]),
@@ -137,7 +144,7 @@ def _card(kind: str, e: dict) -> dict:
             "summary": d.get("summary"), "from": {"text": definitions.FROM[d["from"]], "value": d["from"]} if d.get("from") else None,
             "proves": [{"text": p["label"], "value": p["port"]} for p in e["ports"] if p["state"] == "proven"],
             "ports": "{}/{}".format(sum(p["state"] == "proven" for p in e["ports"]), len(e["ports"])),
-            "runs": "{}/{}".format(sum(not f["why"] for f in e["fits"]), len(e["fits"])),
+            "runs": "{}/{}".format(sum(not f["why"] for f in e["fits"]), len(e["fits"])), "runs_on": _runs_on(e),
             "installs": "yes" if e["install"] else "no"}
 
 
