@@ -186,20 +186,57 @@ class BenchmarksList(PageCase):
 
 
 class BenchmarkPage(PageCase):
-    def test_a_benchmark_with_versions_shows_one_at_a_time_with_its_own_pin_and_proofs(self):
+    def test_a_benchmark_with_versions_is_the_whole_page_once_per_version_one_shown(self):
+        from html.parser import HTMLParser
+
+        def shown(html):
+            """The page as a reader sees it: every hidden version block left out, its whole subtree."""
+            out, depth = [], [0]
+            void = {"input", "br", "img", "meta", "link", "hr", "source", "wbr"}
+
+            class Strip(HTMLParser):
+                def handle_starttag(self, tag, attrs):
+                    a = dict(attrs)
+                    if depth[0]:
+                        depth[0] += tag not in void
+                    elif "data-version" in a and "hidden" in a and tag not in void:
+                        depth[0] = 1
+                    else:
+                        out.append(self.get_starttag_text())
+
+                def handle_endtag(self, tag):
+                    if depth[0]:
+                        depth[0] -= 1
+                    else:
+                        out.append(f"</{tag}>")
+
+                def handle_data(self, data):
+                    if not depth[0]:
+                        out.append(data)
+            Strip(convert_charrefs=False).feed(html)
+            return "".join(out)
         html = self.get("/benchmarks/osworld1")
         nav = re.search(r'<nav class="std-versions".*?</nav>', html, re.S).group(0)
-        self.assertIn('<a href="/benchmarks/osworld1?v=044bc33#standard" aria-current="page"><b>044bc33</b>', nav)
-        self.assertIn("<b>desktop-env-v1.0.3</b>", nav)
-        shown = lambda h: re.findall(r'<div class="std-version" data-version="([^"]+)">', h)      # the one not hidden
-        self.assertEqual(shown(html), ["044bc33"])
-        self.assertIn("xlang-ai/OSWorld @ 044bc33", html)
-        self.assertIn("xlang-ai/OSWorld @ desktop-env-v1.0.3 · 9d6f711", html)        # on the page, hidden: a click shows it in place
-        self.assertIn("<small>368 tasks</small>", html)
-        self.assertIn('name="version" value="desktop-env-v1.0.3"', html)       # its checks run on that version
-        self.assertEqual(shown(self.get("/benchmarks/osworld1?v=desktop-env-v1.0.3")), ["desktop-env-v1.0.3"])
+        self.assertIn('aria-current="page"><b>desktop-env-v1.0.3</b>', nav)                   # the release is the default
+        self.assertIn("<b>main (044bc33)</b>", nav)                                          # an untagged pin: its branch
+        page = shown(html)
+        self.assertIn("xlang-ai/OSWorld @ desktop-env-v1.0.3 · 9d6f711", page)
+        self.assertNotIn("xlang-ai/OSWorld @ main · 044bc33", page)
+        self.assertIn("<small>360 tasks</small>", page); self.assertNotIn("<small>361 tasks</small>", page)
+        self.assertIn("368 tasks in 10 domains", page); self.assertNotIn("369 tasks in 10 domains", page)
+        self.assertIn("comparable only with this version", page)                             # its own limitations
+        self.assertIn('name="version" value="desktop-env-v1.0.3"', page)                    # its checks run on it
+        self.assertIn("<dd><span class=\"std-version\" data-version=\"desktop-env-v1.0.3\">368</span>", page)
+        old = shown(self.get("/benchmarks/osworld1?v=044bc33"))
+        self.assertIn("xlang-ai/OSWorld @ main · 044bc33", old)
+        self.assertIn("<small>361 tasks</small>", old); self.assertIn("369 tasks in 10 domains", old)
+        self.assertIn("Only M3, PromptAgent and Qwen-CUA have completed tasks", old)
+        self.assertNotIn("comparable only with this version", old)
+        self.assertIn('name="version" value="044bc33"', old)
+        self.assertIn("/tree/044bc33901cb893808e3f91ebc9a17ed8e54b44c", old)                  # its data at its own commit
+        self.assertNotIn("/tree/9d6f711", old)
         self.get("/benchmarks/osworld1?v=nope", status=404)
-        self.assertNotIn("std-versions", self.get("/benchmarks/gsm8k"))
+        self.assertNotIn("data-version", self.get("/benchmarks/gsm8k"))                       # one version: nothing to swap
 
     def test_a_benchmark_on_both_runners_opens_the_builder(self):
         self.assertEqual(self.route_case("swe-bench-verified"), "multi-route")

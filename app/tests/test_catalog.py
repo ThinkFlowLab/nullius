@@ -100,6 +100,46 @@ class TaskCounts(unittest.TestCase):
                 self.assertTrue(any("task_count" in p for p in catalog.validate(cat)))
 
 
+class Versions(unittest.TestCase):
+    """An entry is its default version's page; another version on the standard says only what reads differently."""
+
+    def catalogue(self, versions):
+        ds = [catalog.Dataset(key="all", title="All", benchmark="v", tasks=369, notes="369 tasks", source="GitHub")]
+        b = catalog.Benchmark(key="v", title="V", category="QA", datasets=["all"], limitations=["shared"], versions=versions)
+        return catalog.Catalog(benchmarks=[b], datasets=ds), b
+
+    def test_a_version_reads_its_own_lists_and_dataset_fields(self):
+        cat, b = self.catalogue({"old": {"limitations": ["its own"], "datasets": {"all": {"tasks": 368, "notes": "368 tasks"}}}})
+        self.assertEqual(catalog.validate(cat), [])
+        vb, (d,) = cat.in_version(b, "old")
+        self.assertEqual((vb.limitations, d.tasks, d.notes, d.source), (["its own"], 368, "368 tasks", "GitHub"))
+        self.assertEqual(cat.tasks_of(vb, [d]), ("368", "tasks"))
+        self.assertEqual((b.limitations, cat.datasets_of(b)[0].tasks), (["shared"], 369))     # the entry itself unchanged
+        self.assertEqual(cat.in_version(b, "unknown"), (b, cat.datasets_of(b)))
+
+    def test_only_what_may_differ_is_accepted(self):
+        for bad in ({"old": {"title": "W"}}, {"old": {"limitations": "one line"}}, {"old": {}},
+                    {"old": {"datasets": {"other": {"tasks": 1}}}}, {"old": {"datasets": {"all": {"source": "x"}}}},
+                    {"old": {"datasets": {"all": {"tasks": "368"}}}}, ["old"]):
+            with self.subTest(bad=bad):
+                cat, _ = self.catalogue(bad)
+                self.assertTrue(any("versions" in p for p in catalog.validate(cat)), bad)
+
+    def test_bundled_versions_are_versions_of_the_standard_definition(self):
+        cat = catalog.load(catalog.ROOT)
+        for b in cat.benchmarks:
+            if not b.versions:
+                continue
+            with self.subTest(b.key):
+                d = standard_definitions.find(standard_definitions.load("benchmark")[0], b.key)
+                self.assertTrue(set(b.versions) <= set(d["_versions"]) - {d["_default"]}, b.versions.keys())
+                for v in b.versions:                           # its dataset counts are the units its definition proved
+                    units = {x["id"]: x["units"] for x in standard_definitions.find(standard_definitions.load("benchmark", every=True)[0], f"{b.key}@{v}")["datasets"]}
+                    for k, f in (b.versions[v].get("datasets") or {}).items():
+                        if "tasks" in f:
+                            self.assertIn(f["tasks"], units.values(), (v, k))
+
+
 class DeclaredTimeouts(unittest.TestCase):
     """A benchmark's declared per-phase timeouts are recorded from a real run
     or not at all — the builder shows numbers only where a run has shown them."""

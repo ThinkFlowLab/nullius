@@ -77,23 +77,28 @@ def benchmark_page(key):
     entry = harbor_entry.entry_of(key)
     # the standard's definition of it, when it has one: its proofs per dataset, and the form that runs cli prove
     std = standard_recipe.page_of(key) if "standard" in b.harness else None
-    # a benchmark with versions shows one at a time (``?v=``, the default without it), as an agent's page does
-    v, versions = request.args.get("v"), []
-    if std and std["versions"]:
-        pages = {x["version"]: (std if x["default"] else standard_recipe.page_of(x["ref"])) for x in std["versions"]}
-        if v and v not in pages:
-            abort(404)
-        std = pages[v] if v else std
-        versions = [dict(x, std=pages[x["version"]], current=pages[x["version"]] is std, **_proven(pages[x["version"]])) for x in std["versions"]]
-    elif v:
+    # A benchmark with versions is the whole page once per version, one shown (``?v=``, the default without it) and the
+    # others swapped in place: each its own pin, proofs, setup, options, task counts, data and limitations.
+    v = request.args.get("v")
+    listed = (std or {}).get("versions") or [{"ref": key, "version": "", "label": "", "default": True}]
+    if v and v not in {x["version"] for x in listed if x["version"]}:
         abort(404)
-    # where each dataset's data comes from, one row per way it runs - each fetched by its harness, never by hand
-    std_def = standard_definitions.find(standard_definitions.load("benchmark")[0], key) if std else None
-    ds = cat.datasets_of(b)
-    data = {d.key: sources.of(d, b.harness, std_def, only=len(ds) == 1) for d in ds}
+    every = standard_definitions.load("benchmark", every=True)[0] if std else []
+    views = []
+    for x in listed:
+        page = std if x["default"] else standard_recipe.page_of(x["ref"])
+        vb, vds = cat.in_version(b, x["version"]) if x["version"] and not x["default"] else (b, cat.datasets_of(b))
+        # where each dataset's data comes from, one row per way it runs - each fetched by its harness, never by hand
+        std_def = standard_definitions.find(every, x["ref"]) if std else None
+        views.append(dict(x, std=page, b=vb, ds=vds, tasks=cat.tasks_of(vb, vds),
+                          data={d.key: sources.of(d, b.harness, std_def, only=len(vds) == 1) for d in vds},
+                          current=(x["version"] == v) if v else x["default"], **(_proven(page) if page else {})))
+    shown = next(x for x in views if x["current"])
+    std, ds, data = shown["std"], cat.datasets_of(b), shown["data"]
+    versions = views if len(views) > 1 else []
     jobs = {j.job_id for j in shared._jobs_for_request()} if std else set()
     return render_template("catalogue/benchmark.html", cat=cat, b=b, csrf=shared._csrf_token(), papers=citation.parse(b.citation), data=data,
-                           editable=entry is not None and not harbor_entry.not_editable(entry), std=std, std_jobs=jobs, versions=versions,
+                           editable=entry is not None and not harbor_entry.not_editable(entry), std=std, std_jobs=jobs, versions=versions, views=views,
                            deletable=os.path.isfile(os.path.join(paths.catalogue_dir(), catalog.BENCHMARKS, key, catalog.ENTRY)),
                            restore_bundle=storage.can_restore("benchmarks", key, catalog.ROOT),
                            local=settings_web._local_client(),

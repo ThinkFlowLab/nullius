@@ -221,7 +221,7 @@
   };
   // Every benchmark of both runners in one list; picking one sets the runner that runs it (Nullius when both do).
   const benchmarkStep = rec => {
-    const st = C.standard(), sb = C.standardBench(rec), on = C.benchKey(rec), seen = new Set(), tiles = [];
+    const st = C.standard(), sb = C.standardBase(rec), on = C.benchKey(rec), seen = new Set(), tiles = [];
     const add = (key, title, fam, kind, summary) => { if (seen.has(key)) return; seen.add(key); const c = catOf(key);
       tiles.push({attr: 'bench', key, on: key === on, title: c.title || title,
         mark: `<svg aria-hidden="true"><use href="/static/catalogue/marks.svg#bm-${esc(key)}"/></svg>`, cat: c.category, origin: c.origin,
@@ -231,7 +231,7 @@
     C.benchmarks().forEach(x => add(x.key, x.title, 'agent', '', x.domain));
     tiles.sort((a, b) => a.title.localeCompare(b.title, 'en', {sensitivity: 'base'}));
     const versions = C.isStandard(rec) && sb && (sb.versions || []).length > 1
-      ? `<label class="nb-field">Version of ${esc(sb.label)}<select data-std-version>${sb.versions.map(v => `<option value="${esc(v.ref)}" ${v.ref === rec.benchmark || (v.default && rec.benchmark === sb.key) ? 'selected' : ''}>${esc(v.version)}${v.default ? ' (the default)' : ''}</option>`).join('')}</select><small>Each version pins its own upstream, datasets and proofs.</small></label>` : '';
+      ? `<label class="nb-field">Version of ${esc(sb.label)}<select data-std-version>${sb.versions.map(v => `<option value="${esc(v.ref)}" ${v.ref === rec.benchmark || (v.default && rec.benchmark === sb.key) ? 'selected' : ''}>${esc(v.label || v.version)}${v.default ? ' (the default)' : ''}</option>`).join('')}</select><small>Each version pins its own upstream, datasets and proofs.</small></label>` : '';
     return `<div class="nb-sectionhead"><h2>Choose a benchmark.</h2></div>` + picker(tiles, [['agent', 'Agents'], ['capability', 'Capabilities']]) + versions;
   };
   // Put the recipe on a runner, keeping the one each runner had: the benchmark follows.

@@ -70,6 +70,8 @@ document.querySelectorAll('.bench-page .std-versions').forEach(nav => nav.addEve
   nav.querySelectorAll('a').forEach(a => {
     if (a === link) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
+  const build = document.querySelector('.bench-page [data-build-run]');    // Build a run opens the version shown
+  if (build) { const to = new URL(build.href); to.searchParams.set('standard', link.dataset.ref); build.href = to.pathname + to.search; }
   const url = new URL(location.href);
   url.searchParams.set('v', v);
   history.replaceState(null, '', url.pathname + url.search + location.hash);

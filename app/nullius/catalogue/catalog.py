@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from nullius import paths
 from . import storage
@@ -121,6 +121,10 @@ class Benchmark:
     citation_source: str = ""
     #: Distinct tasks across dataset views, when known; otherwise show their count summary.
     task_count: int | None = None
+    #: what reads differently in another version of it on the standard (its ``standard.json``
+    #: ``versions``), by version: whole lists (``VERSIONED``) and its datasets' fields
+    #: (``VERSIONED_DATASET``, by dataset key); the entry itself is the default version
+    versions: dict = field(default_factory=dict)
 
     @property
     def label(self) -> str:
@@ -174,6 +178,11 @@ class Benchmark:
         return "multi-route" if "harbor" in usable else "non-harbor"
 
 
+# What a version of a benchmark may say differently: these lists whole, and these fields of a dataset.
+VERSIONED = ("good_to_know", "upstream_limitations", "limitations")
+VERSIONED_DATASET = ("tasks", "notes", "verifier")
+
+
 @dataclass
 class Dataset:
     key: str
@@ -215,19 +224,32 @@ class Catalog:
         """A benchmark's datasets, as `Dataset`, in the order its entry writes them."""
         return [d for d in (self.dataset(k) for k in b.datasets) if d]
 
-    def tasks_of(self, b: "Benchmark") -> tuple:
+    def tasks_of(self, b: "Benchmark", datasets: list | None = None) -> tuple:
         """Its tasks as a number and a label, for a card: ``("500", "tasks")``,
         ``("500", "tasks each")`` when its datasets agree, ``("10–89", "tasks")``
         when they do not, ``("—", "tasks")`` when none is recorded.
-        An explicit distinct task count takes precedence over those summaries."""
+        An explicit distinct task count takes precedence over those summaries.
+        ``datasets``: one version's (``in_version``), its own counts."""
         if type(b.task_count) is int and b.task_count > 0:
             return f"{b.task_count:,}", "tasks"
-        counts = [d.tasks for d in self.datasets_of(b) if d.tasks]
+        counts = [d.tasks for d in (self.datasets_of(b) if datasets is None else datasets) if d.tasks]
         if not counts:
             return "—", "tasks"
         if len(set(counts)) == 1:
             return f"{counts[0]:,}", "tasks each" if len(counts) > 1 else "tasks"
         return f"{min(counts):,}–{max(counts):,}", "tasks"
+
+    def in_version(self, b: "Benchmark", version: str) -> tuple:
+        """(Benchmark, [Dataset]) as one version of it reads: the entry with that
+        version's lists and dataset fields over it; the entry itself for the default
+        or a version that says nothing different."""
+        own = (b.versions or {}).get(version) or {}
+        ds = self.datasets_of(b)
+        if not own:
+            return b, ds
+        changed = own.get("datasets") or {}
+        return (replace(b, **{k: list(own[k]) for k in VERSIONED if k in own}),
+                [replace(d, **{k: v for k, v in (changed.get(d.key) or {}).items() if k in VERSIONED_DATASET}) for d in ds])
 
     def files(self, key: str) -> list:
         """The files in a benchmark's folder, by name: what its page shows it is made of."""
@@ -411,6 +433,7 @@ def validate(cat: Catalog) -> list:
         for d in b.datasets:
             if d not in dkeys:
                 bad.append(f"{b.key}: dataset {d!r} is not in the catalogue")
+        bad.extend(_versions(b))
     for d in cat.datasets:
         # A dataset is shown on its benchmark's page and
         # nowhere else, so one its benchmark does not list would never be seen.
@@ -423,4 +446,31 @@ def validate(cat: Catalog) -> list:
             bad.append(f"dataset {d.key}: benchmark {d.benchmark!r} does not list it")
         if not d.source:
             bad.append(f"dataset {d.key}: no source")
+    return bad
+
+
+def _versions(b: "Benchmark") -> list:
+    """A ``versions`` block: by version, only what may differ, each list of strings,
+    each dataset one of its own with fields that may differ."""
+    if not b.versions:
+        return []
+    if not isinstance(b.versions, dict):
+        return [f"{b.key}: versions is {{version: what reads differently in it}}"]
+    bad = []
+    for v, own in b.versions.items():
+        if not isinstance(own, dict) or not own:
+            bad.append(f"{b.key}: versions.{v} says what reads differently in it")
+            continue
+        for k, x in own.items():
+            if k in VERSIONED:
+                if not isinstance(x, list) or not all(isinstance(i, str) and i for i in x):
+                    bad.append(f"{b.key}: versions.{v}.{k} is a list of lines")
+            elif k == "datasets":
+                for dk, fields in (x.items() if isinstance(x, dict) else [(None, None)]):
+                    if dk not in b.datasets or not isinstance(fields, dict) or not fields or any(f not in VERSIONED_DATASET for f in fields):
+                        bad.append(f"{b.key}: versions.{v}.datasets is {{one of its datasets: {', '.join(VERSIONED_DATASET)}}}")
+                    elif "tasks" in fields and (type(fields["tasks"]) is not int or fields["tasks"] < 0):
+                        bad.append(f"{b.key}: versions.{v}.datasets.{dk}.tasks is a count")
+            else:
+                bad.append(f"{b.key}: versions.{v}.{k} cannot differ between versions (only {', '.join(VERSIONED + ('datasets',))})")
     return bad

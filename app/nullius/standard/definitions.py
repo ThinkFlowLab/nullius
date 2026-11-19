@@ -209,15 +209,32 @@ def resolve(d: dict, version: Optional[str] = None) -> Optional[dict]:
             out[k] = block[k]
     if isinstance(d.get("options"), dict) and isinstance(block.get("options"), dict):
         out["options"] = dict(d["options"], **block["options"])       # a version adds an option or restates one
-    up = dict(d.get("upstream") or {})
-    own = block.get("upstream") or {}
-    if ("repository" in own or "tested" in own) and "tag" not in own:
-        up.pop("tag", None)                                           # another repository or commit: the shared tag is not its
-    out["upstream"] = dict(up, **own, version=v)
+    out["upstream"] = _version_upstream(d, v)
     out["proven"] = dict(block.get("proven") or {})
     if not bench:                                                     # a benchmark offers nothing: it needs
         out["offers"] = [p for p in ports.PORTS if p in out["proven"]]
-    return dict(out, _version=v, _versions=list(vs), _default=d.get("default"), _ref=f"{d.get('key')}@{v}")
+    labels = {x: version_label({"upstream": _version_upstream(d, x), "_version": x}) for x in vs if isinstance(vs[x], dict)}
+    return dict(out, _version=v, _versions=list(vs), _default=d.get("default"), _ref=f"{d.get('key')}@{v}", _labels=labels)
+
+
+def _version_upstream(d: dict, v: str) -> dict:
+    """One version's upstream: the shared one, its own block over it."""
+    up = dict(d.get("upstream") or {})
+    own = (d["versions"][v] or {}).get("upstream") or {}
+    if ("repository" in own or "tested" in own) and "tag" not in own:
+        up.pop("tag", None)                                           # another repository or commit: the shared tag is not its
+    return dict(up, **own, version=v)
+
+
+def version_label(d: dict) -> str:
+    """A version as a reader names it: its release tag, else its branch and short commit
+    (``main (044bc33)``), else its key."""
+    up = d.get("upstream") or {}
+    if up.get("tag"):
+        return str(up["tag"])
+    if up.get("branch") and up.get("tested"):
+        return f"{up['branch']} ({str(up['tested'])[:7]})"
+    return str(d.get("_version") or "")
 
 
 def title(d: dict) -> str:
@@ -724,6 +741,8 @@ def _upstream(u) -> List[str]:
         bad.append("upstream.tag: the release tag the tested commit is, a plain tag name (v1.0.1)")
     elif "tag" in u and "repository" not in u:
         bad.append("upstream.tag: a tag of upstream.repository, which is not set")
+    if "branch" in u and (not tag_ok(u["branch"]) or "tag" in u or "repository" not in u):
+        bad.append("upstream.branch: the branch an untagged tested commit is on (main), with upstream.repository and no tag")
     if not u.get("license"):
         bad.append("upstream.license: say it, or 'unknown'")
     return bad

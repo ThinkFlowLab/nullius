@@ -533,6 +533,8 @@ An agent or a capability may keep several versions in its one file: an older rel
 | Naming | `KEY@VERSION` in `cli run`, `cli prove`, `cli fit` and the recipe's `benchmark` |
 | In jobs | `…__KEY-VERSION__…` in the name; `standard.benchmark_version` and `standard.benchmark_ref` in `config.json` |
 | A fork is a version | `versions.<name>.upstream = {repository, tag, tested}`, never a patch of ours; cloned at its commit (`upstreams/<key>/<commit>/`), its datasets checked by their own `sha256`; a private repository uses the machine's git credentials. It proves its own controls (`cli prove KEY@NAME`) |
+| A release is the default | An earlier untagged pin stays as a version with `upstream.branch` (`main`): shown as `main (044bc33)` |
+| Its page | `benchmark.json` `versions.<name>`: whole `good_to_know`, `upstream_limitations`, `limitations`, and `datasets.<key>` `tasks`, `notes`, `verifier`; the page and builder switch all of it with the version |
 
 ### Options
 
