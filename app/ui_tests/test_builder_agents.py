@@ -69,6 +69,10 @@ class AgentGrid(unittest.TestCase):
         _, cards = self.grid("gsm8k")
         self.assertEqual(list(cards)[0], "original")
         self.assertIn(">No agent · Original</button>", cards["original"])
+        self.assertIn('<span class="std-tag">as published</span>', cards["original"])            # how it runs, not a protocol
+        self.assertIn('data-f-protocol=""', cards["original"])
+        html, _ = self.grid("gsm8k")
+        self.assertNotIn('data-value="reference"', html)
         for k, c in cards.items():
             if k.startswith("osworld"):
                 self.assertIn(" disabled", c)
