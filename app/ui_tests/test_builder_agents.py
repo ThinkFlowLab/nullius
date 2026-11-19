@@ -65,9 +65,11 @@ class AgentGrid(unittest.TestCase):
         menu = unescape(html[html.index('data-tools="filter"'):])
         values = lambda col: re.findall(r'data-value="[^"]*" checked> ([^<]*)<', menu[menu.index(f'data-filter-menu="{col}"'):].split("</fieldset>")[0])
         self.assertEqual(values("protocol"), ["ACP", "A command", "Its own script"])               # every value on: any protocol
-        self.assertEqual(values("fit"), ["Can run it", "Cannot"])
-        self.assertLess(menu.index('data-filter-menu="protocol"'), menu.index('data-filter-menu="fit"'))
-        self.assertLess(menu.index('data-filter-menu="fit"'), menu.index('data-filter-menu="from"'))
+        self.assertNotIn('data-filter-menu="fit"', menu[:menu.index("</div>")])                     # Fit: a menu of its own, beside Filter
+        fit = unescape(html[html.index('<fieldset data-filter-menu="fit"'):]).split("</fieldset>")[0]
+        self.assertIn('<input type="checkbox" data-value="fit" checked> Can run it', fit)            # what can run, at first
+        self.assertIn('<input type="checkbox" data-value="unfit"> Cannot', fit)
+        self.assertLess(html.index("data-dropdown"), html.index('data-tools-btn="filter"'))
         self.assertIn("> Bundled</label><label><input type=\"checkbox\" data-value=\"benchmark\" checked> OSWorld1's own</label>"
                       "<label><input type=\"checkbox\" data-value=\"elsewhere\" checked> Other benchmarks' agents", menu)
         self.assertIn('data-filter-menu="proves"', menu)

@@ -683,6 +683,9 @@
     slot.replaceWith(grid.node);
     const chosen = C.chosenOf(rec);
     grid.node.querySelectorAll('[data-pick]').forEach(b => b.setAttribute('aria-pressed', String(!b.disabled && chosen.includes(b.dataset.pick))));
+    // a choice made elsewhere (a recipe loaded) that the filters hide: the toolkit draws again, and it shows
+    if (grid.node.dataset.wired && [...grid.node.querySelectorAll('[data-pick][aria-pressed="true"]')].some(b => b.closest('[data-card], tr').hidden))
+      grid.node.querySelector('[data-search]')?.dispatchEvent(new Event('input'));
     if (!grid.node.dataset.wired) {
       grid.node.dataset.wired = '1';
       const cards = grid.node.querySelector('[data-cards]'), table = grid.node.querySelector('table[data-table]');

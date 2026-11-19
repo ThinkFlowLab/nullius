@@ -153,7 +153,7 @@ window.NulliusTable = {
      Escape clears it. A column narrows when it does not show every value;
      the Filter button or a dropdown holding such a column is marked
      .narrowed and counts: the Filter button the columns it narrows, a
-     dropdown the values chosen (after None, 0). Clear filters clears every
+     dropdown the values chosen (after None, 0), or the one chosen by name. Clear filters clears every
      column. `changed` runs after any of them. Returns passes(row). */
   narrow(tools, changed) {
     const [fbtn, fmenu] = [tools.querySelector('[data-tools-btn="filter"]'), tools.querySelector('[data-tools="filter"]')];
@@ -164,12 +164,13 @@ window.NulliusTable = {
     }
     const found = row => !q || this.matches(row.dataset.search, q.value);
     const menus = [...(fmenu ? [[fbtn, fmenu, () => 1]] : []),
-                   ...[...tools.querySelectorAll('[data-dropdown]')].map(b => [b, b.parentNode.querySelector('.menu'), set => set.size])];
+                   ...[...tools.querySelectorAll('[data-dropdown]')].map(b => [b, b.parentNode.querySelector('.menu'),
+                     set => set.size === 1 ? b.parentNode.querySelector(`[data-value="${CSS.escape([...set][0])}"]`)?.parentNode.textContent.trim() ?? 1 : set.size])];
     const mark = () => menus.forEach(([btn, menu, n]) => {
       const sets = [...menu.querySelectorAll('[data-filter-menu]')].map(v => f.allowed[v.dataset.filterMenu]).filter(Boolean);
       const count = btn.querySelector('.tools-count');
       btn.classList.toggle('narrowed', sets.length > 0);
-      count.textContent = sets.length ? sets.reduce((sum, set) => sum + n(set), 0) : '';
+      count.textContent = sets.length === 1 ? n(sets[0]) : sets.length ? sets.reduce((sum, set) => sum + n(set), 0) : '';
       count.hidden = !sets.length;
     });
     const narrowed = () => { mark(); changed(); };
