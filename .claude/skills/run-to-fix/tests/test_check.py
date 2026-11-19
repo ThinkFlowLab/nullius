@@ -266,3 +266,39 @@ class OldCandidate(RepoCase):
             r = run(args)
             self.assertNotEqual(r.code, 0, args)
             self.assertIn("register the candidate again", r.err)
+
+
+class StaleEvidence(RepoCase):
+    """A check that fails leaves no earlier success behind, and a changed adapter runs its commands again."""
+
+    def change_adapter(self, name: str, line: str) -> None:
+        path = os.path.join(self.loop, "adapter.json")
+        data = load(path)
+        data["commands"][name] = line
+        write(path, json.dumps(data))
+
+    def test_a_failing_suite_removes_the_old_checks(self) -> None:
+        self.start(self.commands(), ["run_tasks"])
+        self.candidate("good", self.repo.good, self.repo.test_ref, "outcome")
+        self.check("good")
+        self.change_adapter("test", "exit 23 # {worktree}")
+        r = run(["check", "--loop", self.loop, "--candidate", "good"])
+        self.assertNotEqual(r.code, 0)
+        self.assertFalse(os.path.exists(self.round_file("candidates/good/checks.json")))
+
+    def test_a_changed_replay_is_not_served_from_the_cache(self) -> None:
+        self.start(self.commands(), ["run_tasks"])
+        self.candidate("good", self.repo.good, self.repo.test_ref, "outcome")
+        self.check("good")
+        self.change_adapter("replay", "exit 23 # {worktree} {ref} {job_dir} {out_json}")
+        r = run(["check", "--loop", self.loop, "--candidate", "good"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("commands.replay", r.err)
+        self.assertFalse(os.path.exists(self.round_file("candidates/good/checks.json")))
+
+    def test_an_unchanged_adapter_uses_the_cache(self) -> None:
+        self.start(self.commands(), ["run_tasks"])
+        self.candidate("good", self.repo.good, self.repo.test_ref, "outcome")
+        self.check("good")
+        self.check("good")
+        self.assertEqual(self.marker("replay.marker"), [self.repo.test_ref, self.repo.good])
