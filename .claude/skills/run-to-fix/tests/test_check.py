@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 
-from agentrepo import RepoCase, git
+from agentrepo import RepoCase, git, make_repo
 from jobs import load, run, write
 
 
@@ -302,3 +303,23 @@ class StaleEvidence(RepoCase):
         self.check("good")
         self.check("good")
         self.assertEqual(self.marker("replay.marker"), [self.repo.test_ref, self.repo.good])
+
+
+class PaidScriptsRun(RepoCase):
+    """A written paid command runs as written, in a checkout and a loop folder whose paths hold a space and a quote."""
+
+    def test_a_written_replay_runs_and_removes_its_worktree(self) -> None:
+        spaced = os.path.join(self.tmp, "it's a dir")
+        os.makedirs(spaced)
+        self.repo = make_repo(spaced)
+        self.loop = os.path.join(spaced, "loop space")
+        os.makedirs(self.loop)
+        self.start(self.commands(), ["run_tasks", "replay"])
+        self.candidate("good", self.repo.good, self.repo.test_ref, "outcome")
+        self.check("good")
+        script = self.round_file(os.path.join("commands", f"replay-{self.repo.good[:12]}.sh"))
+        p = subprocess.run(["bash", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual(self.marker("replay.marker"), [self.repo.good])
+        self.assertEqual(git(self.repo.path, ["worktree", "list", "--porcelain"]).count("worktree "), 1)
+        self.assertEqual(os.listdir(os.path.join(self.loop, "worktrees")), [])
