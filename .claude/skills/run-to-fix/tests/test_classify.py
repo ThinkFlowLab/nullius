@@ -401,7 +401,7 @@ class QuotedStrings(LoopCase):
 
     def test_verifier_and_timeout_details_keep_their_quotes(self) -> None:
         failed = trial("f__a", "bench/f", 0.0)
-        failed.verifier_text = "FAIL: Kevin Zhao's email does not have the 'Clients' label"
+        failed.verifier_text = "FAIL: the sample's invoice does not have the 'Done' label"
         late = trial("t__a", "bench/t", None)
         late.exception = ("AgentTimeoutError", "the agent did not answer 'ping' in time")
         run_dir = write_job(self.jobs, "run", "alpha", "harbor", [failed, late, trial("p__a", "bench/p", 1.0)])
@@ -410,7 +410,7 @@ class QuotedStrings(LoopCase):
         self.classify_ok()
         rows = self.by_trial()
         self.assertEqual(rows["f__a"]["signature"],
-                         "verifier_failed: FAIL: Kevin Zhao's email does not have the 'Clients' label")
+                         "verifier_failed: FAIL: the sample's invoice does not have the 'Done' label")
         self.assertEqual(rows["t__a"]["signature"], "time_limit: AgentTimeoutError: the agent did not answer 'ping' in time")
 
 
