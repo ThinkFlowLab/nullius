@@ -80,7 +80,7 @@ def index():
         for name, counts in sorted(used.items(), key=lambda kv: -kv[1]["trials"])
     ]
 
-    # Distinct values behind the per-column filter menus, as (value, label).
+    # Distinct values behind the Filter menu's lists, as (value, label).
     # Value is what the row carries; label is what the menu shows.
     choices = {
         "dataset": sorted(
@@ -284,6 +284,20 @@ def _fold(rows, ended, control=False) -> list:
             v = feasibility.summary_of(job) if job is not None else None
             fold["verdict"] = v and replace(v, running=any(r["verdict"] and r["verdict"].running for r in group))
         out.append(fold)
+    return out
+
+
+def offered(ws=None) -> list:
+    """The runs Compare offers from the open workspace (or ``ws``): (launch, run, the job ids it stands for, its
+    shards' rows as Runs lists them), newest launch first, checks included, a participant's shards one run as
+    the Runs page folds them."""
+    jobs, _, _, grouped = _grouped(ws)
+    by_id = {j.job_id: j for j in jobs}
+    out = []
+    for g in grouped:
+        rows = [{"job": by_id[i], "job_id": i, "state": "finished", "control": feasibility.control_of(by_id[i])} for i in g.job_ids]
+        for r in _fold(rows, {}):
+            out.append((g, r["job"], [s["job_id"] for s in r.get("shards", [r])] + list(r["job"].merged_from), r.get("shards", [])))
     return out
 
 
@@ -641,7 +655,9 @@ def _inventory(g, runs, wss, by_id) -> dict:
     its Delete would take is asked only when it opens (``launch_ask``)."""
     return {"launch": g, "runs": runs, "why": _undeletable(runs), "shards": len(runs), "state": _most_telling(map(_run_state, runs)),
             **_tally(g, by_id), "machines": list(dict.fromkeys(e.plan.host.label if e.plan.host else "this machine" for e in runs)),
-            "bytes": sum(execution.size_of(e.dir) for e in runs), "workspaces": wss}
+            "bytes": sum(execution.size_of(e.dir) for e in runs), "workspaces": wss,
+            # the agents its jobs recorded, and those its records name for jobs not written yet
+            "agents": sorted({by_id[i].agent_label for i in g.job_ids if by_id[i].agent_label} | {str(x["agent"]) for e in runs for x in e.plan.jobs if x.get("agent")})}
 
 
 @app.route("/launches")

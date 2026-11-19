@@ -144,7 +144,7 @@ class AgentOptions(unittest.TestCase):
         program = """const C = {chosenOf: r => r.others, dsIds: () => ['all']};
 const schema = {standardHere: {}}, esc = x => x, tile = x => x.title;
 """ + function + """
-const b = {options: {steps: {label: 'Steps', summary: 'Steps', values: ['10'], default: '10', datasets: [], setups: ['agent']}}};
+const b = {options: {steps: {label: 'Steps', summary: 'Steps', values: ['10'], default: '10', datasets: [], setups: ['agent'], step: ''}}};
 const r = {others: ['fake', 'original']};
 process.stdout.write(JSON.stringify(['yours', 'setup', 'shared'].map(s => benchOptions(r, b, s))));
 """

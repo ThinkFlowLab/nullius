@@ -391,7 +391,7 @@ def option_problem(spec: dict, value) -> Optional[str]:
     if "values" in spec:
         return None if value in (spec.get("values") or []) else f"{value!r} is not one of {', '.join(spec.get('values') or [])}"
     try:
-        return None if re.fullmatch(str(spec.get("pattern")), value) else f"{value!r} does not match {spec.get('pattern')}"
+        return None if re.fullmatch(str(spec.get("pattern")), value) else f"{value!r} is not a value it takes" + (f", e.g. {spec['example']}" if spec.get("example") else "")
     except re.error:
         return "its pattern is not a regular expression"
 
@@ -414,12 +414,12 @@ def _option_slots(d: dict) -> List[Tuple[str, str]]:
 
 def _options(d: dict) -> List[str]:
     """``options``: what a run may set of the agent's own behaviour, each with
-    a ``summary``, its ``values`` (or a ``pattern``) and a ``default`` that is
+    a ``summary``, its ``values`` (or a ``pattern`` and an ``example`` of it) and a ``default`` that is
     the vendor's own - so a run that sets nothing is the agent as it ships.
     Every ``{opt_<name>}`` slot a template carries must be one of them."""
     opts = d.get("options")
     if opts is not None and not isinstance(opts, dict):
-        return ["options: an object, name -> {summary, values or pattern, default}"]
+        return ["options: an object, name -> {summary, values or pattern and example, default}"]
     opts, bad = opts or {}, []
     for name, o in opts.items():
         w = f"options.{name}"
@@ -446,6 +446,8 @@ def _options(d: dict) -> List[str]:
             except re.error:
                 bad.append(f"{w}.pattern: a regular expression")
                 continue
+            if "example" in o and (option_problem(o, o["example"]) or o["example"] == o.get("default")):
+                bad.append(f"{w}.example: a value its pattern allows besides its default, shown in its place")
         if option_problem(o, o.get("default")):
             bad.append(f"{w}.default: the vendor's own default, a value it allows")
     for where, n in _option_slots(d):
@@ -470,7 +472,7 @@ def _bench_options(d: dict) -> List[str]:
     ``embeddings`` model called through the run's relay, ``host`` requirements or ``files`` by name - and
     ``when`` it applies: another option's values (a retriever's, only with a retrieval). ``limit``:
     a bound the upstream has of its own (its steps, its errors), offered with the run's limits; ``by``:
-    its default under each value of another option (an agent's own steps), for a default of ``default``."""
+    its default under each value of another option (an agent's own steps), for a default of ``default``. ``names``: a name for some of its values, shown in their place. ``step``: ``where`` for a choice of where the work runs, ``dataset`` for one its datasets need, the builder step that asks it."""
     opts = d.get("options")
     if opts is None:
         return []
@@ -488,6 +490,8 @@ def _bench_options(d: dict) -> List[str]:
         on = o.get("setups")
         if "limit" in o and (not isinstance(o["limit"], bool) or "pattern" not in o):
             bad.append(f"{w}.limit: true for a bound the upstream has of its own, a number its pattern allows")
+        if o.get("step", "dataset") != "dataset" and (o["step"] != "where" or "values" not in o) or "step" in o and o.get("limit"):
+            bad.append(f"{w}.step: where, a choice of where the work runs among its values, or dataset")
         by = o.get("by")
         if by is not None and not (isinstance(by, dict) and len(by) == 1 and all(
                 k != name and k in opts and isinstance(m, dict) and set(m) == set(opts[k].get("values") or [None])
@@ -504,6 +508,10 @@ def _bench_options(d: dict) -> List[str]:
         about = o.get("about") or {}
         if not isinstance(about, dict) or any(option_problem(o, k) is not None or not isinstance(v, str) for k, v in about.items()):
             bad.append(f"{w}.about: a line for some of its values")
+        names = o.get("names", {})
+        if not isinstance(names, dict) or any(k not in (o.get("values") or []) or not isinstance(v, str) or not v.strip() for k, v in names.items()) \
+                or len(set(names.values())) != len(names):
+            bad.append(f"{w}.names: a name for some of its values")
         needs = o.get("needs") or {}
         if not isinstance(needs, dict):
             bad.append(f"{w}.needs: value -> {{embeddings, reranker, host, files}}")
@@ -553,7 +561,7 @@ def _files(d: dict) -> List[str]:
 
 def _host(d: dict) -> List[str]:
     """A benchmark's ``host``: what the machine its driver runs on must have for some of its options,
-    by name - a ``summary``, the programs that ``check`` it (each on PATH) and how to ``install`` them
+    by name - a ``label``, a ``summary``, the programs that ``check`` it (each on PATH) and how to ``install`` them
     (``apt`` and ``npm`` packages, pinned where the upstream pins them); no ``install`` for the
     machine's own hardware (a GPU, checked by its driver's program), which no package puts there."""
     h = d.get("host")
@@ -1050,6 +1058,25 @@ def control(bench: dict, which: str) -> Optional[dict]:
             "_kind": "control", "_ref": which, "_here": bench.get("_here", "")}
 
 
+def comparable(orig: dict, model: str) -> bool:
+    """Whether a run of the original with ``model`` compares with the paper's: ``comparable`` a bool, or the models that do."""
+    c = orig.get("comparable", True)
+    return model in c if isinstance(c, list) else bool(c)
+
+
+def upstream_name(orig: dict, model: str, provider: str) -> str:
+    """``model`` by the name the original's upstream knows, when given as ``provider`` lists it."""
+    pre = (orig.get("providers") or {}).get(provider, "")
+    names = {pre + (orig.get("served_as") or {}).get(m, m): m for m in orig.get("models") or []}
+    return model if model in (orig.get("models") or []) else names.get(model, model)
+
+
+def paper_models(orig: dict) -> List[str]:
+    """The original's models whose runs compare with the paper's."""
+    c = orig.get("comparable", True)
+    return [m for m in orig.get("models") or [] if not isinstance(c, list) or m in c]
+
+
 def _leaderboard(d: dict) -> List[str]:
     """``leaderboard``: {says, simulator?, judge?, bench_options?, repeat?} - what the
     upstream's leaderboard fixes besides the ranked model, from its own submission
@@ -1137,8 +1164,11 @@ def _setups(s) -> List[str]:
                 bad.append(f"{w}.turn_seconds: a whole number of seconds")
             if "paper" in x and (not isinstance(x["paper"], str) or not x["paper"].strip()):
                 bad.append(f"{w}.paper: where the paper reports its numbers, in a phrase")
-            if "comparable" in x and not isinstance(x["comparable"], bool):
-                bad.append(f"{w}.comparable: false when no served model is the paper's, so its runs compare with each other only")
+            c = x.get("comparable", True)
+            if not isinstance(c, bool) and (not isinstance(c, list) or not c or len(set(c)) != len(c) or any(m not in models for m in c)
+                                            or x.get("default") not in c):
+                bad.append(f"{w}.comparable: false when no served model is the paper's, so its runs compare with each other only; "
+                           "or those of its models whose runs compare with the paper's, its default among them")
         else:
             allowed |= {"runs_as"}
             orig = s.get("original") if isinstance(s.get("original"), dict) else None
@@ -1230,7 +1260,7 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple
         model = model or orig["default"]
         if model not in orig["models"]:
             return None, (f"the original {bench['label']} runs only the paper's models ({', '.join(orig['models'])}): "
-                          f"{model} is not one - choose the model setup for another")
+                          f"{model} is not one" + (" - choose the model setup for another" if "model" in bench.get("setups", {}) else ""))
         if provider and provider not in orig["providers"]:
             return None, (f"the paper's models are not served by {provider}: the original runs on "
                           + " or ".join(orig["providers"]))
@@ -1246,7 +1276,7 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple
         asked, sent = x["runs_as"], model
     units = orig.get("units") or bench.get("units") or {"noun": "unit", "nouns": "units"}
     return {"model": {"side_models": side}, "key": which, "label": f"{bench['label']} {setup_label(bench, which).lower()}",
-            "summary": x["summary"], "asked": asked, "sent": sent, "units": units, "comparable": which == "original" and x.get("comparable", True),
+            "summary": x["summary"], "asked": asked, "sent": sent, "units": units, "comparable": which == "original" and comparable(x, model),
             "turn_seconds": orig.get("turn_seconds"), "upstream": {}, "_kind": "upstream", "_ref": which,
             "_here": bench.get("_here", "")}, ""
 
@@ -1332,7 +1362,7 @@ def problems(d: dict, kind: str) -> List[str]:
             if not isinstance(lim, dict):
                 bad.append("limits: an object")
             else:
-                for f in ("turn_seconds", "turns", "setup_seconds"):
+                for f in ("turn_seconds", "turns", "setup_seconds", "score_seconds", "call_seconds"):
                     v = lim.get(f)
                     if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 100000):
                         bad.append(f"limits.{f}: a whole number from 1")
@@ -1340,6 +1370,8 @@ def problems(d: dict, kind: str) -> List[str]:
                 if a is not None and (not isinstance(a, str) or not a.strip()):
                     bad.append("limits.attempts: how the upstream tells one attempt of a unit from another (its seed per trial), "
                                "in a sentence - the driver is then sent attempt with setup, turn and answer")
+        if "gated" in d and not isinstance(d["gated"], bool):
+            bad.append("gated: true for a benchmark whose tasks are gated, so no provider's words about them are kept")
         s = d.get("score") or {}
         if s.get("kind") not in SCORES or not s.get("says"):
             bad.append(f"score: {{kind: one of {SCORES}, says}}")

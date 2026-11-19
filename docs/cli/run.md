@@ -69,7 +69,7 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | `image` | 3600 s: an own image's pull or build | Environment setup error |
 | `agent` | The task's `agent_seconds`, else the Original setup's `turn_seconds`, else `limits.turn_seconds`, else 900 s: the agent's whole work on the unit, every turn of a conversation and the simulated user's between them; each add and each recall of a capability (its reader has `limits.turn_seconds`); an Original setup's answerer; the oracle | Agent timeout |
 | `verify` | The verify step's `seconds`, else the agent's default | Verifier error |
-| `score` | 600 s: the driver's `score` | Verifier error |
+| `score` | The benchmark's `limits.score_seconds`, else 600 s: the driver's `score` | Verifier error |
 
 `--max-turns N` caps a conversation's agent turns over `limits.turns` (default 20); the conversation is scored as it stands. `config.json` records what was forced under `standard.timeouts` and `standard.max_turns`. From the builder, *Limits* takes them in minutes.
 
@@ -112,7 +112,7 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | Provider, network or setup error; agent crash; setup timeout | Yes |
 | Run or check out of time | Only if the provider was refusing the calls |
 | Wrong key, spent credit | No; three in a row stop the run |
-| A setup this machine lacks, a missing secret, a cap reached, Stop, failed task | No |
+| A setup this machine lacks, a missing secret, a cap reached, Stop, a unit a guard asked to stop, a full context window, failed task | No |
 
 `conform` and `prove` retry a rate limit once.
 
@@ -152,7 +152,7 @@ nullius standard run humaneval reference --provider openrouter --model meta-llam
 | What is sent | `provider: {"order": [...], "allow_fallbacks": false}` on every request sent as that model, on every route, in place of the agent's own routing field. A pinned Chat Completions or Responses request to OpenRouter also asks for its routing facts (`X-OpenRouter-Metadata: enabled`). A Responses reply names the provider that served it there alone. A Messages request is sent without the header, since its reply names its provider. A model with no pin is sent as before |
 | Refused before any unit | A provider other than `openrouter`; a model the run does not call (a control calls only its judge's or an option's, never a simulated user's); a slug that is empty, malformed or given twice; a model named twice. The run, the command line and the relay's own command make the same check |
 | No provider can serve it | OpenRouter answers 404 (no endpoint found) and nothing else is tried; the call fails as any refused call does |
-| The record | `config.json`: `standard.served_by`, the slugs by model. Each call in `agent/calls.jsonl`: `request.routing` and, when the agent sent its own, `request.routing_asked`; `reply.served_by`, the provider the reply names (for a Responses reply, the endpoint its routing facts mark as selected), `reply.end` (one per choice, by index, when a reply has several) and `reply.error`, an error a reply holds under a 200: the top-level one, else that of the first choice that has one, its code, type and message alone. These are read apart from the rest of the record and cleaned of credentials. The call keeps its status, and the unit's verdict reads it as before |
+| The record | `config.json`: `standard.served_by`, the slugs by model. Each call in `agent/calls.jsonl`: `request.routing`, `request.routing_asked` when the agent sent its own, `reply.served_by` (for a Responses reply, the endpoint its routing facts mark as selected), `reply.end` (by choice index when there are several) and `reply.error`, an error held under a 200, its code, type and message alone ([Who served a call](../standard.md#a-run)) |
 | Who served the run | Each trial's `result.json`, `standard.served`, and the job's `result.json`, `served`: the answered calls of every route (the agent's, the judge's, the simulated user's, the benchmark's own relay's) by serving provider, those that named none, and for each pinned model `held`: `true` when every answered call names a provider that reads as a pinned slug, `unknown` when one names none or another name, `null` with no answered call. A name reads as a slug lowercased with its spaces as dashes (`DeepInfra` is `deepinfra`, the first part of `deepinfra/turbo`), and nothing else is folded. The tokens and the cost stay the agent's own calls' |
 | What `held` reads | The provider's name alone: a reply names no endpoint variant, and `held` for `deepinfra/fp8` is true for any endpoint of `deepinfra`. A reply gives the provider's display name. Where that name is not the slug once lowercased, `held` reads `unknown` though the provider served the call (`Google` for `google-vertex`, `SambaNova` for `sambanova-turbo`) |
 | Shards | `merge` refuses shards whose pins differ, unless `--force`; a model pinned differently in the merged shards reads `held: unknown` |

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% from "catalogue/use_bundle.html" import use_bundle %}
 {% set plural = 'Agents' if kind == 'agent' else 'Capabilities' %}
 {% block title %}{{ title }} — Nullius{% endblock %}
@@ -8,20 +9,16 @@
 {# One of the standard's agents (or capabilities): its definition, the ports it proved, what it can run. docs/standard.md #}
 <div class="std-index">
   {% set d = e.d %}
+  {% set tags %}
+    {% if kind == 'capability' %}<span class="cat-tag">{{ d.kind }}</span>{% endif %}
+    <span class="std-tag">{{ e.protocol }}</span>
+    {% if d.example %}<span class="std-tag" title="Nullius's own, to read or copy - not an agent to compare">example</span>{% endif %}
+    {% if versions %}<span class="std-tag">{{ 'default version' if d._version == d._default else 'not the default version' }}</span>{% endif %}
+  {% endset %}
+  {% set actions %}{% if restore_bundle and local %}{{ use_bundle('agents' if kind == 'agent' else 'capabilities', d.key, csrf) }}{% endif %}{% endset %}
+  {% set mark %}<span class="std-mark">{{ agent_mark(kind, d.key, d.label) }}</span>{% endset %}
+  {{ page_head(d.label, sub=tags, actions=actions, mark=mark, id='std-' ~ d.key) }}
   <section class="std-card" id="{{ d.key }}" aria-labelledby="std-{{ d.key }}">
-    <div class="std-head std-entry-head">
-      <span class="std-mark" aria-hidden="true">{{ agent_mark(kind, d.key, d.label) }}</span>
-      <div>
-        <h1 id="std-{{ d.key }}">{{ d.label }}</h1>
-        <div class="std-tags">
-          {% if kind == 'capability' %}<span class="cat-tag">{{ d.kind }}</span>{% endif %}
-          <span class="std-tag">{{ e.protocol }}</span>
-          {% if d.example %}<span class="std-tag" title="Nullius's own, to read or copy - not an agent to compare">example</span>{% endif %}
-          {% if versions %}<span class="std-tag">{{ 'default version' if d._version == d._default else 'not the default version' }}</span>{% endif %}
-        </div>
-      </div>
-      {% if restore_bundle and local %}<div class="bench-actions">{{ use_bundle('agents' if kind == 'agent' else 'capabilities', d.key, csrf) }}</div>{% endif %}
-    </div>
     <p class="std-summary">{{ d.summary }}</p>
     {% if versions %}
     {# Each version has its own pins and its own proofs: a new release is offered only once it has proven its ports. #}
@@ -83,7 +80,7 @@
         {% if e.options %}
         <h3 class="std-subhead">Options</h3>
         <ul class="std-optlist">
-          {% for x in e.options %}<li><code>{{ x.name }}</code> <span class="std-tag">{{ x.default }} (its default)</span>{% if x['values'] %}<small>takes {{ x['values']|join(', ') }}</small>{% elif x.pattern %}<small>takes <code>{{ x.pattern }}</code></small>{% endif %}<small title="{{ x.summary }}">{{ x.summary.split(':')[0].split(';')[0].split('.')[0] }}.</small></li>{% endfor %}
+          {% for x in e.options %}<li><code>{{ x.name }}</code> <span class="std-tag">{{ x.default }} (its default)</span>{% if x['values'] %}<small>takes {{ x['values']|join(', ') }}</small>{% elif x.example %}<small>e.g. <code>{{ x.example }}</code></small>{% endif %}<small title="{{ x.summary }}">{{ x.summary.split(':')[0].split(';')[0].split('.')[0] }}.</small></li>{% endfor %}
         </ul>
         {% endif %}
       </div>

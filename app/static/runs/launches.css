@@ -1,8 +1,6 @@
 /* The Runs page: runs grouped by the launch that made them. A launch is one block - its task checks, its agents
    on one 0-100% scale, raw as a tick on the adjusted bar - and the flat table is the second view. */
-.runs-head { justify-content: space-between; }
-.runs-acts { display: inline-flex; flex-wrap: wrap; gap: 8px; }
-.runs-glance { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -1.2rem 0 1rem; font-size: 13px; color: var(--text-dim); }
+.runs-glance { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 1rem; font-size: 13px; color: var(--text-dim); }
 .runs-glance b { color: var(--text); font-weight: 500; }
 .runs-glance .st-paused b, .runs-glance .st-stopping b { color: var(--patch_failed_tests); }
 .runs-glance .st-stopped b, .runs-glance .st-failed b, .runs-glance .st-not b { color: var(--bad); }
@@ -115,36 +113,21 @@ dialog.std-how.launch-delete { width: min(520px, calc(100vw - 32px)); }
 .la-gap { display: block; margin-top: 2px; font: 11.5px var(--sans); color: var(--patch_failed_tests); }
 
 /* the Launches page: one row per launch */
-.inventory .inv-open { display: inline; }
-.inventory .inv-open .linkish { padding: 0; text-align: left; }
-/* as the Runs page's table: text columns keep a floor and short values stay on one line, so past the box's width the table scrolls instead of squeezing */
-.inventory td[data-col="launch"] { min-width: 12rem; overflow-wrap: anywhere; }
-.inventory td[data-col="bench"], .inventory td[data-col="ws"] { min-width: 8rem; }
-.inventory td[data-col="machines"] { min-width: 10rem; }
-.inventory td[data-col="started"], .inventory td.num { white-space: nowrap; }
-@media (max-width: 640px) { .inventory td[data-col="launch"] { min-width: 9rem; } }   /* a phone keeps room beside the pinned title */
-.grid.sortable.inventory thead th:not([data-type]) { cursor: default; }
-.grid.sortable.inventory thead th:not([data-type])::after { content: none; }
-.inventory td.inv-acts { position: relative; white-space: nowrap; }   /* holds its hidden reason, inside the table's scroll */   /* Add, then Delete, side by side on every row */
-.inventory .launch-add-btn:focus-visible { color: var(--text); }
+#launches .launch-open { display: inline; }
+#launches .launch-open .linkish { padding: 0; text-align: left; }
+#launches .launch-add-btn:focus-visible { color: var(--text); }
 /* State and Launch stay put while the table scrolls sideways; State's header is its name for a screen reader only */
-.inventory { --inv-state-w: 2.2rem; }
-.inventory [data-col="state"] { width: var(--inv-state-w); min-width: var(--inv-state-w); padding-left: 0; padding-right: 0; text-align: center; }
-.inventory [data-col="launch"] { --sticky-left: var(--inv-state-w); }
+#launches :is(th, td)[data-col="state"] { width: 2.2rem; min-width: 2.2rem; padding-left: 0; padding-right: 0; text-align: center; }
 /* a run's state: its icon, coloured as the Runs page's state dots */
-.inventory td[data-col="state"] .ic { vertical-align: middle; }
-.inventory .st-finished, .inventory .st-running, .inventory .st-preparing { color: var(--resolved); }
-.inventory .st-failed, .inventory .st-refused, .inventory .st-stopped { color: var(--bad); }
-.inventory .st-paused, .inventory .st-stopping { color: var(--patch_failed_tests); }
-.inventory .st-running { animation: inv-beat 2s ease-in-out infinite; }
-@keyframes inv-beat { 50% { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { .inventory .st-running { animation: none; } }
-.inv-cols { margin-top: 1rem; }
+#launches td[data-col="state"] .ic { vertical-align: middle; }
+#launches .st-finished, #launches .st-running, #launches .st-preparing { color: var(--resolved); }
+#launches .st-failed, #launches .st-refused, #launches .st-stopped { color: var(--bad); }
+#launches .st-paused, #launches .st-stopping { color: var(--patch_failed_tests); }
+#launches .st-running { animation: state-beat 2s ease-in-out infinite; }
+@keyframes state-beat { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { #launches .st-running { animation: none; } }
 .launch-delete select { margin-left: 8px; }
 /* Add to workspace: the name field only for a new workspace, under its label as the select is */
 .launch-delete .launch-add-new { display: none; }
 .launch-delete .launch-add-new input { display: block; width: 100%; margin-top: 4px; }
 .launch-delete form:has(option[value=""]:checked) .launch-add-new { display: block; }
-/* ten columns fit at 1280 px: narrower gutters, and a count takes only its width */
-.inventory th, .inventory td { padding-left: .4rem; padding-right: .4rem; }
-.inventory th.num, .inventory td.num { width: 1%; }

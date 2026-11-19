@@ -1,19 +1,18 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}Run builder — Nullius{% endblock %}
 {% block crumb %}/ run builder{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='builder/command-builder.css') }}">{% endblock %}
 {% block body %}
 <div id="nullius-builder" data-agent-marks="{{ agent_marks|tojson|forceescape }}">
-  <header class="nb-heading">
-    <div><h1>Set up the next experiment.</h1><p>Choose what to test. Keep every setting explicit.</p></div>
-    <div class="nb-headingactions">
+  {% set actions %}
       <button class="nb-button" id="nb-saved-toggle" aria-haspopup="dialog" aria-controls="nb-saved">Saved recipes</button>
       <button class="nb-button" id="nb-import">Import recipe</button>
-      <button class="nb-button" id="nb-save">Save recipe</button>
+      <button class="nb-button" id="nb-save"{% if not builder_data.local %} aria-disabled="true" title="{{ builder_data.recipesWhy }}"{% endif %}>Save recipe</button>
       <button class="nb-button" id="nb-startover" title="Forget the recipe on this page and start from the defaults">Start over</button>
       <input type="file" accept=".json,application/json" id="nb-import-file" hidden aria-label="Import a recipe JSON file">
-    </div>
-  </header>
+  {% endset %}
+  {{ page_head('Set up the next experiment.', actions=actions) }}
   {#- a message is a toast at the bottom left: it goes after a few seconds, its bar counting them, or on its ×.
        A popover, so it shows above the Saved recipes dialog too -#}
   <div id="nb-status" class="nb-toast" role="status" aria-live="polite" popover="manual"><span class="nb-toast-text"></span><button type="button" class="nb-toast-close" aria-label="Dismiss">×</button><span class="nb-toast-bar" aria-hidden="true"></span></div>

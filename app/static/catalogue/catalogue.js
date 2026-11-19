@@ -1,41 +1,13 @@
 (() => {
   const hash = () => { try { return decodeURIComponent(location.hash.slice(1)); } catch { return ''; } };
 
-  // Hash links (/benchmarks#key, /benchmarks#dataset) open the benchmark's page; category or origin chips and the
-  // Find box keep the cards that match, and a shelf left empty folds away.
-  const cards = [...document.querySelectorAll('.bench-card')];
+  // Hash links (/benchmarks#key, /benchmarks#dataset, /kits#key) open the card's own page; the search and filters
+  // are the card toolkit's (static/tables.js).
+  const cards = [...document.querySelectorAll('.bench-card[data-keys]')];
   if (cards.length) {
     const key = hash();
     const owner = key && cards.find(c => c.dataset.keys.split(' ').includes(key));
-    if (owner) {
-      location.replace(owner.href + (key === owner.dataset.keys.split(' ')[0] ? '' : '#' + encodeURIComponent(key)));
-      return;
-    }
-    const find = document.getElementById('bench-find');
-    const chips = [...document.querySelectorAll('[data-filter] .bench-cat')];
-    const none = document.getElementById('bench-none');
-    // one value per filter group (category, origin); '' keeps every card
-    const picked = {};
-    const apply = () => {
-      const words = (find?.value || '').toLowerCase().split(/\s+/).filter(Boolean);
-      cards.forEach(c => {
-        // Only runners are a space-separated list; categories may contain spaces.
-        c.hidden = !(Object.entries(picked).every(([f, v]) => !v || (f === 'runs' ? (c.dataset[f] || '').split(' ').includes(v) : c.dataset[f] === v)) && words.every(w => c.dataset.find.includes(w)));
-      });
-      document.querySelectorAll('[data-shelf]').forEach(shelf => {
-        const shown = shelf.querySelectorAll('.bench-card:not([hidden])').length;
-        shelf.hidden = !shown;
-        shelf.querySelector('.shelf-n').textContent = shown;
-      });
-      chips.forEach(chip => {
-        const on = chip.dataset.value === (picked[chip.closest('[data-filter]').dataset.filter] || '');
-        chip.classList.toggle('on', on);
-        chip.setAttribute('aria-pressed', String(on));
-      });
-      if (none) none.hidden = cards.some(c => !c.hidden);
-    };
-    chips.forEach(chip => chip.addEventListener('click', () => { picked[chip.closest('[data-filter]').dataset.filter] = chip.dataset.value; apply(); }));
-    find?.addEventListener('input', apply);
+    if (owner) location.replace(owner.querySelector('.card-link').href + (key === owner.dataset.keys.split(' ')[0] ? '' : '#' + encodeURIComponent(key)));
     return;
   }
 

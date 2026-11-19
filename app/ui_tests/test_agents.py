@@ -55,7 +55,7 @@ class Tabs(unittest.TestCase):
         with patch.object(definitions, "load", _LOAD):
             for url in ("/agents", "/capabilities"):
                 html = self.get(url).get_data(as_text=True)
-                cards = re.findall(r'<a[^>]*class="bench-card[^"]*"[^>]*>(.*?)</a>', html, re.S)
+                cards = re.findall(r'<article class="bench-card"[^>]*>(.*?)</article>', html, re.S)
                 self.assertTrue(cards)
                 self.assertIn("Example", cards[0])
                 tree = html.split('data-tree="nav-' + ("agent" if url == "/agents" else "capability") + '"', 1)[1]
@@ -82,9 +82,16 @@ class Tabs(unittest.TestCase):
             self.assertIn(f'/static/catalogue/agents/{key}.svg', html)
         self.assertIn('/static/brand/marks.svg#openai', html)
         self.assertIn('/static/brand/marks.svg#harbor', html)
-        # Personal entries without a bundled mark remain legible.
+        # Beside the logos, an agent without one shows its initials; where none has a logo, no card has an icon.
+        self.assertIn('<span class="ws-avatar std-mark small" aria-hidden="true">EX</span><a class="card-link" href="/agents/reference">', html)
         fixture_html = self.get("/agents").get_data(as_text=True)
-        self.assertIn('std-mark small', fixture_html)
+        self.assertIn('<div class="bench-card-title"><a class="card-link" href="/agents/fake">Fake agent</a></div>', fixture_html)
+        self.assertNotIn('std-mark', fixture_html)
+        with patch.object(definitions, "load", _LOAD):
+            capabilities = self.get("/capabilities").get_data(as_text=True)
+        self.assertNotIn('std-mark', capabilities)                                         # capabilities have no logos: no letters either
+        self.assertIn('<input type="search" data-search placeholder="Name, protocol, summary"', capabilities)
+        self.assertIn('data-search="Mem0 mem0 memory', capabilities)
 
     def test_jiuwenswarm_default_shows_its_search_proof_and_can_run_gaia(self):
         from urllib.parse import unquote
@@ -121,6 +128,15 @@ class Tabs(unittest.TestCase):
         from nullius.standard import ports
         from html import unescape
         page = self.get("/kits").get_data(as_text=True)
+        self.assertIn('<input type="search" data-search placeholder="Name, port, check"', page)       # the search and the family filter
+        self.assertIn('<div class="filter-pills" role="group" aria-label="Family" data-pills="family">', page)   # the family's pills, no button
+        self.assertIn('<button type="button" class="filter-pill" data-value="capability" aria-pressed="false">Capabilities</button>', page)
+        self.assertNotIn('data-filter-menu', page)
+        self.assertNotIn('data-tools-btn="filter"', page)
+        self.assertIn('data-keys="agent-task-v1" data-f-family="agent&#10;"', page)
+        self.assertIn('<p class="empty-note" data-empty="kits" hidden>No kits match.</p>', page)
+        self.assertIn('<dl class="bench-stats"><div><dt>Checks</dt><dd>3</dd></div></dl>', page)
+        self.assertNotIn('bench-card-title"><span', page)                                       # kits have no icon
         for port, info in ports.PORTS.items():
             if not info["kit"]:
                 continue
@@ -156,9 +172,9 @@ class Tabs(unittest.TestCase):
         self.assertIn("<h1>Agents</h1>", html)
         card = html[html.index('id="fake"'):]
         self.assertIn('href="/agents/fake"', card)
-        self.assertIn("<b>2/7</b><span>ports proven</span>", card)                    # task and workspace, of the seven agent ports
-        self.assertIn("<b>1/1</b><span>benchmarks it runs</span>", card)
-        self.assertNotIn("agent.task/v1", card[:card.index("</a>")])                  # the detail is on its page
+        self.assertIn("<dt>Ports proven</dt><dd>2/7</dd>", card)                      # task and workspace, of the seven agent ports
+        self.assertIn("<dt>Benchmarks it runs</dt><dd>1/1</dd>", card)
+        self.assertNotIn("agent.task/v1", card[:card.index("</article>")])            # the detail is on its page
         self.assertEqual(self.get("/agents/nope").status_code, 404)
 
     def test_the_add_dialog_builds_a_prompt_and_keeps_the_steps_by_hand_for_each_kind(self):
@@ -168,7 +184,7 @@ class Tabs(unittest.TestCase):
                 ("/capabilities", "a capability", ".claude/skills/import-capability/SKILL.md",
                  ("nullius standard new capability my-memory", "&#34;project&#34;", "from my_memory import Store"))):
             html = self.get(url).get_data(as_text=True)
-            self.assertIn(f'<button type="button" class="btn" id="std-how-open" aria-haspopup="dialog">+ Add {a}</button>', html)
+            self.assertIn(f'<button type="button" class="btn sm" id="std-how-open" aria-haspopup="dialog">+ Add {a}</button>', html)
             self.assertIn('<dialog class="std-how" id="std-how"', html)
             self.assertLess(html.index(">With an assistant<"), html.index(">By hand<"))       # the assistant's tab first
             self.assertIn('aria-selected="true">With an assistant<', html)
@@ -194,7 +210,7 @@ class Tabs(unittest.TestCase):
 
     def test_an_agents_page_has_its_ports_and_what_it_runs(self):
         html = self.get("/agents/fake").get_data(as_text=True)
-        card = html[html.index('id="fake"'):]
+        card = html[html.index('<header class="page-head">'):]
         self.assertIn("Fake agent", card)
         self.assertIn(">1/1</b>", card)
         self.assertIn('<th scope="col">Proven</th>', card)                                           # agent.task/v1's record
@@ -207,7 +223,7 @@ class Tabs(unittest.TestCase):
         self.assertIn("<h1>Capabilities</h1>", html)
         self.assertIn('href="/capabilities/fakemem"', html)
         html = self.get("/capabilities/fakemem").get_data(as_text=True)
-        card = html[html.index('id="fakemem"'):]
+        card = html[html.index('<header class="page-head">'):]
         self.assertIn('<span class="cat-tag">memory</span>', card)
         self.assertIn("cap.memory/v1", card)
         self.assertNotIn("agent.task/v1", card)
@@ -270,6 +286,17 @@ class Tabs(unittest.TestCase):
         path.write_text(json.dumps(d))
         self.stack.enter_context(patch.object(definitions, "load", lambda kind, root_=None, every=False: _LOAD(kind, str(root), every=every)))
         self.stack.enter_context(patch.object(definitions, "get", lambda kind, key, root_=None: _GET(kind, key, str(root))))
+
+    def test_an_option_with_a_pattern_shows_its_example_not_the_pattern(self):
+        root = self.tmp / "catalogue"
+        shutil.copytree(ROOT, root)
+        path = root / "agents" / "fake" / "agent.json"
+        path.write_text(json.dumps(dict(json.loads(path.read_text()), options={"turns": {"summary": "Turns.", "pattern": "[1-9][0-9]{0,2}", "example": "40", "default": "10"}})))
+        self.stack.enter_context(patch.object(definitions, "load", lambda kind, root_=None, every=False: _LOAD(kind, str(root), every=every)))
+        self.stack.enter_context(patch.object(definitions, "get", lambda kind, key, root_=None: _GET(kind, key, str(root))))
+        html = self.get("/agents/fake").get_data(as_text=True)
+        self.assertIn("e.g. <code>40</code>", html)
+        self.assertNotIn("[1-9]", html)
 
     def test_an_agent_with_versions_is_one_card_and_a_page_per_version(self):
         self.versioned()

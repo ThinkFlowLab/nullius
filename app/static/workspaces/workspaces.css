@@ -1,14 +1,10 @@
 /* The Workspaces page: one row per workspace; its roots in a dialog (the Launches page's, runs/launches.css). */
-.ws-head { justify-content: space-between; align-items: center; }
 .ws-current td { background: var(--accent-soft); }
-.ws-mark { width: 1.2rem; }
-.ws-table th { position: relative; }   /* holds a header named for a screen reader only, inside the scrolling box */
-.ws-name { min-width: 12rem; }
+.ws-current .count-btn { border-color: var(--text-faint); }   /* the plain border blends into the open row */
 .ws-show { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px .4rem; }
 .ws-title { overflow-wrap: anywhere; }   /* a name wraps, never cut */
 .ws-rename { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
 .ws-rename input[type=text] { width: min(16rem, 100%); font-size: .9rem; padding: .3rem .5rem; }
-.ws-roots-btn { font-variant-numeric: tabular-nums; }
 .launch-delete .ws-root-list { list-style: none; padding: 0; margin: 12px 0 0; }
 .ws-root-list li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border-soft); }
 .ws-root-list li > .mono { flex: 1; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }   /* a path wraps, never cut */
@@ -17,3 +13,4 @@
 dialog.std-how.launch-delete.wide { width: min(56rem, calc(100vw - 32px)); }   /* the roots: room for a path */
 .launch-delete .std-how-head h2 { min-width: 0; overflow-wrap: anywhere; }
 .grid.tools.ws-table td { vertical-align: middle; }   /* a count beside a button: one line */
+.ws-table td[data-col="launches"] { position: relative; }   /* holds a greyed count's hidden reason */

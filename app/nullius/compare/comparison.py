@@ -24,9 +24,10 @@ class RunRef:
         return f"{self.workspace}:{self.job_id}"
 
     @classmethod
-    def parse(cls, value: str) -> "RunRef":
+    def parse(cls, value: str, empty: bool = False) -> "RunRef":
+        """``empty``: also a column with no run yet, ``<workspace>:``."""
         name, separator, job_id = value.partition(":")
-        if not separator or not job_id:
+        if not separator or not (job_id or empty):
             raise ValueError("A run selection must include its workspace and run id.")
         # Empty means the active source, for legacy selections without a saved
         # workspace. Named workspaces use the same slug alphabet as workspace.py.

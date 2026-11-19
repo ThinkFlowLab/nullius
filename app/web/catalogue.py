@@ -26,8 +26,37 @@ from . import shared
 def benchmarks_page():
     # the benchmarks of the standard some of whose options need a machine's setup (``host``): a bubble on their card
     setup = {b["key"]: sorted(b["host"]) for b in standard_definitions.load("benchmark")[0] if b.get("host")}
-    return render_template("catalogue/benchmarks.html", cat=shared._catalog_cached(), origins=catalog.ORIGINS,
-                           prompts=howto.prompts(), catalogue_dir=paths.catalogue_dir(), setup=setup)
+    cat = shared._catalog_cached()
+    with open(MARKS, encoding="utf-8") as fh:
+        sprite = fh.read()
+    sheet = url_for("static", filename="catalogue/marks.svg")
+    items = [_card(cat, b, setup.get(b.key), sheet if f'<symbol id="bm-{b.key}"' in sprite or _user_mark(cat, b) else None)
+             for b in cat.listed_benchmarks]
+    choices = {"category": [(c, c) for c in cat.categories], "runs": [(way, label) for way, (label, _) in RUNS_WITH.items()],
+               "origin": [(o, o.capitalize()) for o in catalog.ORIGINS]}
+    return render_template("catalogue/benchmarks.html", cat=cat, items=items, choices=choices,
+                           prompts=howto.prompts(), catalogue_dir=paths.catalogue_dir())
+
+
+RUNS_WITH = {"standard": ("Nullius", "the Nullius standard"), "harbor": ("Harbor", "Harbor")}
+
+
+def _card(cat, b, needs, sheet) -> dict:
+    """A benchmark's card on the list (templates/_cards.html): ``needs`` what some of its options need installed,
+    ``sheet`` the sprite holding its own mark, none when it has none."""
+    ds = cat.datasets_of(b)
+    tasks, unit = cat.tasks_of(b)
+    return {"href": url_for("benchmark_page", key=b.key), "shelf": b.origin, "keys": " ".join([b.key, *b.datasets]),
+            "search": " ".join([b.title, b.category, b.key, *(d.title for d in ds), *b.datasets]),
+            "category": b.category, "origin": {"text": b.label, "class": b.origin, "value": b.origin},
+            "icon": sheet and f"{sheet}#bm-{b.key}", "title": b.title, "domain": b.domain,
+            "runs": [{"text": label, "class": "rt-" + way, "title": "Runs with " + name, "value": way}
+                     for way, (label, name) in RUNS_WITH.items() if way in b.harness],
+            "needs": needs and {"text": "needs " + ", ".join(needs),
+                                "title": f"Some of its options need {', '.join(needs)} installed on the machine it runs on: see its page"},
+            "tasks": {"text": tasks, "label": unit.capitalize()},
+            "datasets": {"text": len(ds), "label": "Datasets" if len(ds) != 1 else "Dataset"},
+            "scoring": b.scoring, "blocker": b.blocker[:1].upper() + b.blocker[1:]}
 
 
 @app.route("/benchmarks/<key>")
@@ -189,17 +218,7 @@ def benchmark_marks():
         text = fh.read()
     cat = shared._catalog_cached()
     for b in cat.benchmarks:
-        symbol = None
-        try:
-            with open(os.path.join(cat.entry_dir(b.key), "logo.json"), encoding="utf-8") as fh:
-                logo = json.load(fh)
-            if (isinstance(logo, dict) and logo.get("kind") in LOGO_TYPES.values()
-                    and isinstance(logo.get("data"), str) and len(logo["data"]) * 3 // 4 <= LOGO_MAX
-                    and re.fullmatch(r"[A-Za-z0-9+/=]+", logo["data"])):
-                symbol = (f'<symbol id="bm-{html.escape(b.key, quote=True)}" viewBox="0 0 24 24">'
-                          f'<image width="24" height="24" href="data:{logo["kind"]};base64,{logo["data"]}"/></symbol>')
-        except (OSError, ValueError):
-            pass
+        symbol = _user_mark(cat, b)
         have = re.search(rf'<symbol id="bm-{re.escape(b.key)}"[\s\S]*?</symbol>', text)
         if have:
             if symbol:
@@ -208,6 +227,21 @@ def benchmark_marks():
             at = text.rindex("</svg>")
             text = text[:at] + "  " + (symbol or PLAIN_MARK.format(key=html.escape(b.key, quote=True))) + "\n" + text[at:]
     return app.response_class(text, mimetype="image/svg+xml", headers={"Cache-Control": "no-cache"})
+
+
+def _user_mark(cat, b):
+    """The sprite's symbol of the logo kept beside ``b``'s user entry, or None."""
+    try:
+        with open(os.path.join(cat.entry_dir(b.key), "logo.json"), encoding="utf-8") as fh:
+            logo = json.load(fh)
+        if (isinstance(logo, dict) and logo.get("kind") in LOGO_TYPES.values()
+                and isinstance(logo.get("data"), str) and len(logo["data"]) * 3 // 4 <= LOGO_MAX
+                and re.fullmatch(r"[A-Za-z0-9+/=]+", logo["data"])):
+            return (f'<symbol id="bm-{html.escape(b.key, quote=True)}" viewBox="0 0 24 24">'
+                    f'<image width="24" height="24" href="data:{logo["kind"]};base64,{logo["data"]}"/></symbol>')
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 def _logo(values: dict):

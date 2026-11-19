@@ -33,6 +33,7 @@ NOT_RETRIED = frozenset({
     "ModelNotFoundError",
     # this runner's own: a secret no second try provides, the spending caps and the calls cap, a stopped run
     "EnvironmentSecretMissingError", ledger.ERROR, ledger.UNIT_ERROR, relay.CALLS_ERROR, "CancelledError",
+    relay.CONTEXT_ERROR,
 })
 
 

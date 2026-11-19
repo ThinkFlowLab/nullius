@@ -51,7 +51,43 @@
     }
     return {field, sync, acceptCompile};
   }
-  if (typeof module === 'object' && module.exports) { module.exports = {servedRows}; return; }
+  // Saved recipes are the server's (/new-run/recipes, nullius/recipes/store.py); a browser on its host alone writes them.
+  // move() sends what this browser kept before (nullius.recipes.v1, and the older nullius.recipes.v1.<workspace> lists)
+  // to the lenient import, which skips names already saved, and removes those keys once the server answered. The
+  // recipes it refused or skipped are kept under REJECTED, never sent again; move() returns how many of each. On a
+  // failure the keys stay for the next visit. `request` is nulliusFetch; the tests run this under Node with stand-ins.
+  function recipeStore({request, csrf, storage}) {
+    const call = async (url, method, body) => {
+      const res = await request(url, method ? {method, headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify(body || {})} : {});
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j.ok === false) throw Error(j.error || 'HTTP ' + res.status);
+      return j;
+    };
+    const OLD = 'nullius.recipes.v1', REJECTED = OLD + '.rejected';
+    const read = k => { try { const l = JSON.parse(storage.getItem(k)); return Array.isArray(l) ? l : [l]; } catch { return [storage.getItem(k)]; } };
+    return {
+      list: async () => (await call('/new-run/recipes')).recipes,
+      save: async (recipe, id) => (await call('/new-run/recipes', 'POST', {recipe, id})).recipe,
+      remove: id => call('/new-run/recipes/' + encodeURIComponent(id), 'DELETE'),
+      async move() {
+        const keys = Array.from({length: storage.length}, (_, i) => storage.key(i)).filter(k => k !== REJECTED && (k === OLD || k.startsWith(OLD + '.')));
+        const recipes = keys.flatMap(read);
+        if (!keys.length) return {refused: 0, taken: 0};
+        const out = recipes.length ? await call('/new-run/recipes/import', 'POST', {recipes, lenient: true}) : {rejected: [], skipped: []};
+        const bad = [...out.rejected, ...out.skipped].map(x => recipes[x.index]);
+        if (bad.length) storage.setItem(REJECTED, JSON.stringify([...(storage.getItem(REJECTED) ? read(REJECTED) : []), ...bad]));
+        keys.forEach(k => storage.removeItem(k));
+        return {refused: out.rejected.length, taken: out.skipped.length};
+      },
+    };
+  }
+  // The Saved recipes dialog's list. A browser on another machine gets Delete greyed, `why` its tooltip.
+  function savedList({saved, local, why, esc, button, state}) {
+    const del = id => local ? `data-delete="${esc(id)}"` : `aria-disabled="true" title="${esc(why)}"`;
+    return saved.length ? saved.map(s => `<div class="nb-savedrow"><span><strong>${esc(s.name)}</strong><small>${esc(s.recipe.harness)} · ${esc(new Date(s.saved).toLocaleDateString())}${state(s.recipe)}</small></span>`
+      + `<div>${button('Load', `data-load="${esc(s.id)}"`)} ${button('Delete', del(s.id))}</div></div>`).join('') : '<p class="nb-note">No saved recipes.</p>';
+  }
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
@@ -74,15 +110,17 @@
   // A run's own recipe (?run=) or a prefill from a run's fields comes first.
   // A draft comes back silently: the page simply is as it was left.
   const draftKey = 'nullius.recipe-draft.v1';
-  let opened = '';
+  let opened = '', savedId = '';   // savedId: the saved recipe this page holds, which a save updates (renames)
   if (schema.loadRecipe) { try { recipe = C.fromJSON(schema.loadRecipe); step = REVIEW; opened = 'Opened the recipe of run “' + schema.loadRun + '”. Run gives it a new name.'; } catch (e) { opened = 'This run’s recipe cannot be read: ' + e.message; } }
   else if (schema.loadLike) { const o = C.fromJob(schema.loadLike); recipe = o.recipe; step = REVIEW; opened = o.notes.join(' '); }
+  else if (schema.loadSaved) { try { recipe = C.fromJSON(schema.loadSaved.recipe); savedId = schema.loadSaved.id; step = REVIEW; opened = 'Loaded “' + schema.loadSaved.name + '”.'; } catch (e) { opened = 'This saved recipe cannot be read: ' + e.message; } }
   // An unsupported draft opens nothing; its rejection is shown as a toast.
-  else { let d = null; try { d = C.unpackDraft(localStorage.getItem(draftKey), query); } catch {} if (d && d.recipe) { recipe = d.recipe; step = d.step; tab = d.tab; } else if (d && d.gone) opened = d.gone; }
-  const saveDraft = () => { try { localStorage.setItem(draftKey, C.packDraft({recipe, step, tab})); } catch {} };
+  else { let d = null; try { d = C.unpackDraft(localStorage.getItem(draftKey), query); } catch {} if (d && d.recipe) { recipe = d.recipe; step = d.step; tab = d.tab; savedId = d.saved; } else if (d && d.gone) opened = d.gone; }
+  const saveDraft = () => { try { localStorage.setItem(draftKey, C.packDraft({recipe, step, tab, saved: savedId})); } catch {} };
   let compiled, pendingDirs, dirsSequence = 0;
   const r = () => recipe;
-  const storageKey = 'nullius.recipes.v1';   // one list for this browser; a run may open another workspace and the recipes stay
+  const store = recipeStore({request: (...a) => nulliusFetch(...a), csrf: schema.csrf, storage: (() => { try { return localStorage; } catch { return {length: 0}; } })()});
+  let saved = [];
   // A message is a toast at the bottom right: a new one replaces it, its bar runs down and it goes, or its × closes it.
   // Shown again on each message, so it lands above a dialog opened since.
   const status = text => {
@@ -431,13 +469,13 @@
     const boatWhy = (list.includes('local') ? here.boat : here.boatKey) || '';
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));
-    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? '$' : v === 'boat' ? '<img class="agent-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="agent-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">' : '▣', title: t, tip: sub});
+    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? icon('terminal') : v === 'boat' ? '<img class="agent-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="agent-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">' : icon('container'), title: t, tip: sub});
     const dockerOnly = Object.entries((b || {}).environments || {}).filter(([, e]) => !e.local_ok).map(([n]) => n);
     const web = agentRun && Object.values((b || {}).environments || {}).some(e => e.network);   // an agent's public web proxy
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
       + `<div class="nb-pick-grid nb-where">${machine('local', 'This machine', 'Nullius runs it here, in runs/' + rec.name + '.')}${H.map(h => machine(h.entry, h.label, 'Over ssh: the standard\'s code at this commit is sent there, uv put there if missing; its job comes back as it runs.')).join('')}</div>`
       + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
-      + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
+      + (b ? benchOptions(rec, b, 'where') : '') + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
       + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
       + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
         : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy)
@@ -488,7 +526,7 @@
       return `<li><b>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</b> ${state} ${button('Check', `data-hostreq-check="${esc(w)}"`, 'nb-inlinebutton')}${lines.length && (gone.length || (st && st.error)) ? ' ' + button('Install for me', `data-hostreq-install="${esc(w)}"`, 'nb-inlinebutton') : ''}${st && st.said ? ` <small>${esc(st.said)}</small>` : ''}</li>`;
     };
     return `<div class="nb-sectionhead std-wherehead"><h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small></div>`
-      + reqs.map(([n, r]) => `<p class="nb-note"><b>${esc(n)}</b>: ${esc(r.summary)}</p>`).join('')
+      + reqs.map(([n, r]) => `<p class="nb-note"><b>${esc(r.label)}</b>: ${esc(r.summary)}</p>`).join('')
       + `<ul class="nb-hostreq">${C.whereList(rec).map(line).join('')}</ul>`
       + (lines.length ? `<div class="std-code"><div class="std-code-head"><span>or run it yourself, on each machine</span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div>` : '');
   }
@@ -511,12 +549,13 @@
   function benchOptions(rec, b, scope = 'yours') {
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
     const chosen = C.chosenOf(rec);
-    return Object.entries(b.options || {}).filter(([, o]) => !o.limit)   // a bound of the upstream's own is with the limits
+    return Object.entries(b.options || {}).filter(([, o]) => !o.limit && o.step === (['where', 'dataset'].includes(scope) ? scope : ''))   // a bound of the upstream's own is with the limits
       .filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
       // one that applies only under another's values (a top-k, only with a retrieval) is left out otherwise
       .filter(([, o]) => Object.entries(o.when || {}).every(([k, vs]) => vs.includes((rec.bench_options || {})[k] ?? (b.options[k] || {}).default)))
       .filter(([, o]) => {
         const on = o.setups || ['yours'];
+        if (o.step) return on.some(s => s === 'yours' ? chosen.some(k => !(b.setups || []).some(x => x.key === k)) : chosen.includes(s));
         const shared = on.includes('yours') && on.includes('original');
         if (scope === 'shared') return shared;
         if (shared) return false;
@@ -525,21 +564,22 @@
       })
       .map(([n, o]) => {
       const cur = (rec.bench_options || {})[n] ?? o.default;
-      if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(n === 'temperature' && o.default === 'default' ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
+      if (scope === 'where' && o.values.length === 1) return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}</h3></div><p class="nb-fixed"${(o.about || {})[cur] ? ` title="${esc(o.about[cur])}"` : ''}>${esc((o.names || {})[cur] || cur)}</p>`;
+      if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}${o.example ? esc(' e.g. ' + o.example) : ''}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(o.default === 'default' && !o.limit ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
       const tileOf = v => { const need = (o.needs || {})[v] || {};
         const foot = [need.embeddings ? `<span class="nb-tick" title="${esc(need.embeddings)} through the run's relay">${need.embeddings.includes('/') ? 'OpenRouter key' : 'OpenAI or OpenRouter key'}</span>` : '',
           need.reranker ? `<span class="nb-tick">reranker ${esc(need.reranker)}</span>` : '',
-          ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(h)}</span>`),
+          ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(((b.host || {})[h] || {}).label || h)}</span>`),
           v === o.default ? '<span class="nb-tag">default</span>' : ''].join('');
-        return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: v, mark: '', tip: (o.about || {})[v] || '', foot}); };
+        return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: (o.names || {})[v] || v, mark: '', tip: (o.about || {})[v] || '', foot}); };
       return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}${o.datasets.length ? ' · ' + esc(o.datasets.join(', ')) : ''}</h3></div>`
         // by the data: every value with its line (or a need) - cards of one size, the line whole; plain values - one small
         // card each, all one size, or a select past five of them (a line some have is their tooltip)
         + (o.values.some(v => ((o.needs || {})[v] || {}).embeddings || ((o.needs || {})[v] || {}).reranker || (((o.needs || {})[v] || {}).host || []).some(h => local[h]))
           ? `<div class="nb-pick-grid std-optgrid" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(tileOf).join('')}</div>`
           : o.values.length > 5
-          ? `<label class="nb-field std-optselect"><select data-bench-opt-select="${esc(n)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''} title="${esc((o.about || {})[v] || '')}">${esc(v === 'default' ? 'Default' : v + (v === o.default ? ' (default)' : ''))}</option>`).join('')}</select></label>`
-          : `<div class="std-valgrid" style="--w:${Math.max(7, ...o.values.map(v => String(v).length))}ch" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(v => `<button class="nb-tile std-val" data-bench-opt="${esc(n)}" data-bench-val="${esc(v)}" aria-pressed="${v === cur}" title="${esc((o.about || {})[v] || (v === o.default ? 'default' : v))}"><strong>${esc(v)}</strong>${v === o.default ? '<small>default</small>' : ''}</button>`).join('')}</div>`);
+          ? `<label class="nb-field std-optselect"><select data-bench-opt-select="${esc(n)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''} title="${esc((o.about || {})[v] || '')}">${esc(v === 'default' && !(o.names || {})[v] ? 'Default' : ((o.names || {})[v] || v) + (v === o.default ? ' (default)' : ''))}</option>`).join('')}</select></label>`
+          : `<div class="std-valgrid" style="--w:${Math.max(7, ...o.values.map(v => String((o.names || {})[v] || v).length))}ch" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(v => `<button class="nb-tile std-val" data-bench-opt="${esc(n)}" data-bench-val="${esc(v)}" aria-pressed="${v === cur}" title="${esc((o.about || {})[v] || (v === o.default ? 'default' : v))}"><strong>${esc((o.names || {})[v] || v)}</strong>${v === o.default ? '<small>default</small>' : ''}</button>`).join('')}</div>`);
     }).join('');
   }
   // Only credentials needing attention belong in the builder. Without a dataset's default
@@ -576,7 +616,8 @@
     + (t.line ? `<span class="nb-tile-line">${esc(t.line)}</span>` : '') + (t.note ? `<span class="nb-tile-note">${esc(t.note)}</span>` : '')
     + (t.meta || t.foot ? `<span class="nb-tile-foot">${t.meta ? `<span>${esc(t.meta)}</span>` : ''}${t.foot || ''}</span>` : '') + '</button>';
   // a machine to run on: this one or a host, its connection state filled in by Test connection
-  const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: v === 'local' ? '⌂' : '⇄', title: t, tip: sub,
+  const icon = name => `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: icon(v === 'local' ? 'machine' : 'network'), title: t, tip: sub,
     foot: v !== 'local' ? `<span class="nb-state nb-hoststate" data-host-state="${esc(v)}"></span>` : ''});
   const picker = (tiles, fams, noun = 'benchmark') => {
     const pick = pickOf(), cats = [...new Set(tiles.map(t => t.cat).filter(Boolean))].sort();
@@ -615,7 +656,7 @@
           tip: x.summary || '', meta: x.units ? x.units + ' ' + u.nouns : '',
           foot: (x.controls || []).map(c => controlChip(c)).join('') + checkChip('stable', (x.proofs || {}).units, (x.failed || {}).units, 'the same ids twice, each unique')
             + ((b.controls || []).some(c => c.key === 'oracle') ? checkChip('no leak', (x.proofs || {}).leak, (x.failed || {}).leak, 'nothing of the reference shows before the run') : '')})).join('')}</div>`
-        + credentialWarnings(b, b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)));
+        + benchOptions(rec, b, 'dataset') + credentialWarnings(b, b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)));
     if (step === S.agent) {
       const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && !o.setup);
       const setups = all.filter(o => o.setup), controls = all.filter(o => o.control);
@@ -638,7 +679,7 @@
           const cur = mine[n] ?? x.default;
           return x.values
             ? `<label class="nb-field std-optselect" title="${esc(x.summary)}">${esc(words(n))}<select data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}">${x.values.map(v => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(v === 'default' ? 'Default' : v + (v === x.default ? ' (its default)' : ''))}</option>`).join('')}</select></label>`
-            : `<label class="nb-field std-optselect" title="${esc(x.summary)}">${esc(words(n))}<input data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}" value="${esc(mine[n] ?? '')}" placeholder="${esc(x.default ?? '')} (its default)" spellcheck="false" autocomplete="off"></label>`;
+            : `<label class="nb-field std-optselect" title="${esc(x.summary)}${x.example ? esc(' e.g. ' + x.example) : ''}">${esc(words(n))}<input data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}" value="${esc(mine[n] ?? '')}" placeholder="${esc(x.default ?? '')} (its default)" spellcheck="false" autocomplete="off"></label>`;
         }).join('') + '</div>'; };
       // the chosen ones' settings, one tab each: the benchmark's own way, the benchmark's settings every agent takes, each one's own
       const yoursWord = agent ? 'agent' : (b.kind || 'capability');
@@ -676,7 +717,7 @@
             hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator') : '')
         + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)',
             hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
-        + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, v, 'leaderboard')).join('') : '')
+        + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, ((b.options[k] || {}).names || {})[v] || v, 'leaderboard')).join('') : '')
         + keyLine(rec);
     }
     if (step === S.limits) {
@@ -743,7 +784,7 @@
     const setupSeconds = C.chosenOf(rec).map(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k) && b.family === 'agent' ? (d.setup_agent || d.setup) : d.setup);
     const setup = setupSeconds.length && setupSeconds.some(s => s !== setupSeconds[0]) ? ['per setup', true]
       : [m(setupSeconds[0] || d.setup), (setupSeconds[0] || d.setup) !== d.setup];
-    const def = {setup, image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), false]};
+    const def = {setup, image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), (d.catalogue || []).includes('score')]};
     const label = (k, l) => k === 'agent' ? 'Agent, whole ' + u.noun : l;
     return '<div class="nb-sectionhead nb-sectionnext"><h2>Time limits</h2></div>'
       + C.STANDARD_PHASES.map(([k, l]) => minutesRow(k, label(k, l), t[k], def[k])).join('');
@@ -897,44 +938,33 @@
     renderForm();refreshPlan();moveUnderline();saveDraft();harborFollow();
     if(focus){const heading=$('#nb-form h2');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'nearest'});}}
   }
-  function readSaved(){
-    try{
-      const ok=list=>Array.isArray(list)?list.filter(x=>x&&x.recipe&&typeof x.id==='string'):[];
-      let list=ok(JSON.parse(localStorage.getItem(storageKey)||'[]'));
-      // Merge workspace-scoped recipe lists into this browser's shared list.
-      for(const k of Object.keys(localStorage))if(k.startsWith(storageKey+'.')){const old=ok(JSON.parse(localStorage.getItem(k)||'[]'));list=list.concat(old.filter(o=>!list.some(x=>x.id===o.id)));localStorage.removeItem(k);localStorage.setItem(storageKey,JSON.stringify(list));}
-      return list;
-    }catch{return [];}
-  }
-  const workspaceLabel = () => schema.workspace && schema.workspace!=='unassigned' ? 'Workspace: '+schema.workspace : 'Personal recipes · no workspace selected';
+  async function loadSaved(){try{saved=await store.list();}catch(e){status('Saved recipes cannot be read: '+e.message);}if($('#nb-saved').open)renderSaved();}
   const recipeSlug = title => title.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9._-]+/g,'-').replace(/^[^a-z0-9]+|[-.]+$/g,'').slice(0,72) || 'recipe';
   function savedState(recipe){try{return C.validate(C.fromJSON(recipe)).errors.length?' · Draft':'';}catch{return ' · Needs review';}}
   function renderSaved(){
-    const saved=readSaved();
-    $('#nb-saved-list').innerHTML='<p class="nb-note">'+esc(workspaceLabel())+' · stored in this browser</p>'+(saved.length?saved.map(s=>`<div class="nb-savedrow"><span><strong>${esc(s.recipe.title||s.recipe.name)}</strong><small>${esc(s.recipe.harness)} · ${esc(s.updated)}${savedState(s.recipe)}</small></span><div>${button('Load',`data-load="${esc(s.id)}"`)} ${button('Delete',`data-delete="${esc(s.id)}"`)}</div></div>`).join(''):'<p class="nb-note">Save your first recipe to find it here.</p>');
+    $('#nb-saved-list').innerHTML=savedList({saved,local:schema.local,why:schema.recipesWhy,esc,button,state:savedState});
   }
   function download(text,filename,type){const url=URL.createObjectURL(new Blob([text],{type})),link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function updateSavePreview(){
-    const title=$('#nb-recipe-title').value.trim(),name=recipeSlug(title),existing=readSaved().find(s=>s.id===(r().harness||'harbor')+':'+name);
-    $('#nb-recipe-title').setCustomValidity(title?'':'Enter a name for this recipe.');
-    $('#nb-save-submit').textContent=existing?'Update recipe':'Save recipe';
-    $('#nb-save-message').textContent=existing?'A recipe with this name exists. Saving will update it.':workspaceLabel()+'. You can save unfinished recipes as drafts.';
+    // as the store decides: the recipe this page holds is updated (renamed), else the one of this name; a name another holds is refused
+    const title=$('#nb-recipe-title').value.trim(),held=saved.find(s=>s.id===savedId),other=saved.find(s=>s.name===title&&s!==held);
+    $('#nb-recipe-title').setCustomValidity(!title?'Enter a name for this recipe.':held&&other?'Another saved recipe has this name.':'');
+    $('#nb-save-submit').textContent=held||other?'Update recipe':'Save recipe';
+    $('#nb-save-message').textContent=held&&other?'Another saved recipe has this name.':held&&held.name!==title?'Saving renames “'+held.name+'”.':other?'A recipe with this name exists. Saving will update it.':'';
   }
   function openSave(){
     $('#nb-recipe-title').value=r().title||r().name.replace(/-/g,' ');
     updateSavePreview();$('#nb-save-dialog').showModal();$('#nb-recipe-title').focus();$('#nb-recipe-title').select();
   }
-  function save(){
+  async function save(){
     const title=$('#nb-recipe-title').value.trim();if(!title){$('#nb-recipe-title').focus();return;}
     const candidate={...C.copy(r()),title,name:recipeSlug(title)};
     if(C.validate(candidate).errors.some(e=>/environment variable name|credentials; do not put/.test(e.message))){$('#nb-save-message').textContent='Use environment variable names for credentials before saving. Their values belong in your shell.';return;}
     try{
-      const list=readSaved(),id=(candidate.harness||'harbor')+':'+candidate.name;   // the harness prefix earlier versions wrote; a runner's key for its recipes
-      const saved={id,updated:new Date().toLocaleDateString(),recipe:candidate};
-      localStorage.setItem(storageKey,JSON.stringify([saved,...list.filter(s=>s.id!==id)].slice(0,50)));
+      const item=await store.save(candidate,savedId);saved=[item,...saved.filter(s=>s.id!==item.id)];savedId=item.id;
       recipe=candidate;$('#nb-save-dialog').close();render();renderSaved();
       status('Saved “'+title+'”'+(compiled.errors.length?' as a draft.':'.'));
-    }catch{ $('#nb-save-message').textContent='Browser storage is unavailable. Close this dialog and export the recipe as JSON instead.'; }
+    }catch(e){ $('#nb-save-message').textContent='Not saved: '+e.message; }
   }
   root.addEventListener('submit',event=>{if(event.target.id==='nb-save-form'){event.preventDefault();save();}});
   // Running from here: the runner script is posted with the target; the page follows the log until the run ends.
@@ -1059,15 +1089,15 @@
       return;
     }
     else if(d.remove!==undefined)r().custom.splice(Number(d.remove),1);
-    else if(d.load){try{const saved=readSaved().find(s=>s.id===d.load);recipe=C.fromJSON(saved.recipe);step=REVIEW;$('#nb-saved').close();status('Loaded “'+(recipe.title||recipe.name)+'”.');}catch(error){status('This saved recipe cannot be read: '+error.message);return;}}
-    else if(d.delete){try{localStorage.setItem(storageKey,JSON.stringify(readSaved().filter(s=>s.id!==d.delete)));renderSaved();status('Saved recipe deleted.');}catch{status('Browser storage is unavailable.');}return;}
+    else if(d.load){try{recipe=C.fromJSON(saved.find(s=>s.id===d.load).recipe);savedId=d.load;step=REVIEW;$('#nb-saved').close();status('Loaded “'+(recipe.title||recipe.name)+'”.');}catch(error){status('This saved recipe cannot be read: '+error.message);return;}}
+    else if(d.delete){try{await store.remove(d.delete);saved=saved.filter(s=>s.id!==d.delete);if(savedId===d.delete)savedId='';renderSaved();status('Saved recipe deleted.');}catch(e){status('Not deleted: '+e.message);}return;}
     else if(b.id==='nb-add'){r().custom.push({scope:'agent',key:'',type:'string',value:'',...(d.addAgent?{agent:d.addAgent}:{})});}
     else if(b.id==='nb-next'){if(step===REVIEW){if(!compiled.errors.length)download(JSON.stringify(r(),null,2)+'\n',r().name+'.json','application/json');return;}step=nextShown(step,1);}
     else if(b.id==='nb-back')step=nextShown(step,-1);
-    else if(b.id==='nb-save'){openSave();return;}
-    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});runnerOut=null;runnerKey='';step=S.benchmark;tab='select';status('Started over from the defaults.');}
+    else if(b.id==='nb-save'){if(schema.local)openSave();return;}
+    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});savedId='';runnerOut=null;runnerKey='';step=S.benchmark;tab='select';status('Started over from the defaults.');}
     else if(b.id==='nb-save-cancel'){$('#nb-save-dialog').close();return;}
-    else if(b.id==='nb-saved-toggle'){renderSaved();$('#nb-saved').showModal();return;}
+    else if(b.id==='nb-saved-toggle'){renderSaved();$('#nb-saved').showModal();loadSaved();return;}
     else if(b.id==='nb-saved-close'){$('#nb-saved').close();return;}
     else if(b.id==='nb-import'){$('#nb-import-file').click();return;}
     else if(b.id==='nb-refresh'){await refreshRegistry();return;}
@@ -1128,10 +1158,11 @@
     else if(d.harborChoice!==undefined){const rec=r(),v=el.value;if(v==='path')rec.harborDev='';else if(v==='dev')rec.harborDev=rec.harborDev||'~/harbor-dev/.venv/bin/harbor';renderForm();refreshPlan();if(v==='dev')root.querySelector('[data-field="harborDev"]')?.select();}
     else if(el.id==='nb-import-file'){
       const file=el.files[0];if(!file)return;
-      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Review the recipe before copying commands.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
+      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Review the recipe before copying commands.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
     }
   });
   { const dl=document.getElementById('nb-models'); if(dl){const seen=new Set(); for(const o of [...dl.options]){const v=C.bareModel(o.value); if(!v||seen.has(v)){o.remove();continue;} seen.add(v); o.value=v;}} }
   render();
   status(opened||'');
+  (async()=>{if(schema.local)try{const {refused,taken}=await store.move(),n=(k,w)=>k+' old recipe'+(k>1?'s':'')+w;const say=[refused&&n(refused,' could not be moved.'),taken&&n(taken,' not moved: '+(taken>1?'their names are':'its name is')+' already saved.')].filter(Boolean);if(say.length)status(say.join(' '));}catch(e){status('Recipes saved in this browser were not moved to Nullius: '+e.message+'. Trying again next time.');}loadSaved();})();
 })();

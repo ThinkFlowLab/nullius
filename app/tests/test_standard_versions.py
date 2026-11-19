@@ -217,7 +217,7 @@ for line in sys.stdin:
 '''
 TOY = dict(BENCH, upstream={"license": "MIT"}, default="1",
            controls={"nop": {"source": "nullius", "from": "nothing runs"}},
-           versions={"2": {"datasets": [{"id": "all", "units": 3}, {"id": "hard", "units": 2}],
+           versions={"2": {"datasets": [{"id": "all", "units": 3}, {"id": "hard", "units": 3}],
                            "driver": {"command": ["python3", "{here}/driver2.py"]}, "proven": {}},
                      "1": {"proven": {"all": {"units": {"units": 2, "passed": "2 ids", "on": "2026-10-12"}}}}})
 

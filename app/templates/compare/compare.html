@@ -1,112 +1,162 @@
-{% from 'runs/_runtime.html' import what_ran %}
+{% from 'runs/_runtime.html' import what_ran, shard_link %}
 {% from 'traces/_attempts.html' import attempt_count %}
+{% from '_tables.html' import classes, controls %}
+{% from '_page.html' import page_head %}
 {% extends "base.html" %}
-{% block title %}Compare {{ jobs|length }} runs — Nullius{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">{% endblock %}
+{% block title %}Compare {{ jobs|length }} run{{ '' if jobs|length == 1 else 's' }} — Nullius{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">
+<script src="{{ url_for('static', filename='tables.js') }}"></script>
+<script src="{{ url_for('static', filename='compare/columns.js') }}"></script>{% endblock %}
 {% block crumb %}/ compare{% endblock %}
 {% block body %}
 {% macro comparison_columns() %}
   <colgroup>
     <col class="compare-label-col">
-    {% for j in jobs %}<col>{% endfor %}
+    {% for c in columns %}<col>{% endfor %}
   </colgroup>
 {% endmacro %}
+{#- A cell a column, in the columns' order: the call block's, given the place of the column's run in `jobs`, or an
+    empty one for a column with no run. #}
+{% macro each(cell='td') %}{% for c in columns %}{% if c.i is none %}<{{ cell }} class="compare-empty"></{{ cell }}>{% else %}{{ caller(c.i) }}{% endif %}{% endfor %}{% endmacro %}
+{% set METRIC, NUM = dict(sticky=true), dict(align='right') %}
+{#- Each column's controls, the rows both tables open with: its header (Baseline, move, remove), then its workspace
+    and its run. Opens the table's tbody. `label` names the first column, `extra` the columns after the runs'. #}
+{% macro column_controls(label, extra=0) %}
+  <thead>
+    <tr data-sticky>
+      <th{{ classes(METRIC, true) }}><span class="sr">{{ label }}</span></th>
+      {% for c in columns %}
+      {% set n = loop.index %}
+      <th class="compare-col{{ ' empty' if c.i is none }}" data-column="{{ loop.index0 }}" data-run="{{ c.ref.job_id }}">
+        <div class="col-tools">
+          <span class="compare-baseline">{{ 'Baseline' if loop.first }}</span>
+          {% if c.left %}<a class="icon-btn" href="{{ c.left }}" aria-label="Move column {{ n }} left" title="Move left">←</a>{% endif %}
+          {% if c.right %}<a class="icon-btn" href="{{ c.right }}" aria-label="Move column {{ n }} right" title="Move right">→</a>{% endif %}
+          {% if c.remove %}<a class="icon-btn" href="{{ c.remove }}" aria-label="Remove column {{ n }}" title="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></a>{% endif %}
+        </div>
+      </th>
+      {% endfor %}
+      {% for _ in range(extra) %}<th></th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    <tr data-sticky="wide">
+      <th{{ classes(METRIC, true, 'rowhead') }}>Workspace</th>
+      {% for c in columns %}
+      <td class="compare-col{{ ' empty' if c.i is none }}" data-column="{{ loop.index0 }}">
+        <select class="col-ws" data-ws aria-label="Workspace of column {{ loop.index }}">
+          {% for ws in workspace_options %}<option value="{{ ws.name }}"{% if ws.name == c.ref.workspace %} selected{% endif %}>{{ ws.label }}</option>{% endfor %}
+        </select>
+      </td>
+      {% endfor %}
+      {% for _ in range(extra) %}<td></td>{% endfor %}
+    </tr>
+    <tr data-sticky="wide">
+      <th{{ classes(METRIC, true, 'rowhead') }}>Run</th>
+      {% for c in columns %}
+      {% set j = jobs[c.i] if c.i is not none else none %}
+      {% set n = loop.index %}
+      <td class="compare-col{{ ' empty' if j is none }}" data-column="{{ loop.index0 }}">
+        <div class="col-head">
+          <div class="menu-wrap">
+            <button type="button" class="col-run" data-run-btn aria-haspopup="listbox" aria-expanded="false"><span class="sr">Run of column {{ n }}: </span><span class="run-entry" data-run-label><span class="run-line">Choose a run</span></span></button>
 
-<div class="page-title compare-title"><h1>Comparing {{ jobs|length }} runs</h1><a class="btn ghost sm" href="{{ url_for('compare_picker', pick=picks, cohort=cohort) }}">Choose runs</a></div>
+            <div class="menu run-menu" data-run-menu hidden>
+              <label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-controls="runs-{{ n }}" aria-label="Search runs" autocomplete="off" spellcheck="false"></label>
+              <ul class="run-list" role="listbox" id="runs-{{ n }}" aria-label="Runs"></ul>
+              <p class="empty-note" data-none hidden>No runs match.</p>
+            </div>
+          </div>
+          {% if j is not none %}
+          <span class="faint mono col-id">{% if c.shards %}{% for s in c.shards %}{{ shard_link(s, workspace=c.ref.workspace) }}{% endfor %}{% else %}<a href="{{ url_for('job', job_id=j.job_id, workspace=c.ref.workspace) }}">{{ j.job_id }}</a>{% endif %}</span>
+          {% if cohort == 'matched' %}<span class="compare-excluded">{{ comparison.excluded_trials[c.i] }} of {{ selections[c.i].job.trials|length }} trials outside this cohort</span>{% endif %}
+          {% endif %}
+        </div>
+      </td>
+      {% endfor %}
+      {% for _ in range(extra) %}<td></td>{% endfor %}
+    </tr>
+{% endmacro %}
+
+{{ page_head('Comparing ' ~ jobs|length ~ ' run' ~ ('' if jobs|length == 1 else 's')) }}
+{% if jobs %}
 <p class="subtitle">
   {{ n_shared }} task{{ '' if n_shared == 1 else 's' }} run by every side<span class="dot">·</span>
   <strong class="{{ 'warn' if n_differing else 'muted' }}">{{ n_differing }} where they disagree</strong>
 </p>
-<div class="cohort-tools">
-  <nav class="cohort-switch" aria-label="Comparison cohort">
-    <a href="{{ url_for('compare', pick=picks, cohort='whole') }}" aria-current="{{ 'true' if cohort == 'whole' else 'false' }}">Whole runs</a>
-    <a href="{{ url_for('compare', pick=picks, cohort='matched') }}" aria-current="{{ 'true' if cohort == 'matched' else 'false' }}">Matched tasks</a>
-  </nav>
-</div>
-<div class="cohort-note">
-  {% if cohort == 'matched' %}
-  <p><strong>{{ n_shared }} matched task{{ '' if n_shared == 1 else 's' }}.</strong> Rates, cost and tokens include every attempt on those tasks. The full run’s wall time is omitted.</p>
-  {% else %}
-  <p>These numbers describe each full run, including tasks the other runs did not cover. Switch to matched tasks to compare the same recorded task IDs.</p>
-  {% endif %}
-  {% if not comparison.datasets_known %}<p>A run has no recorded dataset identity. Its task names are kept separate because their identity cannot be verified.</p>
-  {% elif not comparison.datasets_match %}<p>The recorded datasets differ. Matching requires exact dataset names and versions; identical task names from different datasets are kept separate.</p>{% endif %}
-  {% if cohort == 'matched' and not n_shared %}<p>No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
-  {% if comparison.repeated_trials|sum %}<p>Some tasks have repeated attempts. A task row counts every attempt, infra apart, and disagrees when its pass rate or how its attempts ended differs; its outcome is the last indexed attempt.</p>{% endif %}
-  <p>Adjusted rate excludes only rate limits, API errors, setup errors and spending caps. Unknown outcomes stay in its denominator. Controls are never ranked.</p>
-</div>
-
-<h2>Side by side</h2>
-{% if n_agents > 1 %}
-<div class="table-tools">
-  <span class="table-note">Order columns:</span>
-  <a class="btn ghost sm" href="{{ url_for('compare', pick=order_grouped, cohort=cohort) }}">Group by agent</a>
-  <a class="btn ghost sm" href="{{ url_for('compare', pick=order_alternating, cohort=cohort) }}">Alternate agents</a>
-</div>
 {% endif %}
+
+{#- The controls row: the cohort, the view and the columns' order, then Add a run. #}
+{% macro side_views() %}<nav class="seg-toggle" aria-label="Comparison cohort">
+    <a href="{{ url_for('compare', pick=picks, cohort='whole', view=view) }}" aria-current="{{ 'true' if cohort == 'whole' else 'false' }}">Whole runs</a>
+    <a href="{{ url_for('compare', pick=picks, cohort='matched', view=view) }}" aria-current="{{ 'true' if cohort == 'matched' else 'false' }}">Matched tasks</a>
+  </nav>
+  <nav class="seg-toggle" aria-label="Comparison view">
+    <a href="{{ url_for('compare', pick=picks, cohort=cohort) }}" aria-current="{{ 'false' if view else 'true' }}">Side by side</a>
+    <a href="{{ url_for('compare', pick=picks, cohort=cohort, view='tasks') }}" aria-current="{{ 'true' if view else 'false' }}">Task by task</a>
+  </nav>
+  {% if n_agents > 1 %}<div class="menu-wrap">
+    <button class="btn ghost sm" type="button" data-order-btn aria-haspopup="true" aria-expanded="false" title="Order columns"><svg class="ic" aria-hidden="true"><use href="#i-reorder"/></svg>Order</button>
+    <div class="menu tools-menu" hidden>
+      <a href="{{ url_for('compare', pick=order_grouped, cohort=cohort, view=view) }}">Group by agent</a>
+      <a href="{{ url_for('compare', pick=order_alternating, cohort=cohort, view=view) }}">Alternate agents</a>
+    </div>
+  </div>{% endif %}{% endmacro %}
+{% macro side_actions() %}<a class="btn ghost sm" href="{{ add }}" id="compare-add"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a run</a>{% endmacro %}
+{#- one block, so the controls row sticks only as far as the table #}
+<div>
+{{ controls(view or 'side', [], sort=false, views=side_views, actions=side_actions) }}
+{% if jobs %}
+{% if cohort == 'matched' and not n_shared %}<p class="alert warn">No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
+{% if comparison.datasets_known and not comparison.datasets_match %}<p class="compare-warn">The recorded datasets differ: pick runs of the baseline's dataset to compare the same tasks.</p>{% endif %}
+{% endif %}
+{% if not view %}
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Run comparison" tabindex="0">
-<table class="grid compare" style="--cols: {{ jobs|length }}">
+<table class="grid compare" id="side" style="--cols: {{ columns|length }}">
   {{ comparison_columns() }}
-  <thead>
-    <tr>
-      <th></th>
-      {% for j in jobs %}
-      {% set selection = selections[loop.index0] %}
-      <th class="draggable-col" draggable="true" data-job="{{ selection.value }}"
-          title="Drag to reorder">
-        <div class="col-head">
-          <span class="strong">{{ j.agent_label or '—' }}
-            {%- if j.is_control %} <span class="chip-control"
-              title="Harbor control: applies the gold patch or does nothing. Never calls a model, and never ranked.">control</span>{% endif %}</span>
-          <a class="faint mono col-id" href="{{ url_for('job', job_id=j.job_id, workspace=selection.workspace) }}">{{ j.job_id }}</a>
-          <span class="compare-workspace">{{ selection.workspace_label }}</span>
-          {% if cohort == 'matched' %}<span class="compare-excluded">{{ comparison.excluded_trials[loop.index0] }} of {{ selection.job.trials|length }} trials outside this cohort</span>{% endif %}
-        </div>
-      </th>
-      {% endfor %}
-    </tr>
-  </thead>
-  <tbody>
-    {% macro row(label, values, hint='') %}
-    <tr>
-      <th class="rowhead" {% if hint %}title="{{ hint }}"{% endif %}>{{ label }}</th>
-      {% for v in values %}<td>{{ v }}</td>{% endfor %}
+  {{ column_controls('Metric') }}
+    {% if jobs %}
+    {% macro row(label, values, hint='', sticky=none) %}
+    <tr{% if sticky is not none %} data-sticky="{{ sticky }}"{% endif %}>
+      <th{{ classes(METRIC, true, 'rowhead') }} {% if hint %}title="{{ hint }}"{% endif %}>{{ label }}</th>
+      {% call(i) each() %}<td>{{ values[i] }}</td>{% endcall %}
     </tr>
     {% endmacro %}
 
-    <tr>
-      <th class="rowhead">Agent</th>
-      {% for j in jobs %}
+    <tr data-sticky>
+      <th{{ classes(METRIC, true, 'rowhead') }}>Agent</th>
+      {% call(i) each() %}{% set j = jobs[i] %}
       <td><span class="strong">{{ j.agent_label or '—' }}</span>
         {%- if j.is_control %} <span class="chip-control"
           title="Harbor control — excluded from every ranking below">control</span>{% endif %}
         {%- if j.reasoning_effort %} <span class="faint">· effort {{ j.reasoning_effort }}</span>{% endif %}</td>
-      {% endfor %}
+      {% endcall %}
     </tr>
-    {{ row('Model', jobs|map(attribute='model_name')|list) }}
+    {{ row('Model', jobs|map(attribute='model_name')|list, sticky='wide') }}
+    {{ row('Benchmark', benchmarks, sticky='wide') }}
     <tr>
-      <th class="rowhead">Dataset</th>
-      {% for j in jobs %}<td title="{{ j.dataset }}">{{ j.dataset|dsname }}</td>{% endfor %}
+      <th{{ classes(METRIC, true, 'rowhead') }}>Dataset</th>
+      {% call(i) each() %}<td title="{{ jobs[i].dataset }}">{{ jobs[i].dataset|dsname }}</td>{% endcall %}
     </tr>
     {% if jobs|selectattr('runner')|list %}
     <tr>
-      <th class="rowhead" title="What ran: the runner, and the upstream commit its install resolved">Runner</th>
-      {% for j in jobs %}<td>{% if j.runner %}{{ what_ran(j) }}{% else %}<span class="faint">—</span>{% endif %}</td>{% endfor %}
+      <th{{ classes(METRIC, true, 'rowhead') }} title="What ran: the runner, and the upstream commit its install resolved">Runner</th>
+      {% call(i) each() %}<td>{% if jobs[i].runner %}{{ what_ran(jobs[i]) }}{% else %}<span class="faint">—</span>{% endif %}</td>{% endcall %}
     </tr>
     {% endif %}
     <tr>
-      <th class="rowhead">Outcome mix</th>
-      {% for j in jobs %}
+      <th{{ classes(METRIC, true, 'rowhead') }}>Outcome mix</th>
+      {% call(i) each() %}{% set j = jobs[i] %}
       <td><span class="minibar">
         {%- for k in ORDER %}{% if j.counts[k] %}<span class="seg oc-{{ k }}" style="flex:{{ j.counts[k] }}"
           title="{{ LABELS[k] }}: {{ j.counts[k] }}"></span>{% endif %}{% endfor -%}
       </span></td>
-      {% endfor %}
+      {% endcall %}
     </tr>
     {% for r in summary %}
     <tr>
-      <th class="rowhead" {% if r.hint %}title="{{ r.hint }}"{% endif %}>{{ r.label }}</th>
-      {% for v in r.cells %}<td class="{{ r.classes[loop.index0] }}">{{ v }}</td>{% endfor %}
+      <th{{ classes(METRIC, true, 'rowhead') }} {% if r.hint %}title="{{ r.hint }}"{% endif %}>{{ r.label }}</th>
+      {% call(i) each() %}{% set delta = r.deltas[i] %}<td{{ classes(NUM, false, r.classes[i]) }}>{{ r.cells[i] }}{% if delta[0] %}<span class="delta {{ delta[1] }}">{{ delta[0] }}</span>{% endif %}</td>{% endcall %}
     </tr>
     {% endfor %}
     {% set pk = comparison.pass_k %}
@@ -115,32 +165,30 @@
     {% for name, key, hint in [('pass@', 'at', 'The chance that at least one of k attempts passed, averaged over the tasks'), ('pass^', 'hat', 'The chance that all k attempts passed, averaged over the tasks')] %}
     {% for k in range(1, top + 1) %}
     <tr class="pass-k">
-      <th class="rowhead" title="{{ hint }}">{{ name }}{{ k }}</th>
-      {% for p in pk %}<td class="mono" title="{{ p.units }} task{{ '' if p.units == 1 else 's' }}, each read on its first {{ p.attempts }} attempts">{{ '%.0f'|format(p[key][k] * 100) }}%</td>{% endfor %}
+      <th{{ classes(METRIC, true, 'rowhead') }} title="{{ hint }}">{{ name }}{{ k }}</th>
+      {% call(i) each() %}{% set p = pk[i] %}<td{{ classes(NUM, false, 'mono') }} title="{{ p.units }} task{{ '' if p.units == 1 else 's' }}, each read on its first {{ p.attempts }} attempts">{{ '%.0f'|format(p[key][k] * 100) }}%</td>{% endcall %}
     </tr>
     {% endfor %}
     {% endfor %}
     {% endif %}
     <tr>
-      <th class="rowhead" title="The recorded invocation — a foreign harness's own command verbatim, or the harbor run reconstructed from this run's recorded config — copy it to run the same benchmark again">Rerun</th>
-      {% for j in jobs %}
+      <th{{ classes(METRIC, true, 'rowhead') }} title="The recorded invocation — a foreign harness's own command verbatim, or the harbor run reconstructed from this run's recorded config — copy it to run the same benchmark again">Rerun</th>
+      {% call(i) each() %}{% set j = jobs[i] %}
       <td>{% if j.harbor_command %}<button class="btn ghost sm" data-copy="{{ j.harbor_command }}"
           title="{{ j.harbor_command }}">copy command</button>{% else %}<span class="faint">—</span>{% endif %}</td>
-      {% endfor %}
+      {% endcall %}
     </tr>
+    {% endif %}
   </tbody>
 </table>
 </div>
-
-<h2>Task by task</h2>
-<p class="subtitle">Tasks whose pass rate moved most are listed first. A blank cell means that run
-  didn't include the task.</p>
+{% else %}
 {% if judgement %}
 <div class="judgement-job" id="judgement">
   <span class="small"><strong>Judgement</strong> <span class="badge">experimental</span>
     · {{ judgement.judged }} of {{ judgement.pairs }} matched pair{{ '' if judgement.pairs == 1 else 's' }} judged{% if judgement.unjudged %}, {{ judgement.unjudged }} not judged{% endif %}{% if judgement.earlier %} ({{ judgement.earlier }} under an earlier vocabulary){% endif %}</span>
   {% if judgement.unjudged and judgement.keyed %}
-  <form method="post" action="{{ url_for('judge_compare_route', pick=picks, cohort=cohort) }}" class="header-form" id="judge-all">
+  <form method="post" action="{{ url_for('judge_compare_route', pick=picks, cohort=cohort, view=view) }}" class="header-form" id="judge-all">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <button class="btn sm ghost" type="submit">Judge {{ judgement.unjudged }} pair{{ '' if judgement.unjudged == 1 else 's' }}</button>
   </form>
@@ -148,26 +196,27 @@
 </div>
 {% endif %}
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Task comparison" tabindex="0">
-<table class="grid compare tasks" style="--cols: {{ jobs|length }}">
+<table class="grid compare tasks" id="tasks" style="--cols: {{ columns|length }}">
   {{ comparison_columns() }}
-  <thead>
-    <tr>
-      <th>Task</th>
-      {% for j in jobs %}
-      <th class="draggable-col" draggable="true" data-job="{{ selections[loop.index0].value }}" title="Drag to reorder">
-        {{ j.agent_label or j.job_id }}
+  {{ column_controls('Task', 1 if judgement else 0) }}
+    <tr class="compare-task-head" data-sticky>
+      <th{{ classes(METRIC, true) }}>Task</th>
+      {% for c in columns %}
+      {% set j = jobs[c.i] if c.i is not none else none %}
+      <th class="draggable-col{{ ' compare-empty' if j is none }}" draggable="true" data-job="{{ c.ref.value }}" title="{{ j.job_id ~ ': ' if j is not none }}drag to reorder">
+        {%- if j is not none %}
+        {{ j.agent_label or j.job_id }}{% if j.model_name %} · {{ j.model_name }}{% endif %}
         {%- if j.is_control %} <span class="chip-control">control</span>{% endif %}
+        {%- endif %}
       </th>
       {% endfor %}
       {% if judgement %}<th class="judgement-col" title="Each side scored alone on {{ judgement.question }}, 0 to 3; the higher score by at least {{ judgement.margin }} wins, else a tie">Better of two</th>{% endif %}
     </tr>
-  </thead>
-  <tbody>
     {% for taskrow in tasks %}
     {% set task_index = loop.index0 %}
     {% set row = taskrow.trials %}
     <tr class="compare-task-row {% if taskrow.differs %}row-differs{% endif %}">
-      <td class="mono">
+      <td{{ classes(METRIC, true, 'mono') }}>
         <div class="compare-task-name">
         {# One glyph, rotated by CSS on aria-expanded. #}
         <button type="button" class="disclose" aria-expanded="false"
@@ -177,13 +226,13 @@
         </div>
         {% if not comparison.datasets_match or not comparison.datasets_known %}<span class="compare-task-dataset">{{ 'Dataset not recorded' if taskrow.dataset.startswith('[unidentified:') else taskrow.dataset|dsname }}</span>{% endif %}
       </td>
-      {% for t in row %}
+      {% call(i) each() %}{% set t = row[i] %}
       <td>
         {% if t %}
           <div class="compare-run-cell">
           <div class="compare-cell-summary">
           <div class="compare-cell-outcome">
-          <a class="cell-outcome" href="{{ url_for('trial', job_id=t.job_id, trial_name=t.trial_name, workspace=selections[loop.index0].workspace) }}">
+          <a class="cell-outcome" href="{{ url_for('trial', job_id=t.job_id, trial_name=t.trial_name, workspace=selections[i].workspace) }}">
             <span class="tag oc-{{ t.outcome }}">{{ t.outcome_label }}</span>
           </a>
           {% if t.score is not none %}<span class="badge trial-score" title="{% if t.n_parts %}The mean score of its {{ t.n_parts }} parts{% else %}Its score{% endif %}, as the benchmark's own scorer gave it">{{ '%.2f'|format(t.score) }}</span>{% endif %}
@@ -194,16 +243,16 @@
           </div>
           <span class="compare-quick-metric" title="Recorded total trial duration"><span>Total time</span><strong>{{ t.dur_total|secs }}</strong></span>
           {% set used_tokens = (t.n_input_tokens or 0) + (t.n_output_tokens or 0) %}
-          <span class="compare-quick-metric" title="{% if used_tokens or jobs[loop.index0].is_control %}Input {{ t.n_input_tokens or 0 }} · Output {{ t.n_output_tokens or 0 }} · Cached input {{ t.n_cache_tokens or 0 }} (included in input){% else %}Token usage not recorded{% endif %}"><span>Tokens</span><strong>{{ used_tokens|tokens(jobs[loop.index0].kind) }}</strong></span>
+          <span class="compare-quick-metric" title="{% if used_tokens or jobs[i].is_control %}Input {{ t.n_input_tokens or 0 }} · Output {{ t.n_output_tokens or 0 }} · Cached input {{ t.n_cache_tokens or 0 }} (included in input){% else %}Token usage not recorded{% endif %}"><span>Tokens</span><strong>{{ used_tokens|tokens(jobs[i].kind) }}</strong></span>
           </div>
           </div>
-          {%- set tried = taskrow.tried[loop.index0] %}
+          {%- set tried = taskrow.tried[i] %}
           {% if tried.n > 1 %}<span class="compare-attempts">{{ attempt_count(tried) }}</span>{% endif %}
         {% else %}
           <span class="faint">—</span>
         {% endif %}
       </td>
-      {% endfor %}
+      {% endcall %}
       {% if judgement %}<td class="judgement-cell">{% set jr = judgement.rows.get(taskrow.task) %}
         {% if jr and jr.earlier %}<strong>{{ {'A': jobs[0].agent_label or 'A', 'B': jobs[1].agent_label or 'B', 'same': 'same'}[jr.choice] if jr.choice in ('A', 'B', 'same') else jr.choice }}</strong> <span class="mono small" title="{% for k, v in jr.probabilities.items() %}{{ k }} {{ '%.0f'|format(v * 100) }}%{{ ' · ' if not loop.last }}{% endfor %}">{{ '%.0f'|format((jr.p or 0) * 100) }}%</span>
           <span class="badge" title="Asked under {{ jr.questions }} as one pair state, the pick the model's own; the current vocabulary scores each side alone. Judging again scores both sides.">earlier vocabulary</span>
@@ -224,24 +273,30 @@
 
     {# detail rows: the same metrics for each side, so differences line up #}
     <tr class="detail-row" id="compare-detail-{{ loop.index0 }}" data-detail="{{ loop.index0 }}" hidden>
-      <td colspan="{{ jobs|length + 1 }}">
+      <td colspan="{{ columns|length + 1 + (1 if judgement else 0) }}">
         <div class="detail-body" data-detail-url="{{ url_for('compare_detail_row', index=task_index, pick=picks, cohort=cohort) }}"><p class="faint small">Loading…</p></div>
         <p class="detail-more">
-          <a class="btn ghost sm" href="{{ url_for('compare_task', task=taskrow.task, dataset=taskrow.dataset, pick=picks, cohort=cohort) }}">Open trials side by side →</a>
+          <a class="btn ghost sm" href="{{ url_for('compare_task', task=taskrow.task, dataset=taskrow.dataset, pick=picks, cohort=cohort, view=view) }}">Open trials side by side →</a>
         </p>
       </td>
     </tr>
-    {% else %}<tr><td colspan="{{ jobs|length + 1 }}" class="empty-note">No tasks in this comparison cohort.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="{{ columns|length + 1 }}" class="empty-note">No tasks in this comparison cohort.</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>
+{% endif %}
+</div>
 
 <script>
-  /* ---- drag a column header to reorder ----
+  NulliusCompare.wire({values: {{ picks|tojson }}, lists: {{ lists|tojson }}, dataset: {{ baseline|tojson }},
+                       runs: {{ url_for('compare_runs')|tojson }}});
+
+  /* ---- drag a task table's column header to reorder ----
      Order is carried by qualified ?pick= params, so a drop navigates to the
      reordered URL. Both tables and every detail row follow automatically, and
-     the arrangement stays shareable. The Group / Alternate buttons above the
-     table are the pointer-free path. */
+     the arrangement stays shareable. The ← and → of each column are the
+     pointer-free path. */
+
   (() => {
     const ORDER = {{ picks|tojson }};
     let dragged = null;
@@ -283,9 +338,11 @@
         const at = next.indexOf(target) + (after ? 1 : 0);
         next.splice(at, 0, dragged);
 
-        const url = new URL('{{ url_for("compare") }}', location.origin);
+        // this URL, its other parameters (the cohort, the view) kept
+        const url = new URL(location.href);
+        url.searchParams.delete('pick');
+        url.searchParams.delete('job');
         next.forEach(id => url.searchParams.append('pick', id));
-        url.searchParams.set('cohort', {{ cohort|tojson }});
         location.href = url;
       });
     });

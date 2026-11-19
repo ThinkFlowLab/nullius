@@ -174,7 +174,7 @@ def check(agent: dict, *, model: str, provider: str, jobs_root: str = "jobs", pa
     # records side by side, with the fields fidelity reads.
     r.relay = relay.Relay(r.base, r.key, os.path.join(r.job_dir, ".work", "relay"), prices=price_list.table(), model=model,
                           side_models=(agent.get("model") or {}).get("side_models") or (),
-                          key_header=r.key_header, fields=True).start()
+                          key_header=r.key_header, fields=True, timeout=r.call_seconds).start()
     order = [(s, n) for n in range(1, passes + 1) for s in SIDES]
     got: Dict[str, List[dict]] = {s: [] for s in SIDES}
     solved: Dict[str, List[str]] = {}
@@ -230,7 +230,7 @@ def _one(r: "run.Run", side: str, unit: str, i: int, tag: str, cmd: List[str], k
     except (run._Ended, jsonl.Failed) as e:
         r.say(f"  {tag} {unit}: {e}")
     try:
-        score = r.driver().request("score", unit=unit, dir=ws, transcript=transcript, answer=answer, timeout=600)
+        score = r.driver().request("score", unit=unit, dir=ws, transcript=transcript, answer=answer, timeout=r.score_seconds)
     except jsonl.Failed:
         score = {}
     if os.path.isdir(os.path.join(base, "agent")):

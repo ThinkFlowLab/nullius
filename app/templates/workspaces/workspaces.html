@@ -1,29 +1,29 @@
-{% from '_tables.html' import tools, pager, greyed %}
+{% from '_tables.html' import table, cell, greyed %}
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}Workspaces — Nullius{% endblock %}
 {% block crumb %}/ workspaces{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">{# its dialog #}
 <link rel="stylesheet" href="{{ url_for('static', filename='workspaces/workspaces.css') }}">
 <script src="{{ url_for('static', filename='tables.js') }}"></script>{% endblock %}
+{#- A workspace's row: the open one marked, what its search reads. #}
+{% macro ws_tr(ws) %} class="{{ 'ws-current' if workspace and ws.name == workspace.name }}" data-ws="{{ ws.name }}" data-search="{{ ws.label }} {{ ws.name }}" data-holder{% endmacro %}
+
 {% block body %}
-<div class="page-title ws-head"><h1>Workspaces</h1>
-  <a class="btn sm" href="{{ url_for('import_page', new=1) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New workspace</a></div>
+{% set actions %}<a class="btn sm" href="{{ url_for('import_page', new=1) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New workspace</a>{% endset %}
+{{ page_head('Workspaces', actions=actions) }}
 
 {% if workspaces %}
 {% set labels = workspaces|map(attribute='label')|list %}
-<div class="table-tools inv-cols" id="ws-tools">{{ tools([], [('name', 'Name'), ('roots', 'Roots'), ('runs', 'Runs'), ('checks', 'Checks'), ('launches', 'Launches'), ('opened', 'Last opened')]) }}</div>
-<div class="table-wrap">
-<table class="grid sortable tools inventory ws-table" id="ws-table">
-  <thead>
-    <tr><th><span class="sr">Open</span></th><th data-col="name" data-type="text">Name</th><th data-col="roots" data-type="num">Roots</th><th data-col="runs" data-type="num" class="num">Runs</th><th data-col="checks" data-type="num" class="num">Checks</th><th data-col="launches" data-type="num" class="num">Launches</th><th data-col="opened" data-type="num">Last opened</th><th><span class="sr">Actions</span></th></tr>
-  </thead>
-  <tbody>
-    {% for ws in workspaces %}
-    {% set current = workspace and ws.name == workspace.name %}{% set rs = roots[ws.name] %}{% set clash = labels.count(ws.label) > 1 %}
-    <tr class="{{ 'ws-current' if current }}" data-ws="{{ ws.name }}" data-holder>
-      <td class="ws-mark">{% if current %}<span class="ok" role="img" aria-label="Open" title="Open">●</span>{% endif %}</td>
-      <td class="ws-name" data-sort="{{ ws.label }}">
+{% set cols = [dict(key='open', label='Open', blank=true), dict(key='name', label='Name', width='expand'), dict(key='runs', label='Runs', type='num'),
+               dict(key='checks', label='Checks', type='num'), dict(key='opened', label='Last opened', type='num', align='left'),
+               dict(key='launches', label='Launches', type='num', align='right'), dict(key='roots', label='Roots', type='num', align='right'), dict(key='actions', label='Actions', blank=true)] %}
+{% call(ws, c) table('workspaces', cols, workspaces, ws_tr, class='ws-table', search='Search by name', noun='workspaces') %}
+    {%- set current = workspace and ws.name == workspace.name %}{% set rs = roots[ws.name] %}{% set clash = labels.count(ws.label) > 1 %}
+    {%- if c.key == 'open' %}{% call cell(c) %}{% if current %}<span class="ok" role="img" aria-label="Open" title="Open">●</span>{% endif %}{% endcall %}
+    {%- elif c.key == 'name' %}{% call cell(c, sort=ws.label, class='ws-name') %}
+
         {#- the label; the name on disk too where two labels are alike #}
         <span class="ws-show"><span class="ws-title" title="{{ ws.name }}">{{ ws.label }}</span>{% if clash %} <small class="mono faint">{{ ws.name }}</small>{% endif %}
           <button type="button" class="icon-btn ws-edit" aria-label="Rename workspace {{ ws.label }}" title="Rename"><svg class="ic"><use href="#i-pencil"/></svg></button></span>
@@ -32,9 +32,15 @@
           <input type="text" name="label" value="{{ ws.label }}" required aria-label="New name of workspace {{ ws.label }}" spellcheck="false" autocomplete="off">
           <button class="btn sm" type="submit">Save</button><button class="btn sm ghost ws-cancel" type="button">Cancel</button>
         </form>
-      </td>
-      <td data-sort="{{ rs|length }}">
-        <button type="button" class="btn ghost sm ws-roots-btn" data-ask="ws-roots" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ rs|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ rs|length }}</button>
+      {% endcall %}
+    {%- elif c.key == 'runs' %}{% call cell(c) %}{{ counts[ws.name].runs }}{% endcall %}
+    {%- elif c.key == 'checks' %}{% call cell(c) %}{{ counts[ws.name].checks }}{% endcall %}
+    {#- the time as digits, UTC as every workspace records it; never opened sorts last, newest first #}
+    {%- elif c.key == 'opened' %}{% call cell(c, sort=ws.opened[:19]|replace('-', '')|replace(':', '')|replace('T', '') or 0, class='mono faint nowrap') %}{{ ws.opened[:16]|replace('T', ' ') }}{% endcall %}
+    {%- elif c.key == 'launches' %}{% call cell(c) %}{% set n = n_launches[ws.name] %}{% if n %}<a class="btn ghost sm count-btn" href="{{ url_for('launches_page', ws=ws.name) }}" aria-label="Launches of {{ ws.label }}: {{ n }}" title="Launches of {{ ws.label }}"><svg class="ic" aria-hidden="true"><use href="#i-launches"/></svg>{{ n }}</a>
+      {%- else %}{{ greyed('Launches of ' ~ ws.label ~ ': 0', '', 'No launches in ' ~ ws.label, 'none-' ~ ws.name, icon='launches', class='btn ghost sm count-btn', text='0') }}{% endif %}{% endcall %}
+    {%- elif c.key == 'roots' %}{% call cell(c, sort=rs|length) %}
+        <button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="ws-roots" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ rs|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ rs|length }}</button>
         <template class="ws-roots">
           <div class="std-how-head"><h2 id="ws-dialog-h"{% if clash %} title="{{ ws.name }}"{% endif %}>Roots of {{ ws.label }}</h2>
             <a class="btn sm" href="{{ url_for('import_page', into=ws.name) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a root</a></div>
@@ -58,13 +64,8 @@
             {% else %}<li class="faint">No root.</li>{% endfor %}
           </ul>
         </template>
-      </td>
-      <td class="num">{{ counts[ws.name].runs }}</td>
-      <td class="num">{{ counts[ws.name].checks }}</td>
-      <td class="num">{% set n = n_launches[ws.name] %}{% if n %}<a href="{{ url_for('launches_page', ws=ws.name) }}" aria-label="Launches of {{ ws.label }}: {{ n }}">{{ n }}</a>{% else %}0{% endif %}</td>
-      {#- the time as digits, UTC as every workspace records it; never opened sorts last, newest first #}
-      <td class="mono faint nowrap" data-sort="{{ ws.opened[:19]|replace('-', '')|replace(':', '')|replace('T', '') or 0 }}">{{ ws.opened[:16]|replace('T', ' ') }}</td>
-      <td class="inv-acts">
+      {% endcall %}
+    {%- elif c.key == 'actions' %}{% call cell(c, class='acts-col') %}
         <button type="button" class="icon-btn danger" data-ask="ws-ask-delete" aria-haspopup="dialog" aria-label="Delete workspace {{ ws.label }}" title="Delete workspace"><svg class="ic"><use href="#i-trash"/></svg></button>
         <template class="ws-ask-delete">
           <div class="std-how-head"><h2 id="ws-dialog-h">Delete workspace {{ ws.label }}</h2></div>
@@ -74,13 +75,9 @@
             <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete workspace</button></div>
           </form>
         </template>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
-{{ pager('ws-table') }}
+      {% endcall %}
+    {%- endif %}
+{% endcall %}
 <dialog class="std-how launch-delete" id="ws-dialog" aria-labelledby="ws-dialog-h"></dialog>
 <script>
 (() => {
@@ -120,10 +117,6 @@
     }
   });
   d.addEventListener('close', () => opener?.focus());
-  const table = document.getElementById('ws-table');
-  let pages = () => {};
-  NulliusTable.toolbar(table, document.getElementById('ws-tools'), () => pages());
-  pages = NulliusTable.pager(table, 'workspaces.per');
 
   // Rename in place: the pencil opens the field; Escape or Cancel puts the name back.
   document.querySelectorAll('.ws-name').forEach(cell => {

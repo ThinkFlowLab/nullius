@@ -154,6 +154,20 @@
         "original",
         "model"
       ],
+      "names": {
+        "m3": "M3 Agent",
+        "prompt": "PromptAgent",
+        "claude": "Claude computer use",
+        "gpt54": "GPT-5.4",
+        "openai_cua": "OpenAI CUA",
+        "qwen": "Qwen",
+        "os_symphony": "OS-Symphony",
+        "evocua": "EvoCUA",
+        "autoglm": "AutoGLM",
+        "autoglm_v": "AutoGLM-V",
+        "mano": "Mano",
+        "muse_spark": "Muse Spark"
+      },
       "about": {
         "m3": "MiniMax's M3Agent: run_multienv_m3.py, MiniMax-M3 over Anthropic's Messages API, 100 steps",
         "prompt": "OSWorld's PromptAgent: run_multienv.py, GPT-4o on screenshots over Chat Completions, 15 steps",
@@ -200,6 +214,7 @@
       ],
       "default": "default",
       "pattern": "default|[1-9][0-9]{0,3}",
+      "example": "50",
       "limit": true,
       "by": {
         "agent": {
@@ -220,6 +235,7 @@
     },
     "vm_provider": {
       "label": "VM provider",
+      "step": "where",
       "summary": "--provider_name: where the task's VM runs. docker only: the upstream's other providers need cloud accounts or a hypervisor of their own.",
       "values": [
         "docker"
@@ -245,6 +261,7 @@
       "label": "Pause",
       "summary": "run_single_example's sleep_after_execution for an agent: the seconds env.step waits after each action, 3.0 as in run_multienv_m3.py's default.",
       "pattern": "[0-9]{1,2}(\\.[0-9]{1,2})?",
+      "example": "5.0",
       "default": "3.0",
       "setups": [
         "agent"

@@ -479,7 +479,7 @@ def judge_compare_route():
     done, failed = run_batch(sides, lambda s: judge_side(s[1], s[2], k), lambda s: f"{s[0]} ({s[1].agent_label or s[1].job_id})")
     from flask import flash
     flash(f"Judged {done} of {len(sides)} side(s) over {len(todo)} pair(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
-    return redirect(url_for("compare", pick=view.references, cohort=view.cohort) + "#judgement")
+    return redirect(url_for("compare", pick=view.references, cohort=view.cohort, view=compare_web._view()) + "#judgement")
 
 
 # --- feasibility triage, task-instruction quality

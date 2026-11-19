@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {#- one form, two uses: `editing` is the key of the entry being changed, or none to add one #}
 {% block title %}{{ 'Edit ' ~ values.get('title', editing) if editing else 'Add a Harbor benchmark' }} — Nullius{% endblock %}
 {% block crumb %}/ <a href="{{ url_for('benchmarks_page') }}">benchmarks</a> / {% if editing %}<a href="{{ url_for('benchmark_page', key=editing) }}">{{ editing }}</a> / edit{% else %}add{% endif %}{% endblock %}
@@ -10,17 +11,12 @@
   <span><b>{{ title }}</b>{% if sub %}<small>{{ sub }}</small>{% endif %}</span></label>
 {% endmacro %}
 <div class="bench-index bench-new">
-  <header class="bench-index-head">
-    <div>
-      {% if editing %}
-      <h1>Edit {{ values.get('title') or editing }}</h1>
-      <p class="bench-count">Saving writes <span class="mono">{{ catalogue_dir }}/benchmarks/{{ editing }}/benchmark.json</span>; the entry's other files and fields are kept.</p>
-      {% else %}
-      <h1>Add a Harbor benchmark</h1>
-      <p class="bench-count">Name the dataset, read it from Harbor, check the entry. Saving writes <span class="mono">{{ catalogue_dir }}/benchmarks/&lt;key&gt;/benchmark.json</span>.</p>
-      {% endif %}
-    </div>
-  </header>
+  {{ page_head('Edit ' ~ (values.get('title') or editing) if editing else 'Add a Harbor benchmark') }}
+  {% if editing %}
+  <p class="subtitle">Saving writes <span class="mono">{{ catalogue_dir }}/benchmarks/{{ editing }}/benchmark.json</span>; the entry's other files and fields are kept.</p>
+  {% else %}
+  <p class="subtitle">Name the dataset, read it from Harbor, check the entry. Saving writes <span class="mono">{{ catalogue_dir }}/benchmarks/&lt;key&gt;/benchmark.json</span>.</p>
+  {% endif %}
 
   {% if not writable %}<p class="nb-errors">Benchmarks are added from a browser on the application host only.</p>{% endif %}
   {% if errors %}

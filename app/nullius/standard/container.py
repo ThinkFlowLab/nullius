@@ -725,7 +725,7 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
                model: Optional[str], routes: Dict[str, str], prices: Optional[dict] = None, side_models=(),
                key_header: str = "authorization", hosts: Optional[Dict[str, str]] = None,
                ledger: Optional[str] = None, serving: Optional[Dict[str, List[str]]] = None,
-               max_calls: Optional[int] = None) -> List[str]:
+               timeout: Optional[int] = None, max_calls: Optional[int] = None) -> List[str]:
     """``docker run`` for a unit's relay: on the default bridge (its way to the
     provider), its port published on 127.0.0.1 only. The key is never given:
     ``key_file``, its file, is mounted read-only at ``RELAY_KEY_IN`` with
@@ -764,6 +764,8 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
             a += ["--served-by", f"{m}={','.join(slugs)}"]
     if key_header != "authorization":
         a += ["--key-header", key_header]
+    if timeout:
+        a += ["--timeout", str(timeout)]
     return a
 
 
@@ -1025,11 +1027,12 @@ class Unit:
                  side_models=(), key_header: str = "authorization", servers: Iterable[str] = (),
                  doors: Iterable[Tuple[str, int, str]] = (), hosts: Optional[Dict[str, str]] = None,
                  ledger: Optional[str] = None, network_probe: Optional[str] = None, probe_now: bool = True,
-                 serving: Optional[Dict[str, List[str]]] = None, max_calls: Optional[int] = None):
+                 serving: Optional[Dict[str, List[str]]] = None, timeout: Optional[int] = None, max_calls: Optional[int] = None):
         self.job, self.tag, self.dir, self.image, self.app = job, tag, record_dir, image, app
         self.max_calls = max_calls               # the run's cap on its agent's model calls, when it has one
         self.ledger = ledger                     # the file of the run's spending cap, when it has one
         self.serving = dict(serving or {})       # by model, the serving providers that may answer it
+        self.timeout = timeout
         self.servers = list(servers)             # licence servers, host:port each: a forwarder apiece
         self.doors = list(doors)                 # servers on this machine: (alias, port, socket), a door apiece
         self.side_models, self.key_header = tuple(side_models), key_header
@@ -1055,7 +1058,8 @@ class Unit:
             argv = relay_argv(self.image, name=self.names["relay"], job=self.job, app=self.app, record=self.dir,
                               key_file=self._key_file(), base=self.base, model=self.model, routes=self.routes,
                               prices=self.prices, side_models=self.side_models, key_header=self.key_header,
-                              hosts=self.hosts, ledger=self.ledger, serving=self.serving, max_calls=self.max_calls)
+                              hosts=self.hosts, ledger=self.ledger, serving=self.serving,
+                              timeout=self.timeout, max_calls=self.max_calls)
             self.started.append(self.names["relay"])
             _docker(argv[1:])
             _docker(["network", "connect", "--alias", RELAY_ALIAS, self.names["network"], self.names["relay"]])

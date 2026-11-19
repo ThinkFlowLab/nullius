@@ -57,7 +57,7 @@ and its resources. The source layout stays under `app/`.
   a Harbor benchmark added from the Benchmarks page's form; `citation`, an entry's
   BibTeX read into the paper its page shows; `storage`, whole-folder user overlays and restoring bundled entries; `sources`, where each dataset's data comes
   from for each way it runs), `recipes/`
-  (`launch`, the builder's vocabulary), `providers` (the model provider registry: protocols, presets and each provider's record, read by every consumer; and the builder's steps),
+  (`launch`, the builder's vocabulary; `store`, its saved recipes), `providers` (the model provider registry: protocols, presets and each provider's record, read by every consumer; and the builder's steps),
   `harbor/` (`source`: the Harbor a recipe pins - built, kept, scanned for its agents;
   `feed`: the live feed any Harbor writes, from its own trial hooks),
   `importers/` (`atif` ATIF, `otel` OpenTelemetry, and the `cli`), `judge/` (`questions`, `state`, `client`, `store`, `batch`, `reconcile`, `lanes`),
@@ -68,7 +68,11 @@ and its resources. The source layout stays under `app/`.
   tools kit, an MCP server `mcp_kit`) - the definitions it reads are in the catalogue:
   a benchmark's `standard.json` and `driver` in its folder (τ³-bench's also the MCP
   server of its domains' tools, `mcp_server`: the upstream's own, run on the machine; OSWorld1's also its null control's
-  agent, `nop`, and the `runner` of a unit an agent runs: the upstream's loop with the computer port's bridge), `catalogue/agents/<key>/`
+  agent, `nop`, and the `runner` of a unit an agent runs: the upstream's loop with the computer port's bridge; OSWorld2's also `nop`, `api_logs` (each image of its API logs kept once), `websites` (its mock
+  websites: the checks before a VM start, Overleaf's lock and reset, the stack's command line), `gitlab_server` (its
+  GitLab: made once on the run's machine with its token, its tasks' lock, the stack's command line), `proxy` (a
+  tinyproxy of a unit's own for the tasks that ask for a proxy) and, in `startup/`,
+  `sitecustomize`: its VMs' disk write limit in every process its driver starts), `catalogue/agents/<key>/`
   (the reference `agent`; JiuwenSwarm's `agent` and mini-swe-agent's `run`, the wrappers that start them) and `catalogue/capabilities/<key>/` (the keyword-memory `capability`); `workspace` (and
   `workspace_cli`, its shell command),
   `cli` and `__main__` (the unified `nullius` and `python -m nullius` commands),
@@ -77,7 +81,9 @@ and its resources. The source layout stays under `app/`.
   by `git ls-remote`), `secrets` (a benchmark's licences, kept per benchmark outside the repository, and the Hugging Face token of Data providers), `sandbox` (Docker's state, and the Docker Hub login Data providers uses) and `redact` at the top.
 - `app/templates/`, `app/static/` — the interface, grouped by the same capability
   names (`runs/`, `traces/`, `builder/`, …; `base.html`, `style.css` and the fonts at the top), including the command
-  builder's JavaScript, which owns the generated recipes.
+  builder's JavaScript, which owns the generated recipes. `app/templates/_tables.html` and
+  `app/static/tables.js` are the table toolkit: one column list builds a table's headers, cells and controls.
+  `app/templates/_cards.html` lays the same field list out as cards, one slot per field.
 - `app/tests/`, `app/ui_tests/` — the backend suite and the route suite.
   Beside the backend tests sit scripts run by hand:
   `app/tests/field_contract.py`, which refreshes the `field_contract.json` the
@@ -114,7 +120,7 @@ a recipe without a pin), and the viewer never imports it.
 
 `nullius paths` lists persistent locations. On Linux, settings, the model price
 list and benchmark licences live under `~/.config/nullius/`, user catalogue entries, workspaces,
-runs and standard installs under `~/.local/share/nullius/`, and caches under
+runs, saved builder recipes and standard installs under `~/.local/share/nullius/`, and caches under
 `~/.cache/nullius/`. XDG variables move those roots; `NULLIUS_HOME` selects a
 separate profile with `config/`, `data/` and `cache/`. Existing storage overrides
 still apply. Settings saves owner-only JSON; process environment values win.

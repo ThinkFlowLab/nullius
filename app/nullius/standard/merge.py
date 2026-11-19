@@ -19,7 +19,11 @@ records one list. The units are compared in any order; a list's name,
 comments, line endings and sha256 may differ from shard to shard, and the
 merged job records the first shard's list. Units no shard ran
 are not a refusal - a shard may be missing, or stopped early - and are said:
-the shards absent, and the units a shard planned and has no trial for.
+the shards absent, and the units a shard planned and has no trial for. A
+trial whose record names another job, benchmark, version, control or agent
+than its shard, or a job itself merged despite differences, is refused
+unless ``force``. Shards run with different benchmark options keep them each
+in ``merged_from``.
 
 Files are hard-linked into the merged job where the file system allows (a
 copy where it does not), so a merge of a thousand trials costs no second
@@ -43,6 +47,11 @@ SAME = (("launch", ("standard", "launch")), ("benchmark", ("standard", "benchmar
         ("agent or capability", ("standard", "plugged")), ("model", ("agents", 0, "model_name")),
         ("backend", ("standard", "backend")), ("serving providers", ("standard", "served_by")),
         ("number of shards", ("standard", "shard", "of")), ("retries per attempt", ("standard", "retries")))
+
+
+LISTED = 1000
+OWN = (("benchmark", ("standard", "benchmark")), ("benchmark version", ("standard", "benchmark_version")),
+       ("control", ("standard", "control", "name")), ("agent or capability", ("standard", "plugged")))
 
 
 class Refused(Exception):
@@ -170,6 +179,7 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
     # every trial by its unit: two of one unit are never merged, force or not
     by_unit: Dict[str, List[tuple]] = {}
     names: Dict[str, List[str]] = {}
+    foreign = []
     for s in shards:
         s["trials"] = _trials(s["dir"])
         s["results"] = [_read(os.path.join(s["dir"], t, "result.json")) for t in s["trials"]]
@@ -177,6 +187,22 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
             unit = _at(res, ("standard", "unit")) or t
             by_unit.setdefault(str(unit), []).append((s["name"], t))
             names.setdefault(t, []).append(s["name"])
+            wrong = [label for label, path in OWN if _at(res, path) != _at(s["config"], path)]
+            if _at(res, ("standard", "job")) != (s["config"].get("job_name") or s["name"]):
+                wrong.append("job")
+            if wrong:
+                foreign.append(f"{s['name']}/{t} names another {', '.join(wrong)} than its job")
+    inherited = [f"{s['name']}: {w}" for s in shards for w in _at(s["config"], ("standard", "merged_despite")) or []]
+    if inherited:
+        if not force:
+            raise Refused("a job given was itself merged despite differences - " + "; ".join(inherited[:5])
+                          + " (--force merges it anyway, and the merge says so)")
+        differ += inherited
+    if foreign:
+        shown = f"{len(foreign)} trial(s) not of the job they are in: " + "; ".join(foreign[:5]) + (" ..." if len(foreign) > 5 else "")
+        if not force:
+            raise Refused(shown + " (--force merges them anyway, and the merge says so)")
+        differ.append(shown)
     twice = {u: w for u, w in by_unit.items() if len(w) > 1}
     if twice:
         shown = "; ".join(f"{u} in {', '.join(f'{j}/{t}' for j, t in w)}" for u, w in sorted(twice.items())[:10])
@@ -191,9 +217,10 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
     if len(of) == 1:
         n = of.pop()
         have = sorted(s["shard"].get("index") for s in shards if s["shard"])
-        absent = [i for i in range(1, (n or 0) + 1) if i not in have]
-        if absent:
-            notes.append(f"shard{'s' if len(absent) > 1 else ''} {', '.join(f'{i}/{n}' for i in absent)} not in the merge")
+        if isinstance(n, int) and n <= LISTED:
+            absent = [i for i in range(1, n + 1) if i not in have]
+            if absent:
+                notes.append(f"shard{'s' if len(absent) > 1 else ''} {', '.join(f'{i}/{n}' for i in absent)} not in the merge")
         dup = sorted({i for i in have if have.count(i) > 1})
         if dup:
             notes.append(f"shard{'s' if len(dup) > 1 else ''} {', '.join(f'{i}/{n}' for i in dup)} given more than once (their units differ)")
@@ -298,8 +325,15 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
     cfg["job_name"] = name
     std = cfg.setdefault("standard", {})
     std.pop("shard", None)
+    own = len({json.dumps(_at(s["config"], ("standard", "benchmark_options")), sort_keys=True) for s in shards}) > 1
+    if own:
+        std.pop("benchmark_options", None)
     std["merged_from"] = [{"job": s["name"], "trials": len(s["trials"]),
-                           **({"shard": f"{s['shard'].get('index')}/{s['shard'].get('of')}"} if s["shard"] else {})} for s in shards]
+                           **({"shard": f"{s['shard'].get('index')}/{s['shard'].get('of')}"} if s["shard"] else {}),
+                           **({"benchmark_options": _at(s["config"], ("standard", "benchmark_options")) or {}} if own else {}),
+                           **({"merged_from": _at(s["config"], ("standard", "merged_from"))}
+                              if _at(s["config"], ("standard", "merged_from")) else {})}
+                          for s in shards]
     if got["units_total"] is not None:
         std["units_total"] = got["units_total"]
     if got["differ"]:

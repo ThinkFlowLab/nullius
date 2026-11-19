@@ -66,6 +66,10 @@ def runs_dir(env=None) -> str:
     return env.get("RUNS_DIR") or os.path.join(data_dir(env), "runs")
 
 
+def recipes_dir(env=None) -> str:
+    return os.path.join(data_dir(env), "recipes")
+
+
 def secrets_dir(env=None) -> str:
     env = os.environ if env is None else env
     return env.get("SECRETS_DIR") or os.path.join(config_dir(env), "secrets")
@@ -76,7 +80,7 @@ def main(argv=None) -> int:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     values = {"settings": settings_file(), "secrets": secrets_dir(), "prices": prices_file(), "catalogue": catalogue_dir(),
-              "workspaces": workspaces_dir(), "runs": runs_dir(), "cache": cache_dir()}
+              "workspaces": workspaces_dir(), "runs": runs_dir(), "recipes": recipes_dir(), "cache": cache_dir()}
     if args.json:
         print(json.dumps(values, indent=2))
     else:

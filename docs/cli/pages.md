@@ -10,7 +10,7 @@ Each page's command, or why there is none.
 | `/job/<id>` | `nullius runs show <root> <id> [--json]` |
 | `/trial/<job>/<trial>` | `nullius runs show <root> <job> <trial> [--json]` |
 | `/import`, `/use-path` | `nullius import <run tree> -o <job root> [--json]`; `--list` |
-| `/compare`, `/compare/pick` | `nullius compare <root> <id> <id>... [--matched] [--json]` |
+| `/compare` | `nullius compare <root> <id> <id>... [--matched] [--json]` |
 | `/workspaces/open/<name>` | `nullius serve <root>...`, `WORKSPACE=<name>` |
 | `/workspaces` | `nullius workspace list [--home DIR] [--json]` |
 | `/settings` | User `settings.json`, or the environment; `nullius paths` locates the file |

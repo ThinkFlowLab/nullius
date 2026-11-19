@@ -37,9 +37,9 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
-| `agent` | **`m3`**, `prompt`, `claude`, `gpt54`, `openai_cua`, `qwen`, `os_symphony`, `evocua`, `autoglm`, `autoglm_v`, `mano`, `muse_spark` | Which of OSWorld's own agents runs: each its script as published, with its own prompts, action format and step limit. | `original`, `model` |
-| `max_steps` | pattern `default\|[1-9][0-9]{0,3}`, default `default` | The most actions per task. default: each OSWorld agent script's own documented invocation; 100 through the computer port. | `original`, `model`, `yours` |
-| `pause` | pattern `[0-9]{1,2}(\.[0-9]{1,2})?`, default `3.0` | run_single_example's sleep_after_execution for an agent: the seconds env.step waits after each action, 3.0 as in run_multienv_m3.py's default. | `agent` |
+| `agent` | **`m3` (M3 Agent)**, `prompt` (PromptAgent), `claude` (Claude computer use), `gpt54` (GPT-5.4), `openai_cua` (OpenAI CUA), `qwen` (Qwen), `os_symphony` (OS-Symphony), `evocua` (EvoCUA), `autoglm` (AutoGLM), `autoglm_v` (AutoGLM-V), `mano` (Mano), `muse_spark` (Muse Spark) | Which of OSWorld's own agents runs: each its script as published, with its own prompts, action format and step limit. | `original`, `model` |
+| `max_steps` | e.g. `50`, default `default` | The most actions per task. default: each OSWorld agent script's own documented invocation; 100 through the computer port. | `original`, `model`, `yours` |
+| `pause` | e.g. `5.0`, default `3.0` | run_single_example's sleep_after_execution for an agent: the seconds env.step waits after each action, 3.0 as in run_multienv_m3.py's default. | `agent` |
 | `thinking` | **`adaptive`**, `off` | M3_THINKING_MODE: adaptive, as run_multienv_m3.py's own documented invocation exports it (the model decides whether to think; temperature 1, no top_p), or off, the agent's code default when the variable is unset. | `original`, `model` |
 | `vm_provider` | **`docker`** | --provider_name: where the task's VM runs. docker only: the upstream's other providers need cloud accounts or a hypervisor of their own. | `original`, `model`, `yours` |
 
