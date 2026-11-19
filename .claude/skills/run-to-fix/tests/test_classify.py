@@ -211,6 +211,7 @@ class BothRunPaths(LoopCase):
             classes.append({r["trial"]: r["class"] for r in rows})
         self.assertEqual(headers[0], headers[1])
         self.assertEqual(classes[0], classes[1])
+        self.assertEqual(classes[0], {"p__x": "pass", "f__x": "verifier_failed", "t__x": "time_limit"})
         for column in ("trial", "task", "class", "signature", "reward", "pair", "cost_usd", "model_calls",
                        "agent_s", "max_completion_tokens", "exception_type"):
             self.assertIn(column, headers[0])
