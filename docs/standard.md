@@ -141,15 +141,16 @@ record); verifier/reward.txt and score.json
 | Rule | Detail |
 | --- | --- |
 | Units | Run `-j` at a time, each with its own workspace (a git repository of its own), home and relay |
-| A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost |
+| A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost. A 200 with no reply, not streamed, reaches the caller as a 502 (or the 429 or 402 its error held); the record keeps `answered: 200`. A call refused with 400, 413 or 422 records its inline images' types and sizes as `images`, never their bytes |
+| Job name | One run at a time per job name: another is refused before it writes anything. A later run under the same name moves each trial's earlier record aside to the trial's `.work/earlier.<ns>` |
 | Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image. `boat`: each unit's agent or capability in a boat.dev VM of its own (`standard/boat.py`, [The boat backend](#the-boat-backend)) |
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
-| Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate, unless the unit passed; an agent past its limit for the unit, every turn included, is the agent's timeout ([time limits](cli/run.md#time-limits)). `"kind": "score"` leaves a score and no pass |
+| Outcomes | A last model call that got a 429 is `rate_limited` (calls in the order they began; a side model's later 200 does not cover the agent's own), a refused key an API error, both outside the agent's rate, unless the unit passed; a unit asked to stop (a `stop` beside its relay's records) keeps the score its driver gave despite the agent's own last 429; the agent's own last call over the model's context window is `ContextWindowExceededError`, the agent's; an agent past its limit for the unit, every turn included, is the agent's timeout ([time limits](cli/run.md#time-limits)). `"kind": "score"` leaves a score and no pass |
 | Rate limits | After a `rate_limited` end no unit starts for 60 s, or the provider's `Retry-After`, doubling to 300 s while units keep ending so |
 | The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. The key goes as the agent's protocol says: `x-api-key` and `anthropic-version` for `messages`, else a bearer header. Provider `anthropic` serves `messages` only ([protocols](settings/model-providers.md#protocols)) |
 | Constraints (`--constraint KEY=VALUE`) | What the machine allows Nullius, from Settings ([constraints](settings/run-hosts.md#constraints)): flags on every container the run starts on the machine, on either backend; a systemd scope for each process the run starts there (its drivers, and its agents and capabilities on the local backend); the most units at a time; the CPU affinity; the driver's `CUDA_VISIBLE_DEVICES`. Before the first unit, the run checks the container caps on the engine and the scope caps on systemd: the local backend refuses a cap that no scope holds, and the container backend runs its drivers without a scope. `config.json` records the values under `standard.constraints` |
 | A cap on model calls (`--max-calls`) | Agents only. A unit's relay counts its agent route's answered calls and refuses the one past the cap: the agent's error, as a timeout is ([Run a benchmark](cli/run.md#a-cap-on-model-calls)) |
-| Who served a call | Each call's record keeps the routing field it was sent with (`request.routing`), the serving provider its reply names (`reply.served_by`), how the reply ended (`reply.end`: `finish_reason`, `stop_reason` or a Responses status) and an error the reply holds under a 200 (`reply.error`: the top-level one, else that of the first choice that has one), each read apart from the rest of the record and cleaned of credentials. The call keeps its status, and the unit's verdict reads it as before |
+| Who served a call | Each call's record keeps the routing field it was sent with (`request.routing`), the serving provider its reply names (`reply.served_by`), how the reply ended (`reply.end`: `finish_reason`, `stop_reason` or a Responses status) and an error the reply holds under a 200 (`reply.error`: the top-level one, else that of the first choice that has one), each read apart from the rest of the record and cleaned of credentials. The call keeps its status, and the unit's verdict reads it as before, but for a 200 with no reply |
 | Serving providers (`--served-by`) | On OpenRouter, the providers that may answer a model, in order and no other: each relay, a container's included, sends `provider: {order, allow_fallbacks: false}` on every request sent as that model, in place of the caller's own (kept as `request.routing_asked`). `config.json` records `standard.served_by`; each trial's `result.json` and the job's say the calls of every route by serving provider and, for each pinned model, `held`, which reads the provider's name alone ([Run a benchmark](cli/run.md#serving-providers)) |
 | A spending cap (`--max-usd`, `--max-usd-per-unit`) | Each relay books a call in the job's ledger (`.work/ledger`, `standard/ledger.py`) before sending it, and refuses the one that does not fit the run's cap or its unit's ([Run a benchmark](cli/run.md#a-spending-cap)) |
 
@@ -361,6 +362,8 @@ N machines are N runs of the same command, each with `--shard I/N`, and one merg
 | One launch | Each shard's `config.json` records `standard.shard` (`index`, `of`, `units_total`, `partition`, `planned`, `limit`) and `standard.launch` (`--launch`, else the UTC day, benchmark, agent or capability and model). With `--units`, `units_total` counts the listed units. The shards' lists hold the same units; a list's file name, comments and sha256 may differ from shard to shard |
 | `cli merge JOB_DIR... -o OUT` | One job (`standard/merge.py`): trials hard-linked, `result.json` recomputed, `config.json` with `merged_from`. Shards that differ in launch, version, dataset, agent, model, serving providers, backend or N are refused unless `--force`. Shards whose lists hold different units, and two trials of one unit, are refused always. `merge` compares the units each list holds, in any order; the sha256 is kept in the record only |
 | `cli prove --shard I/N` | The controls and the leak check on that shard's units; each record says `shard` |
+| Different options per shard | Shards of one launch may differ in `--bench-option` (a unit that needs a service its machine serves); the merged config keeps each shard's in `merged_from` |
+| `cli prove --job nop=MERGED` | Checks a merged launch of a control against its bound instead of running it. The job and each of its trials name that benchmark, version, control and job; each unit of the dataset has one trial, scored 0 to 1; the units check passes. `--dataset` named, no `--limit` or `--shard`. The record names the job and its options |
 
 ```bash title="Two machines, one merge"
 nullius standard run humaneval oracle --shard 1/2 --limit 6   # machine 1
@@ -428,16 +431,21 @@ use the source folders and repository checks.
 | `turn` | The transcript so far; `simulator: {model, base_url, key}` when there is one; `judge` for an upstream that grades as the conversation ends; `attempt` with `limits.attempts` | The next message, `{done: true}`, or `restart` |
 | `produce` | A capability benchmark's recall, `base_url` and `key` | The reading, through the relay |
 | `answer` | `unit, dir, setup, model, base_url, key` | `{answer}`: the upstream's own answerer, for a [setup](#setups-as-published-your-model-your-agent-or-capability) |
-| `score` | `unit, dir, transcript, answer`, `setup`, `verified` for an own image, `judge: {model, base_url, key}` when judged | `{reward, detail}`, and `passed` when the benchmark passes or fails; `parts: {n, by, parts}` when the reward is a mean over several parts (a conversation's questions), so the job's mean weighs it by `n` and breaks it down by `by` |
+| `score` | `unit, dir, transcript, answer`, `setup`, `verified` for an own image, `judge: {model, base_url, key}` when judged | `{reward, detail}`, and `passed` when the benchmark passes or fails; `parts: {n, by, parts}` when the reward is a mean over several parts (a conversation's questions), so the job's mean weighs it by `n` and breaks it down by `by`; `stopped`, the reason of a stop asked while the unit ran, kept as `verifier_result.stopped` |
 | `oracle` | `{unit, dir}` | `{answer}`, the reference; a workspace benchmark also writes it into `dir` |
+
+An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierError: `, `CancelledError: ` or `CauseUnknownError: ` keeps that kind.
 
 | Field in `standard.json` | Meaning |
 | --- | --- |
+| `gated` | `true` for a benchmark whose tasks are gated: a unit's failing model endpoint (the agent's, the judge's, the simulated user's) is kept as its status and class, never the provider's words, which can quote the request |
 | `score.judge` | `{model, says}`: the official judge. Its route (`<unit>-judge`) is asked as that model, recorded beside the unit's calls, never as the agent's. `cli run --judge-model` asks another |
 | `simulator` | `{model, says}`, only with `agent.conversation/v1`: the user's model, on `<unit>-simulator`. The conversation opens with a `turn` on an empty transcript, its message after `setup`'s prompt and a blank line. A control never asks it. `cli run --simulator-model` asks another |
 | `leaderboard` | `{says, simulator?, judge?, bench_options?, repeat?}`: what the upstream's leaderboard fixes besides the ranked model, from its own submission rules - the user simulator's and judge's models, the benchmark's options it sets and the fewest attempts per unit. The builder then offers **Like the leaderboard** |
 | `limits.turns` | At most this many agent turns in a conversation (default 20; `cli run --max-turns` forces another) |
-| `limits.turn_seconds` | The agent's whole work on a unit, every turn of a conversation included (default 900; a task's `agent_seconds` or `cli run --timeout agent=` before it) |
+| `limits.turn_seconds` | The agent's whole work on a unit, every turn of a conversation included (default 900; a task's `agent_seconds`, a setup's own `turn_seconds` or `cli run --timeout agent=` before it) |
+| `limits.score_seconds` | How long `score` may take (default 600; `cli run --timeout score=` before it). A driver that runs the unit's environment in `score`, as its null control does, sets it |
+| `limits.call_seconds` | How long the relay waits for one model call's reply (default 900). A benchmark whose agent waits longer for a call sets it above that agent's own wait, so the agent's client, not the relay, ends a long call |
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
 
@@ -472,9 +480,11 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `summary`, `values` or `pattern`, `default` | What it changes, its allowed choices or input pattern, and its value when unset |
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
+| `names` | A name for some values, shown in their place; a recipe and the CLI keep the value |
 | `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, or named `files` |
 | `when` | Another option's values that make it apply |
 | `limit` | `true`: a bound of the upstream's own (steps, errors). The builder shows it in Limits, under the benchmark's name |
+| `step` | `where`: where the work runs, such as the VMs' provider, asked on Where, one value as fixed; `dataset`: what its datasets need, asked on Dataset for the datasets it applies to |
 | `by` | Its default under each value of another option, e.g. each OSWorld agent's own steps |
 | `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`) |
 
@@ -603,9 +613,10 @@ already accepts arbitrary models needs only the `original` method.
 | Rule | Detail |
 | --- | --- |
 | `original` driver method | A model of `models` only, by the name the upstream knows; the relay sends it as `served_as` says, with the prefix `providers` gives. A provider not in `providers` is refused. A model the upstream asks besides the answerer is a `side_models` entry. Without `models`, any model: its own agent runs as the run's model |
-| `model` driver method | The upstream is told `runs_as` (its window, batching and token budget) while the relay sends the model chosen; one that reasons by default can spend that budget first: `OutputLengthExceededError` |
+| `model` driver method | The upstream is told `runs_as` (its window, batching and token budget) while the relay sends the model chosen. A model that reasons by default can spend that budget thinking: a last reply with neither text nor a tool call is `OutputLengthExceededError`. A last Responses reply that `failed` is an API error. A runner that fails after the unit is asked to stop is `CancelledError` |
 | `units` | A setup may count its own units; `units` is sent `setup` |
 | `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes or the Original setup driver container |
+| `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice |
 | Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper` |
 | Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
 | Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |
@@ -649,7 +660,7 @@ A benchmark proves itself by its two **controls**, `nop` and `oracle`, and two c
 
 `cli run KEY nop` and `cli run KEY oracle` need no `--model` and no `--unsandboxed`: no model is called but a judged benchmark's judge. The config and every trial record `standard.control`.
 
-`cli prove KEY [--dataset D] [--limit N]` runs, for each dataset:
+`cli prove KEY [--dataset D] [--limit N] [--bench-option NAME=VALUE ...] [--job nop=JOB_DIR]` runs, for each dataset:
 
 | Check | Passes when |
 | --- | --- |
@@ -657,6 +668,8 @@ A benchmark proves itself by its two **controls**, `nop` and `oracle`, and two c
 | `oracle` | Everything passes, or every score at the ceiling, down to its `expect` |
 | `units` | Two `units` calls give the same ids: unique, plain enough to name a trial, as many as the dataset says |
 | `leak` | After `setup`, the oracle's answer and the lines it writes are not already in the prompt or the workspace. A reference under 12 characters is not looked for; the record says how many were skipped |
+
+`--bench-option NAME=VALUE` sets the benchmark's own options for the units check's driver and each control's run, resolved and refused as `cli run` does them, the programs a value needs on this machine included, before anything is installed or started; the control job's config records the values.
 
 What passed is written into `standard.json` per dataset, dated; a failing check is taken back, and a run on fewer units does not replace one on more.
 

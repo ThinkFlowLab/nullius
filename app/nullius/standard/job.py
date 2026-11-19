@@ -57,9 +57,9 @@ def _text(content) -> str:
 
 
 def _usage_total(calls: List[dict]) -> dict:
-    ok = [c for c in calls if c.get("status") == 200]
+    ok = [c for c in calls if c.get("status") == 200 or c.get("reply")]
     u = lambda k: sum(((c.get("reply") or {}).get("usage") or {}).get(k) or 0 for c in ok)
-    costs = [c["cost_usd"] for c in ok if isinstance(c.get("cost_usd"), (int, float))]
+    costs = [c["cost_usd"] for c in ok if isinstance(c.get("cost_usd"), (int, float)) and c.get("cost_from") != "failed"]
     return {"input": u("input"), "output": u("output"), "cached": u("cached"), "reasoning": u("reasoning"),
             "cost": sum(costs) if costs else None,
             "cost_from": "estimate" if any(c.get("cost_from") == "estimate" for c in ok) else ("provider" if costs else None),
@@ -169,6 +169,9 @@ def trajectory_from_exchanges(exchanges: List[dict], calls: List[dict], capabili
         reply = c.get("reply") or {}
         st = {"step_id": len(steps) + 1, "timestamp": iso(c.get("t1")), "source": "agent", "model_name": c.get("model"),
               "message": reply.get("text") if c.get("status") == 200 else "(" + (c.get("error") or "failed") + ")"}
+        if c.get("status") == 200 and reply.get("tool_calls"):
+            st["tool_calls"] = [{"tool_call_id": f"call-{len(steps) + 1}-{k + 1}", "function_name": t.get("name") or "",
+                                 "arguments": _arguments(t.get("arguments"))} for k, t in enumerate(reply["tool_calls"])]
         if reply.get("usage"):
             st["metrics"] = {"prompt_tokens": reply["usage"]["input"], "completion_tokens": reply["usage"]["output"],
                              "cached_tokens": reply["usage"]["cached"]}
@@ -181,6 +184,17 @@ def trajectory_from_exchanges(exchanges: List[dict], calls: List[dict], capabili
             "steps": steps,
             "final_metrics": {"total_prompt_tokens": tot["input"], "total_completion_tokens": tot["output"],
                               "total_cached_tokens": tot["cached"], "total_cost_usd": tot["cost"], "total_steps": len(steps)}}
+
+
+def _arguments(said) -> dict:
+    """A tool call's arguments as a dict; text that is no JSON object goes under ``raw``."""
+    try:
+        got = json.loads(said) if isinstance(said, str) else said
+    except ValueError:
+        got = None
+    if said is None:
+        return {}
+    return got if isinstance(got, dict) else {"raw": said if isinstance(said, str) else json.dumps(said)}
 
 
 def _control(other: dict) -> dict:
@@ -317,7 +331,7 @@ def trace_from_run(trajectory: dict, calls: List[dict], other: dict, produce: tu
             if at is not None:
                 turns.append(_span(f"turn-{len(turns) + 1}", f"turn {len(turns) + 1}", "user_message", source, at, None, moment=True,
                                    content={"input": st.get("message")}))
-        elif agent or st.get("tool_calls"):
+        elif agent or (st.get("tool_calls") and not st.get("model_name")):
             spans.extend(_step_spans(i + 1, st, source))
     if not spans and not turns:
         return None
@@ -512,6 +526,8 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
         # benchmark a score and no pass or fail - the trial reads as Scored
         rewards = {"reward": value} if bench["score"]["kind"] == "pass" else {"score": value}
         res["verifier_result"] = {"rewards": rewards}
+        if score.get("stopped"):
+            res["verifier_result"]["stopped"] = str(score["stopped"])
         parts = score.get("parts")
         if isinstance(parts, dict) and isinstance(parts.get("n"), int) and not isinstance(parts["n"], bool) and parts["n"] > 0:
             # a score over several parts (a conversation's questions): the job's mean weighs it by them
@@ -531,9 +547,15 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
            "".join(f"{iso(c.get('t0'))} {c.get('model')} status {c.get('status')} {c.get('error') or ''}\n" for c in calls))
     if trajectory is not None:
         _write(os.path.join(trial_dir, "agent", "trajectory.json"), json.dumps(trajectory, indent=1))
-        timeline = trace_from_run(trajectory, calls, other, produce)
-        if timeline is not None:
-            _write(os.path.join(trial_dir, "agent", "trace.json"), json.dumps(timeline, indent=1))
+        try:
+            timeline = trace_from_run(trajectory, calls, other, produce)
+            if timeline is not None:
+                _write(os.path.join(trial_dir, "agent", "trace.json"), json.dumps(timeline, indent=1))
+        except Exception as e:
+            try:
+                _write(os.path.join(trial_dir, "agent", "trace.error.txt"), type(e).__name__ + "\n")
+            except OSError:
+                pass
     for name, text in (extra_logs or {}).items():
         _write(os.path.join(trial_dir, "agent", name), text)
     _write(os.path.join(trial_dir, "result.json"), json.dumps(res, indent=1))

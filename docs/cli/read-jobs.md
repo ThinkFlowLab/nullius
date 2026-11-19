@@ -56,7 +56,7 @@ nullius standard traces <dir> [--dry-run]
 
 ## Give past standard runs a trace
 
-A standard run writes `agent/trace.json` as it ends. `nullius standard traces` gives an earlier job the same file, from what its trials kept. It only adds that file: an existing trace is never replaced, and Harbor jobs and controls are left alone.
+A standard run writes `agent/trace.json` as it ends; one it cannot build leaves `agent/trace.error.txt`, the error's type, and the trial's result as it is. `nullius standard traces` gives an earlier job the same file, from what its trials kept. It only adds that file: an existing trace is never replaced, and Harbor jobs and controls are left alone.
 
 ```bash title="See what it would write, then write it"
 nullius standard traces ./jobs --dry-run

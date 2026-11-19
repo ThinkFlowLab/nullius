@@ -115,7 +115,7 @@
       <section class="bench-section std-benchopts" id="options" aria-labelledby="options-title">
         <h2 id="options-title">Options</h2>
         {% for n, o in std.options.items() %}
-        <h3 class="std-optname">{{ o.label }}{% if o.datasets %} <small>{{ o.datasets|join(', ') }}</small>{% endif %}</h3>
+        <h3 class="std-optname">{{ o.label }}{% if o.datasets %} <small>{{ std.datasets|selectattr('id', 'in', o.datasets)|map(attribute='label')|join(', ') }}</small>{% endif %}</h3>
         <p class="bench-ds-note">{{ o.summary }}</p>
         {% if o.pattern %}
         <div class="std-option-range"><span class="std-tag">{{ 'Provider default' if n == 'temperature' and o.default == 'default' else o.default }}</span>
@@ -124,7 +124,7 @@
         {% else %}
         <ul class="std-optvals{{ ' std-optvals-detailed' if o.about or o.needs else '' }}">
           {% for v in o['values'] %}{% set need = o.needs.get(v) or {} %}
-          <li><b class="mono">{{ v }}</b>{% if v == o.default and v != 'default' %} <span class="std-tag">default</span>{% endif %}
+          <li>{% if o.names.get(v) %}<b title="{{ v }}">{{ o.names[v] }}</b>{% else %}<b class="mono">{{ v }}</b>{% endif %}{% if v == o.default and v != 'default' %} <span class="std-tag">default</span>{% endif %}
             {% if need.embeddings %}<span class="run-tag" title="its embedding calls go through the run's relay">OpenAI key · {{ need.embeddings }}</span>{% endif %}
             {% for h in need.host or [] %}<a class="std-need" href="#setup-{{ h }}" title="{{ std.host[h].summary }}">needs {{ h }}</a>{% endfor %}
             {% if o.about.get(v) %}<small>{{ o.about[v] }}</small>{% endif %}</li>

@@ -3,6 +3,7 @@ call by its unit, and names a unit's failure the way the classifier reads it.
 A driver or capability process answers one JSON line per request."""
 from __future__ import annotations
 
+import base64
 import http.client
 import json
 import os
@@ -34,6 +35,22 @@ RESP_SSE = (b'event: response.output_text.delta\ndata: {"type":"response.output_
             b'{"type":"message","content":[{"type":"output_text","text":"hi"}]}],'
             b'"usage":{"input_tokens":20,"output_tokens":5,"input_tokens_details":{"cached_tokens":10}}}}\n\n')
 
+RESP_FAILED = json.dumps({"object": "response", "id": "gen-1", "status": "failed", "output": [], "usage": None,
+                          "error": {"code": "server_error", "message": "the request said x"}}).encode()
+RESP_FAILED_SSE = (b'event: response.failed\ndata: {"type":"response.failed","response":{"status":"failed","output":[],'
+                   b'"error":{"code":"server_error","message":"the request said x"}}}\n\n')
+RESP_INCOMPLETE = json.dumps({"object": "response", "status": "incomplete", "output": [],
+                              "incomplete_details": {"reason": "max_output_tokens"},
+                              "usage": {"input_tokens": 30, "output_tokens": 8}}).encode()
+
+HOLLOW = {"hollow": json.dumps({"id": "gen-1", "provider": "Minimax", "model": "m"}).encode(),
+          "hollow-error": json.dumps({"id": "gen-1", "error": {"code": 502, "message": "the request said x"}}).encode(),
+          "hollow-429": json.dumps({"id": "gen-1", "error": {"code": 429, "message": "the request said x"}}).encode(),
+          "hollow-402": json.dumps({"id": "gen-1", "error": {"code": 402, "message": "the request said x"}}).encode(),
+          "hollow-404": json.dumps({"id": "gen-1", "error": {"code": 404, "message": "the request said x"}}).encode(),
+          "count": json.dumps({"input_tokens": 12}).encode(), "no-choice": json.dumps({"choices": []}).encode(),
+          "not-json": b"<html>the request said x</html>"}
+
 
 class Upstream(BaseHTTPRequestHandler):
     seen = []
@@ -51,6 +68,23 @@ class Upstream(BaseHTTPRequestHandler):
             self.reply(401, b'{"error":{"message":"Incorrect API key"}}', "application/json")
         elif mode == "no-usage":
             self.reply(200, b'{"choices":[{"message":{"role":"assistant","content":"hello"}}]}', "application/json")
+        elif mode in ("400", "413", "422"):
+            self.reply(int(mode), b'{"error":{"message":"could not process image"}}', "application/json")
+        elif mode in ("cut", "short"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header(*(("Transfer-Encoding", "chunked") if mode == "cut" else ("Content-Length", str(len(CHAT_SSE) + 9))))
+            self.end_headers()
+            self.wfile.write(b"%x\r\n%s\r\n" % (len(CHAT_SSE), CHAT_SSE) if mode == "cut" else CHAT_SSE)
+        elif mode in HOLLOW:
+            self.reply(200, HOLLOW[mode], "application/json", *[("X-Generation-Id", "gen-1")] * (mode == "not-json"),
+                       ("Retry-After", "30"))
+        elif self.path.endswith("/responses") and mode == "failed":
+            self.reply(200, RESP_FAILED, "application/json")
+        elif self.path.endswith("/responses") and mode == "failed-sse":
+            self.reply(200, RESP_FAILED_SSE, "text/event-stream")
+        elif self.path.endswith("/responses") and mode == "incomplete":
+            self.reply(200, RESP_INCOMPLETE, "application/json")
         elif self.path.endswith("/responses"):
             self.reply(200, RESP_SSE, "text/event-stream")
         elif body.get("stream"):
@@ -58,10 +92,11 @@ class Upstream(BaseHTTPRequestHandler):
         else:
             self.reply(200, json.dumps(CHAT).encode(), "application/json")
 
-    def reply(self, status, body, kind):
+    def reply(self, status, body, kind, *headers):
         try:
             self.send_response(status)
-            self.send_header("Content-Type", kind)
+            for header in (("Content-Type", kind),) + headers:
+                self.send_header(*header)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -90,6 +125,7 @@ class RelayTest(unittest.TestCase):
             with urllib.request.urlopen(req) as r:
                 return r.status, r.read()
         except urllib.error.HTTPError as e:
+            self.retry_after = e.headers.get("Retry-After")
             return e.code, e.read()
 
     def test_a_units_agent_is_refused_past_its_cap_on_model_calls(self):
@@ -151,6 +187,68 @@ class RelayTest(unittest.TestCase):
         self.assertEqual(rec["reply"]["text"], "hello")
         self.assertEqual(rec["reply"]["usage"]["input"], 7)
 
+    def test_a_stream_cut_off_after_its_headers_is_a_failed_call(self):
+        for mode in ("cut", "short"):
+            self.post("u" + mode, "/chat/completions", {"model": "m", "stream": True, "mode": mode, "messages": []})
+            rec = self.relay.calls("u" + mode)[-1]
+            self.assertEqual(rec["status"], 502)
+            self.assertIn("cut off", rec["error"])
+            self.assertEqual(rec["reply"]["usage"]["input"], 7)
+            self.assertEqual(job._usage_total([rec])["cost"], rec["cost_usd"])
+
+    def test_a_refused_call_keeps_each_inline_image_by_its_type_wholeness_and_size_alone(self):
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"x" * 20 + b"IEND\xaeB`\x82\n").decode()
+        cut = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"x" * 20).decode()
+        jpeg = base64.b64encode(b"\xff\xd8\xff" + b"y" * 9 + b"\xff\xd9tail").decode()
+        webp = base64.b64encode(b"RIFF" + (12).to_bytes(4, "little") + b"WEBPVP8 " + b"z" * 4 + b"\n").decode()
+        image = lambda kind, data: {"type": "image", "source": {"type": "base64", "media_type": kind, "data": data}}
+        content = [image("image/png", png), image("image/png", cut), image("image/gif", "not base64!"),
+                   {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{jpeg}"}},
+                   {"type": "input_image", "image_url": f"data:image/webp;base64,{webp}"},
+                   {"type": "image_url", "image_url": {"url": "https://example.com/a.png"}}, {"type": "text", "text": "grade"}]
+        sent = [{"type": "image/png", "is": "image/png", "bytes": len(png)}, {"type": "image/png", "is": None, "bytes": len(cut)},
+                {"type": "image/gif", "is": None, "bytes": 11}, {"type": "image/jpeg", "is": "image/jpeg", "bytes": len(jpeg)},
+                {"type": "image/webp", "is": "image/webp", "bytes": len(webp)}]
+        for mode in ("400", "413", "422", "429", None):
+            self.post("img", "/messages", {"model": "m", "mode": mode, "messages": [{"role": "user", "content": content}]})
+            rec = self.relay.calls("img")[-1]
+            with self.subTest(mode):
+                self.assertEqual(rec.get("images"), sent if mode in ("400", "413", "422") else None)
+                self.assertFalse(any(data in json.dumps(rec) for data in (png, cut, jpeg, webp)))
+
+    def test_a_200_to_a_model_call_with_no_reply_is_a_502_said_by_its_kind_alone(self):
+        for mode, path, code, said, kind in (
+                ("hollow", "/messages", 502, "no reply", "NetworkConnectionError"),
+                ("hollow", "/chat/completions", 502, "no reply", "NetworkConnectionError"),
+                ("hollow", "/responses", 502, "no reply", "NetworkConnectionError"),
+                ("hollow-error", "/messages", 502, "an error 502", "NetworkConnectionError"),
+                ("hollow-429", "/messages", 429, "an error 429", "RateLimitError"),
+                ("hollow-404", "/completions", 502, "an error 404", "NetworkConnectionError"),
+                ("hollow-402", "/messages", 402, "an error 402", "ApiUsageLimitError"),
+                ("not-json", "/messages", 502, "no reply", "NetworkConnectionError")):
+            tag = f"uh-{mode}{path.replace('/', '-')}"
+            status, body = self.post(tag, path, {"model": "m", "mode": mode, "messages": []})
+            rec = self.relay.calls(tag)[-1]
+            self.assertEqual(self.retry_after, "30")
+            with self.subTest(mode=mode, path=path):
+                self.assertEqual((status, rec["status"]), (code, code))
+                self.assertEqual(json.loads(body)["error"]["message"], f"the endpoint answered 200 with {said}")
+                self.assertEqual(rec["error"], f"HTTP {code}: the endpoint answered 200 with {said}")
+                self.assertEqual(rec["answered"], 200)
+                self.assertFalse({"reply", "cost_usd"} & set(rec))
+                self.assertNotIn("the request said", json.dumps(rec))
+                self.assertEqual(relay.failure([rec], agent=True)[0], kind)
+        self.assertEqual(self.post("uk-asked-stream", "/messages", {"model": "m", "mode": "hollow", "stream": True,
+                                                                     "messages": []}), (200, HOLLOW["hollow"]))
+        for mode, path in (("count", "/messages/count_tokens"), ("no-choice", "/chat/completions"), ("hollow", "/models"),
+                           ("hollow", "/threads/t1/messages")):
+            tag = f"uk-{mode}{path.replace('/', '-')}"
+            status, body = self.post(tag, path, {"model": "m", "mode": mode, "messages": []})
+            with self.subTest(path):
+                self.assertEqual((status, body), (200, HOLLOW[mode]))
+                self.assertEqual(self.relay.calls(tag)[-1]["status"], 200)
+                self.assertNotIn("answered", self.relay.calls(tag)[-1])
+
     def test_streamed_responses_read_from_the_completed_event(self):
         status, body = self.post("u3", "/responses", {"model": "m", "stream": True, "input": "x"})
         self.assertEqual(body, RESP_SSE)
@@ -158,6 +256,25 @@ class RelayTest(unittest.TestCase):
         self.assertEqual(rec["reply"]["text"], "hi")
         self.assertEqual(rec["reply"]["tool_calls"][0]["name"], "shell")
         self.assertEqual(rec["reply"]["usage"]["cached"], 10)
+
+    def test_a_failed_response_with_no_usage_costs_nothing(self):
+        for tag, mode in (("uf1", "failed"), ("uf2", "failed-sse")):
+            status, _ = self.post(tag, "/responses", {"model": "m", "mode": mode, "input": "x", "stream": mode == "failed-sse"})
+            self.assertEqual(status, 200)
+            rec = self.relay.calls(tag)[-1]
+            self.assertEqual((rec["reply"]["end"], rec["reply"]["error"]["code"]), ("failed", "server_error"))
+            self.assertEqual((rec["cost_usd"], rec["cost_from"]), (0.0, "failed"))
+        failed = {"status": 200, "cost_usd": 0.0, "cost_from": "failed"}
+        self.assertEqual(job._usage_total([failed, {"status": 200}])["cost"], None)
+        self.assertEqual({k: job._usage_total([failed, {"status": 200, "cost_usd": 0.5, "cost_from": "provider"}])[k]
+                          for k in ("cost", "cost_from")}, {"cost": 0.5, "cost_from": "provider"})
+
+    def test_an_incomplete_response_is_priced_from_its_usage(self):
+        self.post("uf3", "/responses", {"model": "m", "mode": "incomplete", "input": "x"})
+        rec = self.relay.calls("uf3")[-1]
+        self.assertTrue(rec["reply"]["end"].startswith("incomplete"))
+        self.assertEqual(rec["cost_from"], "estimate")
+        self.assertGreater(rec["cost_usd"], 0)
 
     def test_calls_are_recorded_by_their_unit(self):
         self.post("ua", "/chat/completions", {"model": "m", "messages": []})
@@ -260,6 +377,54 @@ class CapTest(unittest.TestCase):
         got = led.state()
         self.assertAlmostEqual(got["spent_usd"], rec["cost_usd"])
         self.assertEqual((got["held_usd"], got["unsettled_usd"], got["closed"]), (0, 0.0, False))
+
+    def test_a_stream_cut_off_or_a_failed_response_with_no_usage_keeps_its_whole_booking(self):
+        r, led = self.capped(1.0)
+        for tag, path, body in (("uc", "/chat/completions", {"model": "m", "stream": True, "mode": "cut", "messages": []}),
+                                ("uf", "/responses", {"model": "m", "mode": "failed", "input": "x"})):
+            req = urllib.request.Request(r.url(tag) + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+            try:
+                urllib.request.urlopen(req).read()
+            except (http.client.IncompleteRead, urllib.error.HTTPError):
+                pass
+        (cut,), (failed,) = r.calls("uc"), r.calls("uf")
+        self.assertEqual((cut["status"], failed["cost_from"]), (502, "failed"))
+        self.assertIsNotNone(cut.get("cost_usd"))
+        got = led.state()
+        self.assertEqual((got["spent_usd"], got["held_usd"]), (0.0, 0))
+        self.assertAlmostEqual(got["unsettled_usd"], cut["booked_usd"] + failed["booked_usd"])
+        self.assertNotIn("m", led._read()["seen"])
+
+    def test_a_stream_cut_off_that_already_cost_more_than_its_booking_counts_what_it_cost(self):
+        r, led = self.capped(1.0)
+        body = {"model": "m", "stream": True, "mode": "cut", "messages": []}
+        req = urllib.request.Request(r.url("uc") + "/chat/completions", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with mock.patch.object(ledger, "bound", lambda *a, **k: 1e-9):
+            try:
+                urllib.request.urlopen(req).read()
+            except (http.client.IncompleteRead, urllib.error.HTTPError):
+                pass
+        (cut,) = r.calls("uc")
+        got = led.state()
+        self.assertEqual((cut["status"], got["unsettled_usd"]), (502, 0.0))
+        self.assertGreater(cut["cost_usd"], cut["booked_usd"])
+        self.assertAlmostEqual(got["spent_usd"], cut["cost_usd"])
+        self.assertNotIn("m", led._read()["seen"])
+
+    def test_a_unit_asked_to_stop_books_nothing_and_a_200_with_no_reply_keeps_its_whole_booking(self):
+        r, led = self.capped(1.0)
+        with open(os.path.join(r.dir, relay.STOP), "w") as f:
+            f.write("batch cap\n")
+        self.assertEqual(self.post(r, "u1", {"model": "m", "messages": []})[0], 400)
+        got = led.state()
+        self.assertEqual((got["spent_usd"], got["held_usd"], got["unsettled_usd"]), (0.0, 0, 0.0))
+        os.unlink(os.path.join(r.dir, relay.STOP))
+        self.assertEqual(self.post(r, "u1", {"model": "m", "mode": "hollow", "messages": []})[0], 502)
+        (call,) = r.calls("u1")
+        got = led.state()
+        self.assertEqual((call["answered"], got["spent_usd"], got["held_usd"]), (200, 0.0, 0))
+        self.assertAlmostEqual(got["unsettled_usd"], call["booked_usd"])
 
     def test_a_call_is_booked_at_what_the_runs_replies_have_been_once_one_came_back(self):
         """Fifteen calls at the model's limit would fill a cap nothing was spent of: after the first reply
@@ -481,6 +646,11 @@ class EffortTest(unittest.TestCase):
         self.assertEqual(relay._request_tail({"messages": [], "reasoning_effort": "low"})["reasoning_effort"], "low")
         self.assertEqual(relay._request_tail({"input": [], "reasoning": {"effort": "high"}})["reasoning_effort"], "high")
         self.assertIsNone(relay._request_tail({"messages": []})["reasoning_effort"])
+
+    def test_reasoning_is_read_as_reasoning_or_thinking_tokens(self):
+        self.assertEqual(relay._usage({"completion_tokens_details": {"reasoning_tokens": 3}})["reasoning"], 3)
+        self.assertEqual(relay._usage({"output_tokens_details": {"reasoning_tokens": 5}})["reasoning"], 5)
+        self.assertEqual(relay._usage({"output_tokens": 9, "output_tokens_details": {"thinking_tokens": 7}})["reasoning"], 7)
 
 
 class ServeTest(unittest.TestCase):

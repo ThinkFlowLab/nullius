@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 from nullius import workspace
 from nullius.runs import launches, parse
-from nullius.standard import job, merge, shard
+from nullius.standard import job, merge, prove, shard
 
 BENCH = {"key": "fakebench", "_ref": "fakebench", "family": "agent", "needs": ["agent.workspace/v1"],
          "units": {"noun": "task", "nouns": "tasks"}, "score": {"kind": "pass", "says": "the tests pass"}}
@@ -63,14 +63,16 @@ class Partition(unittest.TestCase):
 
 
 def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="gpt-5-mini", bench=BENCH, other=AGENT,
-                planned=None, t0=1_760_000_000.0, failed=(), budget=None, backend="local", reward=lambda place: float(place % 2)):
+                planned=None, t0=1_760_000_000.0, failed=(), budget=None, backend="local", bench_options=None,
+                reward=lambda place: float(place % 2)):
     """A shard job as a run writes it: its config, a trial per unit (tagged by
     the unit's place in the whole dataset), its result."""
     d = os.path.join(root, name)
     os.makedirs(d)
     planned = list(units) if planned is None else planned
     job.write_config(d, job=name, bench=bench, other=other, model=model, provider="openai", dataset="all", units=planned,
-                     concurrency=2, granted=True, launch=launch, shard=shard.record(index, of, total, planned), backend=backend)
+                     concurrency=2, granted=True, launch=launch, shard=shard.record(index, of, total, planned), backend=backend,
+                     bench_options=bench_options)
     results = []
     for k, u in enumerate(units):
         place = int(u.split("-")[1])
@@ -82,7 +84,7 @@ def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="g
         results.append(job.write_trial(trial, job=name, bench=bench, other=other, model=model, unit=u, t0=t0 + k, t1=t0 + k + 5,
                                        produce=(t0 + k, t0 + k + 4), score=None if exc else {"reward": reward(place)},
                                        exception=exc, calls=[], trajectory=None))
-    job.write_result(d, name, t0, t0 + 10 * (index + 1), results, len(planned), budget=budget)
+    job.write_result(d, name, t0, t0 + 10 * (min(index, 9) + 1), results, len(planned), budget=budget)
     return d
 
 
@@ -236,6 +238,36 @@ class Merge(unittest.TestCase):
         self.assertIn(f"{10 - len(self.split[1]) - len(planned) + 1} of the dataset's 10 units are not in the merge", notes)
         j = parse.parse_job(got["out"])
         self.assertEqual((j.n_total_trials, len(j.trials)), (len(self.split[1]) + len(planned), len(self.split[1]) + len(planned) - 1))
+
+    def test_a_launch_of_one_unit_per_shard_merges_and_says_only_the_units_it_lacks(self):
+        n = 2 ** 64
+        units = [f"t-{i}" for i in range(10)]
+        dirs = [write_shard(self.tmp, f"one-{u}", [u], shard.of(u, n), n) for u in units[:-1]]
+        got = merge.merge(dirs, os.path.join(self.tmp, "out"))
+        self.assertEqual((got["trials"], got["notes"]), (9, ["1 of the dataset's 10 units are not in the merge"]))
+
+    def test_shards_run_with_different_benchmark_options_keep_each_its_own(self):
+        same = {"websites": "none", "gitlab": "none"}
+        dirs = [write_shard(self.tmp, "s1", self.split[1], 1, 3, bench_options=same),
+                write_shard(self.tmp, "s2", self.split[2], 2, 3, bench_options=dict(same, gitlab="gitlab.example")),
+                write_shard(self.tmp, "s3", self.split[3], 3, 3, bench_options=same)]
+        std = read(os.path.join(merge.merge(dirs, os.path.join(self.tmp, "out"))["out"], "config.json"))["standard"]
+        self.assertNotIn("benchmark_options", std)
+        self.assertEqual([m["benchmark_options"]["gitlab"] for m in std["merged_from"]], ["none", "gitlab.example", "none"])
+        alike = [write_shard(self.tmp, f"a{i}", self.split[i], i, 3, bench_options=same) for i in (1, 2, 3)]
+        std = read(os.path.join(merge.merge(alike, os.path.join(self.tmp, "alike"))["out"], "config.json"))["standard"]
+        self.assertEqual(std["benchmark_options"], same)
+        self.assertNotIn("benchmark_options", std["merged_from"][0])
+
+    def test_a_merge_of_merges_keeps_the_options_of_its_inner_shards(self):
+        same = {"websites": "none", "gitlab": "none"}
+        inner = merge.merge([write_shard(self.tmp, "s1", self.split[1], 1, 3),
+                             write_shard(self.tmp, "s2", self.split[2], 2, 3, bench_options=dict(same, gitlab="gitlab.example"))],
+                            os.path.join(self.tmp, "inner"))["out"]
+        outer = merge.merge([inner, write_shard(self.tmp, "s3", self.split[3], 3, 3, bench_options=same)],
+                            os.path.join(self.tmp, "outer"), force=True)["out"]
+        self.assertEqual(prove._options_of(read(os.path.join(outer, "config.json"))),
+                         [dict(same, gitlab="gitlab.example"), same, {}])
 
     def test_a_job_that_is_no_shard_or_an_out_that_is_taken_is_refused(self):
         dirs = self.shards()

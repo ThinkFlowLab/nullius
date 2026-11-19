@@ -115,7 +115,7 @@ class Listed(unittest.TestCase):
                 mock.patch.object(install, "upstream", side_effect=install.InstallFailed("git fetch: exit 128")), \
                 self.assertRaises(run.Refused):
             preparing.start()
-        self.assertEqual(tree(preparing.job_dir), [".work", "progress.jsonl"])
+        self.assertEqual(tree(preparing.job_dir), [".work", ".work/job.lck", "progress.jsonl"])
         self.assertEqual(tree(unknown.job_dir), tree(preparing.job_dir))
         self.assertIn("nope", progress.refusal(progress.read(unknown.job_dir)))
 

@@ -166,6 +166,107 @@ class ControlRun(unittest.TestCase):
         self.assertFalse(parse.parse_job(j.dir).is_control)          # a runner's arm called oracle stays an arm
 
 
+SLOW_SCORE = '''import os, time
+from nullius.standard.jsonl import serve
+CHECKED = os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "checked"))
+def setup(unit, dir):
+    return dict({"prompt": "hi"}, **({"verify": {"run": "true"}} if CHECKED else {}))
+def score(unit, dir, transcript, answer, verified=None):
+    time.sleep(2)
+    return {"reward": 0.0, "passed": False, "detail": {}}
+serve({"units": lambda dataset: {"units": ["a"]}, "setup": setup, "score": score})
+'''
+
+
+class Box:
+    image = ""
+
+    def give_back(self, paths):
+        pass
+
+    def stop(self):
+        pass
+
+
+class ScoreLimit(unittest.TestCase):
+    """A null control whose driver does its work in ``score``, waited for ``limits.score_seconds``."""
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._home = install.HOME
+        install.HOME = os.path.join(self.tmp, "home")
+        here = os.path.join(self.tmp, "slow")
+        os.makedirs(here)
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(SLOW_SCORE)
+        self.b = dict(definitions.get("benchmark", "fakebench", FIX), _here=here, controls=CONTROLS,
+                      driver={"command": ["python3", "{here}/driver.py"]})
+
+    def tearDown(self):
+        install.HOME = self._home
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def problems(self, limits):
+        return definitions.problems(dict(self.b, limits=limits), "benchmark")
+
+    def trial(self, limits):
+        b = dict(self.b, limits=limits)
+        job_dir = run.run(b, definitions.control(b, "nop"), model="", provider="openai",
+                          jobs_root=os.path.join(self.tmp, "jobs"), env={}, say=lambda s: None)
+        name = next(t for t in os.listdir(job_dir) if "__u" in t)
+        with open(os.path.join(job_dir, name, "result.json")) as f:
+            return json.load(f)
+
+    def verify_phase(self):
+        jobs = os.path.join(self.tmp, "jobs")
+        with open(os.path.join(jobs, os.listdir(jobs)[0], "events.jsonl")) as f:
+            return next(e for e in map(json.loads, f) if e["event"] == "trial.phase" and e["phase"] == "verify")
+
+    def test_the_limit_is_a_whole_number_of_seconds_from_1(self):
+        self.assertEqual(self.problems({"score_seconds": 1800}), [])
+        for v in (0, -1, 1.5, "600", True, 100001):
+            self.assertIn("limits.score_seconds: a whole number from 1", self.problems({"score_seconds": v}), v)
+
+    def test_score_is_waited_for_600_seconds_or_the_benchmarks_own_limit(self):
+        r = run.Run(self.b, definitions.control(self.b, "nop"), model="", provider="openai", env={})
+        self.assertEqual(r.score_seconds, 600)
+        r = run.Run(dict(self.b, limits={"score_seconds": 1800}), definitions.control(self.b, "nop"), model="",
+                    provider="openai", env={})
+        self.assertEqual((r.score_seconds, r.phase_limit("score", r.score_seconds)), (1800, 1800))
+        r = run.Run(dict(self.b, limits={"score_seconds": 1800}), definitions.control(self.b, "nop"), model="",
+                    provider="openai", env={}, timeouts={"score": 60})
+        self.assertEqual(r.phase_limit("score", r.score_seconds), 60)
+        page = recipe._bench_page(dict(self.b, limits={"score_seconds": 1800}))["timeouts"]
+        self.assertEqual((page["score"], "score" in page["catalogue"]), (1800, True))
+        self.assertEqual(recipe._bench_page(self.b)["timeouts"]["score"], run.DRIVER_SECONDS)
+
+    def test_a_score_past_the_limit_is_the_verifiers_error_and_one_within_it_scores(self):
+        late = self.trial({"score_seconds": 1})
+        self.assertEqual(late["exception_info"]["exception_type"], "VerifierError")
+        self.assertIn("score: no reply in 1 s", late["exception_info"]["exception_message"])
+        self.assertIsNone(late.get("verifier_result"))
+        on_time = self.trial({"score_seconds": 10})
+        self.assertIsNone(on_time.get("exception_info"))
+        self.assertEqual(on_time["verifier_result"]["rewards"]["reward"], 0.0)
+
+    def test_the_verify_phase_carries_the_score_limit_and_an_own_images_check(self):
+        self.trial({"score_seconds": 10})
+        self.assertEqual(self.verify_phase()["timeout_sec"], 10)
+        shutil.rmtree(os.path.join(self.tmp, "jobs"))
+        open(os.path.join(self.b["_here"], "checked"), "w").close()
+        checked = []
+        with patch.object(run.Run, "unit_environment", lambda r, setup: ("task", {"image": "own"})), \
+                patch.object(run.Run, "not_run", lambda r, e, d: None), \
+                patch.object(run.Run, "unit_relay", lambda r, *a, **k: None), \
+                patch.object(run.Run, "own_box", lambda r, *a: Box()), \
+                patch.object(run.Run, "box_changes", lambda r, box: ""), \
+                patch.object(run.Run, "release_image", lambda r, image: None), \
+                patch.object(run.Run, "verify", lambda r, step, box, trial: checked.append(step) or {"exit": 0}):
+            got = self.trial({"score_seconds": 10})
+        self.assertIsNone(got.get("exception_info"))
+        self.assertEqual(checked, [{"run": "true"}])
+        self.assertEqual(self.verify_phase()["timeout_sec"], 10 + run.TURN_SECONDS)
+
+
 class Prove(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -279,6 +380,254 @@ class Prove(unittest.TestCase):
         prove.record(b, got)
         self.assertEqual(b["proven"]["choice"]["leak"]["in_prompt"]["first"], ["held-unit-1"])
         self.assertIn("held-unit-2", b["proven"]["leaky"]["failed"]["leak"]["problems"][0])
+
+
+class ProveOptions(unittest.TestCase):
+    """The benchmark's options reach the checks' driver and each control's run; a merged control job is held as one."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._home = install.HOME
+        install.HOME = os.path.join(self.tmp, "home")
+        here = os.path.join(self.tmp, "kits", "agent-task-v1")
+        shutil.copytree(os.path.join(definitions.KITS, "agent-task-v1"), here)
+        with open(os.path.join(here, "driver.py")) as f:
+            src = f.read()
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(src.replace('return {"units": list(WORDS)}',
+                                'import os\n    return {"units": list(WORDS) if os.environ.get("NULLIUS_OPTION_SITES") == "on" else []}'))
+        with open(os.path.join(here, "standard.json")) as f:
+            d = json.load(f)
+        d["options"] = {"sites": {"summary": "The sites.", "values": ["off", "on"], "default": "off"},
+                        "lane": {"summary": "A lane.", "values": ["a", "b"], "default": "a"},
+                        "tool": {"summary": "A tool.", "values": ["none", "x"], "default": "none",
+                                 "needs": {"x": {"host": ["tool"]}}}}
+        d["host"] = {"tool": {"summary": "A program this machine lacks.", "check": ["nullius-no-such-program-k5"]}}
+        with open(os.path.join(here, "standard.json"), "w") as f:
+            json.dump(d, f)
+        self.b, bad = definitions._read(os.path.join(here, "standard.json"), "benchmark", "agent-task-v1")
+        assert not bad, bad
+        self.jobs = os.path.join(self.tmp, "jobs")
+
+    def tearDown(self):
+        install.HOME = self._home
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def prove(self, **kw):
+        kw.setdefault("stamp", "2026-01-02__03-04-05")
+        return prove.prove(self.b, jobs_root=self.jobs, env={}, say=lambda s: None, **kw)
+
+    def config(self, job_dir):
+        with open(os.path.join(job_dir, "config.json")) as f:
+            return json.load(f)["standard"]
+
+    def nop_shard(self, i, n, lane):
+        return run.run(self.b, definitions.control(self.b, "nop"), model="", provider="openai", jobs_root=self.jobs, env={},
+                       say=lambda s: None, shard=(i, n), launch="L", bench_options={"sites": "on", "lane": lane})
+
+    def test_the_options_reach_the_units_driver_and_each_controls_run(self):
+        got = self.prove(bench_options={"sites": "on"}, write=False)["kit"]
+        self.assertTrue(all(r["ok"] for r in got.values()), got)
+        self.assertEqual((got["units"]["units"], got["nop"]["passed"], got["oracle"]["passed"]), (3, "0/3", "3/3"))
+        self.assertEqual(self.config(os.path.join(self.jobs, got["nop"]["job"]))["benchmark_options"],
+                         {"sites": "on", "lane": "a", "tool": "none"})
+        self.assertEqual(got["nop"]["options"], {"sites": "on", "lane": "a", "tool": "none"})
+        dflt = self.prove(write=False, stamp="2026-01-02__03-04-06")["kit"]
+        self.assertEqual(dflt["units"]["problems"], ["units: no ids"])
+        self.assertEqual(dflt["nop"]["problems"], ["the units check failed: the control was not run"])
+
+    def test_a_name_or_a_value_the_benchmark_does_not_allow_is_refused_before_anything_runs(self):
+        was = json.dumps(self.b.get("proven"))
+        for given, why in (({"sites": "maybe"}, "'maybe' is not one of off, on"), ({"nope": "x"}, "has no option 'nope'")):
+            with self.assertRaises(run.Refused) as e:
+                self.prove(bench_options=given)
+            self.assertIn(why, str(e.exception))
+        self.assertFalse(os.path.exists(self.jobs))
+        self.assertEqual(json.dumps(self.b.get("proven")), was)
+
+    def test_an_option_whose_value_needs_a_program_this_machine_lacks_is_refused_before_any_install(self):
+        with patch.object(install, "upstream", side_effect=AssertionError("installed")) as up:
+            with self.assertRaises(run.Refused) as e:
+                self.prove(bench_options={"sites": "on", "tool": "x"})
+        self.assertIn("nullius-no-such-program-k5 not on PATH", str(e.exception))
+        up.assert_not_called()
+        self.assertFalse(os.path.exists(self.jobs))
+
+    def test_a_job_is_not_recorded_when_the_units_check_fails(self):
+        from nullius.standard import merge
+        whole = merge.merge([self.nop_shard(i, 4, "a") for i in (1, 3)], os.path.join(self.jobs, "nop-merged"))["out"]
+        self.b["datasets"][0]["units"] = 4
+        got = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"nop": whole})["kit"]
+        self.assertFalse(got["units"]["ok"])
+        self.assertFalse(got["nop"]["ok"])
+        self.assertIn("the units check failed, so this job cannot be checked against the dataset", got["nop"]["problems"])
+        kept = self.b["proven"]["kit"]
+        self.assertNotIn("nop", kept)
+        self.assertNotIn("units", kept)
+        self.assertEqual(kept["failed"]["nop"]["job"], "nop-merged")
+        self.assertIn("the units check failed, so this job cannot be checked against the dataset",
+                      kept["failed"]["nop"]["problems"])
+
+    def test_a_control_is_not_run_nor_kept_when_the_units_check_fails(self):
+        self.assertIn("nop", self.b["proven"]["kit"])
+        self.b["datasets"][0]["units"] = 4
+        got = self.prove(bench_options={"sites": "on"})["kit"]
+        self.assertFalse(got["units"]["ok"])
+        for c in ("nop", "oracle"):
+            self.assertEqual(got[c]["problems"], ["the units check failed: the control was not run"])
+            self.assertNotIn(c, self.b["proven"]["kit"])
+            self.assertIn(c, self.b["proven"]["kit"]["failed"])
+        self.assertFalse(os.path.exists(self.jobs) and any("prove-" in x for x in os.listdir(self.jobs)))
+
+    def test_a_trial_of_another_job_cannot_be_merged_into_a_proof(self):
+        from nullius.standard import merge
+        shards = [self.nop_shard(i, 4, "a") for i in (1, 3)]
+        trial = next(t for t in sorted(os.listdir(shards[0])) if os.path.isfile(os.path.join(shards[0], t, "result.json")))
+        path = os.path.join(shards[0], trial, "result.json")
+        with open(path) as f:
+            res = json.load(f)
+        res["standard"]["job"] = "old-unrelated-job"
+        with open(path, "w") as f:
+            json.dump(res, f)
+        with self.assertRaises(merge.Refused) as e:
+            merge.merge(shards, os.path.join(self.jobs, "never"))
+        self.assertIn("names another job than its job", str(e.exception))
+        forced = merge.merge(shards, os.path.join(self.jobs, "forced"), force=True)["out"]
+        r = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"nop": forced}, write=False)["kit"]["nop"]
+        self.assertFalse(r["ok"])
+        self.assertTrue(any("merged despite differences" in p and "not of the job they are in" in p for p in r["problems"]),
+                        r["problems"])
+
+    def test_a_merge_of_merges_keeps_what_any_of_them_was_merged_despite(self):
+        from nullius.standard import merge
+        good_shard, bad_shard = (self.nop_shard(i, 4, "a") for i in (1, 3))
+        trial = next(t for t in sorted(os.listdir(bad_shard)) if os.path.isfile(os.path.join(bad_shard, t, "result.json")))
+        path = os.path.join(bad_shard, trial, "result.json")
+        with open(path) as f:
+            res = json.load(f)
+        res["standard"]["job"] = "old-unrelated-job"
+        with open(path, "w") as f:
+            json.dump(res, f)
+        good = merge.merge([good_shard], os.path.join(self.jobs, "good"))["out"]
+        bad = merge.merge([bad_shard], os.path.join(self.jobs, "bad"), force=True)["out"]
+        with self.assertRaises(merge.Refused):
+            merge.merge([good, bad], os.path.join(self.jobs, "never"))
+        both = merge.merge([good, bad], os.path.join(self.jobs, "both"), force=True)["out"]
+        std = self.config(both)
+        self.assertTrue(any(w.startswith("bad: ") and "not of the job they are in" in w for w in std["merged_despite"]))
+        self.assertEqual([m.get("merged_from", [{}])[0].get("job") for m in std["merged_from"]], [os.path.basename(good_shard), os.path.basename(bad_shard)])
+        r = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"nop": both}, write=False)["kit"]["nop"]
+        self.assertFalse(r["ok"])
+        self.assertTrue(any("merged despite differences" in p and "not of the job they are in" in p for p in r["problems"]),
+                        r["problems"])
+
+    def test_the_cli_hands_its_options_and_jobs_to_the_proof(self):
+        from nullius import progress
+        from nullius.standard import cli
+        seen = {}
+        with patch.object(cli, "_bench", return_value=self.b), patch.object(cli, "licences", return_value=(None, None)), \
+                patch.object(cli, "_exit_on_term"), patch.object(progress, "ECHO", None), \
+                patch.object(prove, "prove", side_effect=lambda b, **kw: seen.update(kw) or {}):
+            self.assertEqual(cli.main(["prove", "agent-task-v1", "--from-run", "--dataset", "kit", "--bench-option", "sites=on",
+                                       "--bench-option", "lane=b", "--job", "nop=/x/merged"]), 0)
+            self.assertEqual((seen["bench_options"], seen["jobs"]), ({"sites": "on", "lane": "b"}, {"nop": "/x/merged"}))
+            with self.assertRaises(SystemExit):
+                cli.main(["prove", "agent-task-v1", "--from-run", "--job", "reference=/x"])
+
+    def test_a_merged_launch_is_held_to_the_bound_as_one_job_and_must_cover_every_unit(self):
+        from nullius.standard import merge
+        shards = [self.nop_shard(i, 4, lane) for i, lane in ((1, "a"), (3, "b"))]
+        whole = merge.merge(shards, os.path.join(self.jobs, "nop-merged"))["out"]
+        before = sorted(os.listdir(self.jobs))
+        got = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"nop": whole})["kit"]
+        self.assertTrue(got["nop"]["ok"], got["nop"])
+        self.assertEqual((got["nop"]["job"], got["nop"]["units"], got["nop"]["passed"]), ("nop-merged", 3, "0/3"))
+        self.assertEqual(self.b["proven"]["kit"]["nop"]["job"], "nop-merged")
+        self.assertEqual(self.b["proven"]["kit"]["nop"]["options"],
+                         [{"lane": "a", "sites": "on", "tool": "none"}, {"lane": "b", "sites": "on", "tool": "none"}])
+        self.assertEqual(sorted(set(os.listdir(self.jobs)) - set(before)), ["2026-01-02__03-04-05__agent-task-v1__kit__prove-oracle"])
+        self.assertEqual([m["benchmark_options"]["lane"] for m in self.config(whole)["merged_from"]], ["a", "b"])
+        half = merge.merge(shards[:1], os.path.join(self.jobs, "nop-half"))["out"]
+        part = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"nop": half}, write=False, stamp="2026-01-02__03-04-06")["kit"]["nop"]
+        self.assertFalse(part["ok"])
+        self.assertTrue(any("units have no trial" in p for p in part["problems"]), part["problems"])
+        wrong = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"oracle": whole}, write=False, stamp="2026-01-02__03-04-07")["kit"]["oracle"]
+        self.assertIn("nop-merged: its control is 'nop', not 'oracle'", wrong["problems"])
+        trial = next(t for t in sorted(os.listdir(whole)) if os.path.isfile(os.path.join(whole, t, "result.json")))
+        with open(os.path.join(whole, trial, "result.json")) as f:
+            res = json.load(f)
+        res.pop("verifier_result", None)
+        res.pop("exception_info", None)
+        with open(os.path.join(whole, trial, "result.json"), "w") as f:
+            json.dump(res, f)
+        blank = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"nop": whole}, write=False,
+                           stamp="2026-01-02__03-04-08")["kit"]["nop"]
+        self.assertFalse(blank["ok"])
+        self.assertIn("1 unit(s) ended with no reward from 0 to 1 and no error: read the job's trials", blank["problems"])
+        for kw in ({"limit": 1}, {"shard": (1, 2)}):
+            with self.assertRaises(run.Refused):
+                self.prove(dataset="kit", jobs={"nop": whole}, **kw)
+        with self.assertRaises(run.Refused):
+            self.prove(jobs={"nop": os.path.join(self.tmp, "absent")})
+
+
+NUMERIC = {"key": "numeric", "_ref": "numeric", "label": "Numeric", "family": "agent", "needs": ["agent.task/v1"],
+           "units": {"noun": "task", "nouns": "tasks"}, "score": {"kind": "score", "says": "a number from 0 to 1"},
+           "controls": {"nop": {"source": "nullius", "from": "Nothing runs."}}, "datasets": [{"id": "all", "units": 3}]}
+
+
+class HeldJob(unittest.TestCase):
+    """A control's job held to its bound, read from each trial's own record."""
+
+    def setUp(self):
+        from nullius.standard import job
+        self.tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.dir = os.path.join(self.tmp, "nop-job")
+        os.makedirs(self.dir)
+        nop = definitions.control(NUMERIC, "nop")
+        self.units = ["u1", "u2", "u3"]
+        job.write_config(self.dir, job="nop-job", bench=NUMERIC, other=nop, model="", provider="openai", dataset="all",
+                         units=self.units, concurrency=1, granted=False)
+        results = [job.write_trial(os.path.join(self.dir, f"{u}__u{i:04d}"), job="nop-job", bench=NUMERIC, other=nop, model="",
+                                   unit=u, t0=1_760_000_000.0, t1=1_760_000_001.0, produce=(None, None), score={"reward": 0.0},
+                                   exception=None, calls=[], trajectory=None) for i, u in enumerate(self.units)]
+        job.write_result(self.dir, "nop-job", 1_760_000_000.0, 1_760_000_002.0, results, 3)
+
+    def held(self):
+        return prove.control_check(NUMERIC, NUMERIC["datasets"][0], "nop", limit=None, jobs_root=self.tmp, stamp="s",
+                                   provider="openai", model="", judge_model=None, env={}, concurrency=1,
+                                   say=lambda s: None, job_dir=self.dir, ids=self.units)
+
+    def edit(self, unit, change):
+        trial = next(t for t in os.listdir(self.dir) if t.startswith(unit + "__"))
+        path = os.path.join(self.dir, trial, "result.json")
+        with open(path) as f:
+            res = json.load(f)
+        change(res)
+        with open(path, "w") as f:
+            json.dump(res, f)
+
+    def test_a_clean_job_passes(self):
+        r = self.held()
+        self.assertTrue(r["ok"], r["problems"])
+        self.assertEqual((r["passed"], r["value"], r["units"]), ("0/3", 0.0, 3))
+
+    def test_a_reward_without_a_score_a_score_below_0_and_nan_are_no_score(self):
+        for value in ({"reward": 1.0}, {"score": -100}, {"score": float("nan")}, {"score": True}, {"score": "0"}):
+            self.edit("u2", lambda res: res["verifier_result"].update(rewards=value))
+            r = self.held()
+            self.assertFalse(r["ok"], value)
+            self.assertIn("1 unit(s) ended with no score from 0 to 1 and no error: read the job's trials", r["problems"], value)
+            self.assertEqual(r["value"], 0.0)
+
+    def test_a_trial_another_run_wrote_is_refused(self):
+        self.edit("u1", lambda res: res["standard"].update(benchmark="other", control={"name": "oracle"}, plugged="oracle"))
+        self.edit("u3", lambda res: res["standard"].update(job="another-job"))
+        r = self.held()
+        self.assertFalse(r["ok"])
+        said = " | ".join(r["problems"])
+        for k in ("benchmark", "control", "who ran it", "job"):
+            self.assertIn(f"whose own record names another {k} than the job", said)
 
 
 LEAKY = '''from nullius.standard.jsonl import serve
