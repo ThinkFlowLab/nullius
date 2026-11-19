@@ -29,8 +29,6 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--units FILE` | Only the units the file lists: [below](#a-list-of-units) |
 | `--unsandboxed` | An agent runs as you; else `--backend container` |
 | `--backend` | `local` (default); `container`, each unit in a container with its relay; or [`boat`](../standard.md#the-boat-backend), a VM per unit |
-| `--shard-by` | `id` (default): a unit's shard by its id's hash; `position`: by its place in the dataset |
-| `--relay-container` | Local task processes with a separate relay container on their host; used inside whole-task Boat VMs |
 | `--boat-size` | Boat's VM size: `small` (default), `default`, `large`, `xlarge` |
 | `--option NAME=VALUE` | An agent's or capability's option (repeatable) |
 | `--bench-option NAME=VALUE` | A benchmark's option (repeatable), read as `NULLIUS_OPTION_<NAME>` |

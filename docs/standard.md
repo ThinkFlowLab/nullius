@@ -181,18 +181,20 @@ A rootful Docker with `userns-remap` maps the uids of each container to sub-uids
 
 `--backend boat`: each unit's agent or capability in its own [boat.dev](https://boat.dev) VM. Driver, relay, spending cap and scoring stay with the run.
 
-Refused before any unit: a computer-port run (its server's socket is on this machine), an Original setup or a check (they run on a machine). Choose local processes or the container backend.
+Except for VM benchmarks below, computer-port runs, Original setups and checks require Hosts.
 
-A benchmark whose units boot their own VM (OSWorld) runs each unit whole in its VM instead: driver, desktop VM and all, as a one-unit shard (`--shard-by position`) of this runner's snapshot, merged here into one job (`standard/boat_units.py`). Each VM installs what the unit needs. Model calls use a separate relay container inside each Boat VM; only the relay receives the real model key. Declared benchmark credentials also enter the VM. A run's spending cap is divided equally between its tasks; unused shares are not transferred. `--units` and `--shard` are unavailable on this path; choose a dataset and limit instead.
+VM benchmarks such as OSWorld run each task entirely inside Boat, including scoring. Model keys and declared benchmark credentials enter those VMs.
+
+For these runs, spending caps are split equally across tasks; unused shares cannot transfer. Use a dataset and limit instead of `--units` or `--shard`.
 
 | Piece | Rule |
 | --- | --- |
 | Key | Settings → Sandbox, or `BOAT_API_KEY` |
-| VM | One per unit, `--boat-size` (`small` by default). Always deleted. Free trial: 2 hours at most. Review refuses a size without more memory than a unit's own VM (`needs.<value>.vm`) |
+| VM | One per unit, `--boat-size` (`small` by default). Always deleted. Free trial: 2 hours at most. VM benchmarks need more RAM than their guest VM |
 | Machines | Runs from this machine; never mixed with hosts |
 | Units at a time | The account's VM limit; a recipe may set fewer. The run warns when it cannot start every unit |
 | Agent time | Excludes the VM's start-up |
-| Isolation | Agent-only VMs reach loopback only: no internet, no DNS, no model key. Whole-task VMs run the driver and desktop with a separate relay container |
+| Isolation | Agent-only VMs reach loopback only: no internet, no DNS, no model key. VM benchmarks isolate the whole task |
 | Files | A link into your home or keys refuses the unit. Links out of the workspace are not copied back |
 | Code checks | A `runs_code` check needs Docker where the run runs |
 | Not run | Units needing the public web, their own image, a licence file or server of this machine, or MCP servers. No GPUs |
