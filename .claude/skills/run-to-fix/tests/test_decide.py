@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from typing import List
 
-from agentrepo import RepoCase, recorded_trials
+from agentrepo import REPLAY, RepoCase, recorded_trials
 from jobs import Result, Trial, load, run, trial, write, write_job, write_json
 
 KEEP_GOOD = "Keep good. bad breaks test_other."
@@ -639,6 +639,39 @@ class StandardUnits(Flow):
         self.assertEqual(r.code, 0, r.out + r.err)
         self.assertEqual(self.lines("rerun-tasks.txt"), ["f1", "f2", "p1"])
         self.assertEqual(self.lines("full-tasks.txt"), ["f1", "f2", "f3", "p1", "p2", "p3"])
+
+
+class StandardUnitIds(Flow):
+    """Each selected task of a job of the standard takes the one unit id its trials give."""
+
+    def set_unit(self, trial_name: str, unit: object) -> None:
+        path = os.path.join(self.run_dir, trial_name, "result.json")
+        result = load(path)
+        result["standard"]["unit"] = unit
+        write_json(path, result)
+
+    def test_a_selected_task_without_a_unit_id_is_refused(self) -> None:
+        self.run_dir = write_job(self.jobs, "recorded-standard", "alpha", "standard", recorded_trials())
+        self.set_unit("f1__r", None)
+        self.kept()
+        r = self.select(["--size", "guards", "--budget-usd", "0.5", "--text", "targets and guards"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("bench/f1", r.err)
+        self.assertFalse(os.path.exists(self.round_file("trial-tasks.txt")))
+
+    def test_a_task_with_two_unit_ids_is_refused(self) -> None:
+        extra = trial("p2b__r", "bench/p2", 1.0)
+        extra.cost = 0.01
+        self.run_dir = write_job(self.jobs, "recorded-standard", "alpha", "standard", recorded_trials() + [extra])
+        self.set_unit("p2b__r", "p2-other")
+        write(os.path.join(self.stubs, "replay.py"),
+              REPLAY.replace("labels[n]", 'labels.get(n, {"label": "done", "touched": False})'))
+        job = self.chosen()
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
+        self.assertNotEqual(r.code, 0)
+        for text in ("bench/p2", "p2-other"):
+            self.assertIn(text, r.err)
+        self.assertEqual(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"], [])
 
 
 class RecordedAmounts(Flow):
