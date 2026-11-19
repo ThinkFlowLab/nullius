@@ -469,13 +469,13 @@
     const boatWhy = (list.includes('local') ? here.boat : here.boatKey) || '';
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));
-    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? '$' : v === 'boat' ? '<img class="agent-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="agent-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">' : '▣', title: t, tip: sub});
+    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? icon('terminal') : v === 'boat' ? '<img class="agent-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="agent-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">' : icon('container'), title: t, tip: sub});
     const dockerOnly = Object.entries((b || {}).environments || {}).filter(([, e]) => !e.local_ok).map(([n]) => n);
     const web = agentRun && Object.values((b || {}).environments || {}).some(e => e.network);   // an agent's public web proxy
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
       + `<div class="nb-pick-grid nb-where">${machine('local', 'This machine', 'Nullius runs it here, in runs/' + rec.name + '.')}${H.map(h => machine(h.entry, h.label, 'Over ssh: the standard\'s code at this commit is sent there, uv put there if missing; its job comes back as it runs.')).join('')}</div>`
       + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
-      + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
+      + (b ? benchOptions(rec, b, 'where') : '') + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
       + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
       + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
         : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy)
@@ -526,7 +526,7 @@
       return `<li><b>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</b> ${state} ${button('Check', `data-hostreq-check="${esc(w)}"`, 'nb-inlinebutton')}${lines.length && (gone.length || (st && st.error)) ? ' ' + button('Install for me', `data-hostreq-install="${esc(w)}"`, 'nb-inlinebutton') : ''}${st && st.said ? ` <small>${esc(st.said)}</small>` : ''}</li>`;
     };
     return `<div class="nb-sectionhead std-wherehead"><h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small></div>`
-      + reqs.map(([n, r]) => `<p class="nb-note"><b>${esc(n)}</b>: ${esc(r.summary)}</p>`).join('')
+      + reqs.map(([n, r]) => `<p class="nb-note"><b>${esc(r.label)}</b>: ${esc(r.summary)}</p>`).join('')
       + `<ul class="nb-hostreq">${C.whereList(rec).map(line).join('')}</ul>`
       + (lines.length ? `<div class="std-code"><div class="std-code-head"><span>or run it yourself, on each machine</span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div>` : '');
   }
@@ -549,34 +549,37 @@
   function benchOptions(rec, b, scope = 'yours') {
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
     const chosen = C.chosenOf(rec);
-    return Object.entries(b.options || {}).filter(([, o]) => !o.limit)   // a bound of the upstream's own is with the limits
+    return Object.entries(b.options || {}).filter(([, o]) => !o.limit && o.step === (['where', 'dataset'].includes(scope) ? scope : ''))   // a bound of the upstream's own is with the limits
       .filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
       // one that applies only under another's values (a top-k, only with a retrieval) is left out otherwise
       .filter(([, o]) => Object.entries(o.when || {}).every(([k, vs]) => vs.includes((rec.bench_options || {})[k] ?? (b.options[k] || {}).default)))
       .filter(([, o]) => {
         const on = o.setups || ['yours'];
+        if (o.step) return on.some(s => s === 'yours' ? chosen.some(k => !(b.setups || []).some(x => x.key === k)) : chosen.includes(s));
         const shared = on.includes('yours') && on.includes('original');
         if (scope === 'shared') return shared;
         if (shared) return false;
-        return scope === 'setup' ? !on.includes('yours') && on.some(k => chosen.includes(k)) : on.includes('yours');
+        // 'agent': an agent's run alone takes it, shown with the agents
+        return scope === 'setup' ? !on.includes('yours') && !on.includes('agent') && on.some(k => chosen.includes(k)) : on.includes('yours') || on.includes('agent');
       })
       .map(([n, o]) => {
       const cur = (rec.bench_options || {})[n] ?? o.default;
-      if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(n === 'temperature' && o.default === 'default' ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
+      if (scope === 'where' && o.values.length === 1) return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}</h3></div><p class="nb-fixed"${(o.about || {})[cur] ? ` title="${esc(o.about[cur])}"` : ''}>${esc((o.names || {})[cur] || cur)}</p>`;
+      if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}${o.example ? esc(' e.g. ' + o.example) : ''}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(o.default === 'default' && !o.limit ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
       const tileOf = v => { const need = (o.needs || {})[v] || {};
         const foot = [need.embeddings ? `<span class="nb-tick" title="${esc(need.embeddings)} through the run's relay">${need.embeddings.includes('/') ? 'OpenRouter key' : 'OpenAI or OpenRouter key'}</span>` : '',
           need.reranker ? `<span class="nb-tick">reranker ${esc(need.reranker)}</span>` : '',
-          ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(h)}</span>`),
+          ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(((b.host || {})[h] || {}).label || h)}</span>`),
           v === o.default ? '<span class="nb-tag">default</span>' : ''].join('');
-        return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: v, mark: '', tip: (o.about || {})[v] || '', foot}); };
+        return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: (o.names || {})[v] || v, mark: '', tip: (o.about || {})[v] || '', foot}); };
       return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}${o.datasets.length ? ' · ' + esc(o.datasets.join(', ')) : ''}</h3></div>`
         // by the data: every value with its line (or a need) - cards of one size, the line whole; plain values - one small
         // card each, all one size, or a select past five of them (a line some have is their tooltip)
         + (o.values.some(v => ((o.needs || {})[v] || {}).embeddings || ((o.needs || {})[v] || {}).reranker || (((o.needs || {})[v] || {}).host || []).some(h => local[h]))
           ? `<div class="nb-pick-grid std-optgrid" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(tileOf).join('')}</div>`
           : o.values.length > 5
-          ? `<label class="nb-field std-optselect"><select data-bench-opt-select="${esc(n)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''} title="${esc((o.about || {})[v] || '')}">${esc(v === 'default' ? 'Default' : v + (v === o.default ? ' (default)' : ''))}</option>`).join('')}</select></label>`
-          : `<div class="std-valgrid" style="--w:${Math.max(7, ...o.values.map(v => String(v).length))}ch" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(v => `<button class="nb-tile std-val" data-bench-opt="${esc(n)}" data-bench-val="${esc(v)}" aria-pressed="${v === cur}" title="${esc((o.about || {})[v] || (v === o.default ? 'default' : v))}"><strong>${esc(v)}</strong>${v === o.default ? '<small>default</small>' : ''}</button>`).join('')}</div>`);
+          ? `<label class="nb-field std-optselect"><select data-bench-opt-select="${esc(n)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''} title="${esc((o.about || {})[v] || '')}">${esc(v === 'default' && !(o.names || {})[v] ? 'Default' : ((o.names || {})[v] || v) + (v === o.default ? ' (default)' : ''))}</option>`).join('')}</select></label>`
+          : `<div class="std-valgrid" style="--w:${Math.max(7, ...o.values.map(v => String((o.names || {})[v] || v).length))}ch" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(v => `<button class="nb-tile std-val" data-bench-opt="${esc(n)}" data-bench-val="${esc(v)}" aria-pressed="${v === cur}" title="${esc((o.about || {})[v] || (v === o.default ? 'default' : v))}"><strong>${esc((o.names || {})[v] || v)}</strong>${v === o.default ? '<small>default</small>' : ''}</button>`).join('')}</div>`);
     }).join('');
   }
   // Only credentials needing attention belong in the builder. Without a dataset's default
@@ -613,7 +616,8 @@
     + (t.line ? `<span class="nb-tile-line">${esc(t.line)}</span>` : '') + (t.note ? `<span class="nb-tile-note">${esc(t.note)}</span>` : '')
     + (t.meta || t.foot ? `<span class="nb-tile-foot">${t.meta ? `<span>${esc(t.meta)}</span>` : ''}${t.foot || ''}</span>` : '') + '</button>';
   // a machine to run on: this one or a host, its connection state filled in by Test connection
-  const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: v === 'local' ? '⌂' : '⇄', title: t, tip: sub,
+  const icon = name => `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: icon(v === 'local' ? 'machine' : 'network'), title: t, tip: sub,
     foot: v !== 'local' ? `<span class="nb-state nb-hoststate" data-host-state="${esc(v)}"></span>` : ''});
   const picker = (tiles, fams, noun = 'benchmark') => {
     const pick = pickOf(), cats = [...new Set(tiles.map(t => t.cat).filter(Boolean))].sort();
@@ -652,7 +656,7 @@
           tip: x.summary || '', meta: x.units ? x.units + ' ' + u.nouns : '',
           foot: (x.controls || []).map(c => controlChip(c)).join('') + checkChip('stable', (x.proofs || {}).units, (x.failed || {}).units, 'the same ids twice, each unique')
             + ((b.controls || []).some(c => c.key === 'oracle') ? checkChip('no leak', (x.proofs || {}).leak, (x.failed || {}).leak, 'nothing of the reference shows before the run') : '')})).join('')}</div>`
-        + credentialWarnings(b, b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)));
+        + benchOptions(rec, b, 'dataset') + credentialWarnings(b, b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)));
     if (step === S.agent) {
       const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && !o.setup);
       const setups = all.filter(o => o.setup), controls = all.filter(o => o.control);
@@ -675,7 +679,7 @@
           const cur = mine[n] ?? x.default;
           return x.values
             ? `<label class="nb-field std-optselect" title="${esc(x.summary)}">${esc(words(n))}<select data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}">${x.values.map(v => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(v === 'default' ? 'Default' : v + (v === x.default ? ' (its default)' : ''))}</option>`).join('')}</select></label>`
-            : `<label class="nb-field std-optselect" title="${esc(x.summary)}">${esc(words(n))}<input data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}" value="${esc(mine[n] ?? '')}" placeholder="${esc(x.default ?? '')} (its default)" spellcheck="false" autocomplete="off"></label>`;
+            : `<label class="nb-field std-optselect" title="${esc(x.summary)}${x.example ? esc(' e.g. ' + x.example) : ''}">${esc(words(n))}<input data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}" value="${esc(mine[n] ?? '')}" placeholder="${esc(x.default ?? '')} (its default)" spellcheck="false" autocomplete="off"></label>`;
         }).join('') + '</div>'; };
       // the chosen ones' settings, one tab each: the benchmark's own way, the benchmark's settings every agent takes, each one's own
       const yoursWord = agent ? 'agent' : (b.kind || 'capability');
@@ -713,7 +717,7 @@
             hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator') : '')
         + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)',
             hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
-        + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, v, 'leaderboard')).join('') : '')
+        + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, ((b.options[k] || {}).names || {})[v] || v, 'leaderboard')).join('') : '')
         + keyLine(rec);
     }
     if (step === S.limits) {
@@ -750,7 +754,7 @@
       .filter(([, o]) => (o.setups || ['yours']).some(s => s === 'yours' ? yours : chosen.includes(s)))
       .map(([n, o]) => {
         const [k, by] = Object.entries(o.by || {})[0] || [];
-        const def = (k && by[of(k)]) || o.default;
+        const def = (!yours && k && by[of(k)]) || o.default;
         return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}<input class="nb-declared" data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
       });
     return rows.length ? `<div class="nb-sectionhead nb-sectionnext"><h2>${esc(b.label)}</h2></div>` + rows.join('') : '';
@@ -777,7 +781,10 @@
     // each field shows, greyed, the value used while it is empty; a task that declares its own keeps it
     const m = s => String(+(s / 60).toFixed(2));
     // [placeholder, declared]: the benchmark's or the agent's own reads as a value, Nullius's default stays grey
-    const def = {setup: [m(d.setup), false], image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), false]};
+    const setupSeconds = C.chosenOf(rec).map(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k) && b.family === 'agent' ? (d.setup_agent || d.setup) : d.setup);
+    const setup = setupSeconds.length && setupSeconds.some(s => s !== setupSeconds[0]) ? ['per setup', true]
+      : [m(setupSeconds[0] || d.setup), (setupSeconds[0] || d.setup) !== d.setup];
+    const def = {setup, image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), (d.catalogue || []).includes('score')]};
     const label = (k, l) => k === 'agent' ? 'Agent, whole ' + u.noun : l;
     return '<div class="nb-sectionhead nb-sectionnext"><h2>Time limits</h2></div>'
       + C.STANDARD_PHASES.map(([k, l]) => minutesRow(k, label(k, l), t[k], def[k])).join('');

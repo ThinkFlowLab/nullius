@@ -294,6 +294,24 @@ class DefaultAgentLeftOutOfConfig(unittest.TestCase):
         self.assertEqual((job.agent_name, job.agent_label, job.is_control), ("oracle", "oracle", True))
 
 
+class NullInConfig(unittest.TestCase):
+    """A present JSON null reads as nothing recorded, as an absent key does:
+    pages sort and print these strings."""
+
+    def test_null_model_and_effort_read_as_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_json(os.path.join(tmp, "result.json"), {})
+            _write_json(os.path.join(tmp, "config.json"), {"agents": [
+                {"name": "oracle", "model_name": None, "kwargs": {"reasoning_effort": None}},
+                {"name": "nop", "model_name": None, "kwargs": {"reasoning_effort": None}}]})
+            trial = os.path.join(tmp, "t__x")
+            _write_json(os.path.join(trial, "result.json"), {"task_name": "t", "trial_name": "t__x",
+                                                            "config": {"agent": {"kwargs": {"reasoning_effort": None}}}})
+            job = parse.parse_job(tmp)
+        self.assertEqual((job.model_name, job.reasoning_effort, job.trials[0].reasoning_effort), ("", "", ""))
+        self.assertEqual([a["effort"] for a in job.agents], ["", ""])
+
+
 class Stamps(unittest.TestCase):
     """Harbor's stamps carry no zone and mean UTC; the standard's and the
     imports' carry one. Pages order and subtract them together."""

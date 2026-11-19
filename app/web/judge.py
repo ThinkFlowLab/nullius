@@ -290,7 +290,7 @@ def judge_trial_route(job_id, trial_name):
 def judge_job_route(job_id):
     """Judge the job's unjudged trials with one judge, the form's ``lane``
     (Decision unless it names the LLM judge): the click is the request."""
-    job = shared._find_job(shared._jobs_for_request(), job_id)
+    job = shared._job_for_request(job_id)
     if job is None:
         abort(404)
     lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "decision"
@@ -479,7 +479,7 @@ def judge_compare_route():
     done, failed = run_batch(sides, lambda s: judge_side(s[1], s[2], k), lambda s: f"{s[0]} ({s[1].agent_label or s[1].job_id})")
     from flask import flash
     flash(f"Judged {done} of {len(sides)} side(s) over {len(todo)} pair(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
-    return redirect(url_for("compare", pick=view.references, cohort=view.cohort) + "#judgement")
+    return redirect(url_for("compare", pick=view.references, cohort=view.cohort, view=compare_web._view()) + "#judgement")
 
 
 # --- feasibility triage, task-instruction quality

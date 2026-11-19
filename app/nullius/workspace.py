@@ -19,6 +19,16 @@ and trajectory.json under it, with size and mtime), never by time: a run
 still going changes its files, the signature moves, the job is parsed again.
 A cached job that was parsed by an older version of ``parse`` is refreshed
 too — the signature carries ``parse.SCHEMA`` so a change there invalidates.
+
+A job that has ended (``_ended``: its result records a finish and nothing
+running or pending) is checked by its *head* alone: its own result.json and
+config.json, and its folder, whose mtime moves when a trial folder comes or
+goes. A Harbor resume rewrites result.json, so it is caught; a file changed
+inside a trial of an ended job and nothing else is not. The workspace's
+Refresh (``clear_cache``) reads every job again. A job a run of this
+application writes is checked trial by trial while that run goes on (a host
+run's copy can bring a trial's files after the job's own), and its head
+carries the run's end, so the last copy is checked trial by trial once more.
 """
 from __future__ import annotations
 
@@ -311,6 +321,25 @@ def _signatures(job_dir: str) -> tuple:
     return hashlib.sha256("\n".join(parts).encode()).hexdigest(), trials
 
 
+def _head(job_dir: str) -> str:
+    """What an ended job's parse can change by without a trial changing in place:
+    its own records, and its folder's mtime (a trial folder added or removed)."""
+    parts = [f"schema={SCHEMA}/{parse.SCHEMA}"]
+    for path in (job_dir, os.path.join(job_dir, "result.json"), os.path.join(job_dir, "config.json")):
+        try:
+            st = os.stat(path)
+        except OSError:
+            parts.append("-")
+            continue
+        parts.append(f"{st.st_size}:{st.st_mtime_ns}")
+    return "\n".join(parts)
+
+
+def _ended(job: parse.Job) -> bool:
+    """Its result records a finish and nothing running or pending: its trials are final."""
+    return job.finished_at is not None and job.state == "finished"
+
+
 def _encode(obj):
     if isinstance(obj, datetime):
         return {"$dt": obj.isoformat()}
@@ -381,37 +410,70 @@ def _write_index(ws: Workspace, index: dict) -> None:
     _write_atomically(_index_path(ws), lambda fh: json.dump(index, fh, ensure_ascii=False, indent=1))
 
 
-# Jobs already decoded in this process, by cache file: (signature, Job). A page
-# that loads the workspace then skips the JSON decode and the rebuild of every
-# unchanged job. A Job is never changed once loaded (parse.split_agents and the
-# compare page make new ones with dataclasses.replace).
+# Jobs already decoded in this process, by cache file: (signature, Job, trial
+# signatures, head). A page that loads the workspace then skips the JSON decode
+# and the rebuild of every unchanged job. A Job is never changed once loaded
+# (parse.split_agents and the compare page make new ones with dataclasses.replace).
 _DECODED: dict = {}
 _DECODED_LOCK = threading.Lock()
 
 
-def load_job(ws: Workspace, job_dir: str, index: dict | None = None) -> tuple:
-    """(Job, from_cache). Parses only when the signature changed. ``index``:
-    the rail's index as load_jobs holds it, noted in place."""
-    sig, trial_sigs = _signatures(job_dir)
+def _read_cache(path: str, job_dir: str) -> tuple | None:
+    """(signature, head, Job) of the cache file *path* when it is *job_dir*'s, else None."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            cached = json.load(fh, object_hook=_decode)
+        # "agents": a cache from before split_agents knows nothing of a job's several agents
+        if cached.get("dir") == job_dir and "agents" in cached.get("job", {}):
+            return cached.get("signature"), cached.get("head"), job_from_dict(cached["job"])
+    except (OSError, json.JSONDecodeError, TypeError, KeyError, ValueError, AttributeError):
+        pass
+    return None
+
+
+def _write_cache(ws: Workspace, path: str, sig: str, head: str, job: parse.Job) -> None:
+    os.makedirs(ws.jobs_dir, exist_ok=True)
+    _write_atomically(path, lambda fh: json.dump({"signature": sig, "head": head, "dir": job.dir, "cached": _now(),
+                                                  "job": job_to_dict(job)}, fh, default=_encode, ensure_ascii=False))
+
+
+def load_job(ws: Workspace, job_dir: str, index: dict | None = None, runs: dict | None = None) -> tuple:
+    """(Job, from_cache). Parses only when the signature changed; an ended job
+    whose head is unchanged is not stated trial by trial. ``index``: the
+    rail's index as load_jobs holds it, noted in place. ``runs``: job folder
+    name -> the end of the run of this application that writes it, None while
+    that run goes on; a job no run writes has no entry."""
+    run = (runs or {}).get(os.path.basename(job_dir), "")
+    short = run is not None     # the head alone may answer
+    head = _head(job_dir) + (f"\nrun={run}" if run else "")       # before anything is read: a change after it is caught next time
     path = _cache_file(ws, job_dir)
     with _DECODED_LOCK:
         known = _DECODED.get(path)
+    if short and known is not None and known[1].dir == job_dir and known[3] == head and _ended(known[1]):
+        _note_in_index(ws, job_dir, known[1], index)
+        return known[1], True
+    cached = _read_cache(path, job_dir) if known is None else None
+    if short and cached is not None and cached[1] == head and _ended(cached[2]):
+        with _DECODED_LOCK:
+            _DECODED[path] = (cached[0], cached[2], {}, head)
+        _note_in_index(ws, job_dir, cached[2], index)
+        return cached[2], True
+    sig, trial_sigs = _signatures(job_dir)
     if sig:
         if known is not None and known[0] == sig and known[1].dir == job_dir:
+            with _DECODED_LOCK:
+                _DECODED[path] = (sig, known[1], known[2], head)
             _note_in_index(ws, job_dir, known[1], index)
             return known[1], True
-        try:
-            with open(path, encoding="utf-8") as fh:
-                cached = json.load(fh, object_hook=_decode)
-            # "agents": a cache from before split_agents knows nothing of a job's several agents
-            if cached.get("signature") == sig and cached.get("dir") == job_dir and "agents" in cached.get("job", {}):
-                job = job_from_dict(cached["job"])
-                with _DECODED_LOCK:
-                    _DECODED[path] = (sig, job, trial_sigs)
-                _note_in_index(ws, job_dir, job, index)
-                return job, True
-        except (OSError, json.JSONDecodeError, TypeError, KeyError, ValueError):
-            pass
+        if known is not None:
+            cached = _read_cache(path, job_dir)
+        if cached is not None and cached[0] == sig:
+            if cached[1] != head and _ended(cached[2]):
+                _write_cache(ws, path, sig, head, cached[2])      # read by its head from the next process on
+            with _DECODED_LOCK:
+                _DECODED[path] = (sig, cached[2], trial_sigs, head)
+            _note_in_index(ws, job_dir, cached[2], index)
+            return cached[2], True
     reuse = None
     if known is not None and known[1].dir == job_dir:
         before = {t.dir: t for t in known[1].trials}
@@ -420,23 +482,22 @@ def load_job(ws: Workspace, job_dir: str, index: dict | None = None) -> tuple:
         reuse = lambda sub: before.get(sub) if old_sigs.get(sub) and old_sigs.get(sub) == trial_sigs.get(sub) else None
     job = parse.parse_job(job_dir, reuse=reuse)
     if sig:
-        os.makedirs(ws.jobs_dir, exist_ok=True)
-        _write_atomically(path, lambda fh: json.dump({"signature": sig, "dir": job_dir, "cached": _now(),
-                                                      "job": job_to_dict(job)}, fh, default=_encode, ensure_ascii=False))
+        _write_cache(ws, path, sig, head, job)
         with _DECODED_LOCK:
-            _DECODED[path] = (sig, job, trial_sigs)
+            _DECODED[path] = (sig, job, trial_sigs, head)
         _note_in_index(ws, job_dir, job, index)
     return job, False
 
 
-def load_jobs(ws: Workspace, roots) -> list:
+def load_jobs(ws: Workspace, roots, runs: dict | None = None) -> list:
     """Every job under *roots*, each from the cache when its files are
-    unchanged. Same order and de-duplication as ``parse.load_all``."""
+    unchanged. Same order and de-duplication as ``parse.load_all``.
+    ``runs``: as ``load_job``'s."""
     # the rail's index read once and written once, not once per job: re-reading it for
     # each made a workspace of n jobs cost n parses of an index of n entries
     index = job_index(ws)
     before = dict(index)
-    jobs = [load_job(ws, d, index)[0] for d in parse.find_job_dirs(roots)]
+    jobs = [load_job(ws, d, index, runs)[0] for d in parse.find_job_dirs(roots)]
     if index != before:
         _write_index(ws, index)
     return parse.split_agents(jobs)

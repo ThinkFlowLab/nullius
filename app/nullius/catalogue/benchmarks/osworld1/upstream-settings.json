@@ -3057,5 +3057,19 @@
   "values": "a person at the VM",
   "default": "manual",
   "nullius": "not offered - a person examines tasks by hand: no run to score"
+ },
+ {
+  "entry": "lib_run_single.py",
+  "setting": "max_steps",
+  "values": "a number",
+  "default": "none: its caller's",
+  "nullius": "option:max_steps"
+ },
+ {
+  "entry": "lib_run_single.py",
+  "setting": "args.sleep_after_execution",
+  "values": "seconds",
+  "default": "none: its caller's",
+  "nullius": "option:pause"
  }
 ]

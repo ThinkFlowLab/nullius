@@ -17,7 +17,7 @@ class StandardWhere(CompilerCase):
         schema = dict(self.schema, hosts=[], standardHere={"docker": docker, "licences": {}, "host": {}})
         program = ("const schema=" + json.dumps(schema) + ";const C=require(" + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ")(schema);\n"
                    + line("esc") + line("button") + cut("  const tile = t =>", "  const picker = ")
-                   + cut("  const consentBox = ", "  async function hostReq(")
+                   + cut("  const consentBox = ", "  async function hostReq(") + cut("  function benchOptions(", "  // Only credentials")
                    + "const out={};for(const b of C.standard().benchmarks)for(const backend of ['local','docker']){"
                    + "const r=C.createStandard(b.key);r.backend=backend;" + edit
                    + "try{out[b.key+' '+backend]=standardWhere(r);}catch(e){out[b.key+' '+backend]=String(e);}}"
@@ -34,7 +34,7 @@ class StandardWhere(CompilerCase):
                 self.assertIn('title="Not on this machine: docker is not installed"', tile)
                 self.assertEqual(html.count("Not on this machine"), 1)
                 container = re.search(r'<button [^>]*data-std-backend="container"[^>]*>', here[name]).group(0)
-                if name.startswith("osworld1 "):     # its Original's docker provider needs docker, which no image installs
+                if name.split()[0] in ("osworld1", "osworld2"):     # its Original's docker provider needs docker, which no image installs
                     self.assertIn('title="docker cannot be provided in a container: choose local processes."', container)
                 else:
                     self.assertNotIn("disabled", container)
@@ -61,6 +61,24 @@ class StandardWhere(CompilerCase):
         html = self.draw(None)["osworld1 local"]
         self.assertIn("<h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small>", html)
         self.assertIn("<b>docker</b>: Docker on the machine the driver runs on", html)
+        self.assertIn('VM provider</h3></div><p class="nb-fixed" title="the upstream', html)
+        self.assertNotIn("VM provider</h3>", self.draw(None, "r.others=[];")["osworld1 local"])
+        self.assertIn("<b>Docker</b>: Docker without sudo", self.draw(None)["osworld2 local"])
+
+    def test_an_option_shows_its_example_and_a_setup_its_label(self):
+        page = (APP / "static/builder/command-builder.js").read_text(encoding="utf-8")
+        cut = lambda start, end: page[page.index(start):page.index(end, page.index(start))]
+        line = lambda name: re.search(r"^  const %s = .*$" % name, page, re.M).group(0) + "\n"
+        schema = dict(self.schema, hosts=[], standardHere={"docker": None, "licences": {}, "host": {"osworld2": {"docker": ["missing"]}}})
+        program = ("const schema=" + json.dumps(schema) + ";const C=require(" + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ")(schema);\n"
+                   + line("esc") + line("button") + cut("  const tile = t =>", "  const picker = ") + cut("  function benchOptions(", "  // Only credentials")
+                   + "const out={};for(const k of ['osworld2','gsm8k']){const r=C.createStandard(k);out[k]=benchOptions(r,C.standardBench(r),'shared')+benchOptions(r,C.standardBench(r),'setup')+benchOptions(r,C.standardBench(r));}"
+                   + "const r=C.createStandard('osworld2'),b=C.standardBench(r);r.datasets=['offline36'];out.offline=benchOptions(r,b,'dataset');r.datasets=['test_v2'];out.all=benchOptions(r,b,'dataset');"
+                   + "process.stdout.write(JSON.stringify(out));")
+        html = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        self.assertIn('title="Disk write limit for each VM. e.g. 16"', html["osworld2"])
+        self.assertIn('placeholder="Provider default"', html["gsm8k"])
+        self.assertEqual(("Website host suffix" in html["offline"], "Website host suffix" in html["all"]), (False, True))
 
 
 if __name__ == "__main__":

@@ -137,7 +137,7 @@ class Routes(unittest.TestCase):
         self.stack.enter_context(patch.object(workspace, "load", side_effect=lambda home, name:
             {"active": self.active, "foreign": self.foreign}.get(name)))
         self.load_jobs = self.stack.enter_context(patch.object(workspace, "load_jobs",
-            side_effect=lambda ws, roots: [self.foreign_job if ws.name == "foreign" else self.active_job]))
+            side_effect=lambda ws, roots, runs=None: [self.foreign_job if ws.name == "foreign" else self.active_job]))
         for obj, name in [(web.shared, "open_workspace"), (web.shared, "_import_roots"),
                           (workspace, "save"), (workspace, "touch")]:
             self.stack.enter_context(patch.object(obj, name, side_effect=AssertionError(

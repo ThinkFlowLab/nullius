@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from 'traces/_attempts.html' import attempt_count %}
+{% from '_page.html' import page_head %}
 {% block title %}{{ task }} side by side — Nullius{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">
 <style>
@@ -9,22 +10,22 @@
   .cmp-cell .strip-caption { margin: .9rem 0 .35rem; font-size: .78rem; color: var(--text-dim); }
   .cmp-cell .strip-caption:first-child { margin-top: 0; }
 </style>{% endblock %}
-{% block crumb %}/ <a href="{{ url_for('compare', pick=picks, cohort=cohort) }}">compare</a> / {{ task }}{% endblock %}
+{% block crumb %}/ <a href="{{ url_for('compare', pick=picks, cohort=cohort, view=view) }}">compare</a> / {{ task }}{% endblock %}
 {% import "traces/_charts.html" as ui %}
 
 {# Same shape as the trial page's `view_url`, so the shared chart macros can
    call it without knowing which page they are on. Only the legend state rides
    in it: this page has no trace filter, so `f` is always the empty one. #}
 {% macro view_url(f, cf=none) -%}
-{{ url_for('compare_task', task=task, pick=picks, cohort=cohort, dataset=dataset, attempt=chosen,
+{{ url_for('compare_task', task=task, pick=picks, cohort=cohort, view=view, dataset=dataset, attempt=chosen,
            **((cf if cf is not none else chart_filter).query)) }}
 {%- endmacro %}
 
 {% block body %}
 
-<div class="page-title"><h1 class="mono">{{ task }}</h1></div>
+{{ page_head(task, mono=true) }}
 <p class="subtitle">{{ panels|length }} runs side by side<span class="dot">·</span>
-  <a href="{{ url_for('compare', pick=picks, cohort=cohort) }}">back to the comparison</a><span class="dot">·</span>
+  <a href="{{ url_for('compare', pick=picks, cohort=cohort, view=view) }}">back to the comparison</a><span class="dot">·</span>
   <span class="faint">drag a column header to reorder</span></p>
 <div class="cohort-note">
   <p>{{ 'Dataset not recorded' if dataset.startswith('[unidentified:') else dataset }} · {{ 'Matched tasks' if cohort == 'matched' else 'Whole runs' }}</p>
@@ -330,6 +331,7 @@
         const url = new URL({{ url_for('compare_task', task=task)|tojson }}, location.origin);
         next.forEach(id => url.searchParams.append('pick', id));
         url.searchParams.set('cohort', {{ cohort|tojson }});
+        {% if view %}url.searchParams.set('view', {{ view|tojson }});{% endif %}
         url.searchParams.set('dataset', {{ dataset|tojson }});
         {{ chosen|tojson }}.forEach(a => url.searchParams.append('attempt', a));
         location.href = url;

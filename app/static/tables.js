@@ -2,6 +2,12 @@
    into (the macros of templates/_tables.html; their styles in style.css,
    "the table toolkit"), and the card toolkit's (templates/_cards.html). */
 window.NulliusTable = {
+  /* Whether `text` holds every word of `query`, in any order and case. */
+  matches(text, query) {
+    const t = (text ?? '').toLowerCase();
+    return query.toLowerCase().split(/\s+/).every(w => t.includes(w));
+  },
+
   /* A header with data-type sorts its column on a click or Enter; num sorts
      descending first. A cell's data-sort wins over its text. A header that
      carries data-sorted at load is the sort the rows came in. The sorted
@@ -124,15 +130,17 @@ window.NulliusTable = {
      ancestor (the page's <main>): that is not leaving. */
   menu(btn, menu) {
     const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    // a modal over the page (the first-visit guide) takes the focus and the clicks without closing the menu under it
+    const away = to => !menu.contains(to) && !btn.contains(to) && !to.closest?.('[aria-modal="true"]');
     btn.addEventListener('click', () => {
       const open = menu.hidden;
       menu.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
-      if (open) menu.querySelector('input:not(:disabled), button')?.focus();
+      if (open) menu.querySelector('input:not(:disabled), button, a[href]')?.focus();
     });
-    document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) close(); });
+    document.addEventListener('click', e => { if (!menu.hidden && away(e.target)) close(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { close(); btn.focus(); } });
-    const left = e => { const to = e.relatedTarget; if (to && !menu.contains(to) && !btn.contains(to) && !to.contains(menu)) close(); };
+    const left = e => { const to = e.relatedTarget; if (to && away(to) && !to.contains(menu)) close(); };
     menu.addEventListener('focusout', left);
     btn.addEventListener('focusout', left);
   },
@@ -152,10 +160,7 @@ window.NulliusTable = {
       q.addEventListener('input', changed);
       q.addEventListener('keydown', e => { if (e.key === 'Escape' && q.value) { e.preventDefault(); q.value = ''; changed(); } });
     }
-    const found = row => {
-      const text = (row.dataset.search ?? '').toLowerCase();
-      return !q || q.value.toLowerCase().split(/\s+/).every(w => text.includes(w));
-    };
+    const found = row => !q || this.matches(row.dataset.search, q.value);
     const menus = [...(fmenu ? [[fbtn, fmenu, () => 1]] : []),
                    ...[...tools.querySelectorAll('[data-dropdown]')].map(b => [b, b.parentNode.querySelector('.menu'), set => set.size])];
     const mark = () => menus.forEach(([btn, menu, n]) => {
@@ -272,15 +277,54 @@ window.NulliusTable = {
   },
 
   /* Sticky columns, those whose header is a .sticky-col: each cell under it
-     pinned at the summed widths of the sticky columns before it, again as
-     they resize, hide or rows come in. A row without a cell under each
-     header (a colspan, an empty row) is left as it is. */
+     pinned at the summed widths of the sticky columns before it. Sticky rows,
+     the rows with data-sticky (data-sticky="wide": only from 900px wide, where
+     a tall row leaves room for the rest): once the first scrolls above the
+     table's controls row (id <table id>-tools), which sticks, they float under
+     it in a box of the wrapper's classes until the table ends, its sideways
+     scroll kept with the table's. The rows themselves move, so their controls
+     keep working; a hidden copy holds each one's place. Again as they resize,
+     hide or rows come in. A row without a cell under each header (a colspan,
+     an empty row) is left as it is. */
   sticky(table) {
     const heads = [...table.tHead.rows[0].cells], pinned = heads.filter(th => th.classList.contains('sticky-col'));
+    const wrap = table.closest('.table-wrap'), wide = matchMedia('(min-width: 900px)');
+    const box = document.createElement('div'), float = table.cloneNode(false), cols = document.createElement('colgroup');
+    const rows = () => [...table.querySelectorAll('tr[data-sticky]'), ...float.rows];
+    const floats = rows().length > 0, tools = floats && table.id && document.getElementById(table.id + '-tools');
+    const active = r => r.dataset.sticky !== 'wide' || wide.matches, ghosts = new Map();   // a floating row -> the copy holding its place
+    const land = () => { ghosts.forEach((ghost, row) => ghost.replaceWith(row)); ghosts.clear(); };
+    const lift = () => {
+      const on = rows().filter(active), t = table.getBoundingClientRect();
+      const under = tools ? tools.getBoundingClientRect().bottom : parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-height'));
+      const up = on.length > 0 && Math.min(...on.map(r => (ghosts.get(r) || r).getBoundingClientRect().top)) < under && t.bottom > under;
+      if (!up || on.length !== ghosts.size || on.some(r => !ghosts.has(r))) {
+        land();
+        if (up) [...table.querySelectorAll('tr[data-sticky]')].filter(active).forEach(row => {
+          const ghost = row.cloneNode(true), into = row.parentNode.tagName === 'THEAD' ? float.tHead : float.tBodies[0];
+          [ghost, ...ghost.querySelectorAll('[id]')].forEach(e => e.removeAttribute('id'));
+          ghost.removeAttribute('data-sticky');
+          ghost.classList.add('sticky-ghost');
+          ghost.setAttribute('aria-hidden', 'true');
+          ghost.inert = true;
+          row.replaceWith(ghost);
+          into.appendChild(row);
+          ghosts.set(row, ghost);
+        });
+        seen.takeRecords();   // its own moves are no change to the table
+      }
+      box.hidden = !up;
+      if (!up) return;
+      const widths = [...table.tHead.rows[0].cells].map(c => c.getBoundingClientRect().width);
+      cols.replaceChildren(...widths.map(w => { const c = document.createElement('col'); c.style.width = w + 'px'; return c; }));
+      float.style.width = t.width + 'px';
+      Object.assign(box.style, {top: Math.min(under, t.bottom - box.offsetHeight) + 'px', left: wrap.getBoundingClientRect().left + wrap.clientLeft + 'px', width: wrap.clientWidth + 'px'});
+      box.scrollLeft = wrap.scrollLeft;
+    };
     const place = () => {
       let left = 0;
       pinned.forEach(th => {
-        for (const row of table.rows) {
+        for (const row of [...table.rows, ...float.rows]) {
           if (row.cells.length !== heads.length) continue;
           const cell = row.cells[th.cellIndex];
           cell.classList.add('sticky-col');
@@ -289,10 +333,27 @@ window.NulliusTable = {
         }
         left += th.getBoundingClientRect().width;
       });
+      if (floats) lift();
     };
+    const seen = new MutationObserver(place);
+    if (tools) tools.classList.add('sticky-tools');
+    if (floats) {
+      float.removeAttribute('id');
+      float.removeAttribute('data-table');
+      float.append(cols, document.createElement('thead'), document.createElement('tbody'));
+      box.className = wrap.className + ' table-float';
+      box.hidden = true;
+      box.appendChild(float);
+      wrap.before(box);
+      wrap.addEventListener('scroll', () => { box.scrollLeft = wrap.scrollLeft; });
+      box.addEventListener('scroll', () => { wrap.scrollLeft = box.scrollLeft; });
+      addEventListener('scroll', lift, {passive: true});
+      addEventListener('resize', lift);
+      wide.addEventListener('change', lift);
+    }
     const resized = new ResizeObserver(place);
-    pinned.forEach(th => resized.observe(th));
-    new MutationObserver(place).observe(table, {childList: true, subtree: true});
+    [...pinned, table].forEach(el => resized.observe(el));
+    seen.observe(table, {childList: true, subtree: true});
     place();
   },
 
@@ -344,11 +405,11 @@ window.NulliusTable = {
   },
 };
 
-/* Every table with sticky columns, every table of the table macro and every collection of the cards macro, set up
+/* Every table with sticky columns or rows, every table of the table macro and every collection of the cards macro, set up
    once the page is read. */
 const nulliusTables = () => {
   document.querySelectorAll('table.grid').forEach(t => {
-    if (t.querySelector('.sticky-col')) NulliusTable.sticky(t);
+    if (t.querySelector('.sticky-col, [data-sticky]')) NulliusTable.sticky(t);
     if (t.hasAttribute('data-table')) NulliusTable.wire(t);
   });
   document.querySelectorAll('[data-cards]').forEach(c => NulliusTable.cards(c));

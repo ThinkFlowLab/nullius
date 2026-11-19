@@ -12,6 +12,7 @@ each one shows.
 No workspace is opened; the pages read the shipped catalogue only."""
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from contextlib import ExitStack
@@ -146,7 +147,7 @@ class BenchmarksList(PageCase):
         cat = catalog.load()
         keys = re.findall(r'<a class="card-link" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
-        self.assertEqual(len(keys), 10)
+        self.assertEqual(len(keys), 11)
         # two shelves, the official benchmarks then the community benchmarks; a shelf with nothing on it is not shown
         official = self.html[self.html.index('data-shelf="official"'):].split('</section>', 1)[0]
         for b in cat.listed_benchmarks:
@@ -218,12 +219,29 @@ class BenchmarkPage(PageCase):
         self.assertIn("benchmarks/swe-bench-verified/ ├─ benchmark.json ├─ driver.py ├─ images.json ├─ standard.json └─ upstream-settings.json", self.page("swe-bench-verified"))
         self.assertIn("benchmarks/terminal-bench/ ├─ benchmark.json ├─ driver.py ├─ standard.json └─ upstream-settings.json", self.page("terminal-bench"))
 
+    def test_an_option_with_a_pattern_shows_its_example_not_the_pattern(self):
+        for key in ("osworld2", "gsm8k", "humaneval", "gaia", "osworld1", "tau3-bench"):
+            html, opts = self.page_html(key), json.loads((Path(catalog.__file__).parent / "benchmarks" / key / "standard.json").read_text())["options"]
+            for o in opts.values():
+                if "pattern" in o:
+                    self.assertIn("e.g. <code>%s</code>" % o["example"], html)
+                    self.assertNotIn(o["pattern"], unescape(html))
+        self.assertNotIn("Provider default", self.page("osworld1"))
+
     def test_a_machine_setup_says_what_checks_it_and_what_installs_it(self):
         osworld = self.page("osworld1")
         self.assertIn("Setup: docker", osworld)
         self.assertIn("Checked by docker on PATH, on each machine a run uses; the builder's Where step checks it.", osworld)
         self.assertNotIn("nothing installs it", osworld)
         self.assertIn("the builder's Where step checks it and can install it.", self.page("tau3-bench"))
+
+    def test_a_machine_setup_shows_its_label_and_its_key_without_one(self):
+        osworld2 = self.page("osworld2")
+        for label in ("Docker", "Scoring programs"):
+            self.assertIn("Setup: " + label, osworld2)
+            self.assertIn("needs " + label, osworld2)
+        self.assertNotIn("Setup: scoring_programs", osworld2)
+        self.assertIn("Setup: docker", self.page("osworld1"))
 
 
 class DatasetsOnTheirPage(PageCase):

@@ -296,6 +296,93 @@ class Cache(unittest.TestCase):
         self.assertEqual(len(again.trials), 3)
         self.assertIs(again.trials[0], first.trials[0]); self.assertIs(again.trials[1], first.trials[1])
 
+    def _end(self, **stats):
+        _write_json(os.path.join(self.job_dir, "result.json"), {
+            "id": "j1", "started_at": "2026-09-04T01:00:00Z", "finished_at": "2026-09-04T01:05:00Z",
+            "stats": {"n_running_trials": 0, "n_pending_trials": 0, **stats}})
+
+    def _rewrite_trial(self, reward):
+        target = os.path.join(self.job_dir, "tau3-bench__t1__abc", "result.json")
+        with open(target, encoding="utf-8") as fh:
+            data = json.load(fh)
+        data["verifier_result"] = {"rewards": {"reward": reward}}
+        _write_json(target, data)
+
+    def test_an_ended_job_is_not_stated_trial_by_trial(self):
+        self._end()
+        first, _ = workspace.load_job(self.ws, self.job_dir)
+        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
+            again, from_cache = workspace.load_job(self.ws, self.job_dir)
+            self.assertIs(again, first); self.assertTrue(from_cache)
+            workspace._DECODED.clear()                   # a new process: the file on disk, by its head
+            again, from_cache = workspace.load_job(self.ws, self.job_dir)
+        self.assertTrue(from_cache); self.assertEqual(again, first)
+
+    def test_a_cache_from_before_the_head_learns_it_once(self):
+        self._end()
+        workspace.load_job(self.ws, self.job_dir)
+        path = workspace._cache_file(self.ws, self.job_dir)
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        del data["head"]
+        _write_json(path, data)
+        workspace._DECODED.clear()
+        _, from_cache = workspace.load_job(self.ws, self.job_dir)       # by its signature, the head written down
+        self.assertTrue(from_cache)
+        workspace._DECODED.clear()
+        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
+            _, from_cache = workspace.load_job(self.ws, self.job_dir)
+        self.assertTrue(from_cache)
+
+    def test_an_ended_job_a_resume_rewrites_is_parsed_again(self):
+        self._end()
+        workspace.load_job(self.ws, self.job_dir)
+        self._rewrite_trial(1.0)
+        _write_json(os.path.join(self.job_dir, "result.json"),
+                    {"id": "j1", "started_at": "2026-09-04T01:00:00Z", "stats": {"n_running_trials": 1}})
+        job, from_cache = workspace.load_job(self.ws, self.job_dir)
+        self.assertFalse(from_cache)
+        self.assertEqual([t.reward for t in job.trials], [1.0, 1.0])
+        self.assertTrue(job.is_running)
+
+    def test_an_ended_job_that_gains_a_trial_is_parsed_again(self):
+        self._end()
+        workspace.load_job(self.ws, self.job_dir)
+        time.sleep(0.01)
+        shutil.copytree(os.path.join(self.job_dir, "tau3-bench__t1__abc"), os.path.join(self.job_dir, "tau3-bench__t9__abc"))
+        job, from_cache = workspace.load_job(self.ws, self.job_dir)
+        self.assertFalse(from_cache); self.assertEqual(len(job.trials), 3)
+
+    def test_a_running_job_updates_with_each_trial(self):
+        self._end(n_running_trials=1)
+        workspace.load_job(self.ws, self.job_dir)
+        for reward in (1.0, 0.5):
+            time.sleep(0.01)
+            self._rewrite_trial(reward)                  # its result.json, config.json and folder as they were
+            job, from_cache = workspace.load_job(self.ws, self.job_dir)
+            self.assertFalse(from_cache); self.assertEqual(job.trials[1].reward, reward)
+
+    def test_a_host_run_s_trial_copied_after_its_job_is_read_once_the_run_ends(self):
+        """A host run's copy can bring the job's final result.json with a trial's
+        file still mid-write, and the next copy correct the trial alone."""
+        self._end()
+        workspace.load_job(self.ws, self.job_dir, runs={"job-a": None})       # the stale trial parsed, its run going on
+        time.sleep(0.01)
+        self._rewrite_trial(1.0)
+        done = {"job-a": ("done", "2026-09-04T01:06:00Z")}                     # marked done after its last copy
+        job, from_cache = workspace.load_job(self.ws, self.job_dir, runs=done)
+        self.assertFalse(from_cache); self.assertEqual(job.trials[1].reward, 1.0)
+        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
+            again, from_cache = workspace.load_job(self.ws, self.job_dir, runs=done)
+        self.assertIs(again, job); self.assertTrue(from_cache)
+
+    def test_a_job_no_run_writes_is_read_by_its_head(self):
+        self._end()
+        first, _ = workspace.load_job(self.ws, self.job_dir, runs={"job-b": None})
+        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
+            again, from_cache = workspace.load_job(self.ws, self.job_dir, runs={"job-b": None})
+        self.assertIs(again, first); self.assertTrue(from_cache)
+
     def test_index_lists_runs_without_a_parse(self):
         self.assertEqual(workspace.job_index(self.ws), {})
         workspace.load_job(self.ws, self.job_dir)

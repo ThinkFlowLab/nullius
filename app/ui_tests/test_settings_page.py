@@ -225,7 +225,8 @@ class SettingsPage(unittest.TestCase):
             return re.search(r'<article[^>]*id="%s".*?</article>' % name, html, re.S).group(0)
         hosts_row, key = row("HOSTS"), row("MODEL_API_KEY")
         self.assertNotIn(">not set<", hosts_row); self.assertNotIn('data-entry=', hosts_row); self.assertIn('data-add-host aria-label="Add a host"', html)
-        page = re.sub(r'(?s)<details class="st-endpoints">.*?</details>', '', html.split('<div id="add-host"')[0])   # an endpoint's placeholder is its default
+        page = re.sub(r'<article class="st-key-card"[^>]*data-key-kind="benchmark">.*?</article>', '', html, flags=re.S)
+        page = re.sub(r'(?s)<details class="st-endpoints">.*?</details>', '', page.split('<div id="add-host"')[0])   # an endpoint's placeholder is its default
         self.assertEqual(re.findall(r'placeholder="([^"]*)"', page), ["Search settings", "Search providers…", "(optional)", "(optional)"])                           # no field suggests anything
         self.assertNotIn("agtai", html); self.assertNotIn("10.0.0.4", html)                      # (ssh aliases offered come from this machine's own config)
         self.assertIn('data-source="unset"', key); self.assertIn('data-provider-card="custom" data-configured="false" data-ready="false"', html)
@@ -300,6 +301,7 @@ class SettingsPage(unittest.TestCase):
         html = self.page()
         self.assertIn("Saved", html); self.assertNotIn("Applies now.", html); self.assertNotIn("Saved to .env", html); self.assertIn('data-entry="bench"', html)
         form = html[html.index('id="settings-form"'):html.index('</form>', html.index('id="settings-form"'))]
+        form = re.sub(r'<article class="st-key-card"[^>]*data-key-kind="benchmark">.*?</article>', '', form, flags=re.S)
         self.assertEqual(form.count('type="submit"'), 2)                                            # one Save for the page
         # re-posting the page unchanged changes nothing; an emptied field keeps the value; × removes it
         self.post(); self.assertIn("Nothing changed", self.page())

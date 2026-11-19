@@ -7,6 +7,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 from nullius.standard import job
 from nullius.traces import trace
@@ -197,6 +198,31 @@ class Written(unittest.TestCase):
 
     def test_a_control_writes_none(self):
         self.assertFalse(os.path.exists(self.write({"key": "nop", "_kind": "control"}, None)))
+
+    def test_a_trace_that_fails_leaves_the_result_and_says_its_error(self):
+        traj = job.trajectory_from_events(list(EVENTS), [call(1, 2)], AGENT, "m", "j/u")
+        with mock.patch.object(job, "trace_from_run", side_effect=KeyError("the task's own words")):
+            path = self.write(AGENT, traj)
+        agent = os.path.dirname(path)
+        self.assertFalse(os.path.exists(path))
+        with open(os.path.join(os.path.dirname(agent), "result.json")) as f:
+            self.assertEqual(json.load(f)["verifier_result"]["rewards"], {"reward": 1.0})
+        with open(os.path.join(agent, "trace.error.txt")) as f:
+            self.assertEqual(f.read(), "KeyError\n")
+        self.assertTrue(os.path.exists(os.path.join(agent, "trajectory.json")))
+
+    def test_a_trace_error_that_cannot_be_written_leaves_the_result(self):
+        traj = job.trajectory_from_events(list(EVENTS), [call(1, 2)], AGENT, "m", "j/u")
+        write = job._write
+
+        def refusing(path, text):
+            if os.path.basename(path).startswith("trace"):
+                raise PermissionError(path)
+            write(path, text)
+
+        with mock.patch.object(job, "_write", refusing):
+            path = self.write(AGENT, traj)
+        self.assertTrue(os.path.exists(os.path.join(os.path.dirname(os.path.dirname(path)), "result.json")))
 
 
 class Backfill(unittest.TestCase):

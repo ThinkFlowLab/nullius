@@ -57,7 +57,7 @@ GSMA's eight telecom tests, from 3GPP standards and maths to 5G root-cause analy
 | `eval_type` | **`soft`**, `hard` | How TeleLogs' scorer compares the boxed root cause with the answer (its eval_type). | `original`, `yours` |
 | `subject` | **`all`**, `lexicon`, `research-overview`, `research-publications`, `standards-overview`, `standards-specifications` | TeleQnA's question category: every one, or one alone (the task's subject argument). | `original`, `yours` |
 | `task_id` | **`all`**, `T1`, `T2`, `T3`, `T4`, `T5`, `T6`, `T7`, `T8`, `T9`, `T10`, `T11`, `T12`, `T13`, `T14`, `T15`, `T16`, `T17`, `T18`, `T19`, `T20`, `T21`, `T22`, `T23`, `T24`, `T25`, `T26`, `T27`, `T28`, `T29`, `T30` | 6G-Bench's task family: all 30, or one alone (the task's task_id argument). | `original`, `yours` |
-| `temperature` | pattern `default\|(?:0\|[1-9][0-9]*)(?:\.[0-9]+)?`, default `default` | Sampling randomness: Inspect's --temperature. Provider default sends none, as GSMA's leaderboard runs do; enter a non-negative decimal to set one. Accepted values depend on the model. | `original` |
+| `temperature` | default `default` | Sampling randomness: Inspect's --temperature. Provider default sends none, as GSMA's leaderboard runs do; enter a non-negative decimal to set one. Accepted values depend on the model. | `original` |
 
 ## Good to know
 

@@ -191,7 +191,8 @@ class TheRelay(WithUpstream):
     def test_the_recorded_copies_are_cleaned_and_what_is_sent_is_not(self):
         """An error that echoes the request's credentials, and a routing object holding a token: the record keeps
         neither the relay's key nor the token; the provider receives the caller's bytes as they were."""
-        Upstream.always = (200, "application/json", json.dumps({"error": {"code": 401, "message": f"Authorization: Bearer {KEY}"}}).encode())
+        Upstream.always = (200, "application/json", json.dumps({"choices": [{"message": {"content": "ok"}}],
+                                                                "error": {"code": 401, "message": f"Authorization: Bearer {KEY}"}}).encode())
         for serving in (None, {"m-run": ["prov-a"]}):
             with self.subTest(serving=serving):
                 r = self.relay(model="m-run", key=KEY, serving=serving)
@@ -260,15 +261,15 @@ class TheRelay(WithUpstream):
         self.assertEqual(relay.reply_facts("/chat/completions", b"not json", False), {})
         self.assertEqual(relay.reply_facts("/chat/completions", b"data: [1]\n\ndata: {\"error\": 5}\n\n", True), {})
 
-    def test_what_the_record_read_before_is_read_as_before(self):
-        """The facts are read apart: a failed Responses stream's text, tool calls and usage stay as the relay read
-        them before (it took nothing from a ``response.failed`` event), its error beside them."""
+    def test_a_failed_responses_stream_is_read_beside_its_facts(self):
+        """The facts are read apart: a failed Responses stream's text, tool calls and usage are read from its
+        ``response.failed`` event, its error beside them."""
         body = sse({"type": "response.output_text.delta", "delta": "part"},
                    {"type": "response.failed", "response": {"object": "response", "status": "failed",
                                                             "error": {"code": "server_error", "message": "failed"},
                                                             "output": [{"type": "message", "content": [{"type": "output_text", "text": "x"}]}],
                                                             "usage": {"input_tokens": 5, "output_tokens": 2}}})
-        self.assertEqual(relay.read_reply("/responses", body, True), {"text": "", "tool_calls": [], "usage": None})
+        self.assertEqual(relay.read_reply("/responses", body, True), {"text": "x", "tool_calls": [], "usage": relay._usage({"input_tokens": 5, "output_tokens": 2})})
         self.assertEqual(relay.reply_facts("/responses", body, True),
                          {"end": "failed", "error": {"code": "server_error", "message": "failed"}})
 
@@ -276,9 +277,7 @@ class TheRelay(WithUpstream):
         """Recorded beside the reply as it was read; the call keeps its status, no ``error`` of the record's own
         is added, and a unit's failure reads it as before (a 200 is no failure)."""
         r = self.relay(model="m-run")
-        errors = [(b'{"error":{"code":502,"message":"Provider returned error"}}', "application/json",
-                   {"code": 502, "message": "Provider returned error"}),
-                  (sse({"id": "c1", "provider": "Prov A", "choices": [{"index": 0, "delta": {"content": "part"}}]},
+        errors = [(sse({"id": "c1", "provider": "Prov A", "choices": [{"index": 0, "delta": {"content": "part"}}]},
                        {"id": "c1", "error": {"code": "server_error", "message": "upstream ended"},
                         "choices": [{"index": 0, "delta": {}, "finish_reason": "error"}]}), "text/event-stream",
                    {"code": "server_error", "message": "upstream ended"}),

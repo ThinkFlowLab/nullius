@@ -9,6 +9,7 @@ exactly one place. The requirements and import checks together keep the
 viewer independent of the runtime.
 """
 
+import fnmatch
 import importlib.util
 import json
 import os
@@ -79,6 +80,26 @@ class TheSurfaceIsDeclared(unittest.TestCase):
                   for p in (APP / "nullius").rglob("__init__.py")}
         self.assertEqual({p for p in packages if p == "nullius" or p.startswith("nullius.")}, source)
         self.assertEqual({p.split(".")[0] for p in packages}, {"nullius", "_nullius_app"})
+
+    def test_every_file_a_bundled_definition_runs_is_shipped(self):
+        """Every file a host's snapshot takes of a bundled entry is package data too."""
+        from nullius.standard import payload
+        shipped = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["setuptools"]["package-data"]
+
+        def covered(package, relative):
+            parts = relative.split("/")
+            return any(len(g.split("/")) == len(parts) and all(map(fnmatch.fnmatchcase, parts, g.split("/")))
+                       for g in shipped[package])
+
+        base = APP / "nullius"
+        entries = [("nullius.catalogue", f"{kind}/{e.name}", payload._entry(e))
+                   for kind in ("agents", "benchmarks", "capabilities")
+                   for e in sorted((base / "catalogue" / kind).iterdir()) if e.is_dir() and e.name != "__pycache__"]
+        entries += [("nullius.standard", f"kits/{e.name}", payload._entry(e, kit=True))
+                    for e in sorted((base / "standard" / "kits").iterdir()) if (e / "standard.json").is_file()]
+        missing = [f"{where}/{name}" for package, where, files in entries for name in files
+                   if not covered(package, f"{where}/{name}")]
+        self.assertEqual(missing, [])
 
     def test_every_requirement_is_on_the_allowlist(self):
         for req in requirements():

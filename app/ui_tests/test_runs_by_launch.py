@@ -60,7 +60,7 @@ class RunsByLaunch(unittest.TestCase):
         self.stack.enter_context(patch.object(workspace, "job_index", return_value={}))
         self.stack.enter_context(patch.object(workspace, "load", side_effect=lambda home, name: self.ws))
         self.jobs = [self.later, self.strong, self.nop, self.weak, self.oracle]
-        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: self.jobs))
+        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: self.jobs))
         self.stack.enter_context(patch.object(web.shared, "_jobs_for_request", side_effect=lambda: self.jobs))
         self.stack.enter_context(patch.dict(execution.EXECUTIONS, {}, clear=True))
         self.client = web.app.test_client()
@@ -142,12 +142,39 @@ class RunsByLaunch(unittest.TestCase):
                 if says:
                     self.assertIn(says, block)
 
+    def test_finished_kits_do_not_inherit_the_shared_process_state(self):
+        from nullius.standard import job
+        with tempfile.TemporaryDirectory() as root:
+            plan = execution.Plan(name="kits", script="conform", runner="standard",
+                                  jobs=[{"name": "kit-conversation"}, {"name": "kit-tools"}, {"name": "kit-computer"}])
+            ex = execution.Execution(plan, root=root)
+            ex.launched = "run"
+            self.jobs = []
+            for name in ("kit-conversation", "kit-tools", "kit-computer"):
+                ok = name != "kit-computer"
+                j = write_job(ex.jobs, name, "my-agent", {"a": 1 if ok else "RuntimeError"}, n_tasks=1)
+                job.write_result(j.dir, name, 1, 2, [{}] if ok else [{"exception_info": {"exception_type": "RuntimeError"}}], 1)
+                self.jobs.append(parse.parse_job(j.dir))
+            execution.EXECUTIONS[ex.id] = ex
+            for state in ("running", "failed"):
+                with self.subTest(state=state):
+                    ex.state = state
+                    ex.finished = 3 if state == "failed" else None
+                    ex.ends = {"run": {"rc": 1, "at": 3}} if state == "failed" else {}
+                    html = self.get("/runs")
+                    for name in ("kit-conversation", "kit-tools", "kit-computer"):
+                        row = next(row for row in re.findall(r"<tr\b.*?</tr>", html, re.S)
+                                   if f"{name}</small>" in row)
+                        expected = state if name == "kit-computer" else "finished"
+                        self.assertIn(f'class="la-state {expected}"', row)
+                    self.assertEqual(ex.state, state)
+
     def test_a_later_paused_shard_has_a_resume_link(self):
         from web.runs import _launch_view
         group = SimpleNamespace(job_ids=[], pending=["first", "second"], source="record", dataset="")
         first = SimpleNamespace(state="done", plan=SimpleNamespace(recipe={}, jobs=[]), refused=lambda _: None, never_ran=lambda _: False)
         second = SimpleNamespace(state="paused", plan=SimpleNamespace(recipe={}, jobs=[]), live_state=lambda _: "paused")
-        with patch.object(execution, "for_job", side_effect=lambda key: {"first": first, "second": second}[key]), \
+        with patch("web.shared.run_for", side_effect=lambda key: {"first": first, "second": second}[key]), \
              patch("web.runs._control_planned", return_value=""):
             self.assertEqual(_launch_view(group, {}, {}, {})["paused"], "second")
 

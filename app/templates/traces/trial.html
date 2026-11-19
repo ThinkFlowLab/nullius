@@ -24,20 +24,20 @@
 {% from 'traces/_judgement.html' import judgement_panel %}
 {% from 'traces/_attempts.html' import attempt_tabs, attempt_count, try_tabs %}
 {% from 'traces/_head.html' import ran_cards %}
+{% from '_page.html' import page_head %}
 {% block body %}
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
 
 
-<div class="page-title trial-title">
-  <h1>{{ trial.task_base }}</h1>
+{% set sub %}
   <span class="tag oc-{{ trial.outcome }}">{{ trial.outcome_label }}</span>
   {# The recorded exception type, beside the label that came from it. For an
      Unknown it says which class the classifier has no side for, so a reader
      can place it (classify._AGENT_EXCEPTIONS / _INFRA_EXCEPTIONS) instead of
      guessing from the colour. #}
   {% if trial.exception_type %}<span class="mono faint exception-type"
-    title="{% if trial.outcome == 'unknown' %}Harbor recorded this exception on the trial and the classifier has no side for it, so the trial counts and is charged to nobody. To place it, add the name to _AGENT_EXCEPTIONS or _INFRA_EXCEPTIONS in app/nullius/runs/classify.py.{% else %}Harbor recorded this exception on the trial; the outcome label follows from it.{% endif %}">{{ trial.exception_type }}</span>{% endif %}
-</div>
+    title="{% if trial.outcome == 'unknown' %}Harbor recorded this exception on the trial and the classifier has no side for it, so the trial counts and is charged to nobody. To place it, add the name to _AGENT_EXCEPTIONS or _INFRA_EXCEPTIONS in app/nullius/runs/classify.py.{% else %}Harbor recorded this exception on the trial; the outcome label follows from it.{% endif %}">{{ trial.exception_type }}</span>{% endif %}{% endset %}
+{{ page_head(trial.task_base, sub=sub, mono=true) }}
 {# an earlier try of an attempt: evidence only, never judged #}
 {% set replaced = trial.trial_name != attempt.trial_name %}
 {# What ran (traces/_head.html, the same on All attempts), then how it went: the dataset's own

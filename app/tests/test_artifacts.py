@@ -25,6 +25,21 @@ class ArtifactViews(unittest.TestCase):
         self.assertIn("zzz", second["text"])
         self.assertIn(secret, (self.trial / "result.json").read_text())
 
+    def test_osworld_calls_are_available_before_a_score_and_not_duplicated_after_it(self):
+        calls = self.trial / ".work/osworld/computer-calls.jsonl"
+        calls.parent.mkdir(parents=True)
+        calls.write_text('{"tool":"click"}\n')
+        for scored in (False, True):
+            with self.subTest(scored=scored):
+                if scored:
+                    copy = self.trial / "verifier/osworld/computer-calls.jsonl"
+                    copy.parent.mkdir(parents=True)
+                    copy.write_bytes(calls.read_bytes())
+                records = [r for r in artifacts.listing(self.trial)
+                           if r["key"].startswith("osworld-") and r["exists"]]
+                self.assertEqual([r["key"] for r in records], ["osworld-runner-calls"])
+                self.assertEqual(artifacts.read(self.trial, "osworld-runner-calls")["text"], calls.read_text())
+
     def test_unknown_keys_and_escaping_symlinks_are_refused(self):
         outside = Path(self.tmp.name) / "outside.txt"
         outside.write_text("not a trial record")

@@ -679,7 +679,7 @@ def parse_trial(job_id: str, trial_dir: str) -> Trial | None:
         source=source,
         model_name=(res.get("agent_info", {}).get("model_info", {}) or {}).get("name", ""),
         agent_version=(res.get("agent_info") or {}).get("version") or "",
-        reasoning_effort=str((((res.get("config") or {}).get("agent") or {}).get("kwargs") or {}).get("reasoning_effort", "")),
+        reasoning_effort=str((((res.get("config") or {}).get("agent") or {}).get("kwargs") or {}).get("reasoning_effort") or ""),
         agent_info_name=str((res.get("agent_info") or {}).get("name") or ""),
         outcome=outcome,
         reward=reward,
@@ -919,7 +919,7 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
     stats = res.get("stats") or {}
 
     agents = cfg.get("agents") or [{}]
-    model = agents[0].get("model_name", "")
+    model = agents[0].get("model_name") or ""
 
     # Three config shapes in the wild: `datasets: [{path, n_tasks}]` for a
     # local checkout, `datasets: [{name, version, n_tasks}]` for a registry
@@ -955,7 +955,7 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
         started_at=_iso(res.get("started_at")),
         finished_at=_iso(res.get("finished_at")),
         agent_name=agents[0].get("name", ""),
-        reasoning_effort=str((agents[0].get("kwargs") or {}).get("reasoning_effort", "")),
+        reasoning_effort=str((agents[0].get("kwargs") or {}).get("reasoning_effort") or ""),
         n_total_trials=res.get("n_total_trials") or 0,
         n_errored_trials=stats.get("n_errored_trials") or 0,
         n_running_trials=stats.get("n_running_trials") or 0,
@@ -997,7 +997,7 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
     job.launch = launch_of(cfg)
     if len(agents) > 1 and not job.runner:
         job.agents = [{"name": a.get("name") or a.get("import_path") or "", "model": a.get("model_name") or "",
-                       "effort": str((a.get("kwargs") or {}).get("reasoning_effort", "")),
+                       "effort": str((a.get("kwargs") or {}).get("reasoning_effort") or ""),
                        "command": redact(harbor_command(dict(cfg, agents=[a]),
                                                         next((t.env_type for t in job.trials if t.env_type), "")))}
                       for a in agents if isinstance(a, dict)]

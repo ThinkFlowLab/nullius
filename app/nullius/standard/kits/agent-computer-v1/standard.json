@@ -1,0 +1,158 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "agent-computer-v1",
+  "kit_version": 1,
+  "label": "Kit: agent.computer/v1",
+  "summary": "Eight checks on a small real desktop, reached through the computer port's MCP server: four basic - read the screen, click, type, stop at the step budget - and four skills - drag, scroll, recover from an error, several actions in one step. The desktop's own records decide each one.",
+  "family": "agent",
+  "needs": [
+    "agent.computer/v1"
+  ],
+  "basic": [
+    "see",
+    "click",
+    "type",
+    "limit"
+  ],
+  "skills": {
+    "drag": "drags a handle into a marked zone",
+    "scroll": "scrolls a list to read what it shows at first below its edge",
+    "recover": "reads an acting call's error and acts again",
+    "batch": "sends several actions in one step"
+  },
+  "driver": {
+    "unit_end": true,
+    "command": [
+      "python3",
+      "{here}/driver.py"
+    ]
+  },
+  "mcp_servers": {
+    "computer": {
+      "command": [
+        "python3",
+        "{here}/pipe.py"
+      ],
+      "summary": "The unit's desktop: a pipe to the socket where the kit's driver serves the computer port over it; the socket is setup's argument."
+    }
+  },
+  "environments": {
+    "desktop": {
+      "summary": "The kit's desktop, which the driver starts for each unit: a virtual X display, a window manager, a session bus, the accessibility bus, Python with Tk, pyautogui and Pillow, and the kit's fixture. No agent runs in it but through the port.",
+      "dockerfile": "desktop.Dockerfile",
+      "files": [
+        "desktop-requirements.txt",
+        "fixture.py",
+        "session.py"
+      ]
+    }
+  },
+  "datasets": [
+    {
+      "id": "kit",
+      "units": 8
+    }
+  ],
+  "units": {
+    "noun": "check",
+    "nouns": "checks"
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "Nullius: no agent runs; the desktop is left as setup made it, and the turn ends with no call."
+    },
+    "oracle": {
+      "source": "nullius",
+      "from": "The calls a correct agent makes, sent by the kit's driver to the unit's own computer server, run on its desktop."
+    }
+  },
+  "score": {
+    "kind": "pass",
+    "says": "the desktop's records show the task done, every pointer and key event inside an acting call, and the final message holds what the screen showed"
+  },
+  "limits": {
+    "turn_seconds": 600
+  },
+  "check_details": {
+    "see": {
+      "label": "Read the screen",
+      "task": "Read the words drawn on the screen and report them in order.",
+      "passes": "Ignoring case, the final message contains the drawn words together in order at least once, with no other vocabulary word between them and at most twelve vocabulary occurrences in all, including repeats, and no input came outside an acting call."
+    },
+    "click": {
+      "label": "Click a button",
+      "task": "Click the named one of six buttons.",
+      "passes": "The desktop logged a left press on that button, none on the others, and every input inside an acting call."
+    },
+    "type": {
+      "label": "Type a word",
+      "task": "Type a given word in a text field and press Enter.",
+      "passes": "The field held exactly the word at the last Enter, and every key came inside an acting call."
+    },
+    "limit": {
+      "label": "Stop at the budget",
+      "task": "Click six buttons in order with a budget of two steps.",
+      "passes": "At least one button was pressed, no input came after the last step, and no acting call was sent once the steps were used up."
+    },
+    "drag": {
+      "label": "Drag",
+      "task": "Drag a handle into a marked zone.",
+      "passes": "A left press on the handle was released inside the zone, inside acting calls."
+    },
+    "scroll": {
+      "label": "Scroll",
+      "task": "Scroll to the end of a list and report the large words there in order.",
+      "passes": "Ignoring case, the final message contains the drawn words together in order at least once, with no other vocabulary word between them and at most twelve vocabulary occurrences in all, including repeats, and the list moved."
+    },
+    "recover": {
+      "label": "Recover from an error",
+      "task": "Click a named button; the first acting call, whatever it is, is answered with an error and not run.",
+      "passes": "An acting call sent after the error's answer succeeded, and the button was clicked as in the click check."
+    },
+    "batch": {
+      "label": "Several actions in one step",
+      "task": "Fill three text fields with a budget of two steps.",
+      "passes": "Each field holds its word, every key inside an acting call."
+    }
+  },
+  "proven": {
+    "kit": {
+      "units": {
+        "units": 8,
+        "passed": "8 ids, the same twice, unique",
+        "on": "2026-11-16"
+      },
+      "leak": {
+        "units": 8,
+        "looked_for": 2,
+        "short": 6,
+        "passed": "8/8",
+        "note": "6 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-16"
+      },
+      "nop": {
+        "passed": "0/8",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 8,
+        "job": "2026-11-16__13-07-27__agent-computer-v1__kit__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-16"
+      },
+      "oracle": {
+        "passed": "8/8",
+        "value": 1.0,
+        "expect": {
+          "at_least": 1.0
+        },
+        "units": 8,
+        "job": "2026-11-16__13-07-27__agent-computer-v1__kit__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-16"
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}Feasibility · {{ job.job_id }} — Nullius{% endblock %}
 {% block crumb %}/ <a href="{{ url_for('job', job_id=job.job_id) }}">{{ job.job_id }}</a> / feasibility{% endblock %}
 {% block head %}
@@ -37,13 +38,12 @@
 </style>
 {% endblock %}
 {% block body %}
-<header class="run-header">
-  <div class="page-title"><h1>Feasibility check</h1><span class="mono">{{ job.job_id }}</span></div>
+{% set sub %}<span class="mono">{{ job.job_id }}</span>{% endset %}
+{{ page_head('Feasibility check', sub=sub) }}
   <p class="subtitle" id="feasibility-meaning">
     Is each task feasible: can an empty solution <strong>fail</strong>, and can a reference solution <strong>pass</strong>?
     Harbor's <span class="mono">nop</span> and <span class="mono">oracle</span> controls answer that per task. It says nothing about whether an agent will succeed.
   </p>
-</header>
 
 <div class="feas-controls" id="feasibility-executed" aria-label="Scope and controls">
   <div><span class="fk">Task scope</span><span id="feasibility-scope">{{ report.scope }}</span></div>
@@ -74,7 +74,7 @@
 
 <div class="legend feas-summary" role="group" aria-label="Feasibility classes">
   <span class="feas-headline" id="feasibility-count"><strong>{{ report.n_feasible }}</strong><span class="faint">/{{ report.rows|length }}</span> feasible</span>
-  {% for k in F_ORDER %}{% if report.counts[k] %}<span class="chip fv-{{ k }}">{{ F_LABELS[k] }} <b>{{ report.counts[k] }}</b></span>{% endif %}{% endfor %}
+  {% set oc = report.counts %}{% for k in F_ORDER %}{% if oc[k] %}<span class="chip fv-{{ k }}">{{ F_LABELS[k] }} <b>{{ oc[k] }}</b></span>{% endif %}{% endfor %}
 </div>
 
 {% if report.rows %}

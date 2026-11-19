@@ -8,12 +8,14 @@ every shard has its row. Jobs are written as a standard run writes them
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
 import tempfile
 import unittest
 from contextlib import ExitStack
+from html import unescape
 from pathlib import Path
 from unittest.mock import patch
 
@@ -80,7 +82,7 @@ class LaunchShards(unittest.TestCase):
         for name, value in (("list_all", [ws]), ("job_index", {})):
             self.stack.enter_context(patch.object(workspace, name, return_value=value))
         self.stack.enter_context(patch.object(workspace, "load", side_effect=lambda home, name: ws))
-        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda w, roots: self.jobs))
+        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda w, roots, runs=None: self.jobs))
         self.stack.enter_context(patch.object(web.shared, "_jobs_for_request", side_effect=lambda: self.jobs))
         self.stack.enter_context(patch.dict(execution.EXECUTIONS, {}, clear=True))
         self.client = web.app.test_client()
@@ -172,6 +174,37 @@ class LaunchShards(unittest.TestCase):
         self.assertIn("· 2 runs · 2 checks</span>", block)
         self.assertEqual(len(rows_of(block)), 4)
 
+    def test_compare_offers_a_sharded_run_once_and_compares_every_shard_s_trials(self):
+        self.jobs, executions = write_launch(self.root, self.runs)
+        execution.EXECUTIONS.update(executions)
+        runs = self.client.get("/compare/runs", query_string={"workspace": "s"}).get_json()["runs"]
+        self.assertEqual(sorted((r["agent"], r["shards"], r["check"]) for r in runs),
+                         [("jiuwenswarm", 2, False), ("nop", 2, True), ("oracle", 1, True), ("terminus-2", 2, False)])   # no oracle on shard 2
+        self.assertEqual(len({r["launch"] for r in runs}), 1)
+        whole = next(r["value"] for r in runs if r["agent"] == "jiuwenswarm")
+        # any shard's id stands for its whole run, on a column or from the Runs page's job= links
+        for query in ({"pick": f"s:{NAME}-jiuwenswarm-shard-2of2"}, {"job": [f"{NAME}-jiuwenswarm-shard-2of2", f"{NAME}-jiuwenswarm-shard-1of2"]}):
+            response = self.client.get("/compare", query_string=query)
+            self.addCleanup(response.close)
+            body = response.get_data(as_text=True)
+            self.assertEqual(re.findall(r'data-column="\d+" data-run="([^"]*)"', body), [whole.split(":", 1)[1], ""])
+            # and the picks the run lists compare against name it whole, so its entry is greyed in another column
+            self.assertEqual(json.loads(re.search(r"NulliusCompare.wire\(\{values: (\[.*?\])", body).group(1)), [whole, "s:"])
+            # its link under the run is every shard's, as Runs lists them
+            links = re.search(r'<span class="faint mono col-id">(.*?)</span>', body, re.S).group(1)
+            self.assertEqual([(unescape(h), re.sub(r"<[^>]+>", "", t)) for h, t in re.findall(r'<a href="([^"]+)"[^>]*>(.*?)</a>', links)],
+                             [(f"/job/{NAME}-jiuwenswarm-shard-{i}of2?workspace=s", f"shard {i} · {host}")
+                              for i, host in ((1, "this machine"), (2, "host-2"))])
+            trials = re.search(r'<th class="rowhead[^"]*"[^>]*>Trials</th>\s*<td[^>]*>(\d+)', body).group(1)
+            self.assertEqual(int(trials), len(UNITS))
+
+    def test_compare_keeps_a_run_of_one_shard_as_it_is(self):
+        self.jobs, executions = write_launch(self.root, self.runs, written=())
+        self.jobs = [j for j in self.jobs if j.job_id.endswith("1of2")]
+        runs = self.client.get("/compare/runs", query_string={"workspace": "s"}).get_json()["runs"]
+        self.assertEqual(sorted((r["id"], r["shards"]) for r in runs), sorted((j.job_id, 1) for j in self.jobs))
+
 
 if __name__ == "__main__":
+
     unittest.main()

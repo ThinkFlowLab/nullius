@@ -5,6 +5,9 @@
    base.html chooses the theme before paint; every asset remains local. */
 :root {
   --topbar-height: 56px;
+  --tool-h: 2.1rem;                               /* a page's buttons and a table's controls: as tall as a small button with its icon */
+  --h1-size: clamp(1.75rem, 2.5vw, 2.15rem);
+  --head-gap: 1.5rem;                             /* under a page's head, on every page */
   --nav-hover: #32363d;
   --nav-text: #d6d9df;
   color-scheme: dark;
@@ -256,18 +259,34 @@ h1, h2, h3 { font-weight: 500; letter-spacing: -0.01em; }
    readable however wide the screen is. */
 main { max-width: none; margin: 0; padding: 2.6rem clamp(1.25rem, 3vw, 3rem) 5rem; }
 
-.page-title { display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap; }
-h1 { font-size: clamp(1.75rem, 2.5vw, 2.15rem); font-weight: 500; line-height: 1.22; letter-spacing: -.04em; margin: 0; }
+h1 { font-size: var(--h1-size); font-weight: 500; line-height: 1.22; letter-spacing: -.04em; margin: 0; }
+
+/* the page head (templates/_page.html): the title flush left, one line under it, the page's buttons right of the
+   title's first line and centred on it; on a narrow screen the buttons go under, flush left. One gap under it. */
+.page-head { --h1-line: calc(var(--h1-size) * 1.22); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem 1.5rem; margin: 0 0 var(--head-gap); }
+.page-head > h1 { grid-column: 1; grid-row: 1; overflow-wrap: anywhere; }
+.page-head-mark { display: inline-flex; align-items: center; height: var(--h1-line); margin-right: .45em; vertical-align: top; }
+.page-head .page-head-mark > * { width: calc(var(--h1-size) * .9); height: calc(var(--h1-size) * .9); }
+.page-head-sub { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; min-width: 0; color: var(--text-dim); font-size: .9rem; line-height: 1.5; }
+.page-head-sub .mono { color: var(--text); overflow-wrap: anywhere; }
+.page-head-actions { position: relative; grid-column: 2; grid-row: 1; align-self: start; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .5rem;
+  margin-top: calc((var(--h1-line) - var(--tool-h)) / 2); }
+.page-head-actions :is(.btn, .nb-button) { height: var(--tool-h); padding-block: 0; }
+main .page-head + * { margin-top: 0; }   /* the head's gap is the only one */
+@media (max-width: 640px) {
+  .page-head { grid-template-columns: minmax(0, 1fr); }
+  .page-head-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; margin-top: .25rem; }
+}
+@media (pointer: coarse) { .page-head { --tool-h: 2.75rem; } }
 h2 { font-size: 1.05rem; margin: 2rem 0 .75rem; }
 h3 { font-size: .72rem; margin: 1.25rem 0 .6rem; color: var(--text-dim);
      text-transform: uppercase; letter-spacing: .09em; font-weight: 500; }
 h3 .total { margin-left: .15rem; color: var(--text); font-weight: 600; text-transform: none; letter-spacing: normal; }
 .subtitle { color: var(--text-dim); font-size: .9rem; line-height: 1.75; margin: .75rem 0 1.75rem; max-width: 105ch; }
-.subtitle .mono { color: var(--text); }
+.subtitle .mono { color: var(--text); overflow-wrap: anywhere; }
 .muted { color: var(--text-dim); }
 .dot { color: var(--text-faint); margin: 0 .5rem; }
 
-/* Run details, actions and recorded configuration each own a row. */
 /* Judgement: the judge's answers beside the evidence. */
 .judgement-head { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 6px; }
 .judgement-head h2 { margin: 0 0 .2rem; }
@@ -326,16 +345,11 @@ tr.tone-good .jbar .fill { background: #4cc26a; } tr.tone-warn .jbar .fill { bac
 .judgement-sides > span { display: inline-flex; gap: 4px; align-items: baseline; }
 .judgement-job { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0 16px; padding: 10px 14px; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--surface); }
 .judgement-job .header-form { margin-left: auto; }
-.run-header { display: grid; gap: 16px; margin-bottom: 28px; }
-.run-header h1 { overflow-wrap: anywhere; }
 .run-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; color: var(--text-dim); font-size: 14px; line-height: 1.7; }
 .run-meta > span { min-width: 0; overflow-wrap: anywhere; }
 .run-meta > span + span::before { content: "·"; color: var(--text-faint); margin-right: 14px; }
 .run-meta > .mono { color: var(--text); }
-.run-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.run-actions .btn { min-height: 36px; font-size: 13px; padding: 8px 13px; white-space: normal; text-align: center; }
-@media(max-width:640px){.run-meta > span + span::before{display:none}.run-header{gap:14px;margin-bottom:24px}.run-meta{font-size:13px}.run-actions{gap:8px}}
-@media(pointer:coarse){.run-actions .btn{min-height:44px}}
+@media(max-width:640px){.run-meta > span + span::before{display:none}.run-meta{font-size:13px}}
 
 .bar {
   display: flex; height: 8px; border-radius: 99px; overflow: hidden;
@@ -362,6 +376,13 @@ button.seg:hover { filter: brightness(1.25); }
 .table-buttons, .table-slot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .75rem; }
 .table-buttons { margin-left: auto; }
 .table-buttons .menu { left: auto; right: 0; }   /* opens leftwards, inside the page */
+.table-controls :is(.btn, .seg-toggle, .filter-pill) { height: var(--tool-h); }
+.table-controls .filter-pill { min-height: 0; padding-block: 0; }
+/* a segmented toggle: a bordered group of links or buttons, the current one marked */
+.seg-toggle { display: inline-flex; padding: 3px; gap: 3px; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--surface); }
+.seg-toggle > * { display: inline-flex; align-items: center; padding: .3rem .75rem; border: 0; border-radius: 5px; background: transparent; font: inherit; font-size: .8rem; line-height: 1.2; color: var(--text-dim); cursor: pointer; }
+.seg-toggle > :hover { background: var(--surface-2); text-decoration: none; }
+.seg-toggle > [aria-current="true"], .seg-toggle > [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 /* a search box, its icon first (the Settings page's too) */
 .st-search { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--surface-2); color: var(--text-dim); }
 .st-search .ic { flex: none; width: 17px; height: 17px; }
@@ -376,11 +397,11 @@ button.seg:hover { filter: brightness(1.25); }
   padding: .5rem; min-width: 168px; box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
   display: flex; flex-direction: column; gap: .1rem;
 }
-.menu label {
+.menu label, .tools-menu > a {
   display: flex; align-items: center; gap: .5rem; cursor: pointer;
   font-size: .84rem; color: var(--text-dim); padding: .3rem .45rem; border-radius: 6px;
 }
-.menu label:hover { background: var(--surface-2); color: var(--text); }
+.menu label:hover, .tools-menu > a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
 .menu input { accent-color: var(--accent); }
 .table-note { color: var(--text-faint); font-size: .8rem; }
 .table-pager { margin-top: .6rem; }
@@ -409,12 +430,6 @@ button.seg:hover { filter: brightness(1.25); }
   overflow-x: auto; overscroll-behavior-x: contain;
   border-radius: var(--radius);
 }
-/* NOTE: no sticky header here. `overflow-x: auto` makes the wrapper a scroll
-   container on BOTH axes (per spec, a non-visible overflow-x forces overflow-y
-   to compute to auto), so `top: 64px` positioned the header 64px down from the
-   wrapper — on top of the first rows — instead of pinning it to the viewport.
-   The left-pinned columns below work correctly, because the wrapper really
-   does scroll horizontally. */
 
 /* a table's .sticky-col cells stay put while it scrolls sideways, at --sticky-left (tables.js `sticky`), so a
    row never loses its identity; .sticky-edge draws the line after the last one */
@@ -425,6 +440,14 @@ button.seg:hover { filter: brightness(1.25); }
 .table-wrap .grid thead th.sticky-col { z-index: 4; background: var(--bg); }
 /* opaque sticky cells would hide the row hover, so repaint them to match */
 .table-wrap .grid tbody tr:hover td.sticky-col { background: var(--surface); }
+/* `overflow-x: auto` makes the wrapper a scroll container on both axes, so a sticky row could pin only to it: the
+   sticky rows float in a fixed box instead (tables.js `sticky`), sideways scrolled with the table, under the
+   controls row, a hidden copy holding their place */
+.table-wrap.table-float { position: fixed; z-index: 4; background: var(--bg); scrollbar-width: none; }
+.table-wrap.table-float::-webkit-scrollbar { display: none; }
+.table-float > .grid { table-layout: fixed; }
+.sticky-ghost { visibility: hidden; }
+.table-tools.sticky-tools { position: sticky; top: var(--topbar-height); z-index: 5; background: var(--bg); margin-bottom: 0; padding-bottom: .6rem; }
 
 /* compact density — same data, ~35% less width */
 .grid.compact { font-size: .88rem; }
@@ -490,16 +513,9 @@ button.seg:hover { filter: brightness(1.25); }
 .grid.compare th.rowhead, .grid.inner th.rowhead {
   color: var(--text-dim); font-weight: 500; font-size: .78rem;
   text-transform: uppercase; letter-spacing: .07em; width: 11rem; text-align: left;
-  position: sticky; left: 0; z-index: 2; background: var(--bg);
 }
-.grid.compare.tasks td:first-child {
-  position: sticky; left: 0; z-index: 2; background: var(--bg);
-  box-shadow: 1px 0 0 var(--border-soft);
-}
-.grid.compare.tasks tbody tr:hover td:first-child { background: var(--surface); }
-.grid.compare.tasks thead th:first-child {
-  position: sticky; left: 0; z-index: 3; background: var(--bg); width: 20rem;
-}
+.grid.compare.tasks thead th:first-child { width: 20rem; }
+
 /* the detail row spans the table, so its inner table must not re-scroll */
 .detail-row > td { overflow-x: auto; }
 .grid.compare tbody tr:hover { background: var(--surface); }
@@ -1146,7 +1162,6 @@ pre.msg { color: var(--text); max-height: 220px; }
 .cat-other .cat-dot, .chip.cat-other::before { background: var(--text-faint); }
 
 .setup-wrap { max-width: 720px; margin: 7vh auto 0; text-align: center; }
-.setup-wrap h1 { font-size: 2rem; }
 .setup-wrap .subtitle { justify-content: center; font-size: .95rem; }
 .setup-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 2.25rem 2.5rem; margin-top: 1.75rem; text-align: left; }
 .field-label { font-size: .74rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text-dim); font-weight: 500; margin-bottom: .55rem; }
@@ -1248,7 +1263,6 @@ input[type=text].invalid:focus { box-shadow: inset 0 0 0 1px var(--bad); }
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
   border-radius: 8px; padding: .65rem .85rem; font-size: .85rem; margin-bottom: 1rem;
 }
-.page-title + .alert { margin-top: 1rem; }   /* the gap the controls row leaves when a table shows */
 .alert .mono { color: var(--text); }
 .alert.error {
   background: color-mix(in srgb, var(--agent_error) 12%, var(--surface));

@@ -1,0 +1,66 @@
+{
+  "key": "osworld2",
+  "title": "OSWorld2",
+  "category": "Computer use",
+  "domain": "Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a VM of its own.",
+  "scoring": "OSWorld-V2 evaluator",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "good_to_know": [
+    "Partial credit: each task scores 0 to 1; the score is the mean."
+  ],
+  "limitations": [
+    "Not the paper's M3 setup: another release, no residential proxy, and 100 steps with thinking off by default; Steps per task 500 and Thinking adaptive restore the budget.",
+    "Muse Spark's published score came from newer upstream code: scores here do not compare with it.",
+    "The LLM grader (21 tasks) and the simulated user (6) are Claude Sonnet 4.6: the run's provider must serve it.",
+    "29 tasks use the public internet: their outcome can change with the live sites.",
+    "Tasks 103 and 104 are not supported: they stay in the datasets, and an agent's unit ends in an error.",
+    "A slow or loaded machine, or a run across 16:00 UTC (the VM's midnight), can change scores.",
+    "The null control scores above 0 on 015, 076, 090 and 092, and on 077 in some runs.",
+    "Only OSWorld-V2's own M3 and Muse Spark run it; no agent from the Agents page yet.",
+    "Fetch the gated tasks and prepare the machine first: see OSWorld2 machine setup in the docs."
+  ],
+  "todo": [
+    "agent.computer/v1's kit, and the driver's agent side: the upstream's DesktopEnv served to any agent.",
+    "The upstream's other agents, beside M3 and Muse Spark."
+  ],
+  "datasets": [
+    {
+      "key": "osworld2",
+      "title": "OSWorld-V2, release osworld-v2.1",
+      "tasks": 108,
+      "official": "https://github.com/xlang-ai/OSWorld-V2",
+      "source": "Hugging Face (gated)",
+      "registry": "",
+      "hub": "",
+      "verifier": "Each task's own evaluate() on the VM's final state, 0 to 1.",
+      "access": [
+        {
+          "step": "Ask for access to the gated datasets on Hugging Face",
+          "note": "xlangai/osworld_v2_tasks and xlangai/osworld_v2_assets_gated"
+        },
+        {
+          "step": "Download the task classes into the upstream's evaluation_examples/task_class",
+          "note": "scripts/tools/download_osworld_v2_tasks.py --benchmark-release osworld-v2.1"
+        },
+        {
+          "step": "Download the assets into the upstream's cache/osworld_v2_assets",
+          "note": "scripts/tools/download_osworld_v2_assets.py --benchmark-release osworld-v2.1"
+        },
+        {
+          "step": "Fetch the VM image into the upstream's docker_vm_data",
+          "note": "osworld-v2-ubuntu-x86.qcow2 from xlangai/v2-image at 6e16459a, about 15 GB unpacked"
+        },
+        {
+          "step": "Build the proxy image for the 8 tasks that ask for a proxy",
+          "note": "python3 proxy.py --build, from this benchmark's folder"
+        }
+      ],
+      "notes": "Code Apache-2.0; tasks and assets gated on Hugging Face."
+    }
+  ],
+  "citation": "@misc{yuan26osworld2,\n      title={OSWorld 2.0: Benchmarking Computer Use Agents on Long-Horizon Real-World Tasks}, \n      author={Mengqi Yuan and Zilong Zhou and Xinzhuang Xiong and Weiming Wu and Jiayang Sun and Jiamin Song and Kaiqian Cui and Bowen Wang and Haoyuan Wu and Yitong Li and Dunjie Lu and Haikong Lu and Qi Zhen and Xinyuan Wang and Jiaqi Deng and Yuhao Yang and Cheng Chen and Boyuan Zheng and Alex Su and Xiao Yu and Hao Zou and Saaket Agashe and Xing Han Lu and Manpreet Kaur and Zhengyang Qi and Vincent Sunn Chen and Frederic Sala and Dayiheng Liu and Junyang Lin and Zhou Yu and Yu Su and Siva Reddy and Xin Eric Wang and Peng Qi and Tianbao Xie and Tao Yu},\n      year={2026},\n      eprint={2606.29537},\n      archivePrefix={arXiv},\n      primaryClass={cs.AI},\n      url={https://arxiv.org/abs/2606.29537}, \n}",
+  "citation_source": "https://github.com/xlang-ai/OSWorld-V2"
+}
