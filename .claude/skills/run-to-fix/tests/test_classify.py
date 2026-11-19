@@ -482,3 +482,17 @@ class StandardModelCalls(LoopCase):
         self.classify_ok()
         row = self.by_trial()["s1__s"]
         self.assertEqual((row["model_calls"], row["class"]), ("20", "verifier_failed"))
+
+
+class OutputLimitUnreadable(LoopCase):
+    def test_a_set_limit_that_no_trial_records_is_named_as_switched_off(self) -> None:
+        t = trial("s1__s", "made-up-bench/s1", 0.0)
+        t.files = {"agent/trajectory.json": STEPS_WITHOUT_USAGE}
+        p = trial("p__s", "made-up-bench/p", 1.0)
+        p.files = {"agent/trajectory.json": STEPS_WITHOUT_USAGE}
+        run_dir = write_job(self.jobs, "run", "alpha", "standard", [t, p])
+        self.set_adapter(adapter("alpha", {"output_token_limit": 4096}, {}))
+        self.read_ok(run_dir, None)
+        self.classify_ok()
+        self.assertIn("output_limit: no trial records the tokens of one reply",
+                      load(self.round_file("groups.json"))["rules_off"])
