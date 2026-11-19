@@ -217,7 +217,9 @@ class BenchmarkPage(PageCase):
             return "".join(out)
         html = self.get("/benchmarks/osworld1")
         nav = re.search(r'<nav class="std-versions".*?</nav>', html, re.S).group(0)
-        self.assertIn('aria-current="page"><b>desktop-env-v1.0.3</b>', nav)                   # the release is the default
+        self.assertIn('aria-current="page" data-ref="osworld1"><b>desktop-env-v1.0.3</b>', nav)   # the release is the default
+        self.assertIn('data-ref="osworld1@044bc33"', nav)
+        self.assertIn('data-build-run href="/new-run?standard=osworld1"', html)                # Build a run opens the version shown
         self.assertIn("<b>main (044bc33)</b>", nav)                                          # an untagged pin: its branch
         page = shown(html)
         self.assertIn("xlang-ai/OSWorld @ desktop-env-v1.0.3 · 9d6f711", page)
@@ -233,6 +235,7 @@ class BenchmarkPage(PageCase):
         self.assertIn("Only M3, PromptAgent and Qwen-CUA have completed tasks", old)
         self.assertNotIn("comparable only with this version", old)
         self.assertIn('name="version" value="044bc33"', old)
+        self.assertIn('data-build-run href="/new-run?standard=osworld1@044bc33"', old)
         self.assertIn("/tree/044bc33901cb893808e3f91ebc9a17ed8e54b44c", old)                  # its data at its own commit
         self.assertNotIn("/tree/9d6f711", old)
         self.get("/benchmarks/osworld1?v=nope", status=404)
