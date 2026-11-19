@@ -215,28 +215,21 @@ PYTHONPATH=app python3 -m nullius.importers.cli --list
 Debug mode is off by default. Use `--debug` only for development; `--no-debug`
 overrides an explicit `DEBUG=1` environment setting.
 
-**CI** runs the experimental PR judge, backend and route suites, and a temporary
-wheel install/reinstall check on non-draft pull requests (again when one is
-marked ready). `app/packaging/verify.py` checks runtime assets, one backend
-provider, installed commands and pages, and user storage preservation. The
-`tests` workflow also runs by hand.
-The manual `draft release` workflow (`.github/workflows/release.yml`) runs both
-suites and uses `app/packaging/release.py` to build and verify a release's
-wheel and source archive, then attaches them and `SHA256SUMS` to a draft
-release (a prerelease for an `rc` tag). It does not publish or upload to PyPI; see
-`app/packaging/README.md` and the versioned notes under `docs/releases/`.
-The separate manual `publish to PyPI` workflow (`.github/workflows/publish.yml`)
-requires confirmation and a reviewed, published GitHub release. It verifies
-the downloaded assets before a separate `pypi` environment job uploads the
-same bytes through Trusted Publishing. PyPI and environment configuration
-must be completed before that workflow can publish.
-The `docker tests` workflow (`.github/workflows/docker-tests.yml`) builds the
-standard's base image and runs the backend suite with the docker tier, nightly
-and by hand, never on a pull request. The `documentation site` workflow
-is run by hand and only checks: the host builds and publishes the site from
-`docs-release`, advanced to the release tag only after the PyPI upload succeeds.
-Preview deployments are disabled; `bash app/site/host-build.sh` is the same check locally. See
-`app/site/README.md`.
+**CI** (`.github/workflows/`):
+
+- `tests`: backend and route suites, actionlint, and a wheel install check
+  (`app/packaging/verify.py`). Non-draft pull requests, and by hand.
+- `judge-pr`: the PR judge, below. Non-draft pull requests, and `/judge`.
+- `docker-tests`: the backend suite with the docker tier. Nightly, and by hand.
+- `draft release` (`release.yml`): builds and verifies a release's wheel and
+  source archive into a draft GitHub release. By hand; never publishes.
+- `publish to PyPI` (`publish.yml`): uploads a reviewed, published release's
+  verified assets by Trusted Publishing. By hand, with confirmation.
+- `documentation site`: checks the site build, by hand
+  (`bash app/site/host-build.sh` locally). The host publishes from
+  `docs-release`, advanced to the release tag after the PyPI upload.
+
+See `app/packaging/README.md`, `docs/releases/` and `app/site/README.md`.
 
 **UI checks:** routine interface changes require relevant unit and route tests
 plus focused browser checks of the affected pages and interactions, including
