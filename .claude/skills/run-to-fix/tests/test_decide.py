@@ -46,6 +46,16 @@ class Flow(RepoCase):
         """The commit the person states the trial run ran: the one select chose."""
         return load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["selection"]["ref"]
 
+    def job_without_one_cost(self) -> str:
+        self.chosen()
+        trials = []
+        for task, passes, cost in (("f1", 3, 0.04), ("f2", 2, 0.06), ("p1", 3, 0.01)):
+            for k in range(3):
+                t = trial(f"{task}-{k}__t", f"bench/{task}", 1.0 if k < passes else 0.0)
+                t.cost = None if (task, k) == ("f1", 0) else cost
+                trials.append(t)
+        return write_job(self.jobs, "trial", "alpha", "harbor", trials)
+
     def chosen(self) -> str:
         self.kept()
         r = self.select(["--size", "guards", "--budget-usd", "0.5", "--text", "targets and guards"])
@@ -420,16 +430,6 @@ class TrialBudgetHasNoDefault(Flow):
 class IncompleteCosts(Flow):
     """A trial run whose trials do not all report a cost has no known spending until the person gives it."""
 
-    def job_without_one_cost(self) -> str:
-        self.chosen()
-        trials = []
-        for task, passes, cost in (("f1", 3, 0.04), ("f2", 2, 0.06), ("p1", 3, 0.01)):
-            for k in range(3):
-                t = trial(f"{task}-{k}__t", f"bench/{task}", 1.0 if k < passes else 0.0)
-                t.cost = None if (task, k) == ("f1", 0) else cost
-                trials.append(t)
-        return write_job(self.jobs, "trial", "alpha", "harbor", trials)
-
     def test_stop_two_refuses_an_unknown_spending(self) -> None:
         job = self.job_without_one_cost()
         r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
@@ -521,14 +521,14 @@ class AmountsAreFinite(Flow):
         self.assertFalse(os.path.exists(self.round_file("trial-tasks.txt")))
 
     def test_stop_two_refuses_a_cost_that_is_not_an_amount(self) -> None:
-        job = self.chosen()
+        job = self.job_without_one_cost()
         r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref(),
                  "--trial-cost-usd", "inf"])
         self.assertNotEqual(r.code, 0)
         self.assertIn("--trial-cost-usd", r.err)
 
     def test_compare_refuses_a_cost_that_is_not_an_amount(self) -> None:
-        job = self.chosen()
+        job = self.job_without_one_cost()
         r = run(["compare", "--loop", self.loop, "--new", job, "--against", "run", "--new-cost-usd", "nan"])
         self.assertNotEqual(r.code, 0)
         self.assertIn("--new-cost-usd", r.err)
