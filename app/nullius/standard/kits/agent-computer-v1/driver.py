@@ -1,15 +1,24 @@
-"""Kit for agent.computer/v1: eight checks on a small real desktop, decided by the desktop's own records.
+"""Kit for agent.computer/v1: nine checks on a small real desktop, decided by the desktop's own records.
 
 Basic: ``see``, ``click``, ``type``, ``limit``. Skills: ``drag``, ``scroll``, ``recover``, ``batch``
-(``checks.py`` gives each one's screen and verdict).
+(``checks.py`` gives each one's screen and verdict) and ``late``.
 
 **A unit.** ``setup`` starts a desktop of the kit's image (``desktop.py``) and the fixture on it, then, in this
 driver's process, the port's server over that desktop (``computer_port.Bridge`` and ``Server``, its socket in a
 folder of this user's alone) and the kit's loop: a thread that asks the bridge for a step, runs its actions with
 ``Desktop.act`` and waits the pause after each, as a desktop benchmark's own loop does. The session gets the
-server through ``computer_pipe.py`` (``mcp_servers.computer``). ``score`` ends the turn, waits for the loop,
-reads the fixture's log, the actions' times and the call log, judges, and removes the desktop and the socket.
-``oracle`` is the reference: the right calls, sent to the unit's own server as a client.
+server through ``computer_pipe.py`` (``mcp_servers.computer``). The server's window before the task is closed by
+``task_given`` (which the definition's ``driver.task_given`` asks Nullius to send) or, for the reference, as it
+starts; every prepare call is recorded in ``verifier/computer-prepare.jsonl``, the agent's folder is ``FOLDER``.
+``score`` ends the turn, waits for the loop, reads the fixture's log, the actions' times and the call log, judges,
+and removes the desktop and the socket. ``oracle`` is the reference: the right calls, sent to the unit's own server
+as a client.
+
+**late.** One labelled button appears ``LATE_SECONDS`` after the task is given, away from the screen's centre at a
+place drawn for the unit (``late_place``), so that no click at a fixed point finds it; the agent clicks it. It passes
+when the click is the check ``click``'s, and a picture was taken as a step ended, after the button was up and before
+the action holding the press began. Its times are the driver's own clock (when the button was up,
+each picture of a step's end, each action's start), the press matched to its action on the desktop's clock.
 
 **What is left when a unit never reaches ``score``.** Nothing: a new ``setup`` ends the unit before it, and the
 end of the driver's input (the run is over, or stopped) ends the one still open. A driver that is killed cannot
@@ -23,6 +32,7 @@ import contextlib
 import importlib.util
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -49,10 +59,13 @@ desktop = _load("nullius_kit_desktop", "desktop.py")
 checks = _load("nullius_kit_checks", "checks.py")
 fixture = _load("nullius_kit_fixture", "fixture.py")
 
-UNITS = checks.CHECKS
+UNITS = checks.CHECKS + ("late",)
 PAUSE = 1.0                                  # after each action
-PYTHON_SECONDS = 90                          # one python call's reply
+PYTHON_SECONDS = 90                          # one desktop call's reply
 AGENT_SECONDS = 600                          # the agent's turn
+FOLDER = "/tmp/agent"                        # the agent's own folder in the desktop
+LATE_SECONDS = 3.0                           # late: the button appears this long after the task is given
+LATE_PLACES = ((0.15, 0.35), (0.65, 0.85))   # late: where the button's centre may be, as fractions of each side
 LOOP_SECONDS = PYTHON_SECONDS + desktop.SETTLE + PAUSE + 30     # the loop's end, once the turn has ended
 USE = "Use the tools of the MCP server named computer, given to this session: they show and drive a desktop. "
 DONE = " Then reply with the word done."
@@ -78,6 +91,9 @@ def prompt(unit, expected):
         w = expected["words"]
         return (USE + "Fill the three text fields on the screen: " + ", ".join(f"{w[f]} in the field labelled {f}"
                                                                                 for f in checks.FIELDS) + "." + DONE)
+    if unit == "late":
+        return (USE + f"A button labelled {expected['target']} appears on the screen a few seconds after you are "
+                      f"given this task. Click it once." + DONE)
     raise ValueError(f"no unit {unit!r}")
 
 
@@ -142,6 +158,21 @@ class KitDesktop:
         return self.d.password()
 
 
+class Pictures(KitDesktop):
+    """The unit's desktop, with each step's picture timed on the driver's clock."""
+
+    def __init__(self, d, unit):
+        super().__init__(d)
+        self.unit = unit
+
+    def capture(self):
+        t = time.monotonic()
+        png = super().capture()
+        if self.unit.bridge.running is not None:
+            self.unit.pictures.append((t, time.monotonic()))
+        return png
+
+
 class KitBridge(port.Bridge):
     """The port's bridge, with the kit's budget count and first acting call's recover error."""
 
@@ -196,7 +227,7 @@ class KitServer(port.Server):
             if self.bridge.booked >= self.bridge.steps:
                 self.bridge.past += 1
             try:
-                port.checked(call, self.bridge.screen)
+                port.checked(call, self.bridge.screen, self.bridge.folder)
             except port.Refused as e:
                 call.answer(error=str(e))
                 return
@@ -207,35 +238,83 @@ class KitServer(port.Server):
 
 
 class Unit:
-    """One unit's desktop, server and loop."""
+    """One unit's desktop, server and loop; ``late`` draws its button once the task is given."""
 
     def __init__(self, unit, dir):
         self.unit, self.trial = unit, os.path.dirname(os.path.abspath(dir))
-        self.values, self.expected = checks.draw(unit)
+        if unit == "late":                           # the click screen with one button, drawn later
+            label = secrets.SystemRandom().choice(checks.LABELS)
+            self.values = {"screen": "click", "labels": [label], "at": late_place()}
+            self.expected = {"target": label, "labels": [label]}
+        else:
+            self.values, self.expected = checks.draw(unit)
         self.steps = checks.steps(unit)
         self.log = os.path.join(self.trial, "verifier", "computer-calls.jsonl")
+        self.prepared = os.path.join(self.trial, "verifier", "computer-prepare.jsonl")
         self.desktop = self.bridge = self.server = self.loop = self.folder = self.boxes = None
         self.final, self.error = "", None
+        self.pictures, self.acted, self.shown = [], [], None
+        self.given, self.up, self.ending = threading.Event(), threading.Event(), threading.Event()
 
     def start(self, job):
         os.makedirs(os.path.dirname(self.log), exist_ok=True)
-        if os.path.exists(self.log):
-            os.remove(self.log)
+        for path in (self.log, self.prepared):
+            if os.path.exists(path):
+                os.remove(path)
         image = desktop.image(os.path.dirname(self.log))
         name = f"nullius-desktop-{os.urandom(6).hex()}"
         REAPER.tell(f"+container {name}")            # before it exists: a kill during the start is covered
         self.desktop = desktop.Desktop.start(image, name, job=job)
         REAPER.tell(f"=container {name}")            # only a successful start rules out late creation
-        self.desktop.start_fixture(self.values)
-        self.boxes = self.desktop.events()[0].get("boxes") or {}
+        acting = self.desktop.act
+
+        def act(code, seconds=PYTHON_SECONDS):       # each action's start on the driver's clock too
+            t = time.monotonic()
+            r = acting(code, seconds)
+            if r.get("start") is not None:
+                self.acted.append((t, r["start"], r["end"]))
+            return r
+        self.desktop.act = act
+        if self.unit != "late":
+            self.desktop.start_fixture(self.values)
+            self.boxes = self.desktop.events()[0].get("boxes") or {}
         folder = os.path.join(tempfile.gettempdir(), f"nullius-computer-{os.urandom(6).hex()}")
         REAPER.tell(f"+folder {folder}")             # named before it is made
         self.folder = folder
         os.mkdir(folder, 0o700)
-        self.bridge = KitBridge(KitDesktop(self.desktop), self.steps, PAUSE, desktop.SCREEN, PYTHON_SECONDS)
+        self.bridge = KitBridge(Pictures(self.desktop, self), self.steps, PAUSE, desktop.SCREEN, FOLDER, window=True,
+                                prepared=self.prepared)
         self.server = KitServer(self.bridge, self.socket(), log=self.log)
         self.loop = threading.Thread(target=self.run_loop, name=f"kit-loop-{self.unit}", daemon=True)
         self.loop.start()
+        if self.unit == "late":
+            threading.Thread(target=self.late, name="kit-late", daemon=True).start()
+
+    def task_given(self):
+        self.bridge.close_window()
+        self.given.set()
+
+    def late(self):
+        """The button drawn ``LATE_SECONDS`` after the task is given, unless the unit ends first."""
+        while not self.given.wait(0.5):
+            if self.ending.is_set():
+                return
+        if self.ending.wait(LATE_SECONDS):
+            return
+        try:
+            self.desktop.start_fixture(self.values)
+            self.boxes = self.desktop.events()[0].get("boxes") or {}
+            self.shown = time.monotonic()
+        except Exception as e:                       # the unit says so at score
+            self.error = f"the button could not be drawn: {type(e).__name__}: {e}"
+        finally:
+            self.up.set()
+
+    def events(self):
+        """The fixture's log; none for ``late`` while its button was never drawn."""
+        if self.unit == "late" and self.shown is None and not self.boxes:
+            return []
+        return self.desktop.events()
 
     def socket(self):
         return os.path.join(self.folder, "s")
@@ -276,6 +355,7 @@ class Unit:
     def end(self, wait=LOOP_SECONDS):
         """The turn's end, the loop's (``wait`` seconds at most), the server's: what the verdict reads is
         complete."""
+        self.ending.set()
         if self.bridge is not None:
             self.bridge.end_turn()
         if self.loop is not None:
@@ -365,6 +445,30 @@ def job_of(dir):
     return os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(dir)))) or None
 
 
+def late_place(rng=None):
+    """Where ``late`` draws its button: the point its frame is centred on, as fractions of the screen's width and
+    height, each in one of ``LATE_PLACES``. The button never covers the screen's centre, and the place is drawn anew
+    for each unit."""
+    rng = rng or secrets.SystemRandom()
+    return [round(rng.uniform(*rng.choice(LATE_PLACES)), 3) for _ in range(2)]
+
+
+def late_verdict(u, events, actions, message):
+    """``late``: the click's verdict, and an observation of the button, taken as a step ended, before the press."""
+    v = checks.click(u.expected, events, actions, message)
+    if not v["passed"]:
+        return v
+    if u.shown is None:
+        return {"passed": False, "why": "the button was never drawn"}
+    press = next(e for e in events if e.get("kind") == "press" and e.get("hit") == u.expected["target"]
+                 and e.get("button") == 1)
+    sent = next((h for h, s, e in u.acted if s <= press["t"] <= e + checks.SLACK), None)
+    if sent is None or not any(start > u.shown and end < sent for start, end in u.pictures):
+        return {"passed": False, "why": "no step's observation showed the button before the press: it was pressed "
+                                        "without looking again by a step"}
+    return {"passed": True, "why": ""}
+
+
 def units(dataset, **_):
     return {"units": list(UNITS)}
 
@@ -387,6 +491,16 @@ def setup(unit, dir, **_):
             "agent_seconds": AGENT_SECONDS}
 
 
+def task_given(unit, dir, **_):
+    """The agent is being given its task: the window before it closes, and ``late``'s count starts."""
+    with OPEN_LOCK:
+        u = OPEN.get(unit)
+    if u is None:
+        raise ValueError(f"{unit} was not set up")
+    u.task_given()
+    return {}
+
+
 def score(unit, dir, transcript, answer, **_):
     with OPEN_LOCK:
         u = OPEN.pop(unit, None)
@@ -394,7 +508,7 @@ def score(unit, dir, transcript, answer, **_):
         raise ValueError(f"{unit} was not set up")
     try:
         u.end()
-        events = u.desktop.events()
+        events = u.events()
         actions = list(u.desktop.actions)
         calls = u.calls()
         try:
@@ -404,7 +518,10 @@ def score(unit, dir, transcript, answer, **_):
     finally:
         u.remove()
     message = "\n".join(x for x in (answer or "", u.final) if x)
-    v = checks.verdict(unit, u.expected, events, actions, message, calls, u.bridge.past)
+    if unit == "late":
+        v = late_verdict(u, events, actions, message)
+    else:
+        v = checks.verdict(unit, u.expected, events, actions, message, calls, u.bridge.past)
     passed = v["passed"] and u.error is None
     detail = {"said": (answer or "")[:200], "steps": u.steps, "steps_used": u.bridge.used, "past_budget": u.bridge.past,
               "calls": [c.get("tool") for c in calls], "errors": sum(1 for c in calls if c.get("isError")),
@@ -475,13 +592,18 @@ def read_words(png, scale, count):
 
 
 def oracle(unit, dir, **_):
-    """The reference: the calls a correct agent makes, sent to the unit's own server, through its desktop, to the
-    same scorer; the answer they lead to. Words are read from the screenshot the server gives, and a call that does
-    not answer as a correct agent's would (the one ``recover`` refuses aside) fails the reference."""
+    """The reference: given its task at once, then the calls a correct agent makes, sent to the unit's own server,
+    through its desktop, to the same scorer; the answer they lead to. Words are read from the screenshot the server
+    gives, and a call that does not answer as a correct agent's would (the one ``recover`` refuses aside) fails the
+    reference. For ``late``, steps that look again until the button is up and an observation shows it, then its
+    click."""
     with OPEN_LOCK:
         u = OPEN.get(unit)
     if u is None:
         raise ValueError(f"{unit} was not set up")
+    u.task_given()
+    if unit == "late":
+        return late_reference(u)
     e, b, answer = u.expected, u.boxes, "done"
     c = Client(u.socket())
 
@@ -530,6 +652,29 @@ def oracle(unit, dir, **_):
     return {"answer": answer}
 
 
+def late_reference(u):
+    """``late``'s reference: a look by a step (``wait``) until a step's observation was taken with the button up,
+    then the click."""
+    c = Client(u.socket())
+    try:
+        target = u.expected["target"]
+        for _ in range(u.steps - 1):
+            failed, _ = c.call("wait")
+            failed_shot, png = c.call("screenshot")
+            if failed or failed_shot or not isinstance(png, bytes):
+                raise ReferenceFailed("a look by a step did not answer as a correct agent's would")
+            if u.up.is_set() and u.pictures[-1][0] > (u.shown or float("inf")):
+                break                                # this step's observation was taken with the button up
+        else:
+            raise ReferenceFailed("the button was not seen within the steps")
+        failed, said = c.call("click", dict(zip("xy", centre(u.boxes[target]))))
+        if failed:
+            raise ReferenceFailed(f"click answered with an error: {str(said)[:200]}")
+    finally:
+        c.close()
+    return {"answer": "done"}
+
+
 def end(unit, dir, **_):
     """Release the desktop before this attempt is archived for a retry."""
     close_all(shutdown=False)
@@ -539,7 +684,7 @@ def end(unit, dir, **_):
 def main():
     atexit.register(REAPER.close)
     atexit.register(close_all)                   # runs first: the units go, then the reaper is let go with nothing
-    serve({"units": units, "setup": setup, "score": score, "oracle": oracle, "end": end})
+    serve({"units": units, "setup": setup, "task_given": task_given, "score": score, "oracle": oracle, "end": end})
 
 
 if __name__ == "__main__":
