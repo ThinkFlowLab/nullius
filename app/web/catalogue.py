@@ -59,6 +59,14 @@ def _card(cat, b, needs, sheet) -> dict:
             "scoring": b.scoring, "blocker": b.blocker[:1].upper() + b.blocker[1:]}
 
 
+def _proven(std: dict) -> dict:
+    """How many of a version's checks (each dataset's units, leak and controls) hold a proof."""
+    oracle = any(c["key"] == "oracle" for c in std["controls"])
+    checks = [p for d in std["datasets"] for p in [d["proofs"].get("units")] + ([d["proofs"].get("leak")] if oracle else [])
+              + [c.get("proven") for c in d["controls"]]]
+    return {"proven": sum(1 for p in checks if p), "checks": len(checks)}
+
+
 @app.route("/benchmarks/<key>")
 def benchmark_page(key):
     """One listed benchmark; an entry the list does not show has no page either."""
@@ -69,13 +77,23 @@ def benchmark_page(key):
     entry = harbor_entry.entry_of(key)
     # the standard's definition of it, when it has one: its proofs per dataset, and the form that runs cli prove
     std = standard_recipe.page_of(key) if "standard" in b.harness else None
+    # a benchmark with versions shows one at a time (``?v=``, the default without it), as an agent's page does
+    v, versions = request.args.get("v"), []
+    if std and std["versions"]:
+        pages = {x["version"]: (std if x["default"] else standard_recipe.page_of(x["ref"])) for x in std["versions"]}
+        if v and v not in pages:
+            abort(404)
+        std = pages[v] if v else std
+        versions = [dict(x, current=pages[x["version"]] is std, **_proven(pages[x["version"]])) for x in std["versions"]]
+    elif v:
+        abort(404)
     # where each dataset's data comes from, one row per way it runs - each fetched by its harness, never by hand
     std_def = standard_definitions.find(standard_definitions.load("benchmark")[0], key) if std else None
     ds = cat.datasets_of(b)
     data = {d.key: sources.of(d, b.harness, std_def, only=len(ds) == 1) for d in ds}
     jobs = {j.job_id for j in shared._jobs_for_request()} if std else set()
     return render_template("catalogue/benchmark.html", cat=cat, b=b, csrf=shared._csrf_token(), papers=citation.parse(b.citation), data=data,
-                           editable=entry is not None and not harbor_entry.not_editable(entry), std=std, std_jobs=jobs,
+                           editable=entry is not None and not harbor_entry.not_editable(entry), std=std, std_jobs=jobs, versions=versions,
                            deletable=os.path.isfile(os.path.join(paths.catalogue_dir(), catalog.BENCHMARKS, key, catalog.ENTRY)),
                            restore_bundle=storage.can_restore("benchmarks", key, catalog.ROOT),
                            local=settings_web._local_client(),
@@ -109,11 +127,12 @@ def benchmark_prove(key):
     shared._require_csrf()
     if not settings_web._local_client():
         abort(403, description="Proofs are started from a browser on the application host only.")
-    back = url_for("benchmark_page", key=key) + "#standard"
+    version = request.form.get("version", "")
+    back = url_for("benchmark_page", key=key, **({"v": version} if version else {})) + "#standard"
     limit = request.form.get("limit", "").strip()
     provider, endpoint = providers.split(request.form.get("provider", "openai"))
     stamp = time.strftime(prove.STAMP)
-    got = standard_recipe.proving(key, dataset=request.form.get("dataset", ""), limit=int(limit) if limit.isdigit() else (limit or None),
+    got = standard_recipe.proving(f"{key}@{version}" if version else key, dataset=request.form.get("dataset", ""), limit=int(limit) if limit.isdigit() else (limit or None),
                                   provider=provider, judge_model=request.form.get("judge_model", "").strip(), stamp=stamp)
     problem = " ".join(got["errors"]) or ("" if got["keyless"] else execute.provider_problem(provider, endpoint))
     if problem:

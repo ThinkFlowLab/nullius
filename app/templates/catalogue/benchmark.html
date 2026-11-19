@@ -66,6 +66,13 @@
       {%- endif %}
       <section class="bench-section std-proofs" id="standard" aria-labelledby="standard-title">
         <h2 id="standard-title">Proofs</h2>
+        {% if versions %}
+        {#- Each version has its own pin and its own proofs, as an agent's page shows them. -#}
+        <nav class="std-versions" aria-label="Versions">
+          <span>Versions</span>
+          {% for x in versions %}<a href="{{ url_for('benchmark_page', key=b.key, v=x.version) }}#standard"{% if x.current %} aria-current="page"{% endif %}><b>{{ x.version }}</b><small>{{ x.proven }}/{{ x.checks }} proven{{ ' · default' if x.default else '' }}</small></a>{% endfor %}
+        </nav>
+        {% endif %}
         {% if std.upstream.repository %}<p class="mono bench-runner-repo" title="The upstream it runs: the release tag, and the commit it was checked at">{{ std.upstream.repository|replace('https://github.com/', '') }} @ {% if std.upstream.tag %}{{ std.upstream.tag }} · {% endif %}{{ std.upstream.tested[:7] }}</p>{% endif %}
         <p class="bench-ds-note">Null and reference controls check the scorer; stability and leak checks validate the tasks.</p>
 
@@ -89,6 +96,7 @@
           <summary>Run control checks</summary>
           <form method="post" action="{{ url_for('benchmark_prove', key=b.key) }}">
             <input type="hidden" name="csrf" value="{{ csrf }}">
+            {% if versions %}<input type="hidden" name="version" value="{{ std.version }}">{% endif %}
             <p>Check dataset stability, answer leaks and control scores. Results update the recorded proofs.
               {% if std.judged %}The judge needs a model key.{% else %}No model calls or key required.{% endif %}</p>
             <div class="std-form">

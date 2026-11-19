@@ -186,6 +186,19 @@ class BenchmarksList(PageCase):
 
 
 class BenchmarkPage(PageCase):
+    def test_a_benchmark_with_versions_shows_one_at_a_time_with_its_own_pin_and_proofs(self):
+        html = self.get("/benchmarks/osworld1")
+        nav = re.search(r'<nav class="std-versions".*?</nav>', html, re.S).group(0)
+        self.assertIn('<a href="/benchmarks/osworld1?v=044bc33#standard" aria-current="page"><b>044bc33</b>', nav)
+        self.assertIn("<b>desktop-env-v1.0.3</b>", nav)
+        self.assertIn("xlang-ai/OSWorld @ 044bc33", html)
+        html = self.get("/benchmarks/osworld1?v=desktop-env-v1.0.3")
+        self.assertIn("xlang-ai/OSWorld @ desktop-env-v1.0.3 · 9d6f711", html)
+        self.assertIn("<small>368 tasks</small>", html)
+        self.assertIn('name="version" value="desktop-env-v1.0.3"', html)       # its checks run on this version
+        self.get("/benchmarks/osworld1?v=nope", status=404)
+        self.assertNotIn("std-versions", self.get("/benchmarks/gsm8k"))
+
     def test_a_benchmark_on_both_runners_opens_the_builder(self):
         self.assertEqual(self.route_case("swe-bench-verified"), "multi-route")
         html, text = self.page_html("swe-bench-verified"), self.page("swe-bench-verified")
