@@ -216,9 +216,10 @@ Debug mode is off by default. Use `--debug` only for development; `--no-debug`
 overrides an explicit `DEBUG=1` environment setting.
 
 **CI** runs the experimental PR judge, backend and route suites, and a temporary
-wheel install/reinstall check on pull requests. `app/packaging/verify.py` checks
-runtime assets, one backend provider, installed commands and pages, and user
-storage preservation. The `tests` workflow also runs by hand.
+wheel install/reinstall check on non-draft pull requests (again when one is
+marked ready). `app/packaging/verify.py` checks runtime assets, one backend
+provider, installed commands and pages, and user storage preservation. The
+`tests` workflow also runs by hand.
 The manual `draft release` workflow (`.github/workflows/release.yml`) runs both
 suites and uses `app/packaging/release.py` to build and verify a release's
 wheel and source archive, then attaches them and `SHA256SUMS` to a draft
