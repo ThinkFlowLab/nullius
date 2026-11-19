@@ -156,8 +156,11 @@ python3 L compare --loop DIR --new JOB --against run [--new-cost-usd X]
 `compare` reads the new run against the round's run (`--against baseline` compares with the round's baseline) and
 writes `result.json`: the pass rates with their standard error; the tasks both runs share, won and lost; the verdict
 "improved" or "regressed" when an exact two-sided binomial test on won and lost gives p under 0.05, "noise" otherwise;
-the targets' trials with Fisher's exact test, given only when the new run holds the selection's 3 trials of each
-selected task (stop 2 counts the same way); each prediction of stage 3 beside its result; and the stop rule. When
+the targets' trials with Fisher's exact test, given only when the selection is complete; each prediction of stage 3
+beside its result; and the stop rule. Stop 2 and `compare` use one rule for a complete selection, 3 trials of each
+selected task, and count different trials: stop 2 counts the round's trial jobs on the selected commit together,
+`compare` the trials of its new job alone. For an incomplete selection the result says how many trials per task the
+new job holds. When
 some trials of the new run report no cost, the budget part of the stop rule is not checked, unless the person gives the
 run's cost with `--new-cost-usd`. `read` records the text of the stop rule, and `compare` refuses a round whose recorded
 rule is not the rule of the skill it runs: keep that loop folder as it is and start a new one. It

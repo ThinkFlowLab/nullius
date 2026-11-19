@@ -555,6 +555,20 @@ class SelectionCoverage(Flow):
         self.assertNotEqual(r.code, 0)
         self.assertIn("bench/f2 (1)", r.err)
 
+    def test_compare_counts_its_new_job_alone_after_three_jobs_of_one_trial(self) -> None:
+        self.chosen()
+        jobs = [self.job_of(name, ["f1", "f2", "p1"], 1) for name in ("one", "two", "three")]
+        for job in jobs:
+            r = self.decide(job)
+            self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertIsNotNone(load(self.round_file("trial.json"))["targets"]["p"])
+        r = run(["compare", "--loop", self.loop, "--new", jobs[-1], "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        targets = load(self.round_file("result.json"))["targets"]
+        self.assertIsNone(targets["p"])
+        self.assertIsNone(targets["verdict"])
+        self.assertIn("1 of the 3 trials per task", targets["text"])
+
     def test_three_jobs_of_one_trial_each_make_a_complete_selection(self) -> None:
         self.chosen()
         for k, name in enumerate(("one", "two", "three")):
