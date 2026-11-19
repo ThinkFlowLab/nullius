@@ -7,7 +7,7 @@ import os
 import re
 from typing import Dict, List, Optional
 
-from checking import load_candidate
+from checking import candidate_id, load_candidate
 from checkout import resolve
 from classifying import read_rows
 from comparing import REPORT_NOT_READ, TARGET_TRIALS, passes, targets_of, trial_spent
@@ -252,7 +252,7 @@ def cmd_answer(args: argparse.Namespace) -> None:
     if args.stop == 1:
         if args.keep is None:
             raise LoopError("answer --stop 1 needs --keep: candidate ids separated by commas, or none")
-        keep = [] if args.keep == "none" else [k.strip() for k in args.keep.split(",") if k.strip()]
+        keep = [] if args.keep == "none" else [candidate_id(k.strip()) for k in args.keep.split(",") if k.strip()]
         cands = {k: load_candidate(os.path.join(round_dir, "candidates", k, "candidate.json")) for k in keep
                  if os.path.isfile(os.path.join(round_dir, "candidates", k, "candidate.json"))}
         missing = [k for k in keep if not os.path.isfile(os.path.join(round_dir, "candidates", k, "checks.json"))]

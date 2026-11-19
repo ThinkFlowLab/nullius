@@ -22,9 +22,18 @@ TABLE = ("done_pass", "done_fail", "not_done_pass", "not_done_fail")
 EFFECTS = ("outcome", "report")
 
 
+def candidate_id(cid: str) -> str:
+    """A candidate id names a folder of the round: lower-case letters, digits, - and _."""
+    if not CANDIDATE_ID.match(cid):
+        raise LoopError(f"a candidate id is lower-case letters, digits, - and _, got {cid!r}")
+    return cid
+
+
 def cause_trials(round_dir: str, cause: str, effect: str) -> Tuple[str, List[str], List[str]]:
     """The rule a cause names, the trials it counts and their tasks: failing trials for an effect on the outcome,
     every trial the rule matches for an effect on the report."""
+    if not CANDIDATE_ID.match(cause):
+        raise LoopError(f"a cause is the name of a file in causes/: lower-case letters, digits, - and _, got {cause!r}")
     path = os.path.join(round_dir, "causes", f"{cause}.md")
     if not os.path.isfile(path):
         raise LoopError(f"{path} is missing: write the cause before its candidates")
@@ -66,8 +75,7 @@ def cmd_candidate(args: argparse.Namespace) -> None:
     adapter = adapter_of(args.loop)
     round_dir = open_round(args.loop)
     read_input(round_dir)
-    if not CANDIDATE_ID.match(args.id):
-        raise LoopError(f"a candidate id is lower-case letters, digits, - and _, got {args.id!r}")
+    candidate_id(args.id)
     if (args.test is None) != (args.test_ref is None):
         raise LoopError("--test and --test-ref go together: the test file and the commit that adds it before the fix")
     if args.test is not None and (os.path.isabs(args.test) or ".." in re.split(r"[\\/]", args.test)):
@@ -248,7 +256,7 @@ def cmd_check(args: argparse.Namespace) -> None:
     adapter = adapter_of(args.loop)
     round_dir = open_round(args.loop)
     record = read_input(round_dir)
-    cdir = os.path.join(round_dir, "candidates", args.candidate)
+    cdir = os.path.join(round_dir, "candidates", candidate_id(args.candidate))
     cand = load_candidate(os.path.join(cdir, "candidate.json"))
     # a check that fails part way must not leave the success of an earlier check to be read
     stale = os.path.join(cdir, "checks.json")
