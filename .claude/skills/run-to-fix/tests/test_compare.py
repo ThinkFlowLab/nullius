@@ -311,3 +311,26 @@ class ResultBeforeLedger(LoopCase):
         r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
         self.assertNotEqual(r.code, 0)
         self.assertIsNone(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["result"])
+
+
+class IncompleteNewCost(LoopCase):
+    def compare_partial(self, extra: List[str]) -> dict:
+        before, new = paired(20, 1, 1, 1)
+        new[0].cost = None
+        before_dir = write_job(self.jobs, "before", "alpha", "harbor", before)
+        new_dir = write_job(self.jobs, "new", "alpha", "harbor", new)
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(before_dir, None)
+        r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"] + extra)
+        self.assertEqual(r.code, 0, r.out + r.err)
+        return load(self.round_file("result.json"))["stop_rule"]
+
+    def test_a_new_run_of_unknown_cost_leaves_the_budget_unchecked(self) -> None:
+        rule = self.compare_partial([])
+        self.assertIsNone(rule["spent_usd"])
+        self.assertIsNone(rule["left_usd"])
+        self.assertTrue(any("budget" in n for n in rule["not_checked"]))
+
+    def test_the_person_s_figure_for_the_new_run(self) -> None:
+        rule = self.compare_partial(["--new-cost-usd", "0.5"])
+        self.assertAlmostEqual(rule["spent_usd"], 0.5)

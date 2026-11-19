@@ -411,3 +411,57 @@ class TrialBudgetHasNoDefault(Flow):
         self.assertNotEqual(r.code, 0)
         self.assertIn("--budget-usd", r.err)
         self.assertFalse(os.path.exists(self.round_file("trial-tasks.txt")))
+
+
+class IncompleteCosts(Flow):
+    """A trial run whose trials do not all report a cost has no known spending until the person gives it."""
+
+    def job_without_one_cost(self) -> str:
+        self.chosen()
+        trials = []
+        for task, passes, cost in (("f1", 3, 0.04), ("f2", 2, 0.06), ("p1", 3, 0.01)):
+            for k in range(3):
+                t = trial(f"{task}-{k}__t", f"bench/{task}", 1.0 if k < passes else 0.0)
+                t.cost = None if (task, k) == ("f1", 0) else cost
+                trials.append(t)
+        return write_job(self.jobs, "trial", "alpha", "harbor", trials)
+
+    def test_stop_two_refuses_an_unknown_spending(self) -> None:
+        job = self.job_without_one_cost()
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("--trial-cost-usd", r.err)
+        self.assertIn("$0.29", r.err)
+        self.assertEqual(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"], [])
+        self.assertFalse(os.path.exists(self.round_file("commands/run_tasks-full.sh")))
+
+    def test_the_person_s_figure_is_the_spending(self) -> None:
+        job = self.job_without_one_cost()
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--trial-cost-usd", "0.40"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        record = load(self.round_file("trial.json"))
+        self.assertAlmostEqual(record["cost_usd"], 0.40)
+        self.assertAlmostEqual(record["budget_left_usd"], 9.60)
+        run_entry = record["trial_runs"][0]
+        self.assertEqual(run_entry["cost_from"], "the person")
+        self.assertAlmostEqual(run_entry["cost_recorded_usd"], 0.29)
+        self.assertIn("the person's figure", self.page("decision-2.md"))
+
+    def test_a_figure_under_the_recorded_cost_is_refused(self) -> None:
+        job = self.job_without_one_cost()
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--trial-cost-usd", "0.10"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("$0.29", r.err)
+
+    def test_an_old_trial_run_of_unknown_cost_stops_select(self) -> None:
+        job = self.job_without_one_cost()
+        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--trial-cost-usd", "0.40"])
+        path = os.path.join(self.loop, "ledger.json")
+        ledger = load(path)
+        entry = ledger["rounds"][0]["trial_runs"][0]
+        entry.pop("cost_from")
+        entry["cost_complete"] = False
+        write_json(path, ledger)
+        r = self.select(["--size", "targets", "--budget-usd", "1", "--text", "again"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("unknown", r.err)
