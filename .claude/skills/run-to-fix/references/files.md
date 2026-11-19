@@ -29,7 +29,7 @@ round that has no `result.json`.
 | `input.json` | 1 | `read` | the run and baseline job folders, the adapter's SHA-256, the budget, the pass threshold, the `runs.py` used, the text of the stop rule; `refused` with its reason when the run is not analysable |
 | `health.txt` | 1 | `read` | `runs.py health` of the run and the baseline |
 | `metrics.json` | 1 | `read` | `runs.py analyze` of the baseline and the run, labels `baseline` and `run` |
-| `trials.csv` | 2 | `classify` | one row per trial: `trial`, `task`, `class`, `signature`, `reward`, `pair`, `cost_usd`, `model_calls`, `agent_s`, `max_completion_tokens`, `exception_type`, then `found:<id>`, `agent_class:<name>`, `agent_flag:<name>` |
+| `trials.csv` | 2 | `classify` | one row per trial: `trial`, `task`, `class`, `signature`, `reward`, `pair`, `cost_usd`, `model_calls`, `agent_s`, `max_completion_tokens`, `exception_type`, then `found:<id>`, `agent_class:<name>`, `agent_flag:<name>`. `model_calls` is the standard's own count where `result.json` holds one; the page of `run-analysis` counts from the trajectory |
 | `groups.json` | 2 | `classify` | class counts, the rules switched off, the groups with their warnings, the counts of found and agent classes |
 | `agent-classes.json` | 2 | `commands.classes` | the agent's own classes and flags per trial |
 | `causes/<id>.md` | 2 | the assistant | one cause, below |
@@ -110,8 +110,8 @@ of `trial.json` and `cheapest_option` of `result.json` hold such prices.
 
 | file | used for |
 |---|---|
-| `<trial>/result.json` | task, trial name, reward, exception, agent phase, cost, agent name |
-| `<trial>/agent/trajectory.json` | model calls and the largest reply |
+| `<trial>/result.json` | task, trial name, reward, exception, agent phase, cost, agent name, unit id, and the standard's own count of model calls (`agent_result.n_model_calls`) where it holds one |
+| `<trial>/agent/trajectory.json` | model calls where `result.json` holds no count of them, and the largest reply; the page of `run-analysis` counts model calls from it always |
 | `<trial>/verifier/ctrf.json`, `test-stdout.txt`, `score.json` | the detail of a `verifier_failed` signature |
 | any file a found class names | the found class's column |
 | everything `runs.py` reads | `health`, `analyze` and `render` (`run-analysis/references/files.md`) |

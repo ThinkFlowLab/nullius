@@ -20,13 +20,15 @@ The first rule that holds gives the class.
 | `verifier_failed` | the verifier ran and the reward is under the threshold | never |
 
 With every limit null, each trial is `pass`, `time_limit`, `exception`, `no_score` or `verifier_failed`.
-`groups.json` lists the rules a null limit switched off under `rules_off`, and `output_limit` with its reason when the
-adapter sets the limit and no trial records the tokens of one reply, as on a job of the standard.
+`groups.json` lists the rules a null limit switched off under `rules_off`. When the adapter sets
+`limits.output_token_limit`, it also lists `output_limit` with the count of trials that record no tokens of one reply,
+as on a job of the standard; `output_limit` is not checked on those trials.
 
 The primary reward follows the rule of `run-analysis`: `verifier_result.rewards.reward`, else the first numeric
-reward. Model calls are `agent_result.n_model_calls` when `result.json` holds it, as a job of the standard does; else
-they follow `run-analysis`: the per-call usage records (`extra.raw_usage` or steps with `metrics`, whichever is more),
-else the agent's steps. The largest reply is the
+reward. `model_calls` in `trials.csv` is the standard's own count, `agent_result.n_model_calls`, when `result.json` holds
+it; else it follows `run-analysis`: the per-call usage records (`extra.raw_usage` or steps with `metrics`, whichever is
+more), else the agent's steps. The page of `run-analysis` always counts from the trajectory, so on a job of the
+standard its count of model calls can differ from `trials.csv`. The largest reply is the
 largest `metrics.completion_tokens` of a step or `output_tokens` of a usage record. `classify` stops when its count
 of trials or passes, or of the pairs with the baseline, differs from the count in `metrics.json`.
 

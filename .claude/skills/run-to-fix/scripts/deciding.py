@@ -115,6 +115,7 @@ def decide_one(args: argparse.Namespace, round_dir: str, record: dict) -> None:
 
 def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     adapter = adapter_of(args.loop)
+    checkout = source_of(adapter, "decide --stop 2")
     ledger = load_ledger(args.loop)
     entry = ledger_round(ledger, os.path.basename(round_dir))
     selection = entry.get("selection")
@@ -130,7 +131,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     job_dir = checked.dir
     this_run: List[TrialRow] = read_rows(job_dir, threshold)
     before = read_rows(record["run"]["job_dir"], threshold)
-    code_ref = resolve(source_of(adapter, "decide --stop 2"), args.code_ref)
+    code_ref = resolve(checkout, args.code_ref)
     if code_ref != selection["ref"]:
         raise LoopError(f"a trial run of this round runs the commit select chose, {selection['ref'][:12]}; --code-ref "
                         f"names {code_ref[:12]}")
