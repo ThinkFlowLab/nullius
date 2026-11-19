@@ -191,11 +191,13 @@ class BenchmarkPage(PageCase):
         nav = re.search(r'<nav class="std-versions".*?</nav>', html, re.S).group(0)
         self.assertIn('<a href="/benchmarks/osworld1?v=044bc33#standard" aria-current="page"><b>044bc33</b>', nav)
         self.assertIn("<b>desktop-env-v1.0.3</b>", nav)
+        shown = lambda h: re.findall(r'<div class="std-version" data-version="([^"]+)">', h)      # the one not hidden
+        self.assertEqual(shown(html), ["044bc33"])
         self.assertIn("xlang-ai/OSWorld @ 044bc33", html)
-        html = self.get("/benchmarks/osworld1?v=desktop-env-v1.0.3")
-        self.assertIn("xlang-ai/OSWorld @ desktop-env-v1.0.3 · 9d6f711", html)
+        self.assertIn("xlang-ai/OSWorld @ desktop-env-v1.0.3 · 9d6f711", html)        # on the page, hidden: a click shows it in place
         self.assertIn("<small>368 tasks</small>", html)
-        self.assertIn('name="version" value="desktop-env-v1.0.3"', html)       # its checks run on this version
+        self.assertIn('name="version" value="desktop-env-v1.0.3"', html)       # its checks run on that version
+        self.assertEqual(shown(self.get("/benchmarks/osworld1?v=desktop-env-v1.0.3")), ["desktop-env-v1.0.3"])
         self.get("/benchmarks/osworld1?v=nope", status=404)
         self.assertNotIn("std-versions", self.get("/benchmarks/gsm8k"))
 

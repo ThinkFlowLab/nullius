@@ -84,7 +84,7 @@ def benchmark_page(key):
         if v and v not in pages:
             abort(404)
         std = pages[v] if v else std
-        versions = [dict(x, current=pages[x["version"]] is std, **_proven(pages[x["version"]])) for x in std["versions"]]
+        versions = [dict(x, std=pages[x["version"]], current=pages[x["version"]] is std, **_proven(pages[x["version"]])) for x in std["versions"]]
     elif v:
         abort(404)
     # where each dataset's data comes from, one row per way it runs - each fetched by its harness, never by hand
