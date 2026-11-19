@@ -559,7 +559,8 @@
         const shared = on.includes('yours') && on.includes('original');
         if (scope === 'shared') return shared;
         if (shared) return false;
-        return scope === 'setup' ? !on.includes('yours') && on.some(k => chosen.includes(k)) : on.includes('yours');
+        // 'agent': an agent's run alone takes it, shown with the agents
+        return scope === 'setup' ? !on.includes('yours') && !on.includes('agent') && on.some(k => chosen.includes(k)) : on.includes('yours') || on.includes('agent');
       })
       .map(([n, o]) => {
       const cur = (rec.bench_options || {})[n] ?? o.default;
@@ -753,7 +754,7 @@
       .filter(([, o]) => (o.setups || ['yours']).some(s => s === 'yours' ? yours : chosen.includes(s)))
       .map(([n, o]) => {
         const [k, by] = Object.entries(o.by || {})[0] || [];
-        const def = (k && by[of(k)]) || o.default;
+        const def = (!yours && k && by[of(k)]) || o.default;
         return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}<input class="nb-declared" data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
       });
     return rows.length ? `<div class="nb-sectionhead nb-sectionnext"><h2>${esc(b.label)}</h2></div>` + rows.join('') : '';
@@ -780,7 +781,10 @@
     // each field shows, greyed, the value used while it is empty; a task that declares its own keeps it
     const m = s => String(+(s / 60).toFixed(2));
     // [placeholder, declared]: the benchmark's or the agent's own reads as a value, Nullius's default stays grey
-    const def = {setup: [m(d.setup), false], image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), (d.catalogue || []).includes('score')]};
+    const setupSeconds = C.chosenOf(rec).map(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k) && b.family === 'agent' ? (d.setup_agent || d.setup) : d.setup);
+    const setup = setupSeconds.length && setupSeconds.some(s => s !== setupSeconds[0]) ? ['per setup', true]
+      : [m(setupSeconds[0] || d.setup), (setupSeconds[0] || d.setup) !== d.setup];
+    const def = {setup, image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), (d.catalogue || []).includes('score')]};
     const label = (k, l) => k === 'agent' ? 'Agent, whole ' + u.noun : l;
     return '<div class="nb-sectionhead nb-sectionnext"><h2>Time limits</h2></div>'
       + C.STANDARD_PHASES.map(([k, l]) => minutesRow(k, label(k, l), t[k], def[k])).join('');

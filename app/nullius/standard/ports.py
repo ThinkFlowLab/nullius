@@ -56,7 +56,7 @@ PORTS = {
         "label": "Computer use",
         "family": "agent",
         "summary": "A desktop the agent sees in screenshots and drives with mouse and keyboard actions.",
-        "kit": None,
+        "kit": "agent-computer-v1",
     },
     "cap.memory/v1": {
         "label": "Memory",

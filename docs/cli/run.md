@@ -65,7 +65,7 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 
 | Phase | Default | A unit past it |
 | --- | --- | --- |
-| `setup` | 600 s for the driver's `setup`; an own image's `prepare` step its `seconds` | Environment setup error |
+| `setup` | The benchmark's `limits.setup_seconds` for an agent's unit, else 600 s; an own image's `prepare` step its `seconds` | Environment setup error |
 | `image` | 3600 s: an own image's pull or build | Environment setup error |
 | `agent` | The task's `agent_seconds`, else the Original setup's `turn_seconds`, else `limits.turn_seconds`, else 900 s: the agent's whole work on the unit, every turn of a conversation and the simulated user's between them; each add and each recall of a capability (its reader has `limits.turn_seconds`); an Original setup's answerer; the oracle | Agent timeout |
 | `verify` | The verify step's `seconds`, else the agent's default | Verifier error |

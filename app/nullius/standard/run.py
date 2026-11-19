@@ -104,8 +104,9 @@ def driver_path() -> str:
     return root
 
 TURN_SECONDS = 900
-DRIVER_SECONDS = 600                  # a driver's setup, oracle and score requests, each
+DRIVER_SECONDS = 600                  # a driver's setup, oracle and score requests, each; limits.setup_seconds for setup
 IMAGE_SECONDS = 3600                  # an own image's pull or build (container.own_image)
+END_SECONDS = 120                     # a driver's answer to a unit's end (driver.unit_end)
 MAX_AGENT_SECONDS = 6 * 3600          # the longest a unit's own agent limit (setup's agent_seconds) may ask
 MAX_TURNS = 20
 # The phases of a unit whose time limit a run may set (``Run(timeouts=)``, ``cli run --timeout PHASE=SECONDS``):
@@ -122,6 +123,23 @@ LIVE: dict = {}
 
 class Refused(Exception):
     """The run cannot start: the pair does not fit, or a setting is missing."""
+
+
+class BenchmarkRefused(Refused):
+    """This benchmark cannot run here; another benchmark may still run."""
+
+
+def setup_request(bench: dict, kind: str, attempt: Optional[int] = None) -> tuple:
+    """What a unit's ``setup`` is sent besides the unit and its folder, and how long it may take, for a unit that
+    ``kind`` runs (agent, capability, control): ``attempt`` when the benchmark tells attempts apart
+    (``limits.attempts``), ``participant`` when its driver asks (``driver.participant``); the benchmark's
+    ``limits.setup_seconds`` for an agent's unit,
+    ``DRIVER_SECONDS`` for any other. A run and a proof's checks build the request here, the one way."""
+    limits, drv = bench.get("limits") or {}, bench.get("driver") or {}
+    sent = {"attempt": attempt} if attempt and limits.get("attempts") else {}
+    if drv.get("participant"):
+        sent["participant"] = kind
+    return sent, (limits.get("setup_seconds") if kind == "agent" else None) or DRIVER_SECONDS
 
 
 def provider_endpoint(provider: str, env=os.environ) -> tuple:
@@ -519,6 +537,9 @@ class Run:
             raise Refused(f"backend {backend!r} is not one of {list(BACKENDS)}")
         if backend == "boat" and other.get("_kind") not in ("agent", "capability"):
             backend = "local"                    # a check or a setup: nothing of an agent's runs, so nothing goes to a VM
+        if backend == "boat" and other.get("_kind") == "agent" and "agent.computer/v1" in bench.get("needs", []):
+            raise BenchmarkRefused("the computer port uses a socket on this machine, which an agent in a Boat VM "
+                                   "cannot reach: choose local processes or the container backend")
         if backend == "boat":
             why = boat.unusable(env=env, which=which)
             if why:
@@ -583,31 +604,32 @@ class Run:
         # A control (definitions.control) calls no model: its run needs a key only for the benchmark's judge.
         ds = [d for d in bench["datasets"] if dataset in (None, d["id"])]
         if not ds:
-            raise Refused(f"{bench['label']} has no dataset {dataset!r}: {[d['id'] for d in bench['datasets']]}")
+            raise BenchmarkRefused(f"{bench['label']} has no dataset {dataset!r}: {[d['id'] for d in bench['datasets']]}")
         self.ds = ds[0]
         try:
             _, env_def = definitions.environment_of(bench, None, self.ds)
         except ValueError as e:
-            raise Refused(str(e))
+            raise BenchmarkRefused(str(e))
         if backend != "container" and other.get("_kind") == "control" and definitions.own_image(env_def):
             why = container.unusable()
             if why:
-                raise Refused(f"each {(bench.get('units') or {}).get('noun', 'unit')} of {bench['label']} runs in its own image, "
+                raise BenchmarkRefused(f"each {(bench.get('units') or {}).get('noun', 'unit')} of {bench['label']} runs in its own image, "
                               f"which needs docker: {why}")
         # The benchmark's own options on this dataset; what their values need: an embedding model the driver
         # calls through a relay of the run's own (bench_relay), programs on this machine.
         # each option where it applies: a setup's own (a retriever, a top-k), or those of the benchmark's port
         self.bench_options, bad = definitions.bench_options_of(bench, self.ds["id"], bench_options,
-                                                               other["key"] if self.upstream else "yours")
+                                                               other["key"] if self.upstream else "yours",
+                                                               kind=other.get("_kind"))
         if bad:
-            raise Refused("; ".join(bad))
+            raise BenchmarkRefused("; ".join(bad))
         needs = definitions.option_needs(bench, self.bench_options)
         self.files = needs["files"]
         self.file_env: Dict[str, str] = {}
         for m in needs["embeddings"]:
             why = providers.embedding_problem(m, provider)
             if why:
-                raise Refused(why)
+                raise BenchmarkRefused(why)
         self.embed_model = providers.served_as(needs["embeddings"][0], provider) if needs["embeddings"] else None
         self.rerank_model = providers.served_as(needs["reranker"][0], provider) if needs["reranker"] else None
         # What a call's cost is estimated from when the provider does not say it: the user's price list
@@ -648,12 +670,12 @@ class Run:
             imaged = hostreq.in_image(bench, on_host)
             cannot = [n for n in hostreq.requirements(bench, on_host) if n not in imaged]
             if cannot:
-                raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs "
+                raise BenchmarkRefused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs "
                               f"{', '.join(cannot)}, which a container setup cannot provide: choose local processes")
             on_host = []
         lacking = hostreq.problems(bench, on_host, which, self.constraints.get("gpu_ids"))
         if lacking:
-            raise Refused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
+            raise BenchmarkRefused(f"{', '.join(f'{k}={v}' for k, v in self.bench_options.items())} needs on this machine "
                           + "; ".join(f"{n} ({why})" for n, why in lacking.items())
                           + (". Install with: " + " && ".join(lines) if (lines := hostreq.install_lines(bench, list(lacking)))
                              else ". Run it on a machine that has it"))
@@ -766,7 +788,7 @@ class Run:
             try:
                 cmd, extra = install.driver_argv(self.bench)     # its driver.install: installed in ready(), found here
             except install.InstallFailed as e:
-                raise Refused(f"could not install the driver's environment: {e}")
+                raise BenchmarkRefused(f"could not install the driver's environment: {e}")
             env = base_env(os.path.join(self.job_dir, ".work", "driver-home"),
                            {**extra, "NULLIUS_UPSTREAM": self.up or "", "NULLIUS_DATASET": self.data or "",
                             "NULLIUS_DATASET_ID": self.ds["id"], "PYTHONPATH": driver_path(), "PYTHONDONTWRITEBYTECODE": "1",
@@ -1139,7 +1161,7 @@ class Run:
         from . import network_requirements
         why = network_requirements.check(self.bench, self.other)
         if why:
-            raise Refused("; ".join(why))
+            raise BenchmarkRefused("; ".join(why))
         p = self.progress
         self.scope_limits = self.scope_ready(limits.scoped(self.constraints), refuse=self.backend == "local")
         owns = any(definitions.own_image(e) for e in (self.bench.get("environments") or {}).values())
@@ -1154,13 +1176,14 @@ class Run:
         # every container the run starts takes the caps: its agents', relays' and installs' on the container
         # backend, its checks' and own images' on either
         if self.backend == "container" or self.container_check or owns:
+            refusal = Refused if self.backend == "container" else BenchmarkRefused
             try:
                 # Docker can drop a limit with only a warning: a result would look limited when it was not
                 not_applied = container.unenforced(self.image or limits.PROBE_IMAGE, self.container_limits)
             except container.Unavailable as e:
-                raise Refused(str(e))
+                raise refusal(str(e))
             if not_applied:
-                raise Refused("this machine's engine does not apply " + "; ".join(
+                raise refusal("this machine's engine does not apply " + "; ".join(
                     f"{limits.BY_KEY[k].label} ({limits.explain(k, self.container_limits[k], why)})" for k, why in not_applied.items()))
         # on the container backend the agent's packages are installed in the base image, with the Node, uv and libc it runs on
         image = self.image if self.backend == "container" else None
@@ -1196,6 +1219,11 @@ class Run:
             elif drv is not None:                  # the environment the upstream's own code needs, for the driver
                 with p.stage("driver", cached=install.ready(drv), start=f"installing {self.bench['key']}'s driver environment"):
                     install.driver_packages(self.bench)
+        except (install.InstallFailed, container.Unavailable) as e:
+            if self.backend == "container":
+                container.sweep(self.name)
+            raise BenchmarkRefused(f"could not install what the run needs: {e}")
+        try:
             self.inst = ""
             if self.other["_kind"] not in ("control", "upstream"):
                 with p.stage("install", cached=install.ready(install.packages_dir(self.other, image=image)), agent=self.other.get("_ref") or self.other["key"]):
@@ -1211,7 +1239,7 @@ class Run:
                 with p.stage("runtime", start="fetching " + ", ".join(self.runtimes_needed()), name=",".join(self.runtimes_needed())):
                     self.runtimes = container.runtime_mounts(self.runtimes_needed())
             except container.Unavailable as e:
-                raise Refused(f"the agent's runtime for an own image: {e}")
+                raise BenchmarkRefused(f"the agent's runtime for an own image: {e}")
         # An option whose driver embeds or reranks: its calls go through a relay of the run's
         # own, recorded in the job's .work/relay-benchmark beside the units', never counted as the agent's.
         if (self.embed_model or self.rerank_model) and self.bench_relay is None:
@@ -1237,6 +1265,31 @@ class Run:
         a = getattr(self.local, "attempt", None)
         return {"attempt": a} if a and (self.bench.get("limits") or {}).get("attempts") else {}
 
+    def setup_kw(self) -> dict:
+        """What ``setup`` is told besides the unit (:func:`setup_request`)."""
+        return setup_request(self.bench, self.other["_kind"], getattr(self.local, "attempt", None))[0]
+
+    def setup_seconds(self) -> int:
+        """How long a unit's ``setup`` may take (:func:`setup_request`)."""
+        return setup_request(self.bench, self.other["_kind"])[1]
+
+    def unit_ended(self, unit: str, ws: str) -> bool:
+        """A driver that asks for it (``driver.unit_end``) is told that a unit an agent ran has ended, scored or not -
+        also when the run was stopped - so that what its setup started for the agent ends now. The driver the unit
+        used is asked, never a new one, and only while it runs with no request the stop left unanswered (that
+        request's late reply would be read as this one's); its answer is waited for ``END_SECONDS`` at most, and a
+        failure is no unit's. Returns whether the request failed."""
+        if self.other.get("_kind") != "agent" or not (self.bench.get("driver") or {}).get("unit_end"):
+            return False
+        d = getattr(self.local, "driver", None)
+        if d is None or d.p is None or d.p.poll() is not None or d.unanswered:
+            return False
+        try:
+            d.request("end", unit=unit, dir=ws, timeout=END_SECONDS, force=True)
+        except Exception:                        # noqa: BLE001 - the unit's result is written; its clean-up is not its result
+            return True
+        return False
+
     def trial_name(self, i: int, unit: str, r: int = 1) -> str:
         return f"{_slug(unit)}__u{i:04d}" + (f"r{r}" if self.repeat > 1 else "")
 
@@ -1251,6 +1304,22 @@ class Run:
         return self.other["_kind"] == "agent" and "command" not in self.other["start"]
 
     def unit(self, i: int, unit: str, r: int = 1, retry: int = 0) -> Optional[dict]:
+        """One unit (:meth:`_unit`); once its setup was sent, whatever happened after, the driver is told its end
+        (:meth:`unit_ended`)."""
+        self.local.set_up = None
+        try:
+            return self._unit(i, unit, r, retry)
+        finally:
+            asked, self.local.set_up = self.local.set_up, None
+            if asked is not None:
+                if self.unit_ended(*asked) and "agent.computer/v1" in self.bench.get("needs", []):
+                    # A failed end leaves the agent's desktop for the driver's exit cleanup.
+                    d = getattr(self.local, "driver", None)
+                    if d is not None:
+                        d.close()
+                        self.local.driver = None
+
+    def _unit(self, i: int, unit: str, r: int = 1, retry: int = 0) -> Optional[dict]:
         if self._stopped.is_set() or (getattr(self, "_halt", None) is not None and self._halt.is_set()):
             return None                          # the endpoint refused the run: nothing more is begun
         if getattr(self, "ledger", None) is not None and self.ledger.closed():
@@ -1274,7 +1343,7 @@ class Run:
         os.makedirs(home, exist_ok=True)
         t0 = time.time()
         self.progress.emit("unit", "start", unit=unit)
-        self.phase(name, unit, "env_setup", None if self.upstream else self.phase_limit("setup", DRIVER_SECONDS))
+        self.phase(name, unit, "env_setup", None if self.upstream else self.phase_limit("setup", self.setup_seconds()))
         produce, score, exc, traj, logs = (None, None), None, None, None, {}
         p0, p1, checking = None, None, (None, None)   # when the agent began and ended; the check's start and end
         clock: dict = {}                         # an agent's start: "ready" when its session opened, "failed" when it ended with none
@@ -1285,8 +1354,12 @@ class Run:
         retry_ok = True                          # whether its failure is one a further try may mend
         try:
             try:
-                # a setup's unit needs none: the upstream's answerer reads its data itself
-                setup = {} if self.upstream else self.driver().request("setup", unit=unit, dir=ws, timeout=self.phase_limit("setup", DRIVER_SECONDS), **self.attempt_kw())
+                # a setup's unit needs none: the upstream's answerer reads its data itself. The unit is set up
+                # once its request is written: a stop before that leaves the driver nothing to end
+                def sent():
+                    self.local.set_up = (unit, ws)
+                setup = {} if self.upstream else self.driver().request("setup", unit=unit, dir=ws, timeout=self.phase_limit("setup", self.setup_seconds()),
+                                                                       on_sent=sent, **self.setup_kw())
             except jsonl.Failed as e:            # a driver that did not answer in its time is not asked again
                 raise _Ended("EnvironmentSetupError", str(e), retryable=not isinstance(e, jsonl.NoReply))
             environment, env_def = self.unit_environment(setup)

@@ -157,7 +157,8 @@ def leak_check(driver: _Driver, units: List[str], family: str, in_prompt: str = 
             a, b = os.path.join(driver.work, "leak", f"{i}", "a"), os.path.join(driver.work, "leak", f"{i}", "b")
             os.makedirs(a)
             try:
-                s = p.request("setup", unit=unit, dir=a, timeout=600)
+                sent, seconds = run.setup_request(driver.bench, "control")       # the oracle's unit, as a run sends it
+                s = p.request("setup", unit=unit, dir=a, timeout=seconds, **sent)
                 before = _files(a)
                 shutil.copytree(a, b)
                 o = p.request("oracle", unit=unit, dir=b, timeout=600)

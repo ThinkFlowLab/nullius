@@ -214,7 +214,7 @@ class Tabs(unittest.TestCase):
         self.assertIn("Fake agent", card)
         self.assertIn(">1/1</b>", card)
         self.assertIn('<th scope="col">Proven</th>', card)                                           # agent.task/v1's record
-        self.assertEqual(card.count("<b>no kit yet</b>"), 2)                             # agent.browser/v1 and agent.computer/v1
+        self.assertEqual(card.count("<b>no kit yet</b>"), 1)                             # agent.browser/v1
         self.assertIn('href="/new-run?standard=fakebench&amp;other=fake"', card)         # a fitting pair opens its recipe
         self.assertNotIn("fakememo", card)                                                # a capability benchmark is not an agent's
 

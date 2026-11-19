@@ -31,7 +31,7 @@ A pair is an **agent benchmark** × an **agent**, or a **capability benchmark** 
 | `agent.conversation/v1` | Several prompts in one session, the earlier turns remembered | Turn 2 asks for what turn 1 said |
 | `agent.search/v1` | Search an HTTP collection with the agent's own tools, retrieve a source and answer with evidence | Find a source, choose the current one, follow a reference (3 checks) |
 | `agent.browser/v1` | A browser, through an MCP server Nullius starts | Defined; its kit comes with the first browser benchmark |
-| `agent.computer/v1` | A desktop seen in screenshots and driven by mouse and keyboard actions | Defined; no kit yet |
+| `agent.computer/v1` | A desktop seen in screenshots and driven by mouse and keyboard actions, through [the tools of an MCP server the benchmark's runner serves](ports/agent-computer-v1.md) | Four basic checks, four skills on a small desktop in a container ([the kit](ports/agent-computer-v1.md#the-kit)) |
 | `cap.memory/v1` | `add {session}` then `recall {question}` → `{memory}`; a session is `{id, date, turns: [{role, text}], text}` | Recall a place and an exact name among distractors (2 checks); nothing it stores is a credential |
 
 - **The last message** follows ACP `messageId` boundaries and other events (a tool call, a notice). Without IDs, session metadata parts messages but never erases the final answer.
@@ -180,6 +180,8 @@ A rootful Docker with `userns-remap` maps the uids of each container to sub-uids
 ### The boat backend
 
 `--backend boat`: each unit's agent or capability in its own [boat.dev](https://boat.dev) VM. Driver, relay, spending cap and scoring stay with the run.
+
+A computer-port run is refused before any unit: its server's local socket cannot be reached from the agent's VM. Choose local processes or the container backend.
 
 | Piece | Rule |
 | --- | --- |
@@ -427,12 +429,13 @@ use the source folders and repository checks.
 | Op | Sent | Replies |
 | --- | --- | --- |
 | `units` | `dataset`, `setup` | Every unit id |
-| `setup` | `unit`, `dir` | `{prompt}`, any `mcp` servers, `environment`, an own image's `image`, `prepare`, `internet` and `verify`, and `agent_seconds`, the unit's own agent timeout (up to 6 hours, instead of `limits.turn_seconds`) |
+| `setup` | `unit`, `dir`; `attempt` with `limits.attempts`; `participant` (`agent`, `capability` or `control`) with `driver.participant` | `{prompt}`, any `mcp` servers, `environment`, an own image's `image`, `prepare`, `internet` and `verify`, and `agent_seconds`, the unit's own agent timeout (up to 6 hours, instead of `limits.turn_seconds`) |
 | `turn` | The transcript so far; `simulator: {model, base_url, key}` when there is one; `judge` for an upstream that grades as the conversation ends; `attempt` with `limits.attempts` | The next message, `{done: true}`, or `restart` |
 | `produce` | A capability benchmark's recall, `base_url` and `key` | The reading, through the relay |
 | `answer` | `unit, dir, setup, model, base_url, key` | `{answer}`: the upstream's own answerer, for a [setup](#setups-as-published-your-model-your-agent-or-capability) |
 | `score` | `unit, dir, transcript, answer`, `setup`, `verified` for an own image, `judge: {model, base_url, key}` when judged | `{reward, detail}`, and `passed` when the benchmark passes or fails; `parts: {n, by, parts}` when the reward is a mean over several parts (a conversation's questions), so the job's mean weighs it by `n` and breaks it down by `by`; `stopped`, the reason of a stop asked while the unit ran, kept as `verifier_result.stopped` |
 | `oracle` | `{unit, dir}` | `{answer}`, the reference; a workspace benchmark also writes it into `dir` |
+| `end` | `{unit, dir}`, with `driver.unit_end`, once a unit an agent ran has ended, also after a stop, when its `setup` was sent and the driver still runs with no request left unanswered | `{}` |
 
 An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierError: `, `CancelledError: ` or `CauseUnknownError: ` keeps that kind.
 
@@ -444,8 +447,11 @@ An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierErr
 | `leaderboard` | `{says, simulator?, judge?, bench_options?, repeat?}`: what the upstream's leaderboard fixes besides the ranked model, from its own submission rules - the user simulator's and judge's models, the benchmark's options it sets and the fewest attempts per unit. The builder then offers **Like the leaderboard** |
 | `limits.turns` | At most this many agent turns in a conversation (default 20; `cli run --max-turns` forces another) |
 | `limits.turn_seconds` | The agent's whole work on a unit, every turn of a conversation included (default 900; a task's `agent_seconds`, a setup's own `turn_seconds` or `cli run --timeout agent=` before it) |
+| `limits.setup_seconds` | How long `setup` may take, in seconds, for a unit an agent runs (a setup that starts a machine of its own for an agent); every other unit keeps 600; `cli run --timeout setup=` forces either. A benchmark's driver may hold a bound of its own (OSWorld1: setup 1 hour, scoring 10 minutes): a value raised above it is then not reached |
 | `limits.score_seconds` | How long `score` may take (default 600; `cli run --timeout score=` before it). A driver that runs the unit's environment in `score`, as its null control does, sets it |
 | `limits.call_seconds` | How long the relay waits for one model call's reply (default 900). A benchmark whose agent waits longer for a call sets it above that agent's own wait, so the agent's client, not the relay, ends a long call |
+| `driver.participant` | `true`: `setup` is also sent `participant`, the kind of what runs the unit, for a driver that starts something only an agent uses. A driver whose `setup` takes `unit` and `dir` alone leaves it out |
+| `driver.unit_end` | `true`: the driver is sent `end` (`unit`, `dir`) once each unit an agent ran has ended, scored or not, so that what its setup started for the agent ends with the unit. Only a unit whose `setup` was sent gets it, and only while that driver still runs: a driver closed after a request got no reply in its time is not asked, nor is one whose request a stop left unanswered. A control's or a setup's unit gets none, nor does any other driver |
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
 
@@ -486,7 +492,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `limit` | `true`: a bound of the upstream's own (steps, errors). The builder shows it in Limits, under the benchmark's name |
 | `step` | `where`: where the work runs, such as the VMs' provider, asked on Where, one value as fixed; `dataset`: what its datasets need, asked on Dataset for the datasets it applies to |
 | `by` | Its default under each value of another option, e.g. each OSWorld agent's own steps |
-| `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`) |
+| `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`); `["agent"]`: an agent's run alone, never a capability's or a control's |
 
 - **Temperature** in GSM8K and HumanEval's Original setups accepts a non-negative decimal, such as `0.5`. **Provider default** omits the parameter; the provider/model decides. Some models restrict overrides. In the builder, leave the input empty for provider default; the CLI accepts `--bench-option temperature=0.5` or `temperature=default`. This does not override an agent's own sampling settings.
 - **Read** by the driver as `NULLIUS_OPTION_<NAME>`; set with `cli run --bench-option NAME=VALUE`.
