@@ -506,6 +506,30 @@ class WorkspaceDelete(unittest.TestCase):
         with self.client.session_transaction() as s:
             self.csrf = s["csrf"]
 
+    def page(self, url):
+        r = self.client.get(url); self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 200)
+        return r.get_data(as_text=True)
+
+    def test_the_page_is_a_table_or_cards_and_renders_only_the_one_chosen(self):
+        html = self.page("/workspaces")
+        self.assertIn('id="workspaces" data-table', html); self.assertNotIn("data-cards", html)
+        self.assertIn('href="/workspaces" aria-label="Table" title="Table" aria-current="true"', html)
+        self.assertIn('href="/workspaces?view=cards" aria-label="Cards" title="Cards" aria-current="false"', html)
+        html = self.page("/workspaces?view=cards")
+        self.assertIn('id="workspaces" data-cards', html); self.assertNotIn("data-table", html)
+        self.assertIn('aria-label="Cards" title="Cards" aria-current="true"', html)
+        self.assertIn('data-s-runs="0"', html)                                                           # Sort by reads it
+        self.assertIn(f'data-ask="/workspaces/{self.ws.name}/roots"', html)                             # the same dialogs
+        self.assertIn('data-ask="ws-ask-delete"', html); self.assertIn('aria-label="Delete workspace gone soon"', html)
+
+    def test_the_view_toggle_keeps_the_other_query_and_shows_only_where_asked(self):
+        html = self.page("/workspaces?view=cards&q=1")
+        self.assertIn('href="/workspaces?q=1" aria-label="Table"', html)
+        self.assertIn('href="/workspaces?view=cards&amp;q=1" aria-label="Cards"', html)
+        for url in ("/benchmarks", "/kits", "/agents"):
+            self.assertNotIn('aria-label="Table" title="Table"', self.page(url), url)
+
     def test_a_restart_with_the_same_paths_reopens_the_workspace_its_runs_went_into(self):
         runs = self.tmp / "runs"
         self.stack.enter_context(patch.dict(os.environ, {"RUNS_DIR": str(runs)}))
