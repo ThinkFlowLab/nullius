@@ -102,6 +102,26 @@ class OriginTags(PageCase):
         self.assertIn('data-f-origin="official&#10;"', self.card("gaia"))
         self.assertNotIn('data-value="Experiment"', html)
 
+    def test_the_list_is_cards_by_default_and_a_table_on_request(self):
+        self.assertIn('href="/benchmarks?view=table" aria-label="Table" title="Table" aria-current="false"', self.html)
+        self.assertIn('href="/benchmarks" aria-label="Cards" title="Cards" aria-current="true"', self.html)
+        self.assertNotIn("data-table", self.html)
+        html = self.get("/benchmarks?view=table&q=1")
+        self.assertIn('href="/benchmarks?view=table&amp;q=1" aria-label="Table" title="Table" aria-current="true"', html)
+        self.assertIn('href="/benchmarks?q=1" aria-label="Cards" title="Cards" aria-current="false"', html)   # the default has no view
+        self.assertNotIn("data-cards", html); self.assertNotIn('class="bench-card"', html)
+        heads = re.findall(r'<th data-col="(\w+)"', html)
+        self.assertEqual(heads[:3], ["title", "category", "origin"])
+        self.assertNotIn("icon", heads)                                                     # the mark is in the name cell
+        row = re.search(r'<tr data-search="[^"]*"[^>]*data-f-origin="official&#10;"[^>]*>(?:(?!</tr>).)*href="/benchmarks/swe-bench-verified".*?</tr>', html, re.S).group(0)
+        self.assertIn('data-f-runs="standard&#10;harbor&#10;"', row)
+        self.assertIn('<td data-col="tasks" data-sort="500" class="align-right">', row)
+        self.assertIn('data-pills="category"', html); self.assertIn('data-filter-menu="origin"', html)
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', html[html.index('data-tools="sort"'):]), ["", "title", "tasks", "datasets"])
+        self.assertIn('<input type="checkbox" data-col="needs" data-off> Needs', html)       # secondary: off until chosen
+        origins = re.findall(r'data-f-origin="(\w+)&#10;"', html)
+        self.assertEqual(origins, sorted(origins, key=list(catalog.ORIGINS).index))         # the shelves' order
+
     def test_the_list_filters_by_category_pills_and_two_dropdowns(self):
         tools = self.html.split('id="benchmarks-tools"', 1)[1].split('id="benchmarks"', 1)[0]
         self.assertIn('<div class="filter-pills" role="group" aria-label="Category" data-pills="category">', tools)
