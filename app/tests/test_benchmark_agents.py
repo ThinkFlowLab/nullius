@@ -130,7 +130,7 @@ class Fits(unittest.TestCase):
                     self.assertEqual({f["ref"] for f in got.values()}, {ref})
         page = {e["d"]["_ref"]: e for e in recipe.entries("agent", own=True)["entries"]}
         self.assertEqual([f["why"] for f in page["osworld1:openai-cua"]["fits"] if f["key"] == "osworld1"], [[]])
-        self.assertEqual(page["osworld1:openai-cua"]["protocol"], "its own script")
+        self.assertEqual(page["osworld1:openai-cua"]["protocol"], "Its own script")
 
 
 
@@ -147,7 +147,7 @@ class Recipes(unittest.TestCase):
         got = {a["key"]: a for a in recipe.choices()["agents"]}
         cua = got["osworld1:openai-cua"]
         self.assertEqual((cua["benchmark"], cua["agent"], cua["models"], cua["protocol"]),
-                         ("osworld1", "openai_cua", ["computer-use-preview"], "its own script"))
+                         ("osworld1", "openai_cua", ["computer-use-preview"], "Its own script"))
 
     def test_an_own_agent_compiles_to_the_command_of_the_agent_option(self):
         old = self.compiled(others=["original"], bench_options={"agent": "openai_cua", "max_steps": "20"})

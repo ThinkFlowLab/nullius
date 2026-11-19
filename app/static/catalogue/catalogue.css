@@ -32,7 +32,9 @@ button.card-link:disabled { cursor: not-allowed; }
 .bench-card:has(> .bench-card-title [data-pick]:disabled):hover { border-color: var(--border-soft); }
 .bench-card :is(input, button, .btn, [title]) { position: relative; z-index: 1; }
 .bench-card [title]:not(input, button, .btn) { cursor: pointer; }   /* raised for its tooltip, it still opens the card */
-.bench-card-foot .bench-harness { margin-left: auto; }
+.bench-card-foot .bench-harness { margin-left: auto; text-align: right; }
+/* the foot on a card's last line, wherever its badges or stats would put it */
+.bench-card-foot:not(.bench-card-runs ~ *, .bench-stats ~ *) { margin-top: auto; }
 .bench-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .bench-shelf.st-community .bench-card { background: transparent; border-style: dashed; border-color: var(--border); }
 .bench-shelf.st-community .bench-card:hover { border-color: var(--accent); }

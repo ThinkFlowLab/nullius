@@ -83,7 +83,7 @@ class Tabs(unittest.TestCase):
         self.assertIn('/static/brand/marks.svg#openai', html)
         self.assertIn('/static/brand/marks.svg#harbor', html)
         # Beside the logos, an agent without one shows its initials; where none has a logo, no card has an icon.
-        self.assertIn('<span class="ws-avatar std-mark small" aria-hidden="true">EX</span><a class="card-link" href="/agents/reference">', html)
+        self.assertIn('<span class="ws-avatar std-mark small" aria-hidden="true">EX</span><span class="bench-card-name"><a class="card-link" href="/agents/reference">Example agent</a> 1</span>', html)
         fixture_html = self.get("/agents").get_data(as_text=True)
         self.assertIn('<div class="bench-card-title"><a class="card-link" href="/agents/fake">Fake agent</a></div>', fixture_html)
         self.assertNotIn('std-mark', fixture_html)
@@ -190,9 +190,10 @@ class Tabs(unittest.TestCase):
         card = card[:card.index("</article>")]
         self.assertIn('data-f-from="benchmark&#10;"', card)
         self.assertIn('href="/benchmarks/osworld1"', card)
-        self.assertIn('<span class="cat-tag">OSWorld1</span>', card)
         self.assertIn('<div class="bench-card-setup">computer-use-preview</div>', card)
-        self.assertIn("Computer use", card)
+        self.assertIn('<div class="bench-card-runs run-tags" role="group" aria-label="Kind, Uses, Example"><span class="std-tag">Computer use</span></div>', card)
+        self.assertIn('<div class="bench-card-foot"><span class="bench-card-tags"><span class="std-tag">Its own script</span></span>'
+                      '<span class="bench-harness">OSWorld1</span></div>', card)                   # the builder's foot: its protocol, where it comes from
         self.assertNotIn("Ports proven", card)
         self.assertIn('id="osworld2-muse-spark"', table)
         self.assertEqual(self.get("/agents/openai-cua").status_code, 404)                 # its benchmark's page is its page
@@ -383,7 +384,8 @@ class Tabs(unittest.TestCase):
         self.versioned()
         html = self.get("/agents").get_data(as_text=True)
         self.assertEqual(html.count('id="fake"'), 1)
-        self.assertIn("v1.0 · 2 versions", html)
+        self.assertIn('Fake agent</a> 1.0</span>', html)                                     # its default version beside its name
+        self.assertIn("v1.0 · 2 versions", self.get("/agents?view=table").get_data(as_text=True))
         html = self.get("/agents/fake").get_data(as_text=True)                          # the default
         self.assertIn('<nav class="std-versions"', html)
         self.assertIn('href="/agents/fake?v=1.0" aria-current="page"><b>1.0</b><small>2/7 proven · default</small>', html)

@@ -171,13 +171,13 @@ def _bench_page(b: dict) -> dict:
 
 
 def protocol(o: dict) -> str:
-    """How Nullius talks to it, in a word or two for a page."""
+    """How Nullius talks to it, in a word or two for a page, in sentence case as its filter names it."""
     if o["_kind"] == "control":
-        return "no agent"
+        return "No agent"
     if o["_kind"] == "capability":
         return "JSON lines"
     st = o.get("start") or {}
-    return "ACP" if "acp" in st else "its own script" if "driver" in st else "a command"
+    return "ACP" if "acp" in st else "Its own script" if "driver" in st else "A command"
 
 
 def skills_of(port: str, record: Optional[dict]) -> List[dict]:

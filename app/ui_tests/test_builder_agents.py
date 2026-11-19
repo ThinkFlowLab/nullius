@@ -50,7 +50,9 @@ class AgentGrid(unittest.TestCase):
         self.assertTrue(list(cards)[0].startswith("osworld1:"))                                  # its own first
         self.assertNotIn("original", cards)                                                         # they are its Original
         self.assertIn('<button type="button" class="card-link" data-pick="osworld1:openai-cua" aria-pressed="false"', cards["osworld1:openai-cua"])
-        self.assertIn('<span class="bench-harness">OSWorld1&#39;s own</span>', cards["osworld1:openai-cua"])
+        self.assertIn('<div class="bench-card-foot"><span class="bench-card-tags"><span class="std-tag">Its own script</span></span>'
+                      '<span class="bench-harness">OSWorld1</span></div>', cards["osworld1:openai-cua"])   # the Agents page's foot
+        self.assertIn('<span class="std-tag">ACP</span></span><span class="bench-harness">Bundled</span></div>', cards["goose"])
         self.assertIn('<div class="bench-card-blocker" title="MiniMax M3 belongs to OSWorld2">Belongs to OSWorld2</div>', cards["osworld2:m3"])
         self.assertIn('data-f-from="elsewhere&#10;"', cards["osworld2:m3"])
         self.assertIn(">Lacks computer</div>", cards["goose"])
@@ -69,7 +71,7 @@ class AgentGrid(unittest.TestCase):
         _, cards = self.grid("gsm8k")
         self.assertEqual(list(cards)[0], "original")
         self.assertIn(">No agent · Original</button>", cards["original"])
-        self.assertIn('<span class="std-tag">as published</span>', cards["original"])            # how it runs, not a protocol
+        self.assertIn('<span class="std-tag">As published</span>', cards["original"])            # how it runs, not a protocol
         self.assertIn('data-f-protocol=""', cards["original"])
         html, _ = self.grid("gsm8k")
         self.assertNotIn('data-value="reference"', html)

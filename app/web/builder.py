@@ -78,7 +78,7 @@ def new_run_agents():
     setups = [] if any(e["d"].get("benchmark") == b["key"] for e in found) else [k for k in (b.get("setups") or {}) if k == "original"]
     items = [_setup_card(b, k) for k in setups] + [_pick_card(b, e) for e in found]
     names = dict(definitions.FROM, benchmark=f"{b['label']}'s own", elsewhere="Other benchmarks' agents")
-    choices = {"protocol": [(p, p[:1].upper() + p[1:]) for p in ("ACP", "a command", "its own script", "JSON lines")
+    choices = {"protocol": [(p, p) for p in ("ACP", "A command", "Its own script", "JSON lines")
                             if any(i["protocol"] and i["protocol"]["value"] == p for i in items)],
                "fit": [(v, t) for v, t in (("fit", "Can run it"), ("unfit", "Cannot")) if any(i["fit"]["value"] == v for i in items)],
                "from": [(k, v) for k, v in names.items() if any(i["from"]["value"] == k for i in items)],
@@ -92,8 +92,8 @@ def _setup_card(b: dict, key: str) -> dict:
     x = b["setups"][key]
     title = x.get("reference_agent") or ("No agent · Original" if b["family"] == "agent" else "Original " + _kind_of(b))
     return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": title, "title": x.get("summary", "")},
-            "search": " ".join([title, b["label"], "as published"]), "published": "as published", "protocol": "",
-            "fit": {"text": "Can run it", "value": "fit"}, "from": {"text": f"{b['label']}'s own", "value": "benchmark"},
+            "search": " ".join([title, b["label"], "as published"]), "published": "As published", "protocol": "",
+            "fit": {"text": "Can run it", "value": "fit"}, "from": {"text": b["label"], "value": "benchmark"},
             "proves": [], "needs": [], "ticks": [], "alert": None}
 
 
@@ -118,7 +118,7 @@ def _pick_card(b: dict, e: dict) -> dict:
     lacks = [p.split(".", 1)[-1].rsplit("/v", 1)[0].replace("-", " ").replace("_", " ") for p in b.get("needs") or [] if p not in rows]
     note = ("Belongs to " + d["benchmark_label"]) if d.get("benchmark") else "Lacks " + (", ".join(lacks) or "a port it needs")
     origin = d.get("from") or "bundled"
-    there = {"text": f"{d['benchmark_label']}'s own", "value": "benchmark" if d["benchmark"] == b["key"] else "elsewhere"} \
+    there = {"text": d["benchmark_label"], "value": "benchmark" if d["benchmark"] == b["key"] else "elsewhere"} \
         if d.get("benchmark") else {"text": definitions.FROM[origin], "value": origin}
     return {"pick": {"value": d["_ref"], "disabled": bool(why)}, "id": "pick-" + d["_ref"].replace(":", "-").replace("@", "-"),
             "icon": agent_mark_url(d["key"]) if b["family"] == "agent" else "", "title": {"text": title, "title": d.get("summary", "")},

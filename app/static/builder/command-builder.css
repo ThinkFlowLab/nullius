@@ -297,5 +297,4 @@
 #nullius-builder #nb-agent-grid .bench-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 12px; }
 #nullius-builder #nb-agent-grid .bench-card { padding: 16px; gap: 10px; }
 #nullius-builder #nb-agent-grid .bench-card-title { font-size: 15px; }
-#nullius-builder #nb-agent-grid .bench-card-foot { flex-wrap: wrap; }
 #nullius-builder #nb-agent-grid .std-tag { white-space: nowrap; }

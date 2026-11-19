@@ -59,7 +59,7 @@ def _choices(kind: str, entries: list) -> dict:
         return {"runs_on": runs_on} if runs_on else {}
     proven = {p["port"] for e in entries for p in e["ports"] if p["state"] == "proven"}
     have = {e["d"].get("from") for e in entries}
-    return {"protocol": [(x, x[:1].upper() + x[1:]) for x in dict.fromkeys(e["protocol"] for e in entries)],
+    return {"protocol": [(x, x) for x in dict.fromkeys(e["protocol"] for e in entries)],
             "proves": [(p, spec.get("label") or p) for p, spec in ports.PORTS.items() if p in proven],
             "from": [(k, v) for k, v in definitions.FROM.items() if k in have], "runs_on": runs_on}
 
@@ -84,7 +84,7 @@ def _card(kind: str, e: dict) -> dict:
         return {"href": url_for("benchmark_page", key=d["benchmark"]), "id": d["_ref"].replace(":", "-"),
                 "search": " ".join([d["label"], d["key"], d["benchmark_label"], e["protocol"], d.get("summary", "")]),
                 "protocol": e["protocol"], "icon": agent_mark_url(d["key"]), "title": d["label"], "summary": d.get("summary"),
-                "from": {"text": definitions.FROM["benchmark"], "value": "benchmark"}, "benchmark": d["benchmark_label"],
+                "from": {"text": d["benchmark_label"], "value": "benchmark"},
                 "uses": "Computer use" if computer else None, "models": ", ".join(d.get("models") or []),
                 "runs_on": _runs_on(e), "unless": {"from": "runs_on"}, "hide": ["ports", "runs", "installs"]}
     version, n = (d.get("upstream") or {}).get("version"), len(d.get("_versions") or ())
@@ -93,7 +93,7 @@ def _card(kind: str, e: dict) -> dict:
             "kind": d.get("kind") if kind == "capability" else None, "protocol": e["protocol"],
             "example": {"text": "example", "title": "Nullius's own, to read or copy - not an agent to compare"} if d.get("example") else None,
             "version": ("v" + str(version) if version else "") + (f" · {n} versions" if n > 1 else ""),
-            "icon": agent_mark_url(d["key"]) if kind == "agent" else None, "title": d["label"],
+            "icon": agent_mark_url(d["key"]) if kind == "agent" else None, "title": {"text": d["label"], "after": str(version or "")},
             "summary": d.get("summary"), "from": {"text": definitions.FROM[d["from"]], "value": d["from"]} if d.get("from") else None,
             "proves": [{"text": p["label"], "value": p["port"]} for p in e["ports"] if p["state"] == "proven"],
             "ports": "{}/{}".format(sum(p["state"] == "proven" for p in e["ports"]), len(e["ports"])),
