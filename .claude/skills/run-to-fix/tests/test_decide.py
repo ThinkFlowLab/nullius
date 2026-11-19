@@ -5,7 +5,7 @@ import os
 from typing import List
 
 from agentrepo import RepoCase
-from jobs import Result, load, run, trial, write, write_job, write_json
+from jobs import Result, Trial, load, run, trial, write, write_job, write_json
 
 KEEP_GOOD = "Keep good. bad breaks test_other."
 
@@ -41,6 +41,10 @@ class Flow(RepoCase):
                 t.cost = cost
                 trials.append(t)
         return write_job(self.jobs, "trial", "alpha", "harbor", trials)
+
+    def code_ref(self) -> str:
+        """The commit the person states the trial run ran: the one select chose."""
+        return load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["selection"]["ref"]
 
     def chosen(self) -> str:
         self.kept()
@@ -175,7 +179,7 @@ class Select(Flow):
 class StopTwo(Flow):
     def test_the_page_gives_three_options_with_their_cost(self) -> None:
         job = self.chosen()
-        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
         self.assertEqual(r.code, 0, r.out + r.err)
         trial_record = load(self.round_file("trial.json"))
         self.assertAlmostEqual(trial_record["cost_usd"], 0.33)
@@ -200,7 +204,7 @@ class StopTwo(Flow):
 
     def test_the_answer_of_stop_two(self) -> None:
         job = self.chosen()
-        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job])
+        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
         words = "A full pass, the targets look fixed."
         r = run(["answer", "--loop", self.loop, "--stop", "2", "--choice", "full", "--text", words])
         self.assertEqual(r.code, 0, r.out + r.err)
@@ -218,7 +222,7 @@ class StopTwo(Flow):
 
     def test_the_stop_rule_counts_the_trial_run_and_the_new_run(self) -> None:
         job = self.chosen()
-        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job])
+        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
         run(["answer", "--loop", self.loop, "--stop", "2", "--choice", "full", "--text", "a full pass"])
         full = write_job(self.jobs, "full", "alpha", "harbor",
                          [trial(f"{t}__f", f"bench/{t}", 1.0) for t in ("p1", "p2", "p3", "f1", "f2", "f3")])
@@ -238,11 +242,11 @@ class Reruns(Flow):
 
     def after_rerun(self) -> str:
         first = self.chosen()
-        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", first])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", first, "--code-ref", self.code_ref()])
         self.assertEqual(r.code, 0, r.out + r.err)
         run(["answer", "--loop", self.loop, "--stop", "2", "--choice", "rerun", "--text", "run them again"])
         second = self.rerun_job()
-        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", second])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", second, "--code-ref", self.code_ref()])
         self.assertEqual(r.code, 0, r.out + r.err)
         return second
 
@@ -266,13 +270,13 @@ class Reruns(Flow):
     def test_deciding_twice_on_one_trial_run_counts_it_once(self) -> None:
         first = self.chosen()
         for _ in range(2):
-            run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", first])
+            run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", first, "--code-ref", self.code_ref()])
         self.assertEqual(len(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"]), 1)
         self.assertAlmostEqual(load(self.round_file("trial.json"))["cost_usd"], 0.33)
 
     def test_select_after_a_trial_run_checks_the_budget_left(self) -> None:
         first = self.chosen()
-        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", first])
+        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", first, "--code-ref", self.code_ref()])
         r = self.select(["--size", "targets", "--budget-usd", "9.95", "--text", "again"])
         self.assertNotEqual(r.code, 0)
         self.assertIn("$9.67", r.err)
@@ -302,7 +306,7 @@ class TrialJobSpec(Flow):
         job = self.trial_job()
         write_job(holder, "other", "alpha", "harbor", [trial("x__o", "bench/x", 1.0)])
         self.jobs = outer
-        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", f"{holder}::trial"])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", f"{holder}::trial", "--code-ref", self.code_ref()])
         self.assertEqual(r.code, 0, r.out + r.err)
         record = load(self.round_file("trial.json"))
         self.assertEqual(record["job_dir"], job)
@@ -371,7 +375,7 @@ class ReportCandidate(Flow):
         self.kept_report()
         self.select_report(["--size", "guards", "--budget-usd", "0.5", "--text", "the guards"])
         job = write_job(self.jobs, "trial", "alpha", "harbor", [trial(f"p3-{k}__t", "bench/p3", 1.0) for k in range(3)])
-        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
         self.assertEqual(r.code, 0, r.out + r.err)
         self.assertIn("rep: this version does not read the agent's report in the new run", self.page("decision-2.md"))
         r = run(["compare", "--loop", self.loop, "--new", job, "--against", "run"])
@@ -428,7 +432,7 @@ class IncompleteCosts(Flow):
 
     def test_stop_two_refuses_an_unknown_spending(self) -> None:
         job = self.job_without_one_cost()
-        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
         self.assertNotEqual(r.code, 0)
         self.assertIn("--trial-cost-usd", r.err)
         self.assertIn("$0.29", r.err)
@@ -437,7 +441,7 @@ class IncompleteCosts(Flow):
 
     def test_the_person_s_figure_is_the_spending(self) -> None:
         job = self.job_without_one_cost()
-        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--trial-cost-usd", "0.40"])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--trial-cost-usd", "0.40", "--code-ref", self.code_ref()])
         self.assertEqual(r.code, 0, r.out + r.err)
         record = load(self.round_file("trial.json"))
         self.assertAlmostEqual(record["cost_usd"], 0.40)
@@ -449,13 +453,13 @@ class IncompleteCosts(Flow):
 
     def test_a_figure_under_the_recorded_cost_is_refused(self) -> None:
         job = self.job_without_one_cost()
-        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--trial-cost-usd", "0.10"])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--trial-cost-usd", "0.10", "--code-ref", self.code_ref()])
         self.assertNotEqual(r.code, 0)
         self.assertIn("$0.29", r.err)
 
     def test_an_old_trial_run_of_unknown_cost_stops_select(self) -> None:
         job = self.job_without_one_cost()
-        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--trial-cost-usd", "0.40"])
+        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--trial-cost-usd", "0.40", "--code-ref", self.code_ref()])
         path = os.path.join(self.loop, "ledger.json")
         ledger = load(path)
         entry = ledger["rounds"][0]["trial_runs"][0]
@@ -465,3 +469,44 @@ class IncompleteCosts(Flow):
         r = self.select(["--size", "targets", "--budget-usd", "1", "--text", "again"])
         self.assertNotEqual(r.code, 0)
         self.assertIn("unknown", r.err)
+
+
+
+class TrialRunIdentity(Flow):
+    """A trial run counts only when it holds the tasks select chose, each with its trials, on the stated commit."""
+
+    def decide_on(self, trials: List[Trial], code_ref: str) -> Result:
+        self.chosen()
+        job = write_job(self.jobs, "other", "alpha", "harbor", trials)
+        return run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", code_ref])
+
+    def three_each(self, tasks: List[str]) -> List[Trial]:
+        return [trial(f"{t}-{k}__o", f"bench/{t}", 1.0) for t in tasks for k in range(3)]
+
+    def test_a_task_outside_the_selection_is_refused(self) -> None:
+        r = self.decide_on(self.three_each(["f1", "f2", "p1", "unrelated"]), self.repo.good)
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("bench/unrelated", r.err)
+        self.assertEqual(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"], [])
+
+    def test_a_missing_target_is_refused(self) -> None:
+        r = self.decide_on(self.three_each(["f1", "p1"]), self.repo.good)
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("bench/f2", r.err)
+
+    def test_a_task_with_another_count_of_trials_is_refused(self) -> None:
+        r = self.decide_on([trial(f"{t}__o", f"bench/{t}", 1.0) for t in ("f1", "f2", "p1")], self.repo.good)
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("3 trials", r.err)
+
+    def test_another_commit_is_refused(self) -> None:
+        r = self.decide_on(self.three_each(["f1", "f2", "p1"]), self.repo.bad)
+        self.assertNotEqual(r.code, 0)
+        self.assertIn(self.repo.good[:12], r.err)
+
+    def test_the_page_shows_the_commit_as_the_person_s_statement(self) -> None:
+        r = self.decide_on(self.three_each(["f1", "f2", "p1"]), self.repo.good[:9])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertIn(f"{self.repo.good[:12]}, as the person states", self.page("decision-2.md"))
+        self.assertEqual(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"][0]["code_from"],
+                         "the person")
