@@ -176,7 +176,8 @@ def protocol(o: dict) -> str:
         return "no agent"
     if o["_kind"] == "capability":
         return "JSON lines"
-    return "ACP" if "acp" in (o.get("start") or {}) else "a command"
+    st = o.get("start") or {}
+    return "ACP" if "acp" in st else "its own script" if "driver" in st else "a command"
 
 
 def skills_of(port: str, record: Optional[dict]) -> List[dict]:

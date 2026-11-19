@@ -634,6 +634,32 @@ already accepts arbitrary models needs only the `original` method.
 | Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
 | Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |
 
+### A benchmark's own agents
+
+A benchmark whose upstream ships several agent scripts (OSWorld's) keeps them in
+`agents.json` beside its `standard.json`. Each entry of its `agents` is an agent
+definition (`nullius.agent/v1`) that starts with `start.driver`: the upstream's
+own name for it (`agent`) and what the driver runs in the Original setup
+(`script`, `argv`, `env`, and whatever else the driver reads), with the `models`
+it is published with. It speaks no port, so it has no `offers` or `proven`.
+`common` and `aws` beside `agents` stay driver data.
+
+```json title="agents.json · one entry"
+"openai-cua": {
+  "key": "openai-cua", "label": "OpenAI CUA", "summary": "...",
+  "models": ["computer-use-preview"],
+  "start": {"driver": {"agent": "openai_cua", "script": "scripts/python/run_multienv_openaicua.py", "argv": ["..."], "env": {"...": "..."}}}
+}
+```
+
+| Rule | Detail |
+| --- | --- |
+| Named | `<benchmark>:<key>`, e.g. `osworld1:openai-cua`; the key follows the key rule (lower case, digits, dashes) |
+| Derived, never written | Where it comes from (`from`: `benchmark`; a catalogue agent's is `bundled` or `yours`) and `only_for`, its benchmark. A written `only_for` names that benchmark alone |
+| `options.agent` | `standard.json` writes its `label`, `summary` and `setups`; the loader rebuilds `values` (each entry's `start.driver.agent`, in order), `names`, `about` and `default` (the first), so `when`, `by`, `--bench-option agent=...` and `NULLIUS_OPTION_AGENT` read as before |
+| Checked | Each entry's `models` are among `setups.original.models`; each upstream name once |
+| Offered | On the Agents page behind its From filter, and in the builder beside the catalogue's agents; another benchmark greys it with the reason |
+
 ### Every setting, inventoried
 
 A benchmark's folder holds `upstream-settings.json`: every setting of every evaluation entry point of its upstream.

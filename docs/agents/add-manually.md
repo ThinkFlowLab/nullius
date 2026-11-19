@@ -129,6 +129,10 @@ A benchmark's own reference agent, made for that benchmark rather than for any
 task, names it in `only_for` (`"only_for": ["terminal-bench"]` for Terminus 2):
 it is offered for those benchmarks alone, whatever ports it has proven.
 
+A benchmark whose upstream ships its own agent scripts keeps them in its folder's
+`agents.json` instead, each started by the benchmark's driver (`start.driver`):
+see [A benchmark's own agents](../standard.md#a-benchmarks-own-agents).
+
 ## If it does not work
 
 | Symptom | Check |

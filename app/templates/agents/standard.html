@@ -34,14 +34,16 @@
   {% if problems %}<div class="std-problems"><strong>Not offered: a definition with problems</strong><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
   {% if not items %}<p class="bench-none">No {{ kind }} yet.</p>{% endif %}
 
-  {#- A card's fields (web/agents.py `_card`); an agent's protocol and the ports it proves as dropdowns. #}
+  {#- A card's fields (web/agents.py `_card`); an agent's protocol, the ports it proves and where it comes from as filters. #}
   {% set cols = [dict(key='icon', label='Logo', card='icon', table=false, class='std-mark small'), dict(key='title', label='Name', card='title'),
-                 dict(key='kind', label='Kind', card='tag', class='cat-tag'), dict(key='protocol', label='Protocol', card='tag', class='std-tag'),
+                 dict(key='kind', label='Kind', card='tag', class='cat-tag'), dict(key='benchmark', label='Benchmark', card='tag', class='cat-tag'),
+                 dict(key='protocol', label='Protocol', card='tag', class='std-tag'), dict(key='uses', label='Uses', card='tag', class='std-tag'),
+                 dict(key='from', label='From'), dict(key='models', label='Models', card='note'),
                  dict(key='proves', label='Proves', class='std-tag', off=true), dict(key='example', label='Example', card='tag', class='std-tag', off=true),
                  dict(key='summary', label='Summary', card='text', class='std-clamp', width='expand', off=true), dict(key='ports', label='Ports proven', card='stat', type='num'),
                  dict(key='runs', label='Benchmarks it runs', card='stat', type='num'), dict(key='installs', label='Installs', card='stat', class='word'),
                  dict(key='version', label='Version', card='meta')] %}
-  {% if items %}{{ cards(plural|lower, cols, items, search='Name, protocol, summary', choices=choices, sort=['title', 'ports', 'runs'], empty='No ' ~ kind ~ ' matches.', noun=plural|lower, layout='table' if request.args.get('view') == 'table' else 'cards', default='cards') }}{% endif %}
+  {% if items %}{{ cards(plural|lower, cols, items, search='Name, protocol, summary', choices=choices, only=only, sort=['title', 'ports', 'runs'], empty='No ' ~ kind ~ ' matches.', noun=plural|lower, layout='table' if request.args.get('view') == 'table' else 'cards', default='cards') }}{% endif %}
 </div>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='catalogue/add.js') }}"></script>{% endblock %}

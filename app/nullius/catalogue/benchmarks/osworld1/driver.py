@@ -106,6 +106,9 @@ AGENTS_FILE, NOP, RUNNER_FILE = (_ARGS + [os.path.join(HERE, "agents.json"), os.
                                           os.path.join(HERE, "runner.py")][len(_ARGS):])[:3]
 with open(AGENTS_FILE, encoding="utf-8") as _f:
     AGENTS = json.load(_f)
+# each entry an agent of the catalogue (start.driver): the driver's spec by its upstream value, the agent option's
+AGENTS["agents"] = {e["start"]["driver"]["agent"]: dict(e["start"]["driver"], models=e["models"])
+                    for e in AGENTS["agents"].values()}
 VM =os.path.join(UP, "docker_vm_data", "Ubuntu.qcow2")     # where the upstream's DockerVMManager puts it
 RESULTS = "results"
 # VM starts on one machine, one after another: the upstream's docker provider creates each container under
