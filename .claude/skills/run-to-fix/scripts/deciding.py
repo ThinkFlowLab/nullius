@@ -133,19 +133,18 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     if code_ref != selection["ref"]:
         raise LoopError(f"a trial run of this round runs the commit select chose, {selection['ref'][:12]}; --code-ref "
                         f"names {code_ref[:12]}")
-    chosen = set(selection["targets"]) | set(selection["guards"]) | set(selection["canaries"])
+    chosen: List[str] = selection["targets"] + selection["guards"] + selection["canaries"]
     per_task = collections.Counter(r.task for r in this_run)
     problems = []
-    outside = sorted(set(per_task) - chosen)
+    outside = sorted(set(per_task) - set(chosen))
     if outside:
         problems.append("tasks outside the selection: " + ", ".join(outside))
-    absent = sorted(set(selection["targets"]) - set(per_task))
+    absent = sorted(set(chosen) - set(per_task))
     if absent:
-        problems.append("targets it lacks: " + ", ".join(absent))
-    uneven = sorted(t for t, n in per_task.items() if n != selection["repeat"])
-    if uneven:
-        problems.append(f"tasks without {selection['repeat']} trials: "
-                        + ", ".join(f"{t} ({per_task[t]})" for t in uneven))
+        problems.append("selected tasks it lacks: " + ", ".join(absent))
+    if len(set(per_task.values())) > 1:
+        problems.append("tasks with unequal numbers of trials: "
+                        + ", ".join(f"{t} ({n})" for t, n in sorted(per_task.items())))
     if problems:
         raise LoopError("the trial job is not a trial run of the selection: " + "; ".join(problems))
     costs = [r.cost_usd for r in this_run]
@@ -171,12 +170,21 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     same = [t for t in runs if t["ref"] == selection["ref"]]
     rows: List[TrialRow] = [r for t in same for r in read_rows(t["job_dir"], threshold)]
     before = read_rows(record["run"]["job_dir"], threshold)
+    repeat_asked = selection["repeat"]
+    pooled = collections.Counter(r.task for r in rows)
+    per_task_trials = min(pooled[t] for t in chosen)
+    complete = per_task_trials >= repeat_asked
+    held = (f"{per_task_trials} of the {repeat_asked} trials per task" if per_task_trials <= repeat_asked
+            else f"{per_task_trials} trials per task, over the {repeat_asked} the selection asks")
     targets = targets_of(selection, before, rows)
+    if not complete:
+        targets = dict(targets, p=None, verdict=None,
+                       text=f"not tested: the selection is not complete, the trial runs hold {held}")
     of = lambda tasks: passes([r for r in rows if r.task in set(tasks)])
     spent = trial_spent(entry)
     sources = [task_costs(rows), task_costs(before)]
     left = float(record["budget_usd"]) - spent
-    rerun_tasks = selection["targets"] + selection["guards"]
+    rerun_tasks = chosen
     full_tasks = sorted({r.task for r in before})
     options = [{"name": "stop", "what": "nothing", "usd": 0.0, "unpriced_tasks": 0, "text": usd(0.0), "command": None}]
     for name, tasks, repeat in (("rerun", rerun_tasks, TARGET_TRIALS), ("full", full_tasks, 1)):
@@ -191,7 +199,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
                 "units_file": units, "repeat": str(repeat), "jobs_dir": os.path.join(round_dir, "jobs"),
                 "budget_usd": f"{max(left, 0.0):.2f}", "build": build["path"] or "", "ref": selection["ref"]},
                 adapter.checkout)
-        what = (f"the {len(tasks)} targets and guards again, {repeat} trials each" if name == "rerun"
+        what = (f"the {len(tasks)} selected tasks again, {repeat} trials each" if name == "rerun"
                 else f"a full pass of the {len(tasks)} tasks of the run, {repeat} trial each")
         price = price_of(tasks, repeat, sources)
         options.append({"name": name, "what": what, "usd": price.usd, "unpriced_tasks": price.unpriced_tasks,
@@ -200,7 +208,8 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     trial_record = {
         "schema": "run-to-fix.trial/v1", "created": now(), "job_dir": job_dir,
         "counts": "cost_usd is every trial run of the round; trials and the results are the trial runs on this ref",
-        "trial_runs": runs, "trials": len(rows), "cost_usd": spent,
+        "trial_runs": runs, "trials": len(rows), "repeat": repeat_asked, "trials_per_task": per_task_trials,
+        "complete": complete, "cost_usd": spent,
         "cost_complete": all(t["cost_complete"] for t in runs),
         "budget_usd": float(record["budget_usd"]), "budget_left_usd": left, "targets": targets,
         "guards": of(selection["guards"]), "canaries": of(selection["canaries"]), "options": options,
@@ -208,9 +217,12 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     }
     write_json(os.path.join(round_dir, "trial.json"), trial_record)
     share = lambda x: f"{x['passed']} of {x['trials']}" if x else "none"
-    results = [f"| targets ({targets['tasks']}) | {share(targets['before'])} | {share(targets['after'])} | "
-               f"{targets['verdict'] or 'none'}, p = {targets['p']:.3g} |" if targets["p"] is not None else
-               "| targets | none | none | none |"]
+    if targets["before"] is None:
+        results = ["| targets | none | none | none |"]
+    else:
+        test = (f"{targets['verdict']}, p = {targets['p']:.3g}" if targets["p"] is not None
+                else "not tested: the selection is not complete")
+        results = [f"| targets ({targets['tasks']}) | {share(targets['before'])} | {share(targets['after'])} | {test} |"]
     for name in ("guards", "canaries"):
         results.append(f"| {name} ({len(selection[name])}) | | {share(trial_record[name])} | |")
     option_rows = [f"| {o['name']} | {o['what']} | {o['text']} | "
@@ -219,6 +231,9 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         "ROUND": os.path.basename(round_dir), "LOOP": args.loop,
         "BUILD": f"{build['path']} from {build['ref'][:12]}" if build["path"] else f"{build['reason']} ({build['ref'][:12]})",
         "TRIAL_JOB": ", ".join(t["job_dir"] for t in same), "TRIALS": str(len(rows)),
+        "COVERAGE": (f"Together they hold {held}: the selection is complete." if complete else
+                     f"Together they hold {held}: the selection is not complete, so the targets are not tested. "
+                     "Start the run of trial-tasks.txt again and pass its job to decide --stop 2."),
         "CODE": f"{selection['ref'][:12]}, as the person states; a trial job does not record the commit it ran",
         "SPENT": usd(spent) + "".join(f" (the person's figure for {t['job_dir']}, whose trials record "
                                       f"{usd(t['cost_recorded_usd'])})" for t in runs if t.get("cost_from") == "the person"),

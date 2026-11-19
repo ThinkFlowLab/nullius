@@ -127,14 +127,17 @@ python3 L decide --loop DIR --stop 2 --trial-job JOB --code-ref COMMIT [--trial-
 
 `--code-ref` is the commit the person states the trial run ran. A job does not record its code; the page shows the
 commit as the person's statement, and `decide` refuses any commit other than the one `select` chose. The job must hold
-only the selected tasks, every target, and the selection's count of trials for each task. When some of its trials
+every selected task and no other, each with one number of trials. The trials per task count over this round's trial
+jobs on that commit: a runner that gives each task one trial per job is started three times, and each job goes to
+`decide --stop 2`. The page says how many trials per task the jobs hold together and whether the selection is
+complete; the targets are tested only when it is. When some of its trials
 report no cost, `decide` refuses the run until the person gives its whole cost with `--trial-cost-usd`, at least what
 its trials record.
 
 **Stop 2.** Show the person `decision-2.md`. For a kept `report` candidate it says that this version does not read the
 agent's report in the new run. The page shows the build, the targets' trials before and in every trial run of this
 round on that build with Fisher's exact test, the guards and canaries, the money spent and left, and three options
-with their price: stop, the targets and guards again, a full pass. The commands of the last two are written. Record
+with their price: stop, the selected tasks again, a full pass. The commands of the last two are written. Record
 the choice:
 
 ```bash
@@ -200,7 +203,7 @@ These follow `run-analysis`, with what the loop adds.
   of that wording in `run-analysis` changes what `read` refuses.
 - The classes read only shared files. What one agent writes reaches the loop through a found class or
   `commands.classes`.
-- A trial run gives every task the same number of trials, because `run_tasks` takes one `{repeat}`.
+- A trial job gives every task the same number of trials, because `run_tasks` takes one `{repeat}`.
 - A loop stopped with SIGTERM or Ctrl+C stops the adapter command it runs and removes its worktree. A loop killed with
   SIGKILL cannot: its worktree stays under `<loop folder>/worktrees/`, and `git worktree remove --force <path>` in the
   agent's checkout removes it.

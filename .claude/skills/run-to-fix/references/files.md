@@ -43,7 +43,7 @@ round that has no `result.json`.
 | `trial-tasks.txt` | 4 | `select --size` | the tasks of the trial run, one per line (unit ids on a job of the standard), the `{units_file}` of `run_tasks` |
 | `build.json` | 4 | `select --size` | the commit tried, the path `commands.build` printed and its SHA-256 |
 | `jobs/` | 4 | the person's run | the job folders that `run_tasks` writes |
-| `trial.json` | stop 2 | `decide --stop 2` | the round's trial runs, the results of targets, guards and canaries, the money spent and left, the options |
+| `trial.json` | stop 2 | `decide --stop 2` | the round's trial runs, the trials per task they hold together and whether the selection is complete, the results of targets, guards and canaries, the money spent and left, the options |
 | `rerun-tasks.txt`, `full-tasks.txt` | stop 2 | `decide --stop 2` | the tasks of the two options that run something |
 | `decision-2.md` | stop 2 | `decide --stop 2` | the build, the results, the budget left and three options with their price |
 | `compare-metrics.json` | 5 | `compare` | `runs.py analyze` of the run compared against and the new run, labelled by their job folders, or `before` and `new` when the two names are equal |
