@@ -74,7 +74,7 @@
    page's other one, its other query kept, at the end; `default` the view a page shows without ?view=, the other
    one's link carrying ?view=<it>. The search goes left, the buttons right. A column's
    `filter` says where its choices go, one form or a list of them: 'button' (the default), in the Filter menu;
-   'dropdown', a menu of its own; 'pills', a row of toggles under the controls. A column's `filter_icon`, a sprite id
+   'dropdown', a menu of its own; 'pills', a row of toggles under the controls, the first named by `all` (All). A column's `filter_icon`, a sprite id
    without its `i-`, leads its dropdown's button and its pills. `id`: the table's. #}
 {% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none, sort=true, layout=none, default='table') %}
 {%- set by = {'button': [], 'dropdown': [], 'pills': []} %}{% for c in cols if c.key in choices %}{% for f in ([c.filter] if c.filter is string else c.filter or ['button']) %}{% set _ = by[f].append(c) %}{% endfor %}{% endfor %}
@@ -120,7 +120,7 @@
   </div>{% endif %}
   {% for c in by.pills %}
   <div class="filter-pills" role="group" aria-label="{{ c.label }}" data-pills="{{ c.key }}">
-    {{ icon(c) }}<button type="button" class="filter-pill" data-all="{{ c.key }}" aria-pressed="{{ 'false' if c.key in only else 'true' }}">All</button>
+    {{ icon(c) }}<button type="button" class="filter-pill" data-all="{{ c.key }}" aria-pressed="{{ 'false' if c.key in only else 'true' }}">{{ c.all or 'All' }}</button>
     {%- for value, text in choices[c.key] %}<button type="button" class="filter-pill" data-value="{{ value }}" aria-pressed="{{ 'true' if c.key in only and value in ([only[c.key]] if only[c.key] is string else only[c.key]) else 'false' }}">{{ text }}</button>{% endfor %}
   </div>
   {% endfor %}

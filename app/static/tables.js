@@ -229,19 +229,30 @@ window.NulliusTable = {
      how many show once the changes pause, counted in the live region's
      data-noun. A click anywhere on a card but on a control of its own
      follows the card's link, in a new tab or window with the keys or the
-     button a link takes; a click that ends a text selection does not. Sort by,
-     when it has one, sorts the cards within their grids as a table's rows. */
+     button a link takes; a click that ends a text selection does not. A pick
+     card's title is a toggle (data-pick, aria-pressed): a click, Space or
+     Enter flips it and sends nullius-pick {value, pressed} from it; the page
+     keeps the choice. Sort by, when it has one, sorts the cards within their
+     grids as a table's rows. */
   cards(root) {
     const items = [...root.querySelectorAll('[data-card]')], empty = document.querySelector(`[data-empty="${CSS.escape(root.id)}"]`);
     const live = document.querySelector(`[data-live="${CSS.escape(root.id)}"]`), say = this.voice(live);
     const follow = e => {
       const link = e.target.closest('[data-card]')?.querySelector('.card-link');
       if (!link || e.target.closest('a, button, input, select, textarea, label, summary, [role=button]') || !getSelection().isCollapsed) return;
+      if (link.dataset.pick !== undefined) { if (e.button === 0) link.click(); return; }
       if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) window.open(link.href, '_blank', 'noopener');
       else if (e.button === 0) link.click();
     };
     root.addEventListener('click', follow);
     root.addEventListener('auxclick', follow);
+    root.addEventListener('click', e => {
+      const b = e.target.closest('[data-pick]');
+      if (!b || b.disabled) return;
+      const pressed = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(pressed));
+      b.dispatchEvent(new CustomEvent('nullius-pick', {bubbles: true, detail: {value: b.dataset.pick, pressed}}));
+    });
     const draw = () => {
       items.forEach(c => { c.hidden = !passes(c); });
       root.querySelectorAll('[data-group]').forEach(g => {

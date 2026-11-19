@@ -24,6 +24,12 @@
 .card-link::after { content: ""; position: absolute; inset: -1px; border-radius: 12px; }
 .card-link:focus-visible { outline: none; }
 .card-link:focus-visible::after { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
+/* a pick card (_cards.html `pick`): its title a toggle; chosen, it is marked; disabled, its reason says why */
+button.card-link { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: left; cursor: pointer; }
+button.card-link:disabled { cursor: not-allowed; }
+.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) { border-color: var(--accent); background: var(--accent-soft); }
+.bench-card:has(> .bench-card-title [data-pick]:disabled) { opacity: .55; }
+.bench-card:has(> .bench-card-title [data-pick]:disabled):hover { border-color: var(--border-soft); }
 .bench-card :is(input, button, .btn, [title]) { position: relative; z-index: 1; }
 .bench-card [title]:not(input, button, .btn) { cursor: pointer; }   /* raised for its tooltip, it still opens the card */
 .bench-card-foot .bench-harness { margin-left: auto; }

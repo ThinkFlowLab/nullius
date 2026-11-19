@@ -125,6 +125,18 @@ class Macros(unittest.TestCase):
         self.assertEqual(html.count('data-dropdown'), 2)
 
 
+    def test_a_pick_card_is_a_toggle_and_a_disabled_one_says_why(self):
+        cols = [dict(key='title', label='Name', card='title'), dict(key='why', label='Why not', card='alert')]
+        html = self.render(cols, [{'title': {'text': 'Alpha', 'title': 'What it is'}, 'pick': {'value': 'a'}},
+                                  {'title': 'Beta', 'pick': {'value': 'b', 'on': True}},
+                                  {'title': 'Gamma', 'pick': {'value': 'g', 'disabled': True}, 'why': {'text': 'Lacks tools', 'title': 'needs agent.tools/v1'}}])
+        self.assertIn('<button type="button" class="card-link" data-pick="a" aria-pressed="false" title="What it is">Alpha</button>', html)
+        self.assertIn('<button type="button" class="card-link" data-pick="b" aria-pressed="true">Beta</button>', html)
+        self.assertIn('<button type="button" class="card-link" data-pick="g" aria-pressed="false" disabled>Gamma</button></div>'
+                      '<div class="bench-card-blocker" title="needs agent.tools/v1">Lacks tools</div>', html)
+        self.assertNotIn('<a ', html)
+
+
 class Script(unittest.TestCase):
     def test_search_and_filter_hide_cards_and_their_empty_groups(self):
         got = node(r'''
@@ -205,6 +217,23 @@ process.stdout.write(JSON.stringify(out));
             self.assertEqual(got[k], [0, ["/a _blank noopener"]], k)
         for k in ("right", "box", "button", "label", "selecting"):
             self.assertEqual(got[k], [0, []], k)
+
+    def test_a_pick_flips_and_says_so_and_a_disabled_one_stays(self):
+        got = node(r"""
+global.CustomEvent = class { constructor(type, o) { this.type = type; this.detail = o.detail; } };
+const picks = [], card = v => el('article', {'data-card': ''}, el('div', {}, el('button', {class: 'card-link', 'data-pick': v, 'aria-pressed': 'false'}, v)), el('span', {title: 't'}, 'pill'));
+const root = el('div', {id: 'c', 'data-cards': ''}, card('a'), card('g'));
+root.querySelectorAll('[data-pick]').forEach(b => { b.dispatchEvent = ev => b.dispatch(ev.type, {detail: ev.detail}); });
+root.querySelector('[data-pick="g"]').disabled = true;
+document.appendChild(el('main', {}, el('div', {id: 'c-tools'}), root, el('p', {'data-empty': 'c', hidden: true}), el('span', {'data-live': 'c', 'data-noun': 'cards'})));
+global.getSelection = () => ({isCollapsed: true});
+T.cards(root);
+root.addEventListener('nullius-pick', e => picks.push([e.detail.value, e.detail.pressed]));
+const a = root.querySelector('[data-pick="a"]'), g = root.querySelector('[data-pick="g"]');
+a.click(); root.querySelectorAll('[title="t"]')[0].dispatch('click', {button: 0}); a.click(); g.click();
+process.stdout.write(JSON.stringify([picks, a.getAttribute('aria-pressed'), g.getAttribute('aria-pressed')]));
+""")
+        self.assertEqual(got, [[["a", True], ["a", False], ["a", True]], "true", "false"])   # its pill too: the card is the toggle
 
 
 if __name__ == "__main__":
