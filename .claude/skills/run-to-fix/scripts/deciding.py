@@ -228,7 +228,8 @@ def cmd_answer(args: argparse.Namespace) -> None:
             cand = cands[k]
             entry["predictions"].append({"candidate": k, "cause": cand["cause"], "rule": cand["rule"],
                                          "effect": cand["effect"], "trials": cand["prediction"]["trials"],
-                                         "tasks": cand["prediction"]["tasks"], "expect": "pass"})
+                                         "tasks": cand["prediction"]["tasks"],
+                                         "expect": "pass" if cand["effect"] == "outcome" else "label_change"})
     else:
         if args.choice not in CHOICES:
             raise LoopError(f"answer --stop 2 needs --choice, one of {', '.join(CHOICES)}")

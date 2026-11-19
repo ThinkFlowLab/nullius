@@ -36,11 +36,18 @@ def guards_of(kept: List[dict], rows_by_trial: Dict[str, Tuple[str, bool]], targ
     ran = [checks["replay"] for checks in kept if checks["replay"]["ran"]]
     if not ran:
         return [], "no replay ran for the kept candidates"
-    names = set()
-    for replay in ran:
-        names |= set(replay["touched"] or []) | set(replay["changed_trials"])
-    tasks = {rows_by_trial[t][0] for t in names if t in rows_by_trial and rows_by_trial[t][1]}
-    return sorted(tasks - set(targets)), None
+
+    def passing(names: set) -> set:
+        return {rows_by_trial[t][0] for t in names if t in rows_by_trial and rows_by_trial[t][1]} - set(targets)
+
+    touched = passing({t for replay in ran for t in replay["touched"] or []})
+    changed = passing({t for replay in ran for t in replay["changed_trials"]})
+    if touched or changed:
+        return sorted(touched | changed), None
+    given = any(replay["touched"] is not None for replay in ran)
+    return [], ("touched marks no passing trial outside the targets" if given
+                else "no replay of the kept candidates gives touched") + \
+        ", and the kept fixes change the label of no passing trial outside the targets"
 
 
 def build_on(adapter: Adapter, loop_dir: str, round_dir: str, sha: str, timeout_s: float) -> dict:
@@ -100,7 +107,7 @@ def cmd_select(args: argparse.Namespace) -> None:
     price = {k: price_of(v, TARGET_TRIALS, sources) for k, v in sizes.items()}
 
     print(f"targets ({len(targets)} tasks of the kept causes): {', '.join(targets)}")
-    print(f"guards: {', '.join(guards)}" if guards else f"guards: none ({no_guards or 'no passing task ran the changed code'})")
+    print(f"guards: {', '.join(guards)}" if guards else f"guards: none ({no_guards})")
     print(f"canaries ({len(canaries)} passing tasks, seed {SEED}): {', '.join(canaries) or 'none'}")
     for k in SIZES:
         print(f"{names[k]}: {price[k].tasks} tasks, {price[k].trials} trials, {describe(price[k])}")
