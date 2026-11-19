@@ -128,11 +128,11 @@ def run_names(rows: List[TrialRow], tasks: List[str]) -> List[str]:
         given = units.get(task, {None})
         ids = sorted(u for u in given if u is not None)
         if len(ids) < len(given) or not ids:
-            raise TrialError(f"trials of the job give unit ids, and a trial of {task} gives none, so the runner cannot "
-                             "be given its unit id")
+            raise TrialError(f"a trial of {task} gives no unit id while other trials of the job give one; the runner "
+                             "takes one unit id per task")
         if len(ids) > 1:
-            raise TrialError(f"the trials of {task} give {len(ids)} unit ids, {', '.join(ids)}, so the runner cannot "
-                             "be given one")
+            raise TrialError(f"the trials of {task} give {len(ids)} unit ids, {', '.join(ids)}; the runner takes one "
+                             "unit id per task")
         names.append(ids[0])
     return names
 

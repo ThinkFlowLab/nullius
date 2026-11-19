@@ -27,8 +27,8 @@ as on a job of the standard; `output_limit` is not checked on those trials.
 The primary reward follows the rule of `run-analysis`: `verifier_result.rewards.reward`, else the first numeric
 reward. `model_calls` in `trials.csv` is the standard's own count, `agent_result.n_model_calls`, when `result.json` holds
 it; else it follows `run-analysis`: the per-call usage records (`extra.raw_usage` or steps with `metrics`, whichever is
-more), else the agent's steps. The page of `run-analysis` always counts from the trajectory, so on a job of the
-standard its count of model calls can differ from `trials.csv`. The largest reply is the
+more), else the agent's steps. On a job of the standard, the count of model calls on the page of
+`run-analysis` can differ from `trials.csv`: that page always counts from the trajectory. The largest reply is the
 largest `metrics.completion_tokens` of a step or `output_tokens` of a usage record. `classify` stops when its count
 of trials or passes, or of the pairs with the baseline, differs from the count in `metrics.json`.
 

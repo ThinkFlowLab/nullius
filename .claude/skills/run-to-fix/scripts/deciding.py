@@ -234,7 +234,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         "BUILD": f"{build['path']} from {build['ref'][:12]}" if build["path"] else f"{build['reason']} ({build['ref'][:12]})",
         "TRIAL_JOB": ", ".join(t["job_dir"] for t in same), "TRIALS": str(len(rows)),
         "COVERAGE": (f"Together they hold {held}: the selection is complete." if complete else
-                     f"Together they hold {held}: the selection is not complete, so the targets are not tested. "
+                     f"Together they hold {held}: the selection is not complete. The targets are tested once it is. "
                      "Start the run of trial-tasks.txt again and pass its job to decide --stop 2."),
         "CODE": f"{selection['ref'][:12]}, as the person states; a trial job does not record the commit it ran",
         "SPENT": usd(spent) + "".join(f" (the person's figure for {t['job_dir']}, whose trials record "
