@@ -115,10 +115,21 @@ def unit_of(result: dict) -> Optional[str]:
     return unit if isinstance(unit, str) and unit else None
 
 
-def run_names(rows: List[TrialRow], tasks: List[str]) -> List[str]:
+def runs_on_standard(job_dir: str) -> bool:
+    """Whether a job ran on the Nullius standard, by the runner its config.json names."""
+    path = os.path.join(job_dir, "config.json")
+    if not os.path.isfile(path):
+        raise TrialError(f"{path} is missing, and the loop reads the kind of a job from it")
+    config = read_json(path)
+    if not isinstance(config, dict):
+        raise TrialError(f"{path} is not an object")
+    return config.get("runner") == "standard"
+
+
+def run_names(rows: List[TrialRow], tasks: List[str], standard: bool) -> List[str]:
     """The names a runner takes for `tasks`: on a job of the standard the one unit id of each task, else the task
     names."""
-    if all(r.unit is None for r in rows):
+    if not standard:
         return list(tasks)
     units: Dict[str, Set[Optional[str]]] = {}
     for r in rows:
@@ -127,7 +138,10 @@ def run_names(rows: List[TrialRow], tasks: List[str]) -> List[str]:
     for task in tasks:
         given = units.get(task, {None})
         ids = sorted(u for u in given if u is not None)
-        if len(ids) < len(given) or not ids:
+        if not ids:
+            raise TrialError(f"config.json names the standard as the runner of the job, and no trial of {task} gives "
+                             "a unit id; the runner takes one unit id per task")
+        if len(ids) < len(given):
             raise TrialError(f"a trial of {task} gives no unit id while other trials of the job give one; the runner "
                              "takes one unit id per task")
         if len(ids) > 1:

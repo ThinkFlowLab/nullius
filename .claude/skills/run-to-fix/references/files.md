@@ -110,6 +110,7 @@ of `trial.json` and `cheapest_option` of `result.json` hold such prices.
 
 | file | used for |
 |---|---|
+| `config.json` | the runner of the job: on a job of the standard, the task lists hold unit ids |
 | `<trial>/result.json` | task, trial name, reward, exception, agent phase, cost, agent name, unit id, and the standard's own count of model calls (`agent_result.n_model_calls`) where it holds one |
 | `<trial>/agent/trajectory.json` | model calls where `result.json` holds no count of them, and the largest reply; the page of `run-analysis` counts model calls from it always |
 | `<trial>/verifier/ctrf.json`, `test-stdout.txt`, `score.json` | the detail of a `verifier_failed` signature |

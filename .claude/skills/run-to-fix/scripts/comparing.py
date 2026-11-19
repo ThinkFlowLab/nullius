@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import os
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from classifying import classes_of, cross_check, failure_groups, read_rows
@@ -34,14 +36,39 @@ def passes(rows: List[TrialRow]) -> dict:
     return {"trials": len(rows), "passed": sum(r.passed for r in rows)}
 
 
+@dataclass(frozen=True)
+class Coverage:
+    """The trials per selected task that a set of trials holds, against the selection's repeats."""
+    repeat: int
+    per_task: int
+    complete: bool
+    held: str
+
+
+def coverage_of(selection: dict, rows: List[TrialRow]) -> Coverage:
+    """The fewest trials any selected task has in `rows`; the selection is complete when that reaches its repeats."""
+    pooled = collections.Counter(r.task for r in rows)
+    chosen = selection["targets"] + selection["guards"] + selection["canaries"]
+    per_task = min((pooled[t] for t in chosen), default=0)
+    repeat = int(selection["repeat"])
+    held = (f"{per_task} of the {repeat} trials per task" if per_task <= repeat
+            else f"{per_task} trials per task, over the {repeat} the selection asks")
+    return Coverage(repeat=repeat, per_task=per_task, complete=per_task >= repeat, held=held)
+
+
 def targets_of(selection: Optional[dict], before: List[TrialRow], new: List[TrialRow]) -> dict:
-    """D7.3: passes of the target tasks' trials before and after, with Fisher's exact test."""
+    """D7.3: passes of the target tasks' trials before and after, with Fisher's exact test once the new trials
+    complete the selection."""
     targets = set((selection or {}).get("targets") or [])
-    if not targets:
+    if selection is None or not targets:
         return {"tasks": 0, "before": None, "after": None, "p": None, "verdict": None,
                 "text": "no targets were selected in this round, so no trials of targets are compared"}
     b = passes([r for r in before if r.task in targets])
     a = passes([r for r in new if r.task in targets])
+    coverage = coverage_of(selection, new)
+    if not coverage.complete:
+        return {"tasks": len(targets), "before": b, "after": a, "p": None, "verdict": None,
+                "text": f"not tested: the selection is not complete, with {coverage.held}"}
     p = fisher_two_sided(b["passed"], b["trials"] - b["passed"], a["passed"], a["trials"] - a["passed"])
     share = lambda x: x["passed"] / x["trials"] if x["trials"] else 0.0
     return {"tasks": len(targets), "before": b, "after": a, "p": p,

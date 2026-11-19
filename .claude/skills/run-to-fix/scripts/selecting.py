@@ -16,7 +16,7 @@ from pricing import describe, price_of, task_costs, usd
 from reading import adapter_of
 from rounds import (LoopError, ledger_round, load_ledger, now, open_round, read_input, read_json, run_command,
                     save_ledger, write_json, write_paid)
-from trials import run_names, solved_tasks
+from trials import run_names, runs_on_standard, solved_tasks
 
 #: canaries are drawn with this seed, so the same round proposes the same canaries
 SEED = 20261117
@@ -126,7 +126,7 @@ def cmd_select(args: argparse.Namespace) -> None:
     if chosen.usd is not None and chosen.usd > args.budget_usd:
         raise LoopError(f"{names[args.size]} cost {describe(chosen)}, over the budget of {usd(args.budget_usd)}")
     tasks = sizes[args.size]
-    names = run_names(rows, tasks)
+    names = run_names(rows, tasks, runs_on_standard(record["run"]["job_dir"]))
     units = os.path.join(round_dir, "trial-tasks.txt")
     with open(units, "w", encoding="utf-8", newline="\n") as fh:
         fh.write("".join(t + "\n" for t in names))
