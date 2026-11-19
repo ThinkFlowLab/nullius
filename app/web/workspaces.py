@@ -37,8 +37,8 @@ def _root(path, launched, memo) -> dict:
     deleted here, '' when it can: its launch has ended and its record reads,
     as Delete launch asks (``execution.deletable``). What Delete would take is
     worked out when it opens (``workspace_root_ask``). ``launched``:
-    ``runs._held_launches()``. ``memo``: by real path, a root two workspaces
-    share read once."""
+    ``runs._held_launches()``. ``memo``: by real path, a folder two roots
+    name read once."""
     real = os.path.realpath(path)
     if real not in memo:
         name = execution.run_of(real)
@@ -75,10 +75,9 @@ def _counts(ws) -> dict:
 
 @app.route("/workspaces")
 def workspaces_page():
-    wss, memo, launched = workspace.list_all(shared.WS_HOME), {}, runs_web._held_launches()
+    wss, launched = workspace.list_all(shared.WS_HOME), runs_web._held_launches()
     held = [w.name for _, _, holders in launched[0] for w in holders]
     return render_template("workspaces/workspaces.html", workspaces=wss, csrf=shared._csrf_token(),
-                           roots={ws.name: [_root(r, launched, memo) for r in ws.roots] for ws in wss},
                            counts={ws.name: _counts(ws) for ws in wss}, n_judged={ws.name: store.count(ws.dir) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
 
 
@@ -175,6 +174,18 @@ def workspace_unlink(name):
     _reopen([ws.name])
     flash(Markup('Unlinked <span class="mono">{}</span> from <b>{}</b>; its files stay.').format(root, ws.label), "")
     return redirect(url_for("workspaces_page"))
+
+
+@app.route("/workspaces/<name>/roots")
+def workspace_roots(name):
+    """The Roots dialog of one workspace, fetched when it opens: each root as
+    ``_root`` reads it, with why its folder cannot be deleted here."""
+    ws = workspace.load(shared.WS_HOME, name)
+    if ws is None:
+        abort(404)
+    launched, memo = runs_web._held_launches(), {}
+    clash = [w.label for w in workspace.list_all(shared.WS_HOME)].count(ws.label) > 1
+    return render_template("workspaces/_roots.html", ws=ws, rs=[_root(r, launched, memo) for r in ws.roots], clash=clash)
 
 
 @app.route("/workspaces/<name>/roots/ask")
