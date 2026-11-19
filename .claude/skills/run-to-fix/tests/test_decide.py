@@ -533,3 +533,20 @@ class AmountsAreFinite(Flow):
         self.assertNotEqual(r.code, 0)
         self.assertIn("--new-cost-usd", r.err)
         self.assertFalse(os.path.exists(self.round_file("result.json")))
+
+
+ADD_KEPT = (" && python3 -c \\"import json,sys; p=sys.argv[1]; d=json.load(open(p)); "
+            "d['kept_recorded'] = ['f3__r', 'p2__r']; json.dump(d, open(p, 'w'))\\" {out_json}")
+
+
+class KeptRecorded(Flow):
+    def test_the_page_shows_the_trials_that_keep_their_recorded_label(self) -> None:
+        commands = self.commands()
+        commands["replay"] = (commands["replay"] or "") + ADD_KEPT
+        self.start(commands, ["run_tasks"])
+        self.candidate("good", self.repo.good, self.repo.test_ref, "outcome")
+        self.check("good")
+        r = run(["decide", "--loop", self.loop, "--stop", "1"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        row = next(ln for ln in self.page("decision-1.md").splitlines() if ln.startswith("| good |"))
+        self.assertIn("2 and 2 trials keep their recorded label", row)
