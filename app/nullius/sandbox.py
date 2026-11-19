@@ -19,6 +19,7 @@ import base64
 import json
 import os
 import re
+import shutil
 import subprocess
 from typing import List, Optional
 
@@ -32,12 +33,33 @@ _TOKEN_MAX = 4096
 
 def docker_state() -> dict:
     """{ok, version} when the engine answers - its name and version, ``podman
-    6.1.4`` - else {ok: False, error}."""
+    6.1.4`` - else {ok: False, error}; with ``also``, the other engine when both
+    are installed (``_other``), so the page says why this one is in use."""
     why = container.unusable()
-    if why:
-        return {"ok": False, "error": why}
-    r = container._docker(["version", "--format", "{{.Server.Version}}"], timeout=30, check=False)
-    return {"ok": True, "version": f"{container.DOCKER} {r.stdout.strip()}"}
+    state = {"ok": False, "error": why} if why else None
+    if state is None:
+        r = container._docker(["version", "--format", "{{.Server.Version}}"], timeout=30, check=False)
+        state = {"ok": True, "version": f"{container.DOCKER} {r.stdout.strip()}"}
+    also = _other()
+    return dict(state, also=also) if also else state
+
+
+def _other() -> Optional[dict]:
+    """The engine not in use, when it is installed too and is not the same program
+    (podman's ``docker``): {name, ok, said}, ``said`` its version or why it does not answer."""
+    other = "podman" if container.DOCKER == "docker" else "docker"
+    path = shutil.which(other)
+    if not path or (other == "docker" and container._runs_podman(path)):
+        return None
+    try:
+        r = subprocess.run([other, "version", "--format", "{{.Server.Version}}"], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"name": other, "ok": False, "said": str(e)[:200]}
+    if r.returncode == 0 and r.stdout.strip():
+        return {"name": other, "ok": True, "said": f"{other} {r.stdout.strip()}"}
+    lines = (r.stderr or r.stdout).strip().splitlines()
+    return {"name": other, "ok": False, "said": lines[-1][:200] if lines else f"exit {r.returncode}"}
 
 
 def _config_dir() -> str:
