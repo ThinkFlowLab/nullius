@@ -14,7 +14,7 @@
     A field's `class` goes on each of its values; `card_label` names a stat when its column header does not, and a
     value's `label` names it for that item; `style` 'code' sets the text as code; `icon` puts #i-<icon> before a
     note. `icon` values are image URLs: when one item has one, the others show initials; when none has, no icon. -#}
-{% from '_tables.html' import controls, empty_note %}
+{% from '_tables.html' import controls, empty_note, table, cell %}
 
 {#- Each value of `fields` in `item`, as a dict, to the call block with its field. #}
 {% macro each(item, fields) %}{% for f in fields %}{% set v = item.get(f.key) %}
@@ -25,14 +25,44 @@
 
 {# A collection of cards (NulliusTable.cards): its controls row, its cards, the note when none passes. `id` names it;
    `search`, `choices`, `only`, `layout` and each field's `filter` as the table's controls; `sort` the Sort by menu, over
-   the fields that are not blank; `noun` what the live region counts.
+   the fields that are not blank, or a list of their keys; `noun` what the live region counts.
    The call block, when given, writes the cards instead (grid for each group, such as the Benchmarks' shelves); a
-   section in it marked data-group hides when none of its cards shows, and its data-group-n counts them. #}
-{% macro cards(id, cols, items, search='', choices={}, only={}, empty='No items match.', noun='items', sort=false, layout=none) %}
-{{ controls(id, cols, search, choices=choices, only=only, sort=sort, layout=layout) }}
+   section in it marked data-group hides when none of its cards shows, and its data-group-n counts them.
+   `layout` 'table' shows the same items as a table instead (rows), `default` the page's view without ?view=. #}
+{% macro cards(id, cols, items, search='', choices={}, only={}, empty='No items match.', noun='items', sort=false, layout=none, default='table') %}
+{%- if layout == 'table' %}{{ rows(id, cols, items, search, choices, only, empty, noun, sort, default) }}{% else %}
+{{ controls(id, cols, search, choices=choices, only=only, sort=sort, layout=layout, default=default) }}
 <div id="{{ id }}" data-cards>{% if caller is defined %}{{ caller() }}{% else %}{{ grid(cols, items, choices=choices, sort=sort) }}{% endif %}</div>
 {{ empty_note(id, empty) }}
 <span class="sr" data-live="{{ id }}" data-noun="{{ noun }}" aria-live="polite"></span>
+{%- endif %}
+{% endmacro %}
+
+{#- An item's icon: `src` an image URL or a sprite symbol, else the initials of `name`. #}
+{% macro mark(icon, src, name) %}
+      {%- if not src %}<span class="ws-avatar {{ icon.class }}" aria-hidden="true">{{ name[:2]|upper }}</span>
+      {%- elif '#' in src %}<span class="{{ icon.class }}" aria-hidden="true"><svg class="agent-logo"><use href="{{ src }}"/></svg></span>
+      {%- else %}<span class="{{ icon.class }}" aria-hidden="true"><img class="agent-logo" src="{{ src }}" alt=""></span>{% endif %}{% endmacro %}
+
+{#- A row's attributes, written once per item by rows. #}
+{% macro attrs(r) %}{{ r.attrs }}{% endmacro %}
+
+{# The items of a cards collection as a table (the table toolkit's, with its Columns menu): a column per field the
+   table takes that some item fills (a filtered or 'num' one always), in the order of `cols`; the title pinned, its
+   icon before it and a link to `href`, the others as on the card. A field `off` starts hidden. #}
+{% macro rows(id, cols, items, search, choices, only, empty, noun, sort, default) %}
+{%- set icon = (cols|selectattr('card', 'equalto', 'icon')|list + [none])[0] %}
+{%- set icons = icon and items|selectattr(icon.key)|list|length > 0 %}
+{%- set shown = [] %}{% for c in cols if c.table is not sameas false and (c.key in choices or c.type == 'num' or items|selectattr(c.key)|list) %}{% set _ = shown.append(dict(c, sticky=c.card == 'title')) %}{% endfor %}
+{%- set rs = [] %}{% for item in items %}{% set a %}{% if item.get('id') %} id="{{ item.id }}"{% endif %} data-search="{{ item.get('search', '') }}"
+  {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}{% endset %}
+  {%- set _ = rs.append({'item': item, 'attrs': a}) %}{% endfor %}
+{% call(r, c) table(id, shown, rs, attrs, search=search, columns=true, choices=choices, only=only, empty=empty, noun=noun, sort=sort, layout='table', default=default) %}
+  {%- set v = r.item.get(c.key) %}{% set by %}{% call(f, x) each(r.item, [c]) %}{{ x.get('value', x.text) }} {% endcall %}{% endset %}
+  {%- call cell(c, sort=by|trim) %}{% if c.card == 'title' %}{% set name = v.text if v is mapping else v %}<span class="row-name">{% if icons %}{{ mark(icon, r.item.get(icon.key), name) }}{% endif %}<a href="{{ r.item.href }}">{{ name }}</a></span>
+    {%- elif c.style == 'code' %}<code>{{ v }}</code>
+    {%- else %}{% call(f, x) each(r.item, [c]) %}{{ pill(f, x) }} {% endcall %}{% endif %}{% endcall %}
+{%- endcall %}
 {% endmacro %}
 
 {# The cards of `items`. `every`: the collection the icon rule reads, when `items` is a part of it; `choices`: the
@@ -49,13 +79,10 @@
 {%- for item in items %}
   <article class="bench-card" data-card{% if item.get('id') %} id="{{ item.get('id') }}"{% endif %}{% if item.get('search') %} data-search="{{ item.get('search') }}"{% endif %}{% if item.get('keys') %} data-keys="{{ item.get('keys') }}"{% endif %}
     {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}
-    {%- for f in fields if sort and not f.blank %} data-s-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}{% endcall %}"{% endfor %}>
+    {%- for f in fields if sort and not f.blank and (sort is sameas true or f.key in sort) %} data-s-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}{% endcall %}"{% endfor %}>
     {%- set title = by.title[0] %}{% set v = item.get(title.key) %}{% set v = v if v is mapping else {'text': v} %}{% set name = v.text %}
     {%- set cls = [title.class, v.class]|select|join(' ') %}
-    <div class="bench-card-title{{ ' ' ~ cls if cls }}">{% if icons %}{% set src = item.get(icon.key) %}
-      {%- if not src %}<span class="ws-avatar {{ icon.class }}" aria-hidden="true">{{ name[:2]|upper }}</span>
-      {%- elif '#' in src %}<span class="{{ icon.class }}" aria-hidden="true"><svg class="agent-logo"><use href="{{ src }}"/></svg></span>
-      {%- else %}<span class="{{ icon.class }}" aria-hidden="true"><img class="agent-logo" src="{{ src }}" alt=""></span>{% endif %}{% endif -%}
+    <div class="bench-card-title{{ ' ' ~ cls if cls }}">{% if icons %}{{ mark(icon, item.get(icon.key), name) }}{% endif -%}
       {%- set link %}<a class="card-link"{% if item.get('href') %} href="{{ item.get('href') }}"{% endif %}>{{ name }}</a>{% endset %}
       {%- if v.after %}<span class="bench-card-name">{{ link }} {{ v.after }}</span>{% else %}{{ link }}{% endif %}
       {%- set corner %}{% call(f, v) each(item, by.check) %}<input type="checkbox" data-check value="{{ v.value }}" aria-label="{{ v.text }}">{% endcall %}

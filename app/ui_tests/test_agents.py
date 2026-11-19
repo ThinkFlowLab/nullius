@@ -137,6 +137,7 @@ class Tabs(unittest.TestCase):
         self.assertIn('<p class="empty-note" data-empty="kits" hidden>No kits match.</p>', page)
         self.assertIn('<dl class="bench-stats"><div><dt>Checks</dt><dd>3</dd></div></dl>', page)
         self.assertNotIn('bench-card-title"><span', page)                                       # kits have no icon
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', page), ["", "title", "port", "checks"])
         for port, info in ports.PORTS.items():
             if not info["kit"]:
                 continue
@@ -174,8 +175,48 @@ class Tabs(unittest.TestCase):
         self.assertIn('href="/agents/fake"', card)
         self.assertIn("<dt>Ports proven</dt><dd>2/7</dd>", card)                      # task and workspace, of the seven agent ports
         self.assertIn("<dt>Benchmarks it runs</dt><dd>1/1</dd>", card)
-        self.assertNotIn("agent.task/v1", card[:card.index("</article>")])            # the detail is on its page
+        self.assertNotIn("agent.task/v1", card[card.index(">"):card.index("</article>")])   # the detail is on its page
         self.assertEqual(self.get("/agents/nope").status_code, 404)
+
+    def test_agents_sort_and_filter_by_protocol_and_the_ports_they_prove(self):
+        html = self.get("/agents").get_data(as_text=True)
+        menu = html[html.index('data-tools="sort"'):]
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', menu), ["", "title", "ports", "runs"])
+        self.assertIn('data-tools-btn="filter"', html)                      # both in the one Filter menu, no dropdown of their own
+        self.assertNotIn('data-dropdown', html)
+        self.assertIn('<fieldset data-filter-menu="protocol">\n        <legend>Protocol</legend>', html)
+        self.assertIn('<input type="checkbox" data-value="ACP" checked> ACP', html)
+        self.assertIn('<fieldset data-filter-menu="proves">\n        <legend>Proves</legend>', html)
+        self.assertIn('<input type="checkbox" data-value="agent.task/v1" checked> One task', html)
+        card = html[html.index('id="fake"'):]
+        self.assertIn('data-f-proves="agent.task/v1&#10;agent.workspace/v1&#10;"', card[:card.index(">")])
+        self.assertIn('data-s-ports="2/7"', card[:card.index(">")])
+        caps = self.get("/capabilities").get_data(as_text=True)
+        self.assertIn('data-tools="sort"', caps)
+        self.assertNotIn("data-filter-menu", caps)                                          # one protocol: nothing to filter
+
+    def test_agents_capabilities_and_kits_are_cards_by_default_and_a_table_on_request(self):
+        for url in ("/agents", "/capabilities", "/kits"):
+            html = self.get(url).get_data(as_text=True)
+            self.assertIn(f'href="{url}?view=table" aria-label="Table" title="Table" aria-current="false"', html)
+            self.assertIn(f'href="{url}" aria-label="Cards" title="Cards" aria-current="true"', html)
+            self.assertNotIn("data-table", html)
+            html = self.get(url + "?view=table&q=1").get_data(as_text=True)
+            self.assertIn(f'href="{url}?view=table&amp;q=1" aria-label="Table" title="Table" aria-current="true"', html)
+            self.assertIn(f'href="{url}?q=1" aria-label="Cards" title="Cards" aria-current="false"', html)
+            self.assertNotIn("data-cards", html)
+            self.assertIn('data-col="title" data-type="text" class="sticky-col sticky-edge">Name</th>', html)
+        html = self.get("/agents?view=table").get_data(as_text=True)
+        row = html[html.index('<tr id="fake"'):]; row = row[:row.index("</tr>")]
+        self.assertIn('data-f-proves="agent.task/v1&#10;agent.workspace/v1&#10;"', row)
+        self.assertIn('<a href="/agents/fake">', row)
+        self.assertIn('<td data-col="ports" data-sort="2/7" class="align-right"><span>2/7</span>', row)
+        self.assertIn('<input type="checkbox" data-col="summary" data-off> Summary', html)
+        self.assertNotIn('data-col="kind"', html)                                           # no agent has a kind: no column
+        kits = self.get("/kits?view=table").get_data(as_text=True)
+        self.assertEqual(re.findall(r'<th data-col="(\w+)"', kits), ["title", "family", "port", "checks", "version"])
+        self.assertIn('data-pills="family"', kits)
+        self.assertNotIn('class="row-name"><span', kits)                                     # kits have no icon
 
     def test_the_add_dialog_builds_a_prompt_and_keeps_the_steps_by_hand_for_each_kind(self):
         for url, a, skill, words in (
