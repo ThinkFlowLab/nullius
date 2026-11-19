@@ -8,6 +8,7 @@ import random
 from typing import Dict, List, Optional, Tuple
 
 from adapter import Adapter, source_of
+from checking import load_checks
 from checkout import is_ancestor, resolve, worktree, write_paid_on_ref
 from classifying import read_rows
 from comparing import TARGET_TRIALS, trial_spent
@@ -22,12 +23,12 @@ SEED = 20261117
 SIZES = ("targets", "guards", "canaries")
 
 
-def kept_candidates(round_dir: str, entry: dict) -> List[dict]:
+def kept_candidates(round_dir: str, entry: dict, adapter: Adapter) -> List[dict]:
     if entry.get("kept") is None:
         raise LoopError("stop 1 has no answer yet: record it with loop.py answer --stop 1")
     if not entry["kept"]:
         raise LoopError("the answer of stop 1 kept no candidate, so there is nothing to try")
-    return [dict(read_json(os.path.join(round_dir, "candidates", cid, "checks.json")), id=cid) for cid in entry["kept"]]
+    return [dict(load_checks(round_dir, cid, adapter), id=cid) for cid in entry["kept"]]
 
 
 def guards_of(kept: List[dict], rows_by_trial: Dict[str, Tuple[str, bool]], targets: List[str]) -> Tuple[List[str], Optional[str]]:
@@ -84,7 +85,7 @@ def cmd_select(args: argparse.Namespace) -> None:
     record = read_input(round_dir)
     ledger = load_ledger(args.loop)
     entry = ledger_round(ledger, os.path.basename(round_dir))
-    kept = kept_candidates(round_dir, entry)
+    kept = kept_candidates(round_dir, entry, adapter)
     ref = resolve(source_of(adapter, "select"), args.ref)
     for checks in kept:
         if not is_ancestor(adapter.checkout, checks["ref"], ref):

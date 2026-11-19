@@ -60,6 +60,18 @@ def cause_trials(round_dir: str, cause: str, effect: str) -> Tuple[str, List[str
     return rule, sorted(names), tasks
 
 
+def load_checks(round_dir: str, cid: str, adapter: Adapter) -> dict:
+    """The checks of a candidate, made with the adapter the loop has now."""
+    path = os.path.join(round_dir, "candidates", cid, "checks.json")
+    if not os.path.isfile(path):
+        raise LoopError(f"the candidate {cid} is not checked: run loop.py check --candidate {cid}")
+    checks = read_json(path)
+    if not isinstance(checks, dict) or checks.get("adapter_sha256") != adapter.sha256:
+        raise LoopError(f"the checks of {cid} were made with another adapter.json than the loop has now; run "
+                        f"loop.py check --candidate {cid} again")
+    return checks
+
+
 def load_candidate(path: str) -> dict:
     """A candidate.json of this version: one that names the effect of its fix."""
     if not os.path.isfile(path):
@@ -269,7 +281,8 @@ def cmd_check(args: argparse.Namespace) -> None:
     base = resolve(adapter.checkout, adapter.base_ref)
     before_ref = cand["test_ref"] or base
     checks = {
-        "schema": "run-to-fix.checks/v1", "candidate": cand["id"], "created": now(), "ref": cand["ref"],
+        "schema": "run-to-fix.checks/v1", "candidate": cand["id"], "created": now(), "adapter_sha256": adapter.sha256,
+        "ref": cand["ref"],
         "test_ref": cand["test_ref"], "base_ref": base,
         "test": check_test(adapter, args, round_dir, cdir, cand),
         "suite": check_suite(adapter, args, round_dir, cdir, base, cand["ref"]),

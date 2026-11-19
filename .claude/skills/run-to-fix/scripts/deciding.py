@@ -8,7 +8,7 @@ import re
 from typing import Dict, List, Optional
 
 from adapter import source_of
-from checking import candidate_id, load_candidate
+from checking import candidate_id, load_candidate, load_checks
 from checkout import resolve
 from classifying import read_rows
 from comparing import REPORT_NOT_READ, TARGET_TRIALS, passes, targets_of, trial_spent
@@ -86,11 +86,12 @@ def decide_one(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         if os.path.isdir(base) else []
     if not ids:
         raise LoopError("no candidate is registered: add one with loop.py candidate, then loop.py check")
+    adapter = adapter_of(args.loop)
     rows, not_run, unchanged = [], [], []
     for cid in ids:
         cand = load_candidate(os.path.join(base, cid, "candidate.json"))
         checks_path = os.path.join(base, cid, "checks.json")
-        checks = read_json(checks_path) if os.path.isfile(checks_path) else None
+        checks = load_checks(round_dir, cid, adapter) if os.path.isfile(checks_path) else None
         rows.append("| " + " | ".join(cell(c) for c in candidate_row(cand, checks)) + " |")
         if checks is None:
             not_run.append(f"- {cid}: not checked; run loop.py check --candidate {cid}")
@@ -259,6 +260,10 @@ def cmd_answer(args: argparse.Namespace) -> None:
         cands = {k: load_candidate(os.path.join(round_dir, "candidates", k, "candidate.json")) for k in keep
                  if os.path.isfile(os.path.join(round_dir, "candidates", k, "candidate.json"))}
         missing = [k for k in keep if not os.path.isfile(os.path.join(round_dir, "candidates", k, "checks.json"))]
+        if not missing:
+            adapter = adapter_of(args.loop)
+            for k in keep:
+                load_checks(round_dir, k, adapter)
         if missing:
             raise LoopError(f"these candidates are not checked: {', '.join(missing)}")
         entry["answers"].append({"about": "stop 1: the candidates to keep", "date": now(), "text": args.text,
