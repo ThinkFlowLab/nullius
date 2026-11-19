@@ -14,6 +14,7 @@
     workspace records it; never opened sorts last, newest first). #}
 {% macro launches(ws) %}{% set n = n_launches[ws.name] %}{% if n %}<a class="btn ghost sm count-btn" href="{{ url_for('launches_page', ws=ws.name) }}" aria-label="Launches of {{ ws.label }}: {{ n }}" title="Launches of {{ ws.label }}"><svg class="ic" aria-hidden="true"><use href="#i-launches"/></svg>{{ n }}</a>
   {%- else %}{{ greyed('Launches of ' ~ ws.label ~ ': 0', '', 'No launches in ' ~ ws.label, 'none-' ~ ws.name, icon='launches', class='btn ghost sm count-btn', text='0') }}{% endif %}{% endmacro %}
+{% macro roots(ws) %}<button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="{{ url_for('workspace_roots', name=ws.name) }}" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ ws.roots|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ ws.roots|length }}</button>{% endmacro %}
 {% macro opened(ws) %}{{ ws.opened[:19]|replace('-', '')|replace(':', '')|replace('T', '') or 0 }}{% endmacro %}
 
 {% block body %}
@@ -26,17 +27,16 @@
                dict(key='disk', label='Folder', blank=true, table=false, card='text', class='mono faint'),
                dict(key='runs', label='Runs', type='num', card='stat'), dict(key='checks', label='Checks', type='num', card='stat'),
                dict(key='opened', label='Last opened', type='num', align='left', card='meta'),
-               dict(key='launches', label='Launches', type='num', align='right', card='stat'), dict(key='roots', label='Roots', type='num', align='right', card='action'),
+               dict(key='launches', label='Launches', type='num', align='right', card='stat'), dict(key='roots', label='Roots', type='num', align='right', card='stat'),
                dict(key='actions', label='Actions', blank=true, card='action')] %}
 {% if request.args.get('view') == 'cards' %}
 {#- the same fields as the table's columns, each in its card slot; a rename only in the table #}
 {% set items = [] %}
 {% for ws in workspaces %}{% set current = workspace and ws.name == workspace.name %}
   {%- set open %}{% if current %}<span class="ok" role="img" aria-label="Open" title="Open">●</span>{% endif %}{% endset %}
-  {%- set roots %}<svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ ws.roots|length }}{% endset %}
   {%- set _ = items.append(dict(open=open, name=ws.label, disk=ws.name if labels.count(ws.label) > 1 else '', runs=counts[ws.name].runs, checks=counts[ws.name].checks,
         opened=dict(text=ws.opened[:16]|replace('T', ' '), value=opened(ws)), launches=dict(text=launches(ws), value=n_launches[ws.name]),
-        roots=dict(text=roots, value=ws.roots|length, class='count-btn ws-roots-btn', title='Roots', attrs={'data-ask': url_for('workspace_roots', name=ws.name), 'aria-haspopup': 'dialog', 'aria-label': 'Roots of ' ~ ws.label ~ ': ' ~ ws.roots|length}),
+        roots=dict(text=roots(ws), value=ws.roots|length),
         actions=dict(text=trash, class='danger', title='Delete workspace', attrs={'data-ask': 'ws-ask-delete', 'data-label': ws.label, 'data-action': url_for('workspace_delete', name=ws.name), 'data-judged': n_judged[ws.name], 'aria-haspopup': 'dialog', 'aria-label': 'Delete workspace ' ~ ws.label}),
         search=ws.label ~ ' ' ~ ws.name)) %}
 {%- endfor %}
@@ -60,9 +60,7 @@
     {%- elif c.key == 'checks' %}{% call cell(c) %}{{ counts[ws.name].checks }}{% endcall %}
     {%- elif c.key == 'opened' %}{% call cell(c, sort=opened(ws), class='mono faint nowrap') %}{{ ws.opened[:16]|replace('T', ' ') }}{% endcall %}
     {%- elif c.key == 'launches' %}{% call cell(c) %}{{ launches(ws) }}{% endcall %}
-    {%- elif c.key == 'roots' %}{% call cell(c, sort=ws.roots|length) %}
-        <button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="{{ url_for('workspace_roots', name=ws.name) }}" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ ws.roots|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ ws.roots|length }}</button>
-      {% endcall %}
+    {%- elif c.key == 'roots' %}{% call cell(c, sort=ws.roots|length) %}{{ roots(ws) }}{% endcall %}
     {%- elif c.key == 'actions' %}{% call cell(c, class='acts-col') %}
         <button type="button" class="icon-btn danger" data-ask="ws-ask-delete" data-label="{{ ws.label }}" data-action="{{ url_for('workspace_delete', name=ws.name) }}" data-judged="{{ n_judged[ws.name] }}" aria-haspopup="dialog" aria-label="Delete workspace {{ ws.label }}" title="Delete workspace">{{ trash }}</button>
       {% endcall %}

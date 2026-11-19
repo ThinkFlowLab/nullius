@@ -2,8 +2,9 @@
     static/tables.js (NulliusTable.cards) and styled in catalogue/catalogue.css. A field's `card` names the slot it
     fills; a field without one is not on the card, and `table` false keeps a card-only field off a table. Slots, in
     order: `icon`, `title` (exactly one), `check` (the title row, the check at its right); `text`; `badge`*, `note`*;
-    `stat` (up to 3, below a line); `alert`; `action`*; `status`, `tag`*, `meta` (the last row, the meta at its right)
-    (* any number, the others at most one).
+    `stat`* (below a line, a column each, a missing value as —; a few, what reads at a glance); `alert`; `action`*;
+    `status`, `tag`*, `meta` (the last row, the meta at its right) (* any number, the others at most one). More than
+    three stats widen every card of the page so they keep one line; on a screen too narrow they wrap in two rows.
     An item is a dict of display values by field key: a string, a dict {text, class, title, label, href, value, attrs}
     or a list of them, empty for none; a filter and Sort by read a value's `value`, else its text; an action's
     `attrs` are its button's own attributes, its `class` added to the button's. Plus `href` (its title's link),
@@ -37,12 +38,12 @@
 {% macro grid(cols, items, every=none, choices={}, sort=false) %}
 {%- set fields = cols|selectattr('card')|list %}
 {%- set by = {} %}{% for slot in ['status', 'tag', 'meta', 'check', 'icon', 'title', 'text', 'badge', 'note', 'stat', 'alert', 'action'] %}{% set _ = by.update({slot: fields|selectattr('card', 'equalto', slot)|list}) %}{% endfor %}
-{#- the limits, each failing the page: one title, at most three stats, at most one of each other single slot #}
-{%- if not by.title or by.stat|length > 3 %}{{ cards_take_one_title_and_at_most_three_stats() }}{% endif %}
+{#- the limits, each failing the page: one title, at most one of each other single slot #}
+{%- if not by.title %}{{ cards_take_one_title() }}{% endif %}
 {%- for slot in ['status', 'meta', 'check', 'icon', 'title', 'text', 'alert'] if by[slot]|length > 1 %}{{ cards_take_one_of_each_single_slot() }}{% endfor %}
 {%- set icon = by.icon[0] if by.icon else none %}
 {%- set icons = icon and (every or items)|selectattr(icon.key)|list|length > 0 %}
-<div class="bench-grid">
+<div class="bench-grid"{% if by.stat %} style="--stats: {{ by.stat|length }}"{% endif %}>
 {%- for item in items %}
   <article class="bench-card" data-card{% if item.get('id') %} id="{{ item.get('id') }}"{% endif %}{% if item.get('search') %} data-search="{{ item.get('search') }}"{% endif %}{% if item.get('keys') %} data-keys="{{ item.get('keys') }}"{% endif %}
     {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}
@@ -60,8 +61,9 @@
     <div class="bench-card-runs run-tags" role="group" aria-label="{{ by.badge|map(attribute='label')|join(', ') }}">{{ badges }}</div>{% endif %}
     {%- call(f, v) each(item, by.note) %}
     <div class="bench-card-setup"{% if v.title %} title="{{ v.title }}"{% endif %}>{% if f.icon %}<svg class="ic" aria-hidden="true"><use href="#i-{{ f.icon }}"/></svg>{% endif %}{{ v.text }}</div>{% endcall %}
-    {%- set stats %}{% call(f, v) each(item, by.stat) %}<div><dt>{{ v.label or f.card_label or f.label }}</dt><dd{% if f.class %} class="{{ f.class }}"{% endif %}>{{ v.text }}</dd></div>{% endcall %}{% endset %}{% if stats %}
-    <dl class="bench-stats">{{ stats }}</dl>{% endif %}
+    {%- if by.stat %}
+    <dl class="bench-stats">{% for f in by.stat %}{% set v = item.get(f.key) %}{% set v = v if v is mapping else {'text': v} -%}
+      <div><dt>{{ v.label or f.card_label or f.label }}</dt><dd{% if f.class %} class="{{ f.class }}"{% endif %}>{{ '—' if v.text is none or v.text == '' else v.text }}</dd></div>{% endfor %}</dl>{% endif %}
     {%- call(f, v) each(item, by.alert) %}
     <div class="bench-card-blocker">{{ v.text }}</div>{% endcall %}
     {%- set actions %}{% call(f, v) each(item, by.action) %}{% if v.href %}<a class="btn ghost sm" href="{{ v.href }}">{{ v.text }}</a>{% else %}<button type="button" class="btn ghost sm{{ ' ' ~ v.class if v.class }}"{% if v.value %} value="{{ v.value }}"{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}{{ v.attrs|xmlattr if v.attrs }}>{{ v.text }}</button>{% endif %}{% endcall %}{% endset %}{% if actions %}

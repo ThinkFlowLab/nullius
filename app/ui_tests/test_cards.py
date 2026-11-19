@@ -48,15 +48,20 @@ class Macros(unittest.TestCase):
         html = self.render(COLS, [{'href': '/b', 'title': 'Beta', 'stat1': 0, 'badge': [], 'tag': '', 'note': None}])
         for absent in ('bench-card-foot', 'data-check', 'bench-card-domain', 'bench-card-runs', 'bench-card-setup', 'bench-card-blocker', 'bench-card-actions'):
             self.assertNotIn(absent, html)
-        self.assertIn('<dl class="bench-stats"><div><dt>Tasks</dt><dd>0</dd></div></dl>', html)   # a zero is a value
+        self.assertIn('<dl class="bench-stats"><div><dt>Tasks</dt><dd>0</dd></div><div><dt>Scorer</dt><dd class="word">—</dd></div></dl>', html)   # a zero is a value; a missing one keeps its place
         self.assertNotIn('bench-stats', self.render(COLS[2:3], [{'href': '/b', 'title': 'Beta'}]))
 
-    def test_one_title_at_most_one_text_and_three_stats(self):
+    def test_one_title_at_most_one_text_and_any_number_of_stats(self):
         title, stat, text = COLS[2], COLS[0], COLS[7]
-        for cols in ([stat], [title, title], [title, text, text], [title] + [stat] * 4, [title, COLS[8], COLS[8]]):
+        for cols in ([stat], [title, title], [title, text, text], [title, COLS[8], COLS[8]]):
             with self.subTest(cols=[c['card'] for c in cols]), self.assertRaises(jinja2.UndefinedError):
                 self.render(cols, [FULL])
-        self.render([title] + [stat] * 3, [FULL])
+        stats = [dict(key='s%d' % i, label='S%d' % i, card='stat') for i in range(4)]
+        html = self.render([title] + stats, [{'title': 'A', 's0': 1, 's1': '', 's3': 4}, {'title': 'B', 's2': 3}])
+        self.assertIn('<div class="bench-grid" style="--stats: 4">', html)                  # a column each, every card alike
+        self.assertIn('<dl class="bench-stats"><div><dt>S0</dt><dd>1</dd></div><div><dt>S1</dt><dd>—</dd></div><div><dt>S2</dt><dd>—</dd></div><div><dt>S3</dt><dd>4</dd></div></dl>', html)
+        self.assertIn('<dl class="bench-stats"><div><dt>S0</dt><dd>—</dd></div><div><dt>S1</dt><dd>—</dd></div><div><dt>S2</dt><dd>3</dd></div><div><dt>S3</dt><dd>—</dd></div></dl>', html)
+        self.assertNotIn('--stats', self.render([title], [FULL]))
 
     def test_initials_only_beside_a_real_icon(self):
         cols = [COLS[8], COLS[2]]

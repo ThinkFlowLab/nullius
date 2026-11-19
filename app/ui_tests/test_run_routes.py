@@ -522,6 +522,10 @@ class WorkspaceDelete(unittest.TestCase):
         self.assertIn('data-s-runs="0"', html)                                                           # Sort by reads it
         self.assertIn(f'data-ask="/workspaces/{self.ws.name}/roots"', html)                             # the same dialogs
         self.assertIn('data-ask="ws-ask-delete"', html); self.assertIn('aria-label="Delete workspace gone soon"', html)
+        card = re.sub(r">\s+<", "><", html.split('data-cards>')[1])                                     # Roots a stat after Launches, Delete the only action
+        self.assertIn('style="--stats: 4"', card)
+        self.assertRegex(card, r'<dt>Launches</dt><dd>.*?</dd></div><div><dt>Roots</dt><dd><button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="/workspaces/[^"]+/roots"')
+        self.assertEqual(re.findall(r'<div class="bench-card-actions">(.*?)</div>', card)[0].count('<button'), 1)
 
     def test_the_view_toggle_keeps_the_other_query_and_shows_only_where_asked(self):
         html = self.page("/workspaces?view=cards&q=1")
