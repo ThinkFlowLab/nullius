@@ -7,8 +7,8 @@ from typing import Dict, List, Optional, Tuple
 
 from classifying import classes_of, cross_check, failure_groups, read_rows
 from reading import adapter_of, analyze, health
-from rounds import (STOP_RULE, LoopError, call_runs, ledger_round, load_ledger, now, open_round, read_input,
-                    read_json, save_ledger, write_json)
+from rounds import (STOP_RULE, LoopError, call_runs, ledger_round, load_ledger, now, open_round, read_input, read_json,
+                    recorded_amount, save_ledger, write_json)
 from pricing import describe, price_of, task_costs, usd
 from stats import binomial_two_sided, fisher_two_sided, verdict
 from trials import TrialRow
@@ -73,7 +73,7 @@ def trial_spent(entry: dict) -> float:
         if not t.get("cost_complete", True) and t.get("cost_from") != "the person":
             raise LoopError(f"the money the trial run {t['job_dir']} spent is unknown: some of its trials report no "
                             "cost. Record it again with loop.py decide --stop 2 and --trial-cost-usd.")
-        total += t["cost_usd"]
+        total += recorded_amount(t.get("cost_usd"), f"ledger.json, the cost of the trial run {t.get('job_dir')},")
     return total
 
 

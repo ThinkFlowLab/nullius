@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -132,6 +133,10 @@ def read_trial(trial_dir: str, pass_threshold: float) -> TrialRow:
     info = result.get("agent_info") or {}
     agent_result = result.get("agent_result") or {}
     cost = agent_result.get("cost_usd")
+    if cost is not None and (isinstance(cost, bool) or not isinstance(cost, (int, float)) or not math.isfinite(cost)
+                             or cost < 0):
+        raise TrialError(f"{trial_dir}/result.json: the trial {result.get('trial_name') or os.path.basename(trial_dir)} "
+                         f"records a cost of {cost!r}, which is not a finite amount of 0 or more")
     counted = agent_result.get("n_model_calls")
     # a job of the standard counts its model calls; its trajectory has one step per message, not per call
     if isinstance(counted, int) and not isinstance(counted, bool):
@@ -142,7 +147,7 @@ def read_trial(trial_dir: str, pass_threshold: float) -> TrialRow:
         exception_type=str(exc.get("exception_type") or "Exception") if exc else None,
         exception_message=str(exc.get("exception_message") or "") if exc else None,
         agent_s=_span(result.get("agent_execution")), model_calls=calls, max_completion_tokens=max_out,
-        cost_usd=float(cost) if isinstance(cost, (int, float)) else None, agent=info.get("name"),
+        cost_usd=float(cost) if cost is not None else None, agent=info.get("name"),
         verifier_ran=reward is not None, unit=unit_of(result))
 
 

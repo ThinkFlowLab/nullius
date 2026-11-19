@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import math
 import os
 import re
 import shlex
@@ -105,6 +106,13 @@ def open_round(loop_dir: str) -> str:
     return existing[-1]
 
 
+def recorded_amount(value: object, where: str) -> float:
+    """An amount in US dollars read from a record: a finite number of 0 or more."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        raise LoopError(f"{where} holds {value!r}, which is not a finite amount of 0 or more")
+    return float(value)
+
+
 def read_input(round_dir: str) -> dict:
     path = os.path.join(round_dir, "input.json")
     if not os.path.isfile(path):
@@ -115,6 +123,7 @@ def read_input(round_dir: str) -> dict:
     if data.get("refused"):
         raise LoopError(f"{os.path.basename(round_dir)}: read refused this run ({data.get('reason')}); "
                         "start a new loop folder for another run")
+    data["budget_usd"] = recorded_amount(data.get("budget_usd"), f"{path}, budget_usd,")
     return data
 
 
