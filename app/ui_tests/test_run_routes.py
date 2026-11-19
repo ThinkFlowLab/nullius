@@ -522,10 +522,12 @@ class WorkspaceDelete(unittest.TestCase):
         self.assertIn('data-s-runs="0"', html)                                                           # Sort by reads it
         self.assertIn(f'data-ask="/workspaces/{self.ws.name}/roots"', html)                             # the same dialogs
         self.assertIn('data-ask="ws-ask-delete"', html); self.assertIn('aria-label="Delete workspace gone soon"', html)
-        card = re.sub(r">\s+<", "><", html.split('data-cards>')[1])                                     # Roots a stat after Launches, Delete the only action
+        card = re.sub(r">\s+<", "><", html.split('data-cards>')[1])                                     # Roots a stat after Launches
         self.assertIn('style="--stats: 4"', card)
         self.assertRegex(card, r'<dt>Launches</dt><dd>.*?</dd></div><div><dt>Roots</dt><dd><button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="/workspaces/[^"]+/roots"')
-        self.assertEqual(re.findall(r'<div class="bench-card-actions">(.*?)</div>', card)[0].count('<button'), 1)
+        self.assertNotIn('bench-card-actions', card)                                                     # its delete in the corner, no action line
+        self.assertRegex(card, r'<span class="bench-card-corner"><button type="button" class="icon-btn danger" title="Delete workspace" data-ask="ws-ask-delete" '
+                               r'data-label="gone soon" data-action="/workspaces/delete/[^"]+" data-judged="0" aria-haspopup="dialog" aria-label="Delete workspace gone soon">')
         self.assertIn('<div class="bench-card-title ws-name"><span class="bench-card-name"><a class="card-link">gone soon</a>'          # the table's rename, after the name
                       '<button type="button" class="icon-btn ws-edit" aria-label="Rename workspace gone soon"', card)
         self.assertIn(f'<input type="hidden" name="name" value="{self.ws.name}"><input type="hidden" name="view" value="cards">', card)

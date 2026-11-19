@@ -34,8 +34,9 @@
 .bench-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .bench-harness { font: 12px var(--mono); color: var(--text-faint); }
 .bench-card-title { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 500; letter-spacing: -.01em; }
-/* the check at the title row's right, level with its first line however the title wraps */
-.bench-card-title [data-check] { flex: none; align-self: flex-start; font: inherit; margin: calc((1lh - 13px) / 2) 0 0 auto; }
+/* the check and the delete at the title row's right, level with its first line however the title wraps */
+.bench-card-corner { flex: none; align-self: flex-start; display: flex; align-items: center; gap: 6px; height: 1lh; margin-left: auto; }
+.bench-card-corner [data-check] { margin: 0; }
 /* a name with a control of its own after its last word (a title's `after`), wrapping as text */
 .bench-card-name { min-width: 0; }
 .bench-card-name > .icon-btn { vertical-align: middle; }
