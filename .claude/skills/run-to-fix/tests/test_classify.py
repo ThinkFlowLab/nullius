@@ -1,6 +1,7 @@
 """`loop.py classify`: the seven classes, signatures, groups, warnings and the agent's own classes."""
 from __future__ import annotations
 
+import json
 import os
 import sys
 from typing import Dict, List
