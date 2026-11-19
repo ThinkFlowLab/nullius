@@ -9,7 +9,8 @@ import shutil
 import tempfile
 import unittest
 
-from nullius.standard import definitions, match, recipe
+from nullius.runs import parse
+from nullius.standard import definitions, job, match, recipe
 
 BENCHES = os.path.join(definitions.CATALOGUE, "benchmarks")
 
@@ -163,6 +164,41 @@ class Recipes(unittest.TestCase):
     def test_another_benchmarks_agent_is_refused_with_its_reason(self):
         said = [e["message"] for e in self.compiled(others=["osworld2:m3"])["errors"]]
         self.assertEqual(said, ["MiniMax M3 cannot run OSWorld1: MiniMax M3 belongs to OSWorld2."])
+
+
+
+class Records(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="nullius-own-job-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def written(self, other, **opts):
+        d = os.path.join(self.tmp, "job")
+        os.makedirs(d, exist_ok=True)
+        job.write_config(d, job="job", bench=bench(), other=other, model="computer-use-preview", provider="openrouter",
+                         dataset="test_small", units=["u1"], concurrency=1, granted=False, bench_options=opts)
+        with open(os.path.join(d, "result.json"), "w") as f:
+            json.dump({}, f)
+        return d
+
+    def test_a_job_names_the_agent_that_ran_its_setup_still_original(self):
+        other, why = definitions.setup(bench(), "original", "computer-use-preview", "openrouter", "openai_cua")
+        self.assertEqual((why, other["key"], other["agent"]), ("", "original", "openai-cua"))
+        d = self.written(other, agent="openai_cua")
+        with open(os.path.join(d, "config.json")) as f:
+            cfg = json.load(f)
+        self.assertEqual((cfg["agents"][0]["name"], cfg["standard"]["setup"]["agent"], cfg["standard"]["plugged"]), ("openai-cua", "openai-cua", "original"))
+        self.assertEqual(parse.parse_job(d).agent_name, "openai-cua")
+
+    def test_a_job_from_before_is_named_by_its_agent_option(self):
+        other, _ = definitions.setup(bench(), "original", "computer-use-preview", "openrouter", "openai_cua")
+        other.pop("agent")                                   # as a job written before its agent was recorded
+        d = self.written(other, agent="openai_cua")
+        with open(os.path.join(d, "config.json")) as f:
+            self.assertEqual(json.load(f)["agents"][0]["name"], "original")
+        self.assertEqual(parse.parse_job(d).agent_name, "openai-cua")
+        other, _ = definitions.setup(bench("gsm8k"), "original", "gpt-4o-mini", "openrouter")
+        self.assertNotIn("agent", other)                    # a benchmark without agents of its own: nothing changes
 
 
 if __name__ == "__main__":

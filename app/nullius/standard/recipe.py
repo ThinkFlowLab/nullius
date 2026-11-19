@@ -398,7 +398,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                 add("model", f"{own['label']} is published with {', '.join(own['models'])}: choose one of them"
                     + (", or Any of your choice for another." if "model" in (b.get("setups") or {}) else "."))
                 continue
-            o, why_not = definitions.setup(b, method, picked, provider_)
+            o, why_not = definitions.setup(b, method, picked, provider_, own["start"]["driver"]["agent"] if own else "")
             if o is None:
                 add("model" if orig else "agent", why_not[0].upper() + why_not[1:] + ".")
                 continue
@@ -751,11 +751,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         for d, p in pairs:
             command = command_for(d, p, i)
             commands.append(command)
-            parts.append({"id": word_of(d, p) or definitions.job_word(p["o"]),
+            parts.append({"id": word_of(d, p) or definitions.job_word(p.get("agent") or p["o"]),
                           "label": " · ".join(([d.get("label") or d["id"]] if many else []) + [(p.get("agent") or p["o"])["label"]]) + (f" · shard {i}/{of}" if of > 1 else ""),
                           "script": script_for(d, p, command, i)})
             # a shard's launch id, so its run record joins the launch before its job is written (runs.launches)
-            jobs.append({"name": job_of(d, p, i), "agent": p["o"]["_ref"], "dataset": definitions.ref_of(b),
+            jobs.append({"name": job_of(d, p, i), "agent": p["agent"]["key"] if p.get("agent") else p["o"]["_ref"], "dataset": definitions.ref_of(b),
                          **({"launch": launch_of(d, p)} if of > 1 else {})})
         out["shards"].append({"where": where, "index": i, "of": of, "name": f"{name}-shard-{i}of{of}" if of > 1 else name,
                               "command": "\n".join(commands[-len(pairs):]), "script": parts[0]["script"], "parts": parts, "jobs": jobs})

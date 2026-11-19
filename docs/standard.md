@@ -630,7 +630,7 @@ already accepts arbitrary models needs only the `original` method.
 | `units` | A setup may count its own units; `units` is sent `setup` |
 | `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes or the Original setup driver container |
 | `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice |
-| Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper` |
+| Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper`, and the benchmark's own agent that ran (`agent`), whose key is also the job's agent (`agent_info.name`) |
 | Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
 | Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |
 
@@ -659,6 +659,7 @@ it is published with. It speaks no port, so it has no `offers` or `proven`.
 | `options.agent` | `standard.json` writes its `label`, `summary` and `setups`; the loader rebuilds `values` (each entry's `start.driver.agent`, in order), `names`, `about` and `default` (the first), so `when`, `by`, `--bench-option agent=...` and `NULLIUS_OPTION_AGENT` read as before |
 | Checked | Each entry's `models` are among `setups.original.models`; each upstream name once |
 | Offered | On the Agents page behind its From filter, and in the builder beside the catalogue's agents; another benchmark greys it with the reason |
+| Run | As the Original setup, its upstream name as the agent option: `nullius standard run osworld1 original --bench-option agent=openai_cua`. Its jobs name it by its key (`openai-cua`); an older job, recorded as `original`, is read the same way from its agent option |
 
 ### Every setting, inventoried
 
