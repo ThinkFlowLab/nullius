@@ -23,7 +23,8 @@ GRADER_LINE = "[2026-11-19 10:00:00,000 ERROR llm_metrics/1-MainProcess] Error i
 def load_driver(up):
     spec = importlib.util.spec_from_file_location("osworld2_driver_original", os.path.join(HERE, "driver.py"))
     driver = importlib.util.module_from_spec(spec)
-    with mock.patch.object(sys, "argv", ["driver.py"]), mock.patch.dict(os.environ, NULLIUS_UPSTREAM=up):
+    with mock.patch.object(sys, "argv", ["driver.py"]), mock.patch.object(sys, "path", [HERE, *sys.path]), \
+            mock.patch.dict(os.environ, NULLIUS_UPSTREAM=up):
         spec.loader.exec_module(driver)
     return driver
 

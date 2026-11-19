@@ -68,7 +68,7 @@ and its resources. The source layout stays under `app/`.
   tools kit, an MCP server `mcp_kit`) - the definitions it reads are in the catalogue:
   a benchmark's `standard.json` and `driver` in its folder (τ³-bench's also the MCP
   server of its domains' tools, `mcp_server`: the upstream's own, run on the machine; OSWorld1's also its null control's
-  agent, `nop`, and the `runner` of a unit an agent runs: the upstream's loop with the computer port's bridge; OSWorld2's also `nop` and `api_logs` (each image of its API logs kept once), the upstream unchanged,
+  agent, `nop`, and the `runner` of a unit an agent runs: the upstream's loop with the computer port's bridge; OSWorld2's also `nop` and `api_logs` (each image of its API logs kept once), the upstream unchanged, `unit` (what its two drivers share: the dataset lists, reading the upstream's logs, the errors),
   and in `hardened/` its patched version `osworld2@hardened`: its own `driver` and `nop`, `websites` (its mock
   websites: the checks before a VM start, Overleaf's lock and reset, the stack's command line), `gitlab_server` (its
   GitLab: made once on the run's machine with its token, its tasks' lock, the stack's command line), `proxy` (a
