@@ -374,3 +374,27 @@ class Cancellation(RepoCase):
 
     def test_ctrl_c(self) -> None:
         self.stop_during_a_command(signal.SIGINT)
+
+
+class SmallItems(RepoCase):
+    def test_a_command_past_its_time_is_a_check_that_did_not_finish(self) -> None:
+        commands = self.commands()
+        commands["replay"] = "sleep 5 # {worktree} {ref} {job_dir} {out_json}"
+        self.start(commands, ["run_tasks"])
+        self.candidate("good", self.repo.good, self.repo.test_ref, "outcome")
+        r = run(["check", "--loop", self.loop, "--candidate", "good", "--command-timeout-s", "1"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        replay = load(self.round_file("candidates/good/checks.json"))["replay"]
+        self.assertFalse(replay["ran"])
+        self.assertIn("did not finish in 1 s", replay["reason"])
+        self.assertEqual(os.listdir(os.path.join(self.loop, "worktrees")), [])
+
+    def test_a_candidate_id_or_a_cause_that_leaves_the_round_is_refused(self) -> None:
+        self.start(self.commands(), ["run_tasks"])
+        r = run(["check", "--loop", self.loop, "--candidate", "../escape"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("candidate id", r.err)
+        r = run(["candidate", "--loop", self.loop, "--id", "c1", "--cause", "../escape", "--ref", self.repo.good,
+                 "--effect", "outcome"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("cause", r.err)

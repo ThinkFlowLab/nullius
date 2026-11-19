@@ -102,6 +102,13 @@ class StopOne(Flow):
         self.assertNotEqual(r.code, 0)
         self.assertIn("decision-1.md", r.err)
 
+    def test_keeping_a_candidate_id_that_leaves_the_round_is_refused(self) -> None:
+        self.checked()
+        run(["decide", "--loop", self.loop, "--stop", "1"])
+        r = run(["answer", "--loop", self.loop, "--stop", "1", "--keep", "good,../escape", "--text", "keep"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("candidate id", r.err)
+
     def test_keeping_an_unchecked_candidate_is_refused(self) -> None:
         self.checked()
         run(["decide", "--loop", self.loop, "--stop", "1"])
@@ -369,6 +376,7 @@ class ReportCandidate(Flow):
         row = next(ln for ln in self.page("decision-1.md").splitlines() if ln.startswith("| rep |"))
         self.assertIn("| report |", row)
         self.assertIn("1 of 1: not done → done 1", row)
+        self.assertIn("1 trials of the rule, no task expected to pass (p3_reports)", row)
 
     def test_select_takes_no_targets_and_guards_the_changed_trials(self) -> None:
         self.kept_report()

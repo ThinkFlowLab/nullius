@@ -334,3 +334,21 @@ class IncompleteNewCost(LoopCase):
     def test_the_person_s_figure_for_the_new_run(self) -> None:
         rule = self.compare_partial(["--new-cost-usd", "0.5"])
         self.assertAlmostEqual(rule["spent_usd"], 0.5)
+
+
+class StopRuleOfTheRound(LoopCase):
+    def test_compare_refuses_a_stop_rule_other_than_the_one_read_recorded(self) -> None:
+        before, new = paired(5, 1, 1, 1)
+        before_dir = write_job(self.jobs, "before", "alpha", "harbor", before)
+        new_dir = write_job(self.jobs, "new", "alpha", "harbor", new)
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(before_dir, None)
+        path = self.round_file("input.json")
+        data = load(path)
+        self.assertIn("No new round when", data["stop_rule"])
+        data["stop_rule"] = "Another rule."
+        write_json(path, data)
+        r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("stop rule", r.err)
+        self.assertFalse(os.path.exists(self.round_file("result.json")))
