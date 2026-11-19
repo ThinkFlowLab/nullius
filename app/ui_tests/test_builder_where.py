@@ -12,13 +12,13 @@ class StandardWhere(CompilerCase):
              {"key": "default", "label": "Default", "spec": "4 vCPU, 8 GB", "memory_gb": 8, "why": None},
              {"key": "large", "label": "Large", "spec": "", "memory_gb": None, "why": "not during the free trial"}]
 
-    def draw(self, docker, edit="", backends=("local", "docker"), boat=None, slots=2):
+    def draw(self, docker, edit="", backends=("local", "docker"), boat=None, slots=2, host=None):
         """standardWhere and what it calls, cut from the page script, run against the core: {benchmark backend: html};
         ``edit``, JavaScript changing the recipe ``r`` first; ``boat``, why Boat cannot run here."""
         page = (APP / "static/builder/command-builder.js").read_text(encoding="utf-8")
         cut = lambda start, end: page[page.index(start):page.index(end, page.index(start))]
         line = lambda name: re.search(r"^  const %s = .*$" % name, page, re.M).group(0) + "\n"
-        schema = dict(self.schema, hosts=[], standardHere={"docker": docker, "licences": {}, "host": {}, "boat": boat,
+        schema = dict(self.schema, hosts=[], standardHere={"docker": docker, "licences": {}, "host": host or {}, "boat": boat,
                                                            "boatSizes": self.SIZES, "boatSlots": slots})
         program = ("const schema=" + json.dumps(schema) + ";const C=require(" + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ")(schema);\n"
                    + line("esc") + line("button") + cut("  const unitsOf = ", "  // the first clause") + line("words")
@@ -117,11 +117,18 @@ class StandardWhere(CompilerCase):
                 self.assertEqual("public web proxy" in tip(html), proxy)
                 self.assertNotIn("public web proxy", tip(setup[name]))         # an Original setup gets no proxy
 
-    def test_a_machine_setup_is_said_to_be_needed_by_the_options_chosen(self):
-        html = self.draw(None)["osworld1 local"]
-        self.assertIn("<h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small>", html)
-        self.assertIn("<b>docker</b>: Docker on the machine the driver runs on", html)
-        self.assertIn("<b>Docker</b>: Docker without sudo", self.draw(None)["osworld2 local"])
+    def test_machine_requirements_are_compact_and_manual_commands_keep_copy(self):
+        html = self.draw(None, host={"osworld2": {"scoring_programs": ["identify not on PATH"]}})["osworld2 local"]
+        self.assertIn('data-hostreq-install="local" data-hostreq-name="scoring_programs"', html)
+        self.assertIn(">Missing</span>", html)
+        self.assertNotIn("Needed by the options", html)
+        self.assertNotIn("1 shard", html)
+        self.assertIn("<h3>Scoring tools</h3>", html)
+        self.assertIn("ImageMagick · FFmpeg · Tesseract", html)
+        self.assertIn('<details><summary>Install manually</summary>', html)
+        self.assertIn('data-copy-code>Copy</button>', html)
+        self.assertIn('data-hostreq-name="scoring_programs"', html)
+        self.assertIn('sudo apt-get install', html)
 
     def test_an_option_shows_its_example_and_a_setup_its_label(self):
         page = (APP / "static/builder/command-builder.js").read_text(encoding="utf-8")

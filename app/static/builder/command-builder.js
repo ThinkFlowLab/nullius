@@ -504,7 +504,6 @@
       + `<div class="std-machines" role="group" aria-label="Machines">${kind('hosts', 'Hosts')}${kind('boat', 'Sandboxes', here.boat || '')}</div>`
       + (sandboxes ? `<div class="std-boat-card"><strong>Boat</strong><span>One VM per ${esc(noun)}</span>${here.boatSlots ? `<span class="std-boat-slots">${here.boatSlots} at once on this account</span>` : ''}${here.boat ? `<span class="nb-error">${esc(here.boat)}</span>` : ''}</div>` + sizes
         : `<div class="nb-pick-grid nb-where std-hosts">${machine('local', 'This machine', 'Runs here')}${H.map(h => machine(h.entry, h.label, 'Over SSH')).join('')}</div>`
-        + `<p class="nb-note">${list.length} ${list.length === 1 ? 'shard' : 'shards, merged into one job'}</p>`
         + (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : ''))
       + '<div class="nb-sectionhead std-wherehead"><h3>Isolation</h3></div>'
       + (sandboxes || vms
@@ -533,7 +532,7 @@
   }
   // The machines' setup for those requirements: each chosen machine's state, a check, an install on an explicit
   // click (sudo -n: a machine whose sudo asks for a password is told the commands instead), the commands to copy.
-  const hostState = {};                                       // entry -> {missing, error, said}
+  const hostState = {};                                       // benchmark:entry:requirement -> {missing, error, said}
   function hostSetup(rec) {
     const b = C.standardBench(rec), need = optionNeeds(rec).host;
     if (!b || !need.length) return '';
@@ -542,31 +541,36 @@
     if ((rec.backend || 'local') === 'container' && chosen.length && chosen.every(o => o.setup)) return '';
     const reqs = need.map(n => [n, (b.host || {})[n]]).filter(([, r]) => r);
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
-    // what installs them; none for a machine's own hardware (a GPU), which no package puts there
-    const lines = reqs.flatMap(([n]) => b.host[n].install).filter((x, i, a) => a.indexOf(x) === i);
-    const line = w => {
-      const st = hostState[w] || (w === 'local' ? {missing: Object.fromEntries(need.filter(n => local[n]).map(n => [n, local[n]]))} : null);
-      const gone = st && st.missing ? Object.entries(st.missing).filter(([n]) => need.includes(n)) : [];
-      const state = !st ? '<span class="nb-tick">not checked</span>' : st.error ? `<span class="nb-tick no">${esc(st.error)}</span>`
-        : gone.length ? `<span class="nb-tick no">${esc(gone.map(([, ps]) => ps.join(', ')).join(', '))}</span>` : '<span class="nb-tick ok">ready ✓</span>';
-      return `<li><b>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</b> ${state} ${button('Check', `data-hostreq-check="${esc(w)}"`, 'nb-inlinebutton')}${lines.length && (gone.length || (st && st.error)) ? ' ' + button('Install for me', `data-hostreq-install="${esc(w)}"`, 'nb-inlinebutton') : ''}${st && st.said ? ` <small>${esc(st.said)}</small>` : ''}</li>`;
-    };
-    return `<div class="nb-sectionhead std-wherehead"><h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small></div>`
-      + reqs.map(([n, r]) => `<p class="nb-note"><b>${esc(r.label)}</b>: ${esc(r.summary)}</p>`).join('')
-      + `<ul class="nb-hostreq">${C.whereList(rec).map(line).join('')}</ul>`
-      + (lines.length ? `<div class="std-code"><div class="std-code-head"><span>or run it yourself, on each machine</span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div>` : '');
+    return reqs.map(([name, req]) => {
+      const lines = req.install || [];
+      const machines = C.whereList(rec);
+      const rows = machines.map(w => {
+        const st = hostState[b.key + ':' + w + ':' + name] || (w === 'local' ? {missing: local[name] ? {[name]: local[name]} : {}} : null);
+        const missing = st && st.missing && st.missing[name];
+        const state = !st ? 'Not checked' : st.error ? st.error : missing && missing.length ? 'Missing' : 'Ready';
+        const attrs = `data-hostreq-name="${esc(name)}"`;
+        return `<div class="std-hostreq-row">${machines.length > 1 || w !== 'local' ? `<strong>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</strong>` : ''}`
+          + `<span class="std-hostreq-names">${esc(req.summary || req.label)}</span>`
+          + `<div class="std-hostreq-actions"><span class="${!st || st.error || missing && missing.length ? 'nb-error' : ''}"${missing ? ` title="${esc(missing.join(', '))}"` : ''}>${esc(state)}</span>`
+          + button('Check', `data-hostreq-check="${esc(w)}" ${attrs}`, 'nb-button')
+          + (lines.length && (missing && missing.length || st && st.error) ? button('Install', `data-hostreq-install="${esc(w)}" ${attrs}`, 'nb-button nb-primary') : '')
+          + `</div>${st && st.said ? `<small>${esc(st.said)}</small>` : ''}</div>`;
+      }).join('');
+      return `<div class="nb-sectionhead std-wherehead"><h3>${esc(req.label)}</h3></div><div class="std-hostreq">${rows}`
+        + (lines.length ? `<details><summary>Install manually</summary><div class="std-code"><div class="std-code-head"><span></span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div></details>` : '') + '</div>';
+    }).join('');
   }
-  async function hostReq(entry, what) {
-    const rec = r(), b = C.standardBench(rec);
-    hostState[entry] = {...(hostState[entry] || {}), said: what === 'install' ? 'installing…' : 'checking…', error: ''};
+  async function hostReq(entry, what, name) {
+    const rec = r(), b = C.standardBench(rec), key = b.key + ':' + entry + ':' + name;
+    hostState[key] = {...(hostState[key] || {}), said: what === 'install' ? 'Installing…' : 'Checking…', error: ''};
     renderForm();
     try {
       const res = await nulliusFetch('/new-run/host/' + what, {method: 'POST', headers: {'X-CSRF-Token': schema.csrf},
-        body: new URLSearchParams({entry, benchmark: b.key, requirements: optionNeeds(rec).host.join(',')})});
+        body: new URLSearchParams({entry, benchmark: b.key, requirements: name})});
       const j = await res.json();
-      if (what === 'install' && j.ok) return hostReq(entry, 'check');
-      hostState[entry] = j.ok ? {missing: j.missing || {}} : {...(hostState[entry] || {}), error: j.error || ('HTTP ' + res.status), said: j.manual ? 'run the commands below by hand' : ''};
-    } catch (e) { hostState[entry] = {error: String(e)}; }
+      if (what === 'install' && j.ok) return hostReq(entry, 'check', name);
+      hostState[key] = j.ok ? {missing: j.missing || {}} : {...(hostState[key] || {}), error: j.error || ('HTTP ' + res.status), said: j.manual ? 'Use Install manually below' : ''};
+    } catch (e) { hostState[key] = {error: String(e)}; }
     renderForm();
   }
   // A benchmark's own options (a search, a mode), for the chosen datasets they apply to, and what a value needs of this
@@ -1077,8 +1081,8 @@
     // key, the keyboard goes back to that field
     if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);syncServed();refreshPlan();if(event.detail===0)root.querySelector(`input[data-served-by="${d.servedRole}"]`)?.focus();return;}
     if(d.benchOpt!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOpt]||{};rec.bench_options={...(rec.bench_options||{})};if(d.benchVal===o.default)delete rec.bench_options[d.benchOpt];else rec.bench_options[d.benchOpt]=d.benchVal;renderForm();refreshPlan();return;}
-    if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check');return;}
-    if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install');return;}
+    if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check',d.hostreqName);return;}
+    if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install',d.hostreqName);return;}
     if(d.copyCode!==undefined){const t=b.closest('.std-code').querySelector('code').textContent;try{await navigator.clipboard.writeText(t);b.textContent='Copied';}catch{b.textContent='Select it';}setTimeout(()=>{b.textContent='Copy';},1500);return;}
     if(d.pickCat!==undefined){pickOf().cat=d.pickCat;applyPick();return;}
     if(d.pickFam!==undefined){pickOf().fam=d.pickFam;applyPick();return;}

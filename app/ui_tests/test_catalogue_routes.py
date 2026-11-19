@@ -249,7 +249,7 @@ class BenchmarkPage(PageCase):
 
     def test_a_machine_setup_shows_its_label_and_its_key_without_one(self):
         osworld2 = self.page("osworld2")
-        for label in ("Docker", "Scoring programs"):
+        for label in ("Docker", "Scoring tools"):
             self.assertIn("Setup: " + label, osworld2)
             self.assertIn("needs " + label, osworld2)
         self.assertNotIn("Setup: scoring_programs", osworld2)

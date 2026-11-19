@@ -249,8 +249,8 @@
       ]
     },
     "scoring_programs": {
-      "label": "Scoring programs",
-      "summary": "ImageMagick, ffmpeg and tesseract, used to score 6 tasks.",
+      "label": "Scoring tools",
+      "summary": "ImageMagick · FFmpeg · Tesseract",
       "check": [
         "identify",
         "convert",
