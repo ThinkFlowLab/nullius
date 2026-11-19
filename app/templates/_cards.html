@@ -47,12 +47,18 @@
       {%- elif '#' in src %}<span class="{{ icon.class }}" aria-hidden="true"><svg class="agent-logo"><use href="{{ src }}"/></svg></span>
       {%- else %}<span class="{{ icon.class }}" aria-hidden="true"><img class="agent-logo" src="{{ src }}" alt=""></span>{% endif %}{% endmacro %}
 
+{#- The check that marks a chosen pick (shown by CSS while its toggle is pressed); none on one that cannot be chosen. #}
+{% macro check(pick) %}{% if pick and not pick.disabled %}<span class="pick-check" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span>{% endif %}{% endmacro %}
+
+{#- A pick's toggle: its title's button, on a card or in a row. #}
+{% macro toggle(pick, name, tip, class) %}<button type="button" class="{{ class }}" data-pick="{{ pick.value }}" aria-pressed="{{ 'true' if pick.on else 'false' }}"{% if pick.disabled %} disabled{% endif %}{% if tip %} title="{{ tip }}"{% endif %}>{{ name }}</button>{% endmacro %}
+
 {#- A row's attributes, written once per item by rows. #}
 {% macro attrs(r) %}{{ r.attrs }}{% endmacro %}
 
 {# The items of a cards collection as a table (the table toolkit's, with its Columns menu): a column per field the
    table takes that some item fills (a filtered or 'num' one always), in the order of `cols`; the title pinned, its
-   icon before it and a link to `href`, the others as on the card. A field `off` starts hidden. #}
+   icon before it and a link to `href` (a pick's toggle and check), the others as on the card. A field `off` starts hidden. #}
 {% macro rows(id, cols, items, search, choices, only, empty, noun, sort, default) %}
 {%- set icon = (cols|selectattr('card', 'equalto', 'icon')|list + [none])[0] %}
 {%- set icons = icon and items|selectattr(icon.key)|list|length > 0 %}
@@ -62,7 +68,8 @@
   {%- set _ = rs.append({'item': item, 'attrs': a}) %}{% endfor %}
 {% call(r, c) table(id, shown, rs, attrs, search=search, columns=true, choices=choices, only=only, empty=empty, noun=noun, sort=sort, layout='table', default=default) %}
   {%- set v = r.item.get(c.key) %}{% set by %}{% call(f, x) each(r.item, [c]) %}{{ x.get('value', x.text) }} {% endcall %}{% endset %}
-  {%- call cell(c, sort=by|trim) %}{% if c.card == 'title' %}{% set name = v.text if v is mapping else v %}<span class="row-name">{% if icons %}{{ mark(icon, r.item.get(icon.key), name) }}{% endif %}<a href="{{ r.item.href }}">{{ name }}</a></span>
+  {%- call cell(c, sort=by|trim) %}{% if c.card == 'title' %}{% set name = v.text if v is mapping else v %}{% set pick = r.item.get('pick') %}<span class="row-name">{% if icons %}{{ mark(icon, r.item.get(icon.key), name) }}{% endif %}
+      {%- if pick %}{{ toggle(pick, name, v.title if v is mapping else '', 'row-pick') }}{{ check(pick) }}{% else %}<a href="{{ r.item.href }}">{{ name }}</a>{% endif %}</span>
     {%- elif c.style == 'code' %}<code>{{ v }}</code>
     {%- else %}{% call(f, x) each(r.item, [c]) %}{{ pill(f, x) }} {% endcall %}{% endif %}{% endcall %}
 {%- endcall %}
@@ -87,10 +94,10 @@
     {%- set cls = [title.class, v.class]|select|join(' ') %}
     <div class="bench-card-title{{ ' ' ~ cls if cls }}">{% if icons %}{{ mark(icon, item.get(icon.key), name) }}{% endif -%}
       {%- set pick = item.get('pick') %}
-      {%- set link %}{% if pick %}<button type="button" class="card-link" data-pick="{{ pick.value }}" aria-pressed="{{ 'true' if pick.on else 'false' }}"{% if pick.disabled %} disabled{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ name }}</button>
+      {%- set link %}{% if pick %}{{ toggle(pick, name, v.title, 'card-link') }}
       {%- else %}<a class="card-link"{% if item.get('href') %} href="{{ item.get('href') }}"{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ name }}</a>{% endif %}{% endset %}
       {%- if v.after %}<span class="bench-card-name">{{ link }} {{ v.after }}</span>{% else %}{{ link }}{% endif %}
-      {%- set corner %}{% if pick and not pick.disabled %}<span class="pick-check" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span>{% endif %}{% call(f, v) each(item, by.check) %}<input type="checkbox" data-check value="{{ v.value }}" aria-label="{{ v.text }}">{% endcall %}
+      {%- set corner %}{{ check(pick) }}{% call(f, v) each(item, by.check) %}<input type="checkbox" data-check value="{{ v.value }}" aria-label="{{ v.text }}">{% endcall %}
       {%- call(f, v) each(item, by.delete) %}<button type="button" class="icon-btn danger{{ ' ' ~ v.class if v.class }}"{% if v.title %} title="{{ v.title }}"{% endif %}{{ v.attrs|xmlattr if v.attrs }}><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg></button>{% endcall %}{% endset %}
       {%- if corner %}<span class="bench-card-corner">{{ corner }}</span>{% endif %}</div>
     {%- call(f, v) each(item, by.text) %}

@@ -86,6 +86,21 @@ class AgentGrid(unittest.TestCase):
                 self.assertIn(" disabled", c)
                 self.assertRegex(c, r">Belongs to OSWorld[12]</div>")
 
+    def test_its_table_view_picks_as_its_cards_do(self):
+        cards, _ = self.grid("osworld1")
+        self.assertIn('href="/new-run/agents?benchmark=osworld1&amp;view=table" aria-label="Table"', cards)    # the toggle, cards by default
+        r = self.client.get("/new-run/agents?benchmark=osworld1&view=table")
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertIn('<table class="grid sortable tools snug" id="nb-agents" data-table>', html)
+        self.assertNotIn("data-cards", html)
+        self.assertIn('<button type="button" class="row-pick" data-pick="osworld1:openai-cua" aria-pressed="false"', html)
+        self.assertIn('data-pick="goose" aria-pressed="false" disabled', html)
+        self.assertEqual(html.count('class="pick-check"'), len(re.findall(r'data-pick="[^"]+" aria-pressed="false"(?! disabled)', html)))   # a check for each one that can be chosen
+        self.assertNotIn("/static/catalogue/agents/goose.svg</td>", html)                              # its logo beside its name, not a column
+        heads = re.findall(r'<th data-col="(\w+)"', html)
+        self.assertEqual(heads[:3], ["title", "alert", "protocol"])                                     # why not, beside the name
+
     def test_a_capability_benchmark_lists_capabilities(self):
         _, cards = self.grid("locomo")
         self.assertIn("original", cards)

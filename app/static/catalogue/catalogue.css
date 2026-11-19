@@ -25,12 +25,16 @@
 .card-link:focus-visible { outline: none; }
 .card-link:focus-visible::after { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
 /* a pick card (_cards.html `pick`): its title a toggle; chosen, it is marked; disabled, its reason says why */
-button.card-link { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: left; cursor: pointer; }
-button.card-link:disabled { cursor: not-allowed; }
+button.card-link, button.row-pick { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: left; cursor: pointer; }
+button.card-link:disabled, button.row-pick:disabled { cursor: not-allowed; }
+/* a pick row: chosen, tinted to its pinned name; disabled, faint (not translucent: its pinned name covers what scrolls under) */
+.table-wrap .grid tbody tr:has([data-pick][aria-pressed="true"]) > td { background: var(--accent-soft); }
+.table-wrap .grid tbody tr:has([data-pick]:disabled) > td { color: var(--text-faint); }
+tr:has([data-pick]:disabled) .row-name > :first-child { opacity: .55; }
 .bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) { border-color: var(--accent); background: var(--accent-soft); }
-.pick-check { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--btn-fg); visibility: hidden; }
+.pick-check { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--btn-fg); visibility: hidden; }
 .pick-check .ic { width: 12px; height: 12px; stroke-width: 3; }
-.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) .pick-check { visibility: visible; }
+:is(.bench-card, tr):has([data-pick][aria-pressed="true"]) .pick-check { visibility: visible; }
 .bench-card:has(> .bench-card-title [data-pick]:disabled) { opacity: .55; }
 .bench-card:has(> .bench-card-title [data-pick]:disabled):hover { border-color: var(--border-soft); }
 .bench-card :is(input, button, .btn, [title]) { position: relative; z-index: 1; }

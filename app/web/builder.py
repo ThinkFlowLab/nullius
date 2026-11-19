@@ -64,8 +64,8 @@ def new_run():
 @app.route("/new-run/agents")
 def new_run_agents():
     """The Agent step's grid for one benchmark of the standard (?benchmark=key or key@version), as a fragment the
-    builder puts in its page: its agents or capabilities as pick cards (templates/builder/agents.html), from the
-    entries the Agents page lists (``recipe.entries``), each greyed with the reasons it does not fit."""
+    builder puts in its page: its agents or capabilities as pick cards (templates/builder/agents.html), or rows with
+    ?view=table, from the entries the Agents page lists (``recipe.entries``), each greyed with the reasons it does not fit."""
     benches = definitions.load("benchmark", every=True)[0]
     b = definitions.find(benches, request.args.get("benchmark", ""))
     if b is None:
@@ -84,7 +84,8 @@ def new_run_agents():
                "from": [(k, v) for k, v in names.items() if any(i["from"]["value"] == k for i in items)],
                "proves": [(p, s.get("label") or p) for p, s in ports.PORTS.items() if any(x["value"] == p for i in items for x in i["proves"])]}
     # a filter only where its cards differ
-    return render_template("builder/agents.html", items=items, kind=kind, choices={k: v for k, v in choices.items() if len(v) > 1})
+    return render_template("builder/agents.html", items=items, kind=kind, choices={k: v for k, v in choices.items() if len(v) > 1},
+                           layout="table" if request.args.get("view") == "table" else "cards")
 
 
 def _setup_card(b: dict, key: str) -> dict:

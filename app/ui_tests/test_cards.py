@@ -251,6 +251,22 @@ process.stdout.write(JSON.stringify(out));
 """)
         self.assertEqual(got, ["codex", "codex m3"])     # Runs on everything narrows nothing: From's default holds
 
+    def test_a_row_click_flips_its_pick_but_not_a_disabled_one(self):
+        got = node(r"""
+global.CustomEvent = class { constructor(type, o) { this.type = type; this.detail = o.detail; } };
+global.getSelection = () => ({isCollapsed: true});
+const row = (v, off) => el('tr', {}, el('td', {}, el('button', Object.assign({class: 'row-pick', 'data-pick': v, 'aria-pressed': 'false'}, off ? {disabled: true} : {}), v)), el('td', {id: 'c-' + v}, 'Bundled'));
+const table = el('table', {}, row('a'), row('g', true));
+table.querySelectorAll('[data-pick]').forEach(b => { b.dispatchEvent = ev => b.dispatch(ev.type, {detail: ev.detail}); b.disabled = b.hasAttribute('disabled'); });
+document.appendChild(table);
+const picks = [];
+T.picks(table, 'tr');
+table.addEventListener('nullius-pick', e => picks.push([e.detail.value, e.detail.pressed]));
+const tds = table.querySelectorAll('td'); tds[1].dispatch('click', {button: 0}); tds[3].dispatch('click', {button: 0}); table.querySelector('[data-pick="a"]').click();
+process.stdout.write(JSON.stringify([picks, T.chosen(table)]));
+""")
+        self.assertEqual(got, [[["a", True], ["a", False]], False])
+
     def test_a_chosen_card_shows_whatever_the_filters_say(self):
         got = node(r"""
 const card = (id, from, on) => el('article', {'data-card': '', id, 'data-f-from': from + '\n', 'data-search': id},

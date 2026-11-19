@@ -671,19 +671,34 @@
   // The standard's Agent step grid: drawn by the server for the benchmark (web/builder.py, /new-run/agents) from the
   // Agents page's entries, run by the card toolkit (tables.js); kept while the benchmark is the same, so a search or a
   // filter survives each render, and its cards pressed as the recipe chooses (nullius-pick changes the recipe).
+  // Its view, cards or a table, is the viewer's: the toggle switches it in place, never leaving the page.
+  let agentView = 'cards';
+  try { agentView = localStorage.getItem('nb-agent-view') === 'table' ? 'table' : 'cards'; } catch {}
   const grid = {ref: '', node: null};
   function placeAgentGrid() {
     const slot = $('#nb-agent-grid'), rec = r();
     if (!slot) return;
-    if (grid.ref !== rec.benchmark) { grid.ref = rec.benchmark; grid.node = null; loadAgentGrid(grid.ref); }
+    if (grid.ref !== rec.benchmark + ' ' + agentView) { grid.ref = rec.benchmark + ' ' + agentView; grid.node = null; loadAgentGrid(grid.ref); }
     if (!grid.node) { slot.setAttribute('aria-busy', 'true'); slot.innerHTML = '<div class="page-skeleton" aria-hidden="true">' + '<div class="skel skel-block"></div>'.repeat(3) + '</div>'; return; }
     slot.replaceWith(grid.node);
     const chosen = C.chosenOf(rec);
     grid.node.querySelectorAll('[data-pick]').forEach(b => b.setAttribute('aria-pressed', String(!b.disabled && chosen.includes(b.dataset.pick))));
-    if (!grid.node.dataset.wired) { grid.node.dataset.wired = '1'; NulliusTable.cards(grid.node.querySelector('[data-cards]')); }
+    if (!grid.node.dataset.wired) {
+      grid.node.dataset.wired = '1';
+      const cards = grid.node.querySelector('[data-cards]'), table = grid.node.querySelector('table[data-table]');
+      if (cards) NulliusTable.cards(cards);
+      if (table) { NulliusTable.sticky(table); NulliusTable.wire(table); }
+      grid.node.querySelectorAll('.seg-toggle a').forEach(a => a.addEventListener('click', e => {
+        e.preventDefault();
+        agentView = new URL(a.href).searchParams.get('view') === 'table' ? 'table' : 'cards';
+        try { localStorage.setItem('nb-agent-view', agentView); } catch {}
+        placeAgentGrid();
+      }));
+    }
   }
   async function loadAgentGrid(ref) {
-    const res = await nulliusFetch('/new-run/agents?' + new URLSearchParams({benchmark: ref})).catch(() => null);
+    const [benchmark, view] = ref.split(' ');
+    const res = await nulliusFetch('/new-run/agents?' + new URLSearchParams({benchmark, ...(view === 'table' ? {view} : {})})).catch(() => null);
     const html = res && res.ok ? await res.text().catch(() => null) : null;
     if (grid.ref !== ref) return;   // another benchmark was chosen while it loaded
     if (html === null) {            // said once; the next render asks again

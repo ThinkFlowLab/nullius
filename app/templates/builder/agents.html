@@ -1,10 +1,13 @@
 {#- The builder's Agent step grid (web/builder.py, new_run_agents): the benchmark's agents or capabilities as pick
-    cards of the card toolkit (_cards.html), loaded by command-builder.js, which keeps the choice. -#}
+    cards of the card toolkit (_cards.html), or its rows (`layout` 'table'), loaded by command-builder.js, which keeps
+    the choice and switches the view in place. -#}
 {% from '_cards.html' import cards %}
 {% set noun = 'agents' if kind == 'agent' else 'capabilities' %}
-{% set cols = [dict(key='icon', label='Logo', card='icon', class='std-mark small'), dict(key='title', label='Name', card='title'),
-               dict(key='protocol', label='Protocol', card='tag', class='std-tag'), dict(key='published', label='Setup', card='tag', class='std-tag'),
-               dict(key='fit', label='Fit'), dict(key='from', label='From', card='meta'),
-               dict(key='proves', label='Proves'), dict(key='needs', label='Proven', card='badge', class='std-tag'),
-               dict(key='ticks', label='Checks', card='badge', class='nb-tick'), dict(key='alert', label='Why not', card='alert')] %}
-{{ cards('nb-agents', cols, items, search='Search ' ~ noun, choices=choices, empty='No ' ~ kind ~ ' matches.', noun=noun) }}
+{#- the card's slots as the Agents page's (agents/standard.html); in a table, why not after the name, fit and proves
+    off until asked -#}
+{% set cols = [dict(key='icon', label='Logo', card='icon', table=false, class='std-mark small'), dict(key='title', label='Name', card='title'),
+               dict(key='alert', label='Why not', card='alert'), dict(key='protocol', label='Protocol', card='tag', class='std-tag'),
+               dict(key='published', label='Setup', card='tag', class='std-tag'), dict(key='needs', label='Proven', card='badge', class='std-tag'),
+               dict(key='ticks', label='Checks', card='badge', class='nb-tick'), dict(key='fit', label='Fit', off=true),
+               dict(key='from', label='From', card='meta'), dict(key='proves', label='Proves', class='std-tag', off=true)] %}
+{{ cards('nb-agents', cols, items, search='Search ' ~ noun, choices=choices, empty='No ' ~ kind ~ ' matches.', noun=noun, layout=layout, default='cards') }}

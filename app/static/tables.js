@@ -210,7 +210,8 @@ window.NulliusTable = {
   /* A table of the table macro (data-table): its controls row (id
      <table id>-tools), its Columns menu and checkbox column when it has
      them, and its pages; choices kept per viewer under <table id>.cols and
-     .per. */
+     .per. A row holding a pick toggle (the cards macro's rows) toggles it
+     and, chosen, shows whatever the search and filters say. */
   wire(table) {
     const tools = document.getElementById(table.id + '-tools');
     const cmenu = tools.querySelector('[data-tools="columns"]');
@@ -221,7 +222,9 @@ window.NulliusTable = {
     const ticks = table.querySelector('[data-check-all]') ? this.checks(table) : () => {};
     let first = () => {};
     const t = this.toolbar(table, tools, () => first());
-    first = this.pager(table, table.id + '.per', t.passes, ticks);
+    const pick = Boolean(table.querySelector('[data-pick]'));
+    if (pick) this.picks(table, 'tr');
+    first = this.pager(table, table.id + '.per', pick ? r => t.passes(r) || this.chosen(r) : t.passes, ticks);
   },
 
   /* A collection of the cards macro (data-cards): its controls row (id
@@ -232,10 +235,9 @@ window.NulliusTable = {
      data-noun. A click anywhere on a card but on a control of its own
      follows the card's link, in a new tab or window with the keys or the
      button a link takes; a click that ends a text selection does not. A pick
-     card's title is a toggle (data-pick, aria-pressed): a click, Space or
-     Enter flips it and sends nullius-pick {value, pressed} from it; the page
-     keeps the choice. A chosen card shows whatever the search and filters say. Sort by, when it has one, sorts the cards within their
-     grids as a table's rows. */
+     card's title is a toggle (`picks`); the page keeps the choice, and a
+     chosen card shows whatever the search and filters say. Sort by, when it
+     has one, sorts the cards within their grids as a table's rows. */
   cards(root) {
     const items = [...root.querySelectorAll('[data-card]')], empty = document.querySelector(`[data-empty="${CSS.escape(root.id)}"]`);
     const live = document.querySelector(`[data-live="${CSS.escape(root.id)}"]`), say = this.voice(live);
@@ -248,15 +250,9 @@ window.NulliusTable = {
     };
     root.addEventListener('click', follow);
     root.addEventListener('auxclick', follow);
-    root.addEventListener('click', e => {
-      const b = e.target.closest('[data-pick]');
-      if (!b || b.disabled) return;
-      const pressed = b.getAttribute('aria-pressed') !== 'true';
-      b.setAttribute('aria-pressed', String(pressed));
-      b.dispatchEvent(new CustomEvent('nullius-pick', {bubbles: true, detail: {value: b.dataset.pick, pressed}}));
-    });
+    this.picks(root);
     const draw = () => {
-      items.forEach(c => { c.hidden = !passes(c) && !c.querySelector('[data-pick][aria-pressed="true"]'); });
+      items.forEach(c => { c.hidden = !passes(c) && !this.chosen(c); });
       root.querySelectorAll('[data-group]').forEach(g => {
         const n = [...g.querySelectorAll('[data-card]')].filter(c => !c.hidden).length, count = g.querySelector('[data-group-n]');
         g.hidden = !n;
@@ -283,6 +279,27 @@ window.NulliusTable = {
     }
     draw();
   },
+
+  /* The pick toggles (data-pick, aria-pressed) under `root`: a click, Space
+     or Enter flips one and sends nullius-pick {value, pressed} from it; with
+     `row`, a click elsewhere in the row (a selector) that holds one, but on a
+     control of its own or at the end of a text selection, clicks it. */
+  picks(root, row) {
+    root.addEventListener('click', e => {
+      if (row && !e.target.closest('a, button, input, select, textarea, label, summary') && getSelection().isCollapsed) {
+        e.target.closest(row)?.querySelector('[data-pick]')?.click();
+        return;
+      }
+      const b = e.target.closest('[data-pick]');
+      if (!b || b.disabled) return;
+      const pressed = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(pressed));
+      b.dispatchEvent(new CustomEvent('nullius-pick', {bubbles: true, detail: {value: b.dataset.pick, pressed}}));
+    });
+  },
+
+  /* Whether a card or a row holds a pressed pick: chosen, it shows whatever the search and filters say. */
+  chosen(el) { return Boolean(el.querySelector('[data-pick][aria-pressed="true"]')); },
 
   /* A checkbox column (a `check` column, check_cell in each row): the header
      ticks or unticks every visible row, and shows all, none or some of them
