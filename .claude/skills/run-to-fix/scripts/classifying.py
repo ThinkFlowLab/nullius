@@ -166,7 +166,7 @@ def cmd_classify(args: argparse.Namespace) -> None:
         "schema": "run-to-fix.groups/v1",
         "counts": "trials of the run; each trial has one class, and a group is the failing trials of one signature",
         "trials": len(rows), "failures": len(failing),
-        "classes": {c: count[c] for c in CLASSES}, "rules_off": rules_off(adapter.limits),
+        "classes": {c: count[c] for c in CLASSES}, "rules_off": rules_off(adapter.limits, rows),
         "groups": groups,
         "found_classes": {r.id: {"meaning": r.meaning, "file": r.file, "trials": found_counts[r.id]["1"],
                                  "failing_trials": found_counts[r.id]["failing"],

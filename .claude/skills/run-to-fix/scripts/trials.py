@@ -150,7 +150,8 @@ def classify(row: TrialRow, limits: Limits) -> str:
     return "verifier_failed"
 
 
-def rules_off(limits: Limits) -> List[str]:
+def rules_off(limits: Limits, rows: List[TrialRow]) -> List[str]:
+    """The rules a null limit switches off, and output_limit when no trial records the tokens of one reply."""
     off = []
     if limits.time_limit_s is None:
         off.append("time_limit by the agent phase")
@@ -158,6 +159,8 @@ def rules_off(limits: Limits) -> List[str]:
         off.append("step_limit")
     if limits.output_token_limit is None:
         off.append("output_limit")
+    elif all(r.max_completion_tokens is None for r in rows):
+        off.append("output_limit: no trial records the tokens of one reply")
     return off
 
 
