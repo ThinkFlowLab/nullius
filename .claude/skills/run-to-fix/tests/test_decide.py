@@ -178,8 +178,7 @@ class Select(Flow):
         self.kept()
         first = self.select([]).out
         self.assertEqual(self.select([]).out, first)
-        self.assertIn("canaries (1 passing tasks, seed 20261117): bench/p2
-", first)
+        self.assertIn("canaries (1 passing tasks, seed 20261117): bench/p2\n", first)
 
     def test_without_touched_there_are_no_guards(self) -> None:
         commands = self.commands()
