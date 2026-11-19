@@ -41,6 +41,7 @@ class TrialRow:
     cost_usd: Optional[float]
     agent: Optional[str]
     verifier_ran: bool
+    unit: Optional[str]
 
 
 def read_json(path: str) -> object:
@@ -107,6 +108,20 @@ def _usage(trial_dir: str) -> Tuple[Optional[int], Optional[int]]:
     return calls, (max(outputs) if outputs else None)
 
 
+def unit_of(result: dict) -> Optional[str]:
+    """The unit id a job of the standard gives a trial; a Harbor trial has none."""
+    unit = (result.get("standard") or {}).get("unit") if isinstance(result.get("standard"), dict) else None
+    return unit if isinstance(unit, str) and unit else None
+
+
+def run_names(rows: List[TrialRow], tasks: List[str]) -> List[str]:
+    """The names a runner takes for `tasks`: the unit ids of a job of the standard, else the task names."""
+    units = {r.task: r.unit for r in rows}
+    if rows and all(r.unit is not None for r in rows):
+        return [units[t] for t in tasks]
+    return list(tasks)
+
+
 def read_trial(trial_dir: str, pass_threshold: float) -> TrialRow:
     result = read_json(os.path.join(trial_dir, "result.json"))
     if not isinstance(result, dict) or "task_name" not in result:
@@ -128,7 +143,7 @@ def read_trial(trial_dir: str, pass_threshold: float) -> TrialRow:
         exception_message=str(exc.get("exception_message") or "") if exc else None,
         agent_s=_span(result.get("agent_execution")), model_calls=calls, max_completion_tokens=max_out,
         cost_usd=float(cost) if isinstance(cost, (int, float)) else None, agent=info.get("name"),
-        verifier_ran=reward is not None)
+        verifier_ran=reward is not None, unit=unit_of(result))
 
 
 def classify(row: TrialRow, limits: Limits) -> str:

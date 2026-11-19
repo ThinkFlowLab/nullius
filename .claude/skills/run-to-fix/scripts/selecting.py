@@ -15,7 +15,7 @@ from pricing import describe, price_of, task_costs, usd
 from reading import adapter_of
 from rounds import (LoopError, ledger_round, load_ledger, now, open_round, read_input, read_json, run_command,
                     save_ledger, write_json, write_paid)
-from trials import solved_tasks
+from trials import run_names, solved_tasks
 
 #: canaries are drawn with this seed, so the same round proposes the same canaries
 SEED = 20261117
@@ -127,7 +127,7 @@ def cmd_select(args: argparse.Namespace) -> None:
     tasks = sizes[args.size]
     units = os.path.join(round_dir, "trial-tasks.txt")
     with open(units, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write("".join(t + "\n" for t in tasks))
+        fh.write("".join(t + "\n" for t in run_names(rows, tasks)))
     build = build_on(adapter, args.loop, round_dir, ref, args.command_timeout_s)
     write_json(os.path.join(round_dir, "build.json"), build)
     entry["selection"] = {"ref": ref, "size": args.size, "targets": targets,

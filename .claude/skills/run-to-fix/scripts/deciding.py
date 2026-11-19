@@ -14,7 +14,7 @@ from comparing import REPORT_NOT_READ, TARGET_TRIALS, passes, targets_of, trial_
 from pricing import describe, price_of, task_costs, usd
 from reading import adapter_of, health
 from rounds import LoopError, ledger_round, load_ledger, now, open_round, read_input, read_json, save_ledger, write_json, write_paid
-from trials import TrialRow
+from trials import TrialRow, run_names
 
 ASSETS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 CHOICES = ("stop", "rerun", "full")
@@ -180,7 +180,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     for name, tasks, repeat in (("rerun", rerun_tasks, TARGET_TRIALS), ("full", full_tasks, 1)):
         units = os.path.join(round_dir, f"{name}-tasks.txt")
         with open(units, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write("".join(t + "\n" for t in tasks))
+            fh.write("".join(t + "\n" for t in run_names(before, tasks)))
         command = None
         line = adapter.commands["run_tasks"]
         if line is not None:
