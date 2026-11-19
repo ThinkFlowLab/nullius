@@ -175,16 +175,23 @@ class Tabs(unittest.TestCase):
         self.assertIn('href="/agents/fake"', card)
         self.assertIn("<dt>Ports proven</dt><dd>2/7</dd>", card)                      # task and workspace, of the seven agent ports
         self.assertIn("<dt>Benchmarks it runs</dt><dd>1/1</dd>", card)
-        self.assertNotIn("agent.task/v1", card[:card.index("</article>")])            # the detail is on its page
+        self.assertNotIn("agent.task/v1", card[card.index(">"):card.index("</article>")])   # the detail is on its page
         self.assertEqual(self.get("/agents/nope").status_code, 404)
 
-    def test_agents_sort_by_name_and_their_counts(self):
+    def test_agents_sort_and_filter_by_protocol_and_the_ports_they_prove(self):
         html = self.get("/agents").get_data(as_text=True)
         menu = html[html.index('data-tools="sort"'):]
         self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', menu), ["", "title", "ports", "runs"])
+        self.assertIn('<fieldset data-filter-menu="protocol" aria-label="Protocol">', html)
+        self.assertIn('<input type="checkbox" data-value="ACP" checked> ACP', html)
+        self.assertIn('<fieldset data-filter-menu="proves" aria-label="Proves">', html)
+        self.assertIn('<input type="checkbox" data-value="agent.task/v1" checked> One task', html)
         card = html[html.index('id="fake"'):]
+        self.assertIn('data-f-proves="agent.task/v1&#10;agent.workspace/v1&#10;"', card[:card.index(">")])
         self.assertIn('data-s-ports="2/7"', card[:card.index(">")])
-        self.assertIn('data-tools="sort"', self.get("/capabilities").get_data(as_text=True))
+        caps = self.get("/capabilities").get_data(as_text=True)
+        self.assertIn('data-tools="sort"', caps)
+        self.assertNotIn("data-filter-menu", caps)                                          # one protocol: nothing to filter
 
     def test_the_add_dialog_builds_a_prompt_and_keeps_the_steps_by_hand_for_each_kind(self):
         for url, a, skill, words in (

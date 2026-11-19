@@ -91,7 +91,16 @@ def _page(kind: str):
     found = _entries(kind)
     return render_template("agents/standard.html", kind=kind, how=howto.steps(kind), prompts=howto.prompts(),
                            catalogue_dir=paths.catalogue_dir(), example_dir=example, problems=found["problems"],
-                           items=[_card(kind, e) for e in found["entries"]])
+                           items=[_card(kind, e) for e in found["entries"]], choices=_choices(kind, found["entries"]))
+
+
+def _choices(kind: str, entries: list) -> dict:
+    """An agent list's filters: how Nullius talks to it, and the ports it proves; none for capabilities."""
+    if kind != "agent":
+        return {}
+    proven = {p["port"] for e in entries for p in e["ports"] if p["state"] == "proven"}
+    return {"protocol": [(x, x[:1].upper() + x[1:]) for x in dict.fromkeys(e["protocol"] for e in entries)],
+            "proves": [(p, spec.get("label") or p) for p, spec in ports.PORTS.items() if p in proven]}
 
 
 def _card(kind: str, e: dict) -> dict:
@@ -105,6 +114,7 @@ def _card(kind: str, e: dict) -> dict:
             "version": ("v" + str(version) if version else "") + (f" · {n} versions" if n > 1 else ""),
             "icon": agent_mark_url(d["key"]) if kind == "agent" else None, "title": d["label"],
             "summary": d.get("summary"),
+            "proves": [{"text": p["label"], "value": p["port"]} for p in e["ports"] if p["state"] == "proven"],
             "ports": "{}/{}".format(sum(p["state"] == "proven" for p in e["ports"]), len(e["ports"])),
             "runs": "{}/{}".format(sum(not f["why"] for f in e["fits"]), len(e["fits"])),
             "installs": "yes" if e["install"] else "no"}
