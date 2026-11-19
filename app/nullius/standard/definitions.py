@@ -1272,7 +1272,8 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "", agent: s
     ``model`` on ``provider``: (definition, why not). The definition says the
     model the upstream's code is asked as (``asked``) and the one the relay
     sends (``sent``). ``original`` takes only the paper's models, on a
-    provider that serves them; ``model`` takes any, asked as its ``runs_as``.
+    provider that serves them; ``model`` takes any, asked as its ``runs_as`` - or,
+    on a benchmark with agents of its own, as the agent's first model, the one its driver asks.
     On a benchmark with agents of its own, ``agent`` is the upstream's name of
     the one that runs (its agent option; none, the first), whose key the
     definition carries (``agent``).
@@ -1280,6 +1281,8 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "", agent: s
     s = bench.get("setups") or {}
     if which not in SETUPS or not isinstance(s.get(which), dict):
         return None, f"{bench['label']} has no {which} setup"
+    own = own_agents(bench)
+    mine = next((a for a in own if a["start"]["driver"]["agent"] == agent), None) if agent else (own[0] if own else None)
     orig, x = s["original"], s[which]
     model = (model or "").strip()
     side = []
@@ -1306,10 +1309,8 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "", agent: s
     else:
         if not model:
             return None, f"the model setup needs a model: the one to put in {orig['default']}'s place"
-        asked, sent = x["runs_as"], model
+        asked, sent = (mine["models"][0] if mine else x["runs_as"]), model      # its own agent asks its own first model
     units = orig.get("units") or bench.get("units") or {"noun": "unit", "nouns": "units"}
-    own = own_agents(bench)
-    mine = next((a for a in own if a["start"]["driver"]["agent"] == agent), None) if agent else (own[0] if own else None)
     return {**({"agent": mine["key"]} if mine else {}), "model": {"side_models": side}, "key": which, "label": f"{bench['label']} {setup_label(bench, which).lower()}",
             "summary": x["summary"], "asked": asked, "sent": sent, "units": units, "comparable": which == "original" and comparable(x, model),
             "turn_seconds": orig.get("turn_seconds"), "upstream": {}, "_kind": "upstream", "_ref": which,

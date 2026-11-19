@@ -198,6 +198,13 @@ class Records(unittest.TestCase):
             self.assertEqual(json.load(f)["agents"][0]["name"], "original")
         self.assertEqual(parse.parse_job(d).agent_name, "openai-cua")
         other, _ = definitions.setup(bench("gsm8k"), "original", "gpt-4o-mini", "openrouter")
+        self.assertNotIn("agent", other)
+
+    def test_under_the_model_method_its_agent_is_asked_as_its_own_first_model(self):
+        other, why = definitions.setup(bench(), "model", "vendor/any", "openrouter", "claude")
+        self.assertEqual((why, other["asked"], other["sent"], other["agent"]), ("", "claude-sonnet-4-5-20250929", "vendor/any", "claude"))
+        self.assertEqual(definitions.setup(bench(), "model", "vendor/any", "openrouter")[0]["asked"], "MiniMax-M3")
+        other, _ = definitions.setup(bench("gsm8k"), "original", "gpt-4o-mini", "openrouter")
         self.assertNotIn("agent", other)                    # a benchmark without agents of its own: nothing changes
 
 
