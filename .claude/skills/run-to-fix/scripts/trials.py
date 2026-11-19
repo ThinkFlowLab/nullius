@@ -7,7 +7,7 @@ import math
 import os
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from adapter import Limits
 
@@ -116,11 +116,25 @@ def unit_of(result: dict) -> Optional[str]:
 
 
 def run_names(rows: List[TrialRow], tasks: List[str]) -> List[str]:
-    """The names a runner takes for `tasks`: the unit ids of a job of the standard, else the task names."""
-    units = {r.task: r.unit for r in rows}
-    if rows and all(r.unit is not None for r in rows):
-        return [units[t] for t in tasks]
-    return list(tasks)
+    """The names a runner takes for `tasks`: on a job of the standard the one unit id of each task, else the task
+    names."""
+    if all(r.unit is None for r in rows):
+        return list(tasks)
+    units: Dict[str, Set[Optional[str]]] = {}
+    for r in rows:
+        units.setdefault(r.task, set()).add(r.unit)
+    names = []
+    for task in tasks:
+        given = units.get(task, {None})
+        ids = sorted(u for u in given if u is not None)
+        if len(ids) < len(given) or not ids:
+            raise TrialError(f"trials of the job give unit ids, and a trial of {task} gives none, so the runner cannot "
+                             "be given its unit id")
+        if len(ids) > 1:
+            raise TrialError(f"the trials of {task} give {len(ids)} unit ids, {', '.join(ids)}, so the runner cannot "
+                             "be given one")
+        names.append(ids[0])
+    return names
 
 
 def read_trial(trial_dir: str, pass_threshold: float) -> TrialRow:

@@ -129,6 +129,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
                         + ", ".join(repr(a) for a in checked.agents))
     job_dir = checked.dir
     this_run: List[TrialRow] = read_rows(job_dir, threshold)
+    before = read_rows(record["run"]["job_dir"], threshold)
     code_ref = resolve(source_of(adapter, "decide --stop 2"), args.code_ref)
     if code_ref != selection["ref"]:
         raise LoopError(f"a trial run of this round runs the commit select chose, {selection['ref'][:12]}; --code-ref "
@@ -158,6 +159,9 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         raise LoopError("every trial of the trial run reports its cost; --trial-cost-usd is for a run whose trials do not")
     if args.trial_cost_usd is not None and args.trial_cost_usd < recorded:
         raise LoopError(f"--trial-cost-usd {usd(args.trial_cost_usd)} is under the recorded {usd(recorded)}")
+    rerun_tasks = chosen
+    full_tasks = sorted({r.task for r in before})
+    names = {"rerun": run_names(before, rerun_tasks), "full": run_names(before, full_tasks)}
     runs = [t for t in entry.setdefault("trial_runs", []) if t["job_dir"] != job_dir]
     runs.append({"job_dir": job_dir, "ref": selection["ref"], "trials": len(this_run),
                  "cost_usd": args.trial_cost_usd if missing else recorded, "cost_recorded_usd": recorded,
@@ -169,7 +173,6 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     # every trial run of this round on the same code adds its trials to the exact test of the targets
     same = [t for t in runs if t["ref"] == selection["ref"]]
     rows: List[TrialRow] = [r for t in same for r in read_rows(t["job_dir"], threshold)]
-    before = read_rows(record["run"]["job_dir"], threshold)
     repeat_asked = selection["repeat"]
     pooled = collections.Counter(r.task for r in rows)
     per_task_trials = min(pooled[t] for t in chosen)
@@ -184,13 +187,11 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     spent = trial_spent(entry)
     sources = [task_costs(rows), task_costs(before)]
     left = float(record["budget_usd"]) - spent
-    rerun_tasks = chosen
-    full_tasks = sorted({r.task for r in before})
     options = [{"name": "stop", "what": "nothing", "usd": 0.0, "unpriced_tasks": 0, "text": usd(0.0), "command": None}]
     for name, tasks, repeat in (("rerun", rerun_tasks, TARGET_TRIALS), ("full", full_tasks, 1)):
         units = os.path.join(round_dir, f"{name}-tasks.txt")
         with open(units, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write("".join(t + "\n" for t in run_names(before, tasks)))
+            fh.write("".join(t + "\n" for t in names[name]))
         command = None
         line = adapter.commands["run_tasks"]
         if line is not None:

@@ -45,7 +45,7 @@ Every key is present, and a value the agent does not have is null. `read` refuse
 | `{out_json}` | `replay`, `classes` | the file the command writes; the loop reads it after a zero exit |
 | `{base_ref}` | `replay`, optional | the full commit id of `source.base_ref` |
 | `{before_ref}` | `replay`, optional | the full commit id the replay is compared with: for the replay before a fix, its own `{ref}`; for the replay of the fix, the ref before it |
-| `{units_file}` | `run_tasks` | a text file with one task per line: the unit id (`standard.unit`) when every trial of the run is a trial of the standard, else the task name |
+| `{units_file}` | `run_tasks` | a text file with one task per line: on a job of the standard the unit id (`standard.unit`) its trials give, else the task name. A task whose trials give no unit id, or two, on a job where other trials give one is refused |
 | `{repeat}` | `run_tasks` | trials per task |
 | `{jobs_dir}` | `run_tasks` | where the run writes its job folder |
 | `{budget_usd}` | `run_tasks` | the budget the person named for this run, in US dollars |

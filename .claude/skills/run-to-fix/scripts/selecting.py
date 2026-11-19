@@ -126,9 +126,10 @@ def cmd_select(args: argparse.Namespace) -> None:
     if chosen.usd is not None and chosen.usd > args.budget_usd:
         raise LoopError(f"{names[args.size]} cost {describe(chosen)}, over the budget of {usd(args.budget_usd)}")
     tasks = sizes[args.size]
+    names = run_names(rows, tasks)
     units = os.path.join(round_dir, "trial-tasks.txt")
     with open(units, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write("".join(t + "\n" for t in run_names(rows, tasks)))
+        fh.write("".join(t + "\n" for t in names))
     build = build_on(adapter, args.loop, round_dir, ref, args.command_timeout_s)
     write_json(os.path.join(round_dir, "build.json"), build)
     entry["selection"] = {"ref": ref, "size": args.size, "targets": targets,
