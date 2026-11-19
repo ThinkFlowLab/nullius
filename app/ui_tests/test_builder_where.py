@@ -54,11 +54,17 @@ class StandardWhere(CompilerCase):
         self.assertIn("The agent alone in each problem's VM", ordinary)
         self.assertIn("Answers and keys stay on this machine", ordinary)
         self.assertIn('class="std-boat-card"', ordinary)
+        self.assertIn('src="/static/brand/boat.svg"', ordinary)               # Boat's mark, one per theme
+        self.assertIn('src="/static/brand/boat-dark.svg"', ordinary)
         self.assertNotIn("shards, merged", ordinary)
         self.assertNotIn("at once", self.draw(None, backends=("boat",), slots=None)["gsm8k boat"])   # the API said nothing: no number
         gone = self.draw(None, backends=("boat",), boat="no Boat API key: set it in Settings → Sandbox")["gsm8k boat"]
         self.assertIn('disabled aria-disabled="true" title="no Boat API key: set it in Settings → Sandbox"', card(gone, "boat"))
         self.assertNotIn("data-std-boat-size", gone)
+        self.assertIn('class="nb-inlinebutton std-boat-key" data-href="/settings#sandbox">Add a Boat API key in Settings</button>', gone)
+        missing = self.draw(None, "schema.standardHere.boatKey=true;", backends=("boat",), boat="missing on this machine: ssh")["gsm8k boat"]
+        self.assertIn('<span class="nb-error">missing on this machine: ssh</span>', missing)   # not a key: nothing in Settings fixes it
+        self.assertNotIn("std-boat-key", missing)
 
     def test_a_benchmark_booting_its_own_vms_asks_no_isolation_and_refuses_a_size_too_small_for_its_vm(self):
         for key in ("osworld1", "osworld2"):

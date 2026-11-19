@@ -282,7 +282,8 @@
 #nullius-builder .std-machines button:focus-visible { outline: 2px solid var(--nb-blue); outline-offset: 2px; }
 #nullius-builder .std-machines button:disabled { opacity: .45; cursor: not-allowed; }
 #nullius-builder .std-boat-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: fit-content; max-width: 100%; min-width: 190px; margin-top: 12px; padding: 12px 14px; border: 1px solid var(--nb-blue); border-radius: 10px; background: var(--nb-tint); }
-#nullius-builder .std-boat-card strong { font-size: 15px; font-weight: 500; }
+#nullius-builder .std-boat-card strong { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; }
+#nullius-builder .std-boat-logo { width: 20px; height: 20px; flex: none; }
 #nullius-builder .std-boat-card > span { font-size: 13px; color: var(--nb-muted); }
 #nullius-builder .std-boat-slots { border: 1px solid var(--nb-line); border-radius: 999px; padding: 2px 8px; }
 #nullius-builder .std-hosts { margin-top: 12px; grid-template-columns: repeat(auto-fill, minmax(190px, 240px)); }
