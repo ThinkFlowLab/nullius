@@ -235,6 +235,22 @@ process.stdout.write(JSON.stringify([picks, a.getAttribute('aria-pressed'), g.ge
 """)
         self.assertEqual(got, [[["a", True], ["a", False], ["a", True]], "true", "false"])   # its pill too: the card is the toggle
 
+    def test_a_card_passes_a_filter_its_unless_column_narrows_to(self):
+        got = node(r"""
+const card = (id, from, runs, unless) => el('article', Object.assign({'data-card': '', id, 'data-f-from': from + '\n', 'data-f-runs': runs + '\n'}, unless ? {'data-unless-from': 'runs'} : {}), id);
+const menu = (col, values, on) => el('fieldset', {'data-filter-menu': col}, ...values.map(v => el('input', Object.assign({type: 'checkbox', 'data-value': v}, on.includes(v) ? {checked: true} : {}))));
+const tools = el('div', {id: 'c-tools'}, menu('from', ['bundled', 'benchmark'], ['bundled']), menu('runs', ['os', 'gsm'], ['os', 'gsm']));
+tools.querySelectorAll('input').forEach(i => { i.checked = i.hasAttribute('checked'); });
+const root = el('div', {id: 'c', 'data-cards': ''}, card('codex', 'bundled', 'os'), card('m3', 'benchmark', 'os', true), card('other', 'benchmark', 'gsm', true));
+document.appendChild(el('main', {}, tools, root, el('p', {'data-empty': 'c', hidden: true}), el('span', {'data-live': 'c', 'data-noun': 'cards'})));
+T.cards(root);
+const shown = () => root.querySelectorAll('[data-card]').filter(c => !c.hidden).map(c => c.id).join(' ');
+const out = [shown()];
+tools.querySelector('[data-value="gsm"]').click(); out.push(shown());
+process.stdout.write(JSON.stringify(out));
+""")
+        self.assertEqual(got, ["codex", "codex m3"])     # Runs on everything narrows nothing: From's default holds
+
 
 if __name__ == "__main__":
     unittest.main()

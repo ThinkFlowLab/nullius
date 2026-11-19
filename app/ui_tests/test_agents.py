@@ -209,6 +209,9 @@ class Tabs(unittest.TestCase):
         self.assertEqual(on, sorted(["codex"] + ["osworld1-" + k for k in ("m3", "prompt", "claude", "gpt54", "openai-cua", "qwen", "os-symphony",
                                                                           "evocua", "autoglm", "autoglm-v", "mano", "muse-spark")]))
         self.assertNotIn("osworld1", dict(cards)["osworld2-m3"].split("&#10;"))         # another benchmark's own runs it alone
+        own = html[html.index('id="osworld1-m3"'):]
+        self.assertIn('data-unless-from="runs_on"', own[:own.index(">")])                     # Runs on its benchmark shows it, whatever From says
+        self.assertNotIn("data-unless-from", html[html.index('id="codex"'):][:200])
         # the count the card shows and the filter read one record
         card = html[html.index('id="codex"'):]
         n = card[:card.index(">")].split('data-f-runs_on="', 1)[1].split('"', 1)[0].count("&#10;")

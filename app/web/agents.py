@@ -64,7 +64,8 @@ def _choices(kind: str, entries: list) -> dict:
             "from": [(k, v) for k, v in definitions.FROM.items() if k in have], "runs_on": runs_on}
 
 
-# The From filter's default: the catalogue's own agents; a benchmark's own are one click away.
+# The From filter's default: the catalogue's own agents; a benchmark's own are one click away, and shown whenever
+# Runs on chooses their benchmark (their card's `unless`).
 ONLY = {"agent": {"from": ["bundled", "yours"]}}
 
 
@@ -85,7 +86,7 @@ def _card(kind: str, e: dict) -> dict:
                 "protocol": e["protocol"], "icon": agent_mark_url(d["key"]), "title": d["label"], "summary": d.get("summary"),
                 "from": {"text": definitions.FROM["benchmark"], "value": "benchmark"}, "benchmark": d["benchmark_label"],
                 "uses": "Computer use" if computer else None, "models": ", ".join(d.get("models") or []),
-                "runs_on": _runs_on(e), "hide": ["ports", "runs", "installs"]}
+                "runs_on": _runs_on(e), "unless": {"from": "runs_on"}, "hide": ["ports", "runs", "installs"]}
     version, n = (d.get("upstream") or {}).get("version"), len(d.get("_versions") or ())
     return {"href": url_for("agent_page" if kind == "agent" else "feature_page", key=d["key"]), "id": d["key"],
             "search": " ".join([d["label"], d["key"], d.get("kind", ""), e["protocol"], d.get("summary", "")]),

@@ -11,7 +11,8 @@
     trash button). Plus `href` (its title's link), or `pick` {value, on, disabled}: the card is a toggle, its title a
     button[data-pick][aria-pressed] that tables.js flips, sending `nullius-pick` {value, pressed} (a disabled one's
     reason goes in its `alert`); a title's `title` is the tooltip of its link or button;
-    `id`, `search` (what the search reads) and `keys`. A title's `after` is markup in the flow of its name, after its
+    `id`, `search` (what the search reads), `keys`, and `unless` {field: other}: the item passes the field's filter
+    whenever the other field's filter narrows and passes it. A title's `after` is markup in the flow of its name, after its
     last word (a control of its own), and its `class` goes on the title row.
     A field's `class` goes on each of its values; `card_label` names a stat when its column header does not, and a
     value's `label` names it for that item; `style` 'code' sets the text as code; `icon` puts #i-<icon> before a
@@ -57,7 +58,7 @@
 {%- set icons = icon and items|selectattr(icon.key)|list|length > 0 %}
 {%- set shown = [] %}{% for c in cols if c.table is not sameas false and (c.key in choices or c.type == 'num' or items|selectattr(c.key)|list) %}{% set _ = shown.append(dict(c, sticky=c.card == 'title')) %}{% endfor %}
 {%- set rs = [] %}{% for item in items %}{% set a %}{% if item.get('id') %} id="{{ item.id }}"{% endif %} data-search="{{ item.get('search', '') }}"
-  {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}{% endset %}
+  {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}{% for k, by in (item.get('unless') or {}).items() %} data-unless-{{ k }}="{{ by }}"{% endfor %}{% endset %}
   {%- set _ = rs.append({'item': item, 'attrs': a}) %}{% endfor %}
 {% call(r, c) table(id, shown, rs, attrs, search=search, columns=true, choices=choices, only=only, empty=empty, noun=noun, sort=sort, layout='table', default=default) %}
   {%- set v = r.item.get(c.key) %}{% set by %}{% call(f, x) each(r.item, [c]) %}{{ x.get('value', x.text) }} {% endcall %}{% endset %}
@@ -80,7 +81,7 @@
 <div class="bench-grid"{% if by.stat %} style="--stats: {{ by.stat|length }}"{% endif %}>
 {%- for item in items %}
   <article class="bench-card" data-card{% if item.get('id') %} id="{{ item.get('id') }}"{% endif %}{% if item.get('search') %} data-search="{{ item.get('search') }}"{% endif %}{% if item.get('keys') %} data-keys="{{ item.get('keys') }}"{% endif %}
-    {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}
+    {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}{% for k, by in (item.get('unless') or {}).items() %} data-unless-{{ k }}="{{ by }}"{% endfor %}
     {%- for f in fields if sort and not f.blank and (sort is sameas true or f.key in sort) %} data-s-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}{% endcall %}"{% endfor %}>
     {%- set title = by.title[0] %}{% set v = item.get(title.key) %}{% set v = v if v is mapping else {'text': v} %}{% set name = v.text %}
     {%- set cls = [title.class, v.class]|select|join(' ') %}

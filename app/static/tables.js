@@ -60,7 +60,8 @@ window.NulliusTable = {
      (data-filter-menu) and rows of pills (data-pills). `allowed`: column ->
      the Set of values chosen, or null when all are; every list and row of a
      column shows that one state. A row passes when, for each column, one of
-     its values (data-f-<col>, one per line) is chosen; a choice made at load
+     its values (data-f-<col>, one per line) is chosen, or its data-unless-<col>
+     names a column that narrows and passes it; a choice made at load
      filters from the start. `changed` runs after each change, a list's
      change event included. */
   filters(scope, changed) {
@@ -97,8 +98,9 @@ window.NulliusTable = {
       });
     });
     draw();
-    const passes = row => Object.entries(allowed).every(([col, set]) =>
-      !set || (row.getAttribute('data-f-' + col) ?? '').split('\n').some(v => set.has(v)));
+    // data-unless-<col>="<other>": a row the other column narrows to passes this one whatever it holds
+    const ok = (row, col) => !allowed[col] || (row.getAttribute('data-f-' + col) ?? '').split('\n').some(v => allowed[col].has(v));
+    const passes = row => Object.keys(allowed).every(col => ok(row, col) || (by => !!by && !!allowed[by] && ok(row, by))(row.getAttribute('data-unless-' + col)));
     const clear = () => { Object.keys(allowed).forEach(c => { allowed[c] = null; }); draw(); };
     return {allowed, passes, clear};
   },
