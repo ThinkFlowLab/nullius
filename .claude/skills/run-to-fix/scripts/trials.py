@@ -115,7 +115,12 @@ def read_trial(trial_dir: str, pass_threshold: float) -> TrialRow:
     exc = result.get("exception_info") or {}
     calls, max_out = _usage(trial_dir)
     info = result.get("agent_info") or {}
-    cost = (result.get("agent_result") or {}).get("cost_usd")
+    agent_result = result.get("agent_result") or {}
+    cost = agent_result.get("cost_usd")
+    counted = agent_result.get("n_model_calls")
+    # a job of the standard counts its model calls; its trajectory has one step per message, not per call
+    if isinstance(counted, int) and not isinstance(counted, bool):
+        calls = counted
     return TrialRow(
         trial=str(result.get("trial_name") or os.path.basename(trial_dir)), task=str(result["task_name"]),
         dir=trial_dir, reward=reward, passed=reward is not None and reward >= pass_threshold,
