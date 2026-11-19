@@ -335,6 +335,24 @@ def _head(job_dir: str) -> str:
     return "\n".join(parts)
 
 
+def heads(roots) -> tuple:
+    """``_head`` of each of *roots* and of each entry in it: what
+    ``parse.find_job_dirs`` over them, and the parse of an ended job found
+    there, can change by. A page's summary of ended jobs is kept while this is.
+    shortcut: a change inside a trial folder alone (a trial's result.json, or
+    the first one of a job without events.jsonl) or a link retargeted is not
+    seen; key on ``signature`` of each job if those must show."""
+    out = []
+    for root in roots:
+        try:
+            names = sorted(os.listdir(root))
+        except OSError:
+            out.append((root, None))
+            continue
+        out.append((root, _head(root), tuple((n, _head(os.path.join(root, n))) for n in names)))
+    return tuple(out)
+
+
 def _ended(job: parse.Job) -> bool:
     """Its result records a finish and nothing running or pending: its trials are final."""
     return job.finished_at is not None and job.state == "finished"

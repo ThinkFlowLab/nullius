@@ -975,6 +975,22 @@ class LaunchesPage(unittest.TestCase):
         self.assertEqual([self.cells(rows[key])[c] for c in ("runs", "checks")], ["1", "0"])      # the merge stands for its two shards
         self.assertEqual([self.cells(rows[f"run:{refused.id}"])[c] for c in ("runs", "checks", "state")], ["1", "1", "refused"])
 
+    def test_launches_kept_between_loads_follow_the_disk(self):
+        from tests.test_feasibility import write_job
+        rec = self.record("r3", "running")
+        said = lambda: [self.cells(self.rows()[f"run:{rec.id}"])[c] for c in ("runs", "checks", "state")]
+        self.assertEqual(said(), ["1", "1", "running"])
+        rec.state = "done"                                                                    # a run ending
+        self.assertEqual(said(), ["1", "1", "finished"])
+        self.assertIn("last", web.runs._EVERY)                                                # kept: every job has ended
+        write_job(rec.jobs, "r3-nop", "my-agent", {"a": 1})                                   # a job added: no check after all
+        self.assertEqual(said(), ["2", "0", "finished"])
+        shutil.rmtree(os.path.join(rec.jobs, "r3-nop"))                                       # and removed: named, not written
+        self.assertEqual(said(), ["1", "1", "finished"])
+        cfg = os.path.join(rec.jobs, "r3-a", "config.json")                                   # a job rewritten in place
+        self._write_json(cfg, {**json.loads(Path(cfg).read_text()), "agents": [{"name": "oracle"}]})
+        self.assertEqual(said(), ["0", "2", "finished"])
+
     def test_no_launch_is_one_line(self):
         execution.EXECUTIONS.clear()
         self.assertIn('<div class="alert">No launch yet.</div>', self.get("/launches").get_data(as_text=True))
@@ -1139,6 +1155,26 @@ class WorkspacesPage(unittest.TestCase):
         self.assertIn('<td class="pick-col"><input type="checkbox" data-check value="r5-a" aria-label="Compare r5-a"></td>', table)
         ask = self.get(f"/workspaces/{self.ws.name}/roots/ask?root={d / 'jobs'}").get_data(as_text=True)
         self.assertIn("<p>1 run · 2 checks · ", ask)                                                # the folder's Delete counts its run alike
+
+    def test_counts_kept_between_loads_follow_the_disk(self):
+        from tests.test_feasibility import write_job
+        other, jobs = self.other(), str(self.run_dir / "jobs")
+        counts = lambda: (self.cell(other, 2), self.cell(other, 3), self.cell(other, 5))
+        self.assertEqual(counts(), ("2", "0", "1"))
+        self.assertIn(other.name, web.workspaces._COUNTS)                                   # kept: its jobs have ended
+        self.assertEqual(counts(), ("2", "0", "1"))
+        write_job(jobs, "r1-c", "nop", {"a": 0})                                              # a job added
+        self.assertEqual(counts(), ("2", "1", "1"))
+        shutil.rmtree(os.path.join(jobs, "r1-c"))                                             # and removed
+        self.assertEqual(counts(), ("2", "0", "1"))
+        cfg = os.path.join(jobs, "r1-b", "config.json")                                       # a job rewritten in place
+        self._write_json(cfg, {**json.loads(Path(cfg).read_text()), "agents": [{"name": "oracle"}]})
+        self.assertEqual(counts(), ("1", "1", "1"))
+        rec = LaunchesPage.record(self, "r9")                                                 # a launch added to it: its roots change
+        other.roots.append(rec.jobs); workspace.save(other)
+        self.assertEqual(counts(), ("2", "2", "2"))
+        del execution.EXECUTIONS["r9"]                                                        # the run records change
+        self.assertEqual(counts(), ("2", "1", "1"))
 
     def test_launches_count_as_the_filtered_launches_page(self):
         bare = workspace.create(self.home, [str(self.tmp / "none")], label="bare")

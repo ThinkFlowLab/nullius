@@ -383,6 +383,20 @@ class Cache(unittest.TestCase):
             again, from_cache = workspace.load_job(self.ws, self.job_dir, runs={"job-b": None})
         self.assertIs(again, first); self.assertTrue(from_cache)
 
+    def test_heads_move_with_a_job_added_removed_or_rewritten_not_with_a_trial(self):
+        before = workspace.heads([self.root])
+        _write_json(os.path.join(self.job_dir, "tau3-bench__t0__abc", "result.json"), {"rewritten": True})
+        self.assertEqual(workspace.heads([self.root]), before)                    # the shortcut's limit
+        _write_json(os.path.join(self.job_dir, "result.json"), {"id": "j1", "stats": {"n_running_trials": 1}})
+        rewritten = workspace.heads([self.root])
+        self.assertNotEqual(rewritten, before)
+        _job_dir(self.root, "job-b")
+        self.assertNotEqual(workspace.heads([self.root]), rewritten)
+        shutil.rmtree(os.path.join(self.root, "job-b"))
+        self.assertNotEqual(workspace.heads([self.root]), rewritten)               # the root's own mtime moved
+        gone = os.path.join(self.root, "gone")
+        self.assertEqual(workspace.heads([gone]), ((gone, None),))
+
     def test_index_lists_runs_without_a_parse(self):
         self.assertEqual(workspace.job_index(self.ws), {})
         workspace.load_job(self.ws, self.job_dir)

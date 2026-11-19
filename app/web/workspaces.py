@@ -61,24 +61,39 @@ def _root(path, launched, memo) -> dict:
     return {**memo[real], "path": path}
 
 
-def _counts(ws) -> dict:
+def _counts(ws, recs) -> dict:
     """The runs and the checks (nop, oracle) of *ws*, summed over the launches
     its Runs page shows, each counted as there and on the Launches page
     (``runs._tally``). Its roots are walked, each unchanged job read from its
-    cache."""
+    cache. A closed workspace whose jobs had all ended keeps its counts while
+    its roots, their heads (``workspace.heads``) and ``recs``, the run records'
+    ids and states, are unchanged."""
     is_open = shared.STATE["workspace"] is not None and shared.STATE["workspace"].name == ws.name
+    key = None if is_open else (tuple(ws.roots), tuple(ws.job_roots), workspace.heads(ws.job_roots or ws.roots), recs)
+    last = _COUNTS.get(ws.name)
+    if key is not None and last and last[0] == key:
+        return last[1]
     jobs, _, _, groups = runs_web._grouped(None if is_open else ws)
     by_id = {j.job_id: j for j in jobs}
     tallies = [runs_web._tally(g, by_id) for g in groups]
-    return {"runs": sum(t["n_runs"] for t in tallies), "checks": sum(t["n_checks"] for t in tallies)}
+    counts = {"runs": sum(t["n_runs"] for t in tallies), "checks": sum(t["n_checks"] for t in tallies)}
+    if key is not None and all(j.state == "finished" for j in jobs):
+        _COUNTS[ws.name] = (key, counts)
+    else:
+        _COUNTS.pop(ws.name, None)
+    return counts
+
+
+_COUNTS: dict = {}      # workspace name -> (key, _counts) of a workspace whose jobs had all ended
 
 
 @app.route("/workspaces")
 def workspaces_page():
     wss, launched = workspace.list_all(shared.WS_HOME), runs_web._held_launches()
     held = [w.name for _, _, holders in launched[0] for w in holders]
+    recs = tuple((e.id, e.state) for e in execution.EXECUTIONS.values())
     return render_template("workspaces/workspaces.html", workspaces=wss, csrf=shared._csrf_token(),
-                           counts={ws.name: _counts(ws) for ws in wss}, n_judged={ws.name: store.count(ws.dir) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
+                           counts={ws.name: _counts(ws, recs) for ws in wss}, n_judged={ws.name: store.count(ws.dir) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
 
 
 @app.route("/workspaces/open/<name>", methods=["POST"])
