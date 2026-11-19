@@ -10,7 +10,7 @@
     `attrs` are its button's own attributes, its `class` added to the button's, and a `delete` takes the same shape (a quiet
     trash button). Plus `href` (its title's link), or `pick` {value, on, disabled}: the card is a toggle, its title a
     button[data-pick][aria-pressed] that tables.js flips, sending `nullius-pick` {value, pressed} (a disabled one's
-    reason goes in its `alert`); a title's `title` is the tooltip of its link or button;
+    reason goes in its `alert`), and an enabled one's corner holds the check that marks it chosen; a title's `title` is the tooltip of its link or button;
     `id`, `search` (what the search reads), `keys`, and `unless` {field: other}: the item passes the field's filter
     whenever the other field's filter narrows and passes it. A title's `after` is markup in the flow of its name, after its
     last word (a control of its own), and its `class` goes on the title row.
@@ -90,7 +90,7 @@
       {%- set link %}{% if pick %}<button type="button" class="card-link" data-pick="{{ pick.value }}" aria-pressed="{{ 'true' if pick.on else 'false' }}"{% if pick.disabled %} disabled{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ name }}</button>
       {%- else %}<a class="card-link"{% if item.get('href') %} href="{{ item.get('href') }}"{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ name }}</a>{% endif %}{% endset %}
       {%- if v.after %}<span class="bench-card-name">{{ link }} {{ v.after }}</span>{% else %}{{ link }}{% endif %}
-      {%- set corner %}{% call(f, v) each(item, by.check) %}<input type="checkbox" data-check value="{{ v.value }}" aria-label="{{ v.text }}">{% endcall %}
+      {%- set corner %}{% if pick and not pick.disabled %}<span class="pick-check" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span>{% endif %}{% call(f, v) each(item, by.check) %}<input type="checkbox" data-check value="{{ v.value }}" aria-label="{{ v.text }}">{% endcall %}
       {%- call(f, v) each(item, by.delete) %}<button type="button" class="icon-btn danger{{ ' ' ~ v.class if v.class }}"{% if v.title %} title="{{ v.title }}"{% endif %}{{ v.attrs|xmlattr if v.attrs }}><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg></button>{% endcall %}{% endset %}
       {%- if corner %}<span class="bench-card-corner">{{ corner }}</span>{% endif %}</div>
     {%- call(f, v) each(item, by.text) %}

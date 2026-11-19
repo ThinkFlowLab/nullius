@@ -56,6 +56,9 @@ class AgentGrid(unittest.TestCase):
         self.assertIn('<div class="bench-card-blocker" title="MiniMax M3 belongs to OSWorld2">Belongs to OSWorld2</div>', cards["osworld2:m3"])
         self.assertIn('data-f-from="elsewhere&#10;"', cards["osworld2:m3"])
         self.assertIn(">Lacks computer</div>", cards["goose"])
+        check = '<span class="bench-card-corner"><span class="pick-check" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span></span>'
+        self.assertIn('>OpenAI CUA</button>' + check, cards["osworld1:openai-cua"])   # the mark a chosen card shows (CSS, by aria-pressed)
+        self.assertNotIn("pick-check", cards["goose"])                                                     # none on one that cannot be chosen
         self.assertIn('<span class="std-tag" title="', cards["codex@2.2.2"])                     # the ports it proved that it needs
         self.assertIn(">Computer use</span>", cards["codex@2.2.2"])
         self.assertNotIn("data-pills", html)                                                        # every filter in the one Filter menu

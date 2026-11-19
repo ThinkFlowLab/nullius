@@ -28,6 +28,9 @@
 button.card-link { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: left; cursor: pointer; }
 button.card-link:disabled { cursor: not-allowed; }
 .bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) { border-color: var(--accent); background: var(--accent-soft); }
+.pick-check { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--btn-fg); visibility: hidden; }
+.pick-check .ic { width: 12px; height: 12px; stroke-width: 3; }
+.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) .pick-check { visibility: visible; }
 .bench-card:has(> .bench-card-title [data-pick]:disabled) { opacity: .55; }
 .bench-card:has(> .bench-card-title [data-pick]:disabled):hover { border-color: var(--border-soft); }
 .bench-card :is(input, button, .btn, [title]) { position: relative; z-index: 1; }
