@@ -342,6 +342,11 @@ class ReportCandidate(Flow):
         r = run(["answer", "--loop", self.loop, "--stop", "1", "--keep", "rep", "--text", "keep the report fix"])
         self.assertEqual(r.code, 0, r.out + r.err)
 
+    def test_a_report_candidate_expects_a_label_change(self) -> None:
+        self.kept_report()
+        pred = load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["predictions"][0]
+        self.assertEqual((pred["effect"], pred["tasks"], pred["expect"]), ("report", [], "label_change"))
+
     def select_report(self, extra: List[str]) -> Result:
         return run(["select", "--loop", self.loop, "--ref", self.repo.report, "--canaries", "0"] + extra)
 
@@ -374,3 +379,26 @@ class ReportCandidate(Flow):
         pred = load(self.round_file("result.json"))["predictions"][0]
         self.assertEqual(pred["effect"], "report")
         self.assertIn("does not read the agent's report", pred["result"]["note"])
+
+
+STRIP_TOUCHED = (" && python3 -c \"import json,sys; p=sys.argv[1]; d=json.load(open(p)); "
+                 "[v.pop('touched', None) for v in d['trials'].values()]; json.dump(d, open(p, 'w'))\" {out_json}")
+
+
+class GuardReasons(Flow):
+    def test_no_touched_and_no_changed_passing_trial(self) -> None:
+        commands = self.commands()
+        commands["replay"] = (commands["replay"] or "") + STRIP_TOUCHED
+        self.start(commands, ["run_tasks"])
+        self.candidate("good", self.repo.good, self.repo.test_ref, "outcome")
+        self.check("good")
+        run(["decide", "--loop", self.loop, "--stop", "1"])
+        run(["answer", "--loop", self.loop, "--stop", "1", "--keep", "good", "--text", "keep good"])
+        reason = ("no replay of the kept candidates gives touched, and the kept fixes change the label of no passing "
+                  "trial outside the targets")
+        r = self.select([])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertIn(f"guards: none ({reason})", r.out)
+        r = self.select(["--size", "guards", "--budget-usd", "0.5", "--text", "targets only, in effect"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertEqual(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["selection"]["guards_reason"], reason)
