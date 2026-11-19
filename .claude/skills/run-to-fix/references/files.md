@@ -26,7 +26,7 @@ round that has no `result.json`.
 
 | file | stage | written by | holds |
 |---|---|---|---|
-| `input.json` | 1 | `read` | the run and baseline job folders, the adapter's SHA-256, the budget, the pass threshold, the `runs.py` used; `refused` with its reason when the run is not analysable |
+| `input.json` | 1 | `read` | the run and baseline job folders, the adapter's SHA-256, the budget, the pass threshold, the `runs.py` used, the text of the stop rule; `refused` with its reason when the run is not analysable |
 | `health.txt` | 1 | `read` | `runs.py health` of the run and the baseline |
 | `metrics.json` | 1 | `read` | `runs.py analyze` of the baseline and the run, labels `baseline` and `run` |
 | `trials.csv` | 2 | `classify` | one row per trial: `trial`, `task`, `class`, `signature`, `reward`, `pair`, `cost_usd`, `model_calls`, `agent_s`, `max_completion_tokens`, `exception_type`, then `found:<id>`, `agent_class:<name>`, `agent_flag:<name>` |
@@ -81,7 +81,8 @@ Not checked: what the files cannot tell.
                      "tasks": [], "expect": "label_change"}],
     "selection": {"ref": "...", "size": "guards", "targets": [], "guards": [], "canaries": [], "repeat": 3,
                   "seed": 20261117, "price_usd": 0.0, "budget_usd": 0.0, "guards_reason": null},
-    "trial_runs": [{"job_dir": "...", "ref": "...", "trials": 0, "cost_usd": 0.0, "cost_complete": true}],
+    "trial_runs": [{"job_dir": "...", "ref": "...", "trials": 0, "cost_usd": 0.0, "cost_recorded_usd": 0.0,
+                    "cost_from": "the trials", "cost_complete": true, "code_ref": "...", "code_from": "the person"}],
     "next": "rerun",
     "result": {"verdict": "noise", "p": 0.68, "won": 10, "lost": 13, "stop": true, "reasons": ["..."]}
   }]
@@ -90,7 +91,9 @@ Not checked: what the files cannot tell.
 
 Every answer of the person is stored with its date and in the person's words: the candidates kept at stop 1, the
 size and budget of the trial run, the choice at stop 2, and the words that start a round after a stop rule said
-stop. The money a round has spent is the sum of its `trial_runs` plus the new run that `compare` reads.
+stop. The money a round has spent is the sum of its `trial_runs` plus the new run that `compare` reads. A trial run
+whose trials do not all report a cost counts with the person's figure (`cost_from`: `the person`) and keeps what its
+trials record in `cost_recorded_usd`; `code_ref` is the commit the person states it ran.
 
 ## Prices
 

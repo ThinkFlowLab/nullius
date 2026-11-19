@@ -77,7 +77,8 @@ included. The rules live in `<loop folder>/found-classes.json`; the skill ships 
 }
 ```
 
-1. `id` is lower-case letters, digits and `_`. `meaning` is one sentence. `file` is a path inside the trial folder.
+1. `id` is lower-case letters, digits and `_`. `meaning` is one sentence. `file` is a path inside the trial folder;
+   a file whose resolved path, through any link, lies outside the trial folder stops `classify`.
 2. A rule has either `regex` (searched in the file's text) or `json_path` with `value`. A `json_path` segment is a
    key, a list index, or `*` for every element; the rule matches when any value reached equals `value`.
 3. A found class may read a file that only one agent writes.

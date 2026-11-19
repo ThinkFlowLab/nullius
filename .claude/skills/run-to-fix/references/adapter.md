@@ -86,6 +86,11 @@ means.
    evidence is missing because of it.
 5. The loop writes the output of every command to a file under `round-NN/`. A command that has not
    exited within the time `loop.py` was given is stopped, and the check is recorded as not finished.
+6. A loop stopped with SIGTERM or Ctrl+C stops the whole process group of the command it runs, then removes its
+   worktree. A loop killed with SIGKILL leaves the worktree; `git worktree remove --force <path>` in the checkout
+   removes it.
+7. The caches of a round, the suite's failures on `base_ref` and each replay, are used only under the adapter that made
+   them; a changed `adapter.json` runs its commands again.
 
 ## Exit codes and output
 

@@ -121,8 +121,14 @@ This writes `trial-tasks.txt`, runs `commands.build` and writes `build.json`, an
 `round-NN/commands/run_tasks.sh`. The person starts it. When its job folder exists:
 
 ```bash
-python3 L decide --loop DIR --stop 2 --trial-job JOB
+python3 L decide --loop DIR --stop 2 --trial-job JOB --code-ref COMMIT [--trial-cost-usd X]
 ```
+
+`--code-ref` is the commit the person states the trial run ran; a job does not record its code, so the page shows it
+as the person's statement, and `decide` refuses any commit other than the one `select` chose. The job must hold only
+the selected tasks, every target, and the selection's count of trials for each task. When some of its trials report no
+cost, the money it spent is unknown: `decide` refuses it until the person gives the run's whole cost with
+`--trial-cost-usd`, at least what its trials record.
 
 **Stop 2.** Show the person `decision-2.md`. For a kept `report` candidate it says that this version does not read the
 agent's report in the new run. The page shows the build, the targets' trials before and in every trial run of this
@@ -140,13 +146,16 @@ the earlier ones.
 ## Stage 5. Compare and record
 
 ```bash
-python3 L compare --loop DIR --new JOB --against run
+python3 L compare --loop DIR --new JOB --against run [--new-cost-usd X]
 ```
 
 `compare` reads the new run against the round's run (`--against baseline` compares with the round's baseline) and
 writes `result.json`: the pass rates with their standard error; the tasks both runs share, won and lost; the verdict
 "improved" or "regressed" when an exact two-sided binomial test on won and lost gives p under 0.05, "noise" otherwise;
-the targets' trials with Fisher's exact test; each prediction of stage 3 beside its result; and the stop rule. It
+the targets' trials with Fisher's exact test; each prediction of stage 3 beside its result; and the stop rule. When
+some trials of the new run report no cost, the budget part of the stop rule is not checked, unless the person gives the
+run's cost with `--new-cost-usd`. `read` records the text of the stop rule, and `compare` refuses a round whose recorded
+rule is not the rule of the skill it runs. It
 closes the round and writes `report.html` with `render` of `run-analysis`; fill its prose slots as that skill
 describes (`runs.py render --slots`, then `runs.py check`).
 
@@ -191,3 +200,7 @@ These follow `run-analysis`, with what the loop adds.
 - The classes read only shared files. What one agent writes reaches the loop through a found class or
   `commands.classes`.
 - A trial run gives every task the same number of trials, because `run_tasks` takes one `{repeat}`.
+- A loop stopped with SIGTERM or Ctrl+C stops the adapter command it runs and removes its worktree. A loop killed with
+  SIGKILL cannot: its worktree stays under `<loop folder>/worktrees/`, and `git worktree remove --force <path>` in the
+  agent's checkout removes it.
+- Every amount in US dollars on the command line is a finite number of 0 or more.
