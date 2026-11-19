@@ -285,6 +285,9 @@
 #nullius-builder .std-boat-card strong { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; }
 #nullius-builder .std-boat-logo { width: 20px; height: 20px; flex: none; }
 #nullius-builder .std-boat-card > span { font-size: 13px; color: var(--nb-muted); }
+#nullius-builder .std-boat-card.off { border-color: var(--nb-line); background: transparent; cursor: not-allowed; }   /* cannot run here: not chosen, only its link works */
+#nullius-builder .std-boat-card.off > :not(.std-boat-key) { opacity: .5; }
+#nullius-builder .std-boat-card.off .std-boat-key { cursor: pointer; }
 #nullius-builder .std-hosts { margin-top: 12px; grid-template-columns: repeat(auto-fill, minmax(190px, 240px)); }
 #nullius-builder .std-isolation { padding: 12px 14px; border: 1px solid var(--nb-line); border-radius: 10px; background: var(--nb-soft); }
 #nullius-builder .std-isolation small { display: block; margin-top: 4px; font-size: 13px; color: var(--nb-muted); }

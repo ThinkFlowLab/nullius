@@ -501,8 +501,8 @@
           disabled: !!z.why, why: z.why, note: z.note || z.spec, title: z.label})).join('')}</div>`;
     }
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
-      + `<div class="std-machines" role="group" aria-label="Machines">${kind('hosts', 'Hosts')}${kind('boat', 'Sandboxes', here.boat || '')}</div>`
-      + (sandboxes ? `<div class="std-boat-card"><strong><img class="std-boat-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="std-boat-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">Boat</strong><span>One VM per ${esc(noun)}</span>${here.boatSlots ? `<span>${here.boatSlots} at once on this account</span>` : ''}${here.boat ? (here.boatKey ? `<span class="nb-error">${esc(here.boat)}</span>` : button('Add a Boat API key in Settings', 'data-href="/settings#sandbox"', 'nb-inlinebutton std-boat-key')) : ''}</div>` + sizes
+      + `<div class="std-machines" role="group" aria-label="Machines">${kind('hosts', 'Hosts')}${kind('boat', 'Sandboxes', here.boatKey ? here.boat || '' : '')}</div>`
+      + (sandboxes ? `<div class="std-boat-card${here.boat ? ' off' : ''}"><strong><img class="std-boat-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="std-boat-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">Boat</strong><span>One VM per ${esc(noun)}</span>${here.boatSlots ? `<span>${here.boatSlots} at once on this account</span>` : ''}${here.boat ? (here.boatKey ? `<span class="nb-error">${esc(here.boat)}</span>` : button('Add a Boat API key in Settings', 'data-href="/settings#sandbox"', 'nb-inlinebutton std-boat-key')) : ''}</div>` + sizes
         : `<div class="nb-pick-grid nb-where std-hosts">${machine('local', 'This machine', 'Runs here')}${H.map(h => machine(h.entry, h.label, 'Over SSH')).join('')}</div>`
         + (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : ''))
       + '<div class="nb-sectionhead std-wherehead"><h3>Isolation</h3></div>'
