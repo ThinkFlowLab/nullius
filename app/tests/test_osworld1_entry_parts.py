@@ -642,7 +642,7 @@ class FakeEnv:
         self.controller = types.SimpleNamespace(
             execute_python_command=lambda code: self.seen.append(("python", code)) or (
                 {"status": "success", "output": "made\n"} if "os.makedirs(p, 0o700)" in code else {"status": "success"}),
-            get_file=lambda path: self.files.get(path),
+            get_file=lambda path, strict=False: self.files.get(path),
             get_screenshot=lambda: b"png")
         self.setup_controller = types.SimpleNamespace(_upload_file_setup=self.upload)
 
@@ -687,7 +687,7 @@ class Runner(unittest.TestCase):
         return types.SimpleNamespace(example=example, result_dir=os.path.join(self.tmp, "results"),
                                      socket=os.path.join(folder, "s"), ready=os.path.join(folder, "ready.json"),
                                      vm="vm", calls=os.path.join(self.tmp, "calls.jsonl"), held=None, lifeline=-1,
-                                     steps=3, pause=0.0)
+                                     steps=3, pause=0.0, prepared=None, given=None)
 
     def run_with(self, env, loop):
         a = self.args()
@@ -740,6 +740,100 @@ class Runner(unittest.TestCase):
         code, _ = self.run_with(env, loop)
         self.assertEqual(code, 1)
         self.assertLess(time.monotonic() - t0, 3)
+
+    def test_the_entry_serves_the_computer_port_and_a_steps_observation_is_the_one_the_loop_hands(self):
+        from tests.test_standard_computer_port import Client, error, image, value
+        with open(os.path.join(ENTRY, "standard.json")) as f:
+            definition = json.load(f)
+        self.assertEqual(definition["needs"], ["agent.computer/v1"])
+        self.assertTrue(definition["driver"]["task_given"])
+        env, shots, said = FakeEnv(), iter([b"after-1", b"after-2"]), {}
+        env.step = lambda action, pause=2: ({"screenshot": next(shots)}, 0, False, {})
+        env.controller.get_screenshot = lambda: self.fail("a capture was added to the loop's observation")
+        a = self.args()
+        a.given, a.steps = os.path.join(os.path.dirname(a.socket), "given.json"), 2
+        turn = self.r.Turn()
+        turn.given, turn.said = a.given, computer_port.ready
+
+        def agent():                                     # the agent's calls, while the loop waits in predict
+            c = Client(a.socket)
+            try:
+                c.initialize()
+                said["tools"] = [t["name"] for t in c.ask("tools/list")["result"]["tools"]]
+                said["start"] = image(c.call("screenshot"))
+                said["prepare"] = value(c.call("prepare", actions=["print(1)"]))
+                said["early"] = error(c.call("click", x=1, y=1))
+                turn.close_window()
+                said["late"] = error(c.call("upload", path="/tmp/agent/a", data="YQ=="))
+                said["click"] = image(c.call("click", x=1, y=1))
+                said["again"] = image(c.call("screenshot"))
+                said["step"] = value(c.call("step", actions=[], files=["/tmp/agent/none"]))
+            finally:
+                c.close()
+
+        def loop(agent_, env_, example, steps, instruction, args, where, scores):
+            self.assertIsInstance(env_, self.r.Watched)
+            agent_.reset(None, vm_ip="x")
+            obs = {"screenshot": b"start"}
+            worker = threading.Thread(target=agent, daemon=True)
+            worker.start()
+            for _ in range(steps):
+                _, actions = agent_.predict(instruction, obs)
+                for action in actions:
+                    obs = env_.step(action, 0)[0]
+            worker.join(10)
+            open(os.path.join(where, "result.txt"), "w").write("0.0\n")
+
+        with mock.patch.dict(sys.modules, {"lib_run_single": types.SimpleNamespace(run_single_example=loop),
+                                           "desktop_env": mock.Mock(),
+                                           "desktop_env.desktop_env": types.SimpleNamespace(DesktopEnv=lambda **kw: env)}):
+            self.assertEqual(self.r.run(a, computer_port, computer_port.Stop(30), turn), 0)
+        self.assertNotIn("python", said["tools"])
+        self.assertEqual((said["start"], said["prepare"]), (b"start", {"files": {}}))
+        self.assertIn("the task has not been given yet", said["early"])
+        self.assertEqual(said["late"], "the task has been given: upload is taken only before it")
+        self.assertEqual((said["click"], said["again"]), (b"after-1", b"after-1"))
+        self.assertEqual(said["step"], {"steps_left": 0, "done": True, "files": {"/tmp/agent/none": None}})
+        with open(a.given) as f:
+            self.assertEqual(json.load(f), {"ok": True})
+        self.assertIn(("python", computer_port.PREPARE.format(code="print(1)")), env.seen)
+
+
+class TaskGiven(unittest.TestCase):
+    """task_given: the runner is told on its lifeline and the driver answers once the runner has said so."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.d = load("driver", self.tmp)
+        self.ws = os.path.join(self.tmp, "trial", "workspace")
+        os.makedirs(self.ws)
+
+    def runner(self, code):
+        read, write = os.pipe()
+        sock_dir = tempfile.mkdtemp(dir=self.tmp)
+        p = subprocess.Popen([sys.executable, "-c", code, str(read), sock_dir], pass_fds=(read,), start_new_session=True,
+                             stdin=subprocess.DEVNULL)
+        os.close(read)
+        self.addCleanup(lambda: (p.poll() is None and p.kill(), p.wait(), os.close(write)))
+        self.d.RUNNERS[self.d._runner_dir(self.ws)] = {"p": p, "sock_dir": sock_dir, "life": write}
+        return sock_dir
+
+    def test_the_driver_answers_once_the_runner_says_the_window_is_closed(self):
+        sock_dir = self.runner("import os, sys, json, time\nfd, data = int(sys.argv[1]), b''\n"
+                               "while b'task-given\\n' not in data:\n    data += os.read(fd, 64)\n"
+                               "json.dump({'ok': True}, open(os.path.join(sys.argv[2], 'given.json'), 'w'))\n"
+                               "time.sleep(30)\n")
+        self.assertEqual(self.d.task_given("os__t1", self.ws), {})
+        self.assertFalse(os.path.exists(os.path.join(sock_dir, "given.json")))
+
+    def test_a_runner_that_never_says_so_or_has_none_fails_it(self):
+        self.d.GIVEN_SECONDS = 0.5
+        with self.assertRaisesRegex(RuntimeError, "no runner of this driver's"):
+            self.d.task_given("os__t1", self.ws)
+        self.runner("import time; time.sleep(30)")
+        with self.assertRaisesRegex(RuntimeError, "did not say that the window before the task is closed"):
+            self.d.task_given("os__t1", self.ws)
 
 
 if __name__ == "__main__":

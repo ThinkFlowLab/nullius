@@ -25,7 +25,7 @@ class _Controller:
             return {"status": "success", "output": "made\n", "error": "", "returncode": 0}
         return {"status": "success", "output": f"{len(command)} {first}", "error": "", "returncode": 0}
 
-    def get_file(self, path):
+    def get_file(self, path, strict=False):
         self.env.record("get_file", path=path)
         return self.env.files.get(path)
 

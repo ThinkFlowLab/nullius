@@ -20,6 +20,9 @@ setup    - the task's instruction, for the null control. For an agent
            the MCP server computer (the port's pipe, joined to the runner's
            socket) and the agent's time. The options max_steps and pause are
            the loop's
+task_given - an agent's unit (driver.task_given): the agent is about to be
+           given its task. The runner is told on its lifeline, closes the
+           port's window before the task and says so; this answers then
 answer   - a setup's (original, model): the script of the run's agent option
            (agents.json: the upstream's scripts/python/run_*.py) as published,
            on the one task (a test_all_meta file naming it), with the arguments
@@ -40,8 +43,8 @@ score    - for a setup, the upstream's result.txt: what the agent's runner
            waits for the runner to end and reads result.txt from the runner's
            folder, never the workspace, and only from a runner this driver
            started that ended by itself with status 0, through folders opened
-           without following a link. It copies result.txt and the call log to
-           the trial's verifier/osworld/.
+           without following a link. It copies result.txt, the call log and the
+           record of prepare calls to the trial's verifier/osworld/.
            For the null control, nop.py: the upstream's run_single_example
            with an agent that answers DONE at its first step, its result.txt
            read the same way
@@ -120,6 +123,7 @@ ANSWER_SECONDS = 10                                  # this driver's own answer 
 REMOVE_SECONDS = 30                                  # the docker commands that remove a unit's VMs, together
 FALLBACK_SECONDS = 2                                 # this driver's removal when no reaper could start: inside the core's 3 s
 RUNNERS = {}                                         # the runner folder of each unit this driver set up -> its process
+GIVEN_SECONDS = 30                                   # the runner's word that the window before the task is closed
 
 
 def _load(path):
@@ -473,7 +477,9 @@ def _start_runner(unit, dir, instruction, until):
         argv = [sys.executable, RUNNER_FILE, "--example", task, "--result-dir", os.path.join(where, RESULTS),
                 "--socket", os.path.join(sock_dir, "s"), "--ready", ready, "--lifeline", str(life_r),
                 "--steps", "100" if steps == "default" else steps, "--pause", str(_option("pause", "3.0", float)),
-                "--vm", vm, "--calls", os.path.join(where, "computer-calls.jsonl"), "--held", held]
+                "--vm", vm, "--calls", os.path.join(where, "computer-calls.jsonl"), "--held", held,
+                "--prepared", os.path.join(where, "computer-prepare.jsonl"),
+                "--given", os.path.join(sock_dir, "given.json")]
         lock = open(START_LOCK, "a")
         while True:                                  # VM starts one after another, as the setups' do
             try:
@@ -573,6 +579,26 @@ def _turn_end(entry):
             os.write(entry["life"], _port().TURN_END + b"\n")
         except OSError:
             pass
+
+
+def task_given(unit, dir, **_):
+    """The agent is about to be given its task: the runner closes the port's window before it and says so in the
+    socket's folder; this answers once it has, within GIVEN_SECONDS."""
+    entry = RUNNERS.get(_runner_dir(dir))
+    if entry is None or entry.get("life") is None:
+        raise RuntimeError("no runner of this driver's for this unit: the window before the task cannot be closed")
+    said = os.path.join(entry["sock_dir"], "given.json")
+    os.write(entry["life"], _port().TASK_GIVEN + b"\n")
+    t0 = time.time()
+    while not os.path.exists(said):
+        if _exited(entry["p"]) is not None or time.time() - t0 > GIVEN_SECONDS or CLOSED.wait(0.05):
+            raise RuntimeError("the runner did not say that the window before the task is closed")
+    with open(said, encoding="utf-8") as f:
+        ok = json.load(f).get("ok")
+    os.unlink(said)
+    if not ok:
+        raise RuntimeError("the runner could not close the window before the task: " + str(ok))
+    return {}
 
 
 def _reap_runner(where, seconds=None):
@@ -772,13 +798,16 @@ def _agent_score(where, dir, domain, eid):
         value = float(result.decode().strip())
     except (OSError, ValueError, RuntimeError) as e:
         raise RuntimeError(f"the runner's result could not be read ({e}): " + _tail(os.path.join(where, "runner.log")))
-    try:
-        calls = _plain(trial, ".work", "osworld", "computer-calls.jsonl")
-    except (OSError, RuntimeError):
-        calls = b""
+    kept = {"computer-calls.jsonl": b""}
+    for name in ("computer-calls.jsonl", "computer-prepare.jsonl"):      # the record of prepare calls when there is one
+        try:
+            kept[name] = _plain(trial, ".work", "osworld", name)
+        except (OSError, RuntimeError):
+            pass
+    calls = kept["computer-calls.jsonl"]
     out = os.path.join(trial, "verifier", "osworld")
     os.makedirs(out, exist_ok=True)
-    for name, data in (("result.txt", result), ("computer-calls.jsonl", calls)):
+    for name, data in [("result.txt", result)] + sorted(kept.items()):
         with open(os.path.join(out, name), "wb") as f:
             f.write(data)
     return {"reward": value, "detail": {"result": value, "by": "runner.py, run_single_example, DesktopEnv.evaluate",
@@ -816,7 +845,7 @@ def score(unit, dir, transcript=None, answer=None, setup=None, **_):
     return _scored(where, "nop.py, DesktopEnv.evaluate")
 
 
-HANDLERS = {"units": units, "setup": setup, "answer": answer, "score": score, "end": end}
+HANDLERS = {"units": units, "setup": setup, "task_given": task_given, "answer": answer, "score": score, "end": end}
 
 
 def main():

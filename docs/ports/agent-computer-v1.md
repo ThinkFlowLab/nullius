@@ -50,7 +50,7 @@ A step's `files` are read once its actions have run and their pauses have passed
 | Rule | Detail |
 | --- | --- |
 | When | Fixed as a step that ran an action ends. A step that ran no action leaves it as it was |
-| Which | The benchmark's own: for a loop that hands its agent an observation, the screenshot it hands for the next decision, with no capture added. For a loop that hands none, one picture taken once the step's last pause has passed |
+| Which | The benchmark's own: for a loop that hands its agent an observation, such as [OSWorld1](../benchmarks/supported/osworld1.md)'s, the screenshot it hands for the next decision, with no capture added. For a loop that hands none, one picture taken once the step's last pause has passed |
 | Between two steps | Nothing else of the desktop is shown. What `prepare` changed on the screen shows in the first step's observation |
 
 ## Rules
