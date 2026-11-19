@@ -95,7 +95,7 @@ The shared code is `app/nullius/standard/computer_port.py`, with the standard li
 
 ## The kit
 
-`cli conform AGENT --port agent.computer/v1` runs the kit `agent-computer-v1`: eight checks, each on a desktop of its own, reached through this port's server. A program decides each check from the desktop's own records and the server's call log.
+`cli conform AGENT --port agent.computer/v1` runs the kit `agent-computer-v1`: nine checks, each on a desktop of its own, reached through this port's server. The run tells the kit when it gives the agent its task; the window before it is open until then. A program decides each check from the desktop's own records and the server's call log.
 
 | Check | Kind | The task | Passes when |
 | --- | --- | --- | --- |
@@ -107,16 +107,17 @@ The shared code is `app/nullius/standard/computer_port.py`, with the standard li
 | `scroll` | skill | Scroll to the end of a list and report the large words there in order | The final message contains an uninterrupted sequence of the drawn words among at most twelve vocabulary occurrences, and the list moved |
 | `recover` | skill | Click a named button; the first acting call, whatever it is, is answered with an error and not run | An acting call sent after the error's answer succeeds, and the button is clicked as in `click` |
 | `batch` | skill | Fill three text fields with a budget of two steps | Each field holds its word |
+| `late` | skill | A button appears a few seconds after the task is given, away from the screen's centre at a place drawn for the unit; click it once | The desktop logged a left press on the button with every input inside an acting call. A picture was taken at a step's end after the button appeared and before the action containing the press began. |
 
-`see` shows three distinct common nouns drawn at 63 pixels tall, with gaps between words. `scroll` shows two at the list's end, below its initial view, at 56 pixels tall. Both sample from 96 everyday nouns chosen to avoid screen, desktop and action vocabulary and the fixture's labels. The verdict reads whole vocabulary words in the final message, ignoring case. The drawn words must occur together in the shown order at least once, with no other vocabulary word inside that sequence. Prose and punctuation may separate them. Repeated answers and vocabulary words before or after the sequence are accepted, up to twelve vocabulary occurrences in the whole message, counting repeats. `type` tests typing in a field that already has the focus; no pointing is needed. `limit` needs at least one button pressed within the two-step budget, no input after the last step and no acting call once the steps are used up.
+`see` shows three distinct common nouns drawn at 63 pixels tall, with gaps between words. `scroll` shows two at the list's end, below its initial view, at 56 pixels tall. Both sample from 96 everyday nouns chosen to avoid screen, desktop and action vocabulary and the fixture's labels. The verdict reads whole vocabulary words in the final message, ignoring case. The drawn words must occur together in the shown order at least once, with no other vocabulary word inside that sequence. Prose and punctuation may separate them. Repeated answers and vocabulary words before or after the sequence are accepted, up to twelve vocabulary occurrences in the whole message, counting repeats. `type` tests typing in a field that already has the focus; no pointing is needed. `limit` needs at least one button pressed within the two-step budget, no input after the last step and no acting call once the steps are used up. `late` draws its button 3 s after the task is given, never over the screen's centre: a click there without looking does not find it.
 
-Every check also fails when a pointer or key event came outside an acting call. Each check has 8 steps (2 for `limit` and `batch`), a pause of 1 s, 90 s for one action and 600 s for the agent's turn.
+Every check also fails when a pointer or key event came outside an acting call: input sent by `prepare` fails it. Each check has 8 steps (2 for `limit` and `batch`), a pause of 1 s, 90 s for one action and 600 s for the agent's turn.
 
 | Piece | Where |
 | --- | --- |
 | The desktop | A container of the kit's image, `desktop.Dockerfile` on Nullius's base image, built the first time a unit needs it: an X display at 1920 by 1080, a window manager, a session bus, the accessibility bus, Python with Tk, `pyautogui` and Pillow. The agent's actions run as its user; the kit's fixture runs as another, its log out of that user's reach |
 | The server and the loop | In the kit's driver: the port's server over the unit's desktop, and a loop of the kit's own that runs each step's actions and waits the pause |
 | What a stop leaves | A unit that never reaches its score is let go by the next unit or by the driver's end; a reaper the driver starts removes the containers and sockets of a driver that was killed |
-| The controls | The null control passes no check; the reference makes the right calls through the unit's own server, reads the words and their gaps from the screenshot it gets, and passes all eight |
+| The controls | The null control passes no check; the reference is given its task as it starts, makes the right calls through the unit's own server, reads the words and their gaps from the screenshot it gets and, for `late`, looks again by `wait` until a step's observation was taken with the button up, then clicks it: it passes all nine |
 
 A machine that runs the kit needs Docker, or Podman 4.7 or later, as the container backend does. The first unit builds the image (about 0.5 GB over the base image).

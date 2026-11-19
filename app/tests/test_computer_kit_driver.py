@@ -1,13 +1,14 @@
-"""The computer kit's eight checks and its driver: each verdict on hand-written records; the driver's wiring
-(the port's server and the kit's loop over a desktop, the turn's end at score, the budget, the reference, a unit
-let go without its score, the reaper) over a fake desktop, with no container; the docker tier runs the eight
-checks on real desktops, the reference passing each and the null control none."""
+"""The computer kit's nine checks and its driver: each verdict on hand-written records; the driver's wiring
+(the port's server and the kit's loop over a desktop, the window before the task, the turn's end at score, the
+budget, the reference, ``late``, a unit let go without its score, the reaper) over a fake desktop, with no container;
+the docker tier runs the nine checks on real desktops, the reference passing each and the null control none."""
 from __future__ import annotations
 
 import importlib.util
 import inspect
 import io
 import json
+import math
 import os
 import queue
 import random
@@ -150,9 +151,9 @@ class Definition(unittest.TestCase):
         self.assertEqual(ports.PORTS["agent.computer/v1"]["kit"], "agent-computer-v1")
         self.assertEqual(kit["key"], "agent-computer-v1")
         self.assertEqual(definitions.problems({k: v for k, v in kit.items() if not k.startswith("_")}, "benchmark"), [])
-        self.assertEqual(list(kit["check_details"]), list(checks.CHECKS))
+        self.assertEqual(list(kit["check_details"]), list(driver.UNITS))
         self.assertEqual(kit["basic"], list(checks.BASIC))
-        self.assertEqual(set(kit["skills"]), set(checks.CHECKS) - set(checks.BASIC))
+        self.assertEqual(set(kit["skills"]), set(driver.UNITS) - set(checks.BASIC))
         self.assertEqual(kit["environments"]["desktop"], dict(desktop.KIT["environments"]["desktop"],
                                                              summary=kit["environments"]["desktop"]["summary"]))
         self.assertEqual(kit["mcp_servers"]["computer"]["command"], ["python3", "{here}/pipe.py"])     # a file of its folder
@@ -171,6 +172,15 @@ class Definition(unittest.TestCase):
                 server.close()
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(json.loads(p.stdout)["result"]["tools"][0]["name"], "info")
+
+    def test_the_kit_has_nine_checks_and_is_told_the_task(self):
+        kit = definitions.kit("agent.computer/v1")
+        self.assertEqual((kit["key"], kit["needs"], kit["datasets"]), ("agent-computer-v1", ["agent.computer/v1"],
+                                                                        [{"id": "kit", "units": 9}]))
+        self.assertTrue(kit["driver"]["task_given"] and kit["driver"]["unit_end"])
+        self.assertEqual(driver.units("kit")["units"], list(checks.CHECKS) + ["late"])
+        self.assertEqual(set(kit["check_details"]), set(driver.UNITS))
+        self.assertEqual(set(kit["basic"]) | set(kit["skills"]), set(driver.UNITS))
 
 
 # -- the driver over a fake desktop -------------------------------------------------------------------------------------
@@ -380,10 +390,14 @@ class FakeUnits(unittest.TestCase):
         self.enterContext(mock.patch.object(desktop, "_CLIENTS_CLOSED", False))
         self.addCleanup(driver.close_all)
 
-    def unit(self, name):
+    def unit(self, name, given=True):
+        """A unit set up, and given its task (the window before it closed) unless ``given`` is false."""
         ws = os.path.join(self.tmp, "job", f"{name}-{len(FakeDesktop.made)}", "workspace")
         os.makedirs(ws)
-        return ws, driver.setup(name, ws)
+        s = driver.setup(name, ws)
+        if given:
+            driver.task_given(name, ws)
+        return ws, s
 
 
 class Wiring(FakeUnits):
@@ -423,7 +437,7 @@ class Wiring(FakeUnits):
             self.assertEqual(json.load(f), u.boxes)
 
     def test_the_turns_end_at_score_ends_the_loop_and_judges_what_is_there(self):
-        ws, s = self.unit("click")
+        ws, s = self.unit("click", given=False)
         u = driver.OPEN["click"]
         t = time.monotonic()
         got = driver.score("click", ws, [], "")                                 # no call: the null control
@@ -1119,7 +1133,218 @@ esac
         self.assertEqual(driver.OPEN, {})
 
 
-# -- the docker tier: the eight checks on real desktops --------------------------------------------------------------
+class Fake(FakeDesktop):
+    """A blank desktop that draws the fixture on request."""
+
+    def __init__(self, name, values):
+        super().__init__(name, {})
+        self.boxes.clear()
+        self.log.clear()
+
+    def start_fixture(self, values):
+        self.values = values
+        self.boxes = {label: [100 + 300 * i, 100, 300 + 300 * i, 200]
+                      for i, label in enumerate(values.get("labels") or [])}
+        if values.get("at"):                                 # one button, around the point the values name
+            x, y = int(values["at"][0] * desktop.SCREEN[0]), int(values["at"][1] * desktop.SCREEN[1])
+            self.boxes = {label: [x - 120, y - 45, x + 120, y + 45] for label in values["labels"]}
+        self.boxes.update(field=[600, 500, 1200, 560], handle=[200, 500, 260, 560], zone=[1300, 400, 1700, 700],
+                          list=[600, 300, 1300, 800])
+        self.log.append({"kind": "ready", "t": time.monotonic(), "boxes": dict(self.boxes)})
+
+    def capture(self):
+        return super().capture() + json.dumps(self.boxes).encode()
+
+
+class Fixture(unittest.TestCase):
+    def test_click_places_the_button_at_each_supplied_position(self):
+        fixture = driver.fixture
+        for at in ([0.2, 0.7], [0.8, 0.3]):
+            with self.subTest(at=at):
+                f = fixture.Fixture.__new__(fixture.Fixture)
+                f.tk, f.root = mock.Mock(), object()
+                f.values = {"labels": ["BUTTON"], "at": at}
+                f.images, f.names = [], {}
+                with mock.patch.object(fixture, "bitmap"):
+                    f._click()
+                f.tk.Frame.return_value.place.assert_called_once_with(relx=at[0], rely=at[1], anchor="center")
+
+    def test_the_fake_starts_blank_and_draws_the_button_only_when_the_fixture_starts(self):
+        values = {"screen": "click", "labels": ["BUTTON"]}
+        d = Fake("desktop", values)
+        self.assertEqual(d.boxes, {})
+        self.assertEqual(d.events(), [])
+        before = d.capture()
+        self.assertEqual(d.hit(200, 150), "background")
+        d.start_fixture(values)
+        self.assertEqual(d.hit(200, 150), "BUTTON")
+        self.assertNotEqual(d.capture(), before)
+        self.assertEqual(len(d.events()), 1)
+        self.assertEqual(d.events()[0]["kind"], "ready")
+        self.assertEqual(d.events()[0]["boxes"], d.boxes)
+
+
+def blind_clicks(sock, u):
+    """A control that must fail ``late``: a script that never looks. Once the task is given, one step clicks the
+    screen's centre and waits there until the button has had time to appear, so that the step's observation, which it
+    never reads, is taken with the button up; a second step clicks the centre again. A button drawn at the centre
+    would take that second click, after a look by a step."""
+    c = driver.Client(sock)
+    try:
+        x, y = desktop.SCREEN[0] // 2, desktop.SCREEN[1] // 2
+        waits = math.ceil((driver.LATE_SECONDS + 1) / driver.PAUSE) + 1
+        said = [c.call("step", {"actions": [f"pyautogui.click({x}, {y})"] + ["WAIT"] * waits})]
+        if not u.up.wait(30):
+            raise AssertionError("the button was never drawn")
+        said.append(c.call("click", {"x": x, "y": y}))
+    finally:
+        c.close()
+    if any(failed for failed, _ in said):
+        raise AssertionError(f"a blind click was refused: {said}")
+
+
+class Window(unittest.TestCase):
+    """Units over blank fake desktops, given their task only when the test says so."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+        def start(image, name, *, job=None, seconds=None):
+            return Fake(name, list(driver.OPEN.values())[-1].values)
+        self.enterContext(mock.patch.object(desktop, "image", return_value="img"))
+        self.enterContext(mock.patch.object(desktop.Desktop, "start", side_effect=start))
+        self.enterContext(mock.patch.object(driver.REAPER, "tell"))
+        self.enterContext(mock.patch.object(driver, "PAUSE", 0.01))
+        self.enterContext(mock.patch.object(driver, "LATE_SECONDS", 0.05))
+        self.enterContext(mock.patch.object(desktop, "_CLIENTS_CLOSED", False))
+        self.addCleanup(driver.close_all)
+
+    def unit(self, name):
+        ws = os.path.join(self.tmp, "job", f"{name}-{len(FakeDesktop.made)}", "workspace")
+        os.makedirs(ws)
+        return ws, driver.setup(name, ws)
+
+    def client(self, s):
+        c = driver.Client(s["mcp"][0]["args"][0])
+        self.addCleanup(c.close)
+        return c
+
+    def test_the_server_has_the_window_before_the_task(self):
+        ws, s = self.unit("click")
+        u, c = driver.OPEN["click"], self.client(s)
+        names = [t["name"] for t in c.ask("tools/list", {})["result"]["tools"]]
+        self.assertNotIn("python", names)
+        self.assertIn("prepare", names)
+        x, y = driver.centre(u.boxes[u.expected["target"]])
+        failed, said = c.call("click", {"x": x, "y": y})
+        self.assertTrue(failed)
+        self.assertIn("the task has not been given yet", said)
+        self.assertEqual(c.call("prepare", {"actions": ["print(1)"], "files": ["/tmp/agent/a"]}),
+                         (False, {"files": {"/tmp/agent/a": None}}))
+        self.assertEqual(driver.task_given("click", ws), {})
+        self.assertEqual(c.call("step", {"actions": [f"pyautogui.click({x}, {y})"], "files": ["/tmp/agent/a"]}),
+                         (False, {"steps_left": u.steps - 1, "done": False, "files": {"/tmp/agent/a": None}}))
+        self.assertTrue(c.call("prepare", {"actions": []})[0])
+        got = driver.score("click", ws, [], "done")
+        self.assertTrue(got["passed"], got)
+        self.assertEqual(got["detail"]["calls"], ["click", "prepare", "step", "prepare"])
+        with open(os.path.join(os.path.dirname(ws), "verifier", "computer-prepare.jsonl")) as f:
+            self.assertEqual([json.loads(line)["actions"] for line in f], [["print(1)"]])
+
+    def test_input_sent_by_prepare_fails_the_check(self):
+        ws, s = self.unit("click")
+        u, c = driver.OPEN["click"], self.client(s)
+        x, y = driver.centre(u.boxes[u.expected["target"]])
+        c.call("prepare", {"actions": [f"pyautogui.click({x}, {y})"]})
+        driver.task_given("click", ws)
+        got = driver.score("click", ws, [], "done")
+        self.assertFalse(got["passed"])
+        self.assertIn("outside every action", got["detail"]["why"])
+
+    def test_the_reference_is_given_its_task_as_it_starts(self):
+        for unit in ("click", "type", "limit", "recover"):            # the fake desktop logs no field values
+            with self.subTest(unit=unit):
+                ws, s = self.unit(unit)
+                got = driver.score(unit, ws, [], driver.oracle(unit, ws)["answer"])
+                self.assertTrue(got["passed"], got)
+
+    def test_late_passes_for_the_reference_which_looks_again_by_steps(self):
+        ws, s = self.unit("late")
+        self.assertIn("appears on the screen a few seconds after", s["prompt"])
+        u = driver.OPEN["late"]
+        self.assertEqual(u.desktop.boxes, {})
+        self.assertEqual(u.desktop.events(), [])
+        got = driver.score("late", ws, [], driver.oracle("late", ws)["answer"])
+        self.assertTrue(got["passed"], got)
+        self.assertIn("wait", got["detail"]["calls"])
+
+    def test_late_fails_a_click_sent_with_no_look_by_a_step_once_the_button_is_up(self):
+        ws, s = self.unit("late")
+        u, c = driver.OPEN["late"], self.client(s)
+        driver.task_given("late", ws)
+        self.assertTrue(u.up.wait(5))
+        c.call("screenshot")                                                    # the start picture: no button
+        self.assertFalse(c.call("click", dict(zip("xy", driver.centre(u.boxes[u.expected["target"]]))))[0])
+        got = driver.score("late", ws, [], "done")
+        self.assertFalse(got["passed"])
+        self.assertIn("without looking again by a step", got["detail"]["why"])
+
+    def test_late_draws_its_button_away_from_the_centre_at_a_place_drawn_for_each_unit(self):
+        rng, places = random.Random(7), set()
+        for _ in range(1000):
+            place = tuple(driver.late_place(rng))
+            for f, side in zip(place, desktop.SCREEN):
+                self.assertTrue(0.15 <= f <= 0.35 or 0.65 <= f <= 0.85, place)
+                self.assertGreater(abs(f - 0.5) * side, 0.15 * side - 1)         # the centre is never on the button
+            places.add(place)
+        self.assertGreater(len(places), 990)
+        ws, s = self.unit("late")
+        first = driver.OPEN["late"].values["at"]
+        ws, s = self.unit("late")
+        self.assertNotEqual(driver.OPEN["late"].values["at"], first)
+
+    def test_late_fails_blind_clicks_at_the_screens_centre(self):
+        ws, s = self.unit("late")
+        u = driver.OPEN["late"]
+        driver.task_given("late", ws)
+        blind_clicks(s["mcp"][0]["args"][0], u)
+        got = driver.score("late", ws, [], "done")
+        self.assertFalse(got["passed"])
+        self.assertEqual(got["detail"]["steps_used"], 2)
+        self.assertIn(f"no left press on the button {u.expected['target']}", got["detail"]["why"])
+
+    def test_late_fails_the_null_control_and_draws_no_button_when_the_task_is_never_given(self):
+        ws, s = self.unit("late")
+        u = driver.OPEN["late"]
+        t = time.monotonic()
+        got = driver.score("late", ws, [], "")
+        self.assertLess(time.monotonic() - t, 5)
+        self.assertFalse(got["passed"])
+        self.assertIsNone(u.shown)
+
+    def test_late_fails_without_a_prior_step_when_the_start_picture_is_delayed(self):
+        original = Fake.python
+
+        def delayed(d, code, seconds=None):
+            if "os.makedirs(p, 0o700)" in code:
+                self.assertTrue(driver.OPEN["late"].up.wait(5))
+            return original(d, code, seconds)
+
+        with mock.patch.object(Fake, "python", delayed):
+            ws, s = self.unit("late")
+            u, c = driver.OPEN["late"], self.client(s)
+            driver.task_given("late", ws)
+            self.assertFalse(c.call("screenshot")[0])
+            self.assertEqual(u.bridge.used, 0)
+            self.assertFalse(c.call("click", dict(zip("xy", driver.centre(u.boxes[u.expected["target"]]))))[0])
+            got = driver.score("late", ws, [], "done")
+        self.assertEqual(got["detail"]["steps_used"], 1)
+        self.assertFalse(got["passed"])
+        self.assertIn("without looking again by a step", got["detail"]["why"])
+
+
+# -- the docker tier: the nine checks on real desktops --------------------------------------------------------------
 MARGIN = 30                                   # process starts, protocol messages and scheduling
 
 
@@ -1241,7 +1466,7 @@ class DockerKit(unittest.TestCase):
         return ws, driver.setup(name, ws)
 
     def test_the_reference_passes_every_check_and_the_null_control_none(self):
-        for unit in checks.CHECKS:
+        for unit in driver.UNITS:
             with self.subTest(unit=unit, control="oracle"):
                 ws, _ = self.unit(unit)
                 answer = driver.oracle(unit, ws)["answer"]
@@ -1251,8 +1476,29 @@ class DockerKit(unittest.TestCase):
                 ws, _ = self.unit(unit)
                 self.assertFalse(driver.score(unit, ws, [], "")["passed"])
 
-    def test_a_scripted_client_that_acts_past_its_budget_fails(self):
+    def test_blind_clicks_at_the_screens_centre_fail_late(self):
+        ws, s = self.unit("late")
+        u = driver.OPEN["late"]
+        driver.task_given("late", ws)
+        blind_clicks(s["mcp"][0]["args"][0], u)
+        got = driver.score("late", ws, [], "done")
+        self.assertFalse(got["passed"], got)
+        self.assertIn("no left press on the button", got["detail"]["why"])
+
+    def test_scripted_clients_that_type_through_prepare_or_act_past_their_budget_fail(self):
+        ws, s = self.unit("type")
+        u = driver.OPEN["type"]
+        c = driver.Client(s["mcp"][0]["args"][0])
+        x, y = driver.centre(u.boxes["field"])
+        c.call("prepare", {"actions": [f"pyautogui.click({x}, {y})", f"pyautogui.write({u.expected['word']!r})",
+                                       "pyautogui.press('enter')"]})
+        c.close()
+        driver.task_given("type", ws)
+        got = driver.score("type", ws, [], "done")
+        self.assertFalse(got["passed"])
+        self.assertIn("outside every action", got["detail"]["why"])
         ws, s = self.unit("limit")
+        driver.task_given("limit", ws)
         u = driver.OPEN["limit"]
         c = driver.Client(s["mcp"][0]["args"][0])
         for label in checks.ORDER[:3]:
@@ -1316,6 +1562,8 @@ class DockerKit(unittest.TestCase):
                       {"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {"cwd": ws, "mcpServers": [server]}},
                       {"jsonrpc": "2.0", "id": 3, "method": "session/prompt",
                        "params": {"sessionId": "s1", "prompt": [{"type": "text", "text": s["prompt"]}]}}):
+                if m["method"] == "session/prompt":
+                    driver.task_given("click", ws)          # as the run tells the driver before the task
                 p.stdin.write(json.dumps(m) + "\n")
                 p.stdin.flush()
                 seconds = (2 * desktop.CAPTURE_SECONDS + driver.PYTHON_SECONDS + desktop.SETTLE
