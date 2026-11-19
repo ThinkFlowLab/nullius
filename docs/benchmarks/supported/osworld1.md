@@ -31,7 +31,10 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `osworld1` | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
+| `osworld1@044bc33` (default) | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
+| `osworld1@desktop-env-v1.0.3` | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
+
+- `key@version`: a revision of the definition and driver; a recipe pins one, the builder offers the default.
 
 ## Options
 
@@ -80,6 +83,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 - Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.
 - The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.
 - A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes; past any of them the task gets no score.
+- Version desktop-env-v1.0.3 fixes evaluators, turns off key repeat in the VM and retires one task (368 tasks, 360 without Google Drive): its scores compare with each other only, not with the paper's or the default version's.
 
 ## Cite
 

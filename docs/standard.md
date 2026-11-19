@@ -477,6 +477,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `indexes` | Packages from another index |
 | `wheels` | A wheel served by URL only (a model package such as spaCy's `en_core_web_sm`), `{url, sha256}`: refused unless the file matches, resolved with `pip` |
 | `project` | The upstream itself, from its clone; `locked: true` installs it at its own lock file's pins (`uv export --frozen`), `pip` resolved beside them |
+| `virtual` | With `locked`: the lock's pins without the project itself, as `uv sync` leaves a project with no build system; the driver imports the upstream from its clone |
 | `extras`, `prefetch` | The project's extras; what to download ahead |
 
 #### Benchmark options

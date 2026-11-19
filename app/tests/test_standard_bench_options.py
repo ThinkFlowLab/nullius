@@ -261,7 +261,14 @@ class OtherBenchmarks(unittest.TestCase):
         for path in root.glob("*/standard.json"):
             with self.subTest(benchmark=path.parent.name):
                 data = json.loads(path.read_text())
-                self.assertNotIn("versions", data)
+                shared = (data.get("upstream") or {}).get("repository")
+                for name, block in (data.get("versions") or {}).items():
+                    if name == data.get("default"):
+                        continue
+                    own = block.get("upstream") or {}
+                    # a version beside the default is an upstream release (its tag) or a fork (another repository)
+                    self.assertTrue(own.get("tag") or own.get("repository", shared) != shared, name)
+                    self.assertEqual(len(own.get("tested") or ""), 40, name)
 
 
 class MachineDocker(unittest.TestCase):

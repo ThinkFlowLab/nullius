@@ -37,7 +37,8 @@
     "The agent's python and upload calls do not mark OSWorld's desktop as used; each unit's desktop is reset once, before the agent's first call.",
     "Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.",
     "The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.",
-    "A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes; past any of them the task gets no score."
+    "A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes; past any of them the task gets no score.",
+    "Version desktop-env-v1.0.3 fixes evaluators, turns off key repeat in the VM and retires one task (368 tasks, 360 without Google Drive): its scores compare with each other only, not with the paper's or the default version's."
   ],
   "datasets": [
     {
@@ -49,7 +50,7 @@
       "registry": "",
       "hub": "",
       "verifier": "OSWorld's own evaluator, DesktopEnv.evaluate: the task's evaluator functions on the VM's final state.",
-      "notes": "369 tasks in 10 domains; 361 without Google Drive. Apache-2.0."
+      "notes": "369 tasks in 10 domains; 361 without Google Drive (368 and 360 in desktop-env-v1.0.3). Apache-2.0."
     }
   ],
   "citation": "@misc{OSWorld,\n      title={OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments}, \n      author={Tianbao Xie and Danyang Zhang and Jixuan Chen and Xiaochuan Li and Siheng Zhao and Ruisheng Cao and Toh Jing Hua and Zhoujun Cheng and Dongchan Shin and Fangyu Lei and Yitao Liu and Yiheng Xu and Shuyan Zhou and Silvio Savarese and Caiming Xiong and Victor Zhong and Tao Yu},\n      year={2024},\n      eprint={2404.07972},\n      archivePrefix={arXiv},\n      primaryClass={cs.AI}\n}",

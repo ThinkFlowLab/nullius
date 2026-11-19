@@ -311,7 +311,9 @@ def _install(d: dict, where: str = "install") -> List[str]:
     project's resolution keeps them; each a name, or a name pinned), and ``prefetch``, models fetched from
     the Hugging Face hub at install time so a run needs no network for them;
     ``locked``, the project's own lock file (``uv.lock``) installed as its
-    pins, ``pip`` resolved beside them, rather than its loose requirements.
+    pins, ``pip`` resolved beside them, rather than its loose requirements;
+    ``virtual``, with ``locked``, those pins without the project itself, as
+    ``uv sync`` installs a project that declares no build system.
     A benchmark's driver has the same block, ``driver.install`` (:func:`driver_install`):
     ``where`` is the name its problems are said under."""
     inst = d.get("install") or {}
@@ -353,6 +355,10 @@ def _install_block(d: dict, inst: dict) -> List[str]:
         bad.append("install.locked: true or false")
     elif inst.get("locked") and "project" not in inst:
         bad.append("install.locked: the lock file of install.project, which is not set")
+    if "virtual" in inst and not isinstance(inst["virtual"], bool):
+        bad.append("install.virtual: true or false")
+    elif inst.get("virtual") and not inst.get("locked"):
+        bad.append("install.virtual: the lock's packages without the project, which needs install.locked")
     for i, x in enumerate(inst.get("indexes") or []):
         if not isinstance(x, dict) or not _HTTPS.match(str(x.get("url", ""))) or not x.get("packages") \
                 or any(not _PKG.match(str(p)) for p in x.get("packages") or []):
