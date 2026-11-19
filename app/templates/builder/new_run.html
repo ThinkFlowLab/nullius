@@ -2,9 +2,11 @@
 {% from '_page.html' import page_head %}
 {% block title %}Run builder — Nullius{% endblock %}
 {% block crumb %}/ run builder{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='builder/command-builder.css') }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{# the Agent step's cards #}
+<link rel="stylesheet" href="{{ url_for('static', filename='builder/command-builder.css') }}">
+<script src="{{ url_for('static', filename='tables.js') }}"></script>{% endblock %}
 {% block body %}
-<div id="nullius-builder" data-agent-marks="{{ agent_marks|tojson|forceescape }}">
+<div id="nullius-builder">
   {% set actions %}
       <button class="nb-button" id="nb-saved-toggle" aria-haspopup="dialog" aria-controls="nb-saved">Saved recipes</button>
       <button class="nb-button" id="nb-import">Import recipe</button>

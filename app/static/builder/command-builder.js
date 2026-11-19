@@ -93,14 +93,6 @@
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
   const C = window.NulliusRecipe(schema), $ = s => root.querySelector(s);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const agentMarks = JSON.parse(root.dataset.agentMarks || '{}');
-  const agentMark = (key, label) => {
-    const source = agentMarks[String(key).split('@')[0]];
-    if (!source) return esc(label[0]);
-    return source.includes('#')
-      ? `<svg class="agent-logo" aria-hidden="true"><use href="/static/${esc(source)}"/></svg>`
-      : `<img class="agent-logo" src="/static/${esc(source)}" alt="" aria-hidden="true">`;
-  };
   const steps = C.STEPS, S = C.STEP, REVIEW = S.review;
   const query = Object.fromEntries(new URLSearchParams(location.search));
   let recipe = C.prefill(query);
@@ -646,7 +638,7 @@
     return !t.length ? '' : t.every(n => n === t[0]) && t.length > 1 ? `${t[0]} tasks each` : `${t.reduce((a, n) => a + n, 0)} tasks`; };
   const pickChip = (attr, v, label, on) => `<button type="button" class="nb-pick-chip" data-${attr}="${esc(v)}" aria-pressed="${on}">${esc(label)}</button>`;
   // one tile: {attr, key, on, title, mark, cat, origin, line, meta, foot, find, fam, data (more attributes), tip (its title)}
-  const tile = t => `<button class="nb-tile${t.disabled ? ' nb-tile-unfit' : ''}" data-${t.attr}="${esc(t.key)}" aria-pressed="${t.on}"${t.data || ''}${t.disabled ? ` disabled aria-disabled="true" title="${esc(t.why || '')}"` : t.tip ? ` title="${esc(t.tip)}"` : ''} data-cat="${esc(t.cat || '')}" data-fam="${esc(t.fam || '')}"${t.elsewhere ? ' data-elsewhere="1"' : ''} data-find="${esc((t.find || t.title).toLowerCase())}">`
+  const tile = t => `<button class="nb-tile${t.disabled ? ' nb-tile-unfit' : ''}" data-${t.attr}="${esc(t.key)}" aria-pressed="${t.on}"${t.data || ''}${t.disabled ? ` disabled aria-disabled="true" title="${esc(t.why || '')}"` : t.tip ? ` title="${esc(t.tip)}"` : ''} data-cat="${esc(t.cat || '')}" data-fam="${esc(t.fam || '')}" data-find="${esc((t.find || t.title).toLowerCase())}">`
     + `<span class="nb-tile-head">${t.mark ? `<span class="nb-mark">${t.mark}</span>` : ''}<strong>${esc(t.title)}</strong><span class="nb-tile-check" aria-hidden="true">${t.on ? '✓' : ''}</span></span>`
     + (t.cat || t.origin || t.fam ? `<span class="nb-tile-tags">${t.cat ? `<span class="nb-tile-cat">${esc(t.cat)}</span>` : ''}${t.origin === 'community' ? '<span class="nb-tile-community">Community</span>' : ''}${t.famLabel ? `<span class="nb-tile-fam">${esc(t.famLabel)}</span>` : ''}</span>` : '')
     + (t.line ? `<span class="nb-tile-line">${esc(t.line)}</span>` : '') + (t.note ? `<span class="nb-tile-note">${esc(t.note)}</span>` : '')
@@ -661,8 +653,6 @@
       + `<label class="nb-pick-find"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input type="search" data-pick-find value="${esc(pick.q)}" placeholder="Search ${noun === 'capability' ? 'capabilities' : noun + 's'}" aria-label="Search ${noun === 'capability' ? 'capabilities' : noun + 's'}" autocomplete="off"></label>`
       + (cats.length > 1 ? `<div class="nb-pick-chips" role="group" aria-label="Category">${pickChip('pick-cat', '', 'All', !pick.cat)}${cats.map(c => pickChip('pick-cat', c, c, pick.cat === c)).join('')}</div>` : '')
       + (fams ? `<div class="nb-pick-chips" role="group" aria-label="Runs">${pickChip('pick-fam', '', 'Any', !pick.fam)}${fams.map(([v, l]) => pickChip('pick-fam', v, l, pick.fam === v)).join('')}</div>` : '')
-      // other benchmarks' own agents, greyed: shown until the viewer hides them
-      + (tiles.some(t => t.elsewhere) ? `<div class="nb-pick-chips" role="group" aria-label="Other benchmarks">${pickChip('pick-elsewhere', '', "Other benchmarks' agents", !pick.hide)}</div>` : '')
       + `</div><div class="nb-pick-grid">${tiles.map(tile).join('')}</div><p class="nb-pick-none" hidden>No ${noun} matches.</p></div>`;
   };
   function applyPick() {
@@ -671,13 +661,39 @@
     let shown = 0;
     box.querySelectorAll('.nb-tile').forEach(t => {
       const on = t.getAttribute('aria-pressed') === 'true';
-      const fits = (!pick.cat || t.dataset.cat === pick.cat) && (!pick.fam || t.dataset.fam === pick.fam) && !(pick.hide && t.dataset.elsewhere) && words.every(w => t.dataset.find.includes(w));
+      const fits = (!pick.cat || t.dataset.cat === pick.cat) && (!pick.fam || t.dataset.fam === pick.fam) && words.every(w => t.dataset.find.includes(w));
       t.hidden = !fits && !on; if (!t.hidden) shown++;
     });
     box.querySelectorAll('[data-pick-cat]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pickCat === pick.cat));
     box.querySelectorAll('[data-pick-fam]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pickFam === pick.fam));
-    box.querySelectorAll('[data-pick-elsewhere]').forEach(b => b.setAttribute('aria-pressed', !pick.hide));
     box.querySelector('.nb-pick-none').hidden = shown > 0;
+  }
+  // The standard's Agent step grid: drawn by the server for the benchmark (web/builder.py, /new-run/agents) from the
+  // Agents page's entries, run by the card toolkit (tables.js); kept while the benchmark is the same, so a search or a
+  // filter survives each render, and its cards pressed as the recipe chooses (nullius-pick changes the recipe).
+  const grid = {ref: '', node: null};
+  function placeAgentGrid() {
+    const slot = $('#nb-agent-grid'), rec = r();
+    if (!slot) return;
+    if (grid.ref !== rec.benchmark) { grid.ref = rec.benchmark; grid.node = null; loadAgentGrid(grid.ref); }
+    if (!grid.node) { slot.setAttribute('aria-busy', 'true'); slot.innerHTML = '<div class="page-skeleton" aria-hidden="true">' + '<div class="skel skel-block"></div>'.repeat(3) + '</div>'; return; }
+    slot.replaceWith(grid.node);
+    const chosen = C.chosenOf(rec);
+    grid.node.querySelectorAll('[data-pick]').forEach(b => b.setAttribute('aria-pressed', String(!b.disabled && chosen.includes(b.dataset.pick))));
+    if (!grid.node.dataset.wired) { grid.node.dataset.wired = '1'; NulliusTable.cards(grid.node.querySelector('[data-cards]')); }
+  }
+  async function loadAgentGrid(ref) {
+    const res = await nulliusFetch('/new-run/agents?' + new URLSearchParams({benchmark: ref})).catch(() => null);
+    const html = res && res.ok ? await res.text().catch(() => null) : null;
+    if (grid.ref !== ref) return;   // another benchmark was chosen while it loaded
+    if (html === null) {            // said once; the next render asks again
+      grid.ref = '';
+      const slot = $('#nb-agent-grid');
+      if (slot) { slot.removeAttribute('aria-busy'); slot.innerHTML = '<p class="nb-note nb-error">Could not load the list. Change step and come back to try again.</p>'; }
+      return;
+    }
+    grid.node = Object.assign(document.createElement('div'), {id: 'nb-agent-grid', innerHTML: html});
+    placeAgentGrid();
   }
   function modelChoiceCards(rec) {
     const hasPaper = C.paperOffered(rec), on = rec.model_choice || 'any';
@@ -700,18 +716,6 @@
       const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && (!o.setup || o.own));
       const setups = all.filter(o => o.setup && !o.own), controls = all.filter(o => o.control);
       const ds = b.datasets.find(x => C.datasetsOf(rec).includes(x.id)) || b.datasets[0];
-      // an agent or a capability as a tile: its name, a skill it failed or a fidelity that differs as a tick; one that has not
-      // proved a port the benchmark needs greyed, the ports it lacks named (the reasons whole in its title)
-      const tileOf = o => {
-        const ok = !o.why.length, lacks = b.needs.filter(p => !o.proven[p]);
-        const skills = b.needs.flatMap(p => o.proven[p] ? o.proven[p].skills || [] : []).filter(s => !s.shown).map(s => `<span class="nb-tick no" title="${esc(s.says)}">${esc(s.id)} ✗</span>`).join('');
-        const fid = o.fidelity && o.fidelity.verdict !== 'same' ? `<span class="nb-tick ${o.fidelity.verdict === 'same' ? 'ok' : 'no'}" title="ACP ${o.fidelity.verdict === 'same' ? 'gives its model the same requests as its own CLI' : 'differs from its own CLI: ' + esc(o.fidelity.verdict)}">ACP ${o.fidelity.verdict === 'same' ? '= CLI ✓' : '≠ CLI'}</span>` : '';
-        const older = b.needs.some(p => o.proven[p] && o.proven[p].older) ? '<span class="nb-tick no" title="proven on an older kit: worth running again">older kit</span>' : '';
-        return {attr: 'std-other', key: o.key, on: ok && C.chosenOf(rec).includes(o.key), disabled: !ok, why: o.why.join('; '), title: o.label + (o.version && !o.label.includes(o.version) ? ' ' + o.version : ''),
-          mark: agent ? agentMark(o.key, o.label) : esc(o.label[0]), cat: o.protocol, fam: ok ? 'fit' : 'unfit', tip: o.summary, elsewhere: o.elsewhere,
-          note: ok ? '' : o.benchmark ? 'Belongs to ' + o.benchmark_label : 'Lacks ' + (lacks.map(p => p.replace(/^[^.]+\./, '').replace(/\/v\d+$/, '').replace(/[-_]/g, ' ')).join(', ') || 'a port it needs'),
-          foot: fid + skills + older, find: [o.label, o.key, o.version, o.protocol, o.summary].join(' ')};
-      };
       // each chosen agent's options, at its vendor's default unless changed: {ref: {name: word}}
       const chosen = others.filter(o => C.chosenOf(rec).includes(o.key) && !o.why.length), mine = chosen.filter(o => !o.own);
       const optionsOf = o => { const mine = (rec.options || {})[o.key] || {}, opts = Object.entries(o.options || {});
@@ -723,9 +727,6 @@
         }).join('') + '</div>'; };
       // the chosen ones' settings, one tab each: the benchmark's own way, the benchmark's settings every agent takes, each one's own
       const yoursWord = agent ? 'agent' : (b.kind || 'capability');
-      // the benchmark's own way of running it (its reference, as published) is one more choice beside yours
-      const setupTile = o => ({attr: 'std-other', key: o.key, on: C.chosenOf(rec).includes(o.key), mark: o.key === 'original' ? '◆' : '◇',
-        title: o.reference_agent || (agent ? 'No agent · Original' : 'Original ' + (b.kind || 'capability')), cat: 'reference', fam: 'fit', tip: o.summary, find: [b.label, o.label, 'reference'].join(' ')});
       const ds2 = ds;
       const controlTile = o => { const c = ((ds2 || {}).controls || []).find(x => x.key === o.key) || {...o, from: o.summary};
         return tile({attr: 'std-other', key: o.key, on: C.chosenOf(rec).includes(o.key), mark: o.key === 'nop' ? '∅' : '≡', title: o.label,
@@ -733,7 +734,7 @@
       const setupsNamed = ls => ls.filter(l => !ls.some(m => m !== l && l.startsWith(m))).join(' and ');
       const onSetups = setups.filter(o => C.chosenOf(rec).includes(o.key)).concat(chosen.some(o => o.own) ? [{label: 'Original'}] : []);
       return `<div class="nb-sectionhead"><h2>Who runs it?</h2></div>`
-        + picker([...setups.map(setupTile), ...others.map(tileOf)], [['fit', 'Can run it'], ['unfit', 'Cannot']], agent ? 'agent' : 'capability')
+        + '<div id="nb-agent-grid"></div>'
         + (others.length || setups.length ? '' : note('None yet', 'Bring one in with the /import-standard skill, or by hand: docs/standard.md.'))
         + settingsTabs([
             ...(chosen.length || onSetups.length ? [['shared', 'Every ' + yoursWord, benchOptions(rec, b, 'shared')]] : []),
@@ -939,7 +940,7 @@
       const rows=own?[...((runnerOut&&runnerOut.review)||[]),...(C.isStandard(rec)?[]:[[S.where,'Where',C.whereLabel(rec)]])]:C.review(rec);
       html='<div class="nb-sectionhead"><h2>Review the experiment.</h2></div>'+rows.map(([i,t,v])=>`<div class="nb-reviewrow"><div><small>${t}</small><strong>${esc(v)}</strong></div>${button('Edit',`data-step="${i}"`)}</div>`).join('')+'<div id="nb-errors" class="nb-errorlist" hidden></div><div id="nb-reviewnotes"></div>'+(schema.local?'<section id="nb-prereq" class="nb-prereq" aria-live="polite"></section>':'')+runPanel();
     }
-    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';applyPick();
+    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';applyPick();placeAgentGrid();
     if(step===REVIEW&&schema.local){drawPrereq();checkPrereq();}
     $('#nb-back').hidden=step===S.benchmark;
     $('#nb-next').textContent=step===REVIEW?'Export recipe JSON':stepName(steps[nextShown(step,1)],nextShown(step,1))+' →';
@@ -1097,7 +1098,6 @@
     if(d.copyCode!==undefined){const t=b.closest('.std-code').querySelector('code').textContent;try{await navigator.clipboard.writeText(t);b.textContent='Copied';}catch{b.textContent='Select it';}setTimeout(()=>{b.textContent='Copy';},1500);return;}
     if(d.pickCat!==undefined){pickOf().cat=d.pickCat;applyPick();return;}
     if(d.pickFam!==undefined){pickOf().fam=d.pickFam;applyPick();return;}
-    if(d.pickElsewhere!==undefined){pickOf().hide=!pickOf().hide;applyPick();return;}
     if(d.agent){const on=r().agents.includes(d.agent);r().agents=on?r().agents.filter(id=>id!==d.agent):[...r().agents,d.agent];renderForm();refreshPlan();return;}
     else if(d.href){location.href=d.href;return;}
     else if(b.id==='nb-add-custom-agent'){r().customAgents.push('');r().agents.push('custom-'+(r().customAgents.length-1));renderForm();refreshPlan();root.querySelector('[data-custom-agent="'+(r().customAgents.length-1)+'"]')?.focus();return;}
@@ -1110,8 +1110,8 @@
     else if(d.runner){toRunner(d.runner,C.benchKey(r()));}
     else if(d.bench){toRunner(C.runnerFor(r(),d.bench),d.bench);}
     else if(d.stdBench){C.setStandardBenchmark(r(),d.stdBench);}
+    else if(d.stdOther){const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(d.stdOther)?c.filter(k=>k!==d.stdOther):[...c,d.stdOther];delete rec.other;if(rec.options)delete rec.options[d.stdOther];}   // a check
     else if(d.stdDataset){const rec=r(),c=C.datasetsOf(rec);rec.datasets=c.includes(d.stdDataset)?(c.length>1?c.filter(k=>k!==d.stdDataset):c):[...c,d.stdDataset];delete rec.dataset;}
-    else if(d.stdOther){const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(d.stdOther)?c.filter(k=>k!==d.stdOther):[...c,d.stdOther];delete rec.other;if(rec.options)delete rec.options[d.stdOther];}
     // the standard's machines: each a toggle, one at least; several split the run into shards
     else if(d.stdWhere){const rec=r(),list=C.whereList(rec),on=list.includes(d.stdWhere),next=on?list.filter(w=>w!==d.stdWhere):[...list,d.stdWhere];if(!next.length)return;rec.where=next.length>1?next:next[0];}
     // hosts or Boat sandboxes: a sandbox run starts from this machine alone
@@ -1149,6 +1149,8 @@
     else return;
     render(d.step!==undefined||['nb-next','nb-back'].includes(b.id));
   });
+  // an agent, a capability or the setup picked or let go on the Agent step's grid; the focus stays on its card
+  root.addEventListener('nullius-pick',event=>{const k=event.detail.value,rec=r(),c=C.chosenOf(rec);rec.others=c.includes(k)?c.filter(x=>x!==k):[...c,k];delete rec.other;if(rec.options)delete rec.options[k];render();event.target.focus();});
   root.addEventListener('input',event=>{
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}

@@ -588,8 +588,9 @@ class StandardPieces(unittest.TestCase):
                          [("decoys", False, "1/3"), ("chain", True, "3/3"), ("retry", False, "0/3")])
         self.assertEqual(schema["standard"]["fits"]["fakebench"]["fake"],
                          ["Fake agent has not shown the decoys skill of agent.tools/v1 (chooses the right tool among similar ones)"])
-        js = (Path(web.app.static_folder) / "builder" / "command-builder.js").read_text()
-        self.assertIn('.filter(s => !s.shown).map(s => `<span class="nb-tick no"', js)        # the agent step draws a skill not shown, as a tick
+        grid = self.get("/new-run/agents?benchmark=fakebench").get_data(as_text=True)          # the agent step draws a skill not shown, as a tick
+        card = grid[grid.index('id="pick-fake"'):]
+        self.assertIn('<span class="nb-tick no" title="chooses the right tool among similar ones">decoys ✗</span>', card[:card.index("</article>")])
 
     def test_the_builder_is_given_the_controls_their_proofs_and_whether_docker_runs_here(self):
         from nullius.standard import boat

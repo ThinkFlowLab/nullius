@@ -20,10 +20,10 @@ class StandardBenchmarkSwitch(CompilerCase):
         out = self.js('const os=C.standardOthers(C.createStandard("osworld1")),g=C.standardOthers(C.createStandard("gsm8k"));'
                       'const cua=g.find(o=>o.key==="osworld1:openai-cua");'
                       'process.stdout.write(JSON.stringify([os.filter(o=>o.own).map(o=>o.key).slice(0,2),os.findIndex(o=>!o.own),os.filter(o=>o.own).length,'
-                      'os.some(o=>o.setup&&!o.own),cua.why,cua.elsewhere,os.find(o=>o.key==="osworld2:m3").why]));')
+                      'os.some(o=>o.setup&&!o.own),cua.why,cua.benchmark,os.find(o=>o.key==="osworld2:m3").why]));')
         self.assertEqual(out[0], ["osworld1:m3", "osworld1:prompt"])
         self.assertEqual((out[1], out[2], out[3]), (12, 12, False))                # first, and no Original tile beside them
-        self.assertEqual((out[4], out[5]), (["OpenAI CUA belongs to OSWorld1"], True))
+        self.assertEqual((out[4], out[5]), (["OpenAI CUA belongs to OSWorld1"], "osworld1"))   # another benchmark's: the grid's From says so
         self.assertEqual(out[6], ["MiniMax M3 belongs to OSWorld2"])
         tags = self.js('const os=C.standardOthers(C.createStandard("osworld1"));'
                        'process.stdout.write(JSON.stringify([...new Set(os.filter(o=>o.benchmark).map(o=>o.protocol))]));')
