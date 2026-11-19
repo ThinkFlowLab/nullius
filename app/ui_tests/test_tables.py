@@ -558,7 +558,7 @@ class Macros(unittest.TestCase):
         self.assertIn('<th data-col="a" data-type="text" title="x&lt;y">&lt;b&gt;&#34;A&#34;&lt;/b&gt;</th>', html)
         self.assertIn('<td data-col="a" data-sort="&lt;i&gt;&amp;&#34;">a=&lt;i&gt;&amp;&#34;</td>', html)
         self.assertIn('data-search="&lt;i&gt;&amp;&#34;"', html)
-        self.assertIn('<label><input type="radio" name="t-sort-col" data-sort-col value="a"> &lt;b&gt;&#34;A&#34;&lt;/b&gt;</label>', html)
+        self.assertIn('<label><input type="radio" name="t-sort-col" data-sort-col value="a" data-type="text"> &lt;b&gt;&#34;A&#34;&lt;/b&gt;</label>', html)
 
 
 if __name__ == "__main__":

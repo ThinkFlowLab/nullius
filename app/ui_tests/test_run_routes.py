@@ -506,6 +506,40 @@ class WorkspaceDelete(unittest.TestCase):
         with self.client.session_transaction() as s:
             self.csrf = s["csrf"]
 
+    def page(self, url):
+        r = self.client.get(url); self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 200)
+        return r.get_data(as_text=True)
+
+    def test_the_page_is_a_table_or_cards_and_renders_only_the_one_chosen(self):
+        html = self.page("/workspaces")
+        self.assertIn('id="workspaces" data-table', html); self.assertNotIn("data-cards", html)
+        self.assertIn('href="/workspaces" aria-label="Table" title="Table" aria-current="true"', html)
+        self.assertIn('href="/workspaces?view=cards" aria-label="Cards" title="Cards" aria-current="false"', html)
+        html = self.page("/workspaces?view=cards")
+        self.assertIn('id="workspaces" data-cards', html); self.assertNotIn("data-table", html)
+        self.assertIn('aria-label="Cards" title="Cards" aria-current="true"', html)
+        self.assertIn('data-s-runs="0"', html)                                                           # Sort by reads it
+        self.assertIn(f'data-ask="/workspaces/{self.ws.name}/roots"', html)                             # the same dialogs
+        self.assertIn('data-ask="ws-ask-delete"', html); self.assertIn('aria-label="Delete workspace gone soon"', html)
+        card = re.sub(r">\s+<", "><", html.split('data-cards>')[1])                                     # Roots a stat after Launches
+        self.assertIn('style="--stats: 4"', card)
+        self.assertRegex(card, r'<dt>Launches</dt><dd>.*?</dd></div><div><dt>Roots</dt><dd><button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="/workspaces/[^"]+/roots"')
+        self.assertNotIn('bench-card-actions', card)                                                     # its delete in the corner, no action line
+        self.assertRegex(card, r'<span class="bench-card-corner"><button type="button" class="icon-btn danger" title="Delete workspace" data-ask="ws-ask-delete" '
+                               r'data-label="gone soon" data-action="/workspaces/delete/[^"]+" data-judged="0" aria-haspopup="dialog" aria-label="Delete workspace gone soon">')
+        self.assertIn('<div class="bench-card-title ws-name"><span class="bench-card-name"><a class="card-link">gone soon</a>'          # the table's rename, after the name
+                      '<button type="button" class="icon-btn ws-edit" aria-label="Rename workspace gone soon"', card)
+        self.assertIn(f'<input type="hidden" name="name" value="{self.ws.name}"><input type="hidden" name="view" value="cards">', card)
+        self.assertIn(f'<input type="hidden" name="csrf" value="{self.csrf}">', card)
+
+    def test_the_view_toggle_keeps_the_other_query_and_shows_only_where_asked(self):
+        html = self.page("/workspaces?view=cards&q=1")
+        self.assertIn('href="/workspaces?q=1" aria-label="Table"', html)
+        self.assertIn('href="/workspaces?view=cards&amp;q=1" aria-label="Cards"', html)
+        for url in ("/benchmarks", "/kits", "/agents"):
+            self.assertNotIn('aria-label="Table" title="Table"', self.page(url), url)
+
     def test_a_restart_with_the_same_paths_reopens_the_workspace_its_runs_went_into(self):
         runs = self.tmp / "runs"
         self.stack.enter_context(patch.dict(os.environ, {"RUNS_DIR": str(runs)}))
@@ -542,8 +576,11 @@ class WorkspaceDelete(unittest.TestCase):
             self.assertIn(f'<input type="hidden" name="name" value="{ws.name}">', html)
         self.assertEqual(self.client.post("/workspaces/rename", data={"name": other.name, "label": "x"}, headers={"Origin": "http://localhost"}).status_code, 403)   # no token
         r = self.client.post("/workspaces/rename", data={"name": other.name, "label": "tau3 test", "csrf": self.csrf}, headers={"Origin": "http://localhost"}); self.addCleanup(r.close)
-        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.status_code, 302); self.assertTrue(r.location.endswith("/workspaces"))
         self.assertEqual(workspace.load(home, "tau3-test").label, "tau3 test"); self.assertIsNone(workspace.load(home, "sharp-lemur"))
+        r = self.client.post("/workspaces/rename", data={"name": "tau3-test", "label": "tau3 cards", "view": "cards", "csrf": self.csrf}, headers={"Origin": "http://localhost"}); self.addCleanup(r.close)
+        self.assertTrue(r.location.endswith("/workspaces?view=cards"))                                      # back to the cards it was renamed from
+        self.assertEqual(workspace.load(home, "tau3-cards").label, "tau3 cards")
         self.assertEqual(workspace.load(home, self.ws.name).label, "gone soon")                               # the other one untouched
         self.assertIsNone(web.shared.STATE["workspace"])                                                      # renaming opens nothing
 

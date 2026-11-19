@@ -229,7 +229,8 @@ window.NulliusTable = {
      how many show once the changes pause, counted in the live region's
      data-noun. A click anywhere on a card but on a control of its own
      follows the card's link, in a new tab or window with the keys or the
-     button a link takes; a click that ends a text selection does not. */
+     button a link takes; a click that ends a text selection does not. Sort by,
+     when it has one, sorts the cards within their grids as a table's rows. */
   cards(root) {
     const items = [...root.querySelectorAll('[data-card]')], empty = document.querySelector(`[data-empty="${CSS.escape(root.id)}"]`);
     const live = document.querySelector(`[data-live="${CSS.escape(root.id)}"]`), say = this.voice(live);
@@ -252,7 +253,21 @@ window.NulliusTable = {
       empty.hidden = n > 0;
       say(n ? `${n} of ${items.length} ${live.dataset.noun}` : empty.textContent);
     };
-    const passes = this.narrow(document.getElementById(root.id + '-tools'), draw);
+    const tools = document.getElementById(root.id + '-tools'), passes = this.narrow(tools, draw);
+    const [sbtn, smenu] = [tools.querySelector('[data-tools-btn="sort"]'), tools.querySelector('[data-tools="sort"]')];
+    if (smenu) {   // the table's Sort by, over each card's data-s-<field>
+      const dirs = [...smenu.querySelectorAll('[data-sort-dir]')];
+      const sort = e => {
+        const c = smenu.querySelector('[data-sort-col]:checked'), on = c.value, num = c.dataset.type === 'num';
+        const dir = e?.target.matches('[data-sort-dir]') ? (e.target.value === 'asc' ? 1 : -1) : (num ? -1 : 1);
+        dirs.forEach(r => { r.checked = Boolean(on) && r.value === (dir > 0 ? 'asc' : 'desc'); r.disabled = !on; });
+        const key = card => { const raw = card.getAttribute('data-s-' + on) ?? ''; return num ? parseFloat(raw) || 0 : raw.toLowerCase(); };
+        (on ? [...items].sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; }) : items).forEach(c => c.parentNode.appendChild(c));
+      };
+      smenu.addEventListener('change', sort);
+      sort();
+      this.menu(sbtn, smenu);
+    }
     draw();
   },
 

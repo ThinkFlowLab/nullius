@@ -31,13 +31,13 @@
 {# A whole table (static/tables.js `wire`): its controls row, its headers from `cols`, a row of `rows` each,
    and its pages. `id` names it, and keys what a viewer chooses; `class` adds to its classes; `tr`: a macro writing a
    row's attributes. The call block writes a cell: it is called with a row and a column, in the order of `cols`, and
-   writes that cell with the cell macro. Opt-ins: `search`, `columns`, `choices`, `only`, `views`, `actions` as
-   controls'; `empty` and `noun` as pager's; `sticky_head`: its header row pinned while it scrolls down, and `tr`'s
+   writes that cell with the cell macro. Opt-ins: `search`, `columns`, `choices`, `only`, `views`, `actions`, `layout`
+   as controls'; `empty` and `noun` as pager's; `sticky_head`: its header row pinned while it scrolls down, and `tr`'s
    rows with data-sticky under it (tables.js `sticky`), the controls row with them up to the table's end. #}
-{% macro table(id, cols, rows, tr, class='', search='', columns=false, choices={}, only={}, empty='No rows match.', noun='rows', views=none, actions=none, sticky_head=false) %}
+{% macro table(id, cols, rows, tr, class='', search='', columns=false, choices={}, only={}, empty='No rows match.', noun='rows', views=none, actions=none, layout=none, sticky_head=false) %}
 {%- if sticky_head %}<div>{% endif %}
 {%- set cols = cols|rejectattr('table', 'sameas', false)|list %}
-{{ controls(id, cols, search, columns, choices, only, views, actions) }}
+{{ controls(id, cols, search, columns, choices, only, views, actions, layout=layout) }}
 {%- for c in cols if c.width == 'expand' %}
 <style>#{{ id }} > * > tr > :nth-child({{ cols.index(c) + 1 }}) { width: auto; min-width: var(--expand-min); white-space: normal; overflow-wrap: anywhere; }</style>
 {%- endfor %}
@@ -69,15 +69,16 @@
    Columns menu; `choices`: column -> its (value, label) pairs to filter by; `only`: column -> the one value chosen
    at load; then the Sort by menu, unless `sort` is false. `views` and `actions`: macros writing a page's own
    buttons, each any number of them, run by the page: views (how the table looks) before Columns, actions (on the
-   rows or the selection) last. The search goes left, the buttons right. A column's
+   rows or the selection) after Sort by. `layout` 'table' or 'cards', the one shown: a toggle of links to the
+   page's other one (?view=cards), its other query kept, at the end. The search goes left, the buttons right. A column's
    `filter` says where its choices go, one form or a list of them: 'button' (the default), in the Filter menu;
    'dropdown', a menu of its own; 'pills', a row of toggles under the controls. A column's `filter_icon`, a sprite id
    without its `i-`, leads its dropdown's button and its pills. `id`: the table's. #}
-{% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none, sort=true) %}
+{% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none, sort=true, layout=none) %}
 {%- set by = {'button': [], 'dropdown': [], 'pills': []} %}{% for c in cols if c.key in choices %}{% for f in ([c.filter] if c.filter is string else c.filter or ['button']) %}{% set _ = by[f].append(c) %}{% endfor %}{% endfor %}
 <div class="table-tools table-controls" id="{{ id }}-tools">
   {% if search %}<label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-search placeholder="{{ search }}" aria-label="{{ search }}" autocomplete="off" spellcheck="false"></label>{% endif %}
-  {% if columns or by.dropdown or by.button or sort or views or actions %}<div class="table-buttons">
+  {% if columns or by.dropdown or by.button or sort or views or actions or layout %}<div class="table-buttons">
   {{ slot('views', views) }}
   {% if columns %}<div class="menu-wrap">{{ columns_button() }}{{ columns_menu(cols) }}</div>{% endif %}
   {% for c in by.dropdown %}<div class="menu-wrap">
@@ -99,7 +100,7 @@
       <fieldset>
         <legend>Column</legend>
         <label><input type="radio" name="{{ id }}-sort-col" data-sort-col value="" checked> Default</label>
-        {% for c in cols if not (c.blank or c.check) %}<label><input type="radio" name="{{ id }}-sort-col" data-sort-col value="{{ c.key }}"> {{ c.label }}</label>{% endfor %}
+        {% for c in cols if not (c.blank or c.check) %}<label><input type="radio" name="{{ id }}-sort-col" data-sort-col value="{{ c.key }}" data-type="{{ c.type or 'text' }}"> {{ c.label }}</label>{% endfor %}
       </fieldset>
       <fieldset>
         <legend>Order</legend>
@@ -109,6 +110,11 @@
     </div>
   </div>{% endif %}
   {{ slot('actions', actions) }}
+  {% if layout %}{% set q = dict(request.view_args, **request.args.to_dict(flat=false)) %}<nav class="seg-toggle icons" aria-label="View">
+    {%- for key, name in (('table', 'Table'), ('cards', 'Cards')) %}{% set _ = q.update(view=none if key == 'table' else key) %}
+    <a href="{{ url_for(request.endpoint, **q) }}" aria-label="{{ name }}" title="{{ name }}" aria-current="{{ 'true' if layout == key else 'false' }}"><svg class="ic" aria-hidden="true"><use href="#i-{{ key }}"/></svg></a>
+    {%- endfor %}
+  </nav>{% endif %}
   </div>{% endif %}
   {% for c in by.pills %}
   <div class="filter-pills" role="group" aria-label="{{ c.label }}" data-pills="{{ c.key }}">
