@@ -9,5 +9,5 @@
                dict(key='alert', label='Why not', card='alert'), dict(key='protocol', label='Protocol', card='tag', class='std-tag'),
                dict(key='published', label='Setup', card='tag', class='std-tag'), dict(key='needs', label='Proven', card='badge', class='std-tag'),
                dict(key='ticks', label='Checks', card='badge', class='nb-tick'), dict(key='fit', label='Fit', filter='dropdown', off=true),
-               dict(key='from', label='From', card='meta'), dict(key='proves', label='Proves', class='std-tag', off=true)] %}
+               dict(key='from', label='From', card='meta', width='expand'), dict(key='proves', label='Proves', class='std-tag', off=true)] %}
 {{ cards('nb-agents', cols, items, search='Search ' ~ noun, choices=choices, empty='No ' ~ kind ~ ' matches.', noun=noun, layout=layout, default='cards', only={'fit': 'fit'}) }}

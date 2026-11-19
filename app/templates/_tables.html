@@ -5,7 +5,7 @@
    all read: `key` (the data-col), `label`; `type` 'text' (default) or 'num', how it sorts; `align` 'left', 'center'
    or 'right' (a 'num' column's default), of its header and cells; `sticky`: pinned while the table scrolls, the last
    one drawing the edge; `blank`: no visible name (a status, the actions), neither sorted nor in the Columns menu;
-   `check`: blank, a checkbox that ticks every visible row (check_cell in each row); `sr`: the label for a screen
+   `check`: blank, a checkbox that ticks every visible row (check_cell in each row); `pick`: blank, as narrow, with no such box; `sr`: the label for a screen
    reader only; `title`: its tooltip; `menu` false: not in the Columns menu; `fixed`: in it, always on; `off`: off
    until the viewer chooses; `width` in a table macro's table: 'fit' (default), as wide as its widest cell on one
    line, or 'expand', the rest of the width, wrapping; `table` false: on cards only (_cards.html, where `card` names
@@ -23,7 +23,7 @@
 {# The header cells of `cols`. #}
 {% macro heads(cols) %}{% set edge = edge_of(cols) %}
 {%- for c in cols %}{% set named = not (c.blank or c.check) %}
-      <th data-col="{{ c.key }}"{% if named %} data-type="{{ c.type or 'text' }}"{% else %} scope="col"{% endif %}{{ classes(c, c.key == edge, 'pick-col' if c.check) }}{% if c.title %} title="{{ c.title }}"{% endif %}>
+      <th data-col="{{ c.key }}"{% if named %} data-type="{{ c.type or 'text' }}"{% else %} scope="col"{% endif %}{{ classes(c, c.key == edge, 'pick-col' if c.check or c.pick) }}{% if c.title %} title="{{ c.title }}"{% endif %}>
         {%- if c.check %}<input type="checkbox" data-check-all aria-label="{{ c.label }}" title="{{ c.label }}">{% elif c.sr or c.blank %}<span class="sr">{{ c.label }}</span>{% else %}{{ c.label }}{% endif %}</th>
 {%- endfor %}
 {%- endmacro %}

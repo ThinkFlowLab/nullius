@@ -99,6 +99,8 @@ class AgentGrid(unittest.TestCase):
         self.assertIn('<td data-col="_pick" class="pick-col sticky-col"><input type="checkbox" data-pick="osworld1:openai-cua" aria-label="OpenAI CUA"></td>', html)
         self.assertIn('<input type="checkbox" data-pick="goose" aria-label="Goose 1.53.0" disabled>', html)
         self.assertNotIn("data-check-all", html)                                                        # one at a time: no box ticks them all
+        self.assertIn('<th data-col="_pick" scope="col" class="pick-col sticky-col"><span class="sr">Chosen</span></th>', html)   # as narrow as a check column
+        self.assertIn('#nb-agents > * > tr > :nth-child(7) { width: auto;', html)                        # From takes the spare width, not the box
         self.assertNotIn("pick-check", html)                                                            # the box is the mark
         self.assertNotIn("/static/catalogue/agents/goose.svg</td>", html)                              # its logo beside its name, not a column
         heads = re.findall(r'<th data-col="(\w+)"', html)

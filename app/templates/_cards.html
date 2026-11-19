@@ -57,7 +57,7 @@
 {% macro rows(id, cols, items, search, choices, only, empty, noun, sort, default) %}
 {%- set icon = (cols|selectattr('card', 'equalto', 'icon')|list + [none])[0] %}
 {%- set icons = icon and items|selectattr(icon.key)|list|length > 0 %}
-{%- set shown = [dict(key='_pick', label='Chosen', blank=true, sticky=true)] if items|selectattr('pick')|list else [] %}{% for c in cols if c.table is not sameas false and (c.key in choices or c.type == 'num' or items|selectattr(c.key)|list) %}{% set _ = shown.append(dict(c, sticky=c.card == 'title')) %}{% endfor %}
+{%- set shown = [dict(key='_pick', label='Chosen', blank=true, pick=true, sticky=true)] if items|selectattr('pick')|list else [] %}{% for c in cols if c.table is not sameas false and (c.key in choices or c.type == 'num' or items|selectattr(c.key)|list) %}{% set _ = shown.append(dict(c, sticky=c.card == 'title')) %}{% endfor %}
 {%- set rs = [] %}{% for item in items %}{% set a %}{% if item.get('id') %} id="{{ item.id }}"{% endif %} data-search="{{ item.get('search', '') }}"
   {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}{% for k, by in (item.get('unless') or {}).items() %} data-unless-{{ k }}="{{ by }}"{% endfor %}{% endset %}
   {%- set _ = rs.append({'item': item, 'attrs': a}) %}{% endfor %}
