@@ -25,6 +25,9 @@ class StandardBenchmarkSwitch(CompilerCase):
         self.assertEqual((out[1], out[2], out[3]), (12, 12, False))                # first, and no Original tile beside them
         self.assertEqual((out[4], out[5]), (["OpenAI CUA belongs to OSWorld1"], True))
         self.assertEqual(out[6], ["MiniMax M3 belongs to OSWorld2"])
+        tags = self.js('const os=C.standardOthers(C.createStandard("osworld1"));'
+                       'process.stdout.write(JSON.stringify([...new Set(os.filter(o=>o.benchmark).map(o=>o.protocol))]));')
+        self.assertEqual(tags, ["its own script"])                                    # its own and another's read the same
 
     def test_a_recipe_from_before_reads_as_its_benchmarks_agent(self):
         out = self.js('const old=o=>C.fromJSON(JSON.stringify({version:1,harness:"standard",benchmark:"osworld1",datasets:["test_small"],others:["original","nop"],bench_options:o}));'
