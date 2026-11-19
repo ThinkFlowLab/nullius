@@ -252,3 +252,19 @@ class LoopFolderWithATranslatedGit(LoopCase):
                            stdin=subprocess.DEVNULL, timeout=120)
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertTrue(os.path.isfile(self.round_file("input.json")))
+
+
+class ReplayPlaceholders(LoopCase):
+    def test_the_replay_may_take_the_base_and_the_ref_before(self) -> None:
+        run_dir = healthy(self.jobs, "run", "alpha")
+        data = adapter("alpha", NO_LIMITS, {"replay": "r {worktree} {ref} {job_dir} {out_json} {base_ref} {before_ref}"})
+        data["replay_success_labels"] = ["done"]
+        self.set_adapter(data)
+        self.read_ok(run_dir, None)
+
+    def test_another_command_may_not_take_them(self) -> None:
+        run_dir = healthy(self.jobs, "run", "alpha")
+        self.set_adapter(adapter("alpha", NO_LIMITS, {"classes": "c {job_dir} {out_json} {base_ref}"}))
+        r = self.read(run_dir, None)
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("{base_ref}", r.err)

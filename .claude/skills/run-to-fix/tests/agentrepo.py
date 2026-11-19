@@ -41,9 +41,11 @@ print(path)
 BASE_LABELS = {"p1__r": {"label": "done"}, "p2__r": {"label": "done"}, "p3__r": {"label": "not done"},
                "f1__r": {"label": "done"}, "f2__r": {"label": "done"}, "f3__r": {"label": "not done"}}
 GOOD_LABELS = {"p1__r": {"label": "done", "touched": True}, "p2__r": {"label": "done", "touched": False},
-               "p3__r": {"label": "done", "touched": False}, "f1__r": {"label": "not done", "touched": True},
+               "p3__r": {"label": "not done", "touched": False}, "f1__r": {"label": "not done", "touched": True},
                "f2__r": {"label": "not done", "touched": True}, "f3__r": {"label": "not done", "touched": False}}
 BAD_LABELS = dict(GOOD_LABELS, f3__r={"label": "done", "touched": True})
+#: a fix that changes only what the agent reports on the passing trial p3
+REPORT_LABELS = dict(BASE_LABELS, p3__r={"label": "done", "touched": True})
 
 
 def git(repo: str, args: List[str]) -> str:
@@ -71,6 +73,7 @@ class Repo:
     test_ref: str
     good: str
     bad: str
+    report: str
 
 
 def make_repo(root: str) -> Repo:
@@ -83,8 +86,11 @@ def make_repo(root: str) -> Repo:
     good = commit(path, {"agent.py": agent_file(True, False), "labels.json": json.dumps(GOOD_LABELS)}, "fix: good")
     git(path, ["checkout", "-q", "--detach", test_ref])
     bad = commit(path, {"agent.py": agent_file(True, True), "labels.json": json.dumps(BAD_LABELS)}, "fix: bad")
+    git(path, ["checkout", "-q", "--detach", test_ref])
+    report = commit(path, {"agent.py": agent_file(True, False), "labels.json": json.dumps(REPORT_LABELS)},
+                    "fix: report")
     git(path, ["checkout", "-q", "main"])
-    return Repo(path=path, base=base, test_ref=test_ref, good=good, bad=bad)
+    return Repo(path=path, base=base, test_ref=test_ref, good=good, bad=bad, report=report)
 
 
 #: what each recorded trial cost; the failed ones cost more, as in real runs
@@ -138,9 +144,12 @@ class RepoCase(LoopCase):
         write(os.path.join(self.loop, "round-01", "causes", "state.md"),
               "# The agent reports done in the wrong state\n\nRule: g01\n\nTrials: 2 (f1__r, f2__r).\n")
 
-    def candidate(self, cid: str, ref: str, test_ref: str) -> None:
-        r = run(["candidate", "--loop", self.loop, "--id", cid, "--cause", "state", "--ref", ref,
-                 "--test", "tests/test_fix.py", "--test-ref", test_ref])
+    def candidate(self, cid: str, ref: str, test_ref: str, effect: str) -> None:
+        self.candidate_of("state", cid, ref, test_ref, effect)
+
+    def candidate_of(self, cause: str, cid: str, ref: str, test_ref: str, effect: str) -> None:
+        r = run(["candidate", "--loop", self.loop, "--id", cid, "--cause", cause, "--ref", ref,
+                 "--test", "tests/test_fix.py", "--test-ref", test_ref, "--effect", effect])
         self.assertEqual(r.code, 0, r.out + r.err)
 
     def check(self, cid: str) -> dict:

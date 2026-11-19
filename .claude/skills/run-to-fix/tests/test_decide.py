@@ -5,7 +5,7 @@ import os
 from typing import List
 
 from agentrepo import RepoCase
-from jobs import Result, load, run, trial, write_job
+from jobs import Result, load, run, trial, write, write_job, write_json
 
 KEEP_GOOD = "Keep good. bad breaks test_other."
 
@@ -15,8 +15,8 @@ class Flow(RepoCase):
 
     def checked(self) -> None:
         self.start(self.commands(), ["run_tasks"])
-        self.candidate("good", self.repo.good, self.repo.test_ref)
-        self.candidate("bad", self.repo.bad, self.repo.test_ref)
+        self.candidate("good", self.repo.good, self.repo.test_ref, "outcome")
+        self.candidate("bad", self.repo.bad, self.repo.test_ref, "outcome")
         self.check("good")
         self.check("bad")
 
@@ -59,8 +59,11 @@ class StopOne(Flow):
         self.assertEqual(len(rows), 2)
         good = next(ln for ln in rows if ln.startswith("| good |"))
         bad = next(ln for ln in rows if ln.startswith("| bad |"))
-        self.assertIn("2 / 2 / 1 / 1 → 3 / 0 / 0 / 3", good)
-        self.assertIn("2 / 2 / 1 / 1 → 3 / 1 / 0 / 2", bad)
+        self.assertIn("2 / 2 / 1 / 1 → 2 / 0 / 1 / 3", good)
+        self.assertIn("2 / 2 / 1 / 1 → 2 / 1 / 1 / 2", bad)
+        self.assertIn(f"{self.repo.test_ref[:12]} → {self.repo.good[:12]}", good)
+        self.assertIn("2 of 2: done → not done 2", good)
+        self.assertIn("| outcome |", good)
         self.assertIn("test_other", bad)
         self.assertIn("f3__r", bad)
         self.assertIn("fails, then passes", good)
@@ -75,8 +78,9 @@ class StopOne(Flow):
         self.assertEqual(entry["answers"][0]["text"], KEEP_GOOD)
         self.assertEqual(entry["answers"][0]["about"], "stop 1: the candidates to keep")
         self.assertEqual(entry["kept"], ["good"])
-        self.assertEqual(entry["predictions"], [{"candidate": "good", "cause": "state", "rule": "g01",
-                                                 "tasks": ["bench/f1", "bench/f2"], "expect": "pass"}])
+        self.assertEqual(entry["predictions"], [{"candidate": "good", "cause": "state", "rule": "g01", "effect": "outcome",
+                                                 "trials": ["f1__r", "f2__r"], "tasks": ["bench/f1", "bench/f2"],
+                                                 "expect": "pass"}])
 
     def test_an_answer_before_the_page_is_refused(self) -> None:
         self.checked()
@@ -158,7 +162,7 @@ class Select(Flow):
         commands = self.commands()
         commands["replay"] = None
         self.start(commands, ["run_tasks"])
-        self.candidate("good", self.repo.good, self.repo.test_ref)
+        self.candidate("good", self.repo.good, self.repo.test_ref, "outcome")
         self.check("good")
         run(["decide", "--loop", self.loop, "--stop", "1"])
         run(["answer", "--loop", self.loop, "--stop", "1", "--keep", "good", "--text", "keep good"])
@@ -303,3 +307,70 @@ class TrialJobSpec(Flow):
         record = load(self.round_file("trial.json"))
         self.assertEqual(record["job_dir"], job)
         self.assertEqual(record["trials"], 9)
+
+
+class NoLabelChange(Flow):
+    def test_a_fix_that_changes_no_label_of_its_cause_has_a_line_of_its_own(self) -> None:
+        self.start(self.commands(), ["run_tasks"])
+        self.candidate("weak", self.repo.good, self.repo.good, "outcome")
+        self.check("weak")
+        r = run(["decide", "--loop", self.loop, "--stop", "1"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        page = self.page("decision-1.md")
+        self.assertIn("## Candidates whose fix changes no label of their cause", page)
+        self.assertIn(f"- weak: 0 of 2 trials of its cause change their label between {self.repo.good[:12]} and "
+                      f"{self.repo.good[:12]}.", page)
+
+
+REPORT_RULE = {"id": "p3_reports", "meaning": "The trial p3, whose report the report fix changes.",
+               "file": "result.json", "regex": "\"trial_name\": \"p3__r\""}
+
+
+class ReportCandidate(Flow):
+    """A kept candidate whose fix changes what the agent reports, and no pass or fail."""
+
+    def kept_report(self) -> None:
+        self.start(self.commands(), ["run_tasks"])
+        write_json(os.path.join(self.loop, "found-classes.json"),
+                   {"schema": "run-to-fix.found-classes/v1", "rules": [REPORT_RULE]})
+        r = run(["classify", "--loop", self.loop])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        write(self.round_file("causes/report.md"), "# The agent reports p3 wrongly\n\nRule: p3_reports\n")
+        self.candidate_of("report", "rep", self.repo.report, self.repo.test_ref, "report")
+        self.check("rep")
+        run(["decide", "--loop", self.loop, "--stop", "1"])
+        r = run(["answer", "--loop", self.loop, "--stop", "1", "--keep", "rep", "--text", "keep the report fix"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+
+    def select_report(self, extra: List[str]) -> Result:
+        return run(["select", "--loop", self.loop, "--ref", self.repo.report, "--canaries", "0"] + extra)
+
+    def test_the_page_of_stop_one_names_the_effect(self) -> None:
+        self.kept_report()
+        row = next(ln for ln in self.page("decision-1.md").splitlines() if ln.startswith("| rep |"))
+        self.assertIn("| report |", row)
+        self.assertIn("1 of 1: not done → done 1", row)
+
+    def test_select_takes_no_targets_and_guards_the_changed_trials(self) -> None:
+        self.kept_report()
+        r = self.select_report([])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertIn("targets (0 tasks of the kept causes)", r.out)
+        self.assertIn("guards: bench/p3", r.out)
+        r = self.select_report(["--size", "guards", "--budget-usd", "0.5", "--text", "the guards"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        sel = load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["selection"]
+        self.assertEqual((sel["targets"], sel["guards"]), ([], ["bench/p3"]))
+
+    def test_the_pages_say_the_report_is_not_read(self) -> None:
+        self.kept_report()
+        self.select_report(["--size", "guards", "--budget-usd", "0.5", "--text", "the guards"])
+        job = write_job(self.jobs, "trial", "alpha", "harbor", [trial(f"p3-{k}__t", "bench/p3", 1.0) for k in range(3)])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertIn("rep: this version does not read the agent's report in the new run", self.page("decision-2.md"))
+        r = run(["compare", "--loop", self.loop, "--new", job, "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        pred = load(self.round_file("result.json"))["predictions"][0]
+        self.assertEqual(pred["effect"], "report")
+        self.assertIn("does not read the agent's report", pred["result"]["note"])
