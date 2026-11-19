@@ -142,6 +142,33 @@ class RunsByLaunch(unittest.TestCase):
                 if says:
                     self.assertIn(says, block)
 
+    def test_finished_kits_do_not_inherit_the_shared_process_state(self):
+        from nullius.standard import job
+        with tempfile.TemporaryDirectory() as root:
+            plan = execution.Plan(name="kits", script="conform", runner="standard",
+                                  jobs=[{"name": "kit-conversation"}, {"name": "kit-tools"}, {"name": "kit-computer"}])
+            ex = execution.Execution(plan, root=root)
+            ex.launched = "run"
+            self.jobs = []
+            for name in ("kit-conversation", "kit-tools", "kit-computer"):
+                ok = name != "kit-computer"
+                j = write_job(ex.jobs, name, "my-agent", {"a": 1 if ok else "RuntimeError"}, n_tasks=1)
+                job.write_result(j.dir, name, 1, 2, [{}] if ok else [{"exception_info": {"exception_type": "RuntimeError"}}], 1)
+                self.jobs.append(parse.parse_job(j.dir))
+            execution.EXECUTIONS[ex.id] = ex
+            for state in ("running", "failed"):
+                with self.subTest(state=state):
+                    ex.state = state
+                    ex.finished = 3 if state == "failed" else None
+                    ex.ends = {"run": {"rc": 1, "at": 3}} if state == "failed" else {}
+                    html = self.get("/runs")
+                    for name in ("kit-conversation", "kit-tools", "kit-computer"):
+                        row = next(row for row in re.findall(r"<tr\b.*?</tr>", html, re.S)
+                                   if f"{name}</small>" in row)
+                        expected = state if name == "kit-computer" else "finished"
+                        self.assertIn(f'class="la-state {expected}"', row)
+                    self.assertEqual(ex.state, state)
+
     def test_a_later_paused_shard_has_a_resume_link(self):
         from web.runs import _launch_view
         group = SimpleNamespace(job_ids=[], pending=["first", "second"], source="record", dataset="")
