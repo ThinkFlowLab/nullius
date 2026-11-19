@@ -96,12 +96,13 @@ class AgentGrid(unittest.TestCase):
         html = r.get_data(as_text=True)
         self.assertIn('<table class="grid sortable tools snug" id="nb-agents" data-table>', html)
         self.assertNotIn("data-cards", html)
-        self.assertIn('<button type="button" class="row-pick" data-pick="osworld1:openai-cua" aria-pressed="false"', html)
-        self.assertIn('data-pick="goose" aria-pressed="false" disabled', html)
-        self.assertEqual(html.count('class="pick-check"'), len(re.findall(r'data-pick="[^"]+" aria-pressed="false"(?! disabled)', html)))   # a check for each one that can be chosen
+        self.assertIn('<td data-col="_pick" class="pick-col sticky-col"><input type="checkbox" data-pick="osworld1:openai-cua" aria-label="OpenAI CUA"></td>', html)
+        self.assertIn('<input type="checkbox" data-pick="goose" aria-label="Goose 1.53.0" disabled>', html)
+        self.assertNotIn("data-check-all", html)                                                        # one at a time: no box ticks them all
+        self.assertNotIn("pick-check", html)                                                            # the box is the mark
         self.assertNotIn("/static/catalogue/agents/goose.svg</td>", html)                              # its logo beside its name, not a column
         heads = re.findall(r'<th data-col="(\w+)"', html)
-        self.assertEqual(heads[:3], ["title", "alert", "protocol"])                                     # why not, beside the name
+        self.assertEqual(heads[:4], ["_pick", "title", "alert", "protocol"])                            # the box first, why not beside the name
 
     def test_a_capability_benchmark_lists_capabilities(self):
         _, cards = self.grid("locomo")

@@ -281,8 +281,8 @@ window.NulliusTable = {
     draw();
   },
 
-  /* The pick toggles (data-pick, aria-pressed) under `root`: a click, Space
-     or Enter flips one and sends nullius-pick {value, pressed} from it; with
+  /* The pick toggles under `root`, buttons (data-pick, aria-pressed) or
+     checkboxes (data-pick): a click, Space or Enter flips one and sends nullius-pick {value, pressed} from it; with
      `row`, a click elsewhere in the row (a selector) that holds one, but on a
      control of its own or at the end of a text selection, clicks it. */
   picks(root, row) {
@@ -293,14 +293,14 @@ window.NulliusTable = {
       }
       const b = e.target.closest('[data-pick]');
       if (!b || b.disabled) return;
-      const pressed = b.getAttribute('aria-pressed') !== 'true';
-      b.setAttribute('aria-pressed', String(pressed));
+      const pressed = b.type === 'checkbox' ? b.checked : b.getAttribute('aria-pressed') !== 'true';   // a box has ticked itself
+      if (b.type !== 'checkbox') b.setAttribute('aria-pressed', String(pressed));
       b.dispatchEvent(new CustomEvent('nullius-pick', {bubbles: true, detail: {value: b.dataset.pick, pressed}}));
     });
   },
 
   /* Whether a card or a row holds a pressed pick: chosen, it shows whatever the search and filters say. */
-  chosen(el) { return Boolean(el.querySelector('[data-pick][aria-pressed="true"]')); },
+  chosen(el) { return Boolean(el.querySelector('[data-pick][aria-pressed="true"], [data-pick]:checked')); },
 
   /* A checkbox column (a `check` column, check_cell in each row): the header
      ticks or unticks every visible row, and shows all, none or some of them
