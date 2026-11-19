@@ -50,10 +50,10 @@ PACKAGE_OF = {
     "conversation": "nullius.traces", "behavior": "nullius.traces",
     "comparison": "nullius.compare",
     "catalog": "nullius.catalogue", "benchmarks": "nullius.runs",
-    "harnesses": "nullius", "workspace": "nullius",
+    "harnesses": "nullius", "workspace": "nullius", "categorical": "nullius",
 }
 # Manifest keys whose importable module names differ.
-MODULE_NAME = {"harnesses": "importers", "benchmarks": "verifier"}
+MODULE_NAME = {"harnesses": "importers", "benchmarks": "verifier", "categorical": "charts"}
 
 MODULES = tuple(PACKAGE_OF)
 

@@ -2,6 +2,7 @@
 {% from 'traces/_attempts.html' import attempt_count %}
 {% from '_tables.html' import classes, controls %}
 {% from '_page.html' import page_head %}
+{% from '_charts.html' import panel as draw_panel %}
 {% extends "base.html" %}
 {% block title %}Compare {{ jobs|length }} run{{ '' if jobs|length == 1 else 's' }} — Nullius{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='compare/comparison.css') }}">
@@ -88,21 +89,22 @@
 
 {#- The controls row: the cohort, the view and the columns' order, then Add a run. #}
 {% macro side_views() %}<nav class="seg-toggle" aria-label="Comparison cohort">
-    <a href="{{ url_for('compare', pick=picks, cohort='whole', view=view) }}" aria-current="{{ 'true' if cohort == 'whole' else 'false' }}">Whole runs</a>
-    <a href="{{ url_for('compare', pick=picks, cohort='matched', view=view) }}" aria-current="{{ 'true' if cohort == 'matched' else 'false' }}">Matched tasks</a>
+    <a href="{{ url_for('compare', pick=picks, cohort='whole', view=view, **keep) }}" aria-current="{{ 'true' if cohort == 'whole' else 'false' }}">Whole runs</a>
+    <a href="{{ url_for('compare', pick=picks, cohort='matched', view=view, **keep) }}" aria-current="{{ 'true' if cohort == 'matched' else 'false' }}">Matched tasks</a>
   </nav>
   <nav class="seg-toggle" aria-label="Comparison view">
-    <a href="{{ url_for('compare', pick=picks, cohort=cohort) }}" aria-current="{{ 'false' if view else 'true' }}">Side by side</a>
-    <a href="{{ url_for('compare', pick=picks, cohort=cohort, view='tasks') }}" aria-current="{{ 'true' if view else 'false' }}">Task by task</a>
+    {% for key, name in ((none, 'Side by side'), ('tasks', 'Task by task'), ('chart', 'Chart')) %}
+    <a href="{{ url_for('compare', pick=picks, cohort=cohort, view=key, **keep) }}" aria-current="{{ 'true' if view == key else 'false' }}">{{ name }}</a>
+    {% endfor %}
   </nav>
   {% if n_agents > 1 %}<div class="menu-wrap">
     <button class="btn ghost sm" type="button" data-order-btn aria-haspopup="true" aria-expanded="false" title="Order columns"><svg class="ic" aria-hidden="true"><use href="#i-reorder"/></svg>Order</button>
     <div class="menu tools-menu" hidden>
-      <a href="{{ url_for('compare', pick=order_grouped, cohort=cohort, view=view) }}">Group by agent</a>
-      <a href="{{ url_for('compare', pick=order_alternating, cohort=cohort, view=view) }}">Alternate agents</a>
+      <a href="{{ url_for('compare', pick=order_grouped, cohort=cohort, view=view, **keep) }}">Group by agent</a>
+      <a href="{{ url_for('compare', pick=order_alternating, cohort=cohort, view=view, **keep) }}">Alternate agents</a>
     </div>
   </div>{% endif %}{% endmacro %}
-{% macro side_actions() %}<a class="btn ghost sm" href="{{ add }}" id="compare-add"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a run</a>{% endmacro %}
+{% macro side_actions() %}{% if view == 'chart' %}<a class="btn ghost sm" href="{{ add_chart }}" id="chart-add"><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg>Add chart</a>{% endif %}<a class="btn ghost sm" href="{{ add }}" id="compare-add"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a run</a>{% endmacro %}
 {#- one block, so the controls row sticks only as far as the table #}
 <div>
 {{ controls(view or 'side', [], sort=false, views=side_views, actions=side_actions) }}
@@ -110,7 +112,49 @@
 {% if cohort == 'matched' and not n_shared %}<p class="alert warn">No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
 {% if comparison.datasets_known and not comparison.datasets_match %}<p class="compare-warn">The recorded datasets differ: pick runs of the baseline's dataset to compare the same tasks.</p>{% endif %}
 {% endif %}
-{% if not view %}
+{% if view == 'chart' %}
+{#- the columns' controls, as the tables open with, then the chart of their runs #}
+<div class="table-wrap compare-table-wrap" role="region" aria-label="Chart columns" tabindex="0">
+<table class="grid compare" id="chart-columns" style="--cols: {{ columns|length }}">
+  {{ comparison_columns() }}
+  {{ column_controls('Column') }}
+  </tbody>
+</table>
+</div>
+{% if jobs %}<div class="compare-chart">
+{% if cards %}<div class="figs">
+  {% for card in cards %}{% set k = loop.index0 %}
+  <section class="fig" aria-label="Chart {{ loop.index }}">
+    <div class="fig-head">
+      <div class="fig-tools">
+      <div class="menu-wrap">
+        <button class="btn ghost sm" type="button" data-chart-btn aria-haspopup="true" aria-expanded="false" aria-label="Style of chart {{ loop.index }}"><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg>Style</button>
+        <div class="menu tools-menu" hidden>
+          {% for key, label, href in card.styles %}<a href="{{ href }}"{% if key == card.style %} aria-current="true"{% endif %}>{{ label }}</a>{% endfor %}
+        </div>
+      </div>
+      {% set n = loop.index %}
+      {% for axis in card.axes %}
+      <div class="menu-wrap">
+        <button class="btn ghost sm" type="button" data-chart-btn aria-haspopup="true" aria-expanded="false" aria-label="{{ 'Data' if card.axes|length == 1 else axis.name }} of chart {{ n }}: {{ axis.label }}">
+          {%- if card.axes|length == 1 %}<svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>{% else %}<span class="ic ic-letter" aria-hidden="true">{{ axis.name }}</span>{% endif %}{{ axis.label }}<svg class="ic dd-chev" aria-hidden="true"><use href="#i-chev"/></svg></button>
+        <div class="menu tools-menu" hidden>
+          {% for group, links in axis.groups.items() %}<fieldset><legend>{{ group }}</legend>
+            {% for key, label, href in links %}<a href="{{ href }}"{% if key == axis.key %} aria-current="true"{% endif %}>{{ label }}</a>{% endfor %}
+          </fieldset>{% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      </div>
+      <a class="icon-btn" href="{{ card.remove }}" aria-label="Remove this chart" title="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></a>
+    </div>
+    {% if card.panel %}{{ draw_panel(card.panel, 'chart-' ~ loop.index) }}{% else %}<p class="fig-note">Not in this comparison.</p>{% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% else %}<p class="fig-empty"><a class="btn ghost sm" href="{{ add_chart }}"><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg>Add chart</a></p>{% endif %}
+</div>{% endif %}
+{% elif not view %}
 <div class="table-wrap compare-table-wrap" role="region" aria-label="Run comparison" tabindex="0">
 <table class="grid compare" id="side" style="--cols: {{ columns|length }}">
   {{ comparison_columns() }}
