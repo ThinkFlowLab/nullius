@@ -92,6 +92,9 @@ def apply(rule: Rule, trial_dir: str) -> str:
     path = os.path.join(trial_dir, rule.file)
     if not os.path.isfile(path):
         return "0"
+    root = os.path.realpath(trial_dir)
+    if not os.path.realpath(path).startswith(root + os.sep):
+        raise RuleError(f"the file {rule.file} of rule {rule.id} in {trial_dir} leads outside the trial folder")
     with open(path, encoding="utf-8", errors="replace") as fh:
         text = fh.read()
     if rule.regex is not None:
