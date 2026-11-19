@@ -442,16 +442,17 @@
   // reached against its bound, or not run. Its source (nullius/standard/definitions.py, SOURCES) is in its title.
   const SOURCE_SAYS = {official: 'from the authors', adapter: 'from Harbor\'s adapter', nullius: 'made by Nullius'};
   const bound = e => { const [k, v] = Object.entries(e || {})[0] || ['at_least', 1]; return [k === 'at_most' ? '>' : '<', v]; };
-  function proofOf(proven, failed, expect) {
-    if (proven) return {state: 'ok', text: '✓ ' + (proven.passed || '') + (proven.limit ? ' · first ' + proven.limit : ''), title: 'proven on ' + (proven.on || '?') + (proven.shard ? ', shard ' + proven.shard : '')};
+  // short: a proof that met a bound short of the full mark (prove.short_of) - its tick is not green, its bound on hover
+  function proofOf(proven, failed, expect, short) {
+    if (proven) return {state: short ? 'part' : 'ok', text: '✓ ' + (proven.passed || '') + (proven.limit ? ' · first ' + proven.limit : ''), title: (short ? short + ' · ' : '') + 'proven on ' + (proven.on || '?') + (proven.shard ? ', shard ' + proven.shard : '')};
     if (failed && failed.value !== undefined) { const [op, v] = bound(failed.expect || expect); return {state: 'no', text: '✕ ' + failed.value + ' ' + op + ' ' + v, title: 'not proven: ' + [failed.passed, failed.on, ...(failed.problems || [])].filter(Boolean).join(' · ')}; }
     if (failed) return {state: 'no', text: '✕ not proven', title: (failed.problems || []).join(' · ')};
     return {state: 'none', text: 'not run'};
   }
   const proofSpan = p => `<span class="std-proof std-proof-${p.state}"${p.title ? ` title="${esc(p.title)}"` : ''}>${esc(p.text)}</span>`;
   // A control or a check as a plain chip: its name and its proof; where the control comes from is in its title.
-  const controlChip = (c, proof = true) => `<span class="std-ctl" title="${esc(c.key === 'nop' ? 'no answer at all: must score nothing' : c.key === 'oracle' ? 'the reference answers: must score everything' : '')} - ${esc(SOURCE_SAYS[c.source] || c.source)}: ${esc(c.from)}"><b>${esc(c.key)}</b>`
-    + (proof ? proofSpan(proofOf(c.proven, c.failed, c.expect)) : '') + '</span>';
+  const controlChip = (c, proof = true) => `<span class="std-ctl" title="${esc((c.key === 'nop' ? 'no answer at all' : c.key === 'oracle' ? 'the reference answers' : '') + ': must score ' + (c.must || (c.key === 'nop' ? 'nothing' : 'everything')))} - ${esc(SOURCE_SAYS[c.source] || c.source)}: ${esc(c.from)}"><b>${esc(c.key)}</b>`
+    + (proof ? proofSpan(proofOf(c.proven, c.failed, c.expect, c.short)) : '') + '</span>';
   const checkChip = (name, proven, failed, says) => { const p = proofOf(proven, failed); if (p.state === 'ok') { p.title = [says, proven.passed, p.title].filter(Boolean).join(' · '); p.text = '✓'; }
     return `<span class="std-ctl std-checkchip"><b>${esc(name)}</b>${proofSpan(p)}</span>`; };
   // The yes to an agent running as you: asked only for the local backend, where it is no sandbox.

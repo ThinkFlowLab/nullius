@@ -503,11 +503,37 @@ def _merged(proven: dict, got: Dict[str, dict]) -> dict:
     return proven
 
 
+def _pct(v: float) -> str:
+    return f"{v * 100:g}%"
+
+
+def must_score(expect: dict) -> str:
+    """A control's bound as a page says it: "nothing" and "everything" at the
+    full mark, else the bound ("at least 93%")."""
+    (bound, v), = expect.items()
+    if bound == "at_most":
+        return "nothing" if v <= 0 else f"at most {_pct(v)}"
+    return "everything" if v >= 1 else f"at least {_pct(v)}"
+
+
+def short_of(rec: Optional[dict], expect: dict) -> str:
+    """A proof that met a bound short of the full mark - an oracle under every
+    unit, a nop over none - as a page says it: what it reached, and the bound
+    ("93.55%, at least 93% needed"). "" at the full mark, or with no record."""
+    if not rec or not isinstance(rec.get("value"), (int, float)):
+        return ""
+    (bound, v), = (rec.get("expect") or expect).items()
+    if (rec["value"] <= 0) if bound == "at_most" else (rec["value"] >= 1):
+        return ""
+    return f"{_pct(rec['value'])}, " + (f"at most {_pct(v)} allowed" if bound == "at_most" else f"at least {_pct(v)} needed")
+
+
 def status(bench: dict) -> Dict[str, Dict[str, dict]]:
     """Per dataset, each control the benchmark declares - its source, where it
-    comes from, its bound - and whether it is proven on that dataset, with the
-    record; then the units and leak checks the same way. ``failed``: the last
-    attempt that did not pass, while none has since. What a page shows."""
+    comes from, its bound and what it must score - and whether it is proven on
+    that dataset, with the record and how far short of the full mark it is
+    (``short_of``); then the units and leak checks the same way. ``failed``:
+    the last attempt that did not pass, while none has since. What a page shows."""
     out = {}
     controls = bench.get("controls") or {}
     for ds in bench["datasets"]:
@@ -517,7 +543,8 @@ def status(bench: dict) -> Dict[str, Dict[str, dict]]:
         for c in definitions.CONTROLS:
             if c in controls:
                 d = definitions.control(bench, c)
-                row[c] = {"source": d["source"], "from": d["from"], "expect": d["expect"], "proven": rec.get(c), "failed": failed.get(c)}
+                row[c] = {"source": d["source"], "from": d["from"], "expect": d["expect"], "must": must_score(d["expect"]),
+                          "proven": rec.get(c), "short": short_of(rec.get(c), d["expect"]), "failed": failed.get(c)}
         for c in ("units", "leak"):
             row[c] = {"proven": rec.get(c), "failed": failed.get(c)}
         out[ds["id"]] = row

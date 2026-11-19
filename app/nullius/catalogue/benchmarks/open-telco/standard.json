@@ -1,0 +1,901 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "open-telco",
+  "label": "Open Telco",
+  "summary": "Each question is one of GSMA's telecom tests, asked as its Inspect task asks it; the task's own scorer reads the last message.",
+  "family": "agent",
+  "needs": [
+    "agent.task/v1"
+  ],
+  "upstream": {
+    "repository": "https://github.com/gsma-labs/evals",
+    "tag": "v1.1.0",
+    "tested": "708f1c5498793536824eae9919ae003f13c910ea",
+    "tested_date": "2026-03-07",
+    "license": "MIT"
+  },
+  "driver": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/driver.py"
+    ],
+    "install": {
+      "python": "3.12",
+      "project": ".",
+      "locked": true,
+      "pip": [
+        "openai==2.26.0"
+      ]
+    }
+  },
+  "datasets": [
+    {
+      "id": "teleqna-lite",
+      "label": "TeleQnA · Lite",
+      "units": 1000
+    },
+    {
+      "id": "teleqna-full",
+      "label": "TeleQnA · Full",
+      "units": 10000
+    },
+    {
+      "id": "teletables-lite",
+      "label": "TeleTables · Lite",
+      "units": 100
+    },
+    {
+      "id": "teletables-full",
+      "label": "TeleTables · Full",
+      "units": 500
+    },
+    {
+      "id": "telemath-lite",
+      "label": "TeleMath · Lite",
+      "units": 100
+    },
+    {
+      "id": "telemath-full",
+      "label": "TeleMath · Full",
+      "units": 500
+    },
+    {
+      "id": "telelogs-lite",
+      "label": "TeleLogs · Lite",
+      "units": 100
+    },
+    {
+      "id": "telelogs-full",
+      "label": "TeleLogs · Full",
+      "units": 864
+    },
+    {
+      "id": "3gpp_tsg-lite",
+      "label": "3GPP TSG · Lite",
+      "units": 100
+    },
+    {
+      "id": "3gpp_tsg-full",
+      "label": "3GPP TSG · Full",
+      "units": 2000
+    },
+    {
+      "id": "oranbench-lite",
+      "label": "ORANBench · Lite",
+      "units": 150
+    },
+    {
+      "id": "oranbench-full",
+      "label": "ORANBench · Full",
+      "units": 1500
+    },
+    {
+      "id": "srsranbench-lite",
+      "label": "srsRANBench · Lite",
+      "units": 150
+    },
+    {
+      "id": "srsranbench-full",
+      "label": "srsRANBench · Full",
+      "units": 1502
+    },
+    {
+      "id": "sixg_bench-lite",
+      "label": "6G-Bench · Lite",
+      "units": 150
+    },
+    {
+      "id": "sixg_bench-full",
+      "label": "6G-Bench · Full",
+      "units": 3722
+    }
+  ],
+  "units": {
+    "noun": "question",
+    "nouns": "questions"
+  },
+  "score": {
+    "kind": "pass",
+    "says": "GSMA's own task for the question, run in Inspect AI's eval loop with the answer as the model's reply: the multiple-choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter (TeleQnA, TeleTables, ORANBench, srsRANBench, 6G-Bench); TeleMath's scorer takes the last \\boxed{} and accepts a number within 1% or 0.01; TeleLogs' takes the last \\boxed{} and compares its first number (soft, the default) or all of it (hard); 3GPP TSG's pattern takes the first working-group code, case aside"
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "Nullius: no agent runs; the answer is empty."
+    },
+    "oracle": {
+      "source": "nullius",
+      "from": "Nullius, from the authors' answers: the dataset's answer, written as the task's prompt asks for it ('ANSWER: <letter>', \\boxed{<answer>}, {\"WORKING GROUP\": \"<group>\"}). 3GPP TSG's pattern cannot read RAN_AH1, so those questions fail: 6 of 100 Lite, 129 of 2,000 Full.",
+      "expect": {
+        "at_least": 0.93
+      }
+    }
+  },
+  "setups": {
+    "original": {
+      "summary": "GSMA's own Inspect task on the question, as `inspect eval` runs it: its prompt (the multiple-choice template, TeleMath's system prompt), one call to the run's model through Inspect's OpenAI-compatible client, and its scorer. Any model, as GSMA's leaderboard ranks them.",
+      "providers": {
+        "openai": "",
+        "openrouter": "",
+        "custom": ""
+      },
+      "turn_seconds": 900,
+      "paper": "GSMA's Open Telco leaderboard (GSMA/leaderboard): each model's accuracy per test on the Lite sets"
+    }
+  },
+  "options": {
+    "temperature": {
+      "summary": "Sampling randomness: Inspect's --temperature. Provider default sends none, as GSMA's leaderboard runs do; enter a non-negative decimal to set one. Accepted values depend on the model.",
+      "default": "default",
+      "setups": [
+        "original"
+      ],
+      "pattern": "default|(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?",
+      "example": "0.5"
+    },
+    "subject": {
+      "summary": "TeleQnA's question category: every one, or one alone (the task's subject argument).",
+      "datasets": [
+        "teleqna-lite",
+        "teleqna-full"
+      ],
+      "values": [
+        "all",
+        "lexicon",
+        "research-overview",
+        "research-publications",
+        "standards-overview",
+        "standards-specifications"
+      ],
+      "default": "all",
+      "about": {
+        "all": "Every category. The upstream's default.",
+        "lexicon": "Lexicon: 50 Lite, 500 Full.",
+        "research-overview": "Research overview: 200 Lite, 2,000 Full.",
+        "research-publications": "Research publications: 450 Lite, 4,500 Full.",
+        "standards-overview": "Standards overview: 100 Lite, 1,000 Full.",
+        "standards-specifications": "Standards specifications: 200 Lite, 2,000 Full."
+      },
+      "setups": [
+        "original",
+        "yours"
+      ]
+    },
+    "difficulty": {
+      "summary": "ORANBench's difficulty level: every one, or one alone (the task's difficulty argument).",
+      "datasets": [
+        "oranbench-lite",
+        "oranbench-full"
+      ],
+      "values": [
+        "all",
+        "easy",
+        "medium",
+        "hard"
+      ],
+      "default": "all",
+      "about": {
+        "all": "Every level. The upstream's default.",
+        "easy": "50 Lite, 500 Full.",
+        "medium": "45 Lite, 500 Full.",
+        "hard": "55 Lite, 500 Full."
+      },
+      "setups": [
+        "original",
+        "yours"
+      ]
+    },
+    "task_id": {
+      "label": "Task family",
+      "summary": "6G-Bench's task family: all 30, or one alone (the task's task_id argument).",
+      "datasets": [
+        "sixg_bench-lite",
+        "sixg_bench-full"
+      ],
+      "values": [
+        "all",
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8",
+        "T9",
+        "T10",
+        "T11",
+        "T12",
+        "T13",
+        "T14",
+        "T15",
+        "T16",
+        "T17",
+        "T18",
+        "T19",
+        "T20",
+        "T21",
+        "T22",
+        "T23",
+        "T24",
+        "T25",
+        "T26",
+        "T27",
+        "T28",
+        "T29",
+        "T30"
+      ],
+      "default": "all",
+      "about": {
+        "all": "Every family. The upstream's default.",
+        "T1": "Intent Feasibility Assessment",
+        "T2": "Intent Conflict Resolution",
+        "T3": "Intent Drift Detection",
+        "T4": "Slice Selection Reasoning",
+        "T5": "Slice Switching Decision",
+        "T6": "Slice Fairness vs Safety",
+        "T7": "Compute Placement Decision",
+        "T8": "Graceful Degradation under Edge Overload",
+        "T9": "Trust-Aware Offloading",
+        "T10": "SLA Violation Prediction",
+        "T11": "Preemptive Autonomy Downgrade",
+        "T12": "Conservative Continuation Decision",
+        "T13": "Swarm-Level Slice Negotiation",
+        "T14": "Scheduler Reconfiguration Adaptation",
+        "T15": "Decision Consistency under Replanning",
+        "T16": "Network-Exposed Compute Marketplace",
+        "T17": "Network-Knowledge RAG Augmentation",
+        "T18": "AI Agent Identity & Onboarding",
+        "T19": "AI Agent Interoperability & Federation",
+        "T20": "Agent-to-Agent Communication Management",
+        "T21": "Device-Network Task Offload Arbitration",
+        "T22": "Federated / Collaborative Learning Orchestration",
+        "T23": "Network-Assisted Digital Twin Control",
+        "T24": "Sensing-Enhanced Decisioning (ISAC)",
+        "T25": "AI-Agent-based Disaster / Public-Safety Coordination",
+        "T26": "Trust-Aware Third-Party Agent Exposure",
+        "T27": "Agent Lifecycle & Management",
+        "T28": "6G Model Training-as-a-Service Decision",
+        "T29": "Immersive/AR Resource Prioritization",
+        "T30": "Network Security Detection & Response Automation"
+      },
+      "setups": [
+        "original",
+        "yours"
+      ]
+    },
+    "eval_type": {
+      "label": "Answer match",
+      "summary": "How TeleLogs' scorer compares the boxed root cause with the answer (its eval_type).",
+      "datasets": [
+        "telelogs-lite",
+        "telelogs-full"
+      ],
+      "values": [
+        "soft",
+        "hard"
+      ],
+      "default": "soft",
+      "about": {
+        "soft": "The first number in the box: 3 and C3 both match C3. The upstream's default.",
+        "hard": "The whole box, case aside: only C3 matches C3."
+      },
+      "setups": [
+        "original",
+        "yours"
+      ]
+    }
+  },
+  "proven": {
+    "teleqna-lite": {
+      "units": {
+        "units": 1000,
+        "passed": "1000 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 1000,
+        "looked_for": 0,
+        "short": 1000,
+        "passed": "1000/1000",
+        "note": "1000 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/1000",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 1000,
+        "job": "2026-11-18__13-25-23__open-telco__teleqna-lite__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "1000/1000",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 1000,
+        "job": "2026-11-18__13-25-23__open-telco__teleqna-lite__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "teletables-lite": {
+      "units": {
+        "units": 100,
+        "passed": "100 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 100,
+        "looked_for": 0,
+        "short": 100,
+        "passed": "100/100",
+        "note": "100 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/100",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 100,
+        "job": "2026-11-18__13-28-18__open-telco__teletables-lite__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "100/100",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 100,
+        "job": "2026-11-18__13-28-18__open-telco__teletables-lite__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "telemath-lite": {
+      "units": {
+        "units": 100,
+        "passed": "100 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 100,
+        "looked_for": 81,
+        "short": 19,
+        "passed": "100/100",
+        "note": "19 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/100",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 100,
+        "job": "2026-11-18__13-30-18__open-telco__telemath-lite__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "100/100",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 100,
+        "job": "2026-11-18__13-30-18__open-telco__telemath-lite__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "telelogs-lite": {
+      "units": {
+        "units": 100,
+        "passed": "100 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 100,
+        "looked_for": 0,
+        "short": 100,
+        "passed": "100/100",
+        "note": "100 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/100",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 100,
+        "job": "2026-11-18__13-32-19__open-telco__telelogs-lite__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "100/100",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 100,
+        "job": "2026-11-18__13-32-19__open-telco__telelogs-lite__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "3gpp_tsg-lite": {
+      "units": {
+        "units": 100,
+        "passed": "100 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 100,
+        "looked_for": 100,
+        "short": 0,
+        "passed": "100/100",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/100",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 100,
+        "job": "2026-11-18__13-34-19__open-telco__3gpp_tsg-lite__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "94/100",
+        "value": 0.94,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 100,
+        "job": "2026-11-18__13-34-19__open-telco__3gpp_tsg-lite__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "oranbench-lite": {
+      "units": {
+        "units": 150,
+        "passed": "150 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 150,
+        "looked_for": 0,
+        "short": 150,
+        "passed": "150/150",
+        "note": "150 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/150",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 150,
+        "job": "2026-11-18__13-36-17__open-telco__oranbench-lite__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "150/150",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 150,
+        "job": "2026-11-18__13-36-17__open-telco__oranbench-lite__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "srsranbench-lite": {
+      "units": {
+        "units": 150,
+        "passed": "150 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 150,
+        "looked_for": 0,
+        "short": 150,
+        "passed": "150/150",
+        "note": "150 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/150",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 150,
+        "job": "2026-11-18__13-38-20__open-telco__srsranbench-lite__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "150/150",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 150,
+        "job": "2026-11-18__13-38-20__open-telco__srsranbench-lite__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "sixg_bench-lite": {
+      "units": {
+        "units": 150,
+        "passed": "150 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 150,
+        "looked_for": 0,
+        "short": 150,
+        "passed": "150/150",
+        "note": "150 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/150",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 150,
+        "job": "2026-11-18__13-40-24__open-telco__sixg_bench-lite__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "150/150",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 150,
+        "job": "2026-11-18__13-40-24__open-telco__sixg_bench-lite__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "telemath-full": {
+      "units": {
+        "units": 500,
+        "passed": "500 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 500,
+        "looked_for": 425,
+        "short": 75,
+        "passed": "500/500",
+        "note": "75 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/500",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 500,
+        "job": "2026-11-18__13-42-24__open-telco__telemath-full__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "500/500",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 500,
+        "job": "2026-11-18__13-42-24__open-telco__telemath-full__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "teletables-full": {
+      "units": {
+        "units": 500,
+        "passed": "500 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 500,
+        "looked_for": 0,
+        "short": 500,
+        "passed": "500/500",
+        "note": "500 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/500",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 500,
+        "job": "2026-11-18__13-44-54__open-telco__teletables-full__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "500/500",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 500,
+        "job": "2026-11-18__13-44-54__open-telco__teletables-full__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "telelogs-full": {
+      "units": {
+        "units": 864,
+        "passed": "864 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 864,
+        "looked_for": 0,
+        "short": 864,
+        "passed": "864/864",
+        "note": "864 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/864",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 864,
+        "job": "2026-11-18__13-47-16__open-telco__telelogs-full__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "864/864",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 864,
+        "job": "2026-11-18__13-47-16__open-telco__telelogs-full__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "oranbench-full": {
+      "units": {
+        "units": 1500,
+        "passed": "1500 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 1500,
+        "looked_for": 0,
+        "short": 1500,
+        "passed": "1500/1500",
+        "note": "1500 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/1500",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 1500,
+        "job": "2026-11-18__13-50-08__open-telco__oranbench-full__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "1500/1500",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 1500,
+        "job": "2026-11-18__13-50-08__open-telco__oranbench-full__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "srsranbench-full": {
+      "units": {
+        "units": 1502,
+        "passed": "1502 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 1502,
+        "looked_for": 0,
+        "short": 1502,
+        "passed": "1502/1502",
+        "note": "1502 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/1502",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 1502,
+        "job": "2026-11-18__13-53-33__open-telco__srsranbench-full__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "1502/1502",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 1502,
+        "job": "2026-11-18__13-53-33__open-telco__srsranbench-full__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "3gpp_tsg-full": {
+      "units": {
+        "units": 2000,
+        "passed": "2000 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 2000,
+        "looked_for": 2000,
+        "short": 0,
+        "passed": "2000/2000",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/2000",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 2000,
+        "job": "2026-11-18__13-56-50__open-telco__3gpp_tsg-full__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "1871/2000",
+        "value": 0.9355,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 2000,
+        "job": "2026-11-18__13-56-50__open-telco__3gpp_tsg-full__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "sixg_bench-full": {
+      "units": {
+        "units": 3722,
+        "passed": "3722 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 3722,
+        "looked_for": 0,
+        "short": 3722,
+        "passed": "3722/3722",
+        "note": "3722 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/3722",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 3722,
+        "job": "2026-11-18__14-00-45__open-telco__sixg_bench-full__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "3722/3722",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 3722,
+        "job": "2026-11-18__14-00-45__open-telco__sixg_bench-full__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    },
+    "teleqna-full": {
+      "units": {
+        "units": 10000,
+        "passed": "10000 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "leak": {
+        "units": 10000,
+        "looked_for": 0,
+        "short": 10000,
+        "passed": "10000/10000",
+        "note": "10000 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/10000",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 10000,
+        "job": "2026-11-18__14-07-49__open-telco__teleqna-full__prove-nop",
+        "source": "nullius",
+        "on": "2026-11-18"
+      },
+      "oracle": {
+        "passed": "10000/10000",
+        "value": 1.0,
+        "expect": {
+          "at_least": 0.93
+        },
+        "units": 10000,
+        "job": "2026-11-18__14-07-49__open-telco__teleqna-full__prove-oracle",
+        "source": "nullius",
+        "on": "2026-11-18"
+      }
+    }
+  }
+}
