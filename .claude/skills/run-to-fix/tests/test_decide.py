@@ -535,8 +535,8 @@ class AmountsAreFinite(Flow):
         self.assertFalse(os.path.exists(self.round_file("result.json")))
 
 
-ADD_KEPT = (" && python3 -c \\"import json,sys; p=sys.argv[1]; d=json.load(open(p)); "
-            "d['kept_recorded'] = ['f3__r', 'p2__r']; json.dump(d, open(p, 'w'))\\" {out_json}")
+ADD_KEPT = (" && python3 -c \"import json,sys; p=sys.argv[1]; d=json.load(open(p)); "
+            "d['kept_recorded'] = ['f3__r', 'p2__r']; json.dump(d, open(p, 'w'))\" {out_json}")
 
 
 class KeptRecorded(Flow):
