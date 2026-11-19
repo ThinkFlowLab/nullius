@@ -213,6 +213,7 @@ def check_replay(adapter: Adapter, args: argparse.Namespace, round_dir: str, bef
                 labels[when] = replay_labels(out, rows)
                 continue
         values = {"ref": sha, "before_ref": against, "base_ref": base, "job_dir": job_dir, "out_json": out}
+        os.makedirs(os.path.dirname(out), exist_ok=True)
         o = on_ref(adapter, args.loop, round_dir, "replay", sha, values, out[:-len(".json")] + ".log",
                    args.command_timeout_s)
         if o.ran is None:

@@ -66,5 +66,6 @@ def write_paid_on_ref(path: str, checkout: str, loop_dir: str, sha: str, line: s
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write("#!/usr/bin/env bash\nset -euo pipefail\n")
         fh.write(f"git -C {q(checkout)} worktree add --detach {q(tree)} {q(sha)}\n")
-        fh.write(f"trap 'git -C {q(checkout)} worktree remove --force {q(tree)}' EXIT\n")
+        cleanup = f"git -C {q(checkout)} worktree remove --force {q(tree)}"
+        fh.write(f"trap {q(cleanup)} EXIT\n")
         fh.write(f"cd {q(tree)}\n{fill(line, dict(values, worktree=tree))}\n")
