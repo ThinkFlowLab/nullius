@@ -7,8 +7,8 @@ from typing import Dict, List, Optional, Tuple
 
 from classifying import classes_of, cross_check, failure_groups, read_rows
 from reading import adapter_of, analyze, health
-from rounds import (LoopError, call_runs, ledger_round, load_ledger, now, open_round, read_input, read_json,
-                    save_ledger, write_json)
+from rounds import (STOP_RULE, LoopError, call_runs, ledger_round, load_ledger, now, open_round, read_input,
+                    read_json, save_ledger, write_json)
 from pricing import describe, price_of, task_costs, usd
 from stats import binomial_two_sided, fisher_two_sided, verdict
 from trials import TrialRow
@@ -16,9 +16,6 @@ from trials import TrialRow
 TARGET_TRIALS = 3
 REPORT_NOT_READ = "this version does not read the agent's report in the new run"
 GROUP_MIN_TRIALS = 3
-STOP_RULE = ("No new round when the verdict is noise and no group of failing trials of the new run has 3 trials "
-             "or more, or when the budget left is under the price of the cheapest option: the lowest-priced trial run "
-             "of the tasks of one such group, 3 trials each, each task at the mean cost of its trials in the new run.")
 
 
 def page_labels(before_job: str, new_job: str) -> Tuple[str, str]:
@@ -124,6 +121,9 @@ def cmd_compare(args: argparse.Namespace) -> None:
     adapter = adapter_of(args.loop)
     round_dir = open_round(args.loop)
     record = read_input(round_dir)
+    if record.get("stop_rule") != STOP_RULE:
+        raise LoopError("the stop rule of this round, recorded in input.json when read started it, is not the stop "
+                        "rule of this version of the skill; start a new round with loop.py read")
     threshold = float(record["pass_threshold"])
     against = record["run"] if args.against == "run" else record["baseline"]
     if against is None:

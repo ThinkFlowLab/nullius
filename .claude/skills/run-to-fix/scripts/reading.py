@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from adapter import Adapter, load_adapter
-from rounds import (LoopError, call_runs, last_result, ledger_round, load_ledger, now, round_for_read, runs_py,
-                    save_ledger, sha256_of, write_json)
+from rounds import (STOP_RULE, LoopError, call_runs, last_result, ledger_round, load_ledger, now, round_for_read,
+                    runs_py, save_ledger, sha256_of, write_json)
 
 #: verdicts of `runs.py health` that make a run not analysable, matched by their opening words
 REFUSING = ("no trials ran", "every trial raised an exception", "systemic failure", "incomplete:",
@@ -151,7 +151,8 @@ def cmd_read(args: argparse.Namespace) -> None:
         "run": {"spec": args.run, "job_dir": None},
         "baseline": {"spec": args.baseline, "job_dir": None} if args.baseline else None,
         "adapter_sha256": adapter.sha256, "budget_usd": args.budget_usd, "pass_threshold": args.pass_threshold,
-        "run_analysis": {"runs_py": runs, "sha256": sha256_of(runs)}, "refused": bool(refused),
+        "run_analysis": {"runs_py": runs, "sha256": sha256_of(runs)}, "stop_rule": STOP_RULE,
+        "refused": bool(refused),
         "reason": "; ".join(refused) or None,
     }
     if refused:

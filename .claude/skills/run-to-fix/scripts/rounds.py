@@ -16,6 +16,10 @@ from typing import Dict, List, Optional, Tuple
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 RUNS_PY = os.path.join(os.path.dirname(os.path.dirname(SCRIPTS)), "run-analysis", "scripts", "runs.py")
 ROUND = re.compile(r"^round-(\d{2,})$")
+#: the stop rule; read records it in input.json, and compare applies it only when it is still the same text
+STOP_RULE = ("No new round when the verdict is noise and no group of failing trials of the new run has 3 trials "
+             "or more, or when the budget left is under the price of the cheapest option: the lowest-priced trial run "
+             "of the tasks of one such group, 3 trials each, each task at the mean cost of its trials in the new run.")
 TAIL_LINES = 12
 
 
