@@ -1686,6 +1686,15 @@ def owners() -> Dict[str, Execution]:
     return out
 
 
+def run_ends(owner: Optional[Dict[str, Execution]] = None) -> Dict[str, Optional[tuple]]:
+    """Each job a run writes -> its ``job_state`` once the whole run has ended,
+    None while the run is alive: the ``runs`` of ``workspace.load_jobs``. A
+    part's end is written down before the run's last copy from its host.
+    ``owner``: ``owners()``, when the caller holds it."""
+    return {name: None if e.state in ALIVE else e.job_state(name)
+            for name, e in (owners() if owner is None else owner).items()}
+
+
 def for_job(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[Execution]:
     """The newest execution whose script writes this job, if any - the one
     the job page shows beside the job, or instead of it while Harbor has
@@ -1823,7 +1832,7 @@ def deletable(names: List[str], root: Optional[str] = None) -> None:
         _deletable(n, root)
 
 
-def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable) -> dict:
+def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, ends: dict) -> dict:
     path, rec = _deletable(name, root)
     plan = rec.get("plan") or {}
     # a run refused at the name check never made the host folder: one of that name there is not its own
@@ -1831,7 +1840,7 @@ def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable) 
     held = []
     for ws, roots in holding(path):
         dirs = parse.find_job_dirs(roots)
-        ids = [j.job_id for j in workspace.load_jobs(ws, roots)]
+        ids = [j.job_id for j in workspace.load_jobs(ws, roots, ends)]
         # a job of the same id from another root shares these judgements: they stay
         others = {e.get("job_id") for d, e in workspace.job_index(ws).items() if d not in dirs}
         judged = judgements.job_dirs(ws.dir, [i for i in ids if i.split("~")[0] not in others])
@@ -1849,7 +1858,8 @@ def deletion(names: List[str], home: str, root: Optional[str] = None, holding: O
     a run: nothing goes then. ``holding``: a run folder's ``workspace.holding``,
     when the caller has it already."""
     holding = holding or (lambda path: workspace.holding(home, path))
-    runs = [_run_deletion(n, home, root, holding) for n in dict.fromkeys(names)]
+    ends = run_ends()
+    runs = [_run_deletion(n, home, root, holding, ends) for n in dict.fromkeys(names)]
     copies: Dict[str, int] = {}
     for r in runs:
         if r["host"]:

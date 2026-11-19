@@ -391,11 +391,11 @@ def ended_for(job_id):
 
 
 def run_ends():
-    """Each job a run of this application writes -> that run's ``job_state``, the ``runs`` of
-    ``workspace.load_jobs``. Once per request: the Workspaces page reads every workspace."""
+    """``execution.run_ends`` over this request's ``_owners``, once per request:
+    the Workspaces page reads every workspace."""
     memo = request_memo("run_ends")
     if "run_ends" not in memo:
-        memo["run_ends"] = {name: e.job_state(name) for name, e in _owners().items()}
+        memo["run_ends"] = execution.run_ends(_owners())
     return memo["run_ends"]
 
 
