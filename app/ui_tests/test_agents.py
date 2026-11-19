@@ -182,9 +182,11 @@ class Tabs(unittest.TestCase):
         html = self.get("/agents").get_data(as_text=True)
         menu = html[html.index('data-tools="sort"'):]
         self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', menu), ["", "title", "ports", "runs"])
-        self.assertIn('<fieldset data-filter-menu="protocol" aria-label="Protocol">', html)
+        self.assertIn('data-tools-btn="filter"', html)                      # both in the one Filter menu, no dropdown of their own
+        self.assertNotIn('data-dropdown', html)
+        self.assertIn('<fieldset data-filter-menu="protocol">\n        <legend>Protocol</legend>', html)
         self.assertIn('<input type="checkbox" data-value="ACP" checked> ACP', html)
-        self.assertIn('<fieldset data-filter-menu="proves" aria-label="Proves">', html)
+        self.assertIn('<fieldset data-filter-menu="proves">\n        <legend>Proves</legend>', html)
         self.assertIn('<input type="checkbox" data-value="agent.task/v1" checked> One task', html)
         card = html[html.index('id="fake"'):]
         self.assertIn('data-f-proves="agent.task/v1&#10;agent.workspace/v1&#10;"', card[:card.index(">")])
