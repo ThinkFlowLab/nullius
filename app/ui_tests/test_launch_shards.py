@@ -82,7 +82,7 @@ class LaunchShards(unittest.TestCase):
         for name, value in (("list_all", [ws]), ("job_index", {})):
             self.stack.enter_context(patch.object(workspace, name, return_value=value))
         self.stack.enter_context(patch.object(workspace, "load", side_effect=lambda home, name: ws))
-        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda w, roots: self.jobs))
+        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda w, roots, runs=None: self.jobs))
         self.stack.enter_context(patch.object(web.shared, "_jobs_for_request", side_effect=lambda: self.jobs))
         self.stack.enter_context(patch.dict(execution.EXECUTIONS, {}, clear=True))
         self.client = web.app.test_client()

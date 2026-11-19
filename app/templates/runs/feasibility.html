@@ -74,7 +74,7 @@
 
 <div class="legend feas-summary" role="group" aria-label="Feasibility classes">
   <span class="feas-headline" id="feasibility-count"><strong>{{ report.n_feasible }}</strong><span class="faint">/{{ report.rows|length }}</span> feasible</span>
-  {% for k in F_ORDER %}{% if report.counts[k] %}<span class="chip fv-{{ k }}">{{ F_LABELS[k] }} <b>{{ report.counts[k] }}</b></span>{% endif %}{% endfor %}
+  {% set oc = report.counts %}{% for k in F_ORDER %}{% if oc[k] %}<span class="chip fv-{{ k }}">{{ F_LABELS[k] }} <b>{{ oc[k] }}</b></span>{% endif %}{% endfor %}
 </div>
 
 {% if report.rows %}

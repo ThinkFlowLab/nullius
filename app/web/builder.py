@@ -46,7 +46,7 @@ def new_run():
         data["loadRecipe"] = ex.plan.recipe
         data["loadRun"] = run
     elif like:
-        job = shared._find_job(shared._jobs_for_request(), like)
+        job = shared._job_for_request(like)
         if job is None:
             abort(404)
         data["loadLike"] = {"job": job.job_id, "agent": job.agent_name, "launch": job.launch,

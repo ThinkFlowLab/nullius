@@ -32,7 +32,7 @@ class ComparisonRoutes(unittest.TestCase):
         self.stack.enter_context(patch.object(workspace, "job_index", return_value={}))
         self.stack.enter_context(patch.object(workspace, "load", side_effect=lambda home, name:
             {"active": self.active, "foreign": self.foreign}.get(name)))
-        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: self.jobs[ws.name]))
+        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: self.jobs[ws.name]))
         for obj, name in ((web.shared, "open_workspace"), (web.shared, "_import_roots"),
                           (workspace, "touch"), (workspace, "save")):
             self.stack.enter_context(patch.object(obj, name, side_effect=AssertionError(f"Unexpected workspace mutation: {name}")))
