@@ -579,3 +579,53 @@ class StandardUnits(Flow):
         self.assertEqual(r.code, 0, r.out + r.err)
         self.assertEqual(self.lines("rerun-tasks.txt"), ["f1", "f2", "p1"])
         self.assertEqual(self.lines("full-tasks.txt"), ["f1", "f2", "f3", "p1", "p2", "p3"])
+
+
+class RecordedAmounts(Flow):
+    """A recorded cost or budget that is not a finite amount of 0 or more stops the loop before it is used."""
+
+    def job_with_cost(self, value: float) -> str:
+        self.chosen()
+        trials = []
+        for task in ("f1", "f2", "p1"):
+            for k in range(3):
+                t = trial(f"{task}-{k}__t", f"bench/{task}", 1.0)
+                t.cost = value if (task, k) == ("f1", 0) else 0.01
+                trials.append(t)
+        return write_job(self.jobs, "trial", "alpha", "harbor", trials)
+
+    def assert_refused_before_any_write(self, job: str, value: str) -> None:
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("f1-0__t", r.err)
+        self.assertIn(value, r.err)
+        self.assertEqual(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"], [])
+        self.assertFalse(os.path.exists(self.round_file("commands/run_tasks-full.sh")))
+
+    def test_a_nan_cost_of_a_trial_is_refused(self) -> None:
+        self.assert_refused_before_any_write(self.job_with_cost(float("nan")), "nan")
+
+    def test_a_negative_cost_of_a_trial_is_refused(self) -> None:
+        self.assert_refused_before_any_write(self.job_with_cost(-0.01), "-0.01")
+
+    def test_a_nan_cost_in_the_ledger_is_refused(self) -> None:
+        job = self.chosen()
+        run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
+        path = os.path.join(self.loop, "ledger.json")
+        ledger = load(path)
+        ledger["rounds"][0]["trial_runs"][0]["cost_usd"] = float("nan")
+        write_json(path, ledger)
+        r = self.select(["--size", "targets", "--budget-usd", "1", "--text", "again"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("ledger.json", r.err)
+
+    def test_a_nan_budget_in_the_input_is_refused(self) -> None:
+        self.kept()
+        path = self.round_file("input.json")
+        record = load(path)
+        record["budget_usd"] = float("nan")
+        write_json(path, record)
+        r = self.select(["--size", "targets", "--budget-usd", "1", "--text", "a budget"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("input.json", r.err)
+        self.assertFalse(os.path.exists(self.round_file("trial-tasks.txt")))
