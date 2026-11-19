@@ -31,20 +31,22 @@ class Macros(unittest.TestCase):
 
     def test_slots_come_in_their_order_and_a_field_without_one_stays_off(self):
         html = self.render(COLS, [FULL])
-        order = ['>ready<', 'class="cat-tag">coding<', 'class="bench-harness">v1<', 'aria-label="Pick Alpha"', 'href="/m.svg#bm-a"',
-                 'class="card-link" href="/a">Alpha<', '<code>a.port/v1</code>', 'class="run-tag rt-standard">Nullius<', 'class="run-tag">Harbor<',
+        order = ['href="/m.svg#bm-a"', 'class="card-link" href="/a">Alpha<', 'aria-label="Pick Alpha"', '<code>a.port/v1</code>', 'class="run-tag rt-standard">Nullius<', 'class="run-tag">Harbor<',
                  'title="Install docker"><svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg>needs docker<',
                  '<dl class="bench-stats"><div><dt>Tasks each</dt><dd>5</dd></div><div><dt>Scorer</dt><dd class="word">tests</dd></div></dl>',
-                 'class="bench-card-blocker">Blocked<', '<a class="btn ghost sm" href="/a/open">Open</a>']
+                 'class="bench-card-blocker">Blocked<', '<a class="btn ghost sm" href="/a/open">Open</a>', '>ready<', 'class="cat-tag">coding<', 'class="bench-harness">v1<']
         at = [html.index(part) for part in order]
         self.assertEqual(at, sorted(at))
         self.assertNotIn('never on a card', html)
         self.assertIn('<article class="bench-card" data-card id="a" data-search="Alpha one" data-keys="a">', html)
         self.assertEqual(html.count('<a '), 2)                                               # one link to the card, and its action
+        self.assertIn('href="/a">Alpha</a><input type="checkbox" data-check value="a" aria-label="Pick Alpha"></div>', html)   # the title row's right
+        self.assertIn('<div class="bench-card-foot"><span>ready</span><span class="bench-card-tags"><span class="cat-tag">coding</span></span>'
+                      '<span class="bench-harness">v1</span></div></article>', html)                                       # the last row
 
     def test_empty_slots_take_no_space(self):
         html = self.render(COLS, [{'href': '/b', 'title': 'Beta', 'stat1': 0, 'badge': [], 'tag': '', 'note': None}])
-        for absent in ('bench-card-top', 'bench-card-domain', 'bench-card-runs', 'bench-card-setup', 'bench-card-blocker', 'bench-card-actions'):
+        for absent in ('bench-card-foot', 'data-check', 'bench-card-domain', 'bench-card-runs', 'bench-card-setup', 'bench-card-blocker', 'bench-card-actions'):
             self.assertNotIn(absent, html)
         self.assertIn('<dl class="bench-stats"><div><dt>Tasks</dt><dd>0</dd></div></dl>', html)   # a zero is a value
         self.assertNotIn('bench-stats', self.render(COLS[2:3], [{'href': '/b', 'title': 'Beta'}]))

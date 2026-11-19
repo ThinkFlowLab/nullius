@@ -23,14 +23,16 @@
 .card-link:focus-visible::after { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
 .bench-card :is(input, button, .btn, [title]) { position: relative; z-index: 1; }
 .bench-card [title]:not(input, button, .btn) { cursor: pointer; }   /* raised for its tooltip, it still opens the card */
-.bench-card-top .bench-harness { margin-left: auto; }
-.bench-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bench-card-foot .bench-harness { margin-left: auto; }
+.bench-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .bench-shelf.st-community .bench-card { background: transparent; border-style: dashed; border-color: var(--border); }
 .bench-shelf.st-community .bench-card:hover { border-color: var(--accent); }
-.bench-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bench-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .bench-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .bench-harness { font: 12px var(--mono); color: var(--text-faint); }
 .bench-card-title { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 500; letter-spacing: -.01em; }
+/* the check at the title row's right, level with its first line however the title wraps */
+.bench-card-title [data-check] { flex: none; align-self: flex-start; font: inherit; margin: calc((1lh - 13px) / 2) 0 0 auto; }
 .bench-mark { flex: none; width: 22px; height: 22px; color: var(--accent); }
 .bench-card-domain { margin-top: -6px; font-size: 14px; line-height: 1.5; color: var(--text-dim); }
 /* up to three stats in columns of one width, each its label then its value */
