@@ -657,17 +657,19 @@ def late_reference(u):
     then the click."""
     c = Client(u.socket())
     try:
-        target = u.expected["target"]
+        ink = bytes.fromhex(fixture.INK[1:])
         for _ in range(u.steps - 1):
             failed, _ = c.call("wait")
             failed_shot, png = c.call("screenshot")
             if failed or failed_shot or not isinstance(png, bytes):
                 raise ReferenceFailed("a look by a step did not answer as a correct agent's would")
-            if u.up.is_set() and u.pictures[-1][0] > (u.shown or float("inf")):
-                break                                # this step's observation was taken with the button up
+            _, rows = fixture.png_rows(png)
+            point = next(((row.find(ink) // 3, y) for y, row in enumerate(rows) if row.find(ink) >= 0), None)
+            if point is not None:
+                break
         else:
             raise ReferenceFailed("the button was not seen within the steps")
-        failed, said = c.call("click", dict(zip("xy", centre(u.boxes[target]))))
+        failed, said = c.call("click", dict(zip("xy", point)))
         if failed:
             raise ReferenceFailed(f"click answered with an error: {str(said)[:200]}")
     finally:

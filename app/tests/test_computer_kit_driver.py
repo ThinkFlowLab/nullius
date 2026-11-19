@@ -511,11 +511,12 @@ def _alive(pid):
                           timeout=30).stdout.strip()[:1] not in ("", "Z")
 
 
-def _png(text, scale, above=()):
+def _png(text, scale, above=(), at=None):
     """A screen of 1920 by 1080 with ``text`` drawn as the fixture draws it, as PNG bytes (filter 0)."""
     w, h = 1920, 1080
     cols, rows, cells = driver.fixture.pixels(text)
-    x0, y0 = (w - cols * scale) // 2, (h - rows * scale) // 2
+    x, y = at or (w // 2, h // 2)
+    x0, y0 = x - cols * scale // 2, y - rows * scale // 2
     ink = {(x0 + x * scale + dx, y0 + y * scale + dy) for x, y in cells for dx in range(scale) for dy in range(scale)}
     for i, label in enumerate(above):
         _, _, cells = driver.fixture.pixels(label)
@@ -1153,7 +1154,8 @@ class Fake(FakeDesktop):
         self.log.append({"kind": "ready", "t": time.monotonic(), "boxes": dict(self.boxes)})
 
     def capture(self):
-        return super().capture() + json.dumps(self.boxes).encode()
+        labels = self.values.get("labels", [])
+        return _png(" ".join(labels), 5, at=driver.centre(self.boxes[labels[0]]) if len(labels) == 1 else None)
 
 
 class Fixture(unittest.TestCase):
@@ -1278,6 +1280,13 @@ class Window(unittest.TestCase):
         got = driver.score("late", ws, [], driver.oracle("late", ws)["answer"])
         self.assertTrue(got["passed"], got)
         self.assertIn("wait", got["detail"]["calls"])
+
+    def test_late_reference_refuses_blank_observations_even_when_capture_times_are_kept(self):
+        capture, blank = driver.Pictures.capture, _png("", 5)
+        with mock.patch.object(driver.Pictures, "capture", lambda pictures: (capture(pictures), blank)[1]):
+            ws, _ = self.unit("late")
+            with self.assertRaisesRegex(driver.ReferenceFailed, "not seen within the steps"):
+                driver.oracle("late", ws)
 
     def test_late_fails_a_click_sent_with_no_look_by_a_step_once_the_button_is_up(self):
         ws, s = self.unit("late")
