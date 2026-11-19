@@ -30,6 +30,9 @@
     const docker = $('[data-docker-state]');
     docker.textContent = j.docker.ok ? '✓ ' + j.docker.version : '✕ ' + j.docker.error;
     docker.className = 'st-row-value ' + (j.docker.ok ? 'ok' : 'bad');
+    const also = j.docker.also, other = $('[data-docker-also]');
+    other.hidden = !also;
+    if (also) other.lastElementChild.textContent = also.ok ? also.said + ' is installed too' : also.name + ' is installed and does not answer: ' + also.said;
     boat = j.boat || {set: false, env: false};
     render();
   };

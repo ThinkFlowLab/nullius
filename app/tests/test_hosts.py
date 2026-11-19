@@ -114,6 +114,12 @@ class ConnectionTest(unittest.TestCase):
         r = hosts.test(hosts.parse("bench"), run=lambda a, t: (0, "ok\ndocker=no\npodman=yes\npodman_ok=yes\n", ""))
         self.assertEqual(r["engine"], "podman")
 
+    def test_the_engine_is_the_one_that_answers(self):
+        for said, want in (("docker_ok=no\npodman_ok=yes", "podman"), ("docker_ok=yes\npodman_ok=yes", "docker"),
+                           ("docker_ok=no\npodman_ok=no", "docker")):     # neither: docker, whose reason is said
+            r = hosts.test(hosts.parse("bench"), run=lambda a, t: (0, f"ok\ndocker=yes\npodman=yes\n{said}\n", ""))
+            self.assertEqual(r["engine"], want, said)
+
     def test_the_probe_asks_each_engine_that_is_there(self):
         with tempfile.TemporaryDirectory() as d:
             for name, code in (("podman", 0), ("uv", 0)):
