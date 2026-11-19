@@ -9,16 +9,26 @@
   ],
   "origin": "official",
   "good_to_know": [
-    "Partial credit: each task scores 0 to 1; the score is the mean."
+    "Partial credit: each task scores 0 to 1; the score is the mean.",
+    "osworld2@hardened is OSWorld-V2 with Nullius's fixes for one machine (signed-out mail, a local proxy, a 40 GB disk, write limits, a grader failure as an error): not comparable with the paper."
+  ],
+  "upstream_limitations": [
+    "The release never booted its Docker VM: Docker and AWS scores are not shown to match.",
+    "A failed LLM grader call scores 0, like a wrong answer; Nullius notes it beside the score.",
+    "Task 082's check cannot reach its VM's port 3000 on Docker.",
+    "Mail tasks 001, 006 and 010 start Thunderbird with the shipped profiles, which may sign in to a live mailbox.",
+    "The mock websites keep their state between tasks; Overleaf keeps one account for 057 and 072."
   ],
   "limitations": [
-    "Not the paper's M3 setup: another release, no residential proxy, and 100 steps with thinking off by default; Steps per task 500 and Thinking adaptive restore the budget.",
+    "Not the paper's M3 setup: another release, Docker not AWS, no residential proxy, and 100 steps with thinking off by default; Steps per task 500 and Thinking adaptive restore the budget.",
     "Muse Spark's published score came from newer upstream code: scores here do not compare with it.",
     "The LLM grader (21 tasks) and the simulated user (6) are Claude Sonnet 4.6: the run's provider must serve it.",
     "29 tasks use the public internet: their outcome can change with the live sites.",
+    "GitLab tasks 026 and 041, and the 8 that ask for the paid proxy, end in an error in the Original; osworld2@hardened runs them.",
+    "The turn limit ends a unit from outside, unscored; after a spending cap the upstream runs on, its calls refused, to its step limit.",
     "Tasks 103 and 104 are not supported: they stay in the datasets, and an agent's unit ends in an error.",
     "A slow or loaded machine, or a run across 16:00 UTC (the VM's midnight), can change scores.",
-    "The null control scores above 0 on 015, 076, 090 and 092, and on 077 in some runs.",
+    "In osworld2@hardened the null control scores above 0 on 015, 076, 090 and 092, and on 077 in some runs.",
     "Only OSWorld-V2's own M3 and Muse Spark run it; no agent from the Agents page yet.",
     "Fetch the gated tasks and prepare the machine first: see OSWorld2 machine setup in the docs."
   ],
@@ -54,8 +64,12 @@
           "note": "osworld-v2-ubuntu-x86.qcow2 from xlangai/v2-image at 6e16459a, about 15 GB unpacked"
         },
         {
-          "step": "Build the proxy image for the 8 tasks that ask for a proxy",
-          "note": "python3 proxy.py --build, from this benchmark's folder"
+          "step": "For website tasks, start OSWorld-web as its README says",
+          "note": "Task-Web/OSWorld-web at tag osworld-v2.1, served under Website host suffix"
+        },
+        {
+          "step": "osworld2@hardened only: build the proxy image",
+          "note": "python3 hardened/proxy.py --build, from this benchmark's folder"
         }
       ],
       "notes": "Code Apache-2.0; tasks and assets gated on Hugging Face."

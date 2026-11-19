@@ -108,7 +108,8 @@ only when it has no release or the user asks. Never patch an upstream's bug
 or work around it (no monkeypatch, no changed default, no dependency it does
 not declare, no retry or timeout of ours): keep its behaviour, say it in the
 limitations, and ask when it blocks a run. A fix is the upstream's - or the
-user's fork's, brought in as a version (below).
+user's fork's, or a patched version of ours the owner asks for, brought in as
+a version (below), never the default.
 
 **Ask before re-implementing.** When any piece seems to need our own version
 of upstream logic (a scorer, a prompt, a tool, a simulator, a loader the

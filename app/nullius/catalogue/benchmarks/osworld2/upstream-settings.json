@@ -410,7 +410,7 @@
   "setting": "DesktopEnv(enable_proxy=...)",
   "values": "True, False",
   "default": "True, hard-coded",
-  "nullius": "fixed:True - hard-coded in the runner: the 8 tasks whose class asks for a proxy (3 of Offline, none of Offline, no services) get the upstream's DataImpulse setup"
+  "nullius": "fixed:True - hard-coded in the runner; the Original refuses the 8 tasks whose class asks for a proxy, since the release's DataImpulse credentials are placeholders; osworld2@hardened gives each a local tinyproxy"
  },
  {
   "entry": "scripts/python/run_multienv_m3.py",
@@ -459,14 +459,14 @@
   "setting": "GITLAB_URL",
   "values": "a GitLab server",
   "default": "the wrapper's server",
-  "nullius": "fixed:http://gitlab.<Website host suffix> - Task-Web/gitlab, which Nullius makes on the run's machine behind the mock websites' Caddy"
+  "nullius": "not offered - the upstream's GitLab takes ports 80 and 443, as the mock websites do, so the Original refuses its 2 tasks; osworld2@hardened makes Task-Web/gitlab on the run's machine behind the websites' Caddy, at http://gitlab.<Website host suffix>"
  },
  {
   "entry": "scripts/bash/run_multienv_m3.sh",
   "setting": "GITLAB_PRIVATE_TOKEN",
   "values": "the GitLab server's root token",
   "default": "an empty token",
-  "nullius": "fixed:the root token Nullius makes - with that GitLab, kept on that machine and given to the processes of the 2 GitLab tasks alone"
+  "nullius": "not offered - with GITLAB_URL; osworld2@hardened makes the root token on that machine and gives it to the 2 GitLab tasks alone"
  },
  {
   "entry": "scripts/bash/run_multienv_m3.sh",
@@ -487,7 +487,7 @@
   "setting": "OSWORLD_FILE_BASE_URL",
   "values": "a folder or a URL of the task files",
   "default": "$OSWORLD_FILE_BASE_URL, else ./cache/osworld_v2_assets",
-  "nullius": "fixed:the upstream's cache/osworld_v2_assets, by its absolute path - the release's gated assets, put there before a run: a file a task names through asset() is copied from there into the unit's task cache, not downloaded; for 001, 006 and 010 a folder of the unit's own, their mail client started offline (driver.py _assets)"
+  "nullius": "fixed:the upstream's cache/osworld_v2_assets, by its absolute path - the release's gated assets, put there before a run, as the wrapper sets it; osworld2@hardened gives 001, 006 and 010 a folder of the unit's own, their mail client signed out and offline"
  },
  {
   "entry": "desktop_env/controllers/website.py",
@@ -522,7 +522,7 @@
   "setting": "PROXY_CONFIG_FILE",
   "values": "a proxy pool file",
   "default": "evaluation_examples/settings/proxy/dataimpulse.json",
-  "nullius": "fixed:its default, whose username and password are placeholders - the 8 tasks that ask for a proxy get no working proxy, and by the code their setup can fail; not checked by a run"
+  "nullius": "fixed:its default, whose username and password are placeholders - the Original refuses the 8 tasks that ask for a proxy; osworld2@hardened points it at the unit's tinyproxy"
  },
  {
   "entry": "desktop_env/controllers/setup.py",
@@ -557,21 +557,21 @@
   "setting": "DISK_SIZE, RAM_SIZE, CPU_CORES",
   "values": "a size, a size, a count",
   "default": "32G (or a task's own volume size), 4G, 4",
-  "nullius": "fixed:the task's own volume size, at least 40G (startup/sitecustomize.py, as the upstream's aws provider gives), 4G, 4 - the rest hard-coded in the upstream"
+  "nullius": "fixed:the task's own volume size, 4G, 4 - the upstream's; osworld2@hardened raises the disk to at least 40G"
  },
  {
   "entry": "desktop_env/providers/docker/provider.py",
   "setting": "LOCK_TIMEOUT",
   "values": "seconds",
   "default": "10, hard-coded",
-  "nullius": "fixed:none (startup/sitecustomize.py) - every VM start waits for the lock, a restart inside DesktopEnv.reset() too; the driver also starts units' VMs one after another"
+  "nullius": "fixed:10 - its default; the driver starts units' VMs one after another; osworld2@hardened waits for the lock without a limit"
  },
  {
   "entry": "desktop_env/providers/docker/provider.py",
   "setting": "docker.from_env() timeout",
   "values": "seconds a Docker call",
   "default": "60, docker-py's default",
-  "nullius": "fixed:120 once the client creates the VM's container (startup/sitecustomize.py), and kept for its later calls (the containers' list, the stop and the removal) - a daemon busy with neighbouring VMs can take longer to create one; a create the client still times out on is not sent again, and the container the daemon made with that create's label is started"
+  "nullius": "fixed:60 - docker-py's default; osworld2@hardened takes 120 for the VM's create and adopts a container the daemon made after the client gave up"
  },
  {
   "entry": "desktop_env/providers/docker/provider.py",
@@ -592,14 +592,14 @@
   "setting": "device_write_bps",
   "values": "bytes a second per device",
   "default": "unset: no limit, the provider's containers.run passes none",
-  "nullius": "option:write_mbps"
+  "nullius": "not offered - the upstream sets none; osworld2@hardened: option:write_mbps"
  },
  {
   "entry": "desktop_env/providers/docker/provider.py",
   "setting": "device_write_iops",
   "values": "write operations a second per device",
   "default": "unset: no limit, the provider's containers.run passes none",
-  "nullius": "option:write_iops"
+  "nullius": "not offered - the upstream sets none; osworld2@hardened: option:write_iops"
  },
  {
   "entry": "desktop_env/providers/docker/manager.py",

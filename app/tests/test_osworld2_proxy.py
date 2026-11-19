@@ -20,7 +20,7 @@ import unittest
 from unittest import mock
 
 HERE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "nullius", "catalogue", "benchmarks", "osworld2")
+                    "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 DOCKER = """#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_LOG"
 case "$1" in

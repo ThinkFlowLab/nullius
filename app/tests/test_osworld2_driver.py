@@ -17,7 +17,7 @@ import unittest
 from unittest import mock
 
 HERE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "nullius", "catalogue", "benchmarks", "osworld2")
+                    "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 VOLUME = "a" * 64
 OTHER = "b" * 64
 HANG = "30"

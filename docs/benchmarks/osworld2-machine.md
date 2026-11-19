@@ -11,7 +11,7 @@ The minimum is one task at a time:
 | System | Linux on x86_64 with apt; the commands below are Ubuntu's |
 | Docker | `docker ps` answers without sudo; Docker Compose 2.24.4 or later and Buildx for the mock websites and GitLab |
 | Kernel | `ip_tables` and `iptable_nat` loaded (`lsmod`): without them the VM's ports are not forwarded and it never becomes ready |
-| Network | The subnet `10.213.0.0/24` free: Nullius makes the VMs' network `nullius-osworld2` on it, and the websites listen on its gateway, `10.213.0.1` |
+| Network | Original: ports 80 and 443 free for the mock websites. `osworld2@hardened`: the subnet `10.213.0.0/24` free, for its VMs' network `nullius-osworld2`; its websites listen on `10.213.0.1` |
 | Libraries | `build-essential` to install the driver's environment, `libgl1` to run it |
 | Scoring programs | ImageMagick (`identify`, `convert`), `ffmpeg`, `ffprobe` and `tesseract`: the evaluate() of tasks 025, 046, 051, 056, 085 and 095 runs them on this machine, and a run, the null control's too, is refused until they are on PATH |
 | Programs | `git`, `python3`, `uv`, `curl` |
@@ -22,25 +22,25 @@ The minimum is one task at a time:
 
 More at once is optional: `-j N` runs N tasks side by side, each with a VM of its own, so N times its cores, memory and disk. Their VMs start one after another. A machine's constraints in Settings (CPUs, memory, processes) do not reach the VMs, the mock websites, GitLab or the proxies: Docker starts them outside the run's limits, so bound them with `-j`.
 
-One Unix user runs a machine's VMs: the upstream's docker provider keeps its port lock in `/tmp`, and another user's VMs then fail to start. Task 082 takes this machine's port 3000 on 127.0.0.1 for its VM, so its units run one at a time per machine, and fail before the VM starts if another program listens on that port.
+One Unix user runs a machine's VMs: the upstream's docker provider keeps its port lock in `/tmp`, and another user's VMs then fail to start. In `osworld2@hardened`, task 082 takes this machine's port 3000 on 127.0.0.1 for its VM, so its units run one at a time per machine.
 
 !!! warning "The machine's speed can change a task's outcome"
     The upstream waits fixed times, not for the desktop: 60 s after a task is set up, 3 s after each action. Compare scores from machines of similar speed and load.
 
 ## Which tasks it runs
 
-All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 104.
+The Original runs OSWorld-V2 unchanged: 98 tasks, all but GitLab's 2 and the 8 that ask for the paid proxy. `osworld2@hardened` runs all 108 with Nullius's fixes, not comparable with the paper. Neither runs 103 and 104.
 
 | Tasks | Needs |
 | --- | --- |
 | 63, No hosted services | The VM and the gated assets; 27 of them also the LLM grader, the simulated user or the public internet |
-| 35, Mock website tasks | The mock websites, step 8; Overleaf keeps one account for all, so its 2 tasks run one at a time, each on Overleaf started anew, a few minutes more |
-| 2, tasks 026 and 041 | The mock websites, step 8, which serve the GitLab that Nullius makes on this machine before the first of them, about 8 minutes once; they run one at a time, each starting GitLab anew from its snapshot, about 5 minutes more |
-| 8 that ask for a proxy | The proxy image, step 7, and for some the mock websites |
+| 35, Mock website tasks | The mock websites, step 8. Original: one stack, its state kept between tasks. Hardened: Overleaf's 2 tasks run one at a time, each on Overleaf started anew |
+| 2, tasks 026 and 041 | Hardened only: the mock websites, step 8, which serve the GitLab that Nullius makes on this machine, about 8 minutes once |
+| 8 that ask for a proxy | Hardened only: the proxy image, step 7 |
 
 103 and 104 are not supported: their evaluate() runs FreeCAD's Python on this machine, which Nullius neither checks nor installs. They stay in the datasets; without FreeCAD the null control scores them 0, and an agent's unit ends in an error.
 
-**Website host suffix** is a wildcard DNS name of the address the mock websites listen on, the VMs' gateway: `10.213.0.1.nip.io`. **VM provider** offers `docker` alone: the upstream's other providers need cloud accounts or a hypervisor of their own.
+**Website host suffix** is a wildcard DNS name of an address of the mock websites the VMs reach: `172.17.0.1.nip.io` for the Original, `10.213.0.1.nip.io` for `osworld2@hardened`. **VM provider** offers `docker` alone: the upstream's other providers need cloud accounts or a hypervisor of their own.
 
 ## Set it up
 
@@ -117,22 +117,31 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
     docker pull happysixd/osworld-docker@sha256:0e6497a9295647cf05bf2b2af522fdd79bdeba2737595259cab310a3bcf6baa9
     ```
 
-7. **Build the proxy image**, for the 8 tasks that ask for a proxy (3 of Offline, none of No hosted services). Each such unit gets a tinyproxy of its own on this machine, given to the upstream in place of its DataImpulse entry, whose password is a placeholder. The upstream installs tinyproxy in the VM as each of the 8 is set up, through apt, which goes out directly: the 3 of Offline then need the Ubuntu mirrors too, and each is set up more slowly.
+7. **`osworld2@hardened` only: build the proxy image**, for the 8 tasks that ask for a proxy (3 of Offline, none of No hosted services). Each such unit gets a tinyproxy of its own on this machine, given to the upstream in place of its DataImpulse entry, whose password is a placeholder. The upstream installs tinyproxy in the VM as each of the 8 is set up, through apt, which goes out directly: the 3 of Offline then need the Ubuntu mirrors too, and each is set up more slowly.
 
     ```bash
-    python3 "$HERE/proxy.py" --build
+    python3 "$HERE/hardened/proxy.py" --build
     ```
 
-8. **Build and start the mock websites**, for their 40 tasks: OSWorld-web at the tag `osworld-v2.1`, with its submodules, served under `10.213.0.1.nip.io` (no task of this release uses Moodle), here cloned into `/data`, a folder of this user's. The write limits are in MB/s and IOPS: the stack's share of the disk (below), and the builder's, here a whole budget of 120 and 1200 while nothing else runs.
+8. **Start the mock websites**, for their 40 tasks. Original: as OSWorld-web's README says, its suffix a wildcard DNS name of an address the VMs reach (the Docker bridge's, here `172.17.0.1`):
+
+    ```bash title="Original"
+    git clone --recurse-submodules --branch osworld-v2.1 https://github.com/Task-Web/OSWorld-web.git /data/OSWorld-web
+    (cd /data/OSWorld-web && HOST_SUFFIX=172.17.0.1.nip.io docker compose up -d --build)
+    ```
+
+    Give runs the suffix as **Website host suffix** (`websites=172.17.0.1.nip.io`).
+
+    `osworld2@hardened`: OSWorld-web at the tag `osworld-v2.1`, with its submodules, served under `10.213.0.1.nip.io` (no task of this release uses Moodle), here cloned into `/data`, a folder of this user's. The write limits are in MB/s and IOPS: the stack's share of the disk (below), and the builder's, here a whole budget of 120 and 1200 while nothing else runs.
 
     ```bash title="Clone, build, start, check"
     git clone --recurse-submodules --branch osworld-v2.1 https://github.com/Task-Web/OSWorld-web.git /data/OSWorld-web
-    python3 "$HERE/websites.py" configure /data/OSWorld-web 10.213.0.1.nip.io --write-mbps 8 --write-iops 80
-    python3 "$HERE/websites.py" builder /data/OSWorld-web up --write-mbps 120 --write-iops 1200
-    python3 "$HERE/websites.py" build /data/OSWorld-web
-    python3 "$HERE/websites.py" builder /data/OSWorld-web down
-    python3 "$HERE/websites.py" reset /data/OSWorld-web
-    python3 "$HERE/websites.py" smoke /data/OSWorld-web
+    python3 "$HERE/hardened/websites.py" configure /data/OSWorld-web 10.213.0.1.nip.io --write-mbps 8 --write-iops 80
+    python3 "$HERE/hardened/websites.py" builder /data/OSWorld-web up --write-mbps 120 --write-iops 1200
+    python3 "$HERE/hardened/websites.py" build /data/OSWorld-web
+    python3 "$HERE/hardened/websites.py" builder /data/OSWorld-web down
+    python3 "$HERE/hardened/websites.py" reset /data/OSWorld-web
+    python3 "$HERE/hardened/websites.py" smoke /data/OSWorld-web
     ```
 
     The build stops before a group that would leave less than 25 GB free under Docker's root. Give runs the suffix as **Website host suffix** (`websites=10.213.0.1.nip.io`).
@@ -152,7 +161,7 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
 
 ## Write limits and load
 
-On a disk shared with others, limit what the VMs write with **Disk write MB/s** and **Disk write IOPS** (`write_mbps`, `write_iops`): each VM's container has a write limit of its own on Docker's disk, so with `-j N` give each the machine's budget divided by N, after the websites' share (at least 80 IOPS) and a GitLab task's, whose GitLab takes the VM's limits again, or 16 MB/s and 160 IOPS where they are none. Where Docker cannot apply a limit (btrfs, zfs, no io controller, cgroup v1), a unit with one fails before its VM starts. A tight limit slows the VM and can change a task's outcome.
+`osworld2@hardened` only. On a disk shared with others, limit what the VMs write with **Disk write MB/s** and **Disk write IOPS** (`write_mbps`, `write_iops`): each VM's container has a write limit of its own on Docker's disk, so with `-j N` give each the machine's budget divided by N, after the websites' share (at least 80 IOPS) and a GitLab task's, whose GitLab takes the VM's limits again, or 16 MB/s and 160 IOPS where they are none. Where Docker cannot apply a limit (btrfs, zfs, no io controller, cgroup v1), a unit with one fails before its VM starts. A tight limit slows the VM and can change a task's outcome.
 
 | Run | Time | Cost |
 | --- | --- | --- |
@@ -162,7 +171,7 @@ On a disk shared with others, limit what the VMs write with **Disk write MB/s** 
 | One task of Muse Spark, 500 steps | About 30 min on 2 tasks | $4.08 to $5.34 |
 
 ```bash title="The null control on all 108 tasks, six at a time"
-PYTHONPATH=app python3 -m nullius standard run osworld2 nop --dataset test_v2 -j 6 --provider openrouter \
+PYTHONPATH=app python3 -m nullius standard run osworld2@hardened nop --dataset test_v2 -j 6 --provider openrouter \
   --bench-option websites=10.213.0.1.nip.io --bench-option write_mbps=16 --bench-option write_iops=160
 ```
 
@@ -176,7 +185,7 @@ PYTHONPATH=app python3 -m nullius standard run osworld2 nop --dataset test_v2 -j
 | VM's Docker image | `happysixd/osworld-docker@sha256:0e6497a9295647cf05bf2b2af522fdd79bdeba2737595259cab310a3bcf6baa9` |
 | Mock websites | Task-Web/OSWorld-web, tag `osworld-v2.1`, commit `60c89fe6a8ed934668619d8d26132848239eb8ee` |
 | GitLab | Task-Web/gitlab, commit `8655d651722f4254e59e813de9f68a6732ea525c` |
-| Proxy | Alpine 3.24 by digest, its tinyproxy 1.11 (`proxy.py`) |
+| Proxy (hardened) | Alpine 3.24 by digest, its tinyproxy 1.11 (`hardened/proxy.py`) |
 
 ## When it fails
 
@@ -187,6 +196,6 @@ PYTHONPATH=app python3 -m nullius standard run osworld2 nop --dataset test_v2 -j
 | `permission denied` on the Docker socket | Log in again after `usermod`, in a new terminal session |
 | A run refused for `scoring_programs` | Install ImageMagick, ffmpeg and tesseract (step 2) |
 | `no task class`, `no assets` or `no VM image` | Steps 4 and 5 |
-| A websites task refused before its VM starts | Step 8 and Website host suffix; `python3 "$HERE/websites.py" check 10.213.0.1.nip.io` |
+| A websites task refused before its VM starts | Step 8 and Website host suffix; hardened: `python3 "$HERE/hardened/websites.py" check 10.213.0.1.nip.io` |
 | A GitLab task fails while Nullius makes its GitLab | Step 8; GitHub and Docker Hub reachable, and about 7 GB free under Docker's root |
 | A Docker volume left after runs | `docker volume ls -f dangling=true`; remove your own |

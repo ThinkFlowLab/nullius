@@ -6,9 +6,9 @@
 The agent answers DONE at its one step, and evaluate() on the untouched VM goes
 to RESULT_DIR/result.txt. --instruction writes the task's instruction and
 whether it asks for a proxy to OUT as JSON. A task with no class file is an
-error. The setup gets SETUP_ATTEMPTS; a failed one goes to
-RESULT_DIR/setup_failed.json by exception type only, since the message could
-quote the gated task."""
+error. The setup gets the upstream's own attempts (desktop_env.MAX_RETRIES); a
+failed one goes to RESULT_DIR/setup_failed.json by exception type only, since
+the message could quote the gated task."""
 import argparse
 import json
 import logging
@@ -18,7 +18,6 @@ import sys
 
 from task_loader import find_task_class_path, load_task_config, resolve_task_json_path
 
-SETUP_ATTEMPTS = 2
 SETUP_FAILED = "setup_failed.json"
 
 
@@ -67,7 +66,6 @@ from desktop_env.desktop_env import DesktopEnv, EnvironmentSetupError
 vm, password, examples, domain, eid, out = sys.argv[1:7]
 example, instruction = _task(examples, domain, eid)
 signal.signal(signal.SIGTERM, _stop)
-desktop_env.MAX_RETRIES = SETUP_ATTEMPTS
 env = None
 try:
     env = DesktopEnv(path_to_vm=vm, action_space="pyautogui", provider_name="docker", screen_size=(1920, 1080),
@@ -80,7 +78,7 @@ try:
 except EnvironmentSetupError as e:
     with open(os.path.join(out, SETUP_FAILED), "w", encoding="utf-8") as f:
         json.dump({"error": type(e).__name__, "cause": type(e.__cause__).__name__ if e.__cause__ else None,
-                   "attempts": SETUP_ATTEMPTS}, f)
+                   "attempts": desktop_env.MAX_RETRIES}, f)
     logging.error(f"the null control's setup of {domain}__{eid} failed: {type(e).__name__}")
     raise
 except Exception as e:

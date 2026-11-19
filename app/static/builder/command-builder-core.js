@@ -30,8 +30,13 @@
   const isStandard = r => !!(r && r.harness === 'standard');
   const standard = () => schema.standard || {benchmarks: [], agents: [], capabilities: [], fits: {}, ports: {}};
   // A recipe names a benchmark by its key (its default version) or key@version, one of the page's versions.
-  const standardBench = r => standard().benchmarks.find(b => b.key === r.benchmark || b.ref === r.benchmark
-    || (b.versions || []).some(v => v.ref === r.benchmark)) || null;
+  // A version other than the default reads as its own page: its options, setups and proofs.
+  const standardBench = r => {
+    const b = standard().benchmarks.find(b => b.key === r.benchmark || b.ref === r.benchmark
+      || (b.versions || []).some(v => v.ref === r.benchmark));
+    const v = b && (b.versions || []).find(v => v.ref === r.benchmark && v.page);
+    return v ? v.page : b || null;
+  };
   // Every agent (or capability) a benchmark of the standard could take, each with the reasons it does not fit: none, it fits.
   // Then the controls it declares (nop, oracle): no agent, no model, always runnable - each with its source
   // (official, adapter, nullius) and, per dataset, its proof.
@@ -134,7 +139,8 @@
   }
   const removeServed = (r, role, at) => setServed(r, role, ((r.served_by || {})[role] || []).filter((_, i) => i !== Number(at)));
   function createStandard(benchmark = '', other = '') {
-    const st = standard(), b = st.benchmarks.find(x => x.key === benchmark) || st.benchmarks[0];
+    const st = standard(), versioned = benchmark && standardBench({benchmark}),
+      b = st.benchmarks.find(x => x.key === benchmark) || (versioned ? {key: benchmark} : st.benchmarks[0]);
     const r = {version: 1, harness: 'standard', name: 'standard-experiment', title: 'Standard experiment', benchmark: '', datasets: [], others: [],
       model_choice: 'any', provider: firstAvailable(providersOf({}), 'openai'), model: bareModel(schema.defaultModel || ''), limit: '', concurrency: '', unsandboxed: false, where: 'local',
       backend: 'local', options: {}};

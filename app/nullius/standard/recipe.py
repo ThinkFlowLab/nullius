@@ -209,13 +209,23 @@ def _other_page(o: dict) -> dict:
                if isinstance((o.get("proven") or {}).get("fidelity"), dict) else {})}
 
 
+def _versioned_page(b: dict, every: List[dict]) -> dict:
+    """The default version's page; each other version carries its own page (``page``: its options, setups, proofs)."""
+    page = _bench_page(b)
+    for v in page["versions"]:
+        other = None if v["default"] else next((x for x in every if x["key"] == b["key"] and x.get("_version") == v["version"]), None)
+        if other:
+            v["page"] = _bench_page(other)
+    return page
+
+
 def choices() -> dict:
     """What the page offers - choices and the reasons a pair does not fit,
     never a command."""
     d = _all()
     # one entry per benchmark, its default version, which lists the others (``versions``); the fits cover every version
     defaults = [b for b in d["benchmark"] if b.get("_version") == b.get("_default")]
-    return {"benchmarks": [_bench_page(b) for b in defaults],
+    return {"benchmarks": [_versioned_page(b, d["benchmark"]) for b in defaults],
             # an example (the reference agent, the example memory) is there to read or copy, never to choose
             "agents": [_other_page(o) for o in d["agent"] if not o.get("example")],
             "capabilities": [_other_page(o) for o in d["capability"] if not o.get("example")],

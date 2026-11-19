@@ -68,11 +68,12 @@ and its resources. The source layout stays under `app/`.
   tools kit, an MCP server `mcp_kit`) - the definitions it reads are in the catalogue:
   a benchmark's `standard.json` and `driver` in its folder (τ³-bench's also the MCP
   server of its domains' tools, `mcp_server`: the upstream's own, run on the machine; OSWorld1's also its null control's
-  agent, `nop`, and the `runner` of a unit an agent runs: the upstream's loop with the computer port's bridge; OSWorld2's also `nop`, `api_logs` (each image of its API logs kept once), `websites` (its mock
+  agent, `nop`, and the `runner` of a unit an agent runs: the upstream's loop with the computer port's bridge; OSWorld2's also `nop` and `api_logs` (each image of its API logs kept once), the upstream unchanged,
+  and in `hardened/` its patched version `osworld2@hardened`: its own `driver` and `nop`, `websites` (its mock
   websites: the checks before a VM start, Overleaf's lock and reset, the stack's command line), `gitlab_server` (its
   GitLab: made once on the run's machine with its token, its tasks' lock, the stack's command line), `proxy` (a
   tinyproxy of a unit's own for the tasks that ask for a proxy) and, in `startup/`,
-  `sitecustomize`: its VMs' disk write limit in every process its driver starts), `catalogue/agents/<key>/`
+  `sitecustomize`: its patches in every process its driver starts), `catalogue/agents/<key>/`
   (the reference `agent`; JiuwenSwarm's `agent` and mini-swe-agent's `run`, the wrappers that start them) and `catalogue/capabilities/<key>/` (the keyword-memory `capability`); `workspace` (and
   `workspace_cli`, its shell command),
   `cli` and `__main__` (the unified `nullius` and `python -m nullius` commands),
@@ -107,7 +108,8 @@ and its resources. The source layout stays under `app/`.
 
 Benchmark integrations expose one current entry with supported behavior as options.
 Internal driver changes do not create selectable versions. Reserve benchmark versions
-for explicit upstream releases or requested forks; retain only applicable proofs.
+for explicit upstream releases, requested forks, or a patched version the owner asks for
+beside the unpatched default (OSWorld2's `hardened`); retain only applicable proofs.
 
 ### Installation and user storage
 

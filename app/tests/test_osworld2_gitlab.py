@@ -22,7 +22,7 @@ from unittest import mock
 from urllib.parse import urlsplit
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2")
+HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 SUFFIX = "10.213.0.1.nip.io"
 SITES = "NULLIUS_OPTION_WEBSITES"
 URL = f"http://gitlab.{SUFFIX}"
@@ -105,7 +105,7 @@ class Option(Case):
         self.assertEqual(self.g.env("005", given), {})
 
     def test_no_option_and_no_licence_ask_for_gitlab(self):
-        with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, "..", "standard.json"), encoding="utf-8") as f:
             bench = json.load(f)
         self.assertFalse({"gitlab", "gitlab_write"} & set(bench["options"]))
         self.assertFalse(bench.get("environments"))
@@ -433,11 +433,11 @@ class Driver(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, True)
         with mock.patch.dict(os.environ, {"NULLIUS_HOME": str(tmp / "profile"), "NULLIUS_CATALOGUE": str(tmp / "catalogue")}):
             _, root = payload.build(str(tmp / "cache"))
-        entry = Path(root) / "app" / "nullius" / "catalogue" / "benchmarks" / "osworld2"
+        entry = Path(root) / "app" / "nullius" / "catalogue" / "benchmarks" / "osworld2" / "hardened"
         for name in ("gitlab_server.py", "gitlab.compose.yml"):
             self.assertEqual((entry / name).read_bytes(), (Path(HERE) / name).read_bytes(), name)
-        with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
-            self.assertEqual(json.load(f)["driver"]["command"][-1], "{here}/gitlab.compose.yml")
+        with open(os.path.join(HERE, "..", "standard.json"), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["versions"]["hardened"]["driver"]["command"][-1], "{here}/hardened/gitlab.compose.yml")
 
 
 def _stack():

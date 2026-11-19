@@ -20,10 +20,7 @@
       "{install}/.venv/bin/python",
       "{here}/driver.py",
       "{here}/agents.json",
-      "{here}/nop.py",
-      "{here}/startup/sitecustomize.py",
-      "{here}/websites.compose.yml",
-      "{here}/gitlab.compose.yml"
+      "{here}/nop.py"
     ],
     "install": {
       "python": "3.12",
@@ -47,7 +44,7 @@
     {
       "id": "websites35",
       "label": "Mock website tasks",
-      "summary": "The 35 tasks that need the mock websites and no GitLab or proxy: OSWorld-web served on this machine, its suffix given as Website host suffix. 2 of them use Overleaf and run one at a time.",
+      "summary": "The 35 tasks that need the mock websites and no GitLab or proxy, served under Website host suffix. 2 use Overleaf.",
       "units": 35
     },
     {
@@ -205,31 +202,9 @@
         "test_v2_offline_no_internet",
         "test_v2"
       ],
-      "summary": "Where the mock websites, and GitLab with them, are served. Needed by the tasks that use them.",
+      "summary": "The host suffix the mock websites are served under. Needed by the tasks that use them.",
       "pattern": "none|(?=.{3,200}$)[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?)+",
       "example": "10.213.0.1.nip.io",
-      "default": "none",
-      "setups": [
-        "original",
-        "yours"
-      ]
-    },
-    "write_mbps": {
-      "label": "Disk write MB/s",
-      "summary": "Disk write limit for each VM.",
-      "pattern": "none|[1-9][0-9]{0,5}",
-      "example": "16",
-      "default": "none",
-      "setups": [
-        "original",
-        "yours"
-      ]
-    },
-    "write_iops": {
-      "label": "Disk write IOPS",
-      "summary": "Disk write limit for each VM.",
-      "pattern": "none|[1-9][0-9]{0,5}",
-      "example": "160",
       "default": "none",
       "setups": [
         "original",
@@ -273,69 +248,168 @@
       }
     }
   },
-  "proven": {
-    "offline36": {
-      "units": {
-        "units": 36,
-        "passed": "36 ids, the same twice, unique",
-        "on": "2026-11-04"
-      },
-      "nop": {
-        "passed": "0/4",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 4,
-        "job": "2026-11-04__23-15-30__osworld2__offline36__prove-nop",
-        "source": "nullius",
-        "on": "2026-11-04",
-        "limit": 4
-      }
+  "default": "v2.1",
+  "versions": {
+    "v2.1": {
+      "proven": {}
     },
-    "test_v2": {
-      "units": {
-        "units": 108,
-        "passed": "108 ids, the same twice, unique",
-        "on": "2026-11-15"
-      },
-      "nop": {
-        "passed": "0/108",
-        "value": 0.0021,
-        "expect": {
-          "at_most": 0.01
-        },
-        "units": 108,
-        "job": "2026-11-15__06-18-44__osworld2__test_v2__prove-nop",
-        "source": "nullius",
-        "options": [
-          {
-            "vm_provider": "docker",
-            "websites": "10.213.0.1.nip.io",
-            "gitlab": "gitlab.10.213.0.1.nip.io",
-            "gitlab_write": "16:160",
-            "write_mbps": "16",
-            "write_iops": "160"
-          },
-          {
-            "vm_provider": "docker",
-            "websites": "10.213.0.1.nip.io",
-            "gitlab": "none",
-            "gitlab_write": "none",
-            "write_mbps": "16",
-            "write_iops": "160"
-          },
-          {
-            "vm_provider": "docker",
-            "websites": "10.213.0.1.nip.io",
-            "gitlab": "none",
-            "gitlab_write": "none",
-            "write_mbps": "24",
-            "write_iops": "240"
-          }
+    "hardened": {
+      "driver": {
+        "command": [
+          "{install}/.venv/bin/python",
+          "{here}/hardened/driver.py",
+          "{here}/agents.json",
+          "{here}/hardened/nop.py",
+          "{here}/hardened/startup/sitecustomize.py",
+          "{here}/hardened/websites.compose.yml",
+          "{here}/hardened/gitlab.compose.yml"
         ],
-        "judge": "anthropic/claude-sonnet-4.6",
-        "on": "2026-11-15"
+        "install": {
+          "python": "3.12",
+          "project": ".",
+          "locked": true
+        }
+      },
+      "options": {
+        "write_mbps": {
+          "label": "Disk write MB/s",
+          "summary": "Disk write limit for each VM.",
+          "pattern": "none|[1-9][0-9]{0,5}",
+          "example": "16",
+          "default": "none",
+          "setups": [
+            "original",
+            "yours"
+          ]
+        },
+        "write_iops": {
+          "label": "Disk write IOPS",
+          "summary": "Disk write limit for each VM.",
+          "pattern": "none|[1-9][0-9]{0,5}",
+          "example": "160",
+          "default": "none",
+          "setups": [
+            "original",
+            "yours"
+          ]
+        },
+        "websites": {
+          "label": "Website host suffix",
+          "step": "dataset",
+          "datasets": [
+            "websites35",
+            "websites98",
+            "test_v2_offline_no_internet",
+            "test_v2"
+          ],
+          "summary": "Where the mock websites, and GitLab with them, are served. Needed by the tasks that use them.",
+          "pattern": "none|(?=.{3,200}$)[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?)+",
+          "example": "10.213.0.1.nip.io",
+          "default": "none",
+          "setups": [
+            "original",
+            "yours"
+          ]
+        }
+      },
+      "setups": {
+        "original": {
+          "summary": "OSWorld-V2's own agent, M3 or Muse Spark, on a Docker VM, with Nullius's fixes for one machine.",
+          "reference_agent": "OSWorld-V2 agents",
+          "models": [
+            "MiniMax-M3",
+            "muse-spark-1.3"
+          ],
+          "default": "MiniMax-M3",
+          "side_models": [
+            "claude-sonnet-4-6"
+          ],
+          "served_as": {
+            "MiniMax-M3": "minimax/minimax-m3",
+            "muse-spark-1.3": "meta/muse-spark-1.3",
+            "claude-sonnet-4-6": "anthropic/claude-sonnet-4.6"
+          },
+          "providers": {
+            "openrouter": "",
+            "custom": ""
+          },
+          "turn_seconds": 86400,
+          "comparable": false
+        }
+      },
+      "score": {
+        "kind": "score",
+        "says": "OSWorld-V2's own scoring: the task class's evaluate() on the VM's final state, as run_single_example writes it to result.txt (0 to 1, partial credit; result.json carries the detail and safety checks); the upstream's score is the mean; a failed LLM grader call, or a read of the VM or a site the evaluation could not make, is the score's error, never the 0 the upstream writes",
+        "judge": {
+          "model": "anthropic/claude-sonnet-4.6",
+          "says": "the upstream's LLM grader in the evaluate() of 21 tasks, Claude Sonnet 4.6 over Anthropic's Messages API as run_multienv_m3.sh sets it (OSWORLD_EVAL_MODEL_*), whichever agent runs"
+        }
+      },
+      "proven": {
+        "offline36": {
+          "units": {
+            "units": 36,
+            "passed": "36 ids, the same twice, unique",
+            "on": "2026-11-04"
+          },
+          "nop": {
+            "passed": "0/4",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 4,
+            "job": "2026-11-04__23-15-30__osworld2__offline36__prove-nop",
+            "source": "nullius",
+            "on": "2026-11-04",
+            "limit": 4
+          }
+        },
+        "test_v2": {
+          "units": {
+            "units": 108,
+            "passed": "108 ids, the same twice, unique",
+            "on": "2026-11-15"
+          },
+          "nop": {
+            "passed": "0/108",
+            "value": 0.0021,
+            "expect": {
+              "at_most": 0.01
+            },
+            "units": 108,
+            "job": "2026-11-15__06-18-44__osworld2__test_v2__prove-nop",
+            "source": "nullius",
+            "options": [
+              {
+                "vm_provider": "docker",
+                "websites": "10.213.0.1.nip.io",
+                "gitlab": "gitlab.10.213.0.1.nip.io",
+                "gitlab_write": "16:160",
+                "write_mbps": "16",
+                "write_iops": "160"
+              },
+              {
+                "vm_provider": "docker",
+                "websites": "10.213.0.1.nip.io",
+                "gitlab": "none",
+                "gitlab_write": "none",
+                "write_mbps": "16",
+                "write_iops": "160"
+              },
+              {
+                "vm_provider": "docker",
+                "websites": "10.213.0.1.nip.io",
+                "gitlab": "none",
+                "gitlab_write": "none",
+                "write_mbps": "24",
+                "write_iops": "240"
+              }
+            ],
+            "judge": "anthropic/claude-sonnet-4.6",
+            "on": "2026-11-15"
+          }
+        }
       }
     }
   }

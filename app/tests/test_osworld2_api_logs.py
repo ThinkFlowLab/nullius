@@ -16,7 +16,7 @@ import unittest
 from unittest import mock
 
 HERE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "nullius", "catalogue", "benchmarks", "osworld2")
+                    "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 LIMIT = 20
 
 
@@ -29,7 +29,7 @@ def module(name, path, **env):
     return loaded
 
 
-api_logs = module("osworld2_api_logs", os.path.join(HERE, "api_logs.py"))
+api_logs = module("osworld2_api_logs", os.path.join(HERE, "..", "api_logs.py"))
 
 
 def jpeg(n, size=3000):
@@ -238,11 +238,11 @@ class Logs(unittest.TestCase):
 
     def test_the_command_line_packs_and_restores(self):
         for act in ("pack", "restore"):
-            out = subprocess.run([sys.executable, os.path.join(HERE, "api_logs.py"), act, self.dir],
+            out = subprocess.run([sys.executable, os.path.join(HERE, "..", "api_logs.py"), act, self.dir],
                                  capture_output=True, text=True, check=True)
             self.assertIn(self.dir, json.loads(out.stdout))
         self.assertEqual(digest(self.dir), self.before)
-        self.assertNotEqual(subprocess.run([sys.executable, os.path.join(HERE, "api_logs.py"), "unpack", self.dir],
+        self.assertNotEqual(subprocess.run([sys.executable, os.path.join(HERE, "..", "api_logs.py"), "unpack", self.dir],
                                            capture_output=True).returncode, 0)
 
 
@@ -377,7 +377,7 @@ class Snapshot(unittest.TestCase):
         from pathlib import Path
 
         from nullius.standard import payload
-        self.assertIn("api_logs.py", payload._entry(Path(HERE)))
+        self.assertIn("api_logs.py", payload._entry(Path(HERE).parent))
 
 
 if __name__ == "__main__":

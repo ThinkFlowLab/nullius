@@ -456,7 +456,7 @@ An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierErr
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
 
 !!! note "Call the upstream, never copy it"
-    The driver imports the upstream from `$NULLIUS_UPSTREAM` and calls its loader, prompts, scorer, judge and loop. Never patch its bugs: say it in the limitations; a fix is a fork's, brought in as a [version](#versions).
+    The driver imports the upstream from `$NULLIUS_UPSTREAM` and calls its loader, prompts, scorer, judge and loop. Never patch its bugs in the original: say it in the limitations; a fix is a fork's, or a patched version of ours, brought in as a [version](#versions).
 
 #### The driver's environment
 
@@ -524,14 +524,15 @@ An agent or a capability may keep several versions in its one file: an older rel
 | `upstream.core` | Which core an adapter runs; pin it in `install` when the adapter names a range (Codex 2.2.2 pins `@openai/codex@0.160.1`) |
 | Schema | Stays `nullius.agent/v1` (`nullius.capability/v1`): a file without `versions` is one version |
 
-**A benchmark** normally has one integration with its upstream commit pinned. Internal driver improvements and added options update that entry; they do not create user-facing versions. The bundled benchmarks follow this rule. Explicit upstream releases or user-requested forks may use the version mechanism below. Keep only proofs belonging to the retained implementation; never copy older proofs to fill missing results.
+**A benchmark** normally has one integration with its upstream commit pinned. Internal driver improvements and added options update that entry; they do not create user-facing versions. The bundled benchmarks follow this rule. Explicit upstream releases, user-requested forks, or a patched version the owner asks for may use the version mechanism below. Keep only proofs belonging to the retained implementation; never copy older proofs to fill missing results.
 
 | Rule | Detail |
 | --- | --- |
-| What differs | `upstream`, `datasets`, `driver` (its `install` with it), `mcp_servers`, `score`, `limits`, `controls`, `environments`, and its own `proven` |
+| What differs | `upstream`, `datasets`, `driver` (its `install` with it), `mcp_servers`, `score`, `limits`, `controls`, `environments`, `options`, `setups`, and its own `proven` |
 | Naming | `KEY@VERSION` in `cli run`, `cli prove`, `cli fit` and the recipe's `benchmark` |
 | In jobs | `…__KEY-VERSION__…` in the name; `standard.benchmark_version` and `standard.benchmark_ref` in `config.json` |
 | A fork is a version | `versions.<name>.upstream = {repository, tag, tested}`, never a patch of ours; cloned at its commit (`upstreams/<key>/<commit>/`), its datasets checked by their own `sha256`; a private repository uses the machine's git credentials. It proves its own controls (`cli prove KEY@NAME`) |
+| A patched version | Same upstream pin, its own `driver` carrying Nullius's patches; never the default, `setups.original.comparable: false`, its own controls proven |
 
 ### Options
 

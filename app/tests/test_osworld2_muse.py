@@ -21,7 +21,7 @@ from unittest import mock
 from nullius.standard import container, definitions, job, jsonl, recipe, relay, run
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2")
+HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 MUSE, SENT, SONNET = "muse-spark-1.3", "meta/muse-spark-1.3", "anthropic/claude-sonnet-4.6"
 UNIT = "http://127.0.0.1:9/u1/v1"
 
@@ -36,7 +36,7 @@ def load_driver(up):
 
 
 def bench():
-    with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
+    with open(os.path.join(HERE, "..", "standard.json"), encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -174,7 +174,7 @@ class Definition(unittest.TestCase):
     def test_the_relay_waits_longer_than_muse_spark(self):
         b = bench()
         self.assertEqual(b["limits"]["call_seconds"], 3300)
-        with open(os.path.join(HERE, "agents.json"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, "..", "agents.json"), encoding="utf-8") as f:
             self.assertNotIn("--request_timeout", json.load(f)["agents"]["muse_spark"]["argv"])
         for bad in (0, -1, 1.5, True, "3300"):
             b["limits"]["call_seconds"] = bad
@@ -392,7 +392,7 @@ class Runner(unittest.TestCase):
             tree = ast.parse(f.read())
         known = {a.value for n in ast.walk(tree) if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "add_argument"
                  for a in n.args if isinstance(a, ast.Constant) and str(a.value).startswith("--")}
-        with open(os.path.join(HERE, "agents.json"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, "..", "agents.json"), encoding="utf-8") as f:
             agents = json.load(f)
         passed = {w for w in agents["common"] + agents["agents"]["muse_spark"]["argv"] if w.startswith("--")}
         self.assertEqual(passed - known, set())

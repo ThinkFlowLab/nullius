@@ -18,7 +18,7 @@ from unittest import mock
 from nullius.standard import definitions, run
 
 HERE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "nullius", "catalogue", "benchmarks", "osworld2")
+                    "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 WORDS = "the task's own words"
 FAILED = {"error": "EnvironmentSetupError", "cause": "TimeoutError", "attempts": 2}
 TASK_LOADER = """def find_task_class_path(*a):

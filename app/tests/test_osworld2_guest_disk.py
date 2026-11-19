@@ -15,7 +15,7 @@ import unittest
 from unittest import mock
 
 HERE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "nullius", "catalogue", "benchmarks", "osworld2")
+                    "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 STARTUP = os.path.join(HERE, "startup")
 DESKTOP_ENV = """import json, os
 MAX_RETRIES = 5

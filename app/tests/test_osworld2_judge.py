@@ -24,7 +24,7 @@ from nullius import providers
 from nullius.standard import definitions, relay, run
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2")
+HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 OFFLINE36 = ("001 002 004 010 012 022 029 030 040 042 044 045 047 048 049 051 053 054 059 061 063 064 066 067 "
              "076 080 084 085 088 094 103 104 105 106 107 108").split()
 MORE27 = "003 006 009 011 014 017 023 024 025 027 032 033 034 071 074 078 083 086 087 089 090 092 093 095 096 097 099".split()
@@ -43,7 +43,7 @@ def load_driver(up):
 
 
 def bench():
-    with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
+    with open(os.path.join(HERE, "..", "standard.json"), encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -444,7 +444,7 @@ class Definition(unittest.TestCase):
         b = bench()
         self.assertEqual(definitions.problems(b, "benchmark"), [])
         self.assertEqual(providers.served_as(b["score"]["judge"]["model"], "openrouter"), SONNET)
-        with open(os.path.join(HERE, "agents.json"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, "..", "agents.json"), encoding="utf-8") as f:
             asked = json.load(f)["agents"]["m3"]["env"]["OSWORLD_USER_SIM_MODEL"]
         other, why = definitions.setup(b, "original", "MiniMax-M3", "openrouter")
         self.assertEqual(why, "")

@@ -22,7 +22,7 @@ from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2")
+HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 GATEWAY = "10.213.0.1"
 SUFFIX = f"{GATEWAY}.nip.io"
 DOCKER = """#!/bin/sh
@@ -646,21 +646,21 @@ class Driver(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, True)
         with mock.patch.dict(os.environ, {"NULLIUS_HOME": str(tmp / "profile"), "NULLIUS_CATALOGUE": str(tmp / "catalogue")}):
             _, root = payload.build(str(tmp / "cache"))
-        entry = Path(root) / "app" / "nullius" / "catalogue" / "benchmarks" / "osworld2"
+        entry = Path(root) / "app" / "nullius" / "catalogue" / "benchmarks" / "osworld2" / "hardened"
         manifest = json.loads((Path(root) / "manifest.json").read_text())
         for name in ("websites.py", "websites.compose.yml"):
             self.assertEqual((entry / name).read_bytes(), (Path(HERE) / name).read_bytes(), name)
-            self.assertIn(f"catalogue/benchmarks/osworld2/{name}", manifest["files"])
+            self.assertIn(f"catalogue/benchmarks/osworld2/hardened/{name}", manifest["files"])
 
     def test_the_override_is_the_one_the_command_names(self):
-        with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
-            command = json.load(f)["driver"]["command"]
-        self.assertEqual(command[-2], "{here}/websites.compose.yml")
+        with open(os.path.join(HERE, "..", "standard.json"), encoding="utf-8") as f:
+            command = json.load(f)["versions"]["hardened"]["driver"]["command"]
+        self.assertEqual(command[-2], "{here}/hardened/websites.compose.yml")
         self.assertEqual(self.w.OVERRIDE, os.path.join(HERE, "websites.compose.yml"))
         given = os.path.join(self.tmp, "snapshot", "websites.compose.yml")
         spec = importlib.util.spec_from_file_location("osworld2_driver_argv", os.path.join(HERE, "driver.py"))
         driver = importlib.util.module_from_spec(spec)
-        files = [os.path.join(HERE, n) for n in ("agents.json", "nop.py", os.path.join("startup", "sitecustomize.py"))]
+        files = [os.path.join(HERE, "..", "agents.json")] + [os.path.join(HERE, n) for n in ("nop.py", os.path.join("startup", "sitecustomize.py"))]
         with mock.patch.object(sys, "argv", ["driver.py", *files, given]), \
                 mock.patch.object(sys, "path", [HERE, *sys.path]), mock.patch.dict(os.environ, NULLIUS_UPSTREAM=self.tmp):
             spec.loader.exec_module(driver)
@@ -674,7 +674,7 @@ class Driver(unittest.TestCase):
         self.assertEqual(lists["websites98"], sorted(lists["no_services63"] + lists["websites35"]))
         self.assertEqual(len(set(lists["websites98"])), 98)
         self.assertFalse(set(lists["no_services63"]) & self.w.TASKS)
-        with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, "..", "standard.json"), encoding="utf-8") as f:
             bench = json.load(f)
         counted = {d["id"]: d["units"] for d in bench["datasets"]}
         self.assertEqual((counted["websites35"], counted["websites98"]), (35, 98))

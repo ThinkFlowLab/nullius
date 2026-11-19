@@ -255,13 +255,18 @@ class OtherBenchmarks(unittest.TestCase):
         self.assertEqual(definitions.bench_options_of(b, "offline", {"image": "build"})[0], {"image": "build"})
 
     def test_bundled_benchmarks_do_not_expose_integration_revisions(self):
+        """A bundled benchmark's versions are none, or a patched one beside its unpatched default, not comparable."""
         from pathlib import Path
         import json
         root = Path(definitions.get("benchmark", "longmemeval")["_here"]).parent
         for path in root.glob("*/standard.json"):
             with self.subTest(benchmark=path.parent.name):
                 data = json.loads(path.read_text())
-                self.assertNotIn("versions", data)
+                for name, version in (data.get("versions") or {}).items():
+                    if name == data["default"]:
+                        self.assertFalse({"driver", "setups", "options"} & set(version), name)
+                    else:
+                        self.assertIs(version["setups"]["original"]["comparable"], False, name)
 
 
 class MachineDocker(unittest.TestCase):

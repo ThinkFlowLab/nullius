@@ -17,7 +17,7 @@ from unittest import mock
 from nullius.standard import definitions, run
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2")
+HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 STARTUP = os.path.join(HERE, "startup")
 PROVIDER = "happysixd/osworld-docker@sha256:" + "0" * 64
 OFF = {"NULLIUS_OPTION_WRITE_MBPS": "none", "NULLIUS_OPTION_WRITE_IOPS": "none", "NULLIUS_OPTION_VM_PROVIDER": "docker"}
@@ -317,7 +317,7 @@ class Processes(unittest.TestCase):
 
     def test_the_file_comes_from_the_drivers_command(self):
         elsewhere = os.path.join(self.tmp, "snapshot", "startup", "sitecustomize.py")
-        driver = load_driver(self.tmp, [os.path.join(HERE, "agents.json"), os.path.join(HERE, "nop.py"), elsewhere])
+        driver = load_driver(self.tmp, [os.path.join(HERE, "..", "agents.json"), os.path.join(HERE, "nop.py"), elsewhere])
         self.assertEqual(driver._env("001")["PYTHONPATH"].split(os.pathsep)[0], os.path.dirname(elsewhere))
 
 
@@ -516,8 +516,8 @@ class Before(unittest.TestCase):
 
 class Options(unittest.TestCase):
     def test_the_options_reach_the_original_setup_and_the_null_control(self):
-        with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
-            bench = json.load(f)
+        with open(os.path.join(HERE, "..", "standard.json"), encoding="utf-8") as f:
+            bench = definitions.resolve(json.load(f), "hardened")
         given = {"write_mbps": "30", "write_iops": "300"}
         for setup in ("original", "yours"):
             values, bad = definitions.bench_options_of(bench, "offline36", given, setup)
@@ -531,7 +531,7 @@ class Options(unittest.TestCase):
 
 class Turn(unittest.TestCase):
     def test_the_original_setups_turn_holds_500_steps(self):
-        with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, "..", "standard.json"), encoding="utf-8") as f:
             original = json.load(f)["setups"]["original"]
         self.assertEqual(original["turn_seconds"], 86400)
         self.assertGreater(original["turn_seconds"], 2 * 500 * 32)
@@ -545,10 +545,10 @@ class Snapshot(unittest.TestCase):
         with mock.patch.dict(os.environ, {"NULLIUS_HOME": str(tmp / "profile"), "NULLIUS_CATALOGUE": str(tmp / "catalogue")}):
             _, root = payload.build(str(tmp / "cache"))
         entry = Path(root) / "app" / "nullius" / "catalogue" / "benchmarks" / "osworld2"
-        for name in ("driver.py", "nop.py", "agents.json", "startup/sitecustomize.py"):
-            self.assertEqual((entry / name).read_bytes(), (Path(HERE) / name).read_bytes(), name)
+        for name in ("hardened/driver.py", "hardened/nop.py", "agents.json", "hardened/startup/sitecustomize.py"):
+            self.assertEqual((entry / name).read_bytes(), (Path(HERE).parent / name).read_bytes(), name)
         manifest = json.loads((Path(root) / "manifest.json").read_text())
-        self.assertIn("catalogue/benchmarks/osworld2/startup/sitecustomize.py", manifest["files"])
+        self.assertIn("catalogue/benchmarks/osworld2/hardened/startup/sitecustomize.py", manifest["files"])
 
 
 if __name__ == "__main__":

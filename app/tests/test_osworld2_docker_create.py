@@ -16,7 +16,7 @@ import unittest
 from unittest import mock
 
 HERE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nullius", "catalogue",
-                    "benchmarks", "osworld2")
+                    "benchmarks", "osworld2", "hardened")
 STARTUP = os.path.join(HERE, "startup")
 PROVIDER = "happysixd/osworld-docker@sha256:" + "0" * 64
 NONE = {"NULLIUS_OPTION_WRITE_MBPS": "none", "NULLIUS_OPTION_WRITE_IOPS": "none"}

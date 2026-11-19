@@ -25,7 +25,7 @@ from unittest import mock
 from nullius.standard import relay
 
 HERE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "nullius", "catalogue", "benchmarks", "osworld2")
+                    "nullius", "catalogue", "benchmarks", "osworld2", "hardened")
 STARTUP = os.path.join(HERE, "startup")
 EPISODE = """def run_single_example(agent, env, max_steps):
     taken, done, step = [], False, 0
