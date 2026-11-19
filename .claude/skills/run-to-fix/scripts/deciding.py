@@ -50,7 +50,9 @@ def changes_text(replay: dict) -> str:
 
 def candidate_row(cand: dict, checks: Optional[dict]) -> List[str]:
     pred = cand["prediction"]
-    explains = f"{len(pred['trials'])} trials, {len(pred['tasks'])} tasks expected to pass ({cand['rule']})"
+    explains = (f"{len(pred['trials'])} trials, {len(pred['tasks'])} tasks expected to pass ({cand['rule']})"
+                if cand["effect"] == "outcome" else
+                f"{len(pred['trials'])} trials of the rule, no task expected to pass ({cand['rule']})")
     if checks is None:
         return [cand["id"], cand["cause"], cand["effect"], explains] + ["not checked"] * 5 + [""]
     test, suite, replay, diff = checks["test"], checks["suite"], checks["replay"], checks["diff"]
