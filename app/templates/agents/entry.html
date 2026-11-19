@@ -80,7 +80,7 @@
         {% if e.options %}
         <h3 class="std-subhead">Options</h3>
         <ul class="std-optlist">
-          {% for x in e.options %}<li><code>{{ x.name }}</code> <span class="std-tag">{{ x.default }} (its default)</span>{% if x['values'] %}<small>takes {{ x['values']|join(', ') }}</small>{% elif x.pattern %}<small>takes <code>{{ x.pattern }}</code></small>{% endif %}<small title="{{ x.summary }}">{{ x.summary.split(':')[0].split(';')[0].split('.')[0] }}.</small></li>{% endfor %}
+          {% for x in e.options %}<li><code>{{ x.name }}</code> <span class="std-tag">{{ x.default }} (its default)</span>{% if x['values'] %}<small>takes {{ x['values']|join(', ') }}</small>{% elif x.example %}<small>e.g. <code>{{ x.example }}</code></small>{% endif %}<small title="{{ x.summary }}">{{ x.summary.split(':')[0].split(';')[0].split('.')[0] }}.</small></li>{% endfor %}
         </ul>
         {% endif %}
       </div>

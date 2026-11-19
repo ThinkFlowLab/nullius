@@ -1,0 +1,83 @@
+{
+  "about": "The upstream's agents the driver runs, by the agent option: each its own script at the tested commit, as published, on one task. argv is what its scripts/bash wrapper passes (run_multienv_m3.sh, run_multienv_muse_spark.sh), less what Nullius sets for every unit (common: the docker provider, the VM image, one environment, the image's password as the wrapper passes it, the task's meta file, the unit's results) and less the aws provider's --region and --use_public_ip and the wrapper's one --specific_task_id. M3 also gets the relay's key as --api_key, since its script reads MINIMAX_ANTHROPIC_BASE_URL and MINIMAX_API_KEY before ANTHROPIC_*, and a .env file in the upstream (each script calls load_dotenv) could set them. Muse Spark gets the reasoning effort and output budget of its published run's args.json (max, 262144) in place of its wrapper's (high, 8192), and MUSE_SPARK_SKIP_INPUT_TOKEN_PREFLIGHT, since its count of input tokens before each call asks the endpoint for a path OpenRouter does not serve. env points each script's model client at the unit's relay too, and its simulated user's, asked by the name the documented invocation gives it (OSWORLD_USER_SIM_MODEL), which the Original setup sends on as a side model. {model} is the model asked, {base_url} the unit's relay (ending /v1), {base} the same without /v1 (the Anthropic client adds /v1/messages), {key} the relay's placeholder, {vm} the VM image, {up} the upstream, {meta} the unit's task file, {results} the unit's results folder, {examples} the upstream's evaluation_examples. --max_steps is each wrapper's own, unless the max_steps option sets another. models are the ones each agent is published with, by the names its code knows; model_argv adds what its documented invocation passes for one of them.",
+  "common": [
+    "--provider_name",
+    "docker",
+    "--path_to_vm",
+    "{vm}",
+    "--headless",
+    "--num_envs",
+    "1",
+    "--test_config_base_dir",
+    "{examples}",
+    "--test_all_meta_path",
+    "{meta}",
+    "--result_dir",
+    "{results}",
+    "--client_password",
+    "osworld-public-evaluation"
+  ],
+  "agents": {
+    "m3": {
+      "script": "scripts/python/run_multienv_m3.py",
+      "models": [
+        "MiniMax-M3"
+      ],
+      "argv": [
+        "--action_space",
+        "pyautogui",
+        "--observation_type",
+        "screenshot",
+        "--max_tokens",
+        "8192",
+        "--max_steps",
+        "100",
+        "--model",
+        "{model}",
+        "--base_url",
+        "{base}",
+        "--api_key",
+        "{key}"
+      ],
+      "env": {
+        "ANTHROPIC_BASE_URL": "{base}",
+        "ANTHROPIC_API_KEY": "{key}",
+        "OSWORLD_USER_SIM_PROVIDER": "anthropic",
+        "OSWORLD_USER_SIM_MODEL": "claude-sonnet-4-6",
+        "OSWORLD_USER_SIM_BASE_URL": "{base}",
+        "OSWORLD_USER_SIM_API_KEY": "{key}"
+      }
+    },
+    "muse_spark": {
+      "script": "scripts/python/run_multienv_muse_spark.py",
+      "models": [
+        "muse-spark-1.3"
+      ],
+      "argv": [
+        "--action_space",
+        "pyautogui",
+        "--observation_type",
+        "screenshot",
+        "--max_tokens",
+        "262144",
+        "--reasoning_effort",
+        "max",
+        "--max_steps",
+        "500",
+        "--model",
+        "{model}",
+        "--base_url",
+        "{base_url}",
+        "--save_model_eval_raw_info"
+      ],
+      "env": {
+        "MUSE_SPARK_API_KEY": "{key}",
+        "MUSE_SPARK_SKIP_INPUT_TOKEN_PREFLIGHT": "1",
+        "OSWORLD_USER_SIM_PROVIDER": "anthropic",
+        "OSWORLD_USER_SIM_MODEL": "claude-sonnet-4-6",
+        "OSWORLD_USER_SIM_BASE_URL": "{base}",
+        "OSWORLD_USER_SIM_API_KEY": "{key}"
+      }
+    }
+  }
+}

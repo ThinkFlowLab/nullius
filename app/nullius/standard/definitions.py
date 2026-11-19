@@ -391,7 +391,7 @@ def option_problem(spec: dict, value) -> Optional[str]:
     if "values" in spec:
         return None if value in (spec.get("values") or []) else f"{value!r} is not one of {', '.join(spec.get('values') or [])}"
     try:
-        return None if re.fullmatch(str(spec.get("pattern")), value) else f"{value!r} does not match {spec.get('pattern')}"
+        return None if re.fullmatch(str(spec.get("pattern")), value) else f"{value!r} is not a value it takes" + (f", e.g. {spec['example']}" if spec.get("example") else "")
     except re.error:
         return "its pattern is not a regular expression"
 
@@ -414,12 +414,12 @@ def _option_slots(d: dict) -> List[Tuple[str, str]]:
 
 def _options(d: dict) -> List[str]:
     """``options``: what a run may set of the agent's own behaviour, each with
-    a ``summary``, its ``values`` (or a ``pattern``) and a ``default`` that is
+    a ``summary``, its ``values`` (or a ``pattern`` and an ``example`` of it) and a ``default`` that is
     the vendor's own - so a run that sets nothing is the agent as it ships.
     Every ``{opt_<name>}`` slot a template carries must be one of them."""
     opts = d.get("options")
     if opts is not None and not isinstance(opts, dict):
-        return ["options: an object, name -> {summary, values or pattern, default}"]
+        return ["options: an object, name -> {summary, values or pattern and example, default}"]
     opts, bad = opts or {}, []
     for name, o in opts.items():
         w = f"options.{name}"
@@ -446,6 +446,8 @@ def _options(d: dict) -> List[str]:
             except re.error:
                 bad.append(f"{w}.pattern: a regular expression")
                 continue
+            if "example" in o and (option_problem(o, o["example"]) or o["example"] == o.get("default")):
+                bad.append(f"{w}.example: a value its pattern allows besides its default, shown in its place")
         if option_problem(o, o.get("default")):
             bad.append(f"{w}.default: the vendor's own default, a value it allows")
     for where, n in _option_slots(d):
@@ -556,7 +558,7 @@ def _files(d: dict) -> List[str]:
 
 def _host(d: dict) -> List[str]:
     """A benchmark's ``host``: what the machine its driver runs on must have for some of its options,
-    by name - a ``summary``, the programs that ``check`` it (each on PATH) and how to ``install`` them
+    by name - a ``label``, a ``summary``, the programs that ``check`` it (each on PATH) and how to ``install`` them
     (``apt`` and ``npm`` packages, pinned where the upstream pins them); no ``install`` for the
     machine's own hardware (a GPU, checked by its driver's program), which no package puts there."""
     h = d.get("host")

@@ -287,6 +287,17 @@ class Tabs(unittest.TestCase):
         self.stack.enter_context(patch.object(definitions, "load", lambda kind, root_=None, every=False: _LOAD(kind, str(root), every=every)))
         self.stack.enter_context(patch.object(definitions, "get", lambda kind, key, root_=None: _GET(kind, key, str(root))))
 
+    def test_an_option_with_a_pattern_shows_its_example_not_the_pattern(self):
+        root = self.tmp / "catalogue"
+        shutil.copytree(ROOT, root)
+        path = root / "agents" / "fake" / "agent.json"
+        path.write_text(json.dumps(dict(json.loads(path.read_text()), options={"turns": {"summary": "Turns.", "pattern": "[1-9][0-9]{0,2}", "example": "40", "default": "10"}})))
+        self.stack.enter_context(patch.object(definitions, "load", lambda kind, root_=None, every=False: _LOAD(kind, str(root), every=every)))
+        self.stack.enter_context(patch.object(definitions, "get", lambda kind, key, root_=None: _GET(kind, key, str(root))))
+        html = self.get("/agents/fake").get_data(as_text=True)
+        self.assertIn("e.g. <code>40</code>", html)
+        self.assertNotIn("[1-9]", html)
+
     def test_an_agent_with_versions_is_one_card_and_a_page_per_version(self):
         self.versioned()
         html = self.get("/agents").get_data(as_text=True)

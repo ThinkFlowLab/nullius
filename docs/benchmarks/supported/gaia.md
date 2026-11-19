@@ -41,7 +41,7 @@ Real-world questions needing reasoning, web research and file understanding.
 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
-| `temperature` | pattern `default\|(?:0\|[1-9][0-9]*)(?:\.[0-9]+)?`, default `default` | Provider default sends none; a non-negative decimal sets it. The paper does not state it. | `original` |
+| `temperature` | e.g. `0.5`, default `default` | Provider default sends none; a non-negative decimal sets it. The paper does not state it. | `original` |
 
 ## Good to know
 

@@ -1,0 +1,835 @@
+[
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--base_url",
+  "values": "an Anthropic-compatible endpoint",
+  "default": "$MINIMAX_ANTHROPIC_BASE_URL, else $ANTHROPIC_BASE_URL, else MiniMax's endpoint for MINIMAX_REGION",
+  "nullius": "fixed:the unit's relay, without /v1 - every model call goes through the relay, which holds the key; its documented invocation passes --base_url too"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--api_key",
+  "values": "a key",
+  "default": "$MINIMAX_API_KEY, else $ANTHROPIC_API_KEY",
+  "nullius": "fixed:the relay's placeholder - the provider's key stays in the relay; passed so that no MINIMAX_API_KEY from a .env file comes first"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--extra_headers",
+  "values": "a JSON object of headers",
+  "default": "$ANTHROPIC_EXTRA_HEADERS, else unset",
+  "nullius": "fixed:unset - its default; a gateway's routing headers, which the relay's providers do not need"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--path_to_vm",
+  "values": "a VM image",
+  "default": "unset: the docker manager downloads it into ./docker_vm_data",
+  "nullius": "fixed:the upstream's docker_vm_data/osworld-v2-ubuntu-x86.qcow2, through a link in the unit's folder - the image its docker manager downloads, put there once before a run; its containers are found by that link"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--headless",
+  "values": "on, off",
+  "default": "off",
+  "nullius": "fixed:on - its documented invocation; the docker provider ignores it"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--action_space",
+  "values": "pyautogui",
+  "default": "pyautogui",
+  "nullius": "fixed:pyautogui - its default and its documented invocation; M3's parser writes pyautogui code"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--observation_type",
+  "values": "screenshot, a11y_tree, screenshot_a11y_tree, som",
+  "default": "screenshot",
+  "nullius": "fixed:screenshot - its default and its documented invocation; M3Agent reads screenshots"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--provider_name",
+  "values": "aws, virtualbox, vmware, docker, azure",
+  "default": "aws (its documented invocation: $PROVIDER_NAME, else aws)",
+  "nullius": "option:vm_provider"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--client_password",
+  "values": "a password",
+  "default": "empty: DesktopEnv then uses osworld-public-evaluation",
+  "nullius": "fixed:osworld-public-evaluation - its documented invocation's CLIENT_PASSWORD, the v2 image's password"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--screen_width",
+  "values": "pixels",
+  "default": "1920",
+  "nullius": "fixed:1920 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--screen_height",
+  "values": "pixels",
+  "default": "1080",
+  "nullius": "fixed:1080 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--sleep_after_execution",
+  "values": "seconds",
+  "default": "3.0",
+  "nullius": "fixed:3.0 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--max_steps",
+  "values": "a number",
+  "default": "100",
+  "nullius": "option:max_steps"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--checkpoint_eval_mode",
+  "values": "off, inline",
+  "default": "off",
+  "nullius": "fixed:off - its default: one evaluation, after the last step, written to result.txt"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--checkpoint_steps",
+  "values": "comma-separated step numbers",
+  "default": "empty",
+  "nullius": "fixed:empty - its default; read only with inline checkpoints"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--trace_guest (--trace_guest_memory)",
+  "values": "on, off",
+  "default": "off",
+  "nullius": "fixed:off - its default; a debugging trace of the VM's resources"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--guest_trace_top_n (--guest_memory_top_n)",
+  "values": "a number",
+  "default": "30",
+  "nullius": "fixed:30 - its default; read only with --trace_guest"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--guest_trace_timeout (--guest_memory_trace_timeout)",
+  "values": "seconds",
+  "default": "15",
+  "nullius": "fixed:15 - its default; read only with --trace_guest"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--preserve_problem_machine",
+  "values": "on, off",
+  "default": "off",
+  "nullius": "fixed:off - its default; the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--enable_vnc (--disable_vnc)",
+  "values": "on, off",
+  "default": "off",
+  "nullius": "fixed:off - its default; a viewer for a person watching the VM"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--enable_recording (--disable_recording)",
+  "values": "on, off",
+  "default": "off",
+  "nullius": "fixed:off - its default; no recording.mp4 is kept"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--max_trajectory_length",
+  "values": "a number",
+  "default": "10",
+  "nullius": "fixed:10 - its default, the screenshots M3Agent keeps in its history"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--coordinate_type",
+  "values": "relative, absolute",
+  "default": "relative",
+  "nullius": "fixed:relative - its default: M3's [0, 1000] coordinates scaled to the screen"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--thinking_mode",
+  "values": "adaptive, disabled, unset",
+  "default": "$M3_THINKING_MODE, else unset",
+  "nullius": "option:thinking"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_THINKING_MODE",
+  "values": "adaptive, disabled, empty",
+  "default": "empty in its documented invocation",
+  "nullius": "option:thinking"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--thinking_budget",
+  "values": "a number of tokens",
+  "default": "$M3_THINKING_BUDGET, else unset",
+  "nullius": "fixed:unset - its documented invocation leaves M3_THINKING_BUDGET empty; a budget turns thinking on by itself"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_THINKING_BUDGET",
+  "values": "a number of tokens",
+  "default": "empty in its documented invocation",
+  "nullius": "fixed:empty - its documented invocation's; set, it turns thinking on with that budget whatever the thinking option says"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--test_config_base_dir",
+  "values": "a folder",
+  "default": "evaluation_examples",
+  "nullius": "fixed:the upstream's evaluation_examples - its default, by its absolute path since each unit runs in its own folder"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--model",
+  "values": "a model name",
+  "default": "$MINIMAX_MODEL, else $ANTHROPIC_MODEL, else MiniMax-M3",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "MINIMAX_MODEL, ANTHROPIC_MODEL",
+  "values": "a model name",
+  "default": "unset",
+  "nullius": "fixed:unset - --model names the setup's model"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--temperature",
+  "values": "a number",
+  "default": "0.6",
+  "nullius": "fixed:0.6 - its default (M3Agent sends 1 when thinking is on)"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--top_p",
+  "values": "a number",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--max_tokens",
+  "values": "a number",
+  "default": "8192",
+  "nullius": "fixed:8192 - its default and its documented invocation's MAX_TOKENS"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--stop_token",
+  "values": "a string",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--domain",
+  "values": "all, or one key of the meta file",
+  "default": "all",
+  "nullius": "fixed:all - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--test_all_meta_path",
+  "values": "evaluation_examples/test_v2.json (108 tasks), test_v2_offline_no_internet.json (82), or one of ten lists by capability, each a subset of the 108 (conflict_disambiguation, cross_source_reasoning, dynamic_environment, human_in_the_loop, implicit_state_inference, multi_item_state_tracking, multimodal_editing, streaming_interaction, tutorial_following, visual_spatial_precision)",
+  "default": "evaluation_examples/test_v2.json",
+  "nullius": "dataset:test_v2"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--test_all_meta_path evaluation_examples/test_v2_offline_no_internet.json",
+  "values": "the upstream's offline list, 82 tasks",
+  "default": "-",
+  "nullius": "dataset:test_v2_offline_no_internet"
+ },
+ {
+  "entry": "evaluation_examples/test_v2_offline_no_internet.json",
+  "setting": "its tasks that need no service",
+  "values": "36 of its 82: no mock website, GitLab, Moodle, LLM grader or simulated user",
+  "default": "-",
+  "nullius": "dataset:offline36"
+ },
+ {
+  "entry": "evaluation_examples/test_v2.json",
+  "setting": "its tasks that need no hosted service",
+  "values": "63 of its 108: no mock website, GitLab or proxy; the LLM grader, the simulated user and the public internet allowed",
+  "default": "-",
+  "nullius": "dataset:no_services63"
+ },
+ {
+  "entry": "evaluation_examples/test_v2.json",
+  "setting": "its tasks that need the mock websites",
+  "values": "35 of its 108: the mock websites, the LLM grader, the simulated user and the public internet allowed; no GitLab or proxy",
+  "default": "-",
+  "nullius": "dataset:websites35"
+ },
+ {
+  "entry": "evaluation_examples/test_v2.json",
+  "setting": "its tasks that need no GitLab or proxy",
+  "values": "98 of its 108: No hosted services and the 35 that need the mock websites",
+  "default": "-",
+  "nullius": "dataset:websites98"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--eval_version",
+  "values": "v1, v2",
+  "default": "v2",
+  "nullius": "fixed:v2 - its default: the task classes of evaluation_examples/task_class, not OSWorld's v1 examples"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--specific_task_id",
+  "values": "a task id",
+  "default": "unset",
+  "nullius": "fixed:unset - its default; a unit's meta file names its one task"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--result_dir",
+  "values": "a folder",
+  "default": "./results",
+  "nullius": "fixed:results in the unit's folder - each trial keeps its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--num_envs",
+  "values": "a number",
+  "default": "1",
+  "nullius": "fixed:1 - its default and its documented invocation; Nullius runs units side by side (-j), each in a VM of its own"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--env_start_delay",
+  "values": "seconds",
+  "default": "1.0",
+  "nullius": "fixed:1.0 - its default; one environment, so no stagger happens"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--log_level",
+  "values": "DEBUG, INFO, WARNING, ERROR, CRITICAL",
+  "default": "INFO",
+  "nullius": "fixed:INFO - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--region",
+  "values": "an AWS region",
+  "default": "us-east-1 (its documented invocation: $AWS_DEFAULT_REGION)",
+  "nullius": "not offered - the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--snapshot_name",
+  "values": "a snapshot",
+  "default": "init_state",
+  "nullius": "fixed:init_state - its default; read by the vmware and virtualbox providers only"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--os_type",
+  "values": "Ubuntu, Windows",
+  "default": "Ubuntu",
+  "nullius": "fixed:Ubuntu - its default; the image is the v2 Ubuntu one"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--use_public_ip",
+  "values": "on, off",
+  "default": "off (its documented invocation: on when USE_PUBLIC_IP=1)",
+  "nullius": "fixed:off - its default; cloud providers only"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "--save_model_eval_raw_info",
+  "values": "on, off",
+  "default": "off",
+  "nullius": "fixed:off - its default; the LLM grader's inputs, and the grader is not set up"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "MINIMAX_ANTHROPIC_BASE_URL, ANTHROPIC_BASE_URL",
+  "values": "an endpoint",
+  "default": "unset",
+  "nullius": "fixed:ANTHROPIC_BASE_URL the unit's relay, MINIMAX_ANTHROPIC_BASE_URL unset - --base_url passes the relay and comes first"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "MINIMAX_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN",
+  "values": "a key",
+  "default": "unset",
+  "nullius": "fixed:ANTHROPIC_API_KEY the relay's placeholder, the others unset - --api_key passes the placeholder and comes first"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "MINIMAX_REGION",
+  "values": "global_en, cn_zh",
+  "default": "global_en",
+  "nullius": "fixed:unset - it picks MiniMax's own endpoint, which --base_url replaces with the relay"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_IMAGE_FORMAT",
+  "values": "JPEG, PNG",
+  "default": "JPEG",
+  "nullius": "fixed:JPEG - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_IMAGE_QUALITY",
+  "values": "1 to 100",
+  "default": "90",
+  "nullius": "fixed:90 - its default"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "M3_MAX_LLM_RETRIES",
+  "values": "a number",
+  "default": "2",
+  "nullius": "fixed:2 - its default: a reply with no action is asked again twice at most"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": "DesktopEnv(enable_proxy=...)",
+  "values": "True, False",
+  "default": "True, hard-coded",
+  "nullius": "fixed:True - hard-coded in the runner: the 8 tasks whose class asks for a proxy (3 of Offline, none of Offline, no services) get the upstream's DataImpulse setup"
+ },
+ {
+  "entry": "scripts/python/run_multienv_m3.py",
+  "setting": ".env (load_dotenv)",
+  "values": "a file of variables",
+  "default": "loaded when present in the script's folder or a folder above it, by the script and by desktop_env/controllers/{setup,website,gitlab,moodle}.py",
+  "nullius": "fixed:what a .env file there holds - load_dotenv never overrides a variable already set; the driver sets ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY, M3_THINKING_MODE, M3_THINKING_BUDGET, the grader's and the simulated user's provider, model, base URL and key, and passes --base_url, --api_key and --model, so such a file can still set any variable it leaves unset, among them ANTHROPIC_EXTRA_HEADERS, MINIMAX_REGION, M3_IMAGE_FORMAT, M3_IMAGE_QUALITY and M3_MAX_LLM_RETRIES"
+ },
+ {
+  "entry": "scripts/bash/run_multienv_m3.sh",
+  "setting": "MODEL, RESULT_DIR, PROVIDER_NAME, OBSERVATION_TYPE, ACTION_SPACE, MAX_STEPS, NUM_ENVS, MAX_TOKENS, CLIENT_PASSWORD, AWS_DEFAULT_REGION, USE_PUBLIC_IP",
+  "values": "the wrapper's own variables",
+  "default": "MiniMax-M3, ./results/osworld_v2/m3, aws, screenshot, pyautogui, 100, 1, 8192, osworld-public-evaluation, us-east-1, 0",
+  "nullius": "fixed:the arguments they become - agents.json passes those arguments, each a row of run_multienv_m3.py"
+ },
+ {
+  "entry": "scripts/bash/run_multienv_m3.sh",
+  "setting": "AWS_REGION, AWS_SUBNET_ID, AWS_SECURITY_GROUP_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_INSTANCE_NAME, ENABLE_TTL",
+  "values": "the aws provider's settings",
+  "default": "exported with the wrapper's own values",
+  "nullius": "not offered - the aws provider's, which is not offered"
+ },
+ {
+  "entry": "scripts/bash/run_multienv_m3.sh",
+  "setting": "OPENAI_API_KEY",
+  "values": "a key",
+  "default": "exported empty",
+  "nullius": "fixed:unset - M3 does not read it"
+ },
+ {
+  "entry": "scripts/bash/run_multienv_m3.sh",
+  "setting": "OSWORLD_CLIENT_PASSWORD",
+  "values": "a password",
+  "default": "osworld-public-evaluation",
+  "nullius": "fixed:unset - exported, and read by none of the code M3 runs; --client_password passes the same password"
+ },
+ {
+  "entry": "scripts/bash/run_multienv_m3.sh",
+  "setting": "WEBSITE_HOST_SUFFIX",
+  "values": "the mock websites' host suffix: that of OSWorld-web at the tag osworld-v2.1 served for this machine's VMs (websites.py); none refuses the 41 tasks that need it before they run",
+  "default": "web.hku.icu",
+  "nullius": "option:websites"
+ },
+ {
+  "entry": "scripts/bash/run_multienv_m3.sh",
+  "setting": "GITLAB_URL",
+  "values": "a GitLab server",
+  "default": "the wrapper's server",
+  "nullius": "fixed:http://gitlab.<Website host suffix> - Task-Web/gitlab, which Nullius makes on the run's machine behind the mock websites' Caddy"
+ },
+ {
+  "entry": "scripts/bash/run_multienv_m3.sh",
+  "setting": "GITLAB_PRIVATE_TOKEN",
+  "values": "the GitLab server's root token",
+  "default": "an empty token",
+  "nullius": "fixed:the root token Nullius makes - with that GitLab, kept on that machine and given to the processes of the 2 GitLab tasks alone"
+ },
+ {
+  "entry": "scripts/bash/run_multienv_m3.sh",
+  "setting": "OSWORLD_EVAL_MODEL_PROVIDER, OSWORLD_EVAL_MODEL_API_KEY_ENV, OSWORLD_EVAL_MODEL_NAME",
+  "values": "the LLM grader's provider, key and model",
+  "default": "anthropic, ANTHROPIC_API_KEY, claude-sonnet-4-6",
+  "nullius": "fixed:anthropic, OSWORLD_EVAL_MODEL_API_KEY the relay's placeholder, the benchmark's judge (anthropic/claude-sonnet-4.6, OpenRouter's name for claude-sonnet-4-6) - the grader asks the unit's judge route, which holds the key and records its calls apart from the agent's"
+ },
+ {
+  "entry": "scripts/bash/run_multienv_m3.sh",
+  "setting": "OSWORLD_USER_SIM_PROVIDER, OSWORLD_USER_SIM_API_KEY_ENV, OSWORLD_USER_SIM_MODEL",
+  "values": "the simulated user's provider, key and model",
+  "default": "anthropic, ANTHROPIC_API_KEY, claude-sonnet-4-6",
+  "nullius": "fixed:anthropic, OSWORLD_USER_SIM_API_KEY the relay's placeholder, claude-sonnet-4-6 - the simulated user asks the unit's own route, which sends that model on as anthropic/claude-sonnet-4.6, a side model of the Original setup"
+ },
+ {
+  "entry": "scripts/bash/run_multienv_m3.sh",
+  "setting": "OSWORLD_FILE_BASE_URL",
+  "values": "a folder or a URL of the task files",
+  "default": "$OSWORLD_FILE_BASE_URL, else ./cache/osworld_v2_assets",
+  "nullius": "fixed:the upstream's cache/osworld_v2_assets, by its absolute path - the release's gated assets, put there before a run: a file a task names through asset() is copied from there into the unit's task cache, not downloaded; for 001, 006 and 010 a folder of the unit's own, their mail client started offline (driver.py _assets)"
+ },
+ {
+  "entry": "desktop_env/controllers/website.py",
+  "setting": "OSWORLD_WEBSITE_TLS_VERIFY",
+  "values": "0, 1",
+  "default": "0",
+  "nullius": "fixed:unset (0) - the stack serves plain HTTP, which the controller falls back to when its HTTPS probe fails"
+ },
+ {
+  "entry": "desktop_env/controllers/moodle.py",
+  "setting": "MOODLE_API_URL, MOODLE_API_KEY",
+  "values": "a Moodle server and its key",
+  "default": "unset",
+  "nullius": "not offered - no Moodle is hosted: no task of osworld-v2.1 uses it"
+ },
+ {
+  "entry": "desktop_env/evaluators/model_client.py",
+  "setting": "the other OSWORLD_EVAL_MODEL_* variables, OPENAI_BASE_URL, MINIMAX_OPENAI_BASE_URL, LLM_DEBUG",
+  "values": "the LLM grader's endpoint, sampling, retries and logging",
+  "default": "unset",
+  "nullius": "fixed:OSWORLD_EVAL_MODEL_BASE_URL the unit's judge route without /v1, the others unset - the Anthropic client adds /v1/messages; sampling, retries and logging stay the upstream's defaults"
+ },
+ {
+  "entry": "desktop_env/user_simulator.py",
+  "setting": "the other OSWORLD_USER_SIM_* variables",
+  "values": "the simulated user's endpoint, sampling and logging",
+  "default": "unset",
+  "nullius": "fixed:OSWORLD_USER_SIM_BASE_URL the unit's relay without /v1, the others unset - sampling and logging stay the upstream's defaults"
+ },
+ {
+  "entry": "desktop_env/controllers/setup.py",
+  "setting": "PROXY_CONFIG_FILE",
+  "values": "a proxy pool file",
+  "default": "evaluation_examples/settings/proxy/dataimpulse.json",
+  "nullius": "fixed:its default, whose username and password are placeholders - the 8 tasks that ask for a proxy get no working proxy, and by the code their setup can fail; not checked by a run"
+ },
+ {
+  "entry": "desktop_env/controllers/setup.py",
+  "setting": "HF_REPO, HF_TOKEN",
+  "values": "a mirror of the public file cache, a token",
+  "default": "unset",
+  "nullius": "fixed:unset - its default; read only for a download from huggingface.co, and no task of Offline, no services downloads from there"
+ },
+ {
+  "entry": "desktop_env/controllers/setup.py",
+  "setting": "OSWORLD_STRICT_SETUP_TRANSPORT",
+  "values": "1, unset",
+  "default": "unset",
+  "nullius": "fixed:unset - its default"
+ },
+ {
+  "entry": "desktop_env/desktop_env.py",
+  "setting": "SCREEN_WIDTH, SCREEN_HEIGHT",
+  "values": "pixels",
+  "default": "1920, 1080",
+  "nullius": "fixed:unset - the runner passes --screen_width and --screen_height"
+ },
+ {
+  "entry": "desktop_env/providers/docker/provider.py",
+  "setting": "image",
+  "values": "a Docker image",
+  "default": "happysixd/osworld-docker@sha256:0e6497a9295647cf05bf2b2af522fdd79bdeba2737595259cab310a3bcf6baa9",
+  "nullius": "fixed:the upstream's, pinned by digest - pulled before a run, since the provider would pull it within its port lock"
+ },
+ {
+  "entry": "desktop_env/providers/docker/provider.py",
+  "setting": "DISK_SIZE, RAM_SIZE, CPU_CORES",
+  "values": "a size, a size, a count",
+  "default": "32G (or a task's own volume size), 4G, 4",
+  "nullius": "fixed:the task's own volume size, at least 40G (startup/sitecustomize.py, as the upstream's aws provider gives), 4G, 4 - the rest hard-coded in the upstream"
+ },
+ {
+  "entry": "desktop_env/providers/docker/provider.py",
+  "setting": "LOCK_TIMEOUT",
+  "values": "seconds",
+  "default": "10, hard-coded",
+  "nullius": "fixed:none (startup/sitecustomize.py) - every VM start waits for the lock, a restart inside DesktopEnv.reset() too; the driver also starts units' VMs one after another"
+ },
+ {
+  "entry": "desktop_env/providers/docker/provider.py",
+  "setting": "docker.from_env() timeout",
+  "values": "seconds a Docker call",
+  "default": "60, docker-py's default",
+  "nullius": "fixed:120 once the client creates the VM's container (startup/sitecustomize.py), and kept for its later calls (the containers' list, the stop and the removal) - a daemon busy with neighbouring VMs can take longer to create one; a create the client still times out on is not sent again, and the container the daemon made with that create's label is started"
+ },
+ {
+  "entry": "desktop_env/providers/docker/provider.py",
+  "setting": "_wait_for_vm_ready(timeout)",
+  "values": "seconds",
+  "default": "300, hard-coded",
+  "nullius": "fixed:300 - hard-coded"
+ },
+ {
+  "entry": "desktop_env/providers/docker/provider.py",
+  "setting": "KVM",
+  "values": "/dev/kvm when present",
+  "default": "hardware acceleration when /dev/kvm exists",
+  "nullius": "fixed:the machine's - with /dev/kvm the VM is accelerated, without it the upstream runs it unaccelerated"
+ },
+ {
+  "entry": "desktop_env/providers/docker/provider.py",
+  "setting": "device_write_bps",
+  "values": "bytes a second per device",
+  "default": "unset: no limit, the provider's containers.run passes none",
+  "nullius": "option:write_mbps"
+ },
+ {
+  "entry": "desktop_env/providers/docker/provider.py",
+  "setting": "device_write_iops",
+  "values": "write operations a second per device",
+  "default": "unset: no limit, the provider's containers.run passes none",
+  "nullius": "option:write_iops"
+ },
+ {
+  "entry": "desktop_env/providers/docker/manager.py",
+  "setting": "UBUNTU_X86_URL, HF_ENDPOINT",
+  "values": "the image's address; a mirror",
+  "default": "huggingface.co/datasets/xlangai/v2-image at 6e16459a, pinned",
+  "nullius": "fixed:the upstream's pinned image - fetched and unpacked into docker_vm_data before a run, since an interrupted unpacking leaves a broken image"
+ },
+ {
+  "entry": "mm_agents/m3/agent.py",
+  "setting": "the Anthropic client's max_retries, timeout",
+  "values": "a count, seconds",
+  "default": "4, 180 s",
+  "nullius": "fixed:4, 180 s - hard-coded in M3Agent"
+ },
+ {
+  "entry": "mm_agents/m3/agent.py",
+  "setting": "stop_sequences",
+  "values": "a list of strings",
+  "default": "</tool_call>, Perform the next action. Perform",
+  "nullius": "fixed:its default - the runner passes none"
+ },
+ {
+  "entry": "mm_agents/m3/agent.py",
+  "setting": "system_date",
+  "values": "a date in the system prompt",
+  "default": "the task's own date when its class sets one, else the day M3Agent is created",
+  "nullius": "fixed:its default - the runner passes none, and creates M3Agent for each unit: the model sees the day the unit starts, unless the task sets its own (4 of the 108 tasks, 1 of Offline, no services)"
+ },
+ {
+  "entry": "lib_run_single.py",
+  "setting": "time.sleep(60) after reset",
+  "values": "seconds",
+  "default": "60, hard-coded",
+  "nullius": "fixed:60 - hard-coded: a slow or loaded machine can show the agent a desktop that has not caught up"
+ },
+ {
+  "entry": "task_loader.py",
+  "setting": "the task's class",
+  "values": "evaluation_examples/task_class/task_NNN.py",
+  "default": "downloaded by scripts/tools/download_osworld_v2_tasks.py",
+  "nullius": "fixed:the release's gated task classes - put in evaluation_examples/task_class before a run"
+ },
+ {
+  "entry": "scripts/python/run_multienv.py",
+  "setting": "its agent harness",
+  "values": "PromptAgent, run as published",
+  "default": "-",
+  "nullius": "not offered - this entry runs M3 and Muse Spark alone so far"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude.py",
+  "setting": "its agent harness",
+  "values": "Claude, run as published",
+  "default": "-",
+  "nullius": "not offered - this entry runs M3 and Muse Spark alone so far"
+ },
+ {
+  "entry": "scripts/python/run_multienv_claude_code.py",
+  "setting": "its agent harness",
+  "values": "Claude Code, run as published",
+  "default": "-",
+  "nullius": "not offered - this entry runs M3 and Muse Spark alone so far"
+ },
+ {
+  "entry": "scripts/python/run_multienv_codex.py",
+  "setting": "its agent harness",
+  "values": "Codex, run as published",
+  "default": "-",
+  "nullius": "not offered - this entry runs M3 and Muse Spark alone so far"
+ },
+ {
+  "entry": "scripts/python/run_multienv_deepseek.py",
+  "setting": "its agent harness",
+  "values": "DeepSeek, run as published",
+  "default": "-",
+  "nullius": "not offered - this entry runs M3 and Muse Spark alone so far"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gemini.py",
+  "setting": "its agent harness",
+  "values": "Gemini, run as published",
+  "default": "-",
+  "nullius": "not offered - this entry runs M3 and Muse Spark alone so far"
+ },
+ {
+  "entry": "scripts/python/run_multienv_glm.py",
+  "setting": "its agent harness",
+  "values": "GLM, run as published",
+  "default": "-",
+  "nullius": "not offered - this entry runs M3 and Muse Spark alone so far"
+ },
+ {
+  "entry": "scripts/python/run_multienv_gpt_response_api.py",
+  "setting": "its agent harness",
+  "values": "GPT (Responses API), run as published",
+  "default": "-",
+  "nullius": "not offered - this entry runs M3 and Muse Spark alone so far"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_code.py",
+  "setting": "its agent harness",
+  "values": "Muse Code, run as published",
+  "default": "-",
+  "nullius": "not offered - this entry runs M3 and Muse Spark alone so far"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "its agent harness",
+  "values": "Muse Spark, run as published",
+  "default": "-",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "scripts/python/run_multienv_muse_spark.py",
+  "setting": "--max_steps",
+  "values": "a number",
+  "default": "15",
+  "nullius": "option:max_steps"
+ },
+ {
+  "entry": "scripts/python/run_multienv_qwen.py",
+  "setting": "its agent harness",
+  "values": "Qwen, run as published",
+  "default": "-",
+  "nullius": "not offered - this entry runs M3 and Muse Spark alone so far"
+ },
+ {
+  "entry": "scripts/python/dispatch_deepseek_fullset.py",
+  "setting": "its batch tool",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - a batch tool around run_multienv_deepseek.py, which is not offered"
+ },
+ {
+  "entry": "scripts/python/resume_deepseek_queue.py",
+  "setting": "its batch tool",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - a batch tool around run_multienv_deepseek.py, which is not offered"
+ },
+ {
+  "entry": "scripts/python/rerun_deepseek_setup.py",
+  "setting": "its batch tool",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - a batch tool around run_multienv_deepseek.py, which is not offered"
+ },
+ {
+  "entry": "scripts/python/record_deepseek_provenance.py",
+  "setting": "its batch tool",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - a batch tool around run_multienv_deepseek.py, which is not offered"
+ },
+ {
+  "entry": "scripts/python/summarize_deepseek.py",
+  "setting": "its batch tool",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - a batch tool around run_multienv_deepseek.py, which is not offered"
+ },
+ {
+  "entry": "run.py",
+  "setting": "its agent harness",
+  "values": "run as published",
+  "default": "-",
+  "nullius": "not offered - a single-environment runner of OSWorld's v1 examples"
+ },
+ {
+  "entry": "scripts/python/manual_examine.py",
+  "setting": "its harness",
+  "values": "a person at the VM",
+  "default": "manual",
+  "nullius": "not offered - a person examines tasks by hand: no run to score"
+ },
+ {
+  "entry": "scripts/python/interactive_examine.py",
+  "setting": "its harness",
+  "values": "a person at the VM",
+  "default": "manual",
+  "nullius": "not offered - a person examines tasks by hand: no run to score"
+ },
+ {
+  "entry": "scripts/python/debug_examine.py",
+  "setting": "its harness",
+  "values": "a person at the VM",
+  "default": "manual",
+  "nullius": "not offered - a person examines tasks by hand: no run to score"
+ },
+ {
+  "entry": "scripts/bash/run_human_examine.sh",
+  "setting": "its harness",
+  "values": "a person at the VM",
+  "default": "manual",
+  "nullius": "not offered - a person examines tasks by hand: no run to score"
+ },
+ {
+  "entry": "scripts/bash/run_interactive_examine.sh",
+  "setting": "its harness",
+  "values": "a person at the VM",
+  "default": "manual",
+  "nullius": "not offered - a person examines tasks by hand: no run to score"
+ },
+ {
+  "entry": "scripts/bash/run_debug.sh",
+  "setting": "its harness",
+  "values": "a person at the VM",
+  "default": "manual",
+  "nullius": "not offered - a person examines tasks by hand: no run to score"
+ },
+ {
+  "entry": "scripts/bash/run_manual_examine_windows.sh",
+  "setting": "its harness",
+  "values": "a person at the VM",
+  "default": "manual",
+  "nullius": "not offered - a person examines tasks by hand: no run to score"
+ },
+ {
+  "entry": "scripts/bash/run_mannual_examine_windows.sh",
+  "setting": "its harness",
+  "values": "a person at the VM",
+  "default": "manual",
+  "nullius": "not offered - a person examines tasks by hand: no run to score"
+ },
+ {
+  "entry": "the paper (arXiv 2606.29537)",
+  "setting": "M3's run, Table 3",
+  "values": "500 steps, thinking on, 8K output tokens, AWS instances with all web traffic routed through a residential proxy, release osworld-v2-2026.06.24",
+  "default": "-",
+  "nullius": "setup:original"
+ }
+]

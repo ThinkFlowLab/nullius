@@ -78,7 +78,7 @@ def _entries(kind: str, every: bool = False) -> dict:
                     "install": _install_words(o),
                     # its options, each with its default and what else it takes; its fidelity proof, when it has one
                     "options": [{"name": n, "summary": x.get("summary", ""), "default": x.get("default"),
-                                 "values": list(x.get("values") or []), "pattern": x.get("pattern", "")}
+                                 "values": list(x.get("values") or []), "pattern": x.get("pattern", ""), "example": x.get("example", "")}
                                 for n, x in (o.get("options") or {}).items()],
                     "fidelity": fid if isinstance(fid, dict) else None})
     out.sort(key=lambda e: (not e["d"].get("example", False), definitions.title(e["d"]).casefold()))

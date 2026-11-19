@@ -118,15 +118,15 @@
         <h3 class="std-optname">{{ o.label }}{% if o.datasets %} <small>{{ std.datasets|selectattr('id', 'in', o.datasets)|map(attribute='label')|join(', ') }}</small>{% endif %}</h3>
         <p class="bench-ds-note">{{ o.summary }}</p>
         {% if o.pattern %}
-        <div class="std-option-range"><span class="std-tag">{{ 'Provider default' if n == 'temperature' and o.default == 'default' else o.default }}</span>
-          {% if n == 'temperature' %}<span>Custom decimal, e.g. <code>0.5</code></span>{% else %}<code>{{ o.pattern }}</code>{% endif %}
+        <div class="std-option-range"><span class="std-tag">{{ 'Provider default' if o.default == 'default' and not o.limit else o.default }}</span>
+          {% if o.example %}<span>e.g. <code>{{ o.example }}</code></span>{% endif %}
         </div>
         {% else %}
         <ul class="std-optvals{{ ' std-optvals-detailed' if o.about or o.needs else '' }}">
           {% for v in o['values'] %}{% set need = o.needs.get(v) or {} %}
           <li>{% if o.names.get(v) %}<b title="{{ v }}">{{ o.names[v] }}</b>{% else %}<b class="mono">{{ v }}</b>{% endif %}{% if v == o.default and v != 'default' %} <span class="std-tag">default</span>{% endif %}
             {% if need.embeddings %}<span class="run-tag" title="its embedding calls go through the run's relay">OpenAI key · {{ need.embeddings }}</span>{% endif %}
-            {% for h in need.host or [] %}<a class="std-need" href="#setup-{{ h }}" title="{{ std.host[h].summary }}">needs {{ h }}</a>{% endfor %}
+            {% for h in need.host or [] %}<a class="std-need" href="#setup-{{ h }}" title="{{ std.host[h].summary }}">needs {{ std.host[h].label }}</a>{% endfor %}
             {% if o.about.get(v) %}<small>{{ o.about[v] }}</small>{% endif %}</li>
           {% endfor %}
         </ul>
@@ -134,7 +134,7 @@
         {% endfor %}
         {% for h, r in std.host.items() %}
         <div class="std-hostreq" id="setup-{{ h }}">
-          <h3 class="std-optname">Setup: {{ h }}</h3>
+          <h3 class="std-optname">Setup: {{ r.label }}</h3>
           <p class="bench-ds-note">{{ r.summary }} Checked by {{ r.check|join(', ') }} on PATH, on each machine a run uses; the builder's Where step checks it{% if r.install %} and can install it{% endif %}.</p>
           {% if r.install %}<div class="std-code"><div class="std-code-head"><span>install, on each machine</span><button type="button" class="std-copy">Copy</button></div><pre><code>{{ r.install|join('\n') }}</code></pre></div>{% endif %}
         </div>

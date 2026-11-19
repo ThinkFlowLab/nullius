@@ -1,0 +1,94 @@
+name: osworld2-gitlab
+
+x-logging: &logs
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  gitlab:
+    image: gitlab/gitlab-ce@sha256:9c17686c3cd1b72f52282543d2dcf7c96add29b4698ec367bfb1455be8f13ce0
+    container_name: !reset null
+    restart: "no"
+    ports: !reset []
+    networks:
+      web:
+        aliases:
+          - nullius-osworld2-gitlab
+    labels:
+      caddy: "http://${OSWORLD2_GITLAB_HOST:?as gitlab_server.py sets it}, http://*.${OSWORLD2_GITLAB_HOST:?as gitlab_server.py sets it}"
+      caddy.reverse_proxy: "nullius-osworld2-gitlab:80"
+      nullius.osworld2.share: ${OSWORLD2_GITLAB_SHARE:-stack}
+    volumes:
+      - ${OSWORLD2_GITLAB_RB:?as gitlab_server.py sets it}:/etc/gitlab/gitlab.rb:ro
+    blkio_config:
+      device_write_bps:
+        - path: ${OSWORLD2_GITLAB_DISK:?the disk under Docker's root, as gitlab_server.py sets it}
+          rate: ${OSWORLD2_GITLAB_GITLAB_BPS:?as gitlab_server.py sets it}
+      device_write_iops:
+        - path: ${OSWORLD2_GITLAB_DISK:?the disk under Docker's root, as gitlab_server.py sets it}
+          rate: ${OSWORLD2_GITLAB_GITLAB_IOPS:?as gitlab_server.py sets it}
+    logging: *logs
+  gitlab-init-token:
+    profiles:
+      - upstream-init
+    volumes: !override []
+    entrypoint: !override ["/bin/false"]
+    command: !override []
+  gitlab-runner:
+    image: gitlab/gitlab-runner@sha256:9d3b2b8be462e18176b82eb40a5f54a5ee6eaa2b4f46dcc362c4801aef90030f
+    container_name: !reset null
+    labels:
+      nullius.osworld2.share: ${OSWORLD2_GITLAB_SHARE:-stack}
+    restart: "no"
+    depends_on:
+      - dind
+    networks:
+      - ci
+    volumes: !override
+      - gitlab_runner_config:/etc/gitlab-runner
+      - dind_certs_client:/certs/client:ro
+    blkio_config:
+      device_write_bps:
+        - path: ${OSWORLD2_GITLAB_DISK:?the disk under Docker's root, as gitlab_server.py sets it}
+          rate: ${OSWORLD2_GITLAB_RUNNER_BPS:?as gitlab_server.py sets it}
+      device_write_iops:
+        - path: ${OSWORLD2_GITLAB_DISK:?the disk under Docker's root, as gitlab_server.py sets it}
+          rate: ${OSWORLD2_GITLAB_RUNNER_IOPS:?as gitlab_server.py sets it}
+    logging: *logs
+  dind:
+    image: docker@sha256:3ef33f2e220b79ed3ef3b99d81746f06f306cd6340e2cb7331d17ae996e74cb6
+    labels:
+      nullius.osworld2.share: ${OSWORLD2_GITLAB_SHARE:-stack}
+    restart: "no"
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    networks:
+      ci:
+        aliases:
+          - docker
+    volumes:
+      - dind_certs_ca:/certs/ca
+      - dind_certs_client:/certs/client
+      - dind_data:/var/lib/docker
+    blkio_config:
+      device_write_bps:
+        - path: ${OSWORLD2_GITLAB_DISK:?the disk under Docker's root, as gitlab_server.py sets it}
+          rate: ${OSWORLD2_GITLAB_DIND_BPS:?as gitlab_server.py sets it}
+      device_write_iops:
+        - path: ${OSWORLD2_GITLAB_DISK:?the disk under Docker's root, as gitlab_server.py sets it}
+          rate: ${OSWORLD2_GITLAB_DIND_IOPS:?as gitlab_server.py sets it}
+    logging: *logs
+
+networks:
+  web:
+    name: ${OSWORLD2_GITLAB_INGRESS:?the mock websites' Caddy network, as gitlab_server.py sets it}
+    external: true
+  ci: {}
+
+volumes:
+  dind_certs_ca:
+  dind_certs_client:
+  dind_data:

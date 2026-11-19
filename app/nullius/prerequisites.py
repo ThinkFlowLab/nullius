@@ -88,8 +88,8 @@ def check_here(needs: List[str], setups: Optional[Dict[str, dict]] = None, *, st
             rows.append(row(n, "ok") if which(n) else row(n, "missing", f"{n} is not on this machine's PATH"))
     lacking = hostreq.problems({"host": setups or {}}, list(setups or {}), which, constraints.of(constraints.LOCAL, strict=False).get("gpu_ids"))
     for name, s in (setups or {}).items():
-        rows.append(row("setup:" + name, "missing", lacking[name], s.get("install"), label=name)
-                    if name in lacking else row("setup:" + name, "ok", s.get("summary", ""), label=name))
+        rows.append(row("setup:" + name, "missing", lacking[name], s.get("install"), label=s.get("label") or name)
+                    if name in lacking else row("setup:" + name, "ok", s.get("summary", ""), label=s.get("label") or name))
     return rows
 
 
@@ -123,8 +123,8 @@ def check_host(host: hosts.Host, needs: List[str], setups: Optional[Dict[str, di
             rows.append(row(n, "missing", f"{n} is not on the host's PATH") if n in gone else row(n, "ok"))
     for name, s in (setups or {}).items():
         lacking = [p for p in s.get("check") or [] if p in gone]
-        rows.append(row("setup:" + name, "missing", ", ".join(lacking) + " not on PATH", s.get("install"), label=name)
-                    if lacking else row("setup:" + name, "ok", s.get("summary", ""), label=name))
+        rows.append(row("setup:" + name, "missing", ", ".join(lacking) + " not on PATH", s.get("install"), label=s.get("label") or name)
+                    if lacking else row("setup:" + name, "ok", s.get("summary", ""), label=s.get("label") or name))
     return rows
 
 
