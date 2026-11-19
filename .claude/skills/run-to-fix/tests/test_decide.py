@@ -503,11 +503,6 @@ class TrialRunIdentity(Flow):
         self.assertNotEqual(r.code, 0)
         self.assertIn("bench/f2", r.err)
 
-    def test_a_task_with_another_count_of_trials_is_refused(self) -> None:
-        r = self.decide_on([trial(f"{t}__o", f"bench/{t}", 1.0) for t in ("f1", "f2", "p1")], self.repo.good)
-        self.assertNotEqual(r.code, 0)
-        self.assertIn("3 trials", r.err)
-
     def test_another_commit_is_refused(self) -> None:
         r = self.decide_on(self.three_each(["f1", "f2", "p1"]), self.repo.bad)
         self.assertNotEqual(r.code, 0)
@@ -519,6 +514,71 @@ class TrialRunIdentity(Flow):
         self.assertIn(f"{self.repo.good[:12]}, as the person states", self.page("decision-2.md"))
         self.assertEqual(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"][0]["code_from"],
                          "the person")
+
+
+class SelectionCoverage(Flow):
+    """A trial job holds every selected task, each with one number of trials; the repeats count over the round's
+    trial jobs on the selected commit, and the targets are tested once every task has the selection's repeats."""
+
+    def job_of(self, name: str, tasks: List[str], repeat: int) -> str:
+        return write_job(self.jobs, name, "alpha", "harbor",
+                         [trial(f"{t}-{k}__{name}", f"bench/{t}", 1.0) for t in tasks for k in range(repeat)])
+
+    def decide(self, job: str) -> Result:
+        return run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
+
+    def canaries_chosen(self) -> str:
+        self.kept()
+        r = self.select(["--size", "canaries", "--budget-usd", "1", "--text", "targets, guards and canaries"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        canaries = load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["selection"]["canaries"]
+        self.assertEqual(len(canaries), 1)
+        return canaries[0]
+
+    def test_a_missing_guard_is_refused(self) -> None:
+        self.chosen()
+        r = self.decide(self.job_of("noguard", ["f1", "f2"], 3))
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("bench/p1", r.err)
+        self.assertEqual(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["trial_runs"], [])
+
+    def test_a_missing_canary_is_refused(self) -> None:
+        canary = self.canaries_chosen()
+        r = self.decide(self.job_of("nocanary", ["f1", "f2", "p1"], 3))
+        self.assertNotEqual(r.code, 0)
+        self.assertIn(canary, r.err)
+
+    def test_tasks_with_unequal_trials_in_one_job_are_refused(self) -> None:
+        self.chosen()
+        trials = [trial(f"{t}-{k}__u", f"bench/{t}", 1.0) for t, n in (("f1", 3), ("f2", 1), ("p1", 3)) for k in range(n)]
+        r = self.decide(write_job(self.jobs, "uneven", "alpha", "harbor", trials))
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("bench/f2 (1)", r.err)
+
+    def test_three_jobs_of_one_trial_each_make_a_complete_selection(self) -> None:
+        self.chosen()
+        for k, name in enumerate(("one", "two", "three")):
+            r = self.decide(self.job_of(name, ["f1", "f2", "p1"], 1))
+            self.assertEqual(r.code, 0, r.out + r.err)
+            record = load(self.round_file("trial.json"))
+            self.assertEqual(record["trials_per_task"], k + 1)
+            self.assertEqual(record["complete"], k == 2)
+            page = self.page("decision-2.md")
+            self.assertIn(f"{k + 1} of the 3 trials per task", page)
+            if k < 2:
+                self.assertIsNone(record["targets"]["p"])
+                self.assertIn("not complete", page)
+            else:
+                self.assertIsNotNone(record["targets"]["p"])
+                self.assertEqual(record["targets"]["after"], {"trials": 6, "passed": 6})
+                self.assertNotIn("not complete", page)
+
+    def test_the_rerun_holds_every_selected_task(self) -> None:
+        canary = self.canaries_chosen()
+        r = self.decide(self.job_of("all", ["f1", "f2", "p1", canary.split("/", 1)[1]], 3))
+        self.assertEqual(r.code, 0, r.out + r.err)
+        with open(self.round_file("rerun-tasks.txt"), encoding="utf-8") as fh:
+            self.assertIn(canary, fh.read().split())
 
 
 class AmountsAreFinite(Flow):
