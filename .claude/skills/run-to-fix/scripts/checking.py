@@ -109,7 +109,8 @@ def on_ref(adapter: Adapter, loop_dir: str, round_dir: str, name: str, sha: str,
     with worktree(adapter.checkout, loop_dir, sha) as tree:
         ran = run_command(line, dict(values, worktree=tree), tree, log, timeout_s)
     if ran.code is None:
-        raise LoopError(f"commands.{name} on {sha[:12]} did not finish in time; the log is {ran.log}")
+        return Outcome(None, f"commands.{name} on {sha[:12]} did not finish in {timeout_s:g} s and was stopped; "
+                             f"the log is {ran.log}")
     return Outcome(ran, None)
 
 
@@ -217,7 +218,7 @@ def check_replay(adapter: Adapter, args: argparse.Namespace, round_dir: str, bef
         o = on_ref(adapter, args.loop, round_dir, "replay", sha, values, out[:-len(".json")] + ".log",
                    args.command_timeout_s)
         if o.ran is None:
-            if when == "before":
+            if when == "before" and "replay" in adapter.paid:
                 on_ref(adapter, args.loop, round_dir, "replay", ref,
                        dict(values, ref=ref, out_json=replay_file(round_dir, ref, before_ref)),
                        replay_file(round_dir, ref, before_ref)[:-len(".json")] + ".log", args.command_timeout_s)
