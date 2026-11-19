@@ -629,3 +629,36 @@ class RecordedAmounts(Flow):
         self.assertNotEqual(r.code, 0)
         self.assertIn("input.json", r.err)
         self.assertFalse(os.path.exists(self.round_file("trial-tasks.txt")))
+
+
+class ChecksOfAnotherAdapter(Flow):
+    """A check is evidence only for the adapter it ran with; a changed adapter.json asks for the check again."""
+
+    def change_replay(self) -> None:
+        path = os.path.join(self.loop, "adapter.json")
+        data = load(path)
+        data["commands"]["replay"] = "exit 23 # {worktree} {ref} {job_dir} {out_json}"
+        write_json(path, data)
+
+    def test_stop_one_refuses_a_check_of_another_adapter(self) -> None:
+        self.checked()
+        self.change_replay()
+        r = run(["decide", "--loop", self.loop, "--stop", "1"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("loop.py check --candidate", r.err)
+
+    def test_the_answer_refuses_a_check_of_another_adapter(self) -> None:
+        self.checked()
+        run(["decide", "--loop", self.loop, "--stop", "1"])
+        self.change_replay()
+        r = run(["answer", "--loop", self.loop, "--stop", "1", "--keep", "good", "--text", "keep good"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("loop.py check --candidate good", r.err)
+
+    def test_select_refuses_a_check_of_another_adapter(self) -> None:
+        self.kept()
+        self.change_replay()
+        r = self.select(["--size", "guards", "--budget-usd", "0.5", "--text", "the guards"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("loop.py check --candidate good", r.err)
+        self.assertFalse(os.path.exists(self.round_file("trial-tasks.txt")))
