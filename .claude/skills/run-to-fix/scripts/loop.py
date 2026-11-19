@@ -65,6 +65,8 @@ def main(argv: List[str]) -> int:
     de.add_argument("--loop", required=True)
     de.add_argument("--stop", type=int, required=True, choices=(1, 2))
     de.add_argument("--trial-job", help="stop 2: the job folder of the trial run")
+    de.add_argument("--trial-cost-usd", type=float,
+                    help="stop 2: the person's figure for what the trial run cost, when its trials do not all report one")
     de.set_defaults(func=cmd_decide)
     an = sub.add_parser("answer", help="record the person's answer of a stop")
     an.add_argument("--loop", required=True)
@@ -87,6 +89,8 @@ def main(argv: List[str]) -> int:
     cp.add_argument("--new", required=True, help="the job folder of the new run, as for read --run")
     cp.add_argument("--against", required=True, choices=("run", "baseline"),
                     help="compare with the round's run (the code before the fix) or with its baseline")
+    cp.add_argument("--new-cost-usd", type=float,
+                    help="the person's figure for what the new run cost, when its trials do not all report one")
     cp.set_defaults(func=cmd_compare)
     args = ap.parse_args(argv)
     try:

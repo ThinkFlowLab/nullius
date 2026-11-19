@@ -69,8 +69,15 @@ def predictions_of(predictions: List[dict], new: List[TrialRow]) -> List[dict]:
 
 
 def trial_spent(entry: dict) -> float:
-    """What the round's trial runs cost, from the list of them in the ledger."""
-    return sum(t["cost_usd"] for t in entry.get("trial_runs") or [])
+    """What the round's trial runs cost, from the list of them in the ledger. A run whose trials do not all report
+    a cost counts only with the person's figure for it."""
+    total = 0.0
+    for t in entry.get("trial_runs") or []:
+        if not t.get("cost_complete", True) and t.get("cost_from") != "the person":
+            raise LoopError(f"the money the trial run {t['job_dir']} spent is unknown: some of its trials report no "
+                            "cost. Record it again with loop.py decide --stop 2 and --trial-cost-usd.")
+        total += t["cost_usd"]
+    return total
 
 
 def spent_in_round(entry: dict, record: dict, new_dir: str, new_cost: Optional[float]) -> Optional[float]:
@@ -100,9 +107,11 @@ def stop_rule(result_verdict: str, groups: List[dict], budget: float, spent: Opt
                     f"{TARGET_TRIALS} trials each", "usd": price.usd, "trials": price.trials,
                     "unpriced_tasks": price.unpriced_tasks, "text": describe(price)}
     left = budget - spent if spent is not None else None
-    if cheapest is not None:
-        if cheapest["usd"] is None or left is None:
-            not_checked.append("the budget: no trial of the groups' tasks, or of the new run, reports a cost")
+    if left is None:
+        not_checked.append("the budget: the money this round spent is unknown, because some trials report no cost")
+    elif cheapest is not None:
+        if cheapest["usd"] is None:
+            not_checked.append("the budget: no trial of the groups' tasks reports a cost")
         elif left < cheapest["usd"]:
             reasons.append(f"the budget left, {usd(left)}, is under the price of the cheapest option, "
                            f"{usd(cheapest['usd'])}")
@@ -144,7 +153,14 @@ def cmd_compare(args: argparse.Namespace) -> None:
     entry = ledger_round(ledger, os.path.basename(round_dir))
     classes, signatures = classes_of(new_rows, adapter.limits)
     groups = failure_groups(new_rows, classes, signatures, None)
-    spent = spent_in_round(entry, record, new_dir, runs["new"]["cost_total"])
+    missing = sum(r.cost_usd is None for r in new_rows)
+    recorded = sum(r.cost_usd for r in new_rows if r.cost_usd is not None)
+    if args.new_cost_usd is not None and not missing:
+        raise LoopError("every trial of the new run reports its cost; --new-cost-usd is for a run whose trials do not")
+    if args.new_cost_usd is not None and args.new_cost_usd < recorded:
+        raise LoopError(f"--new-cost-usd {usd(args.new_cost_usd)} is under the recorded {usd(recorded)}")
+    new_cost = (args.new_cost_usd if missing else recorded) if new_rows else None
+    spent = spent_in_round(entry, record, new_dir, new_cost)
     rule = stop_rule(result_verdict, groups, float(record["budget_usd"]), spent, task_costs(new_rows))
     result = {
         "schema": "run-to-fix.result/v1", "created": now(), "round": os.path.basename(round_dir),

@@ -122,9 +122,20 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     job_dir = checked.dir
     this_run: List[TrialRow] = read_rows(job_dir, threshold)
     costs = [r.cost_usd for r in this_run]
+    recorded = sum(c for c in costs if c is not None)
+    missing = sum(c is None for c in costs)
+    if missing and args.trial_cost_usd is None:
+        raise LoopError(f"{missing} of {len(costs)} trials of the trial run report no cost, so the money it spent is "
+                        f"unknown. Give the cost of the whole run with --trial-cost-usd, at least the recorded "
+                        f"{usd(recorded)}.")
+    if args.trial_cost_usd is not None and not missing:
+        raise LoopError("every trial of the trial run reports its cost; --trial-cost-usd is for a run whose trials do not")
+    if args.trial_cost_usd is not None and args.trial_cost_usd < recorded:
+        raise LoopError(f"--trial-cost-usd {usd(args.trial_cost_usd)} is under the recorded {usd(recorded)}")
     runs = [t for t in entry.setdefault("trial_runs", []) if t["job_dir"] != job_dir]
     runs.append({"job_dir": job_dir, "ref": selection["ref"], "trials": len(this_run),
-                 "cost_usd": sum(c for c in costs if c is not None), "cost_complete": all(c is not None for c in costs),
+                 "cost_usd": args.trial_cost_usd if missing else recorded, "cost_recorded_usd": recorded,
+                 "cost_from": "the person" if missing else "the trials", "cost_complete": not missing,
                  "added": now()})
     entry["trial_runs"] = runs
     save_ledger(args.loop, ledger)
@@ -180,7 +191,8 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         "ROUND": os.path.basename(round_dir), "LOOP": args.loop,
         "BUILD": f"{build['path']} from {build['ref'][:12]}" if build["path"] else f"{build['reason']} ({build['ref'][:12]})",
         "TRIAL_JOB": ", ".join(t["job_dir"] for t in same), "TRIALS": str(len(rows)),
-        "SPENT": usd(spent) + ("" if trial_record["cost_complete"] else " at least: some trials report no cost"),
+        "SPENT": usd(spent) + "".join(f" (the person's figure for {t['job_dir']}, whose trials record "
+                                      f"{usd(t['cost_recorded_usd'])})" for t in runs if t.get("cost_from") == "the person"),
         "LEFT": usd(left), "BUDGET": usd(float(record["budget_usd"])), "RESULTS": "\n".join(results),
         "OPTIONS": "\n".join(option_rows),
         "REPORT_NOTE": "".join(f"\n- {p['candidate']}: {REPORT_NOT_READ}." for p in entry.get("predictions") or []
