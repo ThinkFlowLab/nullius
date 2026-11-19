@@ -14,6 +14,7 @@ from stats import binomial_two_sided, fisher_two_sided, verdict
 from trials import TrialRow
 
 TARGET_TRIALS = 3
+REPORT_NOT_READ = "this version does not read the agent's report in the new run"
 GROUP_MIN_TRIALS = 3
 STOP_RULE = ("No new round when the verdict is noise and no group of failing trials of the new run has 3 trials "
              "or more, or when the budget left is under the price of the cheapest option: the lowest-priced trial run "
@@ -53,10 +54,16 @@ def targets_of(selection: Optional[dict], before: List[TrialRow], new: List[Tria
 
 
 def predictions_of(predictions: List[dict], new: List[TrialRow]) -> List[dict]:
-    """Each prediction of stage 3 beside the passes of its tasks in the new run."""
+    """Each prediction of stage 3 beside its result in the new run: the passes of its tasks for an effect on the
+    outcome, a note for an effect on the report."""
     out = []
     for pred in predictions:
-        tasks = set(pred.get("tasks") or [])
+        if pred.get("effect") == "report":
+            out.append(dict(pred, result={"note": REPORT_NOT_READ}))
+            continue
+        if pred.get("effect") != "outcome":
+            raise LoopError(f"a prediction of {pred.get('candidate')} names no effect; record the answer of stop 1 again")
+        tasks = set(pred["tasks"])
         out.append(dict(pred, result=dict(passes([r for r in new if r.task in tasks]), tasks=len(tasks))))
     return out
 

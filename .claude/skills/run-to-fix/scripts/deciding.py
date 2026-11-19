@@ -6,8 +6,9 @@ import os
 import re
 from typing import Dict, List, Optional
 
+from checking import load_candidate
 from classifying import read_rows
-from comparing import TARGET_TRIALS, passes, targets_of, trial_spent
+from comparing import REPORT_NOT_READ, TARGET_TRIALS, passes, targets_of, trial_spent
 from pricing import describe, price_of, task_costs, usd
 from reading import adapter_of, health
 from rounds import LoopError, ledger_round, load_ledger, now, open_round, read_input, read_json, save_ledger, write_json, write_paid
@@ -37,11 +38,19 @@ def table_text(t: Dict[str, int]) -> str:
     return f"{t['done_pass']} / {t['done_fail']} / {t['not_done_pass']} / {t['not_done_fail']}"
 
 
+def changes_text(replay: dict) -> str:
+    changes = replay["cause"]
+    text = f"{changes['changed']} of {changes['trials']}"
+    if changes["by_direction"]:
+        text += ": " + ", ".join(f"{d} {n}" for d, n in changes["by_direction"].items())
+    return text
+
+
 def candidate_row(cand: dict, checks: Optional[dict]) -> List[str]:
     pred = cand["prediction"]
-    explains = f"{len(pred['trials'])} trials on {len(pred['tasks'])} tasks ({cand['rule']})"
+    explains = f"{len(pred['trials'])} trials, {len(pred['tasks'])} tasks expected to pass ({cand['rule']})"
     if checks is None:
-        return [cand["id"], cand["cause"], explains, "not checked", "not checked", "not checked", "not checked", ""]
+        return [cand["id"], cand["cause"], cand["effect"], explains] + ["not checked"] * 5 + [""]
     test, suite, replay, diff = checks["test"], checks["suite"], checks["replay"], checks["diff"]
     if not test["ran"]:
         test_text = "did not run"
@@ -52,13 +61,16 @@ def candidate_row(cand: dict, checks: Optional[dict]) -> List[str]:
     suite_text = ("did not run" if not suite["ran"] else
                   ", ".join(suite["added"]) if suite["added"] else "none")
     if replay["ran"]:
-        replay_text = f"{table_text(replay['before'])} → {table_text(replay['after'])}"
+        replay_text = (f"{table_text(replay['before'])} → {table_text(replay['after'])} "
+                       f"({replay['before_ref'][:12]} → {replay['ref'][:12]})")
+        change_text = changes_text(replay)
         false_text = f"{replay['false_success_added']:+d}" + (
             f" (new: {', '.join(replay['false_success_new'])})" if replay["false_success_new"] else "")
     else:
-        replay_text, false_text = "did not run", "did not run"
+        replay_text, change_text, false_text = "did not run", "did not run", "did not run"
     diff_text = f"{diff['files']} files, +{diff['added']} −{diff['removed']}"
-    return [cand["id"], cand["cause"], explains, test_text, suite_text, replay_text, false_text, diff_text]
+    return [cand["id"], cand["cause"], cand["effect"], explains, test_text, suite_text, replay_text, change_text,
+            false_text, diff_text]
 
 
 def decide_one(args: argparse.Namespace, round_dir: str, record: dict) -> None:
@@ -67,9 +79,9 @@ def decide_one(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         if os.path.isdir(base) else []
     if not ids:
         raise LoopError("no candidate is registered: add one with loop.py candidate, then loop.py check")
-    rows, not_run = [], []
+    rows, not_run, unchanged = [], [], []
     for cid in ids:
-        cand = read_json(os.path.join(base, cid, "candidate.json"))
+        cand = load_candidate(os.path.join(base, cid, "candidate.json"))
         checks_path = os.path.join(base, cid, "checks.json")
         checks = read_json(checks_path) if os.path.isfile(checks_path) else None
         rows.append("| " + " | ".join(cell(c) for c in candidate_row(cand, checks)) + " |")
@@ -79,11 +91,16 @@ def decide_one(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         for name in ("test", "suite", "replay"):
             if not checks[name]["ran"]:
                 not_run.append(f"- {cid}, {name}: {checks[name]['reason']}")
+        replay = checks["replay"]
+        if replay["ran"] and replay["cause"]["changed"] == 0:
+            unchanged.append(f"- {cid}: 0 of {replay['cause']['trials']} trials of its cause change their label "
+                             f"between {replay['before_ref'][:12]} and {replay['ref'][:12]}.")
     trials = len(read_rows(record["run"]["job_dir"], float(record["pass_threshold"])))
     fill_page("decision-1.md", {
         "ROUND": os.path.basename(round_dir), "LOOP": args.loop, "TRIALS": str(trials),
         "SUMMARY": f"{len(ids)} candidates, checked against the run {record['run']['job_dir']}.",
         "ROWS": "\n".join(rows), "NOT_RUN": "\n".join(not_run) or "Every check ran.",
+        "UNCHANGED": "\n".join(unchanged) or "None.",
     }, os.path.join(round_dir, "decision-1.md"))
     print(f"wrote {round_dir}/decision-1.md: {len(ids)} candidates, {len(not_run)} checks that did not run")
 
@@ -166,6 +183,8 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         "SPENT": usd(spent) + ("" if trial_record["cost_complete"] else " at least: some trials report no cost"),
         "LEFT": usd(left), "BUDGET": usd(float(record["budget_usd"])), "RESULTS": "\n".join(results),
         "OPTIONS": "\n".join(option_rows),
+        "REPORT_NOTE": "".join(f"\n- {p['candidate']}: {REPORT_NOT_READ}." for p in entry.get("predictions") or []
+                               if p.get("effect") == "report"),
     }, os.path.join(round_dir, "decision-2.md"))
     print(f"wrote {round_dir}: trial.json, decision-2.md; budget left {usd(left)}")
     for o in options:
@@ -196,6 +215,8 @@ def cmd_answer(args: argparse.Namespace) -> None:
         if args.keep is None:
             raise LoopError("answer --stop 1 needs --keep: candidate ids separated by commas, or none")
         keep = [] if args.keep == "none" else [k.strip() for k in args.keep.split(",") if k.strip()]
+        cands = {k: load_candidate(os.path.join(round_dir, "candidates", k, "candidate.json")) for k in keep
+                 if os.path.isfile(os.path.join(round_dir, "candidates", k, "candidate.json"))}
         missing = [k for k in keep if not os.path.isfile(os.path.join(round_dir, "candidates", k, "checks.json"))]
         if missing:
             raise LoopError(f"these candidates are not checked: {', '.join(missing)}")
@@ -204,8 +225,9 @@ def cmd_answer(args: argparse.Namespace) -> None:
         entry["kept"] = keep
         entry["predictions"] = []
         for k in keep:
-            cand = read_json(os.path.join(round_dir, "candidates", k, "candidate.json"))
+            cand = cands[k]
             entry["predictions"].append({"candidate": k, "cause": cand["cause"], "rule": cand["rule"],
+                                         "effect": cand["effect"], "trials": cand["prediction"]["trials"],
                                          "tasks": cand["prediction"]["tasks"], "expect": "pass"})
     else:
         if args.choice not in CHOICES:

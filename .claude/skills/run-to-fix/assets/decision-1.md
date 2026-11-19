@@ -2,12 +2,16 @@
 
 {{SUMMARY}}
 
-| candidate | cause | trials the cause explains | test before → after the fix | suite failures added | replay before → after | false successes added | diff |
-|---|---|---|---|---|---|---|---|
+| candidate | cause | effect | trials of the cause | test before → after the fix | suite failures added | replay before → after (refs) | trials of the cause whose label changes | false successes added | diff |
+|---|---|---|---|---|---|---|---|---|---|
 {{ROWS}}
 
 Replay counts are of the {{TRIALS}} recorded trials: done and passed / done and failed / not done and passed / not
 done and failed. A false success is a failed trial that the agent reports as a success.
+
+## Candidates whose fix changes no label of their cause
+
+{{UNCHANGED}}
 
 ## Checks that did not run
 

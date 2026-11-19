@@ -54,6 +54,8 @@ def main(argv: List[str]) -> int:
     ca.add_argument("--ref", required=True, help="the commit of the fix in the agent's checkout")
     ca.add_argument("--test", help="the test file of the cause, relative to the checkout")
     ca.add_argument("--test-ref", help="the commit that adds the test, before the fix")
+    ca.add_argument("--effect", required=True, choices=("outcome", "report"),
+                    help="outcome: failing trials of the rule turn into passes; report: the agent's report changes")
     ca.set_defaults(func=cmd_candidate)
     ch = sub.add_parser("check", parents=[timeout], help="stage 3: check a candidate")
     ch.add_argument("--loop", required=True)

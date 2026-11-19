@@ -13,7 +13,7 @@ TAKES: Dict[str, FrozenSet[str]] = {
     "test": frozenset({"worktree"}),
     "test_one": frozenset({"worktree", "test"}),
     "build": frozenset({"worktree"}),
-    "replay": frozenset({"worktree", "ref", "job_dir", "out_json"}),
+    "replay": frozenset({"worktree", "ref", "job_dir", "out_json", "base_ref", "before_ref"}),
     "classes": frozenset({"job_dir", "out_json"}),
     "run_tasks": frozenset({"units_file", "repeat", "jobs_dir", "budget_usd", "build", "ref"}),
 }

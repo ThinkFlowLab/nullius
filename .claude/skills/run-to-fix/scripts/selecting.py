@@ -31,14 +31,15 @@ def kept_candidates(round_dir: str, entry: dict) -> List[dict]:
 
 
 def guards_of(kept: List[dict], rows_by_trial: Dict[str, Tuple[str, bool]], targets: List[str]) -> Tuple[List[str], Optional[str]]:
-    touched: Optional[set] = None
-    for checks in kept:
-        replay = checks["replay"]
-        if replay["ran"] and replay["touched"] is not None:
-            touched = (touched or set()) | set(replay["touched"])
-    if touched is None:
-        return [], "no replay reports which trials ran the changed code"
-    tasks = {rows_by_trial[t][0] for t in touched if t in rows_by_trial and rows_by_trial[t][1]}
+    """Passing tasks whose recorded trial ran the changed code: trials the replay marks `touched`, and trials whose
+    label a kept fix changes."""
+    ran = [checks["replay"] for checks in kept if checks["replay"]["ran"]]
+    if not ran:
+        return [], "no replay ran for the kept candidates"
+    names = set()
+    for replay in ran:
+        names |= set(replay["touched"] or []) | set(replay["changed_trials"])
+    tasks = {rows_by_trial[t][0] for t in names if t in rows_by_trial and rows_by_trial[t][1]}
     return sorted(tasks - set(targets)), None
 
 
@@ -85,7 +86,9 @@ def cmd_select(args: argparse.Namespace) -> None:
 
     rows = read_rows(record["run"]["job_dir"], float(record["pass_threshold"]))
     solved, _ = solved_tasks(rows)
-    targets = sorted({t for p in entry["predictions"] for t in p["tasks"]})
+    if any(p.get("effect") not in ("outcome", "report") for p in entry["predictions"]):
+        raise LoopError("a prediction of stop 1 names no effect; record the answer of stop 1 again")
+    targets = sorted({t for p in entry["predictions"] if p["effect"] == "outcome" for t in p["tasks"]})
     guards, no_guards = guards_of(kept, {r.trial: (r.task, r.passed) for r in rows}, targets)
     pool = sorted(t for t, ok in solved.items() if ok and t not in targets and t not in guards)
     canaries = sorted(random.Random(SEED).sample(pool, min(args.canaries, len(pool))))
