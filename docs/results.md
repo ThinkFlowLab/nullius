@@ -41,7 +41,8 @@ Foreign results open the same way: [Open existing results](getting-started.md#op
 1. Open **Compare**: pick a workspace and a run in each column, **Add a run** for another, then choose **Matched tasks**. The first column is the baseline; every other number shows its difference from it.
 
 2. Choose **Task by task**, start with the tasks whose outcomes differ and open the attempts side by side.
-3. Check dataset, model, agent and setup before attributing a change.
+3. Choose **Chart** to draw the summary rows: each chart card picks its style (bars, dots or a scatter) and its metrics, and **Add chart** adds one.
+4. Check dataset, model, agent and setup before attributing a change.
 
 !!! warning "Different task sets move the aggregate"
     A score can change with the task set alone.

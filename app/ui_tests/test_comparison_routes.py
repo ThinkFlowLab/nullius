@@ -308,7 +308,7 @@ class ComparisonRoutes(unittest.TestCase):
         row = body[body.index('<div class="table-tools table-controls" id="side-tools">'):body.index('<div class="table-wrap compare-table-wrap"')]
         self.assertEqual(re.findall(r'data-slot="(\w+)"|aria-label="([^"]+)"|href="#(i-\w+)"|>([A-Z][\w ]+)</(?:a|button)>', row),
                          [("views", "", "", ""), ("", "Comparison cohort", "", ""), ("", "", "", "Whole runs"), ("", "", "", "Matched tasks"),
-                          ("", "Comparison view", "", ""), ("", "", "", "Side by side"), ("", "", "", "Task by task"),
+                          ("", "Comparison view", "", ""), ("", "", "", "Side by side"), ("", "", "", "Task by task"), ("", "", "", "Chart"),
                           ("", "", "i-reorder", ""), ("", "", "", "Order"), ("", "", "", "Group by agent"), ("", "", "", "Alternate agents"),
                           ("actions", "", "", ""), ("", "", "i-plus", ""), ("", "", "", "Add a run")])
         # Order opens a menu of the two one-off reorders, links that keep the cohort
@@ -404,7 +404,8 @@ class ComparisonRoutes(unittest.TestCase):
             switch = re.search(r'aria-label="Comparison view">(.*?)</nav>', row, re.S).group(1)
             # the view switch keeps the cohort and the picks
             self.assertEqual([query(h) for h in re.findall(r'href="([^"]+)"', switch)],
-                             [{"pick": picks, "cohort": ["matched"]}, {"pick": picks, "cohort": ["matched"], "view": ["tasks"]}])
+                             [{"pick": picks, "cohort": ["matched"]}, {"pick": picks, "cohort": ["matched"], "view": ["tasks"]},
+                              {"pick": picks, "cohort": ["matched"], "view": ["chart"]}])
             # the cohort switch, Order and Add a run keep the view
             links = [query(h) for h in re.findall(r'href="([^"]+)"', row.replace(switch, "")) if not h.startswith("#")]
             self.assertEqual(len(links), 5)
@@ -423,12 +424,145 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertEqual([q["view"] for q in back], [["tasks"]] * 2)
         self.assertIn("url.searchParams.set('view', \"tasks\")", page)
         self.assertNotIn("searchParams.set('view'", self.get("/compare/task/shared", pick=picks, cohort="matched", dataset=self.left.dataset))
-        # anything but view=tasks is side by side
+        # anything but view=tasks or chart is side by side
         self.assertIn('id="side" style', self.get(pick=picks, view="other"))
         # the old picker keeps it
         response = self.client.get("/compare/pick", query_string={"pick": picks, "view": "tasks"})
         self.addCleanup(response.close)
         self.assertEqual(query(response.location)["view"], ["tasks"])
+
+    # ---- the chart: the side table's summary rows, drawn, a card a chart ----
+
+    @staticmethod
+    def chart_of(body):
+        return body[body.index('<div class="compare-chart">'):body.index("<script>", body.index('<div class="compare-chart">'))]
+
+    @classmethod
+    def cards(cls, body):
+        """Each chart card: its style, its buttons (their accessible names), its menus as {link text: chart=}, its SVG
+        title and its values' rows as (name, readings...)."""
+        query = lambda h: parse_qs(urlsplit(unescape(h)).query)["chart"]
+        out = []
+        for card in re.findall(r'<section class="fig"[^>]*>(.*?)</section>', cls.chart_of(body), re.S):
+            menus = [{unescape(t): query(h) for h, t in re.findall(r'<a href="([^"]+)"(?: aria-current="true")?>([^<]+)</a>', m)}
+                     for m in re.findall(r'<div class="menu tools-menu" hidden>(.*?)</div>', card, re.S)]
+            current = [unescape(t) for m in re.findall(r'<div class="menu tools-menu" hidden>(.*?)</div>', card, re.S)
+                       for t in re.findall(r'aria-current="true">([^<]+)</a>', m)]
+            style = current[0]
+            chosen = current[1:]
+            title = re.search(r"<title id=[^>]*>(.*?)</title>", card)
+            rows = [tuple(unescape(c) for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", r)) for r in re.findall(r"<tr>(.*?)</tr>", card.split("<tbody>")[1], re.S)] if title else []
+            out.append({"style": style, "metrics": chosen, "menus": menus,
+                        "buttons": [unescape(b) for b in re.findall(r'data-chart-btn aria-haspopup="true" aria-expanded="false" aria-label="([^"]+)"', card)],
+                        "title": unescape(title.group(1)) if title else "", "rows": rows, "html": card})
+        return out
+
+    def test_the_default_charts_are_the_headline_rate_the_cost_and_the_one_against_the_other(self):
+        body = self.get(view="chart")
+        self.assertNotIn('id="side" style', body); self.assertNotIn('id="tasks"', body)
+        cards = self.cards(body)
+        self.assertEqual([(c["style"], c["metrics"]) for c in cards],
+                         [("Bars", ["Adjusted rate"]), ("Bars", ["Cost (estimated)"]), ("Scatter", ["Cost (estimated)", "Adjusted rate"])])
+        self.assertEqual([c["title"] for c in cards], ["Adjusted rate", "Cost (estimated)", "Adjusted rate by Cost (estimated)"])
+        # the values are the side table's own cells, the baseline named, its difference beside the other
+        self.assertEqual(self.cells(self.get(), "Cost (estimated)"), ["$10.00", "$12.00"])
+        self.assertEqual(cards[1]["rows"], [("A · model (baseline)", "$10.00"), ("B · model", "$12.00 +$2.00")])
+        self.assertEqual(self.chart_of(body).count('role="img"'), 3)
+        self.assertEqual(re.findall(r'<rect class="(bar[^"]*)"', cards[0]["html"]), ["bar s1", "bar s2"])
+        # a card's buttons: Style, then Data, or X and Y, each named for the metric it shows
+        self.assertEqual([c["buttons"] for c in cards], [["Style of chart 1", "Data of chart 1: Adjusted rate"], ["Style of chart 2", "Data of chart 2: Cost (estimated)"],
+                                                         ["Style of chart 3", "X of chart 3: Cost (estimated)", "Y of chart 3: Adjusted rate"]])
+        self.assertEqual(re.findall(r'<span class="ic ic-letter" aria-hidden="true">(\w)</span>([^<]+)<svg class="ic dd-chev"', cards[2]["html"]),
+                         [("X", "Cost (estimated)"), ("Y", "Adjusted rate")])
+        self.assertIn('<use href="#i-sliders"/></svg>Adjusted rate<svg class="ic dd-chev"', cards[0]["html"])
+        # the controls row: Add chart beside Add a run, and no chart-wide Data or Style
+        row = body[body.index('id="chart-tools"'):body.index('<div class="compare-chart">')]
+        self.assertEqual(re.findall(r'id="(chart-add|compare-add)"', row), ["chart-add", "compare-add"])
+        self.assertNotIn("Data</button>", row); self.assertNotIn("Style</button>", row)
+
+    def test_each_card_s_style_metrics_and_remove_change_its_own_chart_and_keep_the_rest(self):
+        self.another("third", agent_name="agent:C")
+        picks = ["active:run", "foreign:run", "foreign:third"]
+        query = lambda h: parse_qs(urlsplit(unescape(h)).query)
+        charts = ["bars:solved", "scatter:prompt_size,cost"]
+        body = self.get(pick=picks, view="chart", chart=charts)
+        bars, scatter = self.cards(body)
+        self.assertEqual((bars["title"], scatter["title"]), ("Solved", "Cost (estimated) by Prompt size"))
+        self.assertEqual(scatter["html"].count("<circle"), 3)
+        # a style change keeps the first metric, a scatter's Y the headline rate; the other card stays
+        self.assertEqual(bars["menus"][0], {"Bars": charts, "Dots": ["dots:solved", charts[1]], "Scatter": ["scatter:solved,adjusted_rate", charts[1]]})
+        self.assertEqual(scatter["menus"][0]["Dots"], [charts[0], "dots:prompt_size"])
+        # each axis's menu: a link a summary row, the chosen one marked, changing that axis of that card alone
+        self.assertEqual(bars["metrics"], ["Solved"])
+        self.assertEqual(bars["menus"][1]["Prompt size"], ["bars:prompt_size", charts[1]])
+        self.assertEqual(len(bars["menus"][1]), len(scatter["menus"][1]))
+        self.assertEqual(scatter["menus"][1]["Trials"], [charts[0], "scatter:trials,cost"])
+        self.assertEqual(scatter["menus"][2]["Solved"], [charts[0], "scatter:prompt_size,solved"])
+        self.assertEqual(re.findall(r"<legend>(.*?)</legend>", scatter["html"])[:3], ["Outcomes", "Tokens", "Cost and time"])
+        remove = re.search(r'href="([^"]+)" aria-label="Remove this chart"', scatter["html"]).group(1)
+        self.assertEqual(parse_qs(urlsplit(unescape(remove)).query), {"pick": picks, "cohort": ["whole"], "view": ["chart"], "chart": [charts[0]]})
+        self.assertIn('<use href="#i-x"/>', scatter["html"])
+        # Add chart appends a bar chart of the headline rate
+        add = re.search(r'href="([^"]+)" id="chart-add"', body).group(1)
+        self.assertEqual(query(add)["chart"], charts + ["bars:adjusted_rate"])
+        # every link in the cards keeps the picks, the cohort and the view
+        self.assertEqual({(tuple(q["pick"]), tuple(q["cohort"]), tuple(q["view"])) for q in
+                          (query(h) for h in re.findall(r'href="(/compare\?[^"]+)"', self.chart_of(body)))}, {(tuple(picks), ("whole",), ("chart",))})
+        # every other link keeps the charts: the cohort, the views, Order, Add a run, the columns
+        links = [query(h) for h in re.findall(r'href="(/compare\?[^"]+)"(?! id="chart-add")', body.split('<div class="compare-chart">')[0])]
+        self.assertGreater(len(links), 8)
+        self.assertEqual({tuple(q["chart"]) for q in links}, {tuple(charts)})
+        self.assertEqual(self.links(body, "Remove column 2")["view"], ["chart"])
+
+    def test_no_chart_is_one_add_chart_prompt_and_a_metric_not_in_the_cohort_says_so(self):
+        none = self.get(view="chart", chart="")
+        self.assertEqual(self.cards(none), [])
+        prompt = self.chart_of(none)
+        self.assertEqual(prompt.count("Add chart</a>"), 1)
+        self.assertEqual(parse_qs(urlsplit(unescape(re.search(r'href="([^"]+)"', prompt).group(1))).query)["chart"], ["bars:adjusted_rate"])
+        # wall time is no interval of matched tasks: the card keeps its controls and says why it draws nothing
+        card, = self.cards(self.get(view="chart", cohort="matched", chart="bars:wall_time"))
+        self.assertIn("Not in this comparison.", card["html"])
+        self.assertEqual(card["metrics"], [])
+        self.assertEqual(card["buttons"][1], "Data of chart 1: —")
+        # an unknown style is no card
+        self.assertEqual(self.cards(self.get(view="chart", chart=["pie:cost", "dots:cost"]))[0]["style"], "Dots")
+
+    def test_each_run_keeps_its_column_s_colour_in_every_chart_from_tokens_of_every_theme(self):
+        for k in range(9):
+            self.another(f"run-{k}", agent_name=f"agent:{k}")
+        picks = ["active:run", "foreign:run"] + [f"foreign:run-{k}" for k in range(9)]
+        cards = self.cards(self.get(pick=picks, view="chart", chart=["bars:cost", "dots:cost", "scatter:cost,trials"]))
+        for card in cards:
+            mark = r'<(?:rect|circle) class="(?:bar|dot)( s\d)?'
+            self.assertEqual([m.strip() for m in re.findall(mark, card["html"])], [f"s{(n - 1) % 8 + 1}" for n in range(1, 12)])
+        response = self.client.get("/static/style.css")
+        self.addCleanup(response.close)
+        css = response.get_data(as_text=True)
+        for block in (css[css.index(":root {"):], css[css.index(':root[data-theme="light"] {'):]):
+            block = block[:block.index("}")]
+            self.assertEqual(sorted(set(re.findall(r"--series-(\d):", block))), [str(n) for n in range(1, 9)])
+        self.assertEqual(re.findall(r"\.fig-svg \.s(\d) \{ --c: var\(--series-\1\); \}", css), [str(n) for n in range(1, 9)])
+
+    def test_a_check_is_drawn_apart_and_never_ranked(self):
+        self.right.agent_name = "nop"
+        self.right.trials = [trial("shared", "no_patch", cost_usd=None, n_input_tokens=0, n_output_tokens=0, n_cache_tokens=0)]
+        cost, infra = (c["html"] for c in self.cards(self.get(view="chart", chart=["bars:cost", "bars:infra_errors"])))
+        self.assertIn("(check)", cost)
+        # the check's cost is the table's real $0.00, drawn hollow; its dash is a gap
+        self.assertEqual(self.cells(self.get(), "Cost (estimated)")[1], "$0.00")
+        self.assertEqual(re.findall(r'<rect class="(bar[^"]*)"', cost), ["bar s1", "bar s2 check"])
+        self.assertEqual(re.findall(r'<rect class="(bar[^"]*)"', infra)[1], "bar s2 check")   # its 0 infra errors, a real count
+        self.assertNotIn("best", self.chart_of(self.get(view="chart")))
+
+    def test_one_run_and_an_empty_column_chart_the_one_run(self):
+        body = self.get(pick=["active:run", "foreign:"], view="chart")
+        cards = self.cards(body)
+        self.assertEqual([len(c["rows"]) for c in cards], [1, 1, 1])
+        self.assertNotIn('class="ref"', body)                                    # nothing to set against the baseline
+        empty = self.get(pick=["active:"], view="chart")
+        self.assertNotIn('<div class="compare-chart">', empty)
+        self.assertIn('id="chart-tools"', empty)
 
     def test_the_tasks_view_has_the_column_controls_and_adds_a_run_in_place(self):
         """Each column's header (Baseline, move, remove), workspace and run, as in the side view; Add a run keeps
