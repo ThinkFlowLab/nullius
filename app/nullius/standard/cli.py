@@ -560,7 +560,7 @@ def cmd_run(a):
     try:
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
-                      boat_size=a.boat_size, simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
+                      boat_size=a.boat_size, relay_container=a.relay_container, simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
                       shard_by=a.shard_by, licences=held, bench_options=options(a.bench_option), repeat=a.repeat, retries=a.retries,
                       remove_images=a.remove_images,
                       prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, prices_unreachable=unreachable,
@@ -582,26 +582,86 @@ def cmd_run(a):
     return 3 if failed else 0
 
 
+def boat_credentials(a, bench, other, vals) -> dict:
+    """Only the selected provider and declared benchmark licences cross SSH stdin."""
+    import base64
+    needs = definitions.option_needs(bench, vals)
+    out = {}
+    if other["_kind"] != "control" or (bench.get("score") or {}).get("judge") or needs["embeddings"] or needs["reranker"]:
+        base, key = run.provider_endpoint(a.provider, run_env(a.provider) if a.from_run else os.environ)
+        out.update(OPENAI_API_KEY=key, OPENAI_BASE_URL=base)
+    held, spill = licences(bench, from_run=a.from_run)
+    try:
+        held = held or run.Licences(bench)
+        values = {}
+        for name in held.kinds:
+            item = held.get(name)
+            if item:
+                if item["kind"] == "file":
+                    with open(item["path"], "rb") as f:
+                        value = f.read()
+                else:
+                    value = item["value"].encode()
+                values[name] = base64.b64encode(value).decode()
+        if values:
+            out[secrets.HANDED] = base64.b64encode(json.dumps(values).encode()).decode()
+    finally:
+        if spill:
+            shutil.rmtree(spill, ignore_errors=True)
+    return out
+
+
 def _boat_units(a, b, other) -> int:
     """A benchmark whose units boot VMs of their own, on Boat: each unit whole in a Boat VM (``boat_units``)."""
     from nullius.standard import boat_units
-    if other["_kind"] != "control" or (b.get("score") or {}).get("judge"):
-        print(f"refused: on Boat, {b['label']} runs only what calls no model for now: its null control "
-              "(the model key would have to travel to each VM). Run the rest on hosts.")
+    if a.units or a.shard:
+        print("refused: whole-task Boat runs do not accept --units or --shard; choose a dataset and --limit")
+        return 2
+    ds = a.dataset or b["datasets"][0]["id"]
+    vals, bad = definitions.bench_options_of(b, ds, options(a.bench_option),
+                                            a.other if other["_kind"] == "upstream" else "yours",
+                                            kind=other["_kind"])
+    if bad:
+        print("refused:", "; ".join(bad))
         return 2
     words = [b["key"] if "_version" not in b else definitions.ref_of(b), a.other, "--provider", a.provider,
-             "--dataset", a.dataset or b["datasets"][0]["id"],
-             *[w for x in a.bench_option or [] for w in ("--bench-option", x)],
-             *[w for x in a.timeout or [] for w in ("--timeout", x)],
-             *(["--attempts", str(a.repeat)] if a.repeat > 1 else []), "--retries", str(a.retries)]
+             "--dataset", ds, "--attempts", str(a.repeat), "--retries", str(a.retries)]
+    for field in ("model", "judge_model", "simulator_model", "max_usd_per_unit", "max_turns", "max_calls"):
+        value = getattr(a, field)
+        if value is not None:
+            words += ["--" + field.replace("_", "-"), str(value)]
+    for field in ("bench_option", "option", "timeout", "constraint", "served_by", "price"):
+        for value in getattr(a, field) or []:
+            words += ["--" + field.replace("_", "-"), value]
+    # Saved price overrides belong to the launching profile, not the fresh VM.
+    needs = definitions.option_needs(b, vals)
+    models = [a.model, other.get("sent"), a.judge_model or providers.served_as((b.get("score", {}).get("judge") or {}).get("model", ""), a.provider),
+              a.simulator_model or providers.served_as((b.get("simulator") or {}).get("model", ""), a.provider),
+              *[providers.served_as(m, a.provider) for m in needs["embeddings"] + needs["reranker"]]]
+    explicit = prices(a.price)
+    for model, row in price_list.given(models, price_list.table()).items():
+        if model not in explicit:
+            words += ["--price", model + "=" + ",".join(str(row.get(k, "")) for k in price_list.RATES).rstrip(",")]
+    if a.remove_images:
+        words.append("--remove-images")
+    try:
+        _, wanted = boat_units.plan(b, ds, a.limit)
+        if a.max_usd is not None:
+            if not 0 < a.max_usd < float("inf"):
+                raise boat_units.Refused("--max-usd must be finite and above zero")
+            # Independent VMs cannot share a ledger: each gets an equal, bounded share.
+            words += ["--max-usd", str(a.max_usd / len(wanted))]
+        creds = boat_credentials(a, b, other, vals)
+    except (run.Refused, boat_units.Refused) as e:
+        print("refused:", e)
+        return 2
     stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
     name = a.name or f"{stamp}__{definitions.job_word(b)}__{definitions.job_word(other)}"
-    vals, bad = definitions.bench_options_of(b, a.dataset or b["datasets"][0]["id"], options(a.bench_option), "yours", kind="control")
     try:
         job_dir, failed = boat_units.run(b, words, dataset=a.dataset or b["datasets"][0]["id"], limit=a.limit,
                                          concurrency=a.concurrency, jobs_root=a.jobs, name=name, size=a.boat_size,
                                          launch=a.launch or shard.launch_id(definitions.job_word(b), definitions.job_word(other), ""),
-                                         needs=definitions.option_needs(b, vals)["host"], say=lambda s: print(s, flush=True),
+                                         needs=definitions.option_needs(b, vals)["host"], credentials=creds, say=lambda s: print(s, flush=True),
                                          env={**os.environ, **run_env(a.provider)} if a.from_run else os.environ)
     except (boat_units.Refused, boat.Unavailable, merge.Refused) as e:
         print("refused:", e)
@@ -735,6 +795,8 @@ def main(argv=None):
                        help="local processes (the default); container: each unit in a container, its relay beside it "
                             "(docker: its earlier name); boat: each unit's agent in a boat.dev VM of its own")
         if name == "run":
+            p.add_argument("--relay-container", action="store_true",
+                           help="run the relay in a separate container while task processes run on this host")
             p.add_argument("--boat-size", default=boat.SIZE, choices=list(boat.SIZES),
                            help="on the boat backend, its VMs' machine type (default small: 2 vCPU, 4 GB)")
         p.add_argument("--from-run", action="store_true",

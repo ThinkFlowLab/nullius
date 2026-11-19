@@ -490,9 +490,8 @@
     // a VM benchmark's provider of one value goes on the fixed line; several are its cards (benchOptions)
     const provider = vms && Object.values(b.options || {}).find(o => o.step === 'where' && o.values && o.values.length === 1 && Object.values(o.needs || {}).some(n => n && n.vm));
     // what a sandbox cannot run (recipe.py): a setup or a check runs on a machine; the computer port's socket is on this one
-    // a benchmark booting VMs of its own runs each unit whole in a VM, for now only what calls no model (boat_units)
-    const outside = !sandboxes ? [] : selected.filter(o => vms ? !(o.control && !b.judged)
-      : o.setup || o.control || ((b.needs || []).includes('agent.computer/v1') && b.family === 'agent')).map(o => o.label);
+    // a benchmark booting VMs of its own runs each unit whole in a VM, with a relay container in each VM (boat_units)
+    const outside = !sandboxes ? [] : selected.filter(o => !vms && (o.setup || o.control || ((b.needs || []).includes('agent.computer/v1') && b.family === 'agent'))).map(o => o.label);
     let sizes = '';
     if (sandboxes && !here.boat) {
       const offered = boatSizes(rec, b), fit = offered.find(z => !z.why);

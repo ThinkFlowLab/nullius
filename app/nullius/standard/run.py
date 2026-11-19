@@ -463,13 +463,15 @@ class Run:
                  max_usd_per_unit: Optional[float] = None, prices_unreachable: Optional[str] = None,
                  units_file: Optional[dict] = None,
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
-                 max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None, boat_size: str = boat.SIZE):
+                 max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None, boat_size: str = boat.SIZE, relay_container: bool = False):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
         local agents, and for setup checks that run code without Docker.
         ``backend``: ``local``, ``container`` (``docker``, its earlier name), which needs
         no such yes and is refused when docker is missing or not usable, or ``boat``;
+        ``relay_container``: keep local task processes on the host but run each
+        unit's relay in a separate container, as inside a whole-task Boat VM.
         ``boat_size``: its VMs' machine type (``boat.SIZES``), refused when the
         account cannot start it.
         ``options``: the
@@ -555,7 +557,10 @@ class Run:
             why = [w for w in why if "does not offer" not in w and "has not passed its kit" not in w]
         if why:
             raise Refused(f"{other['label']} cannot run {bench['label']}: " + "; ".join(why))
-        if backend == "container":
+        self.relay_container = bool(relay_container)
+        if relay_container and backend != "local":
+            raise Refused("a separate relay container requires the local process backend")
+        if backend == "container" or relay_container:
             why = container.unusable()
             if why:
                 raise Refused(f"the container backend cannot run here: {why}")
@@ -835,7 +840,7 @@ class Run:
         HELD[lck] = held
         self.say(f"job {self.job_dir}")
         p, control = self.progress, self.other["_kind"] == "control"
-        p.emit("plan", stages=",".join((["image"] if self.backend == "container" or self.container_check else [])
+        p.emit("plan", stages=",".join((["image"] if self.backend == "container" or self.relay_container or self.container_check else [])
                                       + (["upstream"] if install.upstream_dir(self.bench) else [])
                                       + (["dataset"] if self.ds.get("url") else [])
                                       + (["driver"] if install.driver_dir(self.bench) else [])
@@ -860,7 +865,7 @@ class Run:
                 driver.close()
             if self.bench_relay is not None:
                 self.bench_relay.stop()
-            if self.backend == "container":
+            if self.backend == "container" or self.relay_container:
                 container.sweep(self.name)
             raise
         everything = [str(u) for u in units]
@@ -875,7 +880,7 @@ class Run:
                     d.close()
                 if self.bench_relay is not None:
                     self.bench_relay.stop()
-                if self.backend == "container":
+                if self.backend == "container" or self.relay_container:
                     container.sweep(self.name)
                 # the record a refusal in ready() leaves, which the runs list reads (execution's refused):
                 # the job's folder with its progress.jsonl, the driver's working folders and logs taken out
@@ -958,7 +963,7 @@ class Run:
         futures = []
         try:
             # a model server on this machine's loopback, which the relays' containers cannot reach as written
-            if self.backend == "container" and self.base and container.on_loopback(self.base):
+            if (self.backend == "container" or self.relay_container) and self.base and container.on_loopback(self.base):
                 self.loopback = container.Loopback(self.base, image=self.image, job=self.name).start()
             for iur in work:
                 futures.append(pool.submit(work_unit, iur))
@@ -974,7 +979,7 @@ class Run:
         except BaseException:
             self._stopped.set()
             self._halt.set()
-            if self.backend == "container":
+            if self.backend == "container" or self.relay_container:
                 container.sweep(self.name)
             raise
         finally:
@@ -987,7 +992,7 @@ class Run:
                 d.close()
             if self.bench_relay is not None:
                 self.bench_relay.stop()
-            if self.backend == "container":
+            if self.backend == "container" or self.relay_container:
                 container.sweep(self.name)          # whatever an interrupted unit left
             if getattr(self, "boat", None) is not None:
                 self.boat.close()
@@ -1171,7 +1176,7 @@ class Run:
         p = self.progress
         self.scope_limits = self.scope_ready(limits.scoped(self.constraints), refuse=self.backend == "local")
         owns = any(definitions.own_image(e) for e in (self.bench.get("environments") or {}).values())
-        if self.backend == "container" or self.container_check:
+        if self.backend == "container" or self.relay_container or self.container_check:
             try:
                 tag = container.base_tag()
                 there = container.present(tag)
@@ -1181,7 +1186,7 @@ class Run:
                 raise Refused(f"the Docker image: {e}")
         # every container the run starts takes the caps: its agents', relays' and installs' on the container
         # backend, its checks' and own images' on either
-        if self.backend == "container" or self.container_check or owns:
+        if self.backend == "container" or self.relay_container or self.container_check or owns:
             refusal = Refused if self.backend == "container" else BenchmarkRefused
             try:
                 # Docker can drop a limit with only a warning: a result would look limited when it was not
@@ -1226,7 +1231,7 @@ class Run:
                 with p.stage("driver", cached=install.ready(drv), start=f"installing {self.bench['key']}'s driver environment"):
                     install.driver_packages(self.bench)
         except (install.InstallFailed, container.Unavailable) as e:
-            if self.backend == "container":
+            if self.backend == "container" or self.relay_container:
                 container.sweep(self.name)
             raise BenchmarkRefused(f"could not install what the run needs: {e}")
         try:
@@ -1235,7 +1240,7 @@ class Run:
                 with p.stage("install", cached=install.ready(install.packages_dir(self.other, image=image)), agent=self.other.get("_ref") or self.other["key"]):
                     self.inst = install.packages(self.other, run_in=run_in, image=image)
         except (install.InstallFailed, container.Unavailable) as e:
-            if self.backend == "container":
+            if self.backend == "container" or self.relay_container:
                 container.sweep(self.name)
             raise Refused(f"could not install what the run needs: {e}")
         # An own image has none of what the agent runs on: it is mounted in, fetched once on this machine.
@@ -1770,7 +1775,7 @@ class Run:
         record = os.path.join(trial, ".work", "relay")
         side = tuple((self.other.get("model") or {}).get("side_models") or ())
         key_header = self.key_header
-        if self.backend in ("local", "boat"):     # boat: the agent reaches it through its VM's tunnel
+        if self.backend in ("local", "boat") and not getattr(self, "relay_container", False):     # boat: the agent reaches it through its VM's tunnel
             rl = relay.Relay(self.base, self.key, record, prices=getattr(self, "prices", None), model=self.model, side_models=side,
                              key_header=key_header, ledger=self.ledger_file(), serving=getattr(self, "serving", None),
                              timeout=self.call_seconds, max_calls=self.max_calls).start()
@@ -1779,6 +1784,16 @@ class Run:
         routes = {tag + "-judge": self.judge_model} if self.judge_model else {}
         if self.simulator_model:
             routes[tag + "-simulator"] = self.simulator_model
+        if getattr(self, "relay_container", False):
+            door = getattr(self, "loopback", None)
+            rl = container.Unit(self.name, tag, record, image=self.image, app=APP,
+                                base=door.base if door else self.base, key=self.key, model=self.model,
+                                routes=routes, side_models=side, key_header=key_header,
+                                prices=price_list.given(self.models_called(), getattr(self, "prices", None)),
+                                hosts=door.hosts if door else None, ledger=self.ledger_file(),
+                                serving=self.serving, max_calls=self.max_calls, timeout=self.call_seconds).start()
+            rl.unit_url = rl.url(tag)  # driver and agent run on this host, outside the relay container
+            return rl
         doors, listeners = [], []
         if self.other["_kind"] == "agent" and mcp_machine.wanted(setup):
             # the benchmark's own servers run here, in the driver's environment; the agent reaches each

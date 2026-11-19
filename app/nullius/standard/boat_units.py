@@ -18,12 +18,12 @@ As many VMs at once as the account runs (``boat.slots``), never more than
 the run's own concurrency; a VM the account cannot start yet is waited for.
 Every VM carries the run's label, so a Stop or a crash leaves none
 (``boat.sweep``). The VMs are the run's own code: no locked agent's user
-(``boat.VM``, ``lock``). Only a run that calls no model goes this way for now:
-the model key would otherwise have to travel to the VM.
+(``boat.VM``, ``lock``). Each model-calling unit uses a separate relay container in its Boat VM.
 """
 from __future__ import annotations
 
 import os
+import json
 import shlex
 import shutil
 import subprocess
@@ -31,10 +31,10 @@ import threading
 import uuid
 from typing import Callable, Dict, List, Optional
 
-from nullius import paths
+from nullius import paths, secrets
 from nullius.standard import boat, definitions, hostreq, merge, payload, shard
 
-RUNPY = "import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_module('nullius.standard.cli', run_name='__main__', alter_sys=True)"
+RUNPY = "import json, os, runpy, sys; os.environ.update(json.loads(sys.stdin.readline())); sys.path.insert(0, sys.argv.pop(1)); runpy.run_module('nullius.standard.cli', run_name='__main__', alter_sys=True)"
 SHARDS = ".boat"                 # the shards' jobs, under the jobs root, until they are merged
 
 
@@ -45,6 +45,8 @@ class Refused(Exception):
 def plan(bench: dict, dataset: str, limit: Optional[int]) -> tuple:
     """(N, the shards to run): N the dataset's units as its definition declares them, so each shard
     is one unit; ``limit`` runs the first ones."""
+    if limit is not None and (not isinstance(limit, int) or limit < 1):
+        raise Refused("--limit must be a positive whole number")
     ds = next((d for d in bench["datasets"] if d["id"] == dataset), None)
     if ds is None:
         raise Refused(f"{bench['label']} has no dataset {dataset!r}")
@@ -59,7 +61,7 @@ def child_argv(words: List[str], *, app: str, index: int, n: int, launch: str, n
     """The shell line a VM runs: this runner's snapshot, the unit's shard on local processes."""
     argv = ["python3", "-I", "-S", "-B", "-c", RUNPY, app + "/app", "run", *words,
             "--shard", f"{index}/{n}", "--shard-by", "position", "--launch", launch,
-            "--name", name, "--jobs", jobs, "-j", "1", "--from-run"]
+            "--name", name, "--jobs", jobs, "-j", "1", "--from-run", "--unsandboxed", "--relay-container"]
     env = {"NULLIUS_PROGRESS": "1", "PYTHONDONTWRITEBYTECODE": "1", "NULLIUS_CATALOGUE": app + "/catalogue"}
     return ("export PATH=\"$HOME/.local/bin:$PATH\" " + " ".join(f"{k}={shlex.quote(v)}" for k, v in env.items())
             + " && " + " ".join(shlex.quote(w) for w in argv))
@@ -75,7 +77,7 @@ def prepare(vm: "boat.VM", bench: dict, needs: List[str]) -> None:
 
 def run(bench: dict, words: List[str], *, dataset: str, limit: Optional[int], concurrency: int, jobs_root: str,
         name: str, launch: str, size: str, needs: List[str], say: Callable[[str], None],
-        env=os.environ, client: Optional["boat.Client"] = None, stopped: Optional[threading.Event] = None) -> tuple:
+        credentials: Optional[dict] = None, env=os.environ, client: Optional["boat.Client"] = None, stopped: Optional[threading.Event] = None) -> tuple:
     """(the merged job's folder, whether it failed): every unit run whole in a Boat VM of its own."""
     why = boat.unusable(env=env) or boat.size_problem(client or boat.Client(boat.key(env) or ""), size)
     if why:
@@ -98,6 +100,8 @@ def run(bench: dict, words: List[str], *, dataset: str, limit: Optional[int], co
     app = "/home/user/.nullius/app/" + os.path.basename(app_here)     # where the VM keeps it, apart from this machine's paths
     label = f"{name}.{uuid.uuid4().hex[:8]}"
     stopped = stopped or threading.Event()
+    redactions = list((credentials or {}).values())
+    redactions += [v.decode(errors="replace") for v in secrets.unpack((credentials or {}).get(secrets.HANDED, "")).values()]
     keys = boat.Keys()
     queue = list(wanted)
     lock = threading.Lock()
@@ -126,13 +130,21 @@ def run(bench: dict, words: List[str], *, dataset: str, limit: Optional[int], co
             if stopped.is_set():
                 return
             line = child_argv(words, app=app, index=i, n=n, launch=launch, name=sname, jobs=here)
-            p = subprocess.Popen(vm.ssh + ["-T", vm.target, line], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            p = subprocess.Popen(vm.ssh + ["-T", vm.target, line], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  stderr=subprocess.STDOUT, text=True, errors="replace")
             with lock:
                 procs[i] = p
+            try:
+                p.stdin.write(json.dumps(credentials or {}) + "\n")
+                p.stdin.close()
+            except BrokenPipeError:
+                pass
             for ln in p.stdout:
                 ln = ln.rstrip()
                 if ln:
+                    for secret in redactions:
+                        if secret:
+                            ln = ln.replace(secret, "[redacted]")
                     say(f"[{i}/{n}] {ln}")
             rc = p.wait()
             os.makedirs(os.path.join(here, sname), exist_ok=True)
@@ -191,7 +203,6 @@ def run(bench: dict, words: List[str], *, dataset: str, limit: Optional[int], co
 
 def _record(job_dir: str, size: str) -> None:
     """The merged job says where its units ran: Boat, the VMs' size; its shards ran on local processes there."""
-    import json
     path = os.path.join(job_dir, "config.json")
     with open(path) as f:
         cfg = json.load(f)

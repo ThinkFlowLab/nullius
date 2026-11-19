@@ -183,7 +183,7 @@ A rootful Docker with `userns-remap` maps the uids of each container to sub-uids
 
 Refused before any unit: a computer-port run (its server's socket is on this machine), an Original setup or a check (they run on a machine). Choose local processes or the container backend.
 
-A benchmark whose units boot their own VM (OSWorld) runs each unit whole in its VM instead: driver, desktop VM and all, as a one-unit shard (`--shard-by position`) of this runner's snapshot, merged here into one job (`standard/boat_units.py`). Each VM installs what the unit needs. For now only what calls no model: OSWorld1's null control.
+A benchmark whose units boot their own VM (OSWorld) runs each unit whole in its VM instead: driver, desktop VM and all, as a one-unit shard (`--shard-by position`) of this runner's snapshot, merged here into one job (`standard/boat_units.py`). Each VM installs what the unit needs. Model calls use a separate relay container inside each Boat VM; only the relay receives the real model key. Declared benchmark credentials also enter the VM. A run's spending cap is divided equally between its tasks; unused shares are not transferred. `--units` and `--shard` are unavailable on this path; choose a dataset and limit instead.
 
 | Piece | Rule |
 | --- | --- |
@@ -192,7 +192,7 @@ A benchmark whose units boot their own VM (OSWorld) runs each unit whole in its 
 | Machines | Runs from this machine; never mixed with hosts |
 | Units at a time | The account's VM limit; a recipe may set fewer. The run warns when it cannot start every unit |
 | Agent time | Excludes the VM's start-up |
-| Isolation | The agent reaches loopback only: no internet, no DNS, no model key |
+| Isolation | Agent-only VMs reach loopback only: no internet, no DNS, no model key. Whole-task VMs run the driver and desktop with a separate relay container |
 | Files | A link into your home or keys refuses the unit. Links out of the workspace are not copied back |
 | Code checks | A `runs_code` check needs Docker where the run runs |
 | Not run | Units needing the public web, their own image, a licence file or server of this machine, or MCP servers. No GPUs |

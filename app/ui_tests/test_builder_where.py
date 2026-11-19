@@ -67,11 +67,11 @@ class StandardWhere(CompilerCase):
                 self.assertIn(f'data-std-boat-size="small" aria-pressed="false" disabled aria-disabled="true" title="Too small for {label}&#39;s 4 GB VM"', boxes)
                 self.assertIn('data-std-boat-size="default" aria-pressed="true"', boxes)     # the smallest that fits, chosen for it
                 self.assertIn('<p class="nb-fixed">Each task in its own VM · VM provider: Docker</p>', boxes)
-                self.assertIn("Original cannot run in a Boat VM yet: choose Hosts.", boxes)
-        # its null control runs whole in each VM when it calls no model: OSWorld1's; OSWorld2's asks its grader
+                self.assertNotIn("cannot run in a Boat VM", boxes)
+        # Null controls run whole in each VM, including OSWorld2's grader.
         nop = self.draw(None, "r.others=['nop'];", backends=("boat",))
         self.assertNotIn("cannot run in a Boat VM", nop["osworld1 boat"])
-        self.assertIn("Null control cannot run in a Boat VM yet: choose Hosts.", nop["osworld2 boat"])
+        self.assertNotIn("cannot run in a Boat VM", nop["osworld2 boat"])
         # an agent's run still asks the yes to running as you: its process is on the machine, only the desktop in a VM
         agent = self.draw(None, "r.others=[C.standardOthers(r).find(o=>!o.setup&&!o.control&&!o.why.length).key];")["osworld1 local"]
         self.assertIn("data-std-unsandboxed", agent)

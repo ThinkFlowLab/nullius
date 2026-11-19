@@ -579,12 +579,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         add("where", f"A {boat.SIZES[boat_size]['label']} VM is too small for {b['label']}, whose units boot a {guest:g} GB VM: choose a larger size.")
     # on Boat each unit's agent or capability runs in its VM (run.Run refuses the rest): a setup or a check runs
     # on a machine, and the computer port's socket is on this one, out of a VM's reach
-    # A benchmark booting VMs of its own runs each unit whole in a VM (boat_units), for now only what calls no model
+    # A benchmark booting VMs of its own runs each unit whole in a VM (boat_units), with a relay container in each VM
     computer = "agent.computer/v1" in (b.get("needs") or [])
     whole = definitions.boots_vms(b)
     elsewhere = [definitions.setup_label(b, "original") if p.get("setup") else p["o"]["label"] for p in picks
-                 if (not (p["control"] and not (b.get("score") or {}).get("judge")) if whole
-                     else p["control"] or p.get("setup") or (computer and side == "agent"))]
+                 if not whole and (p["control"] or p.get("setup") or (computer and side == "agent"))]
     if backend == "boat" and elsewhere:
         add("where", f"{', '.join(elsewhere)} cannot run in a Boat VM yet: choose Hosts.")
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
