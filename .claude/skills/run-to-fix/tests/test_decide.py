@@ -573,6 +573,22 @@ class SelectionCoverage(Flow):
                 self.assertEqual(record["targets"]["after"], {"trials": 6, "passed": 6})
                 self.assertNotIn("not complete", page)
 
+    def test_compare_gives_no_test_of_the_targets_of_an_incomplete_selection(self) -> None:
+        self.chosen()
+        job = self.job_of("one", ["f1", "f2", "p1"], 1)
+        r = self.decide(job)
+        self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertIn("not complete", self.page("decision-2.md"))
+        r = run(["compare", "--loop", self.loop, "--new", job, "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        result = load(self.round_file("result.json"))
+        self.assertIsNone(result["targets"]["p"])
+        self.assertIsNone(result["targets"]["verdict"])
+        self.assertIn("not complete", result["targets"]["text"])
+        self.assertIn("1 of the 3 trials per task", result["targets"]["text"])
+        self.assertIn(result["verdict"], ("noise", "improved", "regressed"))
+        self.assertIsNotNone(result["test"]["p"])
+
     def test_the_rerun_holds_every_selected_task(self) -> None:
         canary = self.canaries_chosen()
         r = self.decide(self.job_of("all", ["f1", "f2", "p1", canary.split("/", 1)[1]], 3))
@@ -659,6 +675,17 @@ class StandardUnitIds(Flow):
         self.assertIn("bench/f1", r.err)
         self.assertFalse(os.path.exists(self.round_file("trial-tasks.txt")))
 
+    def test_a_job_of_the_standard_with_no_unit_id_at_all_is_refused(self) -> None:
+        self.run_dir = write_job(self.jobs, "recorded-standard", "alpha", "standard", recorded_trials())
+        for name in ("p1__r", "p2__r", "p3__r", "f1__r", "f2__r", "f3__r"):
+            self.set_unit(name, None)
+        self.kept()
+        r = self.select(["--size", "guards", "--budget-usd", "0.5", "--text", "targets and guards"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("bench/f1", r.err)
+        self.assertIn("config.json", r.err)
+        self.assertFalse(os.path.exists(self.round_file("trial-tasks.txt")))
+
     def test_a_task_with_two_unit_ids_is_refused(self) -> None:
         extra = trial("p2b__r", "bench/p2", 1.0)
         extra.cost = 0.01
@@ -711,6 +738,24 @@ class RecordedAmounts(Flow):
         r = self.select(["--size", "targets", "--budget-usd", "1", "--text", "again"])
         self.assertNotEqual(r.code, 0)
         self.assertIn("ledger.json", r.err)
+
+    def test_stop_two_refuses_a_nan_cost_in_the_ledger_before_it_saves(self) -> None:
+        first = self.chosen()
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", first, "--code-ref", self.code_ref()])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        path = os.path.join(self.loop, "ledger.json")
+        ledger = load(path)
+        ledger["rounds"][0]["trial_runs"][0]["cost_usd"] = float("nan")
+        write_json(path, ledger)
+        with open(path, "rb") as fh:
+            saved = fh.read()
+        second = write_job(self.jobs, "second", "alpha", "harbor",
+                           [trial(f"{t}-{k}__s", f"bench/{t}", 1.0) for t in ("f1", "f2", "p1") for k in range(3)])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", second, "--code-ref", self.code_ref()])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("ledger.json", r.err)
+        with open(path, "rb") as fh:
+            self.assertEqual(fh.read(), saved)
 
     def test_a_nan_budget_in_the_input_is_refused(self) -> None:
         self.kept()
