@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from typing import List
 
-from agentrepo import RepoCase
+from agentrepo import RepoCase, recorded_trials
 from jobs import Result, Trial, load, run, trial, write, write_job, write_json
 
 KEEP_GOOD = "Keep good. bad breaks test_other."
@@ -559,3 +559,23 @@ class KeptRecorded(Flow):
         self.assertEqual(r.code, 0, r.out + r.err)
         row = next(ln for ln in self.page("decision-1.md").splitlines() if ln.startswith("| good |"))
         self.assertIn("2 and 2 trials keep their recorded label", row)
+
+
+class StandardUnits(Flow):
+    """On a job of the standard, the task lists of a trial run hold the unit ids that --units of the standard takes."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.run_dir = write_job(self.jobs, "recorded-standard", "alpha", "standard", recorded_trials())
+
+    def lines(self, name: str) -> List[str]:
+        with open(self.round_file(name), encoding="utf-8") as fh:
+            return fh.read().split()
+
+    def test_the_task_lists_hold_unit_ids(self) -> None:
+        job = self.chosen()
+        self.assertEqual(self.lines("trial-tasks.txt"), ["f1", "f2", "p1"])
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", job, "--code-ref", self.code_ref()])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertEqual(self.lines("rerun-tasks.txt"), ["f1", "f2", "p1"])
+        self.assertEqual(self.lines("full-tasks.txt"), ["f1", "f2", "f3", "p1", "p2", "p3"])
