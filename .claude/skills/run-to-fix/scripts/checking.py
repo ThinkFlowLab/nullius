@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from adapter import Adapter
+from adapter import Adapter, source_of
 from checkout import diff_size, resolve, worktree, write_paid_on_ref
 from classifying import read_rows
 from reading import adapter_of
@@ -82,9 +82,10 @@ def cmd_candidate(args: argparse.Namespace) -> None:
         raise LoopError(f"--test is a path inside the checkout, got {args.test!r}")
     if args.effect == "report" and adapter.commands["replay"] is None:
         raise LoopError("an effect on the report is seen only in the replay, and commands.replay is null in adapter.json")
+    checkout = source_of(adapter, "candidate")
     rule, trials, tasks = cause_trials(round_dir, args.cause, args.effect)
-    ref = resolve(adapter.checkout, args.ref)
-    test_ref = resolve(adapter.checkout, args.test_ref) if args.test_ref else None
+    ref = resolve(checkout, args.ref)
+    test_ref = resolve(checkout, args.test_ref) if args.test_ref else None
     record = {"schema": "run-to-fix.candidate/v1", "id": args.id, "created": now(), "cause": args.cause, "rule": rule,
               "effect": args.effect, "ref": ref, "test": args.test, "test_ref": test_ref,
               "prediction": {"trials": trials, "tasks": tasks if args.effect == "outcome" else []}}
@@ -256,6 +257,7 @@ def cmd_check(args: argparse.Namespace) -> None:
     adapter = adapter_of(args.loop)
     round_dir = open_round(args.loop)
     record = read_input(round_dir)
+    source_of(adapter, "check")
     cdir = os.path.join(round_dir, "candidates", candidate_id(args.candidate))
     cand = load_candidate(os.path.join(cdir, "candidate.json"))
     # a check that fails part way must not leave the success of an earlier check to be read

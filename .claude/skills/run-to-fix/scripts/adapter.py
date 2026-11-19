@@ -9,6 +9,8 @@ from typing import Dict, FrozenSet, List, Optional
 
 SCHEMA = "run-to-fix.adapter/v1"
 COMMANDS = ("test", "test_one", "build", "run_tasks", "replay", "classes")
+#: the commands that run on the agent's code, so need source.checkout
+CODE_COMMANDS = ("test", "test_one", "build", "run_tasks", "replay")
 TAKES: Dict[str, FrozenSet[str]] = {
     "test": frozenset({"worktree"}),
     "test_one": frozenset({"worktree", "test"}),
@@ -42,9 +44,9 @@ class Limits:
 @dataclass(frozen=True)
 class Adapter:
     agent: str
-    checkout: str
-    base_ref: str
-    work_branch: str
+    checkout: Optional[str]
+    base_ref: Optional[str]
+    work_branch: Optional[str]
     commands: Dict[str, Optional[str]]
     test_failed_pattern: Optional["re.Pattern[str]"]
     replay_success_labels: List[str]
@@ -91,6 +93,14 @@ def _command(name: str, value: object) -> Optional[str]:
     return line
 
 
+def source_of(adapter: Adapter, step: str) -> str:
+    """The agent's checkout, for a step that works on its code."""
+    if adapter.checkout is None or adapter.base_ref is None:
+        raise AdapterError(f"loop.py {step} works on the agent's code, and adapter.json has no source; read, "
+                           "classify and compare run without it")
+    return adapter.checkout
+
+
 def load_adapter(path: str) -> Adapter:
     with open(path, "rb") as fh:
         raw = fh.read()
@@ -102,11 +112,19 @@ def load_adapter(path: str) -> Adapter:
         raise AdapterError(f"adapter.json: schema must be {SCHEMA}, got {data.get('schema')!r}")
     agent = _text(_key(data, "agent", ""), "agent")
     source = _key(data, "source", "")
-    checkout = _text(_key(source, "checkout", "source."), "source.checkout")
-    base_ref = _text(_key(source, "base_ref", "source."), "source.base_ref")
-    work_branch = _text(_key(source, "work_branch", "source."), "source.work_branch")
+    if source is None:
+        checkout = base_ref = work_branch = None
+    else:
+        checkout = _text(_key(source, "checkout", "source."), "source.checkout")
+        base_ref = _text(_key(source, "base_ref", "source."), "source.base_ref")
+        work_branch = _text(_key(source, "work_branch", "source."), "source.work_branch")
     raw_commands = _key(data, "commands", "")
     commands = {name: _command(name, _key(raw_commands, name, "commands.")) for name in COMMANDS}
+    if source is None:
+        on_code = [name for name in CODE_COMMANDS if commands[name] is not None]
+        if on_code:
+            raise AdapterError("adapter.json: " + ", ".join(f"commands.{n}" for n in on_code) + " works on the agent's "
+                               "code, and source is null; give the checkout in source or make the command null")
     unknown = sorted(set(raw_commands) - set(COMMANDS))
     if unknown:
         raise AdapterError(f"adapter.json: unknown commands {unknown}; the commands are {list(COMMANDS)}")

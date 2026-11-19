@@ -72,10 +72,12 @@ def agent_classes(adapter: Adapter, round_dir: str, job_dir: str, timeout_s: flo
         return {"ran": False, "reason": "commands.classes is null: the agent's own classes did not run", "trials": {}}
     out_json = os.path.join(round_dir, "agent-classes.json")
     values = {"job_dir": job_dir, "out_json": out_json}
+    # without a checkout, the agent's classes run in the loop folder; they read only the job
+    cwd = adapter.checkout or os.path.dirname(round_dir)
     if "classes" in adapter.paid:
-        path = write_paid(round_dir, "classes", line, values, adapter.checkout)
+        path = write_paid(round_dir, "classes", line, values, cwd)
         return {"ran": False, "reason": f"commands.classes costs money: written to {path}, not started", "trials": {}}
-    ran = run_command(line, values, adapter.checkout, os.path.join(round_dir, "logs", "classes.log"), timeout_s)
+    ran = run_command(line, values, cwd, os.path.join(round_dir, "logs", "classes.log"), timeout_s)
     if ran.code != 0:
         status = "did not finish in time" if ran.code is None else f"exited with code {ran.code}"
         raise LoopError(f"commands.classes {status}; the log is {ran.log}:\n{ran.tail}")

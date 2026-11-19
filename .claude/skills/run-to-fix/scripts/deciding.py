@@ -7,6 +7,7 @@ import os
 import re
 from typing import Dict, List, Optional
 
+from adapter import source_of
 from checking import candidate_id, load_candidate
 from checkout import resolve
 from classifying import read_rows
@@ -127,7 +128,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
                         + ", ".join(repr(a) for a in checked.agents))
     job_dir = checked.dir
     this_run: List[TrialRow] = read_rows(job_dir, threshold)
-    code_ref = resolve(adapter.checkout, args.code_ref)
+    code_ref = resolve(source_of(adapter, "decide --stop 2"), args.code_ref)
     if code_ref != selection["ref"]:
         raise LoopError(f"a trial run of this round runs the commit select chose, {selection['ref'][:12]}; --code-ref "
                         f"names {code_ref[:12]}")

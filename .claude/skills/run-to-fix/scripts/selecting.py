@@ -7,7 +7,7 @@ import os
 import random
 from typing import Dict, List, Optional, Tuple
 
-from adapter import Adapter
+from adapter import Adapter, source_of
 from checkout import is_ancestor, resolve, worktree, write_paid_on_ref
 from classifying import read_rows
 from comparing import TARGET_TRIALS, trial_spent
@@ -85,7 +85,7 @@ def cmd_select(args: argparse.Namespace) -> None:
     ledger = load_ledger(args.loop)
     entry = ledger_round(ledger, os.path.basename(round_dir))
     kept = kept_candidates(round_dir, entry)
-    ref = resolve(adapter.checkout, args.ref)
+    ref = resolve(source_of(adapter, "select"), args.ref)
     for checks in kept:
         if not is_ancestor(adapter.checkout, checks["ref"], ref):
             raise LoopError(f"{args.ref} does not contain the kept candidate {checks['id']} ({checks['ref'][:12]}): "
