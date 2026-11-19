@@ -37,7 +37,7 @@
   {#- A card's fields (web/agents.py `_card`); an agent's protocol and the ports it proves as dropdowns. #}
   {% set cols = [dict(key='icon', label='Logo', card='icon', table=false, class='std-mark small'), dict(key='title', label='Name', card='title'),
                  dict(key='kind', label='Kind', card='tag', class='cat-tag'), dict(key='protocol', label='Protocol', card='tag', class='std-tag'),
-                 dict(key='proves', label='Proves', class='std-tag', off=true), dict(key='example', label='Example', card='tag', class='std-tag'),
+                 dict(key='proves', label='Proves', class='std-tag', off=true), dict(key='example', label='Example', card='tag', class='std-tag', off=true),
                  dict(key='summary', label='Summary', card='text', class='std-clamp', width='expand', off=true), dict(key='ports', label='Ports proven', card='stat', type='num'),
                  dict(key='runs', label='Benchmarks it runs', card='stat', type='num'), dict(key='installs', label='Installs', card='stat', class='word'),
                  dict(key='version', label='Version', card='meta')] %}
