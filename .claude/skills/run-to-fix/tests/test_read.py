@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import sys
 
-from jobs import (LIMITS, LOOP, NO_LIMITS, LoopCase, adapter, load, run, trial, write_job, write_json)
+from jobs import (LIMITS, LOOP, NO_LIMITS, LoopCase, adapter, load, run, trial, write, write_job, write_json)
 
 
 def healthy(root: str, name: str, agent: str) -> str:
@@ -289,3 +289,41 @@ class BudgetIsAnAmount(LoopCase):
             self.assertNotEqual(r.code, 0, value)
             self.assertIn("--budget-usd", r.err)
         self.assertFalse(os.path.exists(os.path.join(self.loop, "round-01")))
+
+
+class NoSource(LoopCase):
+    """An agent with no checkout of its own: stages 1, 2 and 5 run, the stages that touch its code refuse."""
+
+    def adapter_without_source(self, commands: dict) -> dict:
+        data = adapter("alpha", NO_LIMITS, commands)
+        data["source"] = None
+        return data
+
+    def test_read_classify_and_compare_run_without_a_checkout(self) -> None:
+        run_dir = healthy(self.jobs, "run", "alpha")
+        base_dir = healthy(self.jobs, "base", "alpha")
+        self.set_adapter(self.adapter_without_source({}))
+        self.read_ok(run_dir, base_dir)
+        self.classify_ok()
+        r = run(["compare", "--loop", self.loop, "--new", run_dir, "--against", "baseline"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+
+    def test_a_candidate_needs_the_checkout(self) -> None:
+        run_dir = healthy(self.jobs, "run", "alpha")
+        self.set_adapter(self.adapter_without_source({}))
+        self.read_ok(run_dir, None)
+        self.classify_ok()
+        write(self.round_file("causes/c1.md"), "# A cause\n\nRule: g01\n")
+        r = run(["candidate", "--loop", self.loop, "--id", "c1", "--cause", "c1", "--ref", "HEAD", "--effect", "outcome"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("source", r.err)
+
+    def test_a_command_on_the_code_needs_the_checkout(self) -> None:
+        run_dir = healthy(self.jobs, "run", "alpha")
+        data = self.adapter_without_source({"test": "pytest {worktree}"})
+        data["test_failed_pattern"] = r"^FAILED (\S+)"
+        self.set_adapter(data)
+        r = self.read(run_dir, None)
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("commands.test", r.err)
+        self.assertIn("source", r.err)
