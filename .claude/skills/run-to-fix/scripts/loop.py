@@ -15,6 +15,7 @@ Every file is written under the loop folder; see references/files.md.
 from __future__ import annotations
 
 import argparse
+import math
 import signal
 import sys
 from typing import List
@@ -31,6 +32,17 @@ from selecting import cmd_select
 from trials import TrialError
 
 
+def usd_amount(text: str) -> float:
+    """An amount in US dollars: a finite number, 0 or more."""
+    try:
+        value = float(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number") from exc
+    if not math.isfinite(value) or value < 0:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a finite amount of 0 or more")
+    return value
+
+
 def main(argv: List[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -38,7 +50,7 @@ def main(argv: List[str]) -> int:
     rd.add_argument("--loop", required=True, help="the loop folder a person named; it holds adapter.json")
     rd.add_argument("--run", required=True, help="the job folder of the run, or a folder holding it as PATH::JOB")
     rd.add_argument("--baseline", help="the job folder the run is compared with, as for --run")
-    rd.add_argument("--budget-usd", type=float, required=True, help="the budget the person named for this round")
+    rd.add_argument("--budget-usd", type=usd_amount, required=True, help="the budget the person named for this round")
     rd.add_argument("--pass-threshold", type=float, default=1.0, help="reward at or above this is a pass (default 1)")
     rd.add_argument("--continue-after-stop", help="the person's words to start a round after a stop rule said stop")
     rd.set_defaults(func=cmd_read)
@@ -67,7 +79,7 @@ def main(argv: List[str]) -> int:
     de.add_argument("--stop", type=int, required=True, choices=(1, 2))
     de.add_argument("--trial-job", help="stop 2: the job folder of the trial run")
     de.add_argument("--code-ref", help="stop 2: the commit the person states the trial run ran")
-    de.add_argument("--trial-cost-usd", type=float,
+    de.add_argument("--trial-cost-usd", type=usd_amount,
                     help="stop 2: the person's figure for what the trial run cost, when its trials do not all report one")
     de.set_defaults(func=cmd_decide)
     an = sub.add_parser("answer", help="record the person's answer of a stop")
@@ -83,7 +95,7 @@ def main(argv: List[str]) -> int:
     se.add_argument("--canaries", type=int, required=True, help="how many passing tasks to draw as canaries")
     se.add_argument("--size", choices=("targets", "guards", "canaries"),
                     help="the person's choice: targets, targets and guards, or all three")
-    se.add_argument("--budget-usd", type=float, help="the budget the person named for the trial run")
+    se.add_argument("--budget-usd", type=usd_amount, help="the budget the person named for the trial run")
     se.add_argument("--text", help="the person's words")
     se.set_defaults(func=cmd_select)
     cp = sub.add_parser("compare", help="stage 5: compare a new run and close the round")
@@ -91,7 +103,7 @@ def main(argv: List[str]) -> int:
     cp.add_argument("--new", required=True, help="the job folder of the new run, as for read --run")
     cp.add_argument("--against", required=True, choices=("run", "baseline"),
                     help="compare with the round's run (the code before the fix) or with its baseline")
-    cp.add_argument("--new-cost-usd", type=float,
+    cp.add_argument("--new-cost-usd", type=usd_amount,
                     help="the person's figure for what the new run cost, when its trials do not all report one")
     cp.set_defaults(func=cmd_compare)
     args = ap.parse_args(argv)
