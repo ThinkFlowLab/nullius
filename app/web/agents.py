@@ -28,7 +28,7 @@ from pathlib import Path
 from flask import abort, flash, redirect, render_template, request, url_for
 from nullius import execution, paths, providers
 from nullius.catalogue import storage
-from nullius.standard import conform, definitions, howto, match, ports
+from nullius.standard import conform, definitions, howto, ports
 from nullius.standard import recipe as standard_recipe
 
 from .core import app
@@ -38,62 +38,14 @@ from .filters import agent_mark_url
 from . import settings as settings_web
 
 
-def _install_words(o: dict) -> list:
-    """What a definition installs, in a few words each."""
-    inst, up = o.get("install") or {}, o.get("upstream") or {}
-    out = [f"npm {p}" for p in inst.get("npm") or []] + [f"pip {p}" for p in inst.get("pip") or []]
-    if inst.get("project"):
-        extras = "[" + ",".join(inst["extras"]) + "]" if inst.get("extras") else ""
-        out.append(f"{inst['project']}{extras} from {up.get('repository', '').removeprefix('https://')} at {(up['tag'] + ' (' + str(up.get('tested', ''))[:12] + ')') if up.get('tag') else str(up.get('tested', ''))[:12]}")
-    if inst.get("python"):
-        out.append(f"on Python {inst['python']}")
-    out += [f"{', '.join(x['packages'])} from {x['url'].removeprefix('https://')}" for x in inst.get("indexes") or []]
-    out += [f"the model {m}" for m in inst.get("prefetch") or []]
-    return out
-
-
-def _entries(kind: str, every: bool = False, own: bool = False) -> dict:
-    """Its entries; ``own``: and the benchmarks' own agents (``definitions.own_agents``), which have no page."""
-    others, bad = definitions.load(kind, every=every)
-    loaded = definitions.load("benchmark")[0]
-    benches = [b for b in loaded if b["family"] == kind]
-    if own and kind == "agent":
-        others = others + definitions.benchmark_agents(loaded)
-    jobs = {j.job_id for j in shared._jobs_for_request()}
-    out = []
-    for o in others:
-        driver = "driver" in (o.get("start") or {})        # a benchmark's own: its driver runs it, it speaks no port
-        cand = set() if driver else set(conform.candidates(o))
-        rows = []
-        for p, spec in ports.PORTS.items() if not driver else ():
-            if ports.family(p) != kind or (kind == "capability" and p.split(".", 1)[1].split("/")[0] != o.get("kind")):
-                continue
-            rec = (o.get("proven") or {}).get(p) if p in (o.get("offers") or []) else None
-            state = "proven" if rec else ("not offered" if p in cand else ("no kit yet" if not spec["kit"] else "not for it"))
-            kit = definitions.kit(p) if spec["kit"] else None
-            rows.append({"port": p, "label": spec.get("label") or p, "summary": spec["summary"], "state": state, "record": rec,
-                         "proof_kit": definitions.proof_kit(rec) if rec else None,
-                         "kit": {"says": kit["summary"], "checks": kit["datasets"][0]["units"], "key": kit["key"], "version": definitions.kit_version(kit)} if kit else None,
-                         "job": rec["job"] if rec and rec.get("job") in jobs else None,
-                         "older_kit": definitions.older_kit(p, rec),
-                         "skills": standard_recipe.skills_of(p, rec)})
-        fits = [{"key": b["key"], "label": b["label"], "needs": b["needs"], "why": match.fit(b, o)} for b in benches]
-        fid = (o.get("proven") or {}).get("fidelity")
-        out.append({"d": o, "protocol": standard_recipe.protocol(o), "ports": rows, "fits": fits,
-                    "install": _install_words(o),
-                    # its options, each with its default and what else it takes; its fidelity proof, when it has one
-                    "options": [{"name": n, "summary": x.get("summary", ""), "default": x.get("default"),
-                                 "values": list(x.get("values") or []), "pattern": x.get("pattern", ""), "example": x.get("example", "")}
-                                for n, x in (o.get("options") or {}).items()],
-                    "fidelity": fid if isinstance(fid, dict) else None})
-    out.sort(key=lambda e: (not e["d"].get("example", False), definitions.title(e["d"]).casefold()))
-    return {"entries": out, "problems": bad}
+def _job_ids() -> set:
+    return {j.job_id for j in shared._jobs_for_request()}
 
 
 def _page(kind: str):
     example = os.path.join(definitions.CATALOGUE, "agents", "reference") if kind == "agent" else \
         os.path.join(definitions.CATALOGUE, "capabilities", "keyword-memory")
-    found = _entries(kind, own=True)
+    found = standard_recipe.entries(kind, own=True, jobs=_job_ids())
     return render_template("agents/standard.html", kind=kind, how=howto.steps(kind), prompts=howto.prompts(),
                            catalogue_dir=paths.catalogue_dir(), example_dir=example, problems=found["problems"],
                            items=[_card(kind, e) for e in found["entries"]], choices=_choices(kind, found["entries"]), only=ONLY.get(kind, {}))
@@ -149,7 +101,7 @@ def _card(kind: str, e: dict) -> dict:
 
 
 def _entry(kind: str, key: str):
-    every = _entries(kind, every=True)["entries"]
+    every = standard_recipe.entries(kind, every=True, jobs=_job_ids())["entries"]
     mine = [x for x in every if x["d"]["key"] == key]
     v = request.args.get("v")
     e = next((x for x in mine if x["d"]["_version"] == v), None) if v else \

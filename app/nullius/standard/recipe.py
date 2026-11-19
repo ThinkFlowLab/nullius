@@ -213,6 +213,61 @@ def _other_page(o: dict) -> dict:
                if isinstance((o.get("proven") or {}).get("fidelity"), dict) else {})}
 
 
+def _install_words(o: dict) -> list:
+    """What a definition installs, in a few words each."""
+    inst, up = o.get("install") or {}, o.get("upstream") or {}
+    out = [f"npm {p}" for p in inst.get("npm") or []] + [f"pip {p}" for p in inst.get("pip") or []]
+    if inst.get("project"):
+        extras = "[" + ",".join(inst["extras"]) + "]" if inst.get("extras") else ""
+        out.append(f"{inst['project']}{extras} from {up.get('repository', '').removeprefix('https://')} at {(up['tag'] + ' (' + str(up.get('tested', ''))[:12] + ')') if up.get('tag') else str(up.get('tested', ''))[:12]}")
+    if inst.get("python"):
+        out.append(f"on Python {inst['python']}")
+    out += [f"{', '.join(x['packages'])} from {x['url'].removeprefix('https://')}" for x in inst.get("indexes") or []]
+    out += [f"the model {m}" for m in inst.get("prefetch") or []]
+    return out
+
+
+def entries(kind: str, benches: Optional[List[dict]] = None, every: bool = False, own: bool = False, jobs=()) -> dict:
+    """The agents (or capabilities) as the Agents page and the builder's Agent step list them, each with its ports
+    and its fits (``match.fit``) on ``benches`` (default: every benchmark of its family, default versions), and
+    the definitions with problems. ``own``: and the benchmarks' own agents (``definitions.benchmark_agents``);
+    ``jobs``: the job ids whose proof links to its job."""
+    from nullius.standard import conform
+    others, bad = definitions.load(kind, every=every)
+    loaded = definitions.load("benchmark")[0]
+    benches = [b for b in loaded if b["family"] == kind] if benches is None else benches
+    if own and kind == "agent":
+        others = others + definitions.benchmark_agents(loaded)
+    out = []
+    for o in others:
+        driver = "driver" in (o.get("start") or {})        # a benchmark's own: its driver runs it, it speaks no port
+        cand = set() if driver else set(conform.candidates(o))
+        rows = []
+        for p, spec in ports.PORTS.items() if not driver else ():
+            if ports.family(p) != kind or (kind == "capability" and p.split(".", 1)[1].split("/")[0] != o.get("kind")):
+                continue
+            rec = (o.get("proven") or {}).get(p) if p in (o.get("offers") or []) else None
+            state = "proven" if rec else ("not offered" if p in cand else ("no kit yet" if not spec["kit"] else "not for it"))
+            kit = definitions.kit(p) if spec["kit"] else None
+            rows.append({"port": p, "label": spec.get("label") or p, "summary": spec["summary"], "state": state, "record": rec,
+                         "proof_kit": definitions.proof_kit(rec) if rec else None,
+                         "kit": {"says": kit["summary"], "checks": kit["datasets"][0]["units"], "key": kit["key"], "version": definitions.kit_version(kit)} if kit else None,
+                         "job": rec["job"] if rec and rec.get("job") in jobs else None,
+                         "older_kit": definitions.older_kit(p, rec),
+                         "skills": skills_of(p, rec)})
+        fits = [{"key": b["key"], "ref": definitions.ref_of(b) if "_version" in b else b["key"], "label": b["label"], "needs": b["needs"], "why": match.fit(b, o)} for b in benches]
+        fid = (o.get("proven") or {}).get("fidelity")
+        out.append({"d": o, "protocol": protocol(o), "ports": rows, "fits": fits,
+                    "install": _install_words(o),
+                    # its options, each with its default and what else it takes; its fidelity proof, when it has one
+                    "options": [{"name": n, "summary": x.get("summary", ""), "default": x.get("default"),
+                                 "values": list(x.get("values") or []), "pattern": x.get("pattern", ""), "example": x.get("example", "")}
+                                for n, x in (o.get("options") or {}).items()],
+                    "fidelity": fid if isinstance(fid, dict) else None})
+    out.sort(key=lambda e: (not e["d"].get("example", False), definitions.title(e["d"]).casefold()))
+    return {"entries": out, "problems": bad}
+
+
 def choices() -> dict:
     """What the page offers - choices and the reasons a pair does not fit,
     never a command."""
