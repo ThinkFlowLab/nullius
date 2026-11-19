@@ -7,7 +7,8 @@
 {{ROWS}}
 
 Replay counts are of the {{TRIALS}} recorded trials: done and passed / done and failed / not done and passed / not
-done and failed. A false success is a failed trial that the agent reports as a success.
+done and failed. A false success is a failed trial that the agent reports as a success. A trial that keeps its
+recorded label is one the replay could not reproduce; its label comes from the recorded run.
 
 ## Candidates whose fix changes no label of their cause
 

@@ -63,8 +63,10 @@ def candidate_row(cand: dict, checks: Optional[dict]) -> List[str]:
     suite_text = ("did not run" if not suite["ran"] else
                   ", ".join(suite["added"]) if suite["added"] else "none")
     if replay["ran"]:
+        kept = replay["kept_recorded"]
         replay_text = (f"{table_text(replay['before'])} → {table_text(replay['after'])} "
-                       f"({replay['before_ref'][:12]} → {replay['ref'][:12]})")
+                       f"({replay['before_ref'][:12]} → {replay['ref'][:12]}); {kept['before']} and {kept['after']} "
+                       "trials keep their recorded label")
         change_text = changes_text(replay)
         false_text = f"{replay['false_success_added']:+d}" + (
             f" (new: {', '.join(replay['false_success_new'])})" if replay["false_success_new"] else "")
