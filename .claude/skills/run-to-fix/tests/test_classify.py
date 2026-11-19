@@ -350,12 +350,12 @@ class FoundClasses(LoopCase):
         self.assertIn("both", r.err)
 
 
-#: the last lines of two exception messages of one real run; they differ in the model text quoted after unit=
+#: the last lines of two exception messages of a made-up agent; they differ in the model text quoted after unit=
 REPEATED_STREAM = [
-    r"JiuwenSwarm failed: FrameworkError: [181001] model call failed, reason: LLM repeated stream output detected: "
-    r"field=reasoning_content, unit='OK.\n\nWriting.\n\nLet me go.\n\n', repeat_count=6",
-    r"JiuwenSwarm failed: FrameworkError: [181001] model call failed, reason: LLM repeated stream output detected: "
-    r"field=reasoning_content, unit='\n\nHmm.', repeat_count=27",
+    r"MadeUpAgent failed: LoopError: [4021] model call failed, reason: repeated stream output detected: "
+    r"field=reasoning, unit='Fine.\n\nNext step.\n\n', repeat_count=4",
+    r"MadeUpAgent failed: LoopError: [4021] model call failed, reason: repeated stream output detected: "
+    r"field=reasoning, unit='\n\nWait.', repeat_count=19",
 ]
 
 

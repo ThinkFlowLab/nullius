@@ -36,11 +36,11 @@ class Verdicts(LoopCase):
         self.last_out = r.out
         return load(self.round_file("result.json"))
 
-    def test_ten_won_and_thirteen_lost_is_noise(self) -> None:
-        result = self.compare(271 // 10, 10, 13, 6)
-        self.assertEqual(result["pairs"], {"common_tasks": 27 + 10 + 13 + 6, "both": 27, "won": 10, "lost": 13,
-                                           "neither": 6})
-        self.assertAlmostEqual(result["test"]["p"], 0.6776394844055176, places=9)
+    def test_eight_won_and_twelve_lost_is_noise(self) -> None:
+        result = self.compare(30, 8, 12, 5)
+        self.assertEqual(result["pairs"], {"common_tasks": 30 + 8 + 12 + 5, "both": 30, "won": 8, "lost": 12,
+                                           "neither": 5})
+        self.assertAlmostEqual(result["test"]["p"], 0.5034446716308594, places=9)
         self.assertEqual(result["verdict"], "noise")
         self.assertIn("noise", self.last_out)
 
