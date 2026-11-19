@@ -22,7 +22,7 @@ None of these is a step.
 | `info` | none | `{screen: [width, height], steps, steps_left, pause, password, folder}`. `folder`: a folder of the desktop that is the agent's own, made empty for the unit |
 | `screenshot` | none | The observation of the last step, as PNG. Before the first step, the picture the benchmark took at the start, before the window. It takes no new picture: two calls with no step between them return the same bytes |
 | `upload` | `path`, inside `folder` (absolute, or relative to it, with no `.` or `..` part); `data`, base64, at most 4 MiB a call; `append`, false (the default) to start the file and true to add to it; `sha256`, optional, the whole file's. With `sha256` and no `data`, the call takes the run's file of that `sha256` and starts the file; `append` is then refused | `{size}`: the file's size so far. In the window alone |
-| `prepare` | `actions`: a list of texts, each Python run in the desktop as a step's action is, with no pause after it (`WAIT` does nothing); `files`: as for `step` | `{files: {PATH: BASE64 or null}}`, once the actions have run. In the window alone; an action the desktop does not end in time is an error and stops it |
+| `prepare` | `actions`: a list of texts, each Python run in the desktop as a step's action is, with no pause after it (`WAIT` does nothing); `files`: as for `step` | `{files: {PATH: BASE64 or null}}`, once the actions have run. In the window alone; an action the desktop does not end in time is an error and stops it. An action that exits with an error returns the desktop's words and stops the actions after it. |
 
 ## Acting
 

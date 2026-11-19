@@ -1686,6 +1686,26 @@ class WindowClosure(unittest.TestCase):
         self.bridge.submit(call)
         return call, replies
 
+    def test_a_failed_prepare_action_returns_its_error_and_stops_before_later_actions_and_files(self):
+        actions = ["WAIT", "print('before')", "raise RuntimeError('installation failed')", "print('after')"]
+        replies = []
+        call = cp.Call("prepare", {"actions": actions, "files": ["missing"]},
+                       lambda c, v, i, e: replies.append((v, i, e)))
+        cp.checked(call, self.bridge.screen, self.bridge.folder)
+        self.bridge._serve(call)
+        value, image, error = replies[0]
+        self.assertIsNone(value)
+        self.assertIsNone(image)
+        self.assertIn("actions[2]", error)
+        self.assertIn("RuntimeError: installation failed", error)
+        self.assertEqual([e["code"] for e in self.desktop.events if e["kind"] == "python"],
+                         ["folder"] + [cp.PREPARE.format(code=a) for a in actions[1:3]])
+        self.assertNotIn("read", self.desktop.kinds())
+        self.assertEqual(self.bridge.used, 0)
+        call, replies = self.submit("prepare")
+        self.bridge._serve(self.bridge._next())
+        self.assertEqual(replies, [({"files": {"/agent/a": None}}, None, None)])
+
     def test_closing_refuses_queued_upload_and_prepare_as_calls_sent_after_it(self):
         pending = [self.submit(tool) for tool in cp.WINDOW]
         before = list(self.desktop.events)
