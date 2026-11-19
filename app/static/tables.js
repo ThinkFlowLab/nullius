@@ -138,6 +138,9 @@ window.NulliusTable = {
       const open = menu.hidden;
       menu.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
+      // one that opens leftwards past the page's edge (a narrow screen) opens rightwards instead
+      menu.style.left = menu.style.right = '';
+      if (open && menu.getBoundingClientRect().left < 0) Object.assign(menu.style, {left: '0', right: 'auto'});
       if (open) menu.querySelector('input:not(:disabled), button, a[href]')?.focus();
     });
     document.addEventListener('click', e => { if (!menu.hidden && away(e.target)) close(); });
