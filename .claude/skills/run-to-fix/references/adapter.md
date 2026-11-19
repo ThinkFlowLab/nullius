@@ -42,6 +42,8 @@ Every key is present, and a value the agent does not have is null. `read` refuse
 | `{ref}` | `replay`, `run_tasks` | the full commit id under check |
 | `{job_dir}` | `replay`, `classes` | the job folder the person gave to `loop.py read` |
 | `{out_json}` | `replay`, `classes` | the file the command writes; the loop reads it after a zero exit |
+| `{base_ref}` | `replay`, optional | the full commit id of `source.base_ref` |
+| `{before_ref}` | `replay`, optional | the full commit id the replay is compared with: for the replay before a fix, its own `{ref}`; for the replay of the fix, the ref before it |
 | `{units_file}` | `run_tasks` | a text file with one task name per line |
 | `{repeat}` | `run_tasks` | trials per task |
 | `{jobs_dir}` | `run_tasks` | where the run writes its job folder |
@@ -116,14 +118,15 @@ adds none. A failure on `base_ref` that a candidate removes is reported as remov
 
 1. `trials` has one entry for every trial of `{job_dir}`. `label` is what the agent reports for that trial on the
    code of `ref`.
-2. `touched` is optional: true when the code that changed between `base_ref` and `ref` ran in the trial. Guard tasks
-   of a trial run come from this field. Without it the list of guards is empty, and the decision page says so.
-3. `kept_recorded` is optional: the trials the replay could not reproduce, which keep the label of the recorded run.
-   The decision page gives their count.
+2. `touched` is optional: true when the code that changed between `{before_ref}` and `{ref}` ran in the trial. Guard
+   tasks of a trial run come from this field and from the passing trials whose label the fix changes.
+3. `kept_recorded` is optional: the trials the replay could not reproduce. For those trials the command writes the
+   recorded label into `label`; the loop crosses `label` as given. The decision page gives their count.
 
 The loop crosses each label with the trial's recorded pass or fail. A label in `replay_success_labels` on a failed
-trial is a false success. A candidate's table before and after is these four counts on `base_ref` and on the
-candidate, and the false successes it adds are the difference.
+trial is a false success. A candidate's table before and after is these four counts at the ref before its fix and at
+its fix: the before ref is the candidate's `test_ref` when it has one, else `base_ref`. The false successes it adds
+are the difference. The loop replays each pair of `{ref}` and `{before_ref}` once per round.
 
 ### The classes file
 

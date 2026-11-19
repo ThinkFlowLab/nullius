@@ -70,19 +70,26 @@ For each cause in the agent layer:
 2. Register and check each candidate:
 
 ```bash
-python3 L candidate --loop DIR --id ID --cause CAUSE --ref FIX --test PATH --test-ref TEST_COMMIT
+python3 L candidate --loop DIR --id ID --cause CAUSE --ref FIX --test PATH --test-ref TEST_COMMIT --effect E
 python3 L check --loop DIR --candidate ID
 python3 L decide --loop DIR --stop 1
 ```
 
-`check` runs, each in a detached worktree of the commit that is removed afterwards: the test before and after the fix,
-`commands.test` against the failures the suite has on `base_ref`, and `commands.replay` on every recorded trial at
-`base_ref` and at the fix. The replay's labels crossed with pass and fail give the table done and passed / done and
-failed / not done and passed / not done and failed, and the count of false successes, failed trials the agent reports
-as a success. A command named in `paid` is written to `round-NN/commands/` and not started.
+`--effect` says what the fix does, with no default. `outcome`: failing trials of the rule turn into passes; the rule
+counts its failing trials, and their tasks are expected to pass. `report`: the agent's report changes on trials of
+the rule and pass or fail stays; the rule counts every trial it matches, no task is expected to pass, and the
+candidate needs `commands.replay`.
 
-**Stop 1.** Show the person `decision-1.md`: one row per candidate with its cause, test, table before and after, false
-successes added and diff size, and the checks that did not run. Ask which candidates to keep, and record the answer in
+`check` runs, each in a detached worktree of the commit that is removed afterwards: the test before and after the fix,
+`commands.test` against the failures the suite has on `base_ref`, and `commands.replay` on every recorded trial at the
+ref before the fix (the candidate's `test_ref`, else `base_ref`) and at the fix. The replay's labels crossed with pass
+and fail give the table done and passed / done and failed / not done and passed / not done and failed, and the count of
+false successes, failed trials the agent reports as a success. `check` also counts the trials of the cause whose label
+the fix changes, by direction. A command named in `paid` is written to `round-NN/commands/` and not started.
+
+**Stop 1.** Show the person `decision-1.md`: one row per candidate with its cause, effect, test, table before and after
+with its two refs, the trials of the cause whose label changes, false successes added and diff size; the candidates
+whose fix changes no label of their cause, under a heading of their own; and the checks that did not run. Ask which candidates to keep, and record the answer in
 the person's words:
 
 ```bash
@@ -97,8 +104,9 @@ Merge the kept candidates into one commit of the work branch. Then:
 python3 L select --loop DIR --ref COMMIT --canaries N
 ```
 
-prints the trial run in three sizes with their price: the targets (the tasks the kept causes predict), plus the
-guards (passing tasks whose recorded trial ran the changed code, when the replay reports `touched`), plus the canaries
+prints the trial run in three sizes with their price: the targets (the tasks the kept `outcome` candidates predict),
+plus the guards (passing tasks whose recorded trial ran the changed code: the replay marks it `touched`, or a kept fix
+changes its label), plus the canaries
 (passing tasks drawn with a fixed seed). Every task gets 3 trials. A price is the sum over the tasks of the mean
 recorded cost of each task's trials, times its trials. The cost comes from this round's trial runs on the same commit
 when they hold the task, else from the run that was read. A task with no recorded cost takes the mean of the others,
@@ -116,7 +124,8 @@ This writes `trial-tasks.txt`, runs `commands.build` and writes `build.json`, an
 python3 L decide --loop DIR --stop 2 --trial-job JOB
 ```
 
-**Stop 2.** Show the person `decision-2.md`: the build, the targets' trials before and in every trial run of this
+**Stop 2.** Show the person `decision-2.md`. For a kept `report` candidate it says that this version does not read the
+agent's report in the new run. The page shows the build, the targets' trials before and in every trial run of this
 round on that build with Fisher's exact test, the guards and canaries, the money spent and left, and three options
 with their price: stop, the targets and guards again, a full pass. The commands of the last two are written. Record
 the choice:

@@ -33,10 +33,11 @@ round that has no `result.json`.
 | `groups.json` | 2 | `classify` | class counts, the rules switched off, the groups with their warnings, the counts of found and agent classes |
 | `agent-classes.json` | 2 | `commands.classes` | the agent's own classes and flags per trial |
 | `causes/<id>.md` | 2 | the assistant | one cause, below |
-| `candidates/<id>/candidate.json` | 3 | `candidate` | the cause, the rule, the fix commit, the test and its commit, the trials and tasks the cause predicts |
-| `candidates/<id>/checks.json` | 3 | `check` | the test before and after the fix, the suite against `base_ref`, the replay table before and after, the diff size |
-| `candidates/<id>/*.log`, `replay.json` | 3 | `check` | the output of each command |
-| `base/suite.json`, `base/replay.json` | 3 | `check` | the suite's failures and the replay on `base_ref`, made once per round |
+| `candidates/<id>/candidate.json` | 3 | `candidate` | the cause, the rule, the effect (`outcome` or `report`), the fix commit, the test and its commit, the trials of the cause and the tasks expected to pass; registering a candidate again removes its `checks.json` |
+| `candidates/<id>/checks.json` | 3 | `check` | the test before and after the fix, the suite against `base_ref`, the replay table at the ref before the fix and at the fix with both refs, the trials of the cause whose label changes, every trial whose label changes, the diff size |
+| `candidates/<id>/*.log` | 3 | `check` | the output of each command |
+| `base/suite.json` | 3 | `check` | the suite's failures on `base_ref`, made once per round |
+| `replays/<ref>-against-<before ref>.json`, `.log` | 3 | `check` | one replay per pair of refs of a round, made once |
 | `decision-1.md` | stop 1 | `decide --stop 1` | one row per candidate and the checks that did not run |
 | `commands/<name>-<commit>.sh`, `commands/run_tasks*.sh` | 3, 4 | `check`, `select`, `decide --stop 2` | commands a person starts |
 | `trial-tasks.txt` | 4 | `select --size` | the tasks of the trial run, one per line, the `{units_file}` of `run_tasks` |
@@ -74,7 +75,8 @@ Not checked: what the files cannot tell.
     "round": "round-01", "started": "<date>",
     "answers": [{"about": "stop 1: the candidates to keep", "date": "<date>", "text": "<the person's words>"}],
     "kept": ["<candidate id>"],
-    "predictions": [{"candidate": "...", "cause": "...", "rule": "...", "tasks": ["..."], "expect": "pass"}],
+    "predictions": [{"candidate": "...", "cause": "...", "rule": "...", "effect": "outcome", "trials": ["..."],
+                     "tasks": ["..."], "expect": "pass"}],
     "selection": {"ref": "...", "size": "guards", "targets": [], "guards": [], "canaries": [], "repeat": 3,
                   "seed": 20261117, "price_usd": 0.0, "budget_usd": 0.0, "guards_reason": null},
     "trial_runs": [{"job_dir": "...", "ref": "...", "trials": 0, "cost_usd": 0.0, "cost_complete": true}],
