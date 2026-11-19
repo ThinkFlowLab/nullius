@@ -73,6 +73,7 @@ import shutil
 import signal
 import sys
 import tempfile
+import time
 
 from nullius.standard.retries import MAX_RETRIES, RETRIES
 from nullius import constraints as limits, paths, prices as price_list, progress, providers, secrets, settings
@@ -545,6 +546,8 @@ def cmd_run(a):
     if why:
         print("refused: constraints:", why)
         return 2
+    if a.backend == "boat" and definitions.boots_vms(b):
+        return _boat_units(a, b, other)
     # a cap counts each call at its model's price: the public list fetched first (Settings, Model prices); a machine
     # that cannot reach it runs uncapped where a model has no price, and says so (run.Run)
     unreachable = None
@@ -558,7 +561,7 @@ def cmd_run(a):
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
                       boat_size=a.boat_size, simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
-                      licences=held, bench_options=options(a.bench_option), repeat=a.repeat, retries=a.retries,
+                      shard_by=a.shard_by, licences=held, bench_options=options(a.bench_option), repeat=a.repeat, retries=a.retries,
                       remove_images=a.remove_images,
                       prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, prices_unreachable=unreachable,
                       constraints=given,
@@ -576,6 +579,34 @@ def cmd_run(a):
     # no unit reached a verdict (a refusing endpoint, every unit an error): the run failed, and says so
     # by its exit status, so a launch of several agents pauses rather than running the next into the same error.
     # A run its spending cap stopped did what was asked of it: no failure
+    return 3 if failed else 0
+
+
+def _boat_units(a, b, other) -> int:
+    """A benchmark whose units boot VMs of their own, on Boat: each unit whole in a Boat VM (``boat_units``)."""
+    from nullius.standard import boat_units
+    if other["_kind"] != "control" or (b.get("score") or {}).get("judge"):
+        print(f"refused: on Boat, {b['label']} runs only what calls no model for now: its null control "
+              "(the model key would have to travel to each VM). Run the rest on hosts.")
+        return 2
+    words = [b["key"] if "_version" not in b else definitions.ref_of(b), a.other, "--provider", a.provider,
+             "--dataset", a.dataset or b["datasets"][0]["id"],
+             *[w for x in a.bench_option or [] for w in ("--bench-option", x)],
+             *[w for x in a.timeout or [] for w in ("--timeout", x)],
+             *(["--attempts", str(a.repeat)] if a.repeat > 1 else []), "--retries", str(a.retries)]
+    stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
+    name = a.name or f"{stamp}__{definitions.job_word(b)}__{definitions.job_word(other)}"
+    vals, bad = definitions.bench_options_of(b, a.dataset or b["datasets"][0]["id"], options(a.bench_option), "yours", kind="control")
+    try:
+        job_dir, failed = boat_units.run(b, words, dataset=a.dataset or b["datasets"][0]["id"], limit=a.limit,
+                                         concurrency=a.concurrency, jobs_root=a.jobs, name=name, size=a.boat_size,
+                                         launch=a.launch or shard.launch_id(definitions.job_word(b), definitions.job_word(other), ""),
+                                         needs=definitions.option_needs(b, vals)["host"], say=lambda s: print(s, flush=True),
+                                         env={**os.environ, **run_env(a.provider)} if a.from_run else os.environ)
+    except (boat_units.Refused, boat.Unavailable, merge.Refused) as e:
+        print("refused:", e)
+        return 2
+    print(job_dir)
     return 3 if failed else 0
 
 
@@ -736,6 +767,9 @@ def main(argv=None):
                            help="remove each image this run pulls or builds when its last unit ends (default: kept for the next run)")
             p.add_argument("--name")
             p.add_argument("--shard", metavar="I/N", help="only shard I of N of the units: by the unit id's hash, before --limit")
+            if name == "run":
+                p.add_argument("--shard-by", choices=list(shard.BY), default="id",
+                               help="split by the unit id's hash (id, the default) or by its place in the dataset (position)")
             p.add_argument("--launch", help="the launch id every shard records (default: the day, the benchmark, the agent, the model)")
             p.add_argument("--bench-option", action="append", metavar="NAME=VALUE",
                            help="one of the benchmark's own options (repeatable: a search, a mode); the rest keep their defaults")

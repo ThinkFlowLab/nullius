@@ -455,7 +455,7 @@ class Run:
                  limit: Optional[int] = None, concurrency: int = 4, jobs_root: str = "jobs", name: Optional[str] = None,
                  turn_seconds: Optional[int] = None, say: Callable[[str], None] = print, env=os.environ,
                  proving: bool = False, unsandboxed: bool = False, judge_model: Optional[str] = None,
-                 backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None,
+                 backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None, shard_by: str = "id",
                  launch: Optional[str] = None, repeat: int = 1, retries: int = RETRIES,
                  retry_if: Optional[Callable[[dict], bool]] = None, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
@@ -476,7 +476,8 @@ class Run:
         agent's or capability's options set for this run, by name; the rest keep
         their defaults, and the job's config records every value.
         ``shard``: (I, N), only the units of shard I of N (``shard``), before
-        ``limit``; ``launch``: the id every shard of one launch records.
+        ``limit``, ``shard_by`` its units' id (by hash) or place (``shard.BY``); ``launch``: the id every
+        shard of one launch records.
         ``units_file``: the units a file lists (:func:`units_file`): only
         those of the dataset run, in the dataset's order, before ``limit``;
         an id the dataset does not hold refuses the run before any unit
@@ -737,6 +738,9 @@ class Run:
         self.say = say
         stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
         self.shard = tuple(shard) if shard and shard[1] > 1 else None
+        if shard_by not in shards.BY:
+            raise Refused(f"--shard-by {shard_by!r}: one of {', '.join(shards.BY)}")
+        self.shard_by = shard_by
         self.launch = launch or (shards.launch_id(definitions.job_word(bench), definitions.job_word(other), model)
                                  if self.shard else None)
         self.name = name or (f"{stamp}__{definitions.job_word(bench)}__{definitions.job_word(other)}"
@@ -888,7 +892,7 @@ class Run:
                 p.emit("refused", detail=why)
                 raise Refused(why)
         # the list and the shard, then the limit; each unit keeps its place in the whole dataset (its trial's tag)
-        mine = shards.select(everything, *self.shard) if self.shard else list(enumerate(everything))
+        mine = shards.select(everything, *self.shard, by=self.shard_by) if self.shard else list(enumerate(everything))
         if listed is not None:
             wanted = set(listed)
             mine = [(i, u) for i, u in mine if u in wanted]
@@ -908,7 +912,7 @@ class Run:
                          image=self.setup_driver.image if self.setup_driver else self.image,
                          options=self.options, launch=self.launch or "", bench_options=self.bench_options,
                          # a shard of a list splits the listed units: they are its whole
-                         shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit)
+                         shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit, by=self.shard_by)
                          if self.shard else None, units_file=self.units_file,
                          repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving,
                          timeouts=self.timeouts, max_turns=self.forced_turns, max_calls=self.max_calls,

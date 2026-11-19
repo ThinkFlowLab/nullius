@@ -183,6 +183,8 @@ A rootful Docker with `userns-remap` maps the uids of each container to sub-uids
 
 Refused before any unit: a computer-port run (its server's socket is on this machine), an Original setup or a check (they run on a machine). Choose local processes or the container backend.
 
+A benchmark whose units boot their own VM (OSWorld) runs each unit whole in its VM instead: driver, desktop VM and all, as a one-unit shard (`--shard-by position`) of this runner's snapshot, merged here into one job (`standard/boat_units.py`). Each VM installs what the unit needs. For now only what calls no model: OSWorld1's null control.
+
 | Piece | Rule |
 | --- | --- |
 | Key | Settings → Sandbox, or `BOAT_API_KEY` |

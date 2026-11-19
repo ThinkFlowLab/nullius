@@ -291,7 +291,7 @@ class VM:
     auto-stop, asked for; ``self.ttl`` the one it has, ``TTL`` on a free trial."""
 
     def __init__(self, client: Client, keys: Keys, job: str, *, size: str = SIZE, stopped: Optional[threading.Event] = None,
-                 wait: float = WAIT_SECONDS, sleep: Callable[[float], None] = time.sleep, ttl: int = TTL):
+                 wait: float = WAIT_SECONDS, sleep: Callable[[float], None] = time.sleep, ttl: int = TTL, lock: bool = True):
         self.client, self.keys, self.id, self.size, self.ttl = client, keys, None, size, max(int(ttl), TTL)
         self.stopped = stopped
         t0 = time.time()
@@ -313,7 +313,8 @@ class VM:
         self.id = d["sandbox"]["id"]
         try:
             self._ready(sleep)
-            self.sh(f"sudo -n useradd -m -s /bin/bash {USER} && " + LOCK.format(user=USER))
+            if lock:                       # a whole unit (boat_units) is the run's own code: no agent's user to lock in
+                self.sh(f"sudo -n useradd -m -s /bin/bash {USER} && " + LOCK.format(user=USER))
         except BaseException:
             self.delete()
             raise

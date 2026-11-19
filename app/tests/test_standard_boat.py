@@ -589,9 +589,9 @@ class BoatRecipe(unittest.TestCase):
                               if e["step"] == recipe.STEP["where"]]
         small = errors(backend="boat", boat_size="small")
         self.assertIn("A Small VM is too small for OSWorld2, whose units boot a 4 GB VM: choose a larger size.", small)
-        # a setup or a check runs on a machine: on Sandboxes it is refused, never run here instead
-        self.assertIn("Original cannot run in a Boat VM: choose Hosts.", small)
-        self.assertIn("Original, Null control cannot run in a Boat VM: choose Hosts.", errors(backend="boat", boat_size="default", others=["original", "nop"]))
+        # what calls a model (OSWorld2's null control asks its grader) is refused, never run here instead
+        self.assertIn("Original cannot run in a Boat VM yet: choose Hosts.", small)
+        self.assertIn("Original, Null control cannot run in a Boat VM yet: choose Hosts.", errors(backend="boat", boat_size="default", others=["original", "nop"]))
         self.assertFalse([m for m in errors(backend="boat", boat_size="default") if "too small" in m])
         self.assertIn("OSWorld2 starts each unit's VM on the machine: choose local processes.", errors(backend="container"))
         self.assertFalse([m for m in errors(backend="local") if "VM" in m])

@@ -579,11 +579,14 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         add("where", f"A {boat.SIZES[boat_size]['label']} VM is too small for {b['label']}, whose units boot a {guest:g} GB VM: choose a larger size.")
     # on Boat each unit's agent or capability runs in its VM (run.Run refuses the rest): a setup or a check runs
     # on a machine, and the computer port's socket is on this one, out of a VM's reach
+    # A benchmark booting VMs of its own runs each unit whole in a VM (boat_units), for now only what calls no model
     computer = "agent.computer/v1" in (b.get("needs") or [])
-    elsewhere = [definitions.setup_label(b, "original") if p.get("setup") else p["o"]["label"]
-                 for p in picks if p["control"] or p.get("setup") or (computer and side == "agent")]
+    whole = definitions.boots_vms(b)
+    elsewhere = [definitions.setup_label(b, "original") if p.get("setup") else p["o"]["label"] for p in picks
+                 if (not (p["control"] and not (b.get("score") or {}).get("judge")) if whole
+                     else p["control"] or p.get("setup") or (computer and side == "agent"))]
     if backend == "boat" and elsewhere:
-        add("where", f"{', '.join(elsewhere)} cannot run in a Boat VM: choose Hosts.")
+        add("where", f"{', '.join(elsewhere)} cannot run in a Boat VM yet: choose Hosts.")
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
     spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"])
     paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])
@@ -692,7 +695,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
                  *(["--backend", backend] if backend != "local" else []),
-                 *(["--boat-size", boat_size] if backend == "boat" and not control and not p.get("setup") else []),
+                 *(["--boat-size", boat_size] if backend == "boat" and (whole or not control and not p.get("setup")) else []),
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
                  *(["--shard", f"{index}/{of}", "--launch", launch_of(d, p)] if of > 1 else []),
                  *limits.cli_words(limits.of(targets[index - 1])),
@@ -735,7 +738,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # Nothing in the run asks a model: no key is handed to it, and none need be set.
     out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"]
     # what the machines must have for the chosen options (``host``): the Where step and its test show it, Run checks it
-    on_host = needs["host"]
+    on_host = [] if backend == "boat" and whole else needs["host"]     # each VM installs them (boat_units.prepare)
     if backend == "container" and any(p.get("setup") for p in picks):
         # a container setup's image installs what has an install; nothing else reaches its container
         imaged = hostreq.in_image(b, on_host)
