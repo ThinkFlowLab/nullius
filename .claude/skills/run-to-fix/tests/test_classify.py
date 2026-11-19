@@ -5,7 +5,8 @@ import os
 import sys
 from typing import Dict, List
 
-from jobs import (LIMITS, NO_LIMITS, LoopCase, Trial, adapter, load, run, trial, write, write_job, write_json)
+from jobs import (LIMITS, NO_LIMITS, LoopCase, Trial, adapter, load, run, trial, write, write_job, write_json,
+                  write_trial)
 
 FIVE = {"pass", "time_limit", "exception", "no_score", "verifier_failed"}
 SEVEN = FIVE | {"step_limit", "output_limit"}
@@ -425,3 +426,22 @@ class BaselineWarningText(LoopCase):
         self.assertEqual(warning["kind"], "fails_on_baseline")
         self.assertIn("fails on both runs", warning["text"])
         self.assertNotIn("benchmark", warning["text"])
+
+
+class RetriedTries(LoopCase):
+    """A job of the standard keeps the earlier tries of an attempt in retried/<trial>.try-N; none is a trial."""
+
+    def test_the_skill_and_run_analysis_count_the_same_trials(self) -> None:
+        trials = [trial("u1__s", "made-up-bench/u1", 1.0), trial("u2__s", "made-up-bench/u2", 0.0),
+                  trial("u3__s", "made-up-bench/u3", 1.0)]
+        run_dir = write_job(self.jobs, "standard-run", "alpha", "standard", trials)
+        earlier = trial("u2__s.try-1", "made-up-bench/u2", None)
+        earlier.exception = ("ConnectionError", "the relay closed")
+        write_trial(os.path.join(run_dir, "retried"), earlier, "alpha", "made-up-model", "standard", 9)
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(run_dir, None)
+        metrics = load(self.round_file("metrics.json"))
+        self.assertEqual([(r["trials"], r["trials_passed"]) for r in metrics["runs"]], [(3, 2)])
+        self.classify_ok()
+        self.assertEqual(sorted(self.by_trial()), ["u1__s", "u2__s", "u3__s"])
+        self.assertEqual(load(self.round_file("groups.json"))["trials"], 3)
