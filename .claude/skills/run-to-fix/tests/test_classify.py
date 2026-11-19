@@ -445,3 +445,20 @@ class RetriedTries(LoopCase):
         self.classify_ok()
         self.assertEqual(sorted(self.by_trial()), ["u1__s", "u2__s", "u3__s"])
         self.assertEqual(load(self.round_file("groups.json"))["trials"], 3)
+
+
+class FoundClassConfinement(LoopCase):
+    def test_a_rule_that_reaches_outside_the_trial_through_a_link_is_refused(self) -> None:
+        run_dir = write_job(self.jobs, "run", "alpha", "harbor",
+                            [trial("p__r", "bench/p", 1.0), trial("f__r", "bench/f", 0.0)])
+        outside = os.path.join(self.tmp, "outside.txt")
+        write(outside, "SYNTHETIC\n")
+        os.symlink(outside, os.path.join(run_dir, "f__r", "link"))
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        write_json(os.path.join(self.loop, "found-classes.json"), {"schema": "run-to-fix.found-classes/v1", "rules": [
+            {"id": "linked", "meaning": "A file the trial links to.", "file": "link", "regex": "SYNTHETIC"}]})
+        self.read_ok(run_dir, None)
+        r = run(["classify", "--loop", self.loop])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("outside the trial", r.err)
+        self.assertFalse(os.path.exists(self.round_file("trials.csv")))
