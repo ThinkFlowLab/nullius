@@ -15,6 +15,7 @@ in `round-NN/input.json`.
 |---|---|---|
 | `schema` | string | `run-to-fix.adapter/v1` |
 | `agent` | string | the value of `agent_info.name` in the trials of the run; `read` refuses a run whose trials name another agent |
+| `source` | object or null | null for an agent with no checkout of its own: `read`, `classify` and `compare` run, and `candidate`, `check`, `select` and `decide --stop 2` refuse; every command but `classes` is then null, and `classes` runs in the loop folder |
 | `source.checkout` | path | the agent's git checkout on this machine |
 | `source.base_ref` | git ref | the commit the run was built from |
 | `source.work_branch` | branch | the branch that receives test and fix commits |
@@ -44,7 +45,7 @@ Every key is present, and a value the agent does not have is null. `read` refuse
 | `{out_json}` | `replay`, `classes` | the file the command writes; the loop reads it after a zero exit |
 | `{base_ref}` | `replay`, optional | the full commit id of `source.base_ref` |
 | `{before_ref}` | `replay`, optional | the full commit id the replay is compared with: for the replay before a fix, its own `{ref}`; for the replay of the fix, the ref before it |
-| `{units_file}` | `run_tasks` | a text file with one task name per line |
+| `{units_file}` | `run_tasks` | a text file with one task per line: the unit id (`standard.unit`) when every trial of the run is a trial of the standard, else the task name |
 | `{repeat}` | `run_tasks` | trials per task |
 | `{jobs_dir}` | `run_tasks` | where the run writes its job folder |
 | `{budget_usd}` | `run_tasks` | the budget the person named for this run, in US dollars |

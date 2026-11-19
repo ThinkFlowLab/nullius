@@ -25,7 +25,8 @@ causes, writing tests and fixes in the agent's code.
 - An adapter, `adapter.json` in the loop folder: one file per agent with its checkout, its commands and the limits
   of the run (`references/adapter.md`). For an agent of the Nullius catalogue, draft it from
   `catalogue/agents/<key>/agent.json` (`versions.<v>.upstream.repository` and `tag`) and the run's settings, and
-  ask the person to confirm it. Ask the person for every value you cannot read from a file.
+  ask the person to confirm it. Ask the person for every value you cannot read from a file. An agent with no checkout
+  of its own takes `"source": null`: stages 1, 2 and 5 run, and the stages that change its code refuse.
 - The run: one job folder with one folder per trial. A baseline run to compare it with is optional.
 
 `L` below is `scripts/loop.py` beside this skill. Every command takes `--loop <loop folder>`. `references/files.md`

@@ -40,7 +40,7 @@ round that has no `result.json`.
 | `replays/<ref>-against-<before ref>.json`, `.log` | 3 | `check` | one replay per pair of refs of a round, made once |
 | `decision-1.md` | stop 1 | `decide --stop 1` | one row per candidate and the checks that did not run |
 | `commands/<name>-<commit>.sh`, `commands/run_tasks*.sh` | 3, 4 | `check`, `select`, `decide --stop 2` | commands a person starts |
-| `trial-tasks.txt` | 4 | `select --size` | the tasks of the trial run, one per line, the `{units_file}` of `run_tasks` |
+| `trial-tasks.txt` | 4 | `select --size` | the tasks of the trial run, one per line (unit ids on a job of the standard), the `{units_file}` of `run_tasks` |
 | `build.json` | 4 | `select --size` | the commit tried, the path `commands.build` printed and its SHA-256 |
 | `jobs/` | 4 | the person's run | the job folders that `run_tasks` writes |
 | `trial.json` | stop 2 | `decide --stop 2` | the round's trial runs, the results of targets, guards and canaries, the money spent and left, the options |
@@ -91,7 +91,9 @@ Not checked: what the files cannot tell.
 
 Every answer of the person is stored with its date and in the person's words: the candidates kept at stop 1, the
 size and budget of the trial run, the choice at stop 2, and the words that start a round after a stop rule said
-stop. The money a round has spent is the sum of its `trial_runs` plus the new run that `compare` reads. A trial run
+stop. The money a round has spent is the sum of its `trial_runs` plus the new run that `compare` reads. A new run
+that is the round's own run adds nothing, because the round did not pay for it; one that is a trial run of the round
+is in the sum already. A trial run
 whose trials do not all report a cost counts with the person's figure (`cost_from`: `the person`) and keeps what its
 trials record in `cost_recorded_usd`; `code_ref` is the commit the person states it ran.
 
