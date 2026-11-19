@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import os
 import re
 from typing import Dict, List, Optional
 
 from checking import load_candidate
+from checkout import resolve
 from classifying import read_rows
 from comparing import REPORT_NOT_READ, TARGET_TRIALS, passes, targets_of, trial_spent
 from pricing import describe, price_of, task_costs, usd
@@ -121,6 +123,25 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
                         + ", ".join(repr(a) for a in checked.agents))
     job_dir = checked.dir
     this_run: List[TrialRow] = read_rows(job_dir, threshold)
+    code_ref = resolve(adapter.checkout, args.code_ref)
+    if code_ref != selection["ref"]:
+        raise LoopError(f"a trial run of this round runs the commit select chose, {selection['ref'][:12]}; --code-ref "
+                        f"names {code_ref[:12]}")
+    chosen = set(selection["targets"]) | set(selection["guards"]) | set(selection["canaries"])
+    per_task = collections.Counter(r.task for r in this_run)
+    problems = []
+    outside = sorted(set(per_task) - chosen)
+    if outside:
+        problems.append("tasks outside the selection: " + ", ".join(outside))
+    absent = sorted(set(selection["targets"]) - set(per_task))
+    if absent:
+        problems.append("targets it lacks: " + ", ".join(absent))
+    uneven = sorted(t for t, n in per_task.items() if n != selection["repeat"])
+    if uneven:
+        problems.append(f"tasks without {selection['repeat']} trials: "
+                        + ", ".join(f"{t} ({per_task[t]})" for t in uneven))
+    if problems:
+        raise LoopError("the trial job is not a trial run of the selection: " + "; ".join(problems))
     costs = [r.cost_usd for r in this_run]
     recorded = sum(c for c in costs if c is not None)
     missing = sum(c is None for c in costs)
@@ -136,6 +157,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
     runs.append({"job_dir": job_dir, "ref": selection["ref"], "trials": len(this_run),
                  "cost_usd": args.trial_cost_usd if missing else recorded, "cost_recorded_usd": recorded,
                  "cost_from": "the person" if missing else "the trials", "cost_complete": not missing,
+                 "code_ref": code_ref, "code_from": "the person",
                  "added": now()})
     entry["trial_runs"] = runs
     save_ledger(args.loop, ledger)
@@ -191,6 +213,7 @@ def decide_two(args: argparse.Namespace, round_dir: str, record: dict) -> None:
         "ROUND": os.path.basename(round_dir), "LOOP": args.loop,
         "BUILD": f"{build['path']} from {build['ref'][:12]}" if build["path"] else f"{build['reason']} ({build['ref'][:12]})",
         "TRIAL_JOB": ", ".join(t["job_dir"] for t in same), "TRIALS": str(len(rows)),
+        "CODE": f"{selection['ref'][:12]}, as the person states; a trial job does not record the commit it ran",
         "SPENT": usd(spent) + "".join(f" (the person's figure for {t['job_dir']}, whose trials record "
                                       f"{usd(t['cost_recorded_usd'])})" for t in runs if t.get("cost_from") == "the person"),
         "LEFT": usd(left), "BUDGET": usd(float(record["budget_usd"])), "RESULTS": "\n".join(results),
@@ -208,8 +231,9 @@ def cmd_decide(args: argparse.Namespace) -> None:
     record = read_input(round_dir)
     if args.stop == 1:
         decide_one(args, round_dir, record)
-    elif args.trial_job is None:
-        raise LoopError("decide --stop 2 needs --trial-job: the job folder of the trial run")
+    elif args.trial_job is None or args.code_ref is None:
+        raise LoopError("decide --stop 2 needs --trial-job, the job folder of the trial run, and --code-ref, the commit "
+                        "the person states it ran")
     else:
         decide_two(args, round_dir, record)
 

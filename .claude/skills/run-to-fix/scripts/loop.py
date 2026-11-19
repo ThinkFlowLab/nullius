@@ -65,6 +65,7 @@ def main(argv: List[str]) -> int:
     de.add_argument("--loop", required=True)
     de.add_argument("--stop", type=int, required=True, choices=(1, 2))
     de.add_argument("--trial-job", help="stop 2: the job folder of the trial run")
+    de.add_argument("--code-ref", help="stop 2: the commit the person states the trial run ran")
     de.add_argument("--trial-cost-usd", type=float,
                     help="stop 2: the person's figure for what the trial run cost, when its trials do not all report one")
     de.set_defaults(func=cmd_decide)
