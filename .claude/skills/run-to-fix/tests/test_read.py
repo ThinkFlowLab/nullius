@@ -268,3 +268,13 @@ class ReplayPlaceholders(LoopCase):
         r = self.read(run_dir, None)
         self.assertNotEqual(r.code, 0)
         self.assertIn("{base_ref}", r.err)
+
+
+class BudgetHasNoDefault(LoopCase):
+    def test_read_needs_the_budget(self) -> None:
+        run_dir = healthy(self.jobs, "run", "alpha")
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        r = run(["read", "--loop", self.loop, "--run", run_dir, "--pass-threshold", "1"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("--budget-usd", r.err)
+        self.assertFalse(os.path.exists(os.path.join(self.loop, "round-01")))

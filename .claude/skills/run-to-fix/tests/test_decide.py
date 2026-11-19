@@ -402,3 +402,12 @@ class GuardReasons(Flow):
         r = self.select(["--size", "guards", "--budget-usd", "0.5", "--text", "targets only, in effect"])
         self.assertEqual(r.code, 0, r.out + r.err)
         self.assertEqual(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["selection"]["guards_reason"], reason)
+
+
+class TrialBudgetHasNoDefault(Flow):
+    def test_a_size_needs_the_budget(self) -> None:
+        self.kept()
+        r = self.select(["--size", "targets", "--text", "the targets"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("--budget-usd", r.err)
+        self.assertFalse(os.path.exists(self.round_file("trial-tasks.txt")))
