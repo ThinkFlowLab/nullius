@@ -62,7 +62,7 @@ class StandardWhere(CompilerCase):
         gone = self.draw(None, backends=("boat",), boat="no Boat API key: set it in Settings → Sandbox")["gsm8k boat"]
         self.assertNotIn("disabled", card(gone, "boat"))                   # no key: still chosen, and its card links to Settings
         self.assertNotIn("data-std-boat-size", gone)
-        self.assertIn('class="nb-inlinebutton std-boat-key" data-href="/settings#sandbox">Add a Boat API key in Settings</button>', gone)
+        self.assertIn('class="nb-inlinebutton std-boat-key" data-href="/settings#sandbox-boat-key">Add a Boat API key in Settings</button>', gone)
         missing = self.draw(None, "schema.standardHere.boatKey=true;", backends=("boat",), boat="missing on this machine: ssh")["gsm8k boat"]
         self.assertIn('<span class="nb-error">missing on this machine: ssh</span>', missing)   # not a key: nothing in Settings fixes it
         self.assertNotIn("std-boat-key", missing)

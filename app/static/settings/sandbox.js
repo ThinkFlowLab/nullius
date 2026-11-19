@@ -53,7 +53,11 @@
       section.querySelectorAll('button').forEach(b => { b.disabled = false; });
     }
   };
-  if (edit) edit.addEventListener('click', () => { editing = true; render(); form.querySelector('input').focus(); });
+  const open = () => { editing = true; render(); form.querySelector('input').focus(); };
+  if (edit) edit.addEventListener('click', open);
+  // #sandbox-boat-key (the builder's link when Boat has no key) opens the key's form, as a provider's field does
+  const fromHash = () => { if (form && location.hash === '#sandbox-boat-key') open(); };
+  window.addEventListener('hashchange', fromHash);
   if (cancel) cancel.addEventListener('click', () => { form.reset(); editing = false; render(); edit.focus(); });
   if (form) form.addEventListener('submit', e => { e.preventDefault(); change('save'); });
   if (remove) remove.addEventListener('click', () => asking(removeAsk.hidden));
@@ -65,4 +69,5 @@
   const ask = () => { if (!asked && !section.hidden) load(); };
   new MutationObserver(ask).observe(section, {attributes: true, attributeFilter: ['hidden']});
   ask();
+  fromHash();
 })();
