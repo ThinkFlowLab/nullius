@@ -351,4 +351,6 @@ class StopRuleOfTheRound(LoopCase):
         r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
         self.assertNotEqual(r.code, 0)
         self.assertIn("stop rule", r.err)
+        self.assertIn("keep this loop folder as it is and start a new loop folder", r.err)
+        self.assertNotIn("loop.py read", r.err)
         self.assertFalse(os.path.exists(self.round_file("result.json")))

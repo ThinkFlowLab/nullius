@@ -318,6 +318,16 @@ class NoSource(LoopCase):
         self.assertNotEqual(r.code, 0)
         self.assertIn("source", r.err)
 
+    def test_stop_two_names_the_missing_checkout_before_it_reads_the_trial_job(self) -> None:
+        run_dir = healthy(self.jobs, "run", "alpha")
+        self.set_adapter(self.adapter_without_source({}))
+        self.read_ok(run_dir, None)
+        self.classify_ok()
+        r = run(["decide", "--loop", self.loop, "--stop", "2", "--trial-job", os.path.join(self.jobs, "no-such-job"),
+                 "--code-ref", "HEAD"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("decide --stop 2 works on the agent's code, and adapter.json has no source", r.err)
+
     def test_a_command_on_the_code_needs_the_checkout(self) -> None:
         run_dir = healthy(self.jobs, "run", "alpha")
         data = self.adapter_without_source({"test": "pytest {worktree}"})
