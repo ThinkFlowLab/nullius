@@ -893,18 +893,28 @@ class LaunchesPage(unittest.TestCase):
     def test_a_blank_name_is_a_new_random_workspace_though_one_holds_the_launch(self):
         before = {w.name for w in workspace.list_all(self.home)}
         row = self.rows()[f"run:{self.ex.id}"]                                              # every workspace holds it
-        self.assertIn('class="icon-btn launch-add-btn" aria-haspopup="dialog" aria-label="Add launch r1-* to a workspace" title="Add to workspace"><svg class="ic"><use href="#i-ws-add"/>', row)
-        self.assertIn('<select name="workspace"><option value="">New workspace…</option></select>', row)
+        self.assertIn(f'class="icon-btn launch-add-btn" aria-haspopup="dialog" aria-label="Add launch r1-* to a workspace" title="Add to workspace" data-add="/launch/run:{self.ex.id}/add" data-title="r1-*"><svg class="ic"><use href="#i-ws-add"/>', row)
         self.post(f"/launch/run:{self.ex.id}/add", workspace="", label=" ")
         (new,) = [w for w in workspace.list_all(self.home) if w.name not in before]
         self.assertEqual((new.label, new.roots), (new.name, [self.ex.jobs]))
         self.assertRegex(new.name, r"^[a-z]+-[a-z]+$")
 
+    def test_the_add_dialog_is_drawn_once_for_the_page(self):
+        orphan = self.record("r3")
+        html, rows = self.get("/launches").get_data(as_text=True), self.rows()
+        wss = workspace.list_all(self.home)
+        self.assertEqual((html.count('<template class="launch-add">'), html.count('<select name="workspace">')), (1, 1))
+        self.assertFalse(any("<select" in r or "launch-add\"" in r for r in rows.values()))   # no row carries its own copy
+        select = html.split('<select name="workspace">', 1)[1].split("</select>", 1)[0]
+        self.assertEqual(re.findall(r'<option value="([^"]*)"', select), [w.name for w in wss] + [""])   # every workspace; the row's are dropped as it opens
+        self.assertIn(f'data-add="/launch/run:{orphan.id}/add" data-title="r3-*"', rows[f"run:{orphan.id}"])
+        self.assertEqual(re.search(r'data-f-ws="([^"]*)"', rows[f"run:{self.ex.id}"]).group(1).split("\n"), [w.name for w in wss])   # what it drops
+
     def test_add_with_no_workspace_at_all(self):
         web.shared.close_workspace()
         for w in workspace.list_all(self.home):
             workspace.delete(self.home, w.name)
-        self.assertIn('<select name="workspace"><option value="">New workspace…</option></select>', self.rows()[f"run:{self.ex.id}"])
+        self.assertIn('<select name="workspace"><option value="">New workspace…</option></select>', self.get("/launches").get_data(as_text=True))
         self.post(f"/launch/run:{self.ex.id}/add", workspace="")
         (new,) = workspace.list_all(self.home)
         self.assertEqual((new.roots, web.shared.STATE["workspace"].name), ([self.ex.jobs], new.name))
