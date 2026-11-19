@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='workspaces/workspaces.css') }}">
 <script src="{{ url_for('static', filename='tables.js') }}"></script>{% endblock %}
 {#- A workspace's row: the open one marked, what its search reads. #}
-{% macro ws_tr(ws) %} class="{{ 'ws-current' if workspace and ws.name == workspace.name }}" data-ws="{{ ws.name }}" data-search="{{ ws.label }} {{ ws.name }}" data-holder{% endmacro %}
+{% macro ws_tr(ws) %} class="{{ 'ws-current' if workspace and ws.name == workspace.name }}" data-ws="{{ ws.name }}" data-search="{{ ws.label }} {{ ws.name }}"{% endmacro %}
 
 {% block body %}
 {% set actions %}<a class="btn sm" href="{{ url_for('import_page', new=1) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New workspace</a>{% endset %}
@@ -20,7 +20,7 @@
                dict(key='checks', label='Checks', type='num'), dict(key='opened', label='Last opened', type='num', align='left'),
                dict(key='launches', label='Launches', type='num', align='right'), dict(key='roots', label='Roots', type='num', align='right'), dict(key='actions', label='Actions', blank=true)] %}
 {% call(ws, c) table('workspaces', cols, workspaces, ws_tr, class='ws-table', search='Search by name', noun='workspaces') %}
-    {%- set current = workspace and ws.name == workspace.name %}{% set rs = roots[ws.name] %}{% set clash = labels.count(ws.label) > 1 %}
+    {%- set current = workspace and ws.name == workspace.name %}{% set clash = labels.count(ws.label) > 1 %}
     {%- if c.key == 'open' %}{% call cell(c) %}{% if current %}<span class="ok" role="img" aria-label="Open" title="Open">●</span>{% endif %}{% endcall %}
     {%- elif c.key == 'name' %}{% call cell(c, sort=ws.label, class='ws-name') %}
 
@@ -39,54 +39,40 @@
     {%- elif c.key == 'opened' %}{% call cell(c, sort=ws.opened[:19]|replace('-', '')|replace(':', '')|replace('T', '') or 0, class='mono faint nowrap') %}{{ ws.opened[:16]|replace('T', ' ') }}{% endcall %}
     {%- elif c.key == 'launches' %}{% call cell(c) %}{% set n = n_launches[ws.name] %}{% if n %}<a class="btn ghost sm count-btn" href="{{ url_for('launches_page', ws=ws.name) }}" aria-label="Launches of {{ ws.label }}: {{ n }}" title="Launches of {{ ws.label }}"><svg class="ic" aria-hidden="true"><use href="#i-launches"/></svg>{{ n }}</a>
       {%- else %}{{ greyed('Launches of ' ~ ws.label ~ ': 0', '', 'No launches in ' ~ ws.label, 'none-' ~ ws.name, icon='launches', class='btn ghost sm count-btn', text='0') }}{% endif %}{% endcall %}
-    {%- elif c.key == 'roots' %}{% call cell(c, sort=rs|length) %}
-        <button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="ws-roots" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ rs|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ rs|length }}</button>
-        <template class="ws-roots">
-          <div class="std-how-head"><h2 id="ws-dialog-h"{% if clash %} title="{{ ws.name }}"{% endif %}>Roots of {{ ws.label }}</h2>
-            <a class="btn sm" href="{{ url_for('import_page', into=ws.name) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a root</a></div>
-          <ul class="ws-root-list">
-            {% for r in rs %}
-            <li data-holder><span class="mono">{{ r.path }}</span>
-              <span class="ws-root-acts">
-                <button type="button" class="icon-btn" data-ask="ask-unlink" aria-label="Unlink {{ r.path }}" title="Unlink from this workspace"><svg class="ic"><use href="#i-unlink"/></svg></button>
-                {%- if not r.why %}<button type="button" class="icon-btn danger" data-ask="{{ url_for('workspace_root_ask', name=ws.name, root=r.path) }}" aria-haspopup="dialog" aria-label="Delete folder {{ r.path }}" title="Delete folder"><svg class="ic"><use href="#i-trash"/></svg></button>
-                {%- else %}{{ greyed('Delete folder ' ~ r.path, 'Delete folder', r.why, 'why-' ~ ws.name ~ '-' ~ loop.index) }}{% endif %}
-              </span>
-              <template class="ask-unlink">
-                <div class="std-how-head"><h2 id="ws-dialog-h"{% if clash %} title="{{ ws.name }}"{% endif %}>Unlink a root of {{ ws.label }}</h2></div>
-                <form method="post" action="{{ url_for('workspace_unlink', name=ws.name) }}">
-                  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="root" value="{{ r.path }}">
-                  <p><span class="mono">{{ r.path }}</span> leaves {{ ws.label }}. Its files stay.</p>
-                  <div class="launch-delete-acts"><button type="button" class="btn ghost" data-back autofocus>Keep it</button><button type="submit" class="btn">Unlink</button></div>
-                </form>
-              </template>
-            </li>
-            {% else %}<li class="faint">No root.</li>{% endfor %}
-          </ul>
-        </template>
+    {%- elif c.key == 'roots' %}{% call cell(c, sort=ws.roots|length) %}
+        <button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="{{ url_for('workspace_roots', name=ws.name) }}" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ ws.roots|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ ws.roots|length }}</button>
       {% endcall %}
     {%- elif c.key == 'actions' %}{% call cell(c, class='acts-col') %}
-        <button type="button" class="icon-btn danger" data-ask="ws-ask-delete" aria-haspopup="dialog" aria-label="Delete workspace {{ ws.label }}" title="Delete workspace"><svg class="ic"><use href="#i-trash"/></svg></button>
-        <template class="ws-ask-delete">
-          <div class="std-how-head"><h2 id="ws-dialog-h">Delete workspace {{ ws.label }}</h2></div>
-          <form method="post" action="{{ url_for('workspace_delete', name=ws.name) }}">
-            <input type="hidden" name="csrf" value="{{ csrf }}">
-            <p>{% set n = n_judged[ws.name] %}{% if n %}Its judgements ({{ n }}) are deleted. {% endif %}Its run folders stay on disk.</p>
-            <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete workspace</button></div>
-          </form>
-        </template>
+        <button type="button" class="icon-btn danger" data-ask="ws-ask-delete" data-label="{{ ws.label }}" data-action="{{ url_for('workspace_delete', name=ws.name) }}" data-judged="{{ n_judged[ws.name] }}" aria-haspopup="dialog" aria-label="Delete workspace {{ ws.label }}" title="Delete workspace"><svg class="ic"><use href="#i-trash"/></svg></button>
       {% endcall %}
     {%- endif %}
 {% endcall %}
+{#- every row's Delete, filled from its button #}
+<template id="ws-ask-delete">
+  <div class="std-how-head"><h2 id="ws-dialog-h">Delete workspace </h2></div>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <p>Its run folders stay on disk.</p>
+    <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete workspace</button></div>
+  </form>
+</template>
 <dialog class="std-how launch-delete" id="ws-dialog" aria-labelledby="ws-dialog-h"></dialog>
 <script>
 (() => {
-  // One dialog: a [data-ask] button fills it from the template of that class in its [data-holder]. An ask
-  // opened inside it (a root's Unlink or Delete) goes back to what it replaced on Keep it.
+  // One dialog: a [data-ask] button fills it from the template of that class in its [data-holder], a row's
+  // Delete from the page's one template, the Roots from the server. An ask opened inside it (a root's Unlink
+  // or Delete) goes back to what it replaced on Keep it.
   const d = document.getElementById('ws-dialog');
   let opener = null, back = null;
   // a template of the page, or, for an address, the server's answer: what a Delete takes is worked out only now
   const content = async b => {
+    if (b.dataset.ask === 'ws-ask-delete') {
+      const c = document.getElementById('ws-ask-delete').content.cloneNode(true), n = +b.dataset.judged;
+      c.querySelector('h2').append(b.dataset.label);
+      c.querySelector('form').action = b.dataset.action;
+      if (n) c.querySelector('p').prepend(`Its judgements (${n}) are deleted. `);
+      return c;
+    }
     if (!b.dataset.ask.startsWith('/')) return b.closest('[data-holder]').querySelector('template.' + b.dataset.ask).content.cloneNode(true);
     const r = await nulliusFetch(b.dataset.ask);
     if (!r.ok) { b.title = await r.text(); return null; }
@@ -100,11 +86,23 @@
       back = {nodes, b};
       d.replaceChildren(c);
       d.querySelector('[autofocus]')?.focus();
+    } else if (b?.classList.contains('ws-roots-btn')) {   // the Roots: a skeleton until the server lists them
+      opener = b; back = null;
+      d.classList.add('wide');
+      d.setAttribute('aria-busy', 'true');
+      d.innerHTML = '<div class="page-skeleton" aria-hidden="true"><div class="skel skel-title"></div>' + '<div class="skel skel-line"></div>'.repeat(3) + '</div>';
+      d.showModal();
+      const r = await nulliusFetch(b.dataset.ask).catch(() => null), html = r?.ok ? await r.text().catch(() => null) : null;
+      if (opener !== b || !d.open) return;   // closed, or another opened, while it loaded
+      d.removeAttribute('aria-busy');
+      if (html !== null) d.replaceChildren(document.createRange().createContextualFragment(html));
+      else d.innerHTML = '<p id="ws-dialog-h">Could not load the roots. Close and try again.</p>';
+      d.querySelector('a[href], button:not([aria-disabled])')?.focus();
     } else if (b) {
       const c = await content(b);
       if (!c) return;
       opener = b; back = null;
-      d.classList.toggle('wide', b.dataset.ask === 'ws-roots');
+      d.classList.remove('wide');
       d.replaceChildren(c);
       d.showModal();
     } else if (e.target.closest('[data-back]') && back) {
