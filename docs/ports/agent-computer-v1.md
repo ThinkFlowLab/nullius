@@ -1,8 +1,17 @@
 # The computer port: `agent.computer/v1`
 
-A desktop the agent sees in screenshots and drives with pointer and keyboard actions. A desktop benchmark's runner serves one MCP server, `computer`, to the agent's session; its tools are the desktop's basic operations. The agent is a client alone. An agent with a driver of its own installs it with `upload` and `python` and sends its actions with `step`. Any other agent uses the pointer and keyboard tools. Every agent gets the same tool list.
+A desktop the agent sees in screenshots and drives with pointer and keyboard actions. A desktop benchmark's runner serves one MCP server, `computer`, to the agent's session; its tools are the desktop's basic operations. The agent is a client alone. Once the agent is given its task, it reaches the desktop through acting calls alone, and everything it learns of the desktop comes in an acting call's answer. One acting call is one step. An agent with a driver of its own uploads it and starts it with `prepare` before the task, and talks to it through a step's actions and files. Every agent gets the same tool list.
 
 Coordinates are pixels of the screen, from its top left corner. A result's text is JSON.
+
+## The window before the task
+
+| Rule | Detail |
+| --- | --- |
+| Opens | When the agent's session opens |
+| Closes | When the run sends the agent its task: Nullius tells the benchmark first, and the task waits until the window is closed. A session that starts with its task already given, such as a command that takes the prompt, has no window |
+| In it | `upload` and `prepare`, as often as needed, neither a step; `info` and `screenshot`. An acting call is refused and takes no step |
+| After it | `upload` and `prepare` are refused, with words that say the task has been given |
 
 ## Reading
 
@@ -10,13 +19,10 @@ None of these is a step.
 
 | Tool | Arguments | Result |
 | --- | --- | --- |
-| `info` | none | `{screen: [width, height], steps, steps_left, pause, python_seconds, password}` |
-| `screenshot` | none | An image: the screen as PNG, at its own size |
-| `read` | `path`, in the desktop | `{data}`: base64, or null when there is no such file. A file over 12 MiB is an error |
-| `python` | `code` | The desktop's reply, `{status, output, error, returncode}`; an error when it gave none within `python_seconds` |
-| `upload` | `path`, in the desktop; `data`, base64, at most 4 MiB a call; `append`, false (the default) to start the file and true to add to it; `sha256`, optional, the whole file's. With `sha256` and no `data`, the call takes the run's file of that `sha256` and starts the file; `append` is then refused | `{size}`: the file's size so far |
-
-`python` runs as the desktop's user, in the desktop's Python. It is for reading the desktop and for the agent's own programs there. A reply whose code failed, with its `returncode`, is the tool's result, as a shell's would be.
+| `info` | none | `{screen: [width, height], steps, steps_left, pause, password, folder}`. `folder`: a folder of the desktop that is the agent's own, made empty for the unit |
+| `screenshot` | none | The observation of the last step, as PNG. Before the first step, the picture the benchmark took at the start, before the window. It takes no new picture: two calls with no step between them return the same bytes |
+| `upload` | `path`, inside `folder` (absolute, or relative to it, with no `.` or `..` part); `data`, base64, at most 4 MiB a call; `append`, false (the default) to start the file and true to add to it; `sha256`, optional, the whole file's. With `sha256` and no `data`, the call takes the run's file of that `sha256` and starts the file; `append` is then refused | `{size}`: the file's size so far. In the window alone |
+| `prepare` | `actions`: a list of texts, each Python run in the desktop as a step's action is, with no pause after it (`WAIT` does nothing); `files`: as for `step` | `{files: {PATH: BASE64 or null}}`, once the actions have run. In the window alone; an action the desktop does not end in time is an error and stops it |
 
 ## Acting
 
@@ -30,12 +36,22 @@ One call is one step. Points use `x` and `y` in screenshot pixels at the screen'
 | `scroll` | `x`, `y`; `dy` and `dx`, each from -100 to 100 and default 0, in wheel clicks: `dy` down, `dx` right, negative the other way; at least one is not 0 | The wheel turned at the point |
 | `type` | `text` | The text typed key by key |
 | `key` | `keys`: a list pressed together, such as `["ctrl", "s"]` | The chord |
-| `wait` | none | No action, the pause alone |
-| `step` | `actions`: a list of texts, each Python run in the desktop with `pyautogui` and `time` imported, or `WAIT`; `response`, the agent's words, optional; `screenshot`, default false; `end`, optional: `done` or `fail` | The actions in order, as one step. An empty list is a step with no action. With `end`, the task then ends in that step, as by `done` or `fail` |
+| `wait` | none | No action, the pause alone: the way to look again, one step and a fresh observation |
+| `step` | `actions`: a list of texts, each Python run in the desktop with `pyautogui` and `time` imported, or `WAIT`; `response`, the agent's words, optional; `screenshot`, default false; `end`, optional: `done` or `fail`; `files`, optional: any number of paths inside `folder` | The actions in order, as one step. An empty list is a step with no action. With `end`, the task then ends in that step, as by `done` or `fail` |
 | `done` | `message`, optional | The task is complete |
 | `fail` | `reason`, optional | The task cannot be done |
 
-A call of `click`, `move`, `drag`, `scroll`, `type`, `key`, `wait` or `step` answers once its actions have run and their pauses have passed, with `{steps_left, done}`; `done` is true once the task takes no more calls. Each adds the screen as a PNG image; `step` adds it only when `screenshot` is true. `done` and `fail` return `{steps_left, done}` with no image as the benchmark takes them, before it runs them: the benchmark's loop asks for nothing after them. A `step` with `end` answers once its actions have run, with `done` true, and the benchmark then takes its end. `DONE` or `FAIL` among the actions is refused.
+A call of `click`, `move`, `drag`, `scroll`, `type`, `key`, `wait` or `step` answers once its actions have run and their pauses have passed, with `{steps_left, done}`; `done` is true once the task takes no more calls. Each adds the step's observation as a PNG image, the bytes `screenshot` returns afterwards; `step` adds it only when `screenshot` is true. `done` and `fail` return `{steps_left, done}` with no image as the benchmark takes them, before it runs them: the benchmark's loop asks for nothing after them. A `step` with `end` answers once its actions have run, with `done` true, and the benchmark then takes its end. `DONE` or `FAIL` among the actions is refused.
+
+A step's `files` are read once its actions have run and their pauses have passed: the answer is `{steps_left, done, files: {PATH: BASE64 or null}}`, null for a file that is not there. A file over 12 MiB, or one the desktop cannot read, is `{PATH: {error}}` for that file alone; the step has run all the same. A path outside `folder` refuses the call at once: it takes no step and never reaches the desktop. A whole answer is at most 24 MiB: the files are taken in their order while the answer holds them, with its image, and each file that would take it past 24 MiB is `{PATH: {error}}`. The same holds for `prepare`.
+
+## The observation
+
+| Rule | Detail |
+| --- | --- |
+| When | Fixed as a step that ran an action ends. A step that ran no action leaves it as it was |
+| Which | The benchmark's own: for a loop that hands its agent an observation, the screenshot it hands for the next decision, with no capture added. For a loop that hands none, one picture taken once the step's last pause has passed |
+| Between two steps | Nothing else of the desktop is shown. What `prepare` changed on the screen shows in the first step's observation |
 
 ## Rules
 
@@ -43,18 +59,25 @@ A call of `click`, `move`, `drag`, `scroll`, `type`, `key`, `wait` or `step` ans
 | --- | --- |
 | A step | One call of an acting tool; the benchmark's own loop counts these calls |
 | Calls | Each call is checked against its tool's schema in `tools/list`, an upload's base64 decoded, before it waits for the desktop. A schema lists every argument its tool takes, and its patterns read alike in any engine. A call that does not hold is refused at once: it takes no step and never reaches the desktop. A message is JSON-RPC 2.0, one a line, at most 24 MiB with its newline; `NaN` and `Infinity` are no JSON, and any other message is refused. Every answer is at most 24 MiB too |
-| The limits | In `initialize`'s `instructions`, in `info`, and as `steps_left` in every acting result |
+| The limits | `steps`, `steps_left` and `pause`, in `initialize`'s `instructions`, in `info`, and as `steps_left` in every acting result. A `prepare` action is bounded as a step's action is |
 | The step budget | [OSWorld1's `max_steps`](../benchmarks/supported/osworld1.md#options). The benchmark's loop stops at its budget. After the last step, every tool but `info` answers with an error, and the benchmark evaluates the desktop as it is. An acting call sent while every step is taken is refused at once |
 | Model calls | A benchmark may bound the agent's model calls at its step budget |
 | The turn's end | A turn that ends with neither `done` nor `fail` ends the task, and the benchmark evaluates the desktop as it is. The driver tells the runner in one message. That message ends the wait for the agent's next call. The actions of a step not yet run are not run, and that call is refused, its `end` with it. A `done` or `fail` taken before the message still reaches the benchmark. Each step left then passes with no action. The benchmark's loop counts those steps up to its budget, and its own records list no action for them. The call log holds the agent's own steps |
-| Input | Pointer and keyboard input goes through the acting tools. Input sent through `python` is outside the port |
+| Input | Pointer and keyboard input goes through the acting tools. Input sent by `prepare` is outside the port |
 | One at a time | The server runs one desktop operation at a time, in the order the calls arrive. A call sent during a step waits for it |
 | Before the desktop is ready | `initialize`, `tools/list` and `info` answer at once; any other call waits. The session starts once the desktop is ready |
 | Errors | An error (`isError`) is a call refused, or a call the desktop could not run or did not answer in time; it has the desktop's words. The agent may call again |
 | Uploads | By content: `upload` takes the bytes, in base64. A file sent once for a run: when `upload` names the file's `sha256` and the run already holds that content, the runner puts it into this unit's desktop at that call, and `data` may be left out. The run keeps a file once chunks sent from its start, in one unit, hash to the `sha256` given with the first, up to 256 MiB. Those chunks are the unit's own: they are dropped when the file starts again and at the unit's end. Nothing else passes from one unit to the next |
 | Connections | The server accepts every connection of the unit's session and keeps the task's steps and waiting calls outside them. A session may connect again; the task goes on when a connection closes during a step. The turn's end ends the task: Nullius sends it when the agent's process is gone or its time is up. Each connection's answers are written apart: a client that stops reading holds up no other call, and once 48 MiB of its answers wait, its connection is closed. A connection whose input has ended is closed once its calls are answered |
-| The record | Every tool call goes to the unit's record as one line, `{tool, start, end, isError}`, beside the benchmark's own records; an answer over 24 MiB is an error. No argument and no result is recorded |
+| The record | Every tool call goes to the unit's record as one line, `{tool, start, end, isError}`, beside the benchmark's own records; an answer over 24 MiB is an error. No argument and no result is recorded. The benchmark's records list every action's text: a step's actions pass through its loop; a `prepare` call's go to a record of their own, `{start, actions, files}` per call, written before they run |
 | More tools | A benchmark may add tools, such as a question to its user. The agent finds them in `tools/list` |
+
+## Known limits
+
+- Inside the desktop, the agent's code can read and write wherever the desktop's user can and can create links outside `folder`; `folder` bounds the names of paths passed to `upload` and `files`, and the benchmark's records hold the code of every step action and `prepare` call.
+- An action's code may start a process that goes on after its step, as an OSWorld action may. The agent learns what it did from a later step's answer alone.
+- In the window the desktop already holds the task's files and windows. An agent that guessed its task from them could work there; the benchmark's records list every `prepare` call's code.
+- An agent that is not sandboxed (the local backend) could reach the machine beside the port. A comparison that has to be trusted runs on the container backend.
 
 ## For a benchmark's runner
 
@@ -62,12 +85,13 @@ The shared code is `app/nullius/standard/computer_port.py`, with the standard li
 
 | Piece | What the runner gives or does |
 | --- | --- |
-| `Desktop` | Five methods over its desktop: `python(code)`, `upload(path, data)`, `read(path)`, `capture()`, `password()` |
-| `Bridge` | Handed to the benchmark's own loop as its agent: `reset` does nothing, and each `predict` returns the actions of the agent's next acting call. Given the loop's step budget and pause, the screen's size and `python_seconds`; `finish` once the loop has returned |
+| `Desktop` | Five methods over its desktop: `python(code)`, `upload(path, data)`, `read(path)`, `capture()`, `password()`; and optionally `observation()`: the screenshot the benchmark's loop took as the step it just ran ended. Without it, the bridge takes one by `capture()` |
+| `Bridge` | Handed to the benchmark's own loop as its agent: `reset` does nothing, and each `predict` returns the actions of the agent's next acting call. Given the loop's step budget and pause, the screen's size and `folder`, an absolute path in the desktop that the bridge makes empty at the loop's first `predict`; `window=True` when the benchmark's driver is told the task is given (else the session has no window); `prepared`, the file of the `prepare` record; `finish` once the loop has returned |
 | `Server` | The MCP server at a Unix socket in a folder of the user's alone, with the path of the call log |
 | `Held` | The run's folder for files sent once, when the runner keeps one. A file is kept through a temporary file of its own, and read only when it is no link |
 | The session's server | Setup's `mcp` entry runs `computer_pipe.py SOCKET`, which joins the session's stdio to the socket |
-| `ready`, `lifeline`, `Stop` | The ready file, written at the loop's first `predict`; the lifeline from the driver, whose line `turn-end` is the turn's end and whose close is a stop; the one stop, whose last resort gives its own callback half a second before it exits |
+| `ready`, `lifeline`, `Stop` | The ready file, written at the loop's first `predict`; the lifeline from the driver, whose line `turn-end` is the turn's end, whose line `task-given` closes the window, and whose close is a stop; the one stop, whose last resort gives its own callback half a second before it exits |
+| The window's end | `driver.task_given` in the definition: Nullius sends `task_given` before the agent's task, and the driver closes the window (`Bridge.close_window`, or the lifeline's line `task-given`) before it answers |
 
 ## The kit
 
@@ -86,11 +110,11 @@ The shared code is `app/nullius/standard/computer_port.py`, with the standard li
 
 `see` shows three distinct common nouns drawn at 63 pixels tall, with gaps between words. `scroll` shows two at the list's end, below its initial view, at 56 pixels tall. Both sample from 96 everyday nouns chosen to avoid screen, desktop and action vocabulary and the fixture's labels. The verdict reads whole vocabulary words in the final message, ignoring case. The drawn words must occur together in the shown order at least once, with no other vocabulary word inside that sequence. Prose and punctuation may separate them. Repeated answers and vocabulary words before or after the sequence are accepted, up to twelve vocabulary occurrences in the whole message, counting repeats. `type` tests typing in a field that already has the focus; no pointing is needed. `limit` needs at least one button pressed within the two-step budget, no input after the last step and no acting call once the steps are used up.
 
-Every check also fails when a pointer or key event came outside an acting call: input sent through `python` fails it. Each check has 8 steps (2 for `limit` and `batch`), a pause of 1 s, 90 s for one `python` call and 600 s for the agent's turn.
+Every check also fails when a pointer or key event came outside an acting call. Each check has 8 steps (2 for `limit` and `batch`), a pause of 1 s, 90 s for one action and 600 s for the agent's turn.
 
 | Piece | Where |
 | --- | --- |
-| The desktop | A container of the kit's image, `desktop.Dockerfile` on Nullius's base image, built the first time a unit needs it: an X display at 1920 by 1080, a window manager, a session bus, the accessibility bus, Python with Tk, `pyautogui` and Pillow. The agent's Python and its actions run as its user; the kit's fixture runs as another, its log out of that user's reach |
+| The desktop | A container of the kit's image, `desktop.Dockerfile` on Nullius's base image, built the first time a unit needs it: an X display at 1920 by 1080, a window manager, a session bus, the accessibility bus, Python with Tk, `pyautogui` and Pillow. The agent's actions run as its user; the kit's fixture runs as another, its log out of that user's reach |
 | The server and the loop | In the kit's driver: the port's server over the unit's desktop, and a loop of the kit's own that runs each step's actions and waits the pause |
 | What a stop leaves | A unit that never reaches its score is let go by the next unit or by the driver's end; a reaper the driver starts removes the containers and sockets of a driver that was killed |
 | The controls | The null control passes no check; the reference makes the right calls through the unit's own server, reads the words and their gaps from the screenshot it gets, and passes all eight |

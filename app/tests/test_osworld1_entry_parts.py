@@ -640,7 +640,8 @@ class FakeEnv:
         self.seen, self.files, self.close_seconds = [], {}, close_seconds
         self.client_password = "password"
         self.controller = types.SimpleNamespace(
-            execute_python_command=lambda code: self.seen.append(("python", code)) or {"status": "success"},
+            execute_python_command=lambda code: self.seen.append(("python", code)) or (
+                {"status": "success", "output": "made\n"} if "os.makedirs(p, 0o700)" in code else {"status": "success"}),
             get_file=lambda path: self.files.get(path),
             get_screenshot=lambda: b"png")
         self.setup_controller = types.SimpleNamespace(_upload_file_setup=self.upload)

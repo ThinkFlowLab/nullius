@@ -51,8 +51,9 @@ fixture = _load("nullius_kit_fixture", "fixture.py")
 
 UNITS = checks.CHECKS
 PAUSE = 1.0                                  # after each action
-PYTHON_SECONDS = 90                          # one python call's reply
+PYTHON_SECONDS = 90                          # one desktop call's reply
 AGENT_SECONDS = 600                          # the agent's turn
+FOLDER = "/tmp/agent"                        # the agent's own folder in the desktop
 LOOP_SECONDS = PYTHON_SECONDS + desktop.SETTLE + PAUSE + 30     # the loop's end, once the turn has ended
 USE = "Use the tools of the MCP server named computer, given to this session: they show and drive a desktop. "
 DONE = " Then reply with the word done."
@@ -196,7 +197,7 @@ class KitServer(port.Server):
             if self.bridge.booked >= self.bridge.steps:
                 self.bridge.past += 1
             try:
-                port.checked(call, self.bridge.screen)
+                port.checked(call, self.bridge.screen, self.bridge.folder)
             except port.Refused as e:
                 call.answer(error=str(e))
                 return
@@ -232,7 +233,7 @@ class Unit:
         REAPER.tell(f"+folder {folder}")             # named before it is made
         self.folder = folder
         os.mkdir(folder, 0o700)
-        self.bridge = KitBridge(KitDesktop(self.desktop), self.steps, PAUSE, desktop.SCREEN, PYTHON_SECONDS)
+        self.bridge = KitBridge(KitDesktop(self.desktop), self.steps, PAUSE, desktop.SCREEN, FOLDER)
         self.server = KitServer(self.bridge, self.socket(), log=self.log)
         self.loop = threading.Thread(target=self.run_loop, name=f"kit-loop-{self.unit}", daemon=True)
         self.loop.start()

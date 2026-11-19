@@ -163,7 +163,7 @@ class Definition(unittest.TestCase):
     def test_the_pipe_from_the_kits_folder_joins_stdio_to_the_socket(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
             path = os.path.join(tmp, "s")
-            server = port.Server(port.Bridge(FakeDesktop("d", {}), 1, 0, (1920, 1080), 1), path)
+            server = port.Server(port.Bridge(FakeDesktop("d", {}), 1, 0, (1920, 1080), driver.FOLDER), path)
             try:
                 p = subprocess.run([sys.executable, os.path.join(KIT, "pipe.py"), path], capture_output=True, timeout=30,
                                    input=(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) + "\n").encode())
@@ -176,7 +176,8 @@ class Definition(unittest.TestCase):
 # -- the driver over a fake desktop -------------------------------------------------------------------------------------
 class FakeDesktop:
     """A desktop with no container: the fixture's boxes, and the input each click, write or key of an action (or
-    of a python call) would send, logged at the time it runs, as the fixture would."""
+    of the desktop's python) would send, logged at the time it runs, as the fixture would. The agent's folder is made
+    as the bridge asks."""
     made = []
 
     def __init__(self, name, values):
@@ -211,6 +212,8 @@ class FakeDesktop:
         return {"start": start, "end": self.actions[-1]["end"], "reply": {"status": "success", "returncode": 0}}
 
     def python(self, code, seconds=None):
+        if code == port.MAKE_FOLDER.format(folder=driver.FOLDER):
+            return {"status": "success", "output": "made\n", "error": "", "returncode": 0}
         self._input(code)
         return {"status": "success", "output": "", "error": "", "returncode": 0}
 
@@ -254,7 +257,7 @@ class ScoreRecords(unittest.TestCase):
         u.expected = {"words": ["ACORN", "BASKET", "CANDLE"]}
         d = u.desktop = FakeDesktop("fake", u.values)
         u.boxes = d.boxes
-        u.bridge = driver.KitBridge(driver.KitDesktop(d), u.steps, 0, desktop.SCREEN, 1)
+        u.bridge = driver.KitBridge(driver.KitDesktop(d), u.steps, 0, desktop.SCREEN, driver.FOLDER)
         driver.OPEN["see"] = u
         return ws, u, d
 
@@ -449,16 +452,6 @@ class Wiring(FakeUnits):
                 self.assertEqual((scored["detail"]["steps_used"], scored["detail"]["actions"]), (1, 3))
                 self.assertEqual(u.final, "typed")
 
-    def test_a_client_that_types_through_python_fails(self):
-        ws, s = self.unit("type")
-        u = driver.OPEN["type"]
-        c = driver.Client(s["mcp"][0]["args"][0])
-        c.call("python", {"code": f"import pyautogui; pyautogui.write({u.expected['word']!r}); pyautogui.hotkey('enter')"})
-        c.close()
-        got = driver.score("type", ws, [], "done")
-        self.assertFalse(got["passed"])
-        self.assertIn("outside every action", got["detail"]["why"])
-
     def test_a_client_that_acts_past_its_budget_fails(self):
         ws, s = self.unit("limit")
         u = driver.OPEN["limit"]
@@ -618,7 +611,7 @@ class Admission(unittest.TestCase):
         u.desktop = FakeDesktop("fake", {"labels": ["OCEAN"]})
         u.expected = {"target": "OCEAN", "labels": ["OCEAN"]}
         u.steps = steps
-        u.bridge = driver.KitBridge(driver.KitDesktop(u.desktop), steps, 0, desktop.SCREEN, 1)
+        u.bridge = driver.KitBridge(driver.KitDesktop(u.desktop), steps, 0, desktop.SCREEN, driver.FOLDER)
         s = driver.KitServer.__new__(driver.KitServer)
         s._state(u.bridge, "/unused/socket", None)
         calls = []
@@ -632,13 +625,13 @@ class Admission(unittest.TestCase):
         entered, release = threading.Event(), threading.Event()
         original, seen, wires = port.checked, [], []
 
-        def checking(call, screen):
+        def checking(call, screen, folder):
             if call.args.get("x") == "bad":
                 seen.append(call)
                 entered.set()
                 if not release.wait(5):
                     raise RuntimeError("validation was not released")
-            return original(call, screen)
+            return original(call, screen, folder)
 
         t = threading.Thread(target=lambda: wires.append(send(s, "click", {"x": "bad", "y": 150})), daemon=True)
         with mock.patch.object(port, "checked", side_effect=checking):
@@ -669,12 +662,12 @@ class Admission(unittest.TestCase):
             first = send(s, "click", {"x": 150, "y": 150})
             _, actions = u.bridge.predict("", None)
 
-            def checking(call, screen):
+            def checking(call, screen, folder):
                 checked.append(call)
                 entered.set()
                 if not release.wait(5):
                     raise RuntimeError("validation was not released")
-                return original(call, screen)
+                return original(call, screen, folder)
 
             t = threading.Thread(target=lambda: wires.append(send(s, "click", {"x": 150, "y": 150})), daemon=True)
             with mock.patch.object(port, "checked", side_effect=checking):
@@ -831,22 +824,23 @@ class EarnedPasses(FakeUnits):
         self.assertEqual(got["detail"]["steps_used"], 2)
 
     def test_the_reference_reads_the_words_from_the_screenshot_and_fails_without_one(self):
-        ws, s = self.unit("see")
-        fake, text = FakeDesktop.made[-1], " ".join(driver.OPEN["see"].expected["words"])
-        fake.capture = lambda: _png(text, driver.fixture.SEE_SCALE)
-        self.assertEqual(driver.oracle("see", ws)["answer"], text)
+        drawn = lambda fake: _png(" ".join(fake.values["words"]), driver.fixture.SEE_SCALE)
+        with mock.patch.object(FakeDesktop, "capture", drawn):          # the start picture, taken as the unit starts
+            ws, s = self.unit("see")
+            text = " ".join(driver.OPEN["see"].expected["words"])
+            self.assertEqual(driver.oracle("see", ws)["answer"], text)
         self.assertTrue(driver.score("see", ws, [], text)["passed"])
-        ws, s = self.unit("see")
 
-        def broken():
+        def broken(fake):
             raise desktop.DesktopError("the capture failed")
-        FakeDesktop.made[-1].capture = broken
-        with self.assertRaises(driver.ReferenceFailed):
-            driver.oracle("see", ws)
-        ws, s = self.unit("see")
-        FakeDesktop.made[-1].capture = lambda: _png("ACORN", 9)           # a screen with only one word
-        with self.assertRaises(driver.ReferenceFailed):
-            driver.oracle("see", ws)
+        with mock.patch.object(FakeDesktop, "capture", broken):
+            ws, s = self.unit("see")
+            with self.assertRaises(driver.ReferenceFailed):
+                driver.oracle("see", ws)
+        with mock.patch.object(FakeDesktop, "capture", lambda fake: _png("ACORN", 9)):   # a screen with only one word
+            ws, s = self.unit("see")
+            with self.assertRaises(driver.ReferenceFailed):
+                driver.oracle("see", ws)
 
 
 class Shutdown(unittest.TestCase):
@@ -1257,17 +1251,7 @@ class DockerKit(unittest.TestCase):
                 ws, _ = self.unit(unit)
                 self.assertFalse(driver.score(unit, ws, [], "")["passed"])
 
-    def test_scripted_clients_that_type_through_python_or_act_past_their_budget_fail(self):
-        ws, s = self.unit("type")
-        u = driver.OPEN["type"]
-        c = driver.Client(s["mcp"][0]["args"][0])
-        x, y = driver.centre(u.boxes["field"])
-        c.call("python", {"code": f"import pyautogui\npyautogui.click({x}, {y})\npyautogui.write({u.expected['word']!r})\n"
-                                  "pyautogui.press('enter')"})
-        c.close()
-        got = driver.score("type", ws, [], "done")
-        self.assertFalse(got["passed"])
-        self.assertIn("outside every action", got["detail"]["why"])
+    def test_a_scripted_client_that_acts_past_its_budget_fails(self):
         ws, s = self.unit("limit")
         u = driver.OPEN["limit"]
         c = driver.Client(s["mcp"][0]["args"][0])
