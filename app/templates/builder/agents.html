@@ -3,8 +3,8 @@
 {% from '_cards.html' import cards %}
 {% set noun = 'agents' if kind == 'agent' else 'capabilities' %}
 {% set cols = [dict(key='icon', label='Logo', card='icon', class='std-mark small'), dict(key='title', label='Name', card='title'),
-               dict(key='protocol', label='Protocol', card='tag', class='std-tag', filter='pills'), dict(key='published', label='Setup', card='tag', class='std-tag'),
-               dict(key='fit', label='Fit', filter='pills', all='Any'), dict(key='from', label='From', card='meta'),
+               dict(key='protocol', label='Protocol', card='tag', class='std-tag'), dict(key='published', label='Setup', card='tag', class='std-tag'),
+               dict(key='fit', label='Fit'), dict(key='from', label='From', card='meta'),
                dict(key='proves', label='Proves'), dict(key='needs', label='Proven', card='badge', class='std-tag'),
                dict(key='ticks', label='Checks', card='badge', class='nb-tick'), dict(key='alert', label='Why not', card='alert')] %}
 {{ cards('nb-agents', cols, items, search='Search ' ~ noun, choices=choices, empty='No ' ~ kind ~ ' matches.', noun=noun) }}

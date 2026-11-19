@@ -58,10 +58,13 @@ class AgentGrid(unittest.TestCase):
         self.assertIn(">Lacks computer</div>", cards["goose"])
         self.assertIn('<span class="std-tag" title="', cards["codex@2.2.2"])                     # the ports it proved that it needs
         self.assertIn(">Computer use</span>", cards["codex@2.2.2"])
-        pills = lambda col: re.findall(r'class="filter-pill"[^>]*>([^<]*)<', html[html.index(f'data-pills="{col}"'):].split("</div>")[0])
-        self.assertEqual(pills("protocol"), ["All", "ACP", "A command", "Its own script"])
-        self.assertEqual(pills("fit"), ["Any", "Can run it", "Cannot"])
+        self.assertNotIn("data-pills", html)                                                        # every filter in the one Filter menu
         menu = unescape(html[html.index('data-tools="filter"'):])
+        values = lambda col: re.findall(r'data-value="[^"]*" checked> ([^<]*)<', menu[menu.index(f'data-filter-menu="{col}"'):].split("</fieldset>")[0])
+        self.assertEqual(values("protocol"), ["ACP", "A command", "Its own script"])               # every value on: any protocol
+        self.assertEqual(values("fit"), ["Can run it", "Cannot"])
+        self.assertLess(menu.index('data-filter-menu="protocol"'), menu.index('data-filter-menu="fit"'))
+        self.assertLess(menu.index('data-filter-menu="fit"'), menu.index('data-filter-menu="from"'))
         self.assertIn("> Bundled</label><label><input type=\"checkbox\" data-value=\"benchmark\" checked> OSWorld1's own</label>"
                       "<label><input type=\"checkbox\" data-value=\"elsewhere\" checked> Other benchmarks' agents", menu)
         self.assertIn('data-filter-menu="proves"', menu)
