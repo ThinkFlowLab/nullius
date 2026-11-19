@@ -132,12 +132,26 @@ def _record(ex, merged=()) -> tuple:
 def _every() -> tuple:
     """Every launch Nullius made, newest first: every run record, grouped as
     the Runs page groups them, each record's jobs read without their trials,
-    and a merge of them written beside them. Returns (job id -> job, launches)."""
+    and a merge of them written beside them. Returns (job id -> job, launches).
+    Kept while the records' states and their folders' heads are unchanged and
+    every job had ended (``workspace.heads``)."""
     recs = list(execution.EXECUTIONS.values())
+    key = (tuple((e.id, e.state, e.jobs) for e in recs), workspace.heads(dict.fromkeys(e.jobs for e in recs)))
+    last = _EVERY.get("last")
+    if last and last[0] == key:
+        return last[1]
     named = {str(x.get("name")) for e in recs for x in e.plan.jobs}
     jobs = [parse.parse_job(d, trials=False) for d in parse.find_job_dirs([e.jobs for e in recs if os.path.isdir(e.jobs)])]
     jobs = [j for j in jobs if j.job_id in named or named & set(getattr(j, "merged_from", []))]
-    return {j.job_id: j for j in jobs}, launches.group(jobs, {e.id: _record(e) for e in recs})
+    every = {j.job_id: j for j in jobs}, launches.group(jobs, {e.id: _record(e) for e in recs})
+    if all(j.state == "finished" for j in jobs):
+        _EVERY["last"] = (key, every)
+    else:
+        _EVERY.pop("last", None)
+    return every
+
+
+_EVERY: dict = {}       # "last": (key, _every()) of the last call that found every job ended
 
 
 def _tally(g, by_id) -> dict:
