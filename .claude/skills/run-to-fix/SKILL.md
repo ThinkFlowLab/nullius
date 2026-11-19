@@ -124,11 +124,11 @@ This writes `trial-tasks.txt`, runs `commands.build` and writes `build.json`, an
 python3 L decide --loop DIR --stop 2 --trial-job JOB --code-ref COMMIT [--trial-cost-usd X]
 ```
 
-`--code-ref` is the commit the person states the trial run ran; a job does not record its code, so the page shows it
-as the person's statement, and `decide` refuses any commit other than the one `select` chose. The job must hold only
-the selected tasks, every target, and the selection's count of trials for each task. When some of its trials report no
-cost, the money it spent is unknown: `decide` refuses it until the person gives the run's whole cost with
-`--trial-cost-usd`, at least what its trials record.
+`--code-ref` is the commit the person states the trial run ran. A job does not record its code; the page shows the
+commit as the person's statement, and `decide` refuses any commit other than the one `select` chose. The job must hold
+only the selected tasks, every target, and the selection's count of trials for each task. When some of its trials
+report no cost, `decide` refuses the run until the person gives its whole cost with `--trial-cost-usd`, at least what
+its trials record.
 
 **Stop 2.** Show the person `decision-2.md`. For a kept `report` candidate it says that this version does not read the
 agent's report in the new run. The page shows the build, the targets' trials before and in every trial run of this
