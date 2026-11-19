@@ -39,6 +39,7 @@ tr:has([data-pick]:disabled) .row-name > :first-child { opacity: .55; }
 .bench-card:has(> .bench-card-title [data-pick]:disabled):hover { border-color: var(--border-soft); }
 .bench-card :is(input, button, .btn, [title]) { position: relative; z-index: 1; }
 .bench-card [title]:not(input, button, .btn) { cursor: pointer; }   /* raised for its tooltip, it still opens the card */
+.bench-card .card-link { position: static; z-index: auto; }   /* with a tooltip too: its ::after stretches over the card, not round its name */
 .bench-card-foot .bench-harness { margin-left: auto; text-align: right; }
 /* the foot on a card's last line, wherever its badges or stats would put it */
 .bench-card-foot:not(.bench-card-runs ~ *, .bench-stats ~ *) { margin-top: auto; }

@@ -298,3 +298,4 @@
 #nullius-builder #nb-agent-grid .bench-card { padding: 16px; gap: 10px; }
 #nullius-builder #nb-agent-grid .bench-card-title { font-size: 15px; }
 #nullius-builder #nb-agent-grid .std-tag { white-space: nowrap; }
+#nullius-builder #nb-agent-grid .card-link:focus-visible { outline: none; }   /* the card's ring (catalogue.css), not a box round the name */
