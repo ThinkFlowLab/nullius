@@ -38,9 +38,9 @@
   {% set cols = [dict(key='kind', label='Kind', card='tag', class='cat-tag'), dict(key='protocol', label='Protocol', card='tag', class='std-tag'),
                  dict(key='example', label='Example', card='tag', class='std-tag'), dict(key='version', label='Version', card='meta'),
                  dict(key='icon', label='Logo', card='icon', table=false, class='std-mark small'), dict(key='title', label='Name', card='title'),
-                 dict(key='summary', label='Summary', card='text', class='std-clamp'), dict(key='ports', label='Ports proven', card='stat'),
-                 dict(key='runs', label='Benchmarks it runs', card='stat'), dict(key='installs', label='Installs', card='stat', class='word')] %}
-  {% if items %}{{ cards(plural|lower, cols, items, search='Name, protocol, summary', empty='No ' ~ kind ~ ' matches.', noun=plural|lower) }}{% endif %}
+                 dict(key='summary', label='Summary', card='text', class='std-clamp'), dict(key='ports', label='Ports proven', card='stat', type='num'),
+                 dict(key='runs', label='Benchmarks it runs', card='stat', type='num'), dict(key='installs', label='Installs', card='stat', class='word')] %}
+  {% if items %}{{ cards(plural|lower, cols, items, search='Name, protocol, summary', sort=['title', 'ports', 'runs'], empty='No ' ~ kind ~ ' matches.', noun=plural|lower) }}{% endif %}
 </div>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='catalogue/add.js') }}"></script>{% endblock %}

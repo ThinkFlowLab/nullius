@@ -44,8 +44,8 @@
   {#- A card's fields (web/agents.py `_kit_card`); the family's pills filter them. #}
   {% set cols = [dict(key='family', label='Family', card='tag', class='std-tag', filter='pills'), dict(key='version', label='Version', card='meta'),
                  dict(key='title', label='Name', card='title'), dict(key='port', label='Port', card='text', style='code'),
-                 dict(key='checks', label='Checks', card='stat')] %}
-  {{ cards('kits', cols, items, search='Name, port, check', choices={'family': [('agent', 'Agents'), ('capability', 'Capabilities')]}, empty='No kits match.', noun='kits') }}
+                 dict(key='checks', label='Checks', card='stat', type='num')] %}
+  {{ cards('kits', cols, items, search='Name, port, check', choices={'family': [('agent', 'Agents'), ('capability', 'Capabilities')]}, sort=['title', 'port', 'checks'], empty='No kits match.', noun='kits') }}
 </div>
 {% endif %}
 {% endblock %}

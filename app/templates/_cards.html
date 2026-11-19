@@ -25,7 +25,7 @@
 
 {# A collection of cards (NulliusTable.cards): its controls row, its cards, the note when none passes. `id` names it;
    `search`, `choices`, `only`, `layout` and each field's `filter` as the table's controls; `sort` the Sort by menu, over
-   the fields that are not blank; `noun` what the live region counts.
+   the fields that are not blank, or a list of their keys; `noun` what the live region counts.
    The call block, when given, writes the cards instead (grid for each group, such as the Benchmarks' shelves); a
    section in it marked data-group hides when none of its cards shows, and its data-group-n counts them. #}
 {% macro cards(id, cols, items, search='', choices={}, only={}, empty='No items match.', noun='items', sort=false, layout=none) %}
@@ -49,7 +49,7 @@
 {%- for item in items %}
   <article class="bench-card" data-card{% if item.get('id') %} id="{{ item.get('id') }}"{% endif %}{% if item.get('search') %} data-search="{{ item.get('search') }}"{% endif %}{% if item.get('keys') %} data-keys="{{ item.get('keys') }}"{% endif %}
     {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}
-    {%- for f in fields if sort and not f.blank %} data-s-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}{% endcall %}"{% endfor %}>
+    {%- for f in fields if sort and not f.blank and (sort is sameas true or f.key in sort) %} data-s-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}{% endcall %}"{% endfor %}>
     {%- set title = by.title[0] %}{% set v = item.get(title.key) %}{% set v = v if v is mapping else {'text': v} %}{% set name = v.text %}
     {%- set cls = [title.class, v.class]|select|join(' ') %}
     <div class="bench-card-title{{ ' ' ~ cls if cls }}">{% if icons %}{% set src = item.get(icon.key) %}

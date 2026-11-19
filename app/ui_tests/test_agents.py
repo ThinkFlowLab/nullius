@@ -137,6 +137,7 @@ class Tabs(unittest.TestCase):
         self.assertIn('<p class="empty-note" data-empty="kits" hidden>No kits match.</p>', page)
         self.assertIn('<dl class="bench-stats"><div><dt>Checks</dt><dd>3</dd></div></dl>', page)
         self.assertNotIn('bench-card-title"><span', page)                                       # kits have no icon
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', page), ["", "title", "port", "checks"])
         for port, info in ports.PORTS.items():
             if not info["kit"]:
                 continue
@@ -176,6 +177,14 @@ class Tabs(unittest.TestCase):
         self.assertIn("<dt>Benchmarks it runs</dt><dd>1/1</dd>", card)
         self.assertNotIn("agent.task/v1", card[:card.index("</article>")])            # the detail is on its page
         self.assertEqual(self.get("/agents/nope").status_code, 404)
+
+    def test_agents_sort_by_name_and_their_counts(self):
+        html = self.get("/agents").get_data(as_text=True)
+        menu = html[html.index('data-tools="sort"'):]
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', menu), ["", "title", "ports", "runs"])
+        card = html[html.index('id="fake"'):]
+        self.assertIn('data-s-ports="2/7"', card[:card.index(">")])
+        self.assertIn('data-tools="sort"', self.get("/capabilities").get_data(as_text=True))
 
     def test_the_add_dialog_builds_a_prompt_and_keeps_the_steps_by_hand_for_each_kind(self):
         for url, a, skill, words in (

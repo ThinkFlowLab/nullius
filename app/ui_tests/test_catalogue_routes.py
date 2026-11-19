@@ -84,6 +84,14 @@ class OriginTags(PageCase):
         self.assertIn('data-f-runs="standard&#10;harbor&#10;"', self.card("swe-bench-verified")); self.assertIn('data-f-runs="standard&#10;"', self.card("longmemeval"))
         self.assertIn('<input type="checkbox" data-value="standard" checked> Nullius', html)            # its value, by its label
 
+    def test_the_list_sorts_by_name_tasks_and_datasets_on_each_shelf(self):
+        html = self.get("/benchmarks")
+        menu = html[html.index('data-tools="sort"'):]
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', menu), ["", "title", "tasks", "datasets"])
+        self.assertIn('value="tasks" data-type="num"> Tasks', menu)
+        self.assertIn('data-s-title="SWE-bench Verified" data-s-tasks="500" data-s-datasets="1"', self.card("swe-bench-verified"))
+        self.assertIn('data-group-n>', html[html.index('data-shelf="official"'):html.index("data-s-title")])    # within its shelf
+
     def test_the_list_filters_by_origin(self):
         html = self.get("/benchmarks")
         self.assertIn('<fieldset data-filter-menu="origin" aria-label="Origin">', html)
@@ -109,7 +117,6 @@ class OriginTags(PageCase):
     def test_the_list_searches_by_name_category_and_dataset(self):
         self.assertIn('<input type="search" data-search placeholder="Name, category, dataset"', self.html)
         self.assertIn('data-search="LongMemEval Memory longmemeval', self.card("longmemeval"))
-        self.assertNotIn('data-tools-btn="sort"', self.html)                                # cards do not sort
         self.assertIn('<p class="empty-note" data-empty="benchmarks" hidden>No benchmark matches.</p>', self.html)
 
 
