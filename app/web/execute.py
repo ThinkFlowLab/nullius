@@ -165,19 +165,27 @@ def unpriced(models: list) -> list:
     return [m for m in models if m not in _PRICED["rows"]]
 
 
-_BOAT_SIZES = {"at": 0.0, "key": None, "sizes": {}}
+_BOAT = {"at": 0.0, "key": None, "account": {}}
 
 
-def boat_sizes() -> dict:
-    """{size: why this account cannot start it}, from Boat's limits, kept a minute for the same key;
-    asked briefly: a Boat that does not answer leaves every size offered, and Run says the rest."""
+def boat_account() -> dict:
+    """What Boat's limits say of this account, kept a minute for the same key and asked briefly:
+    {types: {size: why it cannot start one, or None}, slots: VMs at once or None}. Empty without a key;
+    a Boat that does not answer says nothing, so every size is offered and Run says the rest."""
     k = boat.key()
     if not k:
         return {}
-    if time.time() - _BOAT_SIZES["at"] > 60 or _BOAT_SIZES["key"] != hash(k):
-        types = boat.machine_types(boat.Client(k, timeout=5))
-        _BOAT_SIZES.update(at=time.time(), key=hash(k), sizes={t: why for t, why in types.items() if why})
-    return _BOAT_SIZES["sizes"]
+    if time.time() - _BOAT["at"] > 60 or _BOAT["key"] != hash(k):
+        client = boat.Client(k, timeout=5)
+        limits = client.limits()
+        _BOAT.update(at=time.time(), key=hash(k), account={"types": boat.machine_types(client, limits),
+                                                          "slots": boat.slots(client, limits)})
+    return _BOAT["account"]
+
+
+def boat_sizes() -> dict:
+    """{size: why this account cannot start it}, the sizes it can start left out."""
+    return {t: why for t, why in (boat_account().get("types") or {}).items() if why}
 
 
 def boat_size_problem(size: str):

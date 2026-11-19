@@ -45,7 +45,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Option | Value | Refused without (`host`: the driver's machine; `embeddings`: a model the provider serves) |
 |---|---|---|
-| `vm_provider` | `docker` | host: docker |
+| `vm_provider` | `docker` | host: docker; vm: a 4 GB VM per unit |
 
 ## Good to know
 

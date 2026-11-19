@@ -47,7 +47,7 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 
 | Option | Value | Refused without (`host`: the driver's machine; `embeddings`: a model the provider serves) |
 |---|---|---|
-| `vm_provider` | `docker` | host: docker, scoring_programs |
+| `vm_provider` | `docker` | host: docker, scoring_programs; vm: a 4 GB VM per unit |
 
 ## Good to know
 

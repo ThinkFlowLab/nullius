@@ -250,7 +250,8 @@
 #nullius-builder .std-backends .nb-tile-note { font-size: 11px; padding-left: 30px; }
 #nullius-builder .std-boat-sizes { grid-template-columns: repeat(4, minmax(0, 160px)); grid-auto-rows: auto; }
 #nullius-builder .std-boat-sizes .nb-tile { flex-direction: column; align-items: stretch; gap: 2px; }
-#nullius-builder .std-boat-sizes .nb-tile-note { white-space: normal; }
+#nullius-builder .std-boat-sizes .nb-tile-note { white-space: normal; padding-left: 0; }
+#nullius-builder .std-boat-sizes .nb-tile:not([disabled]) .nb-tile-note { color: var(--nb-muted); }
 @media (max-width: 760px) { #nullius-builder .std-boat-sizes { grid-template-columns: repeat(2, minmax(0, 180px)); } }
 @media (max-width: 560px) { #nullius-builder .std-backends { grid-template-columns: minmax(0, 320px); } #nullius-builder .std-boat-sizes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* Served by: a row after its model's row, as that row is: the label left, the picker right, the providers chosen

@@ -517,9 +517,13 @@ def _bench_options(d: dict) -> List[str]:
             bad.append(f"{w}.needs: value -> {{embeddings, reranker, host, files}}")
             continue
         for v, n in needs.items():
-            if option_problem(o, v) is not None or not isinstance(n, dict) or any(k not in NEED_KEYS + ("when",) for k in n):
-                bad.append(f"{w}.needs.{v}: one of its values -> {{embeddings: a model, reranker: a model, host: [requirements], files: [names]}}")
+            if option_problem(o, v) is not None or not isinstance(n, dict) or any(k not in NEED_KEYS + ("when", "vm") for k in n):
+                bad.append(f"{w}.needs.{v}: one of its values -> {{embeddings: a model, reranker: a model, host: [requirements], files: [names], vm: {{memory_gb}}}}")
                 continue
+            if "vm" in n and (o.get("step") != "where" or not isinstance(n["vm"], dict) or set(n["vm"]) != {"memory_gb"}
+                              or isinstance(n["vm"]["memory_gb"], bool) or not isinstance(n["vm"]["memory_gb"], (int, float))
+                              or n["vm"]["memory_gb"] <= 0):
+                bad.append(f"{w}.needs.{v}.vm: on a Where option, the memory in GB of the VM each unit boots: {{memory_gb: a number}}")
             if not _when_valid(name, n.get("when") or {}, opts):
                 bad.append(f"{w}.needs.{v}.when: another option -> the values that need these requirements")
             for kind in ("embeddings", "reranker"):
@@ -623,6 +627,21 @@ def option_needs(bench: dict, values: dict) -> dict:
         for kind in ("host", "files"):
             out[kind] += [x for x in need.get(kind) or [] if x not in out[kind]]
     return out
+
+
+def vm_memory_gb(bench: dict, values: dict) -> float:
+    """The memory in GB of the VM each unit boots of its own (OSWorld's guest) under the chosen option
+    values: a Where option's ``needs.<value>.vm``; 0 when it boots none."""
+    opts = bench.get("options") or {}
+    return max([((opts.get(n, {}).get("needs") or {}).get(v) or {}).get("vm", {}).get("memory_gb", 0)
+                for n, v in values.items() if _when_applies(opts.get(n, {}).get("when") or {}, opts, values)] or [0])
+
+
+def boots_vms(bench: dict) -> bool:
+    """Whether each unit boots a VM of its own on the machine its driver runs on: a Where option of the
+    benchmark has a value that declares one (``needs.<value>.vm``)."""
+    return any("vm" in (n or {}) for o in (bench.get("options") or {}).values() if o.get("step") == "where"
+               for n in (o.get("needs") or {}).values())
 
 
 def options_of(d: dict, given: Optional[dict] = None) -> Tuple[dict, List[str]]:

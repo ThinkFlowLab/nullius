@@ -536,7 +536,9 @@ class Run:
         if backend not in BACKENDS:
             raise Refused(f"backend {backend!r} is not one of {list(BACKENDS)}")
         if backend == "boat" and other.get("_kind") not in ("agent", "capability"):
-            backend = "local"                    # a check or a setup: nothing of an agent's runs, so nothing goes to a VM
+            # a setup or a check runs on the machine; on Boat it would run here unasked, beside the VMs
+            raise Refused(f"{other['label']} runs on a machine, not in a Boat VM: run it on this machine or a host "
+                          "(--backend local or container)")
         if backend == "boat" and other.get("_kind") == "agent" and "agent.computer/v1" in bench.get("needs", []):
             raise BenchmarkRefused("the computer port uses a socket on this machine, which an agent in a Boat VM "
                                    "cannot reach: choose local processes or the container backend")
