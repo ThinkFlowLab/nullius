@@ -67,8 +67,9 @@ GSMA's eight telecom tests, from 3GPP standards and maths to 5G root-cause analy
 
 ## Upstream limitations
 
-- 3GPP TSG's scorer cannot read RAN_AH1: its 6 Lite and 129 Full questions always fail, so 94% and 93.6% are the ceilings.
-- TeleMath's scorer accepts any number within 0.01 of the answer: 0 passes on the 12 Lite and 51 Full questions whose answer is that small.
+- 3GPP TSG's scorer cannot read RAN_AH1: its 6 Lite and 129 Full questions always fail, so 94% and 93.6% are the ceilings (gsma-labs/evals#81).
+- TeleMath's scorer accepts any number within 0.01 of the answer, looser than its 1% for answers between -1 and 1 (44 Lite, 245 Full): 0 passes on 10 Lite and 47 Full questions whose answer is not 0.
+- The multiple-choice prompt asks for 'ANSWER: $LETTER': a reply that keeps the dollar sign is scored wrong, on all five multiple-choice tests (gsma-labs/evals#73).
 
 ## Nullius limitations
 
