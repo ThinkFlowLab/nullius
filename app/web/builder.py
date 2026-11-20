@@ -75,7 +75,7 @@ def new_run_benchmarks():
                   data={"tasks": json.dumps({"": i["tasks"], **i["versions"]})} if i["versions"] else None)
              for i in catalogue.benchmark_cards(cat)]
     every = catalogue.benchmark_choices(cat)
-    choices = {k: [(v, t) for v, t in every[k] if any(v in _values(i[k]) for i in items)] for k in ("category", "with", "runs")}
+    choices = {k: [(v, t) for v, t in every[k] if any(v in _values(i[k]) for i in items)] for k in ("category", "evaluates", "runs")}
     return render_template("builder/benchmarks.html", items=items, choices={k: v for k, v in choices.items() if len(v) > 1},
                            layout="table" if request.args.get("view") == "table" else "cards")
 

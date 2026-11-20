@@ -30,7 +30,7 @@ def benchmarks_page():
 
 
 RUNS_WITH = {"standard": ("Nullius", "the Nullius standard"), "harbor": ("Harbor", "Harbor")}
-# what a benchmark is run with (``recipe.benchmarks``' family), as a card and its filter say it
+# what a benchmark evaluates (``recipe.benchmarks``' family): its agents or its capabilities, as a card and its filter say it
 FAMILIES = {"agent": "Agents", "capability": "Capabilities"}
 
 
@@ -47,7 +47,7 @@ def benchmark_cards(cat) -> list:
 def benchmark_choices(cat) -> dict:
     """The values the benchmarks' cards are filtered by: their category, what runs them, their origin, what they run."""
     return {"category": [(c, c) for c in cat.categories], "runs": [(way, label) for way, (label, _) in RUNS_WITH.items()],
-            "origin": [(o, o.capitalize()) for o in catalog.ORIGINS], "with": list(FAMILIES.items())}
+            "origin": [(o, o.capitalize()) for o in catalog.ORIGINS], "evaluates": list(FAMILIES.items())}
 
 
 def _card(row, sheet) -> dict:
@@ -65,7 +65,7 @@ def _card(row, sheet) -> dict:
             "tasks": {"text": tasks, "label": unit.capitalize(), "value": tasks.replace(",", "").split("–")[-1]},
             "versions": {v: {"text": n, "label": u.capitalize()} for v, (n, u) in row["versions"].items()},
             "datasets": {"text": len(ds), "label": "Datasets" if len(ds) != 1 else "Dataset"},
-            "with": {"text": FAMILIES[row["family"]], "value": row["family"], "title": f"{row['kind'].capitalize()} capabilities" if row["kind"] else ""},
+            "evaluates": {"text": FAMILIES[row["family"]], "value": row["family"], "title": f"{row['kind'].capitalize()} capabilities" if row["kind"] else ""},
             "scoring": b.scoring, "blocker": b.blocker[:1].upper() + b.blocker[1:]}
 
 

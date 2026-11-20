@@ -1,5 +1,5 @@
 """The builder's Benchmark step grid (/new-run/benchmarks): the Benchmarks page's cards as single-choice pick cards,
-with what each benchmark is run with as a menu of its own."""
+with what each benchmark evaluates, agents or capabilities, as a menu of its own."""
 import json
 import os
 import re
@@ -33,7 +33,7 @@ class BenchmarkGrid(unittest.TestCase):
         self.assertEqual(sorted(cards), sorted(listed))                                              # one listing
         for k, c in cards.items():
             self.assertIn(f'data-pick="{k}" data-pick-one aria-pressed="false"', c)
-        self.assertIn('data-f-with="capability&#10;"', cards["locomo"])
+        self.assertIn('data-f-evaluates="capability&#10;"', cards["locomo"])
         self.assertIn('<span class="std-tag" title="Memory capabilities">Capabilities</span>', cards["locomo"])
         self.assertIn('<span class="std-tag">Agents</span>', cards["swe-bench-verified"])         # Harbor runs agents
         self.assertIn('<dt>Tasks</dt><dd>1,319</dd>', cards["gsm8k"])
@@ -53,9 +53,9 @@ class BenchmarkGrid(unittest.TestCase):
     def test_its_controls_category_pills_run_with_beside_filter_sort_and_the_toggle(self):
         html = self.get("/new-run/benchmarks")
         self.assertIn('data-pills="category"', html)
-        self.assertIn('data-dropdown aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-plug"/></svg>Run with<', html)
+        self.assertIn('data-dropdown aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg>Evaluates<', html)
         self.assertLess(html.index("data-dropdown"), html.index('data-tools-btn="filter"'))
-        menu = unescape(html[html.index('<fieldset data-filter-menu="with"'):]).split("</fieldset>")[0]
+        menu = unescape(html[html.index('<fieldset data-filter-menu="evaluates"'):]).split("</fieldset>")[0]
         self.assertIn('data-value="agent" checked> Agents', menu)
         self.assertIn('data-value="capability" checked> Capabilities', menu)
         self.assertIn('data-filter-menu="runs"', html[html.index('data-tools="filter"'):])
@@ -68,12 +68,12 @@ class BenchmarkGrid(unittest.TestCase):
         self.assertIn('<td data-col="_pick" class="pick-col sticky-col"><input type="radio" name="nb-benchmarks-pick" data-pick="gsm8k" aria-label="GSM8K"></td>', html)
         self.assertNotIn('type="checkbox" data-pick', html)
         self.assertIn('#nb-benchmarks > * > tr > :nth-child(2) { width: auto;', html)                 # Name takes the spare width
-        self.assertEqual(re.findall(r'<th data-col="(\w+)"', html)[:3], ["_pick", "title", "with"])
+        self.assertEqual(re.findall(r'<th data-col="(\w+)"', html)[:3], ["_pick", "title", "evaluates"])
 
     def test_the_benchmarks_page_stays_a_page_of_links(self):
         html = self.get("/benchmarks")
         self.assertNotIn("data-pick", html)
-        self.assertNotIn("data-f-with", html)
+        self.assertNotIn("data-f-evaluates", html)
         self.assertIn('<script src="/static/tables.js">', self.get("/new-run"))
 
 
