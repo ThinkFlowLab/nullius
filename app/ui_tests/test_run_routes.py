@@ -387,6 +387,15 @@ class ReopenAtStart(unittest.TestCase):
         self.root.rmdir()
         self.assertEqual(self.restart().roots, [str(self.root)])
 
+    def test_a_second_server_on_the_runs_folder_stops_with_one_line(self):
+        refused = execution.Followed("another Nullius follows the runs in /r: stop it before starting this one")
+        with patch.object(execution, "restore", side_effect=refused), self.assertRaises(SystemExit) as end:
+            self.restart()
+        self.assertEqual(end.exception.code, f"nullius: {refused}")
+        with patch.object(execution, "restore") as restore:
+            self.restart(["--debug"])                          # the reloader's watcher: the server it starts follows the runs
+        restore.assert_not_called()
+
     def test_job_paths_given_win(self):
         workspace.create(self.home, ["/elsewhere"], label="witty pelican")
         self.assertEqual(self.restart([str(self.root)]).roots, [str(self.root)])
