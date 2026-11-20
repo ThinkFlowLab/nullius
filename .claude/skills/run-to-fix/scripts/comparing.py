@@ -7,7 +7,8 @@ import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from classifying import classes_of, cross_check, failure_groups, read_rows
+from classifying import classes_of, cross_check, failure_groups, found_counts, found_values, read_rows
+from found import Rule, load_rules
 from reading import adapter_of, analyze, health
 from rounds import (STOP_RULE, LoopError, call_runs, ledger_round, load_ledger, now, open_round, read_input, read_json,
                     recorded_amount, save_ledger, write_json)
@@ -92,6 +93,13 @@ def predictions_of(predictions: List[dict], new: List[TrialRow]) -> List[dict]:
     return out
 
 
+def found_on_both(rules: List[Rule], runs: List[Tuple[str, List[TrialRow], Dict[str, str]]]) -> dict:
+    """Each found class, as found-classes.json holds it now, counted on the run compared against and the new run."""
+    return {rule.id: dict({"meaning": rule.meaning, "file": rule.file},
+                          **{label: found_counts(found_values(rule, rows), classes) for label, rows, classes in runs})
+            for rule in rules}
+
+
 def trial_spent(entry: dict) -> float:
     """What the round's trial runs cost, from the list of them in the ledger. A run whose trials do not all report
     a cost counts only with the person's figure for it."""
@@ -156,6 +164,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
     if against is None:
         raise LoopError(f"{os.path.basename(round_dir)} has no baseline; compare --against run, or read the run "
                         "again with --baseline")
+    rules = load_rules(args.loop)
     checked = health("new", args.new, threshold)
     if checked.refused:
         raise LoopError("the new run is not analysable, so it is not compared:\n  " + "\n  ".join(checked.refused))
@@ -180,6 +189,8 @@ def cmd_compare(args: argparse.Namespace) -> None:
     entry = ledger_round(ledger, os.path.basename(round_dir))
     classes, signatures = classes_of(new_rows, adapter.limits)
     groups = failure_groups(new_rows, classes, signatures, None)
+    found = found_on_both(rules, [("before", before_rows, classes_of(before_rows, adapter.limits)[0]),
+                                  ("new", new_rows, classes)])
     missing = sum(r.cost_usd is None for r in new_rows)
     recorded = sum(r.cost_usd for r in new_rows if r.cost_usd is not None)
     if args.new_cost_usd is not None and not missing:
@@ -200,6 +211,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
         "targets": targets_of(entry.get("selection"), before_rows, new_rows),
         "predictions": predictions_of(entry.get("predictions") or [], new_rows),
         "groups": [{k: g[k] for k in ("id", "class", "signature", "trials", "tasks", "task_names")} for g in groups],
+        "found_classes": found,
         "stop_rule": rule,
     }
     report = os.path.join(round_dir, "report.html")
@@ -218,6 +230,10 @@ def cmd_compare(args: argparse.Namespace) -> None:
           f"neither {pr['neither']}")
     print(f"verdict: {result_verdict} (exact two-sided binomial test on won and lost, p = {p:.3g})")
     print(f"targets: {result['targets']['text']}")
+    for rid, f in found.items():
+        print(f"found class {rid}: " + "; ".join(
+            f"{x} {f[x]['trials']} trials, {f[x]['failing_trials']} failing, {f[x]['unreadable']} unreadable"
+            for x in ("before", "new")))
     if rule["cheapest_option"] is not None:
         print(f"cheapest option: {rule['cheapest_option']['what']}, {rule['cheapest_option']['text']}")
     print("stop rule: " + ("stop: " + "; ".join(rule["reasons"]) if rule["stop"] else "go on")

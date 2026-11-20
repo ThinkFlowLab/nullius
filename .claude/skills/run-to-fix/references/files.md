@@ -49,7 +49,7 @@ round that has no `result.json`.
 | `rerun-tasks.txt`, `full-tasks.txt` | stop 2 | `decide --stop 2` | the tasks of the two options that run something |
 | `decision-2.md` | stop 2 | `decide --stop 2` | the build, the results, the budget left and three options with their price |
 | `compare-metrics.json` | 5 | `compare` | `runs.py analyze` of the run compared against and the new run, labelled by their job folders, or `before` and `new` when the two names are equal |
-| `result.json` | 5 | `compare` | pass rates with their standard error, pairs, the exact test and the verdict, the targets (tested only when the new job alone holds 3 trials of each selected task), the predictions beside their results, the groups of the new run, the stop rule |
+| `result.json` | 5 | `compare` | pass rates with their standard error, pairs, the exact test and the verdict, the targets (tested only when the new job alone holds 3 trials of each selected task), the predictions beside their results, the groups of the new run, `found_classes`: each rule of `found-classes.json` with its trials, failing trials and unreadable files on the run compared against (`before`) and on the new run (`new`), the stop rule |
 | `report.html` | 5 | `compare`, then the assistant | the page of `runs.py render` from `compare-metrics.json`, with its prose slots filled by the assistant |
 | `prose.json` | 5 | the assistant | the HTML of each prose slot of `report.html`, the `--slots` file of `runs.py render` |
 

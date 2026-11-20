@@ -67,8 +67,10 @@ of one task.
 
 ## Found classes
 
-While reading trials, the assistant may add a rule that the script then counts on every trial of the round's run,
-the passing ones included; the baseline is not counted. The rules live in `<loop folder>/found-classes.json`; the skill ships with none.
+While reading trials, the assistant may add a rule that `classify` then counts on every trial of the round's run,
+the passing ones included; `classify` does not count the baseline. `compare` counts each rule again, as the file
+holds it when `compare` runs, on the run compared against and on the new run, and writes both counts to
+`found_classes` of `result.json`. The rules live in `<loop folder>/found-classes.json`; the skill ships with none.
 
 ```json
 {
@@ -88,7 +90,10 @@ the passing ones included; the baseline is not counted. The rules live in `<loop
    key, a list index, or `*` for every element; the rule matches when any value reached equals `value`.
 3. A found class may read a file that only one agent writes.
 4. `trials.csv` gets a column `found:<id>` per rule: `1`, `0` (no match or no file), or `unreadable` (a JSON file
-   that does not parse). `groups.json` counts each rule's trials, failing trials and unreadable files.
+   that does not parse). `groups.json` counts each rule's trials, failing trials and unreadable files on the
+   round's run, and `result.json` counts them on the two runs `compare` reads. With no `found-classes.json` or no
+   rule in it, `found_classes` of `result.json` is empty. A rule that `classify` refuses stops `compare` with the
+   same message.
 
 A cause names the rule that counts its trials (`references/files.md`, causes).
 

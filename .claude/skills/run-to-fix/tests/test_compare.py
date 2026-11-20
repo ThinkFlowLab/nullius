@@ -336,6 +336,127 @@ class IncompleteNewCost(LoopCase):
         self.assertAlmostEqual(rule["spent_usd"], 0.5)
 
 
+#: a found class that reads a file only the made-up agent writes
+STATUS_RULE = {"id": "cut_reply", "meaning": "The agent wrote that a model reply was cut.",
+               "file": "agent/output.json", "json_path": "status", "value": "cut"}
+
+
+def marked(name: str, task: str, reward: float, output: Optional[str]) -> Trial:
+    t = trial(name, task, reward)
+    if output is not None:
+        t.files = {"agent/output.json": output}
+    return t
+
+
+CUT, OTHER, BROKEN = '{"status": "cut"}', '{"status": "done"}', '{"status": '
+
+
+class FoundClassesOnBothRuns(LoopCase):
+    """`compare` counts each found class on the run compared against and on the new run."""
+
+    def jobs_of(self) -> Tuple[str, str]:
+        before = [marked("a__b", "bench/a", 0.0, CUT), marked("b__b", "bench/b", 0.0, CUT),
+                  marked("c__b", "bench/c", 1.0, CUT), marked("d__b", "bench/d", 1.0, OTHER),
+                  marked("e__b", "bench/e", 0.0, BROKEN)]
+        new = [marked("a__n", "bench/a", 1.0, CUT), marked("b__n", "bench/b", 0.0, CUT),
+               marked("c__n", "bench/c", 1.0, OTHER), marked("d__n", "bench/d", 1.0, None),
+               marked("e__n", "bench/e", 0.0, OTHER)]
+        return (write_job(self.jobs, "before", "alpha", "harbor", before),
+                write_job(self.jobs, "new", "alpha", "harbor", new))
+
+    def rules(self, rules: List[dict]) -> None:
+        write_json(os.path.join(self.loop, "found-classes.json"),
+                   {"schema": "run-to-fix.found-classes/v1", "rules": rules})
+
+    def compare(self, against: str) -> dict:
+        r = run(["compare", "--loop", self.loop, "--new", os.path.join(self.jobs, "new"), "--against", against])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        return load(self.round_file("result.json"))
+
+    def test_each_rule_is_counted_on_both_runs(self) -> None:
+        before_dir, _ = self.jobs_of()
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.rules([STATUS_RULE])
+        self.read_ok(before_dir, None)
+        found = self.compare("run")["found_classes"]
+        self.assertEqual(found, {"cut_reply": {
+            "meaning": STATUS_RULE["meaning"], "file": "agent/output.json",
+            "before": {"trials": 3, "failing_trials": 2, "unreadable": 1},
+            "new": {"trials": 2, "failing_trials": 1, "unreadable": 0}}})
+
+    def test_the_rule_as_the_file_holds_it_when_compare_runs(self) -> None:
+        before_dir, _ = self.jobs_of()
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.rules([dict(STATUS_RULE, value="never")])
+        self.read_ok(before_dir, None)
+        self.classify_ok()
+        self.rules([STATUS_RULE])
+        found = self.compare("run")["found_classes"]["cut_reply"]
+        self.assertEqual((found["before"]["trials"], found["new"]["trials"]), (3, 2))
+
+    def test_against_the_baseline_the_counts_are_of_the_baseline_and_the_new_run(self) -> None:
+        before_dir, new_dir = self.jobs_of()
+        other = write_job(self.jobs, "other", "alpha", "harbor",
+                          [marked(f"{t}__o", f"bench/{t}", 1.0, OTHER) for t in "abcde"])
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.rules([STATUS_RULE])
+        self.read_ok(other, before_dir)
+        found = self.compare("baseline")["found_classes"]["cut_reply"]
+        self.assertEqual(found["before"], {"trials": 3, "failing_trials": 2, "unreadable": 1})
+        self.assertEqual(found["new"], {"trials": 2, "failing_trials": 1, "unreadable": 0})
+
+    def test_no_file_and_no_rule_give_an_empty_entry(self) -> None:
+        before_dir, _ = self.jobs_of()
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(before_dir, None)
+        self.assertEqual(self.compare("run")["found_classes"], {})
+
+    def test_an_empty_list_of_rules_gives_an_empty_entry(self) -> None:
+        before_dir, _ = self.jobs_of()
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.rules([])
+        self.read_ok(before_dir, None)
+        self.assertEqual(self.compare("run")["found_classes"], {})
+
+    def test_a_rule_with_an_error_stops_compare_with_the_message_of_classify(self) -> None:
+        before_dir, new_dir = self.jobs_of()
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.rules([dict(STATUS_RULE, regex="cut")])
+        self.read_ok(before_dir, None)
+        by_classify = run(["classify", "--loop", self.loop])
+        self.assertNotEqual(by_classify.code, 0)
+        r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("needs either regex, or json_path with value", r.err)
+        self.assertEqual(r.err, by_classify.err)
+        self.assertFalse(os.path.exists(self.round_file("result.json")))
+
+
+class ResultOfAnEarlierVersion(LoopCase):
+    """A round closed by a version whose result.json has no found_classes still starts the next round."""
+
+    def test_read_starts_the_next_round_and_reads_the_recorded_stop_rule(self) -> None:
+        before, new = paired(10, 1, 1, 1)
+        before_dir = write_job(self.jobs, "before", "alpha", "harbor", before)
+        new_dir = write_job(self.jobs, "new", "alpha", "harbor", new)
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        self.read_ok(before_dir, None)
+        r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        path = self.round_file("result.json")
+        result = load(path)
+        result.pop("found_classes", None)
+        self.assertTrue(result["stop_rule"]["stop"])
+        write_json(path, result)
+        r = run(["read", "--loop", self.loop, "--run", new_dir, "--budget-usd", "5", "--pass-threshold", "1"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("the stop rule of round-01 says stop", r.err)
+        r = run(["read", "--loop", self.loop, "--run", new_dir, "--budget-usd", "5", "--pass-threshold", "1",
+                 "--continue-after-stop", "Go on with a new fix."])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertTrue(os.path.isfile(os.path.join(self.loop, "round-02", "input.json")))
+
+
 class StopRuleOfTheRound(LoopCase):
     def test_compare_refuses_a_stop_rule_other_than_the_one_read_recorded(self) -> None:
         before, new = paired(5, 1, 1, 1)

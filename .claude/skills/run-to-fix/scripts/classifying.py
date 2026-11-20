@@ -33,6 +33,18 @@ def classes_of(rows: List[TrialRow], limits: Limits) -> Tuple[Dict[str, str], Di
     return classes, signatures
 
 
+def found_values(rule: Rule, rows: List[TrialRow]) -> Dict[str, str]:
+    """The value of a found class on each trial, by trial name."""
+    return {row.trial: apply(rule, row.dir) for row in rows}
+
+
+def found_counts(values: Dict[str, str], classes: Dict[str, str]) -> dict:
+    """The trials a found class matches, the failing ones among them, and the files it could not read."""
+    return {"trials": sum(v == "1" for v in values.values()),
+            "failing_trials": sum(v == "1" and classes[t] != "pass" for t, v in values.items()),
+            "unreadable": sum(v == UNREADABLE for v in values.values())}
+
+
 def pair_of(task: str, run_solved: Dict[str, bool], base_solved: Optional[Dict[str, bool]]) -> str:
     if base_solved is None or task not in base_solved:
         return ""
@@ -132,8 +144,8 @@ def cmd_classify(args: argparse.Namespace) -> None:
                + [f"agent_flag:{f}" for f in own_flags])
 
     classes, signatures = classes_of(rows, adapter.limits)
+    found = {r.id: found_values(r, rows) for r in rules}
     table = []
-    found_counts = {r.id: collections.Counter() for r in rules}
     for row in rows:
         cls, sig = classes[row.trial], signatures[row.trial].text
         cells = {"trial": row.trial, "task": row.task, "class": cls, "signature": sig,
@@ -144,11 +156,7 @@ def cmd_classify(args: argparse.Namespace) -> None:
                  "max_completion_tokens": "" if row.max_completion_tokens is None else row.max_completion_tokens,
                  "exception_type": row.exception_type or ""}
         for rule in rules:
-            value = apply(rule, row.dir)
-            cells[f"found:{rule.id}"] = value
-            found_counts[rule.id][value] += 1
-            if value == "1" and cls != "pass":
-                found_counts[rule.id]["failing"] += 1
+            cells[f"found:{rule.id}"] = found[rule.id][row.trial]
         own = agent["trials"].get(row.trial) or {}
         for c in own_classes:
             cells[f"agent_class:{c}"] = int(c in own.get("classes", []))
@@ -170,9 +178,8 @@ def cmd_classify(args: argparse.Namespace) -> None:
         "trials": len(rows), "failures": len(failing),
         "classes": {c: count[c] for c in CLASSES}, "rules_off": rules_off(adapter.limits, rows),
         "groups": groups,
-        "found_classes": {r.id: {"meaning": r.meaning, "file": r.file, "trials": found_counts[r.id]["1"],
-                                 "failing_trials": found_counts[r.id]["failing"],
-                                 "unreadable": found_counts[r.id][UNREADABLE]} for r in rules},
+        "found_classes": {r.id: dict({"meaning": r.meaning, "file": r.file}, **found_counts(found[r.id], classes))
+                          for r in rules},
         "agent_classes": {"ran": agent["ran"], "reason": agent["reason"],
                           "classes": {c: sum(c in v.get("classes", []) for v in agent["trials"].values()) for c in own_classes},
                           "flags": {f: sum(f in v.get("flags", []) for v in agent["trials"].values()) for f in own_flags}},

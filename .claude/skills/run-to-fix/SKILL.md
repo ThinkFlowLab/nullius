@@ -170,16 +170,15 @@ python3 L compare --loop DIR --new JOB --against run [--new-cost-usd X]
 writes `result.json`: the pass rates with their standard error; the tasks both runs share, won and lost; the verdict
 "improved" or "regressed" when an exact two-sided binomial test on won and lost gives p under 0.05, "noise" otherwise;
 the targets' trials with Fisher's exact test, given only when the selection is complete; each prediction of stage 3
-beside its result; and the stop rule. Stop 2 and `compare` use one rule for a complete selection, 3 trials of each
-selected task, and count different trials: stop 2 counts the round's trial jobs on the selected commit together,
-`compare` the trials of its new job alone. For an incomplete selection the result says how many trials per task the
-new job holds. When
-some trials of the new run report no cost, the budget part of the stop rule is not checked, unless the person gives the
-run's cost with `--new-cost-usd`. `read` records the text of the stop rule, and `compare` refuses a round whose recorded
-rule is not the rule of the skill it runs: keep that loop folder as it is and start a new one. It
-closes the round and renders `report.html` from `compare-metrics.json` with `render` of `run-analysis`. Write the
-prose slots into `round-NN/prose.json` as that skill describes, then render the page again and check it, with `R`
-the `scripts/runs.py` of `run-analysis`:
+beside its result; each found class counted on both runs; and the stop rule. Stop 2 and `compare` use one rule for
+a complete selection, 3 trials of each selected task, and count different trials: stop 2 counts the round's trial
+jobs on the selected commit together, `compare` the trials of its new job alone. For an incomplete selection the
+result says how many trials per task the new job holds. When some trials of the new run report no cost, the budget
+part of the stop rule is not checked, unless the person gives the run's cost with `--new-cost-usd`. `read` records
+the text of the stop rule, and `compare` refuses a round whose recorded rule is not the rule of the skill it runs:
+keep that loop folder as it is and start a new one. It closes the round and renders `report.html` from
+`compare-metrics.json` with `render` of `run-analysis`. Write the prose slots into `round-NN/prose.json` as that
+skill describes, then render the page again and check it, with `R` the `scripts/runs.py` of `run-analysis`:
 
 ```bash
 python3 R render DIR/round-NN/compare-metrics.json --out DIR/round-NN/report.html --slots DIR/round-NN/prose.json
