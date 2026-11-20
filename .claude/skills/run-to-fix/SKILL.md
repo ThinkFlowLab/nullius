@@ -157,6 +157,10 @@ python3 L answer --loop DIR --stop 2 --choice stop|rerun|full --text "the person
 A rerun is another trial run of the round: run `decide --stop 2` on its job folder, and its trials and money add to
 the earlier ones.
 
+In one open round the person may answer stop 1 again with other candidates, merge them into another commit and run
+`select` again. The new answer replaces the kept candidates and the selection. Stop 2 then counts the trials of the
+latest selected commit only. The money of every earlier trial run stays spent.
+
 ## Stage 5. Compare and record
 
 When the new run exists already, a round may go from stage 2 to stage 5; `result.json` then says that no targets
@@ -170,16 +174,16 @@ python3 L compare --loop DIR --new JOB --against run [--new-cost-usd X]
 writes `result.json`: the pass rates with their standard error; the tasks both runs share, won and lost; the verdict
 "improved" or "regressed" when an exact two-sided binomial test on won and lost gives p under 0.05, "noise" otherwise;
 the targets' trials with Fisher's exact test, given only when the selection is complete; each prediction of stage 3
-beside its result; each found class counted on the tasks both runs share; and the stop rule. Stop 2 and `compare`
-use one rule for a complete selection, 3 trials of each selected task, and count different trials: stop 2 counts
-the round's trial jobs on the selected commit together, `compare` the trials of its new job alone. For an incomplete
-selection the result says how many trials per task the new job holds. When some trials of the new run report no
-cost, the budget part of the stop rule is not checked, unless the person gives the run's cost with
-`--new-cost-usd`. `read` records the text of the stop rule, and `compare` refuses a round whose recorded rule is not
-the rule of the skill it runs: keep that loop folder as it is and start a new one. It closes the round and renders
-`report.html` from `compare-metrics.json` with `render` of `run-analysis`. Write the prose slots into
-`round-NN/prose.json` as that skill describes, then render the page again and check it, with `R` the
-`scripts/runs.py` of `run-analysis`:
+beside its result; each found class counted on the tasks both runs share; and the stop rule. Stop 2 and `compare` use
+one rule for a complete selection, 3 trials of each selected task, and count different trials: stop 2 counts the
+round's trial jobs on the selected commit together, `compare` the trials of its new job alone. For an incomplete
+selection the result says how many trials per task the new job holds. A new run that is the round's own run or one of
+its trial runs takes its cost from the ledger. When some trials of any other new run report no cost, the budget part
+of the stop rule is not checked, unless the person gives the run's cost with `--new-cost-usd`. `read` records the text
+of the stop rule, and `compare` refuses a round whose recorded rule is not the rule of the skill it runs: keep that
+loop folder as it is and start a new one. It closes the round and renders `report.html` from `compare-metrics.json`
+with `render` of `run-analysis`. Write the prose slots into `round-NN/prose.json` as that skill describes, then render
+the page again and check it, with `R` the `scripts/runs.py` of `run-analysis`:
 
 ```bash
 python3 R render DIR/round-NN/compare-metrics.json --out DIR/round-NN/report.html --slots DIR/round-NN/prose.json

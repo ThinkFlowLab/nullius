@@ -95,8 +95,9 @@ tasks. The rules live in `<loop folder>/found-classes.json`; the skill ships wit
    that does not parse). `groups.json` counts each rule's trials, failing trials and unreadable files on the
    round's run. `result.json` counts them on the shared tasks of the two runs `compare` reads, with
    `counted_trials`, the trials of the shared tasks on each run. With no `found-classes.json` or no
-   rule in it, `found_classes` of `result.json` is empty. A rule that `classify` refuses stops `compare` with the
-   same message.
+   rule in it, `found_classes` of `result.json` is empty. A rule with an error in its definition stops `compare`
+   with the message of `classify` before anything is written. `compare` reads the files of the shared tasks only.
+   A file there that leaves its trial folder stops `compare` after it has written `compare-metrics.json`.
 
 A cause names the rule that counts its trials (`references/files.md`, causes).
 

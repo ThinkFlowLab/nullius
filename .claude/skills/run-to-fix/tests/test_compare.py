@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional, Tuple
 
-from jobs import (NO_LIMITS, LoopCase, Trial, adapter, load, run, trial, write_job, write_json)
+from jobs import (NO_LIMITS, LoopCase, Trial, adapter, load, run, trial, write, write_job, write_json)
 
 
 def paired(both: int, won: int, lost: int, neither: int) -> Tuple[List[Trial], List[Trial]]:
@@ -465,6 +465,50 @@ class FoundClassesOnSharedTasks(LoopCase):
         zero = {"trials": 0, "failing_trials": 0, "unreadable": 0, "counted_trials": 0}
         self.assertEqual((found["before"], found["new"]), (zero, zero))
         self.assertIn("found class cut_reply on 0 shared tasks", out)
+
+
+class FoundClassBehindALink(LoopCase):
+    """A found class whose file in one trial links outside its trial folder: `compare` reads the shared tasks only."""
+
+    def loop_with_link(self, linked: str) -> str:
+        before = [trial(f"{t}__b", f"bench/{t}", 0.0) for t in ("a", "b", "x")]
+        new = [trial(f"{t}__n", f"bench/{t}", 1.0) for t in ("a", "b")]
+        before_dir = write_job(self.jobs, "before", "alpha", "harbor", before)
+        new_dir = write_job(self.jobs, "new", "alpha", "harbor", new)
+        outside = os.path.join(self.tmp, "outside.txt")
+        write(outside, "SYNTHETIC\n")
+        os.symlink(outside, os.path.join(before_dir, linked, "link"))
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        write_json(os.path.join(self.loop, "found-classes.json"), {"schema": "run-to-fix.found-classes/v1", "rules": [
+            {"id": "linked", "meaning": "A file the trial links to.", "file": "link", "regex": "SYNTHETIC"}]})
+        self.read_ok(before_dir, None)
+        return new_dir
+
+    def test_a_link_in_a_task_the_new_run_lacks_is_not_read_by_compare(self) -> None:
+        new_dir = self.loop_with_link("x__b")
+        by_classify = run(["classify", "--loop", self.loop])
+        self.assertNotEqual(by_classify.code, 0)
+        self.assertIn("outside the trial", by_classify.err)
+        r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        self.assertTrue(os.path.isfile(self.round_file("result.json")))
+        self.assertIsNotNone(load(os.path.join(self.loop, "ledger.json"))["rounds"][0]["result"])
+
+    def test_a_link_in_a_shared_task_stops_compare_with_the_message_of_classify(self) -> None:
+        new_dir = self.loop_with_link("a__b")
+        by_classify = run(["classify", "--loop", self.loop])
+        self.assertNotEqual(by_classify.code, 0)
+        ledger_path = os.path.join(self.loop, "ledger.json")
+        with open(ledger_path, "rb") as fh:
+            saved = fh.read()
+        r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
+        self.assertNotEqual(r.code, 0)
+        self.assertIn("outside the trial", r.err)
+        self.assertEqual(r.err, by_classify.err)
+        self.assertFalse(os.path.exists(self.round_file("result.json")))
+        self.assertTrue(os.path.isfile(self.round_file("compare-metrics.json")))
+        with open(ledger_path, "rb") as fh:
+            self.assertEqual(fh.read(), saved)
 
 
 class ResultOfAnEarlierVersion(LoopCase):

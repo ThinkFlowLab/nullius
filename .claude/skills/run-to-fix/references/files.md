@@ -93,14 +93,14 @@ Not checked: what the files cannot tell.
 ```
 
 Three commands store an answer of the person in `answers`, with its date and in the person's words: `answer` (the
-candidates kept at stop 1, the choice at stop 2), `select --size` (the size and budget of the trial run) and
-`read --continue-after-stop` (the words that start a round after a stop rule said stop). `read` stores four answers
-in `input.json` as values without words: the budget, the pass threshold, the baseline, and the SHA-256 of the
-adapter the person confirmed. The money a round has spent is the sum of its `trial_runs` plus the new run that `compare` reads. A new run
-that is the round's own run adds nothing, because the round did not pay for it; one that is a trial run of the round
-is in the sum already. A trial run
-whose trials do not all report a cost counts with the person's figure (`cost_from`: `the person`) and keeps what its
-trials record in `cost_recorded_usd`; `code_ref` is the commit the person states it ran.
+candidates kept at stop 1, the choice at stop 2), `select --size` (the size and budget of the trial run) and `read
+--continue-after-stop` (the words that start a round after a stop rule said stop). `read` stores four answers in
+`input.json` as values without words: the budget, the pass threshold, the baseline, and the SHA-256 of the adapter the
+person confirmed. The money a round has spent is the sum of its `trial_runs` plus the new run that `compare` reads. A
+new run that is the round's own run adds nothing, because the round did not pay for it; one that is a trial run of the
+round is in the sum already. A trial run whose trials do not all report a cost counts with the person's figure
+(`cost_from`: `the person`) and keeps what its trials record in `cost_recorded_usd`; `code_ref` is the commit the
+person states it ran.
 
 ## Prices
 
