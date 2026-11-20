@@ -1,0 +1,108 @@
+# Classes, signatures, groups and warnings
+
+`loop.py classify` gives every trial of the run one class. The rules read only what both run paths of Nullius write
+for any agent: the trial's `result.json`, its ATIF trajectory `agent/trajectory.json`, its `verifier/` folder, and
+the three numbers of `limits` in the adapter. They read no agent log, no file that only one agent writes, and no
+setting of one agent.
+
+## The seven classes
+
+The first rule that holds gives the class.
+
+| class | rule | switched off by |
+|---|---|---|
+| `pass` | the primary reward reaches the pass threshold (1 unless `read --pass-threshold` gives another) | never |
+| `time_limit` | `exception_info.exception_type` is `AgentTimeoutError`, or the agent phase (`agent_execution`) lasted `limits.time_limit_s` or longer | a null `time_limit_s` switches off the rule on the agent phase; the timeout exception still counts |
+| `exception` | `exception_info` is present | never |
+| `no_score` | no reward and no exception | never |
+| `step_limit` | the trial made `limits.step_limit` model calls or more | a null `step_limit` |
+| `output_limit` | one model reply has `limits.output_token_limit` completion tokens or more | a null `output_token_limit` |
+| `verifier_failed` | the verifier ran and the reward is under the threshold | never |
+
+With every limit null, each trial is `pass`, `time_limit`, `exception`, `no_score` or `verifier_failed`.
+`groups.json` lists the rules a null limit switched off under `rules_off`. When the adapter sets
+`limits.output_token_limit`, it also lists `output_limit` with the count of trials that record no tokens of one reply,
+as on a job of the standard; `output_limit` is not checked on those trials.
+
+The primary reward follows the rule of `run-analysis`: `verifier_result.rewards.reward`, else the first numeric
+reward. `model_calls` in `trials.csv` is the standard's own count, `agent_result.n_model_calls`, when `result.json` holds
+it; else it follows `run-analysis`: the per-call usage records (`extra.raw_usage` or steps with `metrics`, whichever is
+more), else the agent's steps. On a job of the standard, the count of model calls on the page of
+`run-analysis` can differ from `trials.csv`: that page always counts from the trajectory. The largest reply is the
+largest `metrics.completion_tokens` of a step or `output_tokens` of a usage record. `classify` stops when its count
+of trials or passes, or of the pairs with the baseline, differs from the count in `metrics.json`.
+
+## Signatures and groups
+
+A signature is the class plus a detail with numbers and long hexadecimal ids masked as `#`:
+
+| class | detail |
+|---|---|
+| `exception` | the exception type and the last line of its message, with each quoted string masked as well |
+| `time_limit` | the exception type and the last line of its message, when there is an exception |
+| `verifier_failed` | the name of the first failed test in `verifier/ctrf.json`, else the first line of `verifier/test-stdout.txt` with FAIL, ERROR, Error or assert, else `reason` or `error` of `verifier/score.json`; empty when none of these exists |
+| the others | none |
+
+In an `exception` detail, a quoted string becomes `'#'` or `"#"` before the detail is cut to 200 characters. Two
+messages that differ only in the model text they quote then share a signature. A quote with no closing quote masks to the
+end of the detail. An apostrophe inside a word, as in `agent's`, opens no quote. Verifier details keep their quoted
+values, because those separate one assertion from another.
+
+A group is the set of failing trials with one signature. Groups are numbered `g01`, `g02`, ... from the largest,
+and groups of one size in the order of their signatures.
+`example` holds the detail of the group's first trial as written, with only key-shaped strings masked.
+
+## Warnings
+
+A warning is attached to a group, with its count, and points a person to a check.
+
+| warning | when |
+|---|---|
+| `frequent` | the group has at least 3 trials and at least 5% of the failing trials |
+| `fails_on_baseline` | every task of the group also fails on the baseline; for a group of 3 tasks or more the text names the benchmark as a suspect, for a smaller group it says only that the tasks fail on both runs |
+| `fails_in_every_repeat` | some tasks of the group have several trials and fail in all of them; only a run with repeats gets it |
+
+A claim that a benchmark is defective needs the check the warning names: read the verifier and the expected answer
+of one task.
+
+## Found classes
+
+While reading trials, the assistant may add a rule that `classify` then counts on every trial of the round's run,
+the passing ones included; `classify` does not count the baseline. `compare` counts each rule again, as the file
+holds it when `compare` runs, on the trials of the tasks both runs share, the tasks its verdict pairs. It writes the
+count of the run compared against and of the new run to `found_classes` of `result.json`. The counts of `classify`
+and `compare` can differ: `classify` counts every trial of the round's run, `compare` the trials of the shared
+tasks. The rules live in `<loop folder>/found-classes.json`; the skill ships with none.
+
+```json
+{
+  "schema": "run-to-fix.found-classes/v1",
+  "rules": [
+    {"id": "reply_cut", "meaning": "A model reply ended at the length limit.",
+     "file": "agent/trajectory.json", "json_path": "steps.*.extra.finish_reason", "value": "length"},
+    {"id": "stopped_at_cap", "meaning": "The agent wrote that it stopped at its step cap.",
+     "file": "agent/output.json", "regex": "\"status\":\\s*\"step_cap\""}
+  ]
+}
+```
+
+1. `id` is lower-case letters, digits and `_`. `meaning` is one sentence. `file` is a path inside the trial folder;
+   a file whose resolved path, through any link, lies outside the trial folder stops `classify`.
+2. A rule has either `regex` (searched in the file's text) or `json_path` with `value`. A `json_path` segment is a
+   key, a list index, or `*` for every element; the rule matches when any value reached equals `value`.
+3. A found class may read a file that only one agent writes.
+4. `trials.csv` gets a column `found:<id>` per rule: `1`, `0` (no match or no file), or `unreadable` (a JSON file
+   that does not parse). `groups.json` counts each rule's trials, failing trials and unreadable files on the
+   round's run. `result.json` counts them on the shared tasks of the two runs `compare` reads, with
+   `counted_trials`, the trials of the shared tasks on each run. With no `found-classes.json` or no
+   rule in it, `found_classes` of `result.json` is empty. A rule with an error in its definition stops `compare`
+   with the message of `classify` before anything is written. `compare` reads the files of the shared tasks only.
+   A file there that leaves its trial folder stops `compare` after it has written `compare-metrics.json`.
+
+A cause names the rule that counts its trials (`references/files.md`, causes).
+
+## The agent's own classes
+
+`commands.classes` of the adapter writes classes and flags per trial. Each becomes a column `agent_class:<name>` or
+`agent_flag:<name>` of `trials.csv`, beside the seven classes. When the command is null, `groups.json` says the check
+did not run.
