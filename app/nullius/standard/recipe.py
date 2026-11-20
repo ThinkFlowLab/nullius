@@ -337,7 +337,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     the run sends it as."""
     d = defs or _all()
     errors, notes = [], []
-    add = lambda step, message: errors.append({"step": STEP[step], "message": message})
+    # each problem once: several picks of one kind (a benchmark's own agents) can each find it
+    add = lambda step, message: None if {"step": STEP[step], "message": message} in errors \
+        else errors.append({"step": STEP[step], "message": message})
     out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
            "served_models": {}}
     name = str(recipe.get("name") or "")

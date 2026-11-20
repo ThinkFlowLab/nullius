@@ -161,6 +161,10 @@ class Recipes(unittest.TestCase):
         self.assertEqual(said, [{"step": recipe.STEP["model"],
                                  "message": "OpenAI CUA is published with computer-use-preview: choose one of them, or Any of your choice for another."}])
 
+    def test_two_of_its_agents_without_a_model_say_so_once(self):
+        said = [e["message"] for e in self.compiled(others=["osworld1:m3", "osworld1:claude"], model="")["errors"]]
+        self.assertEqual(said.count("Choose a model."), 1)
+
     def test_another_benchmarks_agent_is_refused_with_its_reason(self):
         said = [e["message"] for e in self.compiled(others=["osworld2:m3"])["errors"]]
         self.assertEqual(said, ["MiniMax M3 cannot run OSWorld1: MiniMax M3 belongs to OSWorld2."])
