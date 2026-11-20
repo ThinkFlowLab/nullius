@@ -70,6 +70,7 @@ import shlex
 import shutil
 from datetime import timezone
 
+from nullius import importers
 from nullius.redact import redact
 from nullius.traces.trajectory import parse_ts
 
@@ -273,6 +274,10 @@ def _usage(doc: dict) -> dict:
     }
 
 
+def _dump(path: str, data) -> bool:
+    return importers.write_if_changed(path, json.dumps(data, indent=2).encode())
+
+
 def _sha256(path: str) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -316,15 +321,15 @@ def convert_document(path: str, doc: dict, trial: str, job_dir: str) -> dict:
             "session_id": doc.get("session_id"),
         },
     }
-    with open(os.path.join(trial_dir, "result.json"), "w", encoding="utf-8") as fh:
-        json.dump(result, fh, indent=2)
+    changed = _dump(os.path.join(trial_dir, "result.json"), result)
 
     # Byte for byte: the trial page reads what the producer wrote, and a
     # digest of the copy is a digest of the source.
-    shutil.copyfile(path, os.path.join(agent_dir, "trajectory.json"))
+    with open(path, "rb") as fh:
+        changed |= importers.write_if_changed(os.path.join(agent_dir, "trajectory.json"), fh.read())
 
     return {"trial_dir": trial, "started_at": started, "finished_at": finished,
-            "agent_info": result["agent_info"]}
+            "agent_info": result["agent_info"], "changed": changed}
 
 
 
@@ -346,30 +351,29 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
     # ordered as instants, not as text: one stamp with a zone and one without sort apart as strings
     starts = sorted((s["started_at"] for s in summaries if s["started_at"]), key=_instant)
     ends = sorted((s["finished_at"] for s in summaries if s["finished_at"]), key=_instant)
-    with open(os.path.join(job_dir, "result.json"), "w", encoding="utf-8") as fh:
-        json.dump({
-            "started_at": starts[0] if starts else None,
-            "finished_at": ends[-1] if ends else None,
-            "n_total_trials": len(summaries),
-            "stats": {"n_errored_trials": 0, "n_running_trials": 0,
-                      "n_pending_trials": 0, "n_retries": 0},
-        }, fh, indent=2)
+    _dump(os.path.join(job_dir, "result.json"), {
+        "started_at": starts[0] if starts else None,
+        "finished_at": ends[-1] if ends else None,
+        "n_total_trials": len(summaries),
+        "stats": {"n_errored_trials": 0, "n_running_trials": 0,
+                  "n_pending_trials": 0, "n_retries": 0},
+    })
+    importers.mark_changed(job_dir, summaries)
 
     # The first document's producer names the job; a tree that mixes
     # producers still shows each trial's own under agent_info.
     agent = next((s["agent_info"] for s in summaries if s["agent_info"]["name"]),
                  summaries[0]["agent_info"])
-    with open(os.path.join(job_dir, "config.json"), "w", encoding="utf-8") as fh:
-        json.dump({
-            "job_name": job_name,
-            "harness": NAME,   # provenance; the walker ignores unknown keys
-            "command": command or (
-                f"PYTHONPATH=app python3 -m nullius.importers.cli {shlex.quote(root)} "
-                f"-o {shlex.quote(out_root)} --job-name {shlex.quote(job_name)}"),
-            "agents": [{"name": agent["name"],
-                        "model_name": agent["model_info"]["name"]}],
-            "tasks": [{"name": f"{NAME}/{s['trial_dir']}"} for s in summaries],
-        }, fh, indent=2)
+    _dump(os.path.join(job_dir, "config.json"), {
+        "job_name": job_name,
+        "harness": NAME,   # provenance; the walker ignores unknown keys
+        "command": command or (
+            f"PYTHONPATH=app python3 -m nullius.importers.cli {shlex.quote(root)} "
+            f"-o {shlex.quote(out_root)} --job-name {shlex.quote(job_name)}"),
+        "agents": [{"name": agent["name"],
+                    "model_name": agent["model_info"]["name"]}],
+        "tasks": [{"name": f"{NAME}/{s['trial_dir']}"} for s in summaries],
+    })
     return job_dir
 
 
