@@ -63,6 +63,7 @@ def _card(row, sheet) -> dict:
             "needs": needs and {"text": "needs " + ", ".join(needs),
                                 "title": f"Some of its options need {', '.join(needs)} installed on the machine it runs on: see its page"},
             "tasks": {"text": tasks, "label": unit.capitalize(), "value": tasks.replace(",", "").split("–")[-1]},
+            "versions": {v: {"text": n, "label": u.capitalize()} for v, (n, u) in row["versions"].items()},
             "datasets": {"text": len(ds), "label": "Datasets" if len(ds) != 1 else "Dataset"},
             "with": {"text": FAMILIES[row["family"]], "value": row["family"], "title": f"{row['kind'].capitalize()} capabilities" if row["kind"] else ""},
             "scoring": b.scoring, "blocker": b.blocker[:1].upper() + b.blocker[1:]}

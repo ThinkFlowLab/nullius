@@ -1,5 +1,6 @@
 """The builder's Benchmark step grid (/new-run/benchmarks): the Benchmarks page's cards as single-choice pick cards,
 with what each benchmark is run with as a menu of its own."""
+import json
 import os
 import re
 import shutil
@@ -39,6 +40,15 @@ class BenchmarkGrid(unittest.TestCase):
         self.assertIn('<span class="cat-tag">Math</span>', cards["gsm8k"])
         self.assertNotIn("Official", html)                                                          # only a community one says so
         self.assertIn('title="Real-world questions', cards["gaia"])                                 # its domain, as its tooltip
+
+    def test_a_benchmark_with_versions_carries_each_ones_tasks(self):
+        html = self.get("/new-run/benchmarks")
+        card = re.search(r'<article class="bench-card"[^>]*id="pick-bench-osworld1"[^>]*>', html).group(0)
+        tasks = json.loads(unescape(re.search(r'data-tasks="([^"]*)"', card).group(1)))
+        self.assertEqual(tasks[""]["text"], "368")                                                # the default version's
+        self.assertEqual(tasks["044bc33"], {"text": "369", "label": "Tasks"})
+        self.assertNotIn("data-tasks", re.search(r'<article class="bench-card"[^>]*id="pick-bench-gsm8k"[^>]*>', html).group(0))
+        self.assertRegex(self.get("/new-run/benchmarks?view=table"), r'<tr[^>]*id="pick-bench-osworld1"[^>]*data-tasks=')       # its row too
 
     def test_its_controls_category_pills_run_with_beside_filter_sort_and_the_toggle(self):
         html = self.get("/new-run/benchmarks")

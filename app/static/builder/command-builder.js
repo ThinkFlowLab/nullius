@@ -636,7 +636,7 @@
   // pressed as the recipe chooses (nullius-pick changes the recipe). Its view, cards or a table, is the viewer's:
   // the toggle switches it in place, never leaving the page.
   const grids = [
-    {slot: 'nb-bench-grid', store: 'nb-bench-view', url: () => '/new-run/benchmarks?', chosen: rec => [C.benchKey(rec)]},
+    {slot: 'nb-bench-grid', store: 'nb-bench-view', url: () => '/new-run/benchmarks?', chosen: rec => [C.benchKey(rec)], after: benchTasks},
     {slot: 'nb-agent-grid', store: 'nb-agent-view', url: rec => '/new-run/agents?' + new URLSearchParams({benchmark: rec.benchmark}) + '&', chosen: rec => C.chosenOf(rec)},
   ];
   grids.forEach(g => { g.view = 'cards'; g.ref = ''; g.node = null; try { g.view = localStorage.getItem(g.store) === 'table' ? 'table' : 'cards'; } catch {} });
@@ -656,6 +656,7 @@
     // a choice made elsewhere (a recipe loaded) that the filters hide: the toolkit draws again, and it shows
     if (g.node.dataset.wired && [...g.node.querySelectorAll('[data-pick]')].some(b => b.matches('[aria-pressed="true"], :checked') && b.closest('[data-card], tr').hidden))
       g.node.querySelector('[data-search]')?.dispatchEvent(new Event('input'));
+    g.after?.();
     if (!g.node.dataset.wired) {
       g.node.dataset.wired = '1';
       const cards = g.node.querySelector('[data-cards]'), table = g.node.querySelector('table[data-table]');
@@ -668,6 +669,17 @@
         placeGrid(g);
       }));
     }
+  }
+  // the Tasks of a benchmark with versions (its data-tasks, {version: {text, label}}, the default's under ''): the
+  // chosen benchmark's as the version the recipe names reads, any other's its default's
+  function benchTasks() {
+    const rec = r(), on = C.benchKey(rec), v = versionOf(rec);
+    root.querySelectorAll('#nb-bench-grid [data-tasks]').forEach(el => {
+      const by = JSON.parse(el.dataset.tasks), t = by[el.querySelector('[data-pick]')?.dataset.pick === on && by[v] ? v : ''];
+      const dd = el.querySelector('.bench-stats dd'), dt = el.querySelector('.bench-stats dt'), td = el.querySelector('td[data-col="tasks"] > span');
+      if (dd) { dd.textContent = t.text; dt.textContent = t.label; }
+      if (td) td.textContent = t.text;
+    });
   }
   async function loadGrid(g, ref) {
     const res = await nulliusFetch(ref).catch(() => null);
@@ -1180,8 +1192,8 @@
     const el=event.target,d=el.dataset;
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
-    else if(d.stdVersion!==undefined){   // in place: nothing else on this step changes
-      C.setStandardBenchmark(r(),el.value);render(false,false);}
+    else if(d.stdVersion!==undefined){   // in place: only the card's count changes on this step, so nothing else is drawn again
+      C.setStandardBenchmark(r(),el.value);benchTasks();render(false,false);}
     // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
     // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the
     // menu button controls.js puts after it once this change is handled; a typed value is left as it is

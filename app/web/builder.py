@@ -69,8 +69,11 @@ def new_run_benchmarks():
     ?view=table; the builder presses the one its recipe names."""
     cat = shared._catalog_cached()
     # a community benchmark says so; an official one says nothing
+    # a benchmark with versions carries each one's Tasks (the default's under ""), for the builder to show the chosen one's
     items = [dict(i, pick={"value": i["key"], "one": True}, id="pick-bench-" + i["key"], title={"text": i["title"], "title": i["domain"]},
-                  origin=i["origin"] if i["shelf"] != "official" else None) for i in catalogue.benchmark_cards(cat)]
+                  origin=i["origin"] if i["shelf"] != "official" else None,
+                  data={"tasks": json.dumps({"": i["tasks"], **i["versions"]})} if i["versions"] else None)
+             for i in catalogue.benchmark_cards(cat)]
     every = catalogue.benchmark_choices(cat)
     choices = {k: [(v, t) for v, t in every[k] if any(v in _values(i[k]) for i in items)] for k in ("category", "with", "runs")}
     return render_template("builder/benchmarks.html", items=items, choices={k: v for k, v in choices.items() if len(v) > 1},

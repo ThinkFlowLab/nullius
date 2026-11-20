@@ -118,8 +118,8 @@ def benchmarks(cat) -> List[dict]:
     """The benchmarks the Benchmarks page and the builder's Benchmark step list: each of the catalogue's listed
     entries (``Catalog.listed_benchmarks``, whichever runner runs it) as ``b``, with its ``datasets``, its ``tasks``
     and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, None for nothing),
-    and what it is run with: ``family`` agent or capability (a benchmark only Harbor runs runs agents) and, for a
-    capability, its ``kind``."""
+    what it is run with: ``family`` agent or capability (a benchmark only Harbor runs runs agents) and, for a
+    capability, its ``kind``; and ``versions``, another version's tasks and unit by version."""
     defs = {d["key"]: d for d in definitions.load("benchmark")[0]}
     out = []
     for b in cat.listed_benchmarks:
@@ -127,7 +127,9 @@ def benchmarks(cat) -> List[dict]:
         tasks, unit = cat.tasks_of(b)
         out.append({"b": b, "datasets": cat.datasets_of(b), "tasks": tasks, "unit": unit,
                     "host": sorted(d["host"]) if d.get("host") else None,
-                    "family": d.get("family") or "agent", "kind": _capability_kind(d)})
+                    "family": d.get("family") or "agent", "kind": _capability_kind(d),
+                    # another version's tasks, when its datasets count differently (``Catalog.in_version``)
+                    "versions": {v: cat.tasks_of(b, cat.in_version(b, v)[1]) for v in b.versions}})
     return out
 
 
