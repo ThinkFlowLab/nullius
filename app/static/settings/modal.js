@@ -72,13 +72,10 @@
       proxy.remove();
     });
   });
-  document.addEventListener('click', event => {
-    const link = event.target.closest('a[href]');
-    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target || link.download) return;
-    const url = new URL(link.href, location.href);
-    if (url.origin !== location.origin || url.pathname !== '/settings' || location.pathname === '/settings') return;
-    event.preventDefault();
-    opener = link;
+  function open(href, from) {
+    const url = new URL(href, location.href);
+    if (url.origin !== location.origin || url.pathname !== '/settings' || location.pathname === '/settings') return false;
+    opener = from;
     baseline = '';
     closing = false;
     closeButton.disabled = false;
@@ -87,5 +84,12 @@
     frame.src = url.href;
     modal.showModal();
     document.getElementById('settings-modal-title').focus();
+    return true;
+  }
+  window.nulliusOpenSettings = open;
+  document.addEventListener('click', event => {
+    const link = event.target.closest('a[href]');
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target || link.download) return;
+    if (open(link.href, link)) event.preventDefault();
   });
 })();

@@ -590,7 +590,7 @@ class BoatRecipe(unittest.TestCase):
         small = errors(backend="boat", boat_size="small")
         self.assertIn("A Small VM is too small for OSWorld2, whose units boot a 4 GB VM: choose a larger size.", small)
         # Model-calling setups and controls use a relay container inside each whole-task VM.
-        self.assertNotIn("Original cannot run in a Boat VM yet: choose Hosts.", small)
+        self.assertNotIn("Original cannot run in a Boat VM: choose Hosts.", small)
         self.assertEqual(errors(backend="boat", boat_size="default", others=["original", "nop"]), [])
         self.assertFalse([m for m in errors(backend="boat", boat_size="default") if "too small" in m])
         self.assertIn("OSWorld2 starts each unit's VM on the machine: choose local processes.", errors(backend="container"))
@@ -602,6 +602,10 @@ class BoatRecipe(unittest.TestCase):
         out = recipe.compile(a_recipe(backend="boat"), defs(), boat_unusable=lambda here=True: "no Boat API key: set it in Settings → Sandbox")
         self.assertEqual([e["step"] for e in out["errors"]], [recipe.STEP["where"]])
         self.assertIn("Settings → Sandbox", out["errors"][0]["message"])
+        for saved, shown in ((None, True), ("k", False)):
+            with mock.patch.object(boat, "key", return_value=saved):
+                out = recipe.compile(a_recipe(backend="boat"), defs(), boat_unusable=lambda here=True: "missing")
+            self.assertEqual(out["errors"][0].get("shown", False), shown)
 
     def test_a_conformance_check_on_boat_says_its_backend(self):
         agent = definitions.load("agent", ROOT)[0][0]

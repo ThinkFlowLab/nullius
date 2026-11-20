@@ -1,4 +1,4 @@
-// The Sandbox section: docker's state and whether a Boat key is saved, asked once when the section is first shown.
+// The Sandbox section: whether a Boat key is saved, asked once when the section is first shown.
 (() => {
   const section = document.getElementById('sandbox');
   if (!section) return;
@@ -26,13 +26,7 @@
   const load = async () => {
     asked = true;
     let j;
-    try { j = await (await nulliusFetch(section.dataset.sandbox)).json(); } catch (err) { j = {docker: {ok: false, error: String(err)}, boat: {set: false, env: false}}; }
-    const docker = $('[data-docker-state]');
-    docker.textContent = j.docker.ok ? '✓ ' + j.docker.version : '✕ ' + j.docker.error;
-    docker.className = 'st-row-value ' + (j.docker.ok ? 'ok' : 'bad');
-    const also = j.docker.also, other = $('[data-docker-also]');
-    other.hidden = !also;
-    if (also) other.lastElementChild.textContent = also.ok ? also.said + ' is installed too' : also.name + ' is installed and does not answer: ' + also.said;
+    try { j = await (await nulliusFetch(section.dataset.sandbox)).json(); } catch (err) { j = {boat: {set: false, env: false}}; }
     boat = j.boat || {set: false, env: false};
     render();
   };
@@ -56,7 +50,10 @@
       section.querySelectorAll('button').forEach(b => { b.disabled = false; });
     }
   };
-  if (edit) edit.addEventListener('click', () => { editing = true; render(); form.querySelector('input').focus(); });
+  const open = () => { editing = true; render(); form.querySelector('input').focus(); };
+  if (edit) edit.addEventListener('click', open);
+  const fromHash = () => { if (form && location.hash === '#sandbox-boat-key') open(); };
+  window.addEventListener('hashchange', fromHash);
   if (cancel) cancel.addEventListener('click', () => { form.reset(); editing = false; render(); edit.focus(); });
   if (form) form.addEventListener('submit', e => { e.preventDefault(); change('save'); });
   if (remove) remove.addEventListener('click', () => asking(removeAsk.hidden));
@@ -68,4 +65,5 @@
   const ask = () => { if (!asked && !section.hidden) load(); };
   new MutationObserver(ask).observe(section, {attributes: true, attributeFilter: ['hidden']});
   ask();
+  fromHash();
 })();

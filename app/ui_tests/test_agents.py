@@ -612,7 +612,7 @@ class StandardPieces(unittest.TestCase):
                  {"key": "large", "label": "Large", "spec": "", "memory_gb": None, "why": None},
                  {"key": "xlarge", "label": "XLarge", "spec": "", "memory_gb": None, "why": None}]
         self.assertEqual(schema["standardHere"], {"docker": None, "boat": "no Boat API key: set it in Settings → Sandbox",
-                                                  "boatSizes": sizes, "boatSlots": None, "licences": {}, "host": {}})
+                                                  "boatSizes": sizes, "boatSlots": None, "boatKey": False, "licences": {}, "host": {}})
 
     def test_the_builder_offers_the_boat_sizes_and_vms_at_once_its_account_says(self):
         from nullius.standard import boat
