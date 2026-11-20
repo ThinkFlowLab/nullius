@@ -53,8 +53,9 @@ An agent's run that fails with more to come pauses the run and the page
 asks: continue or stop. Every state change lands in ``runs/<name>/run.json``;
 ``restore`` reads those records when Nullius starts and reattaches to what
 is still running, waits again where it was paused, and settles what ended
-while nobody was looking. A record is checked against the part's files and
-processes on the target before it is trusted (``_settle``): a part whose pid
+while nobody was looking; one process at a time, by the runs root's lock.
+A record is checked against the part's files and processes on the target
+before it is trusted (``_settle``): a part whose pid
 was never saved, but which was claimed or started, is followed by the pid it
 wrote itself or by its processes - never started a second time; a record
 from before a part's end was one save, naming the next part with the ended
@@ -109,6 +110,7 @@ a restart, and ``summary``'s ``stages`` is them folded for the page.
 from __future__ import annotations
 
 import base64
+import fcntl
 import hashlib
 import json
 import os
@@ -143,6 +145,7 @@ STOP_WAIT = 20.0                              # seconds a Stop's own commands on
 LAUNCH_GRACE = 5.0                            # seconds a restart waits for a part a launcher claimed to start (_settle)
 UV_INSTALL = "curl -LsSf https://astral.sh/uv/install.sh | sh"
 RECORD = "run.json"
+LOCK = ".lock"                                # in the runs root, held by the one process that follows its runs
 STANDARD = "standard"                         # the Nullius standard's runner key (standard/recipe.py HARNESS)
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # this repository: app/ is in it
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
@@ -1716,12 +1719,41 @@ def ended_for(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Opti
     return ex.job_state(job_id) if ex is not None else None
 
 
+class Followed(RuntimeError):
+    """Another process follows the runs under this root."""
+
+
+_FOLLOWED: Dict[str, object] = {}                 # runs root -> its lock, open for the rest of this process
+
+
+def _follow(root: str) -> None:
+    """Hold *root*'s lock for the rest of this process, or raise ``Followed``:
+    two processes following one run both resume it and both write its record.
+    The lock goes with the process, however it ends."""
+    key = os.path.realpath(root)
+    if key in _FOLLOWED:
+        return
+    try:
+        os.makedirs(key, exist_ok=True)
+        fh = open(os.path.join(key, LOCK), "a")
+    except OSError:
+        return                                    # no runs root here: nothing to resume
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        fh.close()
+        raise Followed(f"another Nullius follows the runs in {key}: stop it before starting this one") from None
+    _FOLLOWED[key] = fh
+
+
 def restore(root: Optional[str] = None, **kw) -> List[Execution]:
     """At start-up: every recorded run under the root. The ones still alive
     are reattached (their thread follows the part that was running, or
     waits at the pause it was at); the finished ones are listed as they
-    ended. Returns the ones reattached."""
+    ended. Returns the ones reattached. ``Followed`` when another process
+    holds the root (``_follow``)."""
     root = root or runs_root(kw.get("env", os.environ))
+    _follow(root)
     back = []
     try:
         names = sorted(os.listdir(root))

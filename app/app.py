@@ -25,6 +25,8 @@ if not __package__:
 
 import argparse  # noqa: E402
 
+from werkzeug.serving import is_running_from_reloader  # noqa: E402
+
 if __package__:  # the wheel's private web namespace
     from .web.core import app
     from .web import shared
@@ -64,6 +66,13 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
+    # Runs started from the builder before this start: the ones still going
+    # are followed again (they run detached on their target), the rest listed.
+    # With --debug the reloader's watcher runs this too; the server it starts follows them.
+    try:
+        back = execution.restore() if not args.debug or is_running_from_reloader() else []
+    except execution.Followed as exc:
+        sys.exit(f"nullius: {exc}")
 
     values = args.paths or [
         p for p in os.environ.get("JOB_ROOTS", "").split(os.pathsep) if p
@@ -86,9 +95,6 @@ def main(argv=None) -> None:
             print(f"Workspace {ws.name!r} ({ws.dir}) reopened")
         else:
             print("No job path given — the web page will ask for one, or offer a workspace.")
-    # Runs started from the builder before this start: the ones still going
-    # are followed again (they run detached on their target), the rest listed.
-    back = execution.restore()
     for ex in back:
         print(f"Run {ex.plan.name} picked up again on {ex.plan.host.label if ex.plan.host else 'this machine'} ({ex.state})")
         shared.adopt_roots([ex.jobs], into=ex.workspace)   # its job root back in the workspace it started in

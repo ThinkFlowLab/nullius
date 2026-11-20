@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -15,6 +16,8 @@ from unittest.mock import patch
 from nullius import execution
 
 from tests.execution_support import Base, HostBase, gone
+
+APP = str(Path(__file__).resolve().parents[1])
 
 
 class Restart(Base):
@@ -52,6 +55,28 @@ class Restart(Base):
         self.assertEqual((again.state, again.exit_code), ("done", 0), again.lines)
         text = "\n".join(again.lines)
         self.assertIn("Nullius is back; picking the run up at slow run", text); self.assertIn("slow done", text); self.assertIn("next", (d / "run-next.log").read_text())
+
+    def test_a_second_process_on_one_runs_root_resumes_nothing(self):
+        """Two Nullius started on one profile: one follows the run, the other
+        is refused, and the lock goes with the process that held it."""
+        launches = self.tmp / "launches"
+        parts = [{"id": "slow", "label": "slow", "script": "sleep 2; echo slow done"},
+                 {"id": "next", "label": "next", "script": f"echo launched >> {launches}"}]
+        ex = execution.Execution(execution.Plan(name="r", script="", parts=parts), root=str(self.tmp)).start()
+        self.until(ex, "running"); self.recorded(self.tmp / "r", "pid")
+        self.abandon(ex)                                       # the first Nullius is gone; the part runs on
+        child = ("import sys; from nullius import execution; execution.SYNC_EVERY = 0.05\n"
+                 "try: back = execution.restore(sys.argv[1])\n"
+                 "except execution.Followed: back = None\n"
+                 "print(back and [e.plan.name for e in back], flush=True); [e.thread.join(20) for e in back or ()]")
+        kids = [subprocess.Popen([sys.executable, "-c", child, str(self.tmp)], env=dict(os.environ, PYTHONPATH=APP),
+                                 stdout=subprocess.PIPE, text=True) for _ in range(2)]
+        said = sorted(k.communicate(timeout=60)[0].strip() for k in kids)
+        log = (self.tmp / "r" / "nullius.log").read_text()
+        self.assertEqual(said, ["None", "['r']"], log)                 # one follows it, the other is refused
+        self.assertEqual(log.count("Nullius is back"), 1, log)
+        self.assertEqual(launches.read_text().split(), ["launched"])
+        self.assertEqual(execution.restore(str(self.tmp)), [])        # not refused once that process is gone; the run has ended
 
     def test_a_trial_line_is_said_once_across_a_restart(self):
         """The trials already said are part of the record: a restart says the
