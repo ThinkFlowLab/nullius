@@ -39,7 +39,7 @@ class StandardWhere(CompilerCase):
                 self.assertIn('aria-pressed="true"', card(html, "boat"))
                 self.assertIn('aria-pressed="false"', card(html, "hosts"))
                 self.assertIn(">Sandboxes</button>", html)
-                self.assertIn("2 at once on this account", html)                     # the account's VMs at once, from its API
+                self.assertNotIn("at once", html)                              # the account's VMs at once: Limits' concurrency says it
                 self.assertNotIn("data-std-where", html)                       # no host to add to a sandbox run
                 self.assertNotIn("data-std-backend", html)                     # nothing to choose: the VM is the sandbox
                 self.assertNotIn("not sandboxed", html.lower())
@@ -58,11 +58,10 @@ class StandardWhere(CompilerCase):
         self.assertIn('src="/static/brand/boat.svg"', ordinary)               # Boat's mark, one per theme
         self.assertIn('src="/static/brand/boat-dark.svg"', ordinary)
         self.assertNotIn("shards, merged", ordinary)
-        self.assertNotIn("at once", self.draw(None, backends=("boat",), slots=None)["gsm8k boat"])   # the API said nothing: no number
         gone = self.draw(None, backends=("boat",), boat="no Boat API key: set it in Settings → Sandbox")["gsm8k boat"]
         self.assertNotIn("disabled", card(gone, "boat"))                   # no key: still chosen, and its card links to Settings
         self.assertNotIn("data-std-boat-size", gone)
-        self.assertIn('class="nb-inlinebutton std-boat-key" data-href="/settings#sandbox-boat-key">Add a Boat API key in Settings</button>', gone)
+        self.assertIn('class="nb-inlinebutton std-boat-key" data-href="/settings#sandbox-boat-key">Add API Key</button>', gone)
         missing = self.draw(None, "schema.standardHere.boatKey=true;", backends=("boat",), boat="missing on this machine: ssh")["gsm8k boat"]
         self.assertIn('<span class="nb-error">missing on this machine: ssh</span>', missing)   # not a key: nothing in Settings fixes it
         self.assertNotIn("std-boat-key", missing)

@@ -117,6 +117,10 @@
   // An unsupported draft opens nothing; its rejection is shown as a toast.
   else { let d = null; try { d = C.unpackDraft(localStorage.getItem(draftKey), query); } catch {} if (d && d.recipe) { recipe = d.recipe; step = d.step; tab = d.tab; savedId = d.saved; } else if (d && d.gone) opened = d.gone; }
   const saveDraft = () => { try { localStorage.setItem(draftKey, C.packDraft({recipe, step, tab, saved: savedId})); } catch {} };
+  // Settings closed, however it was opened (a builder link, the rail): the builder opens again to read what changed
+  // (a key added or removed), from its draft, so without the query that would replace the recipe and step with a fresh one
+  // (the popup comes after this script in the page, and its close does not bubble: caught on the way down)
+  document.addEventListener('close', e => { if (e.target.id === 'settings-modal') { saveDraft(); location.replace(location.pathname); } }, true);
   let compiled, pendingDirs, dirsSequence = 0;
   const r = () => recipe;
   const store = recipeStore({request: (...a) => nulliusFetch(...a), csrf: schema.csrf, storage: (() => { try { return localStorage; } catch { return {length: 0}; } })()});
@@ -499,7 +503,7 @@
     }
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
       + `<div class="std-machines" role="group" aria-label="Machines">${kind('hosts', 'Hosts')}${kind('boat', 'Sandboxes', here.boatKey ? here.boat || '' : '')}</div>`
-      + (sandboxes ? `<div class="std-boat-card${here.boat ? ' off' : ''}"><strong><img class="std-boat-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="std-boat-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">Boat</strong><span>One VM per ${esc(noun)}</span>${here.boatSlots ? `<span>${here.boatSlots} at once on this account</span>` : ''}${here.boat ? (here.boatKey ? `<span class="nb-error">${esc(here.boat)}</span>` : button('Add a Boat API key in Settings', 'data-href="/settings#sandbox-boat-key"', 'nb-inlinebutton std-boat-key')) : ''}</div>` + sizes
+      + (sandboxes ? `<div class="std-boat-card${here.boat ? ' off' : ''}"><strong><img class="std-boat-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="std-boat-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">Boat</strong>${here.boat ? (here.boatKey ? `<span class="nb-error">${esc(here.boat)}</span>` : button('Add API Key', 'data-href="/settings#sandbox-boat-key"', 'nb-inlinebutton std-boat-key')) : ''}</div>` + sizes
         : `<div class="nb-pick-grid nb-where std-hosts">${machine('local', 'This machine', 'Runs here')}${H.map(h => machine(h.entry, h.label, 'Over SSH')).join('')}</div>`
         + (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : ''))
       + '<div class="nb-sectionhead std-wherehead"><h3>Isolation</h3></div>'
@@ -1083,9 +1087,8 @@
     if(d.pickCat!==undefined){pickOf().cat=d.pickCat;applyPick();return;}
     if(d.pickFam!==undefined){pickOf().fam=d.pickFam;applyPick();return;}
     if(d.agent){const on=r().agents.includes(d.agent);r().agents=on?r().agents.filter(id=>id!==d.agent):[...r().agents,d.agent];renderForm();refreshPlan();return;}
-    // Settings opens as its popup over the builder; closed, the builder opens again to read what changed, from its
-    // draft (saved on every render), so without the query that would replace the recipe and step with a fresh one
-    else if(d.href){if(window.nulliusOpenSettings?.(d.href,b)){saveDraft();document.getElementById('settings-modal').addEventListener('close',()=>location.replace(location.pathname),{once:true});}else location.href=d.href;return;}
+    // Settings opens as its popup over the builder (its close reloads the builder: below)
+    else if(d.href){if(!window.nulliusOpenSettings?.(d.href,b))location.href=d.href;return;}
     else if(b.id==='nb-add-custom-agent'){r().customAgents.push('');r().agents.push('custom-'+(r().customAgents.length-1));renderForm();refreshPlan();root.querySelector('[data-custom-agent="'+(r().customAgents.length-1)+'"]')?.focus();return;}
     else if(d.removeCustomAgent!==undefined){const i=Number(d.removeCustomAgent),rec=r(),kept=rec.agents.filter(id=>id.startsWith('custom-')&&id!=='custom-'+i).map(id=>Number(id.slice(7)));rec.customAgents.splice(i,1);rec.agents=rec.agents.filter(id=>!id.startsWith('custom-')).concat(kept.map(k=>'custom-'+(k>i?k-1:k)));renderForm();refreshPlan();return;}
     // The Harbor panel (Runner step): a release or a repository, a ref of it, installed and asked for its agents.
