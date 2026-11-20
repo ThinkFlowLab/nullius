@@ -1,6 +1,7 @@
 """A trial: its trace, trajectory, conversation, artifacts and saved views."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -361,10 +362,7 @@ def save_trace(job_id, trial_name):
     if os.path.realpath(dest) == os.path.realpath(source) or os.path.basename(dest) == "trace.json":
         flash(Markup(f"{shown} is the trace being read — save the view under another name."), "error")
         return redirect(back)
-    if os.path.exists(dest):
-        flash(Markup(f"{shown} already exists; nothing was overwritten."), "error")
-        return redirect(back)
-
+    created = False
     try:
         with open(source, encoding="utf-8") as fh:
             data = json.load(fh)
@@ -372,9 +370,18 @@ def save_trace(job_id, trial_name):
         # producer wrote — including the content this app redacts at render. It is
         # exactly as sensitive as its source.
         out = trace.filtered_document(data, filt)
-        with open(dest, "w", encoding="utf-8") as fh:
-            json.dump(out, fh, ensure_ascii=False, indent=1)
+        text = json.dumps(out, ensure_ascii=False, indent=1)
+        # Exclusive create: a file that appeared since the name was chosen is refused, never replaced.
+        with open(dest, "x", encoding="utf-8") as fh:
+            created = True
+            fh.write(text)
+    except FileExistsError:
+        flash(Markup(f"{shown} already exists; nothing was overwritten."), "error")
+        return redirect(back)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
+        if created:
+            with contextlib.suppress(OSError):
+                os.remove(dest)
         flash(Markup(f"Could not write {shown}: {escape(str(exc))}"), "error")
         return redirect(back)
 
