@@ -69,6 +69,7 @@
     <symbol id="i-dollar" viewBox="0 0 24 24"><path d="M12 3v18M16.5 7.5C15.9 6 14.2 5 12 5c-2.5 0-4.5 1.3-4.5 3.3 0 4.4 9 2.4 9 6.9 0 2-2 3.3-4.5 3.3-2.2 0-3.9-1-4.5-2.5"/></symbol>
     {#- Where a dataset's tasks come from #}
     <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24"><path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M15 9h.01M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5"/></symbol>
     {#- Themes #}
     <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></symbol>
     <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
