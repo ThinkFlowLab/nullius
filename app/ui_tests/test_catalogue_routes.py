@@ -267,6 +267,14 @@ class BenchmarkPage(PageCase):
         self.assertNotIn("/tree/9d6f711", old)
         self.get("/benchmarks/osworld1?v=nope", status=404)
         self.assertNotIn("data-version", self.get("/benchmarks/gsm8k"))                       # one version: nothing to swap
+        # a patched version (OSWorld2's hardened) reads by its key, tagged Experimental, its own limitations shown with it
+        html = self.get("/benchmarks/osworld2")
+        nav = re.search(r'<nav class="std-versions".*?</nav>', html, re.S).group(0)
+        self.assertIn('data-ref="osworld2"><b>osworld-v2.1</b>', nav)
+        self.assertRegex(nav, r'data-ref="osworld2@hardened"><b>hardened <span class="std-tag std-experimental"[^>]*>Experimental</span></b>')
+        self.assertEqual(nav.count("Experimental</span>"), 1)
+        self.assertNotIn("make its scores comparable only with this version", shown(html))
+        self.assertIn("make its scores comparable only with this version", shown(self.get("/benchmarks/osworld2?v=hardened")))
 
     def test_a_proof_short_of_the_full_mark_has_no_green_tick_and_says_its_bound(self):
         # Open Telco's oracle must score at least 93%: 3GPP TSG's scorer cannot read RAN_AH1, so its rows stop short

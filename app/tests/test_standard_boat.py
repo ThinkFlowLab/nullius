@@ -593,7 +593,7 @@ class BoatRecipe(unittest.TestCase):
         self.assertNotIn("Original cannot run in a Boat VM: choose Hosts.", small)
         self.assertEqual(errors(backend="boat", boat_size="default", others=["original", "nop"]), [])
         self.assertFalse([m for m in errors(backend="boat", boat_size="default") if "too small" in m])
-        self.assertIn("OSWorld2 starts each unit's VM on the machine: choose local processes.", errors(backend="container"))
+        self.assertIn("OSWorld2 v2.1 starts each unit's VM on the machine: choose local processes.", errors(backend="container"))
         self.assertFalse([m for m in errors(backend="local") if "VM" in m])
         self.assertTrue(definitions.boots_vms(definitions.get("benchmark", "osworld1")))
         self.assertFalse(definitions.boots_vms(definitions.get("benchmark", "gsm8k")))

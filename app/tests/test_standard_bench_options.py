@@ -286,6 +286,24 @@ class OtherBenchmarks(unittest.TestCase):
                         self.assertIs(block["setups"]["original"]["comparable"], False, name)
 
 
+class Experimental(unittest.TestCase):
+    def test_a_patched_version_is_marked_experimental_reads_by_its_key_and_is_never_the_default_or_comparable(self):
+        up = {"repository": "https://github.com/o/r", "tag": "v1", "tested": "a" * 40, "license": "MIT"}
+        d = {"key": "b", "default": "v1", "upstream": up,
+             "versions": {"v1": {}, "fixed": {"experimental": True, "setups": {"original": {"comparable": False}}}}}
+        r = definitions.resolve(d, "v1")
+        self.assertEqual(r["_labels"], {"v1": "v1", "fixed": "fixed"})          # the shared tag is the default's name, not its
+        self.assertEqual(r["_experimental"], ["fixed"])
+        say = "experimental: true, on a version beside the default"
+        for block in ({"experimental": True, "setups": {"original": {"comparable": False}}},):
+            self.assertFalse([p for p in definitions._versioned(dict(d, versions={"v1": {}, "fixed": block}), "benchmark") if say in p])
+        for bad in ({"experimental": True}, {"experimental": "yes", "setups": {"original": {"comparable": False}}}):
+            with self.subTest(bad=bad):
+                self.assertTrue([p for p in definitions._versioned(dict(d, versions={"v1": {}, "fixed": bad}), "benchmark") if say in p])
+        on_default = dict(d, versions={"v1": {"experimental": True, "setups": {"original": {"comparable": False}}}})
+        self.assertTrue([p for p in definitions._versioned(on_default, "benchmark") if say in p])
+
+
 class UpstreamBranch(unittest.TestCase):
     def test_an_untagged_pin_names_its_branch_and_reads_by_it(self):
         ok = {"repository": "https://github.com/o/r", "tested": "a" * 40, "license": "MIT"}
