@@ -54,6 +54,7 @@ import re
 import shutil
 from datetime import datetime, timezone
 
+from nullius import importers
 from nullius.redact import redact
 from nullius.traces import otel as reader
 from nullius.traces import trace
@@ -139,10 +140,8 @@ def _iso(ns: int) -> str:
     return datetime.fromtimestamp(ns / 1e9, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _dump(path: str, data) -> None:
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=1)
-        fh.write("\n")
+def _dump(path: str, data) -> bool:
+    return importers.write_if_changed(path, (json.dumps(data, ensure_ascii=False, indent=1) + "\n").encode())
 
 
 def _window(document: dict) -> tuple:
@@ -206,10 +205,10 @@ def write_trial(document: dict, job_dir: str) -> dict:
             "n_cache_tokens": tokens.get("cache_read_tokens", 0),
             "cost_usd": None,
         }
-    _dump(os.path.join(trial_dir, "result.json"), result)
-    _dump(os.path.join(agent_dir, "trace.json"), document)
+    changed = _dump(os.path.join(trial_dir, "result.json"), result)
+    changed |= _dump(os.path.join(agent_dir, "trace.json"), document)
     return {"trial_dir": trial, "started_at": started, "finished_at": finished,
-            "model": model, "agent": agent.get("name") or ""}
+            "model": model, "agent": agent.get("name") or "", "changed": changed}
 
 
 def _write_job(documents: list, out_root: str, job_name: str, command: str,
@@ -235,6 +234,7 @@ def _write_job(documents: list, out_root: str, job_name: str, command: str,
         "stats": {"n_errored_trials": 0, "n_running_trials": 0,
                   "n_pending_trials": 0, "n_retries": 0},
     })
+    importers.mark_changed(job_dir, summaries)
     agents = sorted({s["agent"] for s in summaries if s["agent"]}) or [""]
     models = sorted({s["model"] for s in summaries if s["model"]})
     _dump(os.path.join(job_dir, "config.json"), {

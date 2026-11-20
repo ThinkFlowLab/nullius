@@ -50,6 +50,7 @@ registered`` and every run tree is refused as unrecognised.
 from __future__ import annotations
 
 import importlib
+import os
 import pkgutil
 import shutil
 import tempfile
@@ -134,6 +135,28 @@ def problem(path: str) -> str | None:
     except (OSError, SystemExit) as e:
         return redact(str(e) or f"{module.NAME} could not read it")
     return None
+
+
+def write_if_changed(path: str, data: bytes) -> bool:
+    """Write *data* to *path* unless the file already holds it; True when
+    written. A conversion runs at each open of a workspace; an unchanged one
+    keeps its mtimes, and with them the parse cache that keys on them."""
+    try:
+        with open(path, "rb") as fh:
+            if fh.read() == data:
+                return False
+    except OSError:
+        pass
+    with open(path, "wb") as fh:
+        fh.write(data)
+    return True
+
+
+def mark_changed(job_dir: str, summaries: list) -> None:
+    """Move the job's own ``result.json`` when one of its trials was written:
+    an ended job's cached parse is checked by that file, not trial by trial."""
+    if any(s["changed"] for s in summaries):
+        os.utime(os.path.join(job_dir, "result.json"))
 
 
 def labels() -> str:
