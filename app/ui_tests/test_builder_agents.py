@@ -70,7 +70,7 @@ class AgentGrid(unittest.TestCase):
         self.assertIn('<input type="checkbox" data-value="fit" checked> Can run it', fit)            # what can run, at first
         self.assertIn('<input type="checkbox" data-value="unfit"> Cannot', fit)
         self.assertLess(html.index("data-dropdown"), html.index('data-tools-btn="filter"'))
-        self.assertIn('data-dropdown aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-plug"/></svg>Fit<', html)   # an icon as Filter's
+        self.assertIn('data-dropdown aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-puzzle"/></svg>Fit<', html)   # an icon as Filter's
         self.assertIn("> Bundled</label><label><input type=\"checkbox\" data-value=\"benchmark\" checked> OSWorld1's own</label>"
                       "<label><input type=\"checkbox\" data-value=\"elsewhere\" checked> Other benchmarks' agents", menu)
         self.assertIn('data-filter-menu="proves"', menu)
