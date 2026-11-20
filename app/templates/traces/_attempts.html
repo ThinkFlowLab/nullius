@@ -10,7 +10,7 @@
   <a class="attempt-tab oc-{{ a.outcome }}" data-keep-tab
      href="{{ url_for('trial', job_id=job.job_id, trial_name=a.trial_name, workspace=workspace) }}"
      title="Attempt {{ loop.index }}: {{ a.outcome_label }}{% if a.n_retries %} on try {{ a.n_retries + 1 }}{% endif %}"{% if on %} aria-current="{{ 'true' if shown is not none and shown.trial_name != a.trial_name else 'page' }}"{% endif %}>{{ ('Attempt ' if attempts.n <= 4 else '') ~ loop.index }}
-    {%- if a.n_retries %}<svg class="attempt-retried" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.55M13 2.5v3h-3"/></svg>{% endif %}</a>
+    {%- if a.n_retries %}<svg class="attempt-retried" aria-hidden="true"><use href="#i-refresh"/></svg>{% endif %}</a>
   {%- endfor %}
   <a class="attempt-tab all" href="{{ url_for('trial_attempts', job_id=job.job_id, trial_name=(current or attempts.trials[0]).trial_name, workspace=workspace) }}"
      {% if current is none %} aria-current="page"{% endif %}>All attempts</a>

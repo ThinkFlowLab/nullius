@@ -1068,7 +1068,7 @@ tr.control-row td { color: var(--text-dim); }
 .attempt-tab:hover { color: var(--text); border-color: var(--text-faint); }
 .attempt-tab[aria-current] { color: var(--text); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
 .attempt-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.attempt-retried { width: 12px; height: 12px; margin-left: -.15rem; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.attempt-retried { width: 12px; height: 12px; margin-left: -.15rem; flex: none; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 /* an attempt's tries, when its runner kept the ones before its last: tabs of
    their own under the attempt's, underlined, the last the one that counts */
 .try-tabs { display: flex; flex-wrap: wrap; gap: 0 1.2rem; width: fit-content; max-width: 100%; margin-top: .6rem; padding-right: .4rem; border-bottom: 1px solid var(--border); }

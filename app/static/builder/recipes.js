@@ -54,7 +54,7 @@
     const r = dialog.getBoundingClientRect();
     if (e.target === dialog && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) dialog.close();
   });
-  const head = (t, x) => `<div class="std-how-head"><h2 id="rcp-dialog-h">${esc(t)}</h2>${x ? '<button type="button" class="std-how-x" data-close aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>' : ''}</div>`;
+  const head = (t, x) => `<div class="std-how-head"><h2 id="rcp-dialog-h">${esc(t)}</h2>${x ? '<button type="button" class="std-how-x" data-close aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>' : ''}</div>`;
   function details(item) {
     const d = info[item.id], shown = STEPS.map(k => C.STEP[k]);
     const warn = d.problems.length ? `<ul class="rcp-problems">${d.problems.map(([s, m]) => `<li><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg><span><b>${esc(C.STEPS[s])}</b> ${esc(m)}</span></li>`).join('')}</ul>` : '';
