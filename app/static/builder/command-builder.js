@@ -625,7 +625,7 @@
     + (t.meta || t.foot ? `<span class="nb-tile-foot">${t.meta ? `<span>${esc(t.meta)}</span>` : ''}${t.foot || ''}</span>` : '') + '</button>';
   // a machine to run on: this one or a host, its connection state filled in by Test connection
   const icon = name => `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`;
-  const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: icon(v === 'local' ? 'machine' : 'network'), title: t, tip: sub,
+  const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: v === 'local' ? icon('machine') : icon('network'), title: t, tip: sub,
     foot: v !== 'local' ? `<span class="nb-state nb-hoststate" data-host-state="${esc(v)}"></span>` : ''});
   // The grids drawn by the server and run by the card toolkit (tables.js): the Benchmark step's (/new-run/benchmarks,
   // one choice) and the standard's Agent step's for its benchmark (/new-run/agents, from the Agents page's entries).
