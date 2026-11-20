@@ -1,7 +1,10 @@
 """The computer port's shared code (``nullius.standard.computer_port``): the MCP server ``computer`` and its bridge to a
 benchmark's loop, on a fake desktop, with a scripted MCP client over the server's socket; the runner's ready file,
-lifeline and one stop. A loop of a few lines stands in for an upstream's, counting steps as OSWorld's
-run_single_example does. The class UpstreamLoop drives OSWorld's own run_single_example with the bridge, where a
+lifeline and one stop. Once the agent is given its task, the desktop is reached through acting calls alone: one
+observation for each step, fixed as the step ends, which screenshot returns without a new picture; upload and prepare
+in the window before the task alone, inside the agent's folder; a step's files. A loop of a few lines stands in for an
+upstream's, counting steps as OSWorld's run_single_example does, handing a constant observation, its own (as OSWorld's)
+or none (as the kit's). The class UpstreamLoop drives OSWorld's own run_single_example with the bridge, where a
 checkout of the upstream is at hand. No VM, no docker, no network, no model."""
 from __future__ import annotations
 
@@ -27,11 +30,14 @@ from nullius.standard import computer_port as cp
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")
+FOLDER = "/agent"
+STUB = "import sys, types\nsys.modules['pyautogui'] = types.SimpleNamespace(FAILSAFE=True)\n"
 
 
 class FakeDesktop:
-    """A desktop of the test's, after the fake DesktopEnv of fixtures/osworld1_fake_desktop: its files in a folder of
-    the test's (relative paths only), python run there in a child process, one constant screen. Every operation is
+    """A desktop of the test's, after the fake DesktopEnv of fixtures/osworld1_fake_desktop: its files under a folder of
+    the test's (a desktop path /x is ROOT/x), python run there in a child process with a stand-in pyautogui and the
+    agent's folder's paths so placed, the folder made as the bridge asks, one constant screen. Every operation is
     recorded with its kind and start; two at once are counted as an overlap. ``fail`` names the operations that raise;
     ``silent`` makes python give no reply."""
 
@@ -58,15 +64,21 @@ class FakeDesktop:
                 self.busy -= 1
 
     def at(self, path):
-        assert not os.path.isabs(path) and ".." not in path.split("/"), path
-        return os.path.join(self.root, path)
+        assert path.startswith("/") and ".." not in path.split("/"), path
+        return os.path.join(self.root, path.lstrip("/"))
 
     def python(self, code):
-        with self.op("python", code=code):
+        made = code == cp.MAKE_FOLDER.format(folder=FOLDER)
+        with self.op("python", code="folder" if made else code):
             if self.silent:
                 return None
-            p = subprocess.run([sys.executable, "-I", "-c", code], cwd=self.root, capture_output=True, text=True,
-                               timeout=30, stdin=subprocess.DEVNULL)
+            if made:
+                shutil.rmtree(self.at(FOLDER), True)
+                os.makedirs(self.at(FOLDER))
+                return {"status": "success", "output": "made\n", "error": "", "returncode": 0}
+            code = code.replace(repr(FOLDER + "/")[:-1], repr(self.at(FOLDER) + "/")[:-1])
+            p = subprocess.run([sys.executable, "-I", "-c", STUB + code], cwd=self.root, capture_output=True,
+                               text=True, timeout=30, stdin=subprocess.DEVNULL)
             return {"status": "success" if p.returncode == 0 else "error", "output": p.stdout, "error": p.stderr,
                     "returncode": p.returncode}
 
@@ -188,16 +200,20 @@ def error(result):
 
 class Port(unittest.TestCase):
     """A unit: a fake desktop, the bridge over it, the server at a socket of the test's and the stand-in loop in a
-    thread, as a runner holds them."""
+    thread, as a runner holds them. ``given``: the task is given at once (the window before it closed), as the run
+    does just after the agent's session opens."""
 
-    def start(self, steps=3, pause=0.05, held=None, go=True):
+    def start(self, steps=3, pause=0.05, held=None, go=True, given=True):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         root = os.path.join(self.tmp, "desktop")
         os.mkdir(root)
         self.desktop = FakeDesktop(root)
         self.first = threading.Event()
-        self.bridge = cp.Bridge(self.desktop, steps, pause, (1920, 1080), 30, on_first=self.first.set, held=held)
+        self.bridge = cp.Bridge(self.desktop, steps, pause, (1920, 1080), FOLDER, on_first=self.first.set, held=held,
+                                window=True)
+        if given:
+            self.bridge.close_window()
         folder = os.path.join(self.tmp, "socket")
         os.mkdir(folder, 0o700)
         self.socket, self.log = os.path.join(folder, "s"), os.path.join(self.tmp, "calls.jsonl")
@@ -241,10 +257,10 @@ class Tools(Port):
         self.assertIn("1920 by 1080 pixels", init["instructions"])
         self.assertIn("There are 3 steps in all", init["instructions"])
         self.assertEqual([t["name"] for t in c.ask("tools/list")["result"]["tools"]],
-                         ["info", "screenshot", "read", "python", "upload", "click", "move", "drag", "scroll", "type",
-                          "key", "wait", "step", "done", "fail"])
+                         ["info", "screenshot", "upload", "prepare", "click", "move", "drag", "scroll", "type", "key",
+                          "wait", "step", "done", "fail"])
         self.assertEqual(value(c.call("info")), {"screen": [1920, 1080], "steps": 3, "steps_left": 3, "pause": 0.05,
-                                                 "python_seconds": 30, "password": "password"})
+                                                 "password": "password", "folder": FOLDER})
         shot = c.start("screenshot")
         with self.assertRaises(AssertionError):                   # held until the loop's first predict
             c.answer(shot, 0.5)
@@ -254,12 +270,12 @@ class Tools(Port):
         self.assertTrue(self.first.is_set())
 
     def test_the_reading_tools_take_no_step(self):
-        c = self.start(steps=3)
+        c = self.start(steps=3, given=False)
         self.assertEqual(image(c.call("screenshot")), PNG)
-        self.assertEqual(value(c.call("python", code="print(6 * 7)"))["output"], "42\n")
-        self.assertEqual(value(c.call("read", path="missing.txt")), {"data": None})
+        self.assertEqual(value(c.call("prepare", actions=[], files=["missing.txt"])), {"files": {"missing.txt": None}})
         self.assertEqual(value(c.call("upload", path="a.txt", data=base64.b64encode(b"abc").decode())), {"size": 3})
-        self.assertEqual(value(c.call("read", path="a.txt")), {"data": base64.b64encode(b"abc").decode()})
+        self.assertEqual(value(c.call("prepare", actions=[], files=["a.txt"])),
+                         {"files": {"a.txt": base64.b64encode(b"abc").decode()}})
         self.assertEqual(value(c.call("info"))["steps_left"], 3)
         self.assertEqual(self.ran, [])
 
@@ -318,7 +334,7 @@ class Budget(Port):
         c.call("click", x=1, y=1)
         c.call("screenshot")
         c.call("step", actions=["pyautogui.press('a')", "pyautogui.press('b')"])
-        c.call("python", code="pass")
+        c.call("info")
         last = c.call("key", keys=["enter"])
         self.assertEqual(value(last), {"steps_left": 0, "done": True})
         self.assertEqual(self.evaluated(), 3)
@@ -330,8 +346,8 @@ class Budget(Port):
         c.call("click", x=1, y=1)
         self.evaluated()
         touched = len(self.desktop.events)
-        for tool, args in [("click", {"x": 1, "y": 1}), ("screenshot", {}), ("python", {"code": "pass"}),
-                           ("read", {"path": "a"}), ("done", {})]:
+        for tool, args in [("click", {"x": 1, "y": 1}), ("screenshot", {}), ("upload", {"path": "a", "data": "YQ=="}),
+                           ("prepare", {"actions": []}), ("done", {})]:
             self.assertEqual(error(c.call(tool, **args)), "the steps are used up", tool)
         self.assertEqual(value(c.call("info"))["steps_left"], 0)
         self.assertEqual(len(self.desktop.events), touched)
@@ -357,18 +373,18 @@ class Held(Port):
         answered = time.time()
         acted = next(e["start"] for e in self.desktop.events if e["kind"] == "action")
         self.assertGreaterEqual(answered - acted, 0.4)
-        self.assertEqual(self.desktop.kinds(), ["action", "capture"])
+        self.assertEqual(self.desktop.kinds(), ["python", "action", "capture"])     # the agent's folder made first
         self.assertEqual(image(got), PNG)
 
     def test_calls_sent_during_a_step_wait_for_it_one_desktop_operation_at_a_time_in_their_order(self):
         c = self.start(steps=3, pause=0.3)
-        ids = [c.start("click", x=1, y=1), c.start("screenshot"), c.start("python", code="print(1)"),
-               c.start("read", path="none"), c.start("move", x=2, y=2)]
+        ids = [c.start("click", x=1, y=1), c.start("screenshot"), c.start("step", actions=[], files=["none"]),
+               c.start("move", x=2, y=2)]
         order = []
         for rid in ids:
             c.answer(rid)
             order.append(rid)
-        self.assertEqual(self.desktop.kinds(), ["action", "capture", "capture", "python", "read", "action", "capture"])
+        self.assertEqual(self.desktop.kinds(), ["python", "action", "capture", "read", "action", "capture"])
         self.assertEqual(self.desktop.overlaps, 0)
 
     def test_the_answers_come_in_the_order_the_desktop_ran_the_calls(self):
@@ -460,21 +476,17 @@ class TurnEnd(Port):
 
 class Errors(Port):
     def test_a_failed_desktop_call_answers_with_its_words_and_the_next_succeeds(self):
-        c = self.start(steps=2)
-        self.desktop.fail = {"python", "capture"}
-        self.assertEqual(error(c.call("python", code="print(1)")),
-                         "the desktop failed python: RuntimeError: python failed in the desktop")
-        self.assertIn("capture failed in the desktop", error(c.call("screenshot")))
+        c = self.start(steps=2, given=False)
+        self.desktop.fail = {"upload"}
+        self.assertEqual(error(c.call("upload", path="a", data="YQ==")),
+                         "the desktop failed upload: RuntimeError: upload failed in the desktop")
+        self.desktop.fail = set()
+        self.assertEqual(value(c.call("upload", path="a", data="YQ==")), {"size": 1})
+        self.bridge.close_window()
+        self.desktop.fail = {"capture"}
         got = c.call("click", x=1, y=1)                          # the step ran; its screen could not be taken
         self.assertIn("the step was run; the screen could not be taken", error(got))
-        self.desktop.fail = set()
-        self.assertEqual(value(c.call("python", code="print(1)"))["output"], "1\n")
         self.assertEqual(value(c.call("info"))["steps_left"], 1)
-
-    def test_python_with_no_reply_in_time_is_an_error(self):
-        c = self.start()
-        self.desktop.silent = True
-        self.assertEqual(error(c.call("python", code="pass")), "the desktop gave no reply within 30 s")
 
     def test_an_unknown_tool_a_line_that_is_no_json_and_an_unknown_method_are_answered(self):
         c = self.start()
@@ -490,10 +502,10 @@ class Errors(Port):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         desktop = FakeDesktop(self.tmp)
-        bridge = cp.Bridge(desktop, 3, 0, (100, 100), 30)
+        bridge = cp.Bridge(desktop, 3, 0, (100, 100), FOLDER)
         answers = []
         call = cp.Call("click", {"x": 1, "y": 1}, lambda c, v, i, e: answers.append(e))
-        cp.checked(call, bridge.screen)
+        cp.checked(call, bridge.screen, bridge.folder)
         bridge.submit(call)
         _, actions = bridge.predict("x", {})
         next(iter(actions))                                      # the loop takes the action, then fails in it
@@ -503,17 +515,18 @@ class Errors(Port):
 
 class Upload(Port):
     def test_an_upload_in_chunks_is_the_file_with_its_size_so_far(self):
-        c = self.start()
+        c = self.start(given=False)
         parts = [b"first", b"-second", b"-third"]
         sizes = [value(c.call("upload", path="f.bin", data=base64.b64encode(p).decode(), append=i > 0))["size"]
                  for i, p in enumerate(parts)]
         self.assertEqual(sizes, [5, 12, 18])
-        self.assertEqual(value(c.call("read", path="f.bin")), {"data": base64.b64encode(b"".join(parts)).decode()})
-        self.assertEqual(sorted(os.listdir(self.desktop.root)), ["f.bin"])
+        self.assertEqual(value(c.call("prepare", actions=[], files=["f.bin"])),
+                         {"files": {"f.bin": base64.b64encode(b"".join(parts)).decode()}})
+        self.assertEqual(sorted(os.listdir(self.desktop.at(FOLDER))), ["f.bin"])
         self.assertEqual(self.ran, [])
 
     def test_a_chunk_over_four_mib_is_refused(self):
-        c = self.start()
+        c = self.start(given=False)
         big = base64.b64encode(b"x" * (cp.CHUNK_BYTES + 1)).decode()
         self.assertEqual(error(c.call("upload", path="f.bin", data=big)), f"data is at most {cp.CHUNK_BYTES} bytes a call")
         self.assertNotIn("upload", self.desktop.kinds())
@@ -523,18 +536,18 @@ class Upload(Port):
         self.addCleanup(shutil.rmtree, run, True)
         content = os.urandom(3000)
         digest = hashlib.sha256(content).hexdigest()
-        c = self.start(held=cp.Held(run))                       # the first unit sends the bytes
+        c = self.start(held=cp.Held(run), given=False)          # the first unit sends the bytes
         self.assertIn("the run holds no file of that sha256", error(c.call("upload", path="tool.bin", sha256=digest)))
         c.call("upload", path="tool.bin", data=base64.b64encode(content[:1000]).decode(), sha256=digest)
         c.call("upload", path="tool.bin", data=base64.b64encode(content[1000:]).decode(), append=True)
         self.assertEqual(os.listdir(run), [digest])
         second = Port("run")                                     # the next unit of the same run sends none
         second.addCleanup = self.addCleanup
-        c2 = second.start(held=cp.Held(run))
+        c2 = second.start(held=cp.Held(run), given=False)
         self.assertEqual(value(c2.call("upload", path="tool.bin", sha256=digest)), {"size": 3000})
-        with open(os.path.join(second.desktop.root, "tool.bin"), "rb") as f:
+        with open(second.desktop.at(FOLDER + "/tool.bin"), "rb") as f:
             self.assertEqual(f.read(), content)
-        self.assertEqual(second.desktop.kinds(), ["upload"])
+        self.assertEqual(second.desktop.kinds(), ["python", "upload"])                # the folder made, the upload
         with open(os.path.join(run, digest), "r+b") as f:       # a kept file that changed is not taken
             f.write(b"\0")
         self.assertIn("the run holds no file of that sha256", error(c2.call("upload", path="t2.bin", sha256=digest)))
@@ -542,12 +555,12 @@ class Upload(Port):
     def test_chunks_that_do_not_hash_to_the_sha256_given_are_not_kept(self):
         run = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, run, True)
-        c = self.start(held=cp.Held(run))
+        c = self.start(held=cp.Held(run), given=False)
         c.call("upload", path="t.bin", data=base64.b64encode(b"abc").decode(), sha256="0" * 64)
         self.assertEqual(os.listdir(run), [])
 
     def test_with_no_folder_for_the_run_an_upload_by_sha256_alone_is_refused(self):
-        c = self.start()
+        c = self.start(given=False)
         self.assertEqual(error(c.call("upload", path="t.bin", sha256="0" * 64)),
                          "the run holds no file of that sha256: send its data")
 
@@ -575,10 +588,10 @@ class Connections(Port):
 
 class CallLog(Port):
     def test_every_tool_call_is_recorded_with_its_tool_times_and_failure_and_nothing_else(self):
-        c = self.start(steps=2, pause=0.3)
+        c = self.start(steps=3, pause=0.3)
         c.call("info")
         c.call("screenshot")
-        c.call("python", code="print('a-secret-text')")
+        c.call("step", actions=["print('a-secret-text')"])
         c.call("click", x=1, y=1)
         c.call("click", x=99999, y=1)
         c.ask("tools/call", {"name": "nope"})
@@ -586,7 +599,7 @@ class CallLog(Port):
         c.call("screenshot")
         lines = self.logged()
         self.assertEqual([(x["tool"], x["isError"]) for x in lines],
-                         [("info", False), ("screenshot", False), ("python", False), ("click", False), ("click", True),
+                         [("info", False), ("screenshot", False), ("step", False), ("click", False), ("click", True),
                           (None, True), ("done", False), ("screenshot", True)])
         for x in lines:
             self.assertEqual(set(x), {"tool", "start", "end", "isError"})
@@ -735,7 +748,8 @@ class Bare(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)
         self.desktop = FakeDesktop(tmp)
-        b = cp.Bridge(self.desktop, steps, 0.01, (100, 100), 30, held=held)
+        os.makedirs(self.desktop.at(FOLDER))
+        b = cp.Bridge(self.desktop, steps, 0.01, (100, 100), FOLDER, held=held)
         self.addCleanup(b.finish)
         return b
 
@@ -750,7 +764,7 @@ class Bare(unittest.TestCase):
         answers = []
         call = cp.Call(tool, args, lambda c, v, i, e: answers.append((v, i, e)))
         call.answers = answers
-        cp.checked(call, b.screen)
+        cp.checked(call, b.screen, b.folder)
         b.submit(call)
         return call
 
@@ -761,7 +775,7 @@ class Bare(unittest.TestCase):
 
     def upload(self, b, **args):
         call = cp.Call("upload", args, None)
-        cp.checked(call, b.screen)
+        cp.checked(call, b.screen, b.folder)
         return b._upload(call)
 
 
@@ -773,11 +787,10 @@ class Descriptions(Bare):
                 description = listed[name]["description"]
                 if name in cp.FINAL:
                     self.assertIn("Returns {steps_left, done}, with no image", description)
+                elif name == "step":
+                    self.assertIn("Returns the step's observation as a PNG image when screenshot is true", description)
                 else:
-                    self.assertIn("Returns the screen as a PNG image after the", description)
-                    self.assertIn("pause", description)
-                    if name == "step":
-                        self.assertIn("when screenshot is true", description)
+                    self.assertIn("Returns the screen as a PNG image after the pause", description)
         for name in ("click", "move", "drag", "scroll"):
             props = listed[name]["inputSchema"]["properties"]
             for point, edge in (("x", "left"), ("y", "top"), ("to_x", "left"), ("to_y", "top")):
@@ -790,7 +803,8 @@ class Descriptions(Bare):
         self.assertIn("x and y in screenshot pixels at the screen's size, from its top left corner", instructions)
         self.assertIn("Look at a screenshot before the first pointing action", instructions)
         self.assertIn("After the actions and their 0.01 s pauses", instructions)
-        self.assertIn("click, move, drag, scroll, type, key and wait return the screen as a PNG image", instructions)
+        self.assertIn("click, move, drag, scroll, type, key and wait return the step's observation, the screen as a PNG "
+                      "image", instructions)
         self.assertIn("step does when screenshot is true", instructions)
         self.assertIn("done and fail answer before they run, with no image", instructions)
         self.assertIn("A step with end, done or fail, runs its actions and then ends the task, in that one step",
@@ -912,8 +926,8 @@ class Wires(Bare):
 
 
 class Envelope(Bare):
-    VALID = {"info": {}, "screenshot": {}, "read": {"path": "a"}, "python": {"code": "pass"},
-             "upload": {"path": "a", "data": "YQ=="}, "click": {"x": 1, "y": 2}, "move": {"x": 1, "y": 2},
+    VALID = {"info": {}, "screenshot": {}, "upload": {"path": "a", "data": "YQ=="}, "prepare": {"actions": ["WAIT"]},
+             "click": {"x": 1, "y": 2}, "move": {"x": 1, "y": 2},
              "drag": {"x": 1, "y": 2, "to_x": 3, "to_y": 4}, "scroll": {"x": 1, "y": 2, "dy": 1},
              "type": {"text": "a"}, "key": {"keys": ["a"]}, "wait": {}, "step": {"actions": ["WAIT"]}, "done": {},
              "fail": {}}
@@ -942,16 +956,16 @@ class Envelope(Bare):
         s.call(1, {"name": "wait", "arguments": {"extra": 1}}, self.wire())
         s.call(2, {"name": "click", "arguments": {"x": 1, "y": 1, "clicks": 2}}, self.wire())
         self.assertEqual(([r["isError"] for r in s.records], b.booked), ([True, True], 0))
-        self.assertEqual([t["inputSchema"]["additionalProperties"] for t in cp.listed((100, 100))], [False] * 15)
+        self.assertEqual([t["inputSchema"]["additionalProperties"] for t in cp.listed((100, 100))], [False] * 14)
 
     def test_the_patterns_mean_the_same_in_python_and_in_the_listed_schema(self):
         for actions in (["\ufeff"], ["\u0085"], ["\u00a0"], ["a"]):              # not blank, read alike either way
-            cp.checked(cp.Call("step", {"actions": actions}, None), (100, 100))
+            cp.checked(cp.Call("step", {"actions": actions}, None), (100, 100), FOLDER)
         for actions in ([" \t\r\n\f\v"], ["DONE\n"], [" FAIL "]):
             with self.subTest(actions=actions), self.assertRaises(cp.Refused):
-                cp.checked(cp.Call("step", {"actions": actions}, None), (100, 100))
+                cp.checked(cp.Call("step", {"actions": actions}, None), (100, 100), FOLDER)
         with self.assertRaisesRegex(cp.Refused, "64 lowercase"):                     # $ is the text's end
-            cp.checked(cp.Call("upload", {"path": "f", "sha256": "0" * 64 + "\n"}, None), (100, 100))
+            cp.checked(cp.Call("upload", {"path": "f", "sha256": "0" * 64 + "\n"}, None), (100, 100), FOLDER)
         patterns = json.dumps(cp.listed((100, 100)))
         self.assertNotRegex(patterns, r"\\\\[sSdDwWbB]", "a class whose meaning differs between engines")
 
@@ -981,22 +995,26 @@ class Envelope(Bare):
         self.assertEqual(sorted(listed), sorted(self.VALID))
         wrong = {"integer": "1", "string": 1, "boolean": "true", "array": "a"}
         for tool, schema in listed.items():
-            cp.checked(cp.Call(tool, dict(self.VALID[tool]), None), (100, 100))   # the valid call holds
+            cp.checked(cp.Call(tool, dict(self.VALID[tool]), None), (100, 100), FOLDER)   # the valid call holds
             for name in schema.get("required", []):
                 with self.subTest(tool=tool, missing=name), self.assertRaises(cp.Refused):
-                    cp.checked(cp.Call(tool, {k: v for k, v in self.VALID[tool].items() if k != name}, None), (100, 100))
+                    cp.checked(cp.Call(tool, {k: v for k, v in self.VALID[tool].items() if k != name}, None), (100, 100),
+                               FOLDER)
             for name, prop in schema["properties"].items():
                 with self.subTest(tool=tool, wrong=name), self.assertRaises(cp.Refused):
-                    cp.checked(cp.Call(tool, dict(self.VALID[tool], **{name: wrong[prop["type"]]}), None), (100, 100))
+                    cp.checked(cp.Call(tool, dict(self.VALID[tool], **{name: wrong[prop["type"]]}), None), (100, 100),
+                               FOLDER)
                 if "maximum" in prop:
                     with self.subTest(tool=tool, over=name), self.assertRaises(cp.Refused):
-                        cp.checked(cp.Call(tool, dict(self.VALID[tool], **{name: prop["maximum"] + 1}), None), (100, 100))
-                    cp.checked(cp.Call(tool, dict(self.VALID[tool], **{name: prop["maximum"]}), None), (100, 100))
+                        cp.checked(cp.Call(tool, dict(self.VALID[tool], **{name: prop["maximum"] + 1}), None),
+                                   (100, 100), FOLDER)
+                    cp.checked(cp.Call(tool, dict(self.VALID[tool], **{name: prop["maximum"]}), None), (100, 100), FOLDER)
 
     def test_an_answer_over_the_bound_is_recorded_as_failed(self):
         b = self.bridge()
+        b.seen, b.unseen = b"x" * 2000, ""                       # an observation too large for the bound below
         s, conn = self.server(b), FakeConnection()
-        s.call(1, {"name": "python", "arguments": {"code": "print('x' * 2000)"}}, self.wire(conn))
+        s.call(1, {"name": "screenshot", "arguments": {}}, self.wire(conn))
         with mock.patch.object(cp, "LINE_BYTES", 512):
             b._serve(b.calls.popleft())
         self.assertTrue(until(lambda: conn.sent))
@@ -1078,9 +1096,9 @@ class Uploads(Bare):
         self.upload(b, path="file", data=b64(b"A"))
         self.upload(b, path="file.part", data=b64(b"unrelated"))
         self.assertEqual(self.upload(b, path="file", data=b64(b"B"), append=True), {"size": 2})
-        with open(os.path.join(self.desktop.root, "file.part"), "rb") as f:
+        with open(self.desktop.at(FOLDER + "/file.part"), "rb") as f:
             self.assertEqual(f.read(), b"unrelated")
-        self.assertEqual(sorted(os.listdir(self.desktop.root)), ["file", "file.part"])
+        self.assertEqual(sorted(os.listdir(self.desktop.at(FOLDER))), ["file", "file.part"])
 
     def held(self):
         run = tempfile.mkdtemp()
@@ -1096,7 +1114,7 @@ class Uploads(Bare):
         with self.assertRaisesRegex(cp.Refused, "append needs data"):
             self.upload(b, path="f", sha256=digest, append=True)
         self.assertEqual(self.upload(b, path="f", sha256=digest), {"size": 1})
-        with open(os.path.join(self.desktop.root, "f"), "rb") as f:
+        with open(self.desktop.at(FOLDER + "/f"), "rb") as f:
             self.assertEqual(f.read(), b"B")
 
     def test_a_file_taken_by_its_sha256_drops_what_was_being_kept_for_its_path(self):
@@ -1107,7 +1125,7 @@ class Uploads(Bare):
         self.upload(b, path="f", data=base64.b64encode(b"A").decode(), sha256=hash_ac)
         self.upload(b, path="f", sha256=hash_b)
         self.upload(b, path="f", data=base64.b64encode(b"C").decode(), append=True)
-        with open(os.path.join(self.desktop.root, "f"), "rb") as f:
+        with open(self.desktop.at(FOLDER + "/f"), "rb") as f:
             self.assertEqual(f.read(), b"BC")
         self.assertIsNone(held.get(hash_ac))
 
@@ -1128,7 +1146,7 @@ class Uploads(Bare):
             args = {"path": "f", "data": base64.b64encode(b"a" * size).decode()}
             listed = cp._passes(args, schema, "upload", "arguments")
             try:
-                cp.checked(cp.Call("upload", args, None), (100, 100))
+                cp.checked(cp.Call("upload", args, None), (100, 100), FOLDER)
                 taken = True
             except cp.Refused:
                 taken = False
@@ -1151,7 +1169,7 @@ class Uploads(Bare):
         self.desktop.python = python
         with self.assertRaises(TimeoutError):
             self.upload(b, path="f", data=b64(b"B"), append=True)
-        self.assertEqual(sorted(os.listdir(self.desktop.root)), ["f"])
+        self.assertEqual(sorted(os.listdir(self.desktop.at(FOLDER))), ["f"])
 
     def test_a_stop_as_a_file_is_kept_leaves_no_file_and_no_descriptor(self):
         held = self.held()
@@ -1241,7 +1259,7 @@ class Desktop:                                    # what an entry gives: one lin
         return env.client_password
 
 
-bridge = cp.Bridge(Desktop(), int(steps), 0.1, (1920, 1080), 90, on_first=lambda: cp.ready(ready, ok=True))
+bridge = cp.Bridge(Desktop(), int(steps), 0.1, (1920, 1080), "/tmp/agent", on_first=lambda: cp.ready(ready, ok=True))
 server = cp.Server(bridge, sock, log)
 threading.Thread(target=cp.lifeline, args=(int(lifeline), bridge), daemon=True).start()
 example = {"id": "task-1", "instruction": "Open the terminal.", "config": [], "evaluator": {"func": "check"}}
@@ -1355,6 +1373,458 @@ class UpstreamLoop(unittest.TestCase):
         self.assertEqual([t["action"] for t in traj], ["pyautogui.click(10, 20, clicks=1, button='left')"])
         self.assertEqual([e["last"] for e in events if e["event"] == "evaluate"],
                          ["pyautogui.click(10, 20, clicks=1, button='left')"])
+
+
+def shot(n):
+    return PNG + b"#%d" % n
+
+
+class ChangingDesktop(FakeDesktop):
+    """The fake desktop with a screen that changes with each action run."""
+
+    def __init__(self, root):
+        super().__init__(root)
+        self.screen_no = 0
+
+    def act(self, action):
+        super().act(action)
+        self.screen_no += 1                                      # the screen moves on, whatever the action
+
+    def capture(self):
+        with self.op("capture"):
+            return shot(self.screen_no)
+
+    def captures(self):
+        return self.kinds().count("capture")
+
+
+class Kept(ChangingDesktop):
+    """A desktop whose benchmark keeps its own observation, as OSWorld's loop does: the bridge never captures."""
+    last = None
+
+    def observation(self):
+        return self.last
+
+
+def observing_loop(agent, desktop, steps, pause, ran, go, hands):
+    """OSWorld's loop in a few lines: the start picture, then one predict a step, its actions run with the pause after
+    each and, when the loop ``hands`` its observation, a picture after each action that the next predict gets."""
+    agent.reset(None, vm_ip="127.0.0.1")
+    go.wait(30)
+    obs = {"screenshot": desktop.capture()} if hands else None
+    done, step = False, 0
+    while not done and step < steps:
+        _, actions = agent.predict("the task", obs)
+        for action in actions:
+            desktop.act(action)
+            time.sleep(pause)
+            ran.append(action)
+            if hands:
+                obs = {"screenshot": desktop.capture()}
+                desktop.last = obs["screenshot"]
+            done = action in ("DONE", "FAIL")
+            if done:
+                break
+        step += 1
+    ran.append(("evaluated", step))
+
+
+class Changing(unittest.TestCase):
+    def start(self, steps=5, hands=True, window=True, given=True):
+        """A unit whose screen changes with each action: the bridge over the desktop, its server and the loop.
+        ``given``: the task is given at once (the window closed), as the run does just after the agent's session
+        opens."""
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        root = os.path.join(self.tmp, "desktop")
+        os.mkdir(root)
+        self.desktop = (Kept if hands else ChangingDesktop)(root)
+        self.prepared = os.path.join(self.tmp, "prepared.jsonl")
+        self.bridge = cp.Bridge(self.desktop, steps, 0.01, (1920, 1080), FOLDER, window=window, prepared=self.prepared)
+        folder = os.path.join(self.tmp, "socket")
+        os.mkdir(folder, 0o700)
+        self.socket, self.log = os.path.join(folder, "s"), os.path.join(self.tmp, "calls.jsonl")
+        self.server = cp.Server(self.bridge, self.socket, self.log)
+        self.addCleanup(self.server.close)
+        self.ran, self.go = [], threading.Event()
+        self.go.set()
+        self.loop = threading.Thread(target=self._loop, args=(steps, hands), daemon=True)
+        self.loop.start()
+        self.addCleanup(self.bridge.finish)
+        c = Client(self.socket)
+        self.addCleanup(c.close)
+        c.initialize()
+        c.call("screenshot")                                     # served once the loop's first predict has begun
+        if given:
+            self.bridge.close_window()
+        return c
+
+    def _loop(self, steps, hands):
+        try:
+            observing_loop(self.bridge, self.desktop, steps, 0.01, self.ran, self.go, hands)
+        finally:
+            self.bridge.finish()
+
+    def evaluated(self, seconds=10):
+        self.loop.join(seconds)
+        self.assertFalse(self.loop.is_alive(), "the loop did not end")
+        return self.ran[-1][1]
+
+    def left(self, c):
+        return value(c.call("info"))["steps_left"]
+
+    def put(self, path, data):
+        with open(self.desktop.at(path), "wb") as f:
+            f.write(data)
+
+
+class ToolList(Changing):
+    def test_the_tool_list_has_no_python_and_no_read_and_names_prepare_and_a_steps_files(self):
+        c = self.start(steps=3)
+        listed = {t["name"]: t for t in c.ask("tools/list")["result"]["tools"]}
+        self.assertEqual(list(listed), ["info", "screenshot", "upload", "prepare", "click", "move", "drag", "scroll",
+                                        "type", "key", "wait", "step", "done", "fail"])
+        self.assertNotIn("maxItems", listed["step"]["inputSchema"]["properties"]["files"])
+        self.assertNotIn("maxItems", listed["prepare"]["inputSchema"]["properties"]["files"])
+        self.assertEqual(sorted(listed["prepare"]["inputSchema"]["properties"]), ["actions", "files"])
+        init = c.initialize()["result"]
+        self.assertEqual(init["serverInfo"], {"name": "computer", "version": "1"})
+        self.assertIn("upload and prepare work inside folder (/agent)", init["instructions"])
+        self.assertEqual(value(c.call("info")), {"screen": [1920, 1080], "steps": 3, "steps_left": 3, "pause": 0.01,
+                                                 "password": "password", "folder": FOLDER})
+        for gone in ("python", "read"):
+            answer = c.ask("tools/call", {"name": gone, "arguments": {}})
+            self.assertEqual(answer["error"]["message"], f"no tool {gone!r}")
+
+    def test_a_bridge_needs_a_plain_absolute_folder(self):
+        for folder in (None, "", "agent", "/", "/agent/", "/a/../b"):
+            with self.subTest(folder=folder), self.assertRaises(ValueError):
+                cp.Bridge(FakeDesktop(self.id()), 1, 0, (10, 10), folder)
+
+
+class Observation(Changing):
+    def test_before_the_first_step_screenshot_is_the_loops_start_picture_and_takes_no_new_one(self):
+        c = self.start(steps=3)
+        first, again = image(c.call("screenshot")), image(c.call("screenshot"))
+        self.assertEqual((first, again), (shot(0), shot(0)))
+        self.assertEqual(self.desktop.captures(), 1)             # the loop's own: the bridge took none
+
+    def test_two_screenshots_with_no_step_between_are_the_same_and_a_step_that_acts_changes_them(self):
+        for hands in (True, False):
+            with self.subTest(hands=hands):
+                c = self.start(steps=5, hands=hands)
+                before = image(c.call("screenshot"))
+                got = c.call("click", x=1, y=1)
+                after = image(c.call("screenshot"))
+                self.assertEqual((image(got), after, image(c.call("screenshot"))), (after, after, after))
+                self.assertNotEqual(before, after)
+                got = c.call("step", actions=["pyautogui.press('a')", "pyautogui.press('b')"], screenshot=True)
+                self.assertEqual(image(got), image(c.call("screenshot")))
+                self.assertNotEqual(image(got), after)
+                self.assertIsNone(image(c.call("step", actions=["pyautogui.press('c')"])))
+
+    def test_an_empty_step_is_one_step_and_leaves_the_observation_as_it_was(self):
+        for hands in (True, False):
+            with self.subTest(hands=hands):
+                c = self.start(steps=5, hands=hands)
+                c.call("click", x=1, y=1)
+                seen, captures = image(c.call("screenshot")), self.desktop.captures()
+                got = c.call("step", actions=[], screenshot=True)
+                self.assertEqual((value(got), image(got)), ({"steps_left": 3, "done": False}, seen))
+                self.assertEqual(self.desktop.captures(), captures)
+
+    def test_wait_is_one_step_and_a_fresh_observation(self):
+        for hands in (True, False):
+            with self.subTest(hands=hands):
+                c = self.start(steps=5, hands=hands)
+                before = image(c.call("screenshot"))
+                got = c.call("wait")
+                self.assertEqual(value(got), {"steps_left": 4, "done": False})
+                self.assertNotEqual(image(got), before)
+                self.assertEqual(image(c.call("screenshot")), image(got))
+                self.assertEqual(self.ran, ["WAIT"])
+
+    def test_with_its_own_observation_the_bridge_takes_no_picture_and_without_one_it_takes_one_a_step(self):
+        c = self.start(steps=5, hands=True)
+        for _ in range(3):
+            c.call("click", x=1, y=1)
+            c.call("screenshot")
+        self.assertEqual(self.desktop.captures(), 4)             # the loop's start picture and one per action
+        c = self.start(steps=5, hands=False)
+        for _ in range(3):
+            c.call("step", actions=["pyautogui.press('a')", "pyautogui.press('b')"])
+            c.call("screenshot")
+        self.assertEqual(self.desktop.captures(), 4)             # the start picture and one as each step ended
+        self.assertEqual(self.desktop.kinds()[-1], "capture")
+
+    def test_a_step_whose_picture_could_not_be_taken_says_so_and_screenshot_too(self):
+        c = self.start(steps=5, hands=False)
+        self.desktop.fail = {"capture"}
+        self.assertIn("the step was run; the screen could not be taken", error(c.call("click", x=1, y=1)))
+        self.assertIn("there is no observation", error(c.call("screenshot")))
+        self.desktop.fail = set()
+        self.assertEqual(image(c.call("click", x=1, y=1)), image(c.call("screenshot")))
+
+
+class Window(Changing):
+    def test_upload_and_prepare_work_in_the_window_and_take_no_step(self):
+        c = self.start(steps=3, given=False)
+        self.assertEqual(value(c.call("upload", path="/agent/run.py", data=base64.b64encode(b"print(1)").decode())),
+                         {"size": 8})
+        self.assertEqual(value(c.call("upload", path="x", data=base64.b64encode(b"abc").decode())), {"size": 3})
+        with open(self.desktop.at("/agent/x"), "rb") as f:
+            self.assertEqual(f.read(), b"abc")                    # a relative path is the folder's
+        got = c.call("prepare", actions=["open('agent/out.txt', 'w').write(open('agent/run.py').read() * 2)", "WAIT"],
+                     files=["/agent/out.txt", "/agent/none"])
+        self.assertEqual(value(got), {"files": {"/agent/out.txt": base64.b64encode(b"print(1)print(1)").decode(),
+                                                "/agent/none": None}})
+        self.assertIsNone(image(got))
+        self.assertEqual(value(c.call("prepare", actions=[])), {"files": {}})
+        self.assertEqual(self.left(c), 3)
+        self.assertEqual(self.ran, [])
+        with open(self.prepared) as f:
+            said = [json.loads(line) for line in f]
+        self.assertEqual([(s["actions"], s["files"]) for s in said],
+                         [(["open('agent/out.txt', 'w').write(open('agent/run.py').read() * 2)", "WAIT"],
+                           ["/agent/out.txt", "/agent/none"]), ([], [])])
+
+    def test_an_acting_call_in_the_window_is_refused_and_takes_no_step(self):
+        c = self.start(steps=3, given=False)
+        for tool, args in (("click", {"x": 1, "y": 1}), ("step", {"actions": []}), ("wait", {}), ("done", {})):
+            with self.subTest(tool=tool):
+                self.assertIn("the task has not been given yet", error(c.call(tool, **args)))
+        self.assertEqual(self.left(c), 3)
+        self.bridge.close_window()
+        self.assertEqual(value(c.call("click", x=1, y=1)), {"steps_left": 2, "done": False})
+        self.assertEqual(self.ran, ["pyautogui.click(1, 1, clicks=1, button='left')"])
+
+    def test_once_the_task_is_given_upload_and_prepare_are_refused(self):
+        c = self.start(steps=3, given=False)
+        c.call("prepare", actions=[])
+        self.bridge.close_window()
+        self.assertEqual(error(c.call("upload", path="/agent/a", data="YQ==")),
+                         "the task has been given: upload is taken only before it")
+        self.assertEqual(error(c.call("prepare", actions=["print(1)"])),
+                         "the task has been given: prepare is taken only before it")
+        self.assertEqual(self.left(c), 3)
+        self.assertEqual(len(self.desktop.kinds()), 2)           # the folder made, the start picture
+
+    def test_the_lifelines_task_given_closes_the_window(self):
+        c = self.start(steps=3, given=False)
+        read, write = os.pipe()
+        with mock.patch.object(cp.os, "kill"):
+            reader = threading.Thread(target=cp.lifeline, args=(read, self.bridge), daemon=True)
+            reader.start()
+            os.write(write, cp.TASK_GIVEN + b"\n")
+            deadline = time.monotonic() + 5
+            while self.bridge.window and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertIn("the task has been given", error(c.call("prepare", actions=[])))
+            os.close(write)
+            reader.join(5)
+        os.close(read)
+
+    def test_with_no_window_upload_and_prepare_are_refused_from_the_start(self):
+        c = self.start(steps=3, window=False, given=False)
+        self.assertIn("the task has been given", error(c.call("upload", path="/agent/a", data="YQ==")))
+        self.assertEqual(value(c.call("click", x=1, y=1)), {"steps_left": 2, "done": False})
+
+    def test_paths_outside_the_folder_are_refused_at_once_and_take_no_step(self):
+        c = self.start(steps=3, given=False)
+        for path in ("/etc/passwd", "/agent", "/agent/", "/agent/../x", "../x", "./x", "/agentx/y", "/agent//x"):
+            with self.subTest(path=path):
+                self.assertIn("is a path inside /agent", error(c.call("upload", path=path, data="YQ==")))
+                self.assertIn("files[1] is a path inside /agent",
+                              error(c.call("prepare", actions=[], files=["/agent/a", path])))
+        self.bridge.close_window()
+        self.assertIn("files[0] is a path inside /agent", error(c.call("step", actions=["x()"], files=["/tmp/a"])))
+        self.assertEqual(self.left(c), 3)
+        self.assertEqual((self.ran, len(self.desktop.kinds())), ([], 2))
+
+    def test_a_prepare_action_the_desktop_did_not_end_in_time_stops_it(self):
+        c = self.start(steps=3, given=False)
+        self.desktop.silent = True
+        self.assertEqual(error(c.call("prepare", actions=["print(1)", "print(2)"])),
+                         "the desktop did not end actions[0] in time; the actions after it were not run")
+        self.assertEqual(self.left(c), 3)
+
+
+class WindowClosure(unittest.TestCase):
+    def setUp(self):
+        tmp = self.enterContext(tempfile.TemporaryDirectory())
+        self.desktop = ChangingDesktop(tmp)
+        self.bridge = cp.Bridge(self.desktop, 3, 0, (100, 100), FOLDER, window=True)
+        self.bridge._begin(None)
+        self.addCleanup(self.bridge.finish)
+
+    def submit(self, tool):
+        args = {"actions": ["print(1)"], "files": ["/agent/a"]} if tool == "prepare" else {
+            "path": "/agent/a", "data": "YQ=="}
+        replies = []
+        call = cp.Call(tool, args, lambda c, v, i, e: replies.append((v, i, e)))
+        cp.checked(call, self.bridge.screen, self.bridge.folder)
+        self.bridge.submit(call)
+        return call, replies
+
+    def test_closing_refuses_queued_upload_and_prepare_as_calls_sent_after_it(self):
+        pending = [self.submit(tool) for tool in cp.WINDOW]
+        before = list(self.desktop.events)
+        self.bridge.close_window()
+        for call, replies in pending:
+            _, later = self.submit(call.tool)
+            self.assertEqual(replies, later)
+            self.assertEqual(replies, [(None, None, f"the task has been given: {call.tool} is taken only before it")])
+        self.assertEqual(list(self.bridge.calls), [])
+        self.assertEqual(self.desktop.events, before)
+        self.assertEqual(self.bridge.used, 0)
+
+    def test_a_dequeued_call_is_refused_if_it_has_not_started_before_closure(self):
+        for tool in cp.WINDOW:
+            with self.subTest(tool=tool):
+                self.bridge.window = True
+                call, replies = self.submit(tool)
+                self.assertIs(self.bridge._next(), call)
+                before = list(self.desktop.events)
+                self.bridge.close_window()
+                self.bridge._serve(call)
+                _, later = self.submit(tool)
+                self.assertEqual(replies, later)
+                self.assertEqual(self.desktop.events, before)
+
+    def test_closing_waits_for_running_upload_and_prepare_even_when_they_fail(self):
+        for tool in cp.WINDOW:
+            for fails in (False, True):
+                with self.subTest(tool=tool, fails=fails):
+                    self.bridge.window = True
+                    call, replies = self.submit(tool)
+                    entered, release, waiting, closed = (threading.Event() for _ in range(4))
+                    operation = "upload" if tool == "upload" else ("python" if fails else "read")
+                    original = getattr(self.desktop, operation)
+                    wait = self.bridge.change.wait
+
+                    def blocked(*args):
+                        entered.set()
+                        if not release.wait(5):
+                            raise RuntimeError("the test did not release the desktop")
+                        if fails:
+                            raise RuntimeError("the desktop operation failed")
+                        return original(*args)
+
+                    def waited(*args):
+                        waiting.set()
+                        return wait(*args)
+
+                    def close():
+                        self.bridge.close_window()
+                        closed.set()
+
+                    with mock.patch.object(self.desktop, operation, blocked), \
+                            mock.patch.object(self.bridge.change, "wait", waited):
+                        serving = threading.Thread(target=lambda: self.bridge._serve(self.bridge._next()))
+                        closing = threading.Thread(target=close)
+                        serving.start()
+                        try:
+                            self.assertTrue(entered.wait(5))
+                            closing.start()
+                            self.assertTrue(waiting.wait(1), "closure did not wait for the running call")
+                            self.assertFalse(closed.is_set())
+                            self.assertFalse(self.bridge.window)
+                            _, later = self.submit(tool)
+                            self.assertIn("the task has been given", later[0][2])
+                        finally:
+                            release.set()
+                            serving.join(5)
+                            if closing.ident is not None:
+                                closing.join(5)
+                        self.assertFalse(serving.is_alive() or closing.is_alive())
+                    self.assertTrue(closed.is_set())
+                    self.assertEqual(len(replies), 1)
+                    self.assertEqual(replies[0][2] is not None, fails)
+                    self.assertEqual(self.bridge.used, 0)
+
+
+class StepFiles(Changing):
+    def test_a_step_returns_each_file_null_for_a_missing_one_and_an_error_for_one_too_large(self):
+        c = self.start(steps=3)
+        self.put("/agent/small", b"hello")
+        self.put("/agent/big", b"x" * (cp.READ_BYTES + 1))
+        got = c.call("step", actions=["pyautogui.press('a')"], files=["/agent/small", "/agent/missing", "big"])
+        self.assertEqual(value(got), {"steps_left": 2, "done": False, "files": {
+            "/agent/small": base64.b64encode(b"hello").decode(), "/agent/missing": None,
+            "big": {"error": f"over {cp.READ_BYTES} bytes"}}})
+        self.desktop.fail = {"read"}
+        got = c.call("step", actions=[], files=["/agent/small"])
+        self.assertEqual(value(got), {"steps_left": 1, "done": False, "files": {"/agent/small": {
+            "error": "the desktop could not read it: RuntimeError: read failed in the desktop"}}})
+
+    def test_forty_small_files_come_back_in_one_step(self):
+        c = self.start(steps=3)
+        names = [f"/agent/f{i}" for i in range(40)]
+        for i, name in enumerate(names):
+            self.put(name, b"file %d" % i)
+        got = value(c.call("step", actions=["pyautogui.press('a')"], files=names))
+        self.assertEqual(got, {"steps_left": 2, "done": False,
+                               "files": {name: base64.b64encode(b"file %d" % i).decode()
+                                         for i, name in enumerate(names)}})
+        self.assertEqual(self.left(c), 2)
+
+    def test_files_that_would_take_the_answer_past_its_bound_are_errors_and_the_others_come(self):
+        c = self.start(steps=3)
+        big = b"y" * (11 * 1024 * 1024)                          # 11 MiB: two of them pass 24 MiB in base64
+        for name in ("a", "b", "c"):
+            self.put(f"/agent/{name}", big)
+        self.put("/agent/small", b"hi")
+        got = c.call("step", seconds=60, actions=["pyautogui.press('a')"], screenshot=True,
+                     files=["/agent/a", "/agent/b", "/agent/small", "/agent/c"])
+        self.assertFalse(got["isError"])
+        over = {"error": f"the answer would pass {cp.LINE_BYTES} bytes with this file"}
+        self.assertEqual(value(got)["files"], {"/agent/a": base64.b64encode(big).decode(), "/agent/b": over,
+                                               "/agent/small": base64.b64encode(b"hi").decode(), "/agent/c": over})
+        self.assertEqual(image(got), shot(1))
+        self.assertEqual(self.left(c), 2)
+
+    def test_the_files_are_read_once_the_actions_and_their_pauses_have_run(self):
+        c = self.start(steps=3)
+        c.call("step", actions=["pyautogui.press('a')", "WAIT"], files=["/agent/a"])
+        kinds = self.desktop.kinds()
+        self.assertEqual(kinds[kinds.index("action"):], ["action", "capture", "action", "capture", "read"])
+
+    def test_every_call_that_reaches_the_desktop_lowers_steps_left_but_upload_and_prepare_in_the_window(self):
+        c = self.start(steps=9, given=False)
+        c.call("upload", path="/agent/a", data="YQ==")
+        c.call("prepare", actions=["print(1)"])
+        c.call("screenshot")
+        self.assertEqual(self.left(c), 9)
+        self.bridge.close_window()
+        calls = [("click", {"x": 1, "y": 1}), ("move", {"x": 1, "y": 1}), ("drag", {"x": 1, "y": 1, "to_x": 2, "to_y": 2}),
+                 ("scroll", {"x": 1, "y": 1, "dy": 1}), ("type", {"text": "a"}), ("key", {"keys": ["a"]}),
+                 ("wait", {}), ("step", {"actions": [], "files": ["/agent/a"]})]
+        for i, (tool, args) in enumerate(calls, 1):
+            self.assertEqual(value(c.call(tool, **args))["steps_left"], 9 - i, tool)
+            c.call("screenshot")
+            self.assertEqual(self.left(c), 9 - i, tool)
+        self.assertEqual(value(c.call("done")), {"steps_left": 0, "done": True})
+        self.assertEqual(self.evaluated(), 9)
+
+    def test_a_step_with_an_end_and_files_runs_its_actions_and_ends_the_task(self):
+        c = self.start(steps=5)
+        got = c.call("step", actions=["pyautogui.press('a')"], end="done", files=["/agent/a"], screenshot=True)
+        self.assertEqual(value(got), {"steps_left": 4, "done": True, "files": {"/agent/a": None}})
+        self.assertEqual(image(got), shot(1))
+        self.assertEqual(self.evaluated(), 1)
+        self.assertEqual(self.ran, ["pyautogui.press('a')", "DONE", ("evaluated", 1)])
+        self.assertEqual(error(c.call("screenshot")), "the task has ended (done)")
+
+    def test_the_budget_and_the_turns_end_hold_when_the_screen_changes(self):
+        c = self.start(steps=1)
+        self.assertEqual(value(c.call("click", x=1, y=1)), {"steps_left": 0, "done": True})
+        self.assertEqual(error(c.call("click", x=1, y=1)), "the steps are used up")
+        self.assertEqual(value(c.call("info"))["steps_left"], 0)
+        c = self.start(steps=4)
+        c.call("click", x=1, y=1)
+        self.bridge.end_turn()
+        self.assertEqual(self.evaluated(), 4)
+        self.assertEqual(error(c.call("click", x=1, y=1)), "the agent's turn has ended")
 
 
 if __name__ == "__main__":

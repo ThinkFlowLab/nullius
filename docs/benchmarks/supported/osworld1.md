@@ -31,8 +31,8 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `osworld1@desktop-env-v1.0.3` (default) | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
-| `osworld1@044bc33` | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
+| `osworld1@desktop-env-v1.0.3` (default) | Original · its own agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
+| `osworld1@044bc33` | Original · its own agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
 
 - `key@version`: a revision of the definition and driver; a recipe pins one, the builder offers the default.
 
@@ -48,11 +48,11 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Option | Value | Refused without (`host`: the driver's machine; `embeddings`: a model the provider serves) |
 |---|---|---|
-| `vm_provider` | `docker` | host: docker |
+| `vm_provider` | `docker` | host: docker; vm: a 4 GB VM per unit |
 
 ## Good to know
 
-- An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. Steps (100) and Pause (3.0 seconds) set that loop.
+- An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. A step's observation is the screenshot that loop hands its agent for the next decision, with no capture added; the files a step names are read once its actions and their pauses have run. Steps (100) and Pause (3.0 seconds) set that loop.
 - Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.
 - Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.
 - At this version only the null control has run through Nullius. OSWorld's agents are the same code as in main (044bc33), where M3, PromptAgent and Qwen-CUA completed tasks.

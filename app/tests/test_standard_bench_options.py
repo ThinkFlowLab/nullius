@@ -38,6 +38,14 @@ class Definition(unittest.TestCase):
         problems = " ".join(definitions.problems({k: v for k, v in bad.items() if not k.startswith("_")}, "benchmark"))
         for said in ("options.retrieval.datasets", "needs.alltools.host", "needs.alltools.embeddings"):
             self.assertIn(said, problems)
+        # a unit's own VM is a Where option's, and says its memory in GB alone
+        for o, vm in ((TAU["options"]["retrieval"], {"memory_gb": 4}), (dict(TAU["options"]["retrieval"], step="where"), {"memory_gb": "4G"}),
+                      (dict(TAU["options"]["retrieval"], step="where"), {"memory_gb": 4, "cpus": 4})):
+            bad = tau(options={"retrieval": dict(o, needs={"bm25": {"vm": vm}})})
+            self.assertIn("needs.bm25.vm", " ".join(definitions.problems({k: v for k, v in bad.items() if not k.startswith("_")}, "benchmark")))
+        good = tau(options={"retrieval": dict(TAU["options"]["retrieval"], step="where", needs={"bm25": {"vm": {"memory_gb": 4}}})})
+        self.assertNotIn("needs.bm25", " ".join(definitions.problems({k: v for k, v in good.items() if not k.startswith("_")}, "benchmark")))
+        self.assertEqual((definitions.vm_memory_gb(good, {"retrieval": "bm25"}), definitions.vm_memory_gb(good, {"retrieval": "terminal_use"})), (4, 0))
         worse = tau(host={"sandbox": {"summary": "x", "check": ["srt; rm"], "install": {"brew": ["x"]}}})
         problems = " ".join(definitions.problems({k: v for k, v in worse.items() if not k.startswith("_")}, "benchmark"))
         self.assertIn("host.sandbox.check", problems)
@@ -310,8 +318,9 @@ class MachineDocker(unittest.TestCase):
                 self.assertTrue(prerequisites.ready([{"rows": prerequisites.check_here([], setups, which=lambda p: "/usr/bin/" + p)}]))
 
     def test_a_value_shows_its_name_and_the_recipe_keeps_the_value(self):
-        out = recipe.compile(self.a_recipe(["original"], bench_options={"agent": "muse_spark"}))
-        self.assertIn([4, "Agent", "Muse Spark · test_small"], out["review"])
+        out = recipe.compile(self.a_recipe(["original"], bench_options={"agent": "muse_spark"}, model="muse-spark-1.1"))
+        self.assertEqual(out["errors"], [])
+        self.assertIn([4, "Participant", "Muse Spark · OSWorld1's own"], out["review"])       # a recipe from before: its agent
         self.assertIn([6, "Steps per task", "100 (its default) · test_small"], out["review"])
         self.assertIn("agent=muse_spark", out["script"])
         self.assertEqual(out["review"][-1], [7, "Where", "this machine · local backend · VM provider docker"])

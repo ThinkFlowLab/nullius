@@ -56,8 +56,10 @@ from nullius.standard import install
 
 API = "https://boat.dev/api/v1"
 STORE, NAME = "sandbox-provider-boat", "BOAT_API_KEY"
-# the VM runs the agent's process, never its model: the smallest is enough
-SIZES = {"small": "2 vCPU, 4 GB", "default": "4 vCPU, 8 GB", "large": "", "xlarge": ""}
+# Boat's machine types, by name: its label and, where measured, its vCPUs and memory. The VM runs the agent's
+# process, never its model: the smallest is enough, unless a task boots a VM of its own inside it (fits).
+SIZES = {"small": {"label": "Small", "cpus": 2, "memory_gb": 4}, "default": {"label": "Default", "cpus": 4, "memory_gb": 8},
+         "large": {"label": "Large"}, "xlarge": {"label": "XLarge"}}
 SIZE = "small"
 TTL = 2 * 3600                       # a VM's auto-stop at least, and a free trial's at most
 USER = "agent"
@@ -153,10 +155,11 @@ def said(d: dict) -> str:
     return str(d.get("message") or d.get("code") or d.get("status") or "no answer")
 
 
-def slots(client: Client) -> Optional[int]:
-    """How many VMs the account may run at once; None when its API does not say."""
-    n = client.limits().get("maxActiveSandboxes")
-    return n if isinstance(n, int) and n > 0 else None
+def slots(client: Client, limits: Optional[dict] = None) -> Optional[int]:
+    """How many VMs the account may run at once; None when its API does not say. ``limits``: its
+    answer to ``GET /limits`` when already asked."""
+    n = (client.limits() if limits is None else limits).get("maxActiveSandboxes")
+    return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else None
 
 
 def starts_problem(client: Client, n: int) -> Optional[str]:
@@ -172,14 +175,28 @@ def starts_problem(client: Client, n: int) -> Optional[str]:
     return None
 
 
-def machine_types(client: Client) -> Dict[str, Optional[str]]:
+def machine_types(client: Client, limits: Optional[dict] = None) -> Dict[str, Optional[str]]:
     """Each machine type the account knows: None when it may start one, else boat's reason why not
     ("not during the free trial"). Empty when its API does not say."""
     out = {}
-    for t in client.limits().get("machineTypes") or []:
+    for t in (client.limits() if limits is None else limits).get("machineTypes") or []:
         if isinstance(t, dict) and isinstance(t.get("type"), str):
             out[t["type"]] = None if t.get("available") else str(t.get("reason") or "not available on this account")
     return out
+
+
+def spec(size: str) -> str:
+    """A size's vCPUs and memory as a card says them, or "" when unmeasured."""
+    z = SIZES.get(size) or {}
+    return f"{z['cpus']} vCPU, {z['memory_gb']} GB" if "cpus" in z and "memory_gb" in z else ""
+
+
+def fits(size: str, vm_memory_gb) -> bool:
+    """Whether a VM of ``size`` can boot a task's own VM of ``vm_memory_gb`` (OSWorld's guest): the guest's
+    memory must be free inside it, so the size needs more than the guest; a size of unmeasured memory, or
+    no guest, is not refused here."""
+    have = (SIZES.get(size) or {}).get("memory_gb")
+    return not vm_memory_gb or not isinstance(have, (int, float)) or have > vm_memory_gb
 
 
 def size_problem(client: Client, size: str) -> Optional[str]:
@@ -274,7 +291,7 @@ class VM:
     auto-stop, asked for; ``self.ttl`` the one it has, ``TTL`` on a free trial."""
 
     def __init__(self, client: Client, keys: Keys, job: str, *, size: str = SIZE, stopped: Optional[threading.Event] = None,
-                 wait: float = WAIT_SECONDS, sleep: Callable[[float], None] = time.sleep, ttl: int = TTL):
+                 wait: float = WAIT_SECONDS, sleep: Callable[[float], None] = time.sleep, ttl: int = TTL, lock: bool = True):
         self.client, self.keys, self.id, self.size, self.ttl = client, keys, None, size, max(int(ttl), TTL)
         self.stopped = stopped
         t0 = time.time()
@@ -296,7 +313,8 @@ class VM:
         self.id = d["sandbox"]["id"]
         try:
             self._ready(sleep)
-            self.sh(f"sudo -n useradd -m -s /bin/bash {USER} && " + LOCK.format(user=USER))
+            if lock:                       # a whole unit (boat_units) is the run's own code: no agent's user to lock in
+                self.sh(f"sudo -n useradd -m -s /bin/bash {USER} && " + LOCK.format(user=USER))
         except BaseException:
             self.delete()
             raise

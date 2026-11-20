@@ -75,6 +75,41 @@ class EngineTest(unittest.TestCase):
         os.symlink(podman, docker)
         self.assertEqual(self.engine(), "podman")
 
+    def test_with_both_on_the_path_the_one_that_answers_is_the_engine(self):
+        refuses = "#!/bin/sh\necho 'permission denied while trying to connect to the Docker daemon socket' >&2\nexit 1\n"
+        for docker, podman, want in ((refuses, "#!/bin/sh\nexit 0\n", "podman"),    # docker refuses this user, podman answers
+                                     ("#!/bin/sh\nexit 0\n", "#!/bin/sh\nexit 0\n", "docker"),
+                                     (refuses, "#!/bin/sh\nexit 125\n", "docker")):   # neither: docker, so its reason is said
+            self.program("docker", docker); self.program("podman", podman)
+            with self.subTest(want=want):
+                self.assertEqual(self.engine(), want)
+
+    def test_the_sandbox_says_the_other_engine_when_both_are_installed(self):
+        from nullius import sandbox
+        def other(engine):
+            with mock.patch.dict(os.environ, {"PATH": self.tmp}), mock.patch.object(container, "DOCKER", engine):
+                return sandbox._other()
+        self.program("podman", "#!/bin/sh\necho 5.4.2\n")
+        self.assertIsNone(other("podman"))                                   # podman alone: nothing else to say
+        self.program("docker", "#!/bin/sh\necho 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock' >&2\nexit 1\n")
+        self.assertEqual(other("podman"), {"name": "docker", "ok": False,
+                                           "said": "Cannot connect to the Docker daemon at unix:///var/run/docker.sock"})
+        self.assertEqual(other("docker"), {"name": "podman", "ok": True, "said": "podman 5.4.2"})
+        self.program("docker", "#!/bin/sh\nexec podman \"$@\"\n")               # podman-docker's docker: the same program
+        self.assertIsNone(other("podman"))
+
+    def test_the_host_probe_and_the_run_there_pick_the_same_engine(self):
+        from nullius import hosts
+        for tool in ("sh", "sed", "grep", "hostname"):
+            os.symlink(shutil.which(tool), os.path.join(self.tmp, tool))
+        self.program("docker", "#!/bin/sh\necho 'permission denied' >&2\nexit 1\n")
+        self.program("podman", "#!/bin/sh\nexit 0\n")
+        run = lambda argv, timeout: (lambda p: (p.returncode, p.stdout, p.stderr))(
+            subprocess.run(["sh", "-c", argv[-1]], capture_output=True, text=True, env={"PATH": self.tmp}, timeout=timeout))
+        got = hosts.test(hosts.parse("bench"), run=run)
+        self.assertEqual((got["docker_ok"], got["podman_ok"], got["engine"]), (False, True, "podman"))
+        self.assertEqual(self.engine(), got["engine"])
+
     def test_a_docker_that_refuses_this_user_says_podman_is_there(self):
         self.enterContext(mock.patch.object(container, "DOCKER", "docker"))
         refused = subprocess.CompletedProcess([], 1, "", "permission denied while trying to connect to the docker API\n")
@@ -84,7 +119,7 @@ class EngineTest(unittest.TestCase):
         with mock.patch.object(container.shutil, "which", return_value=None):
             self.assertEqual(container.unusable(), said)
         with mock.patch.object(container.shutil, "which", return_value="/usr/bin/podman"):
-            self.assertEqual(container.unusable(), said + ". podman is on this machine: Nullius uses it when docker is not on the PATH")
+            self.assertEqual(container.unusable(), said + ". podman is on this machine: Nullius uses it when docker does not answer and podman does")
 
     def test_podman_is_asked_whether_it_is_rootless_in_its_own_terms(self):
         self.enterContext(mock.patch.object(container, "DOCKER", "podman"))

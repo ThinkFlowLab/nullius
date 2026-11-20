@@ -1,0 +1,23 @@
+{#- The Roots dialog of a workspace (`workspace_roots`), fetched when it opens: each root's Unlink asked here, its Delete asked of the server. #}
+{% from '_tables.html' import greyed %}
+<div class="std-how-head"><h2 id="ws-dialog-h"{% if clash %} title="{{ ws.name }}"{% endif %}>Roots of {{ ws.label }}</h2>
+  <a class="btn sm" href="{{ url_for('import_page', into=ws.name) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a root</a></div>
+<ul class="ws-root-list">
+  {% for r in rs %}
+  <li data-holder><span class="mono">{{ r.path }}</span>
+    <span class="ws-root-acts">
+      <button type="button" class="icon-btn" data-ask="ask-unlink" aria-label="Unlink {{ r.path }}" title="Unlink from this workspace"><svg class="ic"><use href="#i-unlink"/></svg></button>
+      {%- if not r.why %}<button type="button" class="icon-btn danger" data-ask="{{ url_for('workspace_root_ask', name=ws.name, root=r.path) }}" aria-haspopup="dialog" aria-label="Delete folder {{ r.path }}" title="Delete folder"><svg class="ic"><use href="#i-trash"/></svg></button>
+      {%- else %}{{ greyed('Delete folder ' ~ r.path, 'Delete folder', r.why, 'why-' ~ ws.name ~ '-' ~ loop.index) }}{% endif %}
+    </span>
+    <template class="ask-unlink">
+      <div class="std-how-head"><h2 id="ws-dialog-h"{% if clash %} title="{{ ws.name }}"{% endif %}>Unlink a root of {{ ws.label }}</h2></div>
+      <form method="post" action="{{ url_for('workspace_unlink', name=ws.name) }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="root" value="{{ r.path }}">
+        <p><span class="mono">{{ r.path }}</span> leaves {{ ws.label }}. Its files stay.</p>
+        <div class="launch-delete-acts"><button type="button" class="btn ghost" data-back autofocus>Keep it</button><button type="submit" class="btn">Unlink</button></div>
+      </form>
+    </template>
+  </li>
+  {% else %}<li class="faint">No root.</li>{% endfor %}
+</ul>

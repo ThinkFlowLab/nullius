@@ -49,28 +49,37 @@
   {%- elif c.key == 'size' %}{% call cell(c, sort=r.bytes, class='nowrap') %}{{ r.bytes|filesizeformat }}{% endcall %}
   {%- elif c.key == 'ws' %}{% call cell(c, sort=wss|map(attribute='label')|sort|join(' ')) %}{% for w in wss %}{{ open_at(w, L, w.label) }}{% if not loop.last %}<br>{% endif %}{% else %}<span class="faint">none</span>{% endfor %}{% endcall %}
   {%- elif c.key == 'actions' %}{% call cell(c, class='acts-col') %}
-        {% set others = workspaces|rejectattr('name', 'in', wss|map(attribute='name')|list)|list %}
-        <button type="button" class="icon-btn launch-add-btn" aria-haspopup="dialog" aria-label="Add launch {{ L.title }} to a workspace" title="Add to workspace"><svg class="ic"><use href="#i-ws-add"/></svg></button>
-        <template class="launch-add">
-          <div class="std-how-head"><h2 id="launch-delete-h">Add launch {{ L.title }}</h2></div>
-          <form method="post" action="{{ url_for('launch_add', key=L.key) }}">
-            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-            <label>Workspace <select name="workspace">{% for w in others %}<option value="{{ w.name }}">{{ w.label }}</option>{% endfor %}<option value="">New workspace…</option></select></label>
-            <label class="launch-add-new">Name <input type="text" name="label" placeholder="Optional" spellcheck="false" autocomplete="off"></label>
-            <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost">Cancel</button><button type="submit" class="btn">Add</button></div>
-          </form>
-        </template>
+        <button type="button" class="icon-btn launch-add-btn" aria-haspopup="dialog" aria-label="Add launch {{ L.title }} to a workspace" title="Add to workspace" data-add="{{ url_for('launch_add', key=L.key) }}" data-title="{{ L.title }}"><svg class="ic"><use href="#i-ws-add"/></svg></button>
         {% if not r.why %}{{ delete_ask(L, none, 'launches', icon=true) }}
         {%- else %}{{ greyed('Delete launch ' ~ L.title, 'Delete launch', r.why, 'why-' ~ L.key) }}{% endif %}
       {% endcall %}
   {%- endif %}
 {% endcall %}
+{#- Add, once for the page: its button fills in the launch, and drops the workspaces its row already lists. #}
+<template class="launch-add">
+  <div class="std-how-head"><h2 id="launch-delete-h"></h2></div>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>Workspace <select name="workspace">{% for w in workspaces %}<option value="{{ w.name }}">{{ w.label }}</option>{% endfor %}<option value="">New workspace…</option></select></label>
+    <label class="launch-add-new">Name <input type="text" name="label" placeholder="Optional" spellcheck="false" autocomplete="off"></label>
+    <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost">Cancel</button><button type="submit" class="btn">Add</button></div>
+  </form>
+</template>
 {{ dialogs({'launch-delete-btn': 'launch-ask', 'launch-add-btn': 'launch-add'}) }}
 <script>
 (() => {
   // ?ws= ticked its workspace alone at load; from here the filter lives in the page, as the others do
   const url = new URL(location.href);
   if (url.searchParams.has('ws')) { url.searchParams.delete('ws'); history.replaceState(history.state, '', url); }
+  // after dialogs() has drawn the Add template: this launch's heading, action and the workspaces it is not in yet
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.launch-add-btn');
+    if (!b) return;
+    const d = document.getElementById('launch-delete'), has = b.closest('[data-launch]').dataset.fWs.split('\n');
+    d.querySelector('h2').textContent = 'Add launch ' + b.dataset.title;
+    d.querySelector('form').action = b.dataset.add;
+    d.querySelectorAll('option[value]:not([value=""])').forEach(o => { if (has.includes(o.value)) o.remove(); });
+  });
 })();
 </script>
 {% else %}

@@ -1,0 +1,206 @@
+{
+  "key": "open-telco",
+  "title": "Open Telco",
+  "category": "Telecom",
+  "domain": "GSMA's eight telecom tests, from 3GPP standards and maths to 5G root-cause analysis and 6G reasoning.",
+  "scoring": "Answer accuracy",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "good_to_know": [
+    "Lite is GSMA's sample of each test, the one its leaderboard ranks; Full is the whole test.",
+    "Each test is a dataset scored on its own. The leaderboard's average is the mean of the tests' accuracies.",
+    "An answer counts only in the form its prompt asks for: 'ANSWER: <letter>', a \\boxed{} value, or a working group's code."
+  ],
+  "upstream_limitations": [
+    "3GPP TSG's scorer cannot read RAN_AH1: its 6 Lite and 129 Full questions always fail, so 94% and 93.6% are the ceilings (gsma-labs/evals#81).",
+    "TeleMath's scorer accepts any number within 0.01 of the answer, looser than its 1% for answers between -1 and 1 (44 Lite, 245 Full): 0 passes on 10 Lite and 47 Full questions whose answer is not 0.",
+    "The multiple-choice prompt asks for 'ANSWER: $LETTER': a reply that keeps the dollar sign is scored wrong, on all five multiple-choice tests (gsma-labs/evals#73)."
+  ],
+  "limitations": [
+    "An agent gets TeleMath's system prompt and the question as one prompt: ACP has no system message.",
+    "TeleLogs' majority vote across epochs (maj@k) is not computed; several attempts give pass@k instead."
+  ],
+  "datasets": [
+    {
+      "key": "teleqna-lite",
+      "title": "TeleQnA · Lite",
+      "tasks": 1000,
+      "official": "https://huggingface.co/datasets/GSMA/ot-lite",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "Inspect's multiple_choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter, as GSMA's task runs them.",
+      "notes": "Telecom standards and research questions: GSMA's sample, the leaderboard's, 1,000 questions. MIT License."
+    },
+    {
+      "key": "teleqna-full",
+      "title": "TeleQnA · Full",
+      "tasks": 10000,
+      "official": "https://huggingface.co/datasets/GSMA/ot-full",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "Inspect's multiple_choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter, as GSMA's task runs them.",
+      "notes": "Telecom standards and research questions: the whole test, 10,000 questions. MIT License."
+    },
+    {
+      "key": "teletables-lite",
+      "title": "TeleTables · Lite",
+      "tasks": 100,
+      "official": "https://huggingface.co/datasets/GSMA/ot-lite",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "Inspect's multiple_choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter, as GSMA's task runs them.",
+      "notes": "Questions on tables of 3GPP specifications: GSMA's sample, the leaderboard's, 100 questions. MIT License."
+    },
+    {
+      "key": "teletables-full",
+      "title": "TeleTables · Full",
+      "tasks": 500,
+      "official": "https://huggingface.co/datasets/GSMA/ot-full",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "Inspect's multiple_choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter, as GSMA's task runs them.",
+      "notes": "Questions on tables of 3GPP specifications: the whole test, 500 questions. MIT License."
+    },
+    {
+      "key": "telemath-lite",
+      "title": "TeleMath · Lite",
+      "tasks": 100,
+      "official": "https://huggingface.co/datasets/GSMA/ot-lite",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "GSMA's telemath_scorer: the last \\boxed{} number, right within 1% or 0.01 of the answer.",
+      "notes": "Telecom maths problems: GSMA's sample, the leaderboard's, 100 questions. MIT License."
+    },
+    {
+      "key": "telemath-full",
+      "title": "TeleMath · Full",
+      "tasks": 500,
+      "official": "https://huggingface.co/datasets/GSMA/ot-full",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "GSMA's telemath_scorer: the last \\boxed{} number, right within 1% or 0.01 of the answer.",
+      "notes": "Telecom maths problems: the whole test, 500 questions. MIT License."
+    },
+    {
+      "key": "telelogs-lite",
+      "title": "TeleLogs · Lite",
+      "tasks": 100,
+      "official": "https://huggingface.co/datasets/GSMA/ot-lite",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "GSMA's telelogs_scorer: the last \\boxed{} answer, its first number against the root cause's (soft, the default).",
+      "notes": "5G root-cause analysis from drive-test data: GSMA's sample, the leaderboard's, 100 questions. MIT License."
+    },
+    {
+      "key": "telelogs-full",
+      "title": "TeleLogs · Full",
+      "tasks": 864,
+      "official": "https://huggingface.co/datasets/GSMA/ot-full",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "GSMA's telelogs_scorer: the last \\boxed{} answer, its first number against the root cause's (soft, the default).",
+      "notes": "5G root-cause analysis from drive-test data: the whole test, 864 questions. MIT License."
+    },
+    {
+      "key": "3gpp_tsg-lite",
+      "title": "3GPP TSG · Lite",
+      "tasks": 100,
+      "official": "https://huggingface.co/datasets/GSMA/ot-lite",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "GSMA's pattern scorer: the first working-group code in the reply, case aside.",
+      "notes": "3GPP documents to classify by working group: GSMA's sample, the leaderboard's, 100 questions. MIT License."
+    },
+    {
+      "key": "3gpp_tsg-full",
+      "title": "3GPP TSG · Full",
+      "tasks": 2000,
+      "official": "https://huggingface.co/datasets/GSMA/ot-full",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "GSMA's pattern scorer: the first working-group code in the reply, case aside.",
+      "notes": "3GPP documents to classify by working group: the whole test, 2,000 questions. MIT License."
+    },
+    {
+      "key": "oranbench-lite",
+      "title": "ORANBench · Lite",
+      "tasks": 150,
+      "official": "https://huggingface.co/datasets/GSMA/ot-lite",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "Inspect's multiple_choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter, as GSMA's task runs them.",
+      "notes": "Questions on O-RAN specifications: GSMA's sample, the leaderboard's, 150 questions. MIT License."
+    },
+    {
+      "key": "oranbench-full",
+      "title": "ORANBench · Full",
+      "tasks": 1500,
+      "official": "https://huggingface.co/datasets/GSMA/ot-full",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "Inspect's multiple_choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter, as GSMA's task runs them.",
+      "notes": "Questions on O-RAN specifications: the whole test, 1,500 questions. MIT License."
+    },
+    {
+      "key": "srsranbench-lite",
+      "title": "srsRANBench · Lite",
+      "tasks": 150,
+      "official": "https://huggingface.co/datasets/GSMA/ot-lite",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "Inspect's multiple_choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter, as GSMA's task runs them.",
+      "notes": "Questions on the srsRAN 5G codebase: GSMA's sample, the leaderboard's, 150 questions. MIT License."
+    },
+    {
+      "key": "srsranbench-full",
+      "title": "srsRANBench · Full",
+      "tasks": 1502,
+      "official": "https://huggingface.co/datasets/GSMA/ot-full",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "Inspect's multiple_choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter, as GSMA's task runs them.",
+      "notes": "Questions on the srsRAN 5G codebase: the whole test, 1,502 questions. MIT License."
+    },
+    {
+      "key": "sixg_bench-lite",
+      "title": "6G-Bench · Lite",
+      "tasks": 150,
+      "official": "https://huggingface.co/datasets/GSMA/ot-lite",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "Inspect's multiple_choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter, as GSMA's task runs them.",
+      "notes": "6G network reasoning across 30 task families: GSMA's sample, the leaderboard's, 150 questions. MIT License."
+    },
+    {
+      "key": "sixg_bench-full",
+      "title": "6G-Bench · Full",
+      "tasks": 3722,
+      "official": "https://huggingface.co/datasets/GSMA/ot-full",
+      "source": "Hugging Face",
+      "registry": "",
+      "hub": "",
+      "verifier": "Inspect's multiple_choice solver reads the 'ANSWER: <letter>' line and choice() checks the letter, as GSMA's task runs them.",
+      "notes": "6G network reasoning across 30 task families: the whole test, 3,722 questions. MIT License."
+    }
+  ],
+  "task_count": 20588,
+  "citation": "@misc{maatouk2023teleqna,\n  title={TeleQnA: A Benchmark Dataset to Assess Large Language Models Telecommunications Knowledge},\n  author={Maatouk, Ali and Ayed, Fadhel and Piovesan, Nicola and De Domenico, Antonio and Debbah, Merouane and Luo, Zhi-Quan},\n  year={2023}, eprint={2310.15051}, archivePrefix={arXiv}\n}\n\n@misc{ezzakri2025teletables,\n  title={TeleTables: A Benchmark for Large Language Models in Telecom Table Interpretation},\n  author={Ezzakri, Anas and Piovesan, Nicola and Sana, Mohamed and De Domenico, Antonio and Ayed, Fadhel and Zhang, Haozhe},\n  year={2025}, eprint={2601.04202}, archivePrefix={arXiv}\n}\n\n@misc{colle2025telemath,\n  title={TeleMath: A Benchmark for Large Language Models in Telecom Mathematical Problem Solving},\n  author={Colle, Vincenzo and Sana, Mohamed and Piovesan, Nicola and De Domenico, Antonio and Ayed, Fadhel and Debbah, Merouane},\n  year={2025}, eprint={2506.10674}, archivePrefix={arXiv}\n}\n\n@misc{sana2025telelogs,\n  title={Reasoning Language Models for Root Cause Analysis in 5G Wireless Networks},\n  author={Sana, Mohamed and Piovesan, Nicola and De Domenico, Antonio and Kang, Yibin and Zhang, Haozhe and Debbah, Merouane and Ayed, Fadhel},\n  year={2025}, eprint={2507.21974}, archivePrefix={arXiv}\n}\n\n@misc{zou2024telecomgpt,\n  title={TelecomGPT: A Framework to Build Telecom-Specific Large Language Models},\n  author={Zou, Hang and Zhao, Qiyang and Tian, Yu and Bariah, Lina and Bader, Faouzi and Lestable, Thierry and Debbah, Merouane},\n  year={2024}, eprint={2407.09424}, archivePrefix={arXiv}\n}\n\n@misc{gajjar2024oranbench,\n  title={ORAN-Bench-13K: An Open Source Benchmark for Assessing LLMs in Open Radio Access Networks},\n  author={Gajjar, Pranshav and Shah, Vijay K.},\n  year={2024}, eprint={2407.06245}, archivePrefix={arXiv}\n}\n\n@misc{gajjar2025oransight2,\n  title={ORANSight-2.0: Foundational LLMs for O-RAN},\n  author={Gajjar, Pranshav and Shah, Vijay K.},\n  year={2025}, eprint={2503.05200}, archivePrefix={arXiv}\n}\n\n@misc{ferrag2026sixgbench,\n  title={6G-Bench: An Open Benchmark for Semantic Communication and Network-Level Reasoning with Foundation Models in AI-Native 6G Networks},\n  author={Ferrag, Mohamed Amine and Lakas, Abderrahmane and Debbah, Merouane},\n  year={2026}, eprint={2602.08675}, archivePrefix={arXiv}\n}",
+  "citation_source": "https://huggingface.co/datasets/GSMA/ot-full"
+}

@@ -179,6 +179,7 @@ class AgentSide(unittest.TestCase):
         s = Session(setup, self.ws)
         self.sessions.append(s)
         s.ask("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t"}})
+        self.assertEqual(self.drivers[-1].request("task_given", unit=UNIT, dir=self.ws), {})   # as the run does
         return s
 
     def events(self, kind: str) -> list:

@@ -55,11 +55,14 @@ class MeetingPoints(unittest.TestCase):
             end = source.index("\n  function ", start + 1)
             functions.append(source[start:end])
         bench = recipe._bench_page(definitions.get("benchmark", "osworld1"))
-        program = ("const C = {chosenOf: r => r.others, datasetsOf: () => ['test_small']};"
+        # OSWorld's PromptAgent, one of its own agents: run as its Original setup (command-builder-core.js, runsOf)
+        program = ("const own = [{key: 'osworld1:prompt', agent: 'prompt'}], C = {chosenOf: r => r.others, datasetsOf: () => ['test_small'],"
+                   "ownAgentsOf: () => own, ownChosen: r => own.filter(a => r.others.includes(a.key)),"
+                   "runsOf: r => r.others.map(k => own.some(a => a.key === k) ? 'original' : k)};"
                    "const schema = {standardHere: {}}, esc = x => x, tile = x => x.title;"
                    + "\n".join(functions) + "\nconst b = " + json.dumps(bench) + ";"
-                   "process.stdout.write(JSON.stringify([['original'], ['fake'], ['original', 'fake']].map(others => {"
-                   "const r = {others, bench_options: {agent: 'prompt'}};"
+                   "process.stdout.write(JSON.stringify([['osworld1:prompt'], ['fake'], ['osworld1:prompt', 'fake']].map(others => {"
+                   "const r = {others, bench_options: {}};"
                    "return ['yours', 'setup', 'shared'].map(s => benchOptions(r, b, s)).join('') + benchLimits(r, b);"
                    "})));")
         result = subprocess.run(["node", "-e", program], stdin=subprocess.DEVNULL, capture_output=True, text=True, check=True)

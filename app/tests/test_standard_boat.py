@@ -119,6 +119,22 @@ class Client(unittest.TestCase):
     def test_slots_is_the_accounts_limit_of_vms_at_once(self):
         self.assertEqual(boat.slots(boat.Client("k", opener=FakeAPI([]))), 2)
 
+    def test_one_answer_of_its_limits_says_both_its_sizes_and_its_vms_at_once(self):
+        api = FakeAPI([])
+        client = boat.Client("k", opener=api)
+        limits = client.limits()
+        self.assertEqual((boat.slots(client, limits), boat.machine_types(client, limits)["large"]), (2, "not during the free trial"))
+        self.assertEqual(len(api.calls), 1)
+        self.assertIsNone(boat.slots(client, {"maxActiveSandboxes": True}))
+
+    def test_a_size_fits_a_units_own_vm_only_with_more_memory_than_it(self):
+        # measured: OSWorld's 4 GB guest is refused on small (4 GB, 2 free) and boots on default (8 GB)
+        self.assertFalse(boat.fits("small", 4))
+        self.assertTrue(boat.fits("default", 4))
+        self.assertTrue(boat.fits("small", 0))
+        self.assertTrue(boat.fits("large", 4))                 # its memory unmeasured: not refused here
+        self.assertEqual((boat.spec("small"), boat.spec("large")), ("2 vCPU, 4 GB", ""))
+
     def test_sweep_deletes_only_this_jobs_vms(self):
         api = FakeAPI([])
         self.assertEqual(boat.sweep("job.1", boat.Client("k", opener=api)), 1)
@@ -514,11 +530,12 @@ class BoatRun(unittest.TestCase):
         with self.assertRaisesRegex(run.Refused, "Boat cannot start a large VM: not during the free trial"):
             run.Run(b, a, model="m", provider="custom", env=self.env, jobs_root=self.tmp, backend="boat", boat_size="large")
 
-    def test_a_check_runs_here_and_no_key_means_no_run(self):
+    def test_a_check_is_refused_not_run_here_and_no_key_means_no_run(self):
         b = definitions.get("benchmark", "fakebench", ROOT)
         b["controls"] = {"nop": {"source": "nullius", "from": "nothing said"}}
         nop = definitions.control(b, "nop")
-        self.assertEqual(run.Run(b, nop, model="m", provider="custom", env=self.env, jobs_root=self.tmp, backend="boat").backend, "local")
+        with self.assertRaisesRegex(run.Refused, "runs on a machine, not in a Boat VM"):
+            run.Run(b, nop, model="m", provider="custom", env=self.env, jobs_root=self.tmp, backend="boat")
         a = definitions.get("agent", "fake", ROOT)
         with mock.patch.object(boat, "unusable", lambda env=None, which=None: "no Boat API key: set it in Settings → Sandbox"):
             with self.assertRaisesRegex(run.Refused, "Boat backend cannot run here: no Boat API key"):
@@ -539,16 +556,22 @@ class BoatRecipe(unittest.TestCase):
         self.assertFalse(out["docker"])
         sized = recipe.compile(a_recipe(backend="boat", boat_size="default"), defs(), boat_unusable=lambda here=True: None)
         self.assertIn("--boat-size default", sized["script"])
-        self.assertIn("default VMs", sized["review"][-1][2])
+        self.assertIn("Boat sandboxes · one Default VM per ", sized["review"][-1][2])
         self.assertEqual([e["step"] for e in recipe.compile(a_recipe(backend="boat", boat_size="huge"), defs())["errors"]],
                          [recipe.STEP["where"]])
-        self.assertIn("boat backend", out["review"][-1][2])
-        # on a host: the key is this machine's, the programs the host's (its prerequisites)
+        # as many units at once as the account runs, unless the recipe says fewer; the run caps it (boat.slots)
+        every = recipe.compile(a_recipe(backend="boat", concurrency=""), defs(), boat_unusable=lambda here=True: None)
+        self.assertIn(f"-j {recipe.MAX_CONCURRENT} ", every["script"])
+        self.assertIn("as many at a time as Boat allows", next(r[2] for r in every["review"] if r[1] == "Scope"))
+        fewer = recipe.compile(a_recipe(backend="boat", concurrency=3), defs(), boat_unusable=lambda here=True: None)
+        self.assertIn("-j 3 ", fewer["script"])
+
+    def test_hosts_and_sandboxes_do_not_mix(self):
         asked = []
-        out = recipe.compile(a_recipe(backend="boat", where="me@bench"), defs(), boat_unusable=lambda here=True: asked.append(here))
-        self.assertEqual(out["errors"], [])
-        self.assertEqual(asked, [False])
-        self.assertIn("--backend boat", out["script"])
+        for where in ("me@bench", ["local", "me@bench"]):
+            out = recipe.compile(a_recipe(backend="boat", where=where), defs(), boat_unusable=lambda here=True: asked.append(here))
+            self.assertEqual([e["message"] for e in out["errors"]], ["Hosts and Boat sandboxes do not mix: choose Hosts, or Sandboxes alone."])
+        self.assertEqual(asked, [])
 
     def test_a_size_the_account_cannot_start_is_the_where_steps_error(self):
         problem = lambda size: "not during the free trial" if size == "large" else None
@@ -557,6 +580,23 @@ class BoatRecipe(unittest.TestCase):
         self.assertIn("large VM on this account: not during the free trial", out["errors"][0]["message"])
         out = recipe.compile(a_recipe(backend="boat", boat_size="default"), defs(), boat_unusable=lambda here=True: None, boat_size_problem=problem)
         self.assertEqual(out["errors"], [])
+
+    def test_a_benchmark_booting_its_own_vms_wants_a_size_that_holds_them_and_never_a_container(self):
+        # OSWorld's Original setup, on the bundled catalogue: the size is judged from its definition's VM, not its name
+        base = {"harness": recipe.HARNESS, "name": "os", "benchmark": "osworld2", "datasets": ["offline36"], "others": ["original"],
+                "model": "MiniMax-M3", "provider": "openrouter", "where": "local"}
+        errors = lambda **k: [e["message"] for e in recipe.compile(dict(base, **k), boat_unusable=lambda here=True: None)["errors"]
+                              if e["step"] == recipe.STEP["where"]]
+        small = errors(backend="boat", boat_size="small")
+        self.assertIn("A Small VM is too small for OSWorld2, whose units boot a 4 GB VM: choose a larger size.", small)
+        # Model-calling setups and controls use a relay container inside each whole-task VM.
+        self.assertNotIn("Original cannot run in a Boat VM yet: choose Hosts.", small)
+        self.assertEqual(errors(backend="boat", boat_size="default", others=["original", "nop"]), [])
+        self.assertFalse([m for m in errors(backend="boat", boat_size="default") if "too small" in m])
+        self.assertIn("OSWorld2 starts each unit's VM on the machine: choose local processes.", errors(backend="container"))
+        self.assertFalse([m for m in errors(backend="local") if "VM" in m])
+        self.assertTrue(definitions.boots_vms(definitions.get("benchmark", "osworld1")))
+        self.assertFalse(definitions.boots_vms(definitions.get("benchmark", "gsm8k")))
 
     def test_without_its_key_the_where_step_says_so(self):
         out = recipe.compile(a_recipe(backend="boat"), defs(), boat_unusable=lambda here=True: "no Boat API key: set it in Settings → Sandbox")

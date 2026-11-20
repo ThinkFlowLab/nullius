@@ -1,0 +1,1073 @@
+[
+ {
+  "entry": "src/evals/teleqna/teleqna.py (@task teleqna, inspect eval -T)",
+  "setting": "subject",
+  "values": "full, Lexicon, Research overview, Research publications, Standards overview, Standards specifications",
+  "default": "full",
+  "nullius": "option:subject"
+ },
+ {
+  "entry": "src/evals/teleqna/teleqna.py (@task teleqna, inspect eval -T)",
+  "setting": "dataset_path",
+  "values": "any Hugging Face dataset",
+  "default": "GSMA/ot-lite",
+  "nullius": "fixed:GSMA/ot-lite or GSMA/ot-full at a pinned revision - the upstream's own datasets: a checked copy of each repository is passed as dataset_path, and the task's hf_dataset call loads it with the dataset card's configuration"
+ },
+ {
+  "entry": "src/evals/teleqna/teleqna.py (@task teleqna, inspect eval -T)",
+  "setting": "split",
+  "values": "test",
+  "default": "test",
+  "nullius": "fixed:test - the only split GSMA publishes"
+ },
+ {
+  "entry": "src/evals/teleqna/teleqna.py (@task teleqna, inspect eval -T)",
+  "setting": "full=false",
+  "values": "GSMA/ot-lite, 1,000 questions",
+  "default": "false",
+  "nullius": "dataset:teleqna-lite"
+ },
+ {
+  "entry": "src/evals/teleqna/teleqna.py (@task teleqna, inspect eval -T)",
+  "setting": "full=true",
+  "values": "GSMA/ot-full, 10,000 questions",
+  "default": "",
+  "nullius": "dataset:teleqna-full"
+ },
+ {
+  "entry": "src/evals/teletables/teletables.py (@task teletables, inspect eval -T)",
+  "setting": "dataset_path",
+  "values": "any Hugging Face dataset",
+  "default": "GSMA/ot-lite",
+  "nullius": "fixed:GSMA/ot-lite or GSMA/ot-full at a pinned revision - the upstream's own datasets: a checked copy of each repository is passed as dataset_path, and the task's hf_dataset call loads it with the dataset card's configuration"
+ },
+ {
+  "entry": "src/evals/teletables/teletables.py (@task teletables, inspect eval -T)",
+  "setting": "split",
+  "values": "test",
+  "default": "test",
+  "nullius": "fixed:test - the only split GSMA publishes"
+ },
+ {
+  "entry": "src/evals/teletables/teletables.py (@task teletables, inspect eval -T)",
+  "setting": "full=false",
+  "values": "GSMA/ot-lite, 100 questions",
+  "default": "false",
+  "nullius": "dataset:teletables-lite"
+ },
+ {
+  "entry": "src/evals/teletables/teletables.py (@task teletables, inspect eval -T)",
+  "setting": "full=true",
+  "values": "GSMA/ot-full, 500 questions",
+  "default": "",
+  "nullius": "dataset:teletables-full"
+ },
+ {
+  "entry": "src/evals/telemath/telemath.py (@task telemath, inspect eval -T)",
+  "setting": "dataset_path",
+  "values": "any Hugging Face dataset",
+  "default": "GSMA/ot-lite",
+  "nullius": "fixed:GSMA/ot-lite or GSMA/ot-full at a pinned revision - the upstream's own datasets: a checked copy of each repository is passed as dataset_path, and the task's hf_dataset call loads it with the dataset card's configuration"
+ },
+ {
+  "entry": "src/evals/telemath/telemath.py (@task telemath, inspect eval -T)",
+  "setting": "split",
+  "values": "test",
+  "default": "test",
+  "nullius": "fixed:test - the only split GSMA publishes"
+ },
+ {
+  "entry": "src/evals/telemath/telemath.py (@task telemath, inspect eval -T)",
+  "setting": "full=false",
+  "values": "GSMA/ot-lite, 100 questions",
+  "default": "false",
+  "nullius": "dataset:telemath-lite"
+ },
+ {
+  "entry": "src/evals/telemath/telemath.py (@task telemath, inspect eval -T)",
+  "setting": "full=true",
+  "values": "GSMA/ot-full, 500 questions",
+  "default": "",
+  "nullius": "dataset:telemath-full"
+ },
+ {
+  "entry": "src/evals/telelogs/telelogs.py (@task telelogs, inspect eval -T)",
+  "setting": "eval_type",
+  "values": "soft, hard",
+  "default": "soft",
+  "nullius": "option:eval_type"
+ },
+ {
+  "entry": "src/evals/telelogs/telelogs.py (@task telelogs, inspect eval -T)",
+  "setting": "dataset_path",
+  "values": "any Hugging Face dataset",
+  "default": "GSMA/ot-lite",
+  "nullius": "fixed:GSMA/ot-lite or GSMA/ot-full at a pinned revision - the upstream's own datasets: a checked copy of each repository is passed as dataset_path, and the task's hf_dataset call loads it with the dataset card's configuration"
+ },
+ {
+  "entry": "src/evals/telelogs/telelogs.py (@task telelogs, inspect eval -T)",
+  "setting": "split",
+  "values": "test",
+  "default": "test",
+  "nullius": "fixed:test - the only split GSMA publishes"
+ },
+ {
+  "entry": "src/evals/telelogs/telelogs.py (@task telelogs, inspect eval -T)",
+  "setting": "full=false",
+  "values": "GSMA/ot-lite, 100 questions",
+  "default": "false",
+  "nullius": "dataset:telelogs-lite"
+ },
+ {
+  "entry": "src/evals/telelogs/telelogs.py (@task telelogs, inspect eval -T)",
+  "setting": "full=true",
+  "values": "GSMA/ot-full, 864 questions",
+  "default": "",
+  "nullius": "dataset:telelogs-full"
+ },
+ {
+  "entry": "src/evals/three_gpp/three_gpp.py (@task three_gpp, inspect eval -T)",
+  "setting": "dataset_path",
+  "values": "any Hugging Face dataset",
+  "default": "GSMA/ot-lite",
+  "nullius": "fixed:GSMA/ot-lite or GSMA/ot-full at a pinned revision - the upstream's own datasets: a checked copy of each repository is passed as dataset_path, and the task's hf_dataset call loads it with the dataset card's configuration"
+ },
+ {
+  "entry": "src/evals/three_gpp/three_gpp.py (@task three_gpp, inspect eval -T)",
+  "setting": "split",
+  "values": "test",
+  "default": "test",
+  "nullius": "fixed:test - the only split GSMA publishes"
+ },
+ {
+  "entry": "src/evals/three_gpp/three_gpp.py (@task three_gpp, inspect eval -T)",
+  "setting": "full=false",
+  "values": "GSMA/ot-lite, 100 questions",
+  "default": "false",
+  "nullius": "dataset:3gpp_tsg-lite"
+ },
+ {
+  "entry": "src/evals/three_gpp/three_gpp.py (@task three_gpp, inspect eval -T)",
+  "setting": "full=true",
+  "values": "GSMA/ot-full, 2,000 questions",
+  "default": "",
+  "nullius": "dataset:3gpp_tsg-full"
+ },
+ {
+  "entry": "src/evals/oranbench/oranbench.py (@task oranbench, inspect eval -T)",
+  "setting": "difficulty",
+  "values": "full, easy, medium, hard",
+  "default": "full",
+  "nullius": "option:difficulty"
+ },
+ {
+  "entry": "src/evals/oranbench/oranbench.py (@task oranbench, inspect eval -T)",
+  "setting": "dataset_path",
+  "values": "any Hugging Face dataset",
+  "default": "GSMA/ot-lite",
+  "nullius": "fixed:GSMA/ot-lite or GSMA/ot-full at a pinned revision - the upstream's own datasets: a checked copy of each repository is passed as dataset_path, and the task's hf_dataset call loads it with the dataset card's configuration"
+ },
+ {
+  "entry": "src/evals/oranbench/oranbench.py (@task oranbench, inspect eval -T)",
+  "setting": "split",
+  "values": "test",
+  "default": "test",
+  "nullius": "fixed:test - the only split GSMA publishes"
+ },
+ {
+  "entry": "src/evals/oranbench/oranbench.py (@task oranbench, inspect eval -T)",
+  "setting": "full=false",
+  "values": "GSMA/ot-lite, 150 questions",
+  "default": "false",
+  "nullius": "dataset:oranbench-lite"
+ },
+ {
+  "entry": "src/evals/oranbench/oranbench.py (@task oranbench, inspect eval -T)",
+  "setting": "full=true",
+  "values": "GSMA/ot-full, 1,500 questions",
+  "default": "",
+  "nullius": "dataset:oranbench-full"
+ },
+ {
+  "entry": "src/evals/srsranbench/srsranbench.py (@task srsranbench, inspect eval -T)",
+  "setting": "dataset_path",
+  "values": "any Hugging Face dataset",
+  "default": "GSMA/ot-lite",
+  "nullius": "fixed:GSMA/ot-lite or GSMA/ot-full at a pinned revision - the upstream's own datasets: a checked copy of each repository is passed as dataset_path, and the task's hf_dataset call loads it with the dataset card's configuration"
+ },
+ {
+  "entry": "src/evals/srsranbench/srsranbench.py (@task srsranbench, inspect eval -T)",
+  "setting": "split",
+  "values": "test",
+  "default": "test",
+  "nullius": "fixed:test - the only split GSMA publishes"
+ },
+ {
+  "entry": "src/evals/srsranbench/srsranbench.py (@task srsranbench, inspect eval -T)",
+  "setting": "full=false",
+  "values": "GSMA/ot-lite, 150 questions",
+  "default": "false",
+  "nullius": "dataset:srsranbench-lite"
+ },
+ {
+  "entry": "src/evals/srsranbench/srsranbench.py (@task srsranbench, inspect eval -T)",
+  "setting": "full=true",
+  "values": "GSMA/ot-full, 1,502 questions",
+  "default": "",
+  "nullius": "dataset:srsranbench-full"
+ },
+ {
+  "entry": "src/evals/sixg_bench/sixg_bench.py (@task sixg_bench, inspect eval -T)",
+  "setting": "task_id",
+  "values": "None, T1 to T30",
+  "default": "None",
+  "nullius": "option:task_id"
+ },
+ {
+  "entry": "src/evals/sixg_bench/sixg_bench.py (@task sixg_bench, inspect eval -T)",
+  "setting": "dataset_path",
+  "values": "any Hugging Face dataset",
+  "default": "GSMA/ot-lite",
+  "nullius": "fixed:GSMA/ot-lite or GSMA/ot-full at a pinned revision - the upstream's own datasets: a checked copy of each repository is passed as dataset_path, and the task's hf_dataset call loads it with the dataset card's configuration"
+ },
+ {
+  "entry": "src/evals/sixg_bench/sixg_bench.py (@task sixg_bench, inspect eval -T)",
+  "setting": "split",
+  "values": "test",
+  "default": "test",
+  "nullius": "fixed:test - the only split GSMA publishes"
+ },
+ {
+  "entry": "src/evals/sixg_bench/sixg_bench.py (@task sixg_bench, inspect eval -T)",
+  "setting": "full=false",
+  "values": "GSMA/ot-lite, 150 questions",
+  "default": "false",
+  "nullius": "dataset:sixg_bench-lite"
+ },
+ {
+  "entry": "src/evals/sixg_bench/sixg_bench.py (@task sixg_bench, inspect eval -T)",
+  "setting": "full=true",
+  "values": "GSMA/ot-full, 3,722 questions",
+  "default": "",
+  "nullius": "dataset:sixg_bench-full"
+ },
+ {
+  "entry": "src/evals/teleqna/teleqna.py (hard-coded)",
+  "setting": "solver multiple_choice(cot)",
+  "values": "cot=False, cot=True",
+  "default": "cot=False",
+  "nullius": "fixed:cot=False - the upstream's: the template asks for 'ANSWER: <letter>' alone"
+ },
+ {
+  "entry": "src/evals/teleqna/teleqna.py (hard-coded)",
+  "setting": "scorer",
+  "values": "choice()",
+  "default": "choice()",
+  "nullius": "fixed:choice() - the upstream's, run as published"
+ },
+ {
+  "entry": "src/evals/teletables/teletables.py (hard-coded)",
+  "setting": "solver multiple_choice(cot)",
+  "values": "cot=False, cot=True",
+  "default": "cot=False",
+  "nullius": "fixed:cot=False - the upstream's: the template asks for 'ANSWER: <letter>' alone"
+ },
+ {
+  "entry": "src/evals/teletables/teletables.py (hard-coded)",
+  "setting": "scorer",
+  "values": "choice()",
+  "default": "choice()",
+  "nullius": "fixed:choice() - the upstream's, run as published"
+ },
+ {
+  "entry": "src/evals/oranbench/oranbench.py (hard-coded)",
+  "setting": "solver multiple_choice(cot)",
+  "values": "cot=False, cot=True",
+  "default": "cot=False",
+  "nullius": "fixed:cot=False - the upstream's: the template asks for 'ANSWER: <letter>' alone"
+ },
+ {
+  "entry": "src/evals/oranbench/oranbench.py (hard-coded)",
+  "setting": "scorer",
+  "values": "choice()",
+  "default": "choice()",
+  "nullius": "fixed:choice() - the upstream's, run as published"
+ },
+ {
+  "entry": "src/evals/srsranbench/srsranbench.py (hard-coded)",
+  "setting": "solver multiple_choice(cot)",
+  "values": "cot=False, cot=True",
+  "default": "cot=False",
+  "nullius": "fixed:cot=False - the upstream's: the template asks for 'ANSWER: <letter>' alone"
+ },
+ {
+  "entry": "src/evals/srsranbench/srsranbench.py (hard-coded)",
+  "setting": "scorer",
+  "values": "choice()",
+  "default": "choice()",
+  "nullius": "fixed:choice() - the upstream's, run as published"
+ },
+ {
+  "entry": "src/evals/sixg_bench/sixg_bench.py (hard-coded)",
+  "setting": "solver multiple_choice(cot)",
+  "values": "cot=False, cot=True",
+  "default": "cot=False",
+  "nullius": "fixed:cot=False - the upstream's: the template asks for 'ANSWER: <letter>' alone"
+ },
+ {
+  "entry": "src/evals/sixg_bench/sixg_bench.py (hard-coded)",
+  "setting": "scorer",
+  "values": "choice()",
+  "default": "choice()",
+  "nullius": "fixed:choice() - the upstream's, run as published"
+ },
+ {
+  "entry": "src/evals/telemath/telemath.py (hard-coded)",
+  "setting": "SYSTEM_PROMPT",
+  "values": "the solving guidelines, ending in the \\boxed{} format",
+  "default": "",
+  "nullius": "fixed:the upstream's - the Original's model gets it as the system message, an agent ahead of the question (limitations)"
+ },
+ {
+  "entry": "src/evals/telemath/telemath.py (hard-coded)",
+  "setting": "telemath_scorer tolerance",
+  "values": "math.isclose rel_tol=0.01, abs_tol=0.01",
+  "default": "0.01, 0.01",
+  "nullius": "fixed:the upstream's - 0 passes on the questions whose answer is within 0.01 of it (upstream limitations)"
+ },
+ {
+  "entry": "src/evals/telelogs/telelogs.py (hard-coded)",
+  "setting": "metric maj_at_k",
+  "values": "majority vote over epochs",
+  "default": "",
+  "nullius": "not offered - a metric across epochs; a run's attempts give pass@k instead (limitations)"
+ },
+ {
+  "entry": "src/evals/three_gpp/three_gpp.py (hard-coded)",
+  "setting": "WG_PATTERN",
+  "values": "([A-Z]+\\d+(?:-[A-Z]+)?), ignore_case",
+  "default": "",
+  "nullius": "fixed:the upstream's - it cannot read RAN_AH1, whose questions always fail (upstream limitations)"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--model",
+  "values": "any Inspect model",
+  "default": "",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--model-base-url",
+  "values": "a URL",
+  "default": "",
+  "nullius": "fixed:the unit's relay - every call goes through it, the key never leaves it"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--model-config",
+  "values": "a file",
+  "default": "",
+  "nullius": "not offered - model arguments; GSMA's runs set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--model-role",
+  "values": "role=model",
+  "default": "",
+  "nullius": "not offered - GSMA's tasks ask one model"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--task-config",
+  "values": "a file",
+  "default": "",
+  "nullius": "fixed:the task arguments above - from the run's options and dataset"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--solver",
+  "values": "a solver",
+  "default": "the task's",
+  "nullius": "not offered - the task's own solver is the benchmark"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--solver-config",
+  "values": "a file",
+  "default": "",
+  "nullius": "not offered - the task's own solver is the benchmark"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--tags",
+  "values": "text",
+  "default": "",
+  "nullius": "not offered - a log label, not what is measured"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--metadata",
+  "values": "key=value",
+  "default": "",
+  "nullius": "not offered - a log label, not what is measured"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--approval",
+  "values": "a file",
+  "default": "",
+  "nullius": "not offered - GSMA's tasks give the model no tools"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--sandbox",
+  "values": "docker, local, ...",
+  "default": "",
+  "nullius": "not offered - GSMA's tasks use no sandbox"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--no-sandbox-cleanup",
+  "values": "flag",
+  "default": "",
+  "nullius": "not offered - GSMA's tasks use no sandbox"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--limit",
+  "values": "N or N-M",
+  "default": "every sample",
+  "nullius": "fixed:the run's --limit - the first N questions of the file, or of an option's subset"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--sample-id",
+  "values": "ids",
+  "default": "every sample",
+  "nullius": "fixed:one question per unit - the driver runs Inspect on the unit's own sample id"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--sample-shuffle",
+  "values": "a seed",
+  "default": "off",
+  "nullius": "not offered - the order of questions, not what is measured"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--epochs",
+  "values": "N",
+  "default": "1",
+  "nullius": "fixed:1 per attempt - a run's --attempts K asks each question K times (pass@k); the leaderboard runs 1"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--epochs-reducer",
+  "values": "mean, median, mode, max, pass_at_k",
+  "default": "mean",
+  "nullius": "fixed:mean - Inspect's default; one epoch a unit, nothing to reduce"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--no-epochs-reducer",
+  "values": "flag",
+  "default": "off",
+  "nullius": "fixed:off - one epoch a unit"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--max-connections",
+  "values": "N",
+  "default": "model specific",
+  "nullius": "fixed:the run's concurrency (-j) - how many questions at once, not what is measured"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--max-retries",
+  "values": "N",
+  "default": "unlimited",
+  "nullius": "fixed:unlimited - Inspect's default: a rate-limited call waits and retries until the unit's time ends (limitations)"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--timeout",
+  "values": "seconds",
+  "default": "none",
+  "nullius": "fixed:none - Inspect's default; the unit's limit (900 s) ends a call that hangs"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--attempt-timeout",
+  "values": "seconds",
+  "default": "none",
+  "nullius": "fixed:none - Inspect's default"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--max-samples",
+  "values": "N",
+  "default": "max-connections + 1",
+  "nullius": "fixed:the run's concurrency (-j) - how many questions at once, not what is measured"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--max-tasks",
+  "values": "N",
+  "default": "1",
+  "nullius": "fixed:the run's concurrency (-j) - how many questions at once, not what is measured"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--max-subprocesses",
+  "values": "N",
+  "default": "CPU count",
+  "nullius": "not offered - GSMA's tasks start no subprocess"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--max-sandboxes",
+  "values": "N",
+  "default": "",
+  "nullius": "not offered - GSMA's tasks use no sandbox"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--message-limit",
+  "values": "N",
+  "default": "none",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--token-limit",
+  "values": "N",
+  "default": "none",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--cost-limit",
+  "values": "dollars",
+  "default": "none",
+  "nullius": "fixed:none - a run's --max-usd caps spending instead"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--model-cost-config",
+  "values": "a file",
+  "default": "",
+  "nullius": "not offered - a cost comes from the run's price list"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--time-limit",
+  "values": "seconds",
+  "default": "none",
+  "nullius": "fixed:none - the unit's limit (900 s) instead"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--working-limit",
+  "values": "seconds",
+  "default": "none",
+  "nullius": "fixed:none - the unit's limit (900 s) instead"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--fail-on-error",
+  "values": "a threshold",
+  "default": "every error fails",
+  "nullius": "fixed:a sample's error is the unit's error - a run's --retries runs it again"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--no-fail-on-error",
+  "values": "flag",
+  "default": "off",
+  "nullius": "fixed:off - a sample's error is the unit's error"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--continue-on-fail",
+  "values": "flag",
+  "default": "off",
+  "nullius": "fixed:off - one sample per eval"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--retry-on-error",
+  "values": "N",
+  "default": "none",
+  "nullius": "fixed:none - a run's --retries instead"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--no-log-samples",
+  "values": "flag",
+  "default": "off",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--no-log-realtime",
+  "values": "flag",
+  "default": "off",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--log-images",
+  "values": "flag",
+  "default": "on",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--log-model-api",
+  "values": "flag",
+  "default": "off",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--log-refusals",
+  "values": "flag",
+  "default": "off",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--log-buffer",
+  "values": "N",
+  "default": "",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--log-shared",
+  "values": "seconds",
+  "default": "",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--log-format",
+  "values": "eval, json",
+  "default": "eval",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--log-level-transcript",
+  "values": "a level",
+  "default": "info",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--log-level",
+  "values": "a level",
+  "default": "warning",
+  "nullius": "fixed:warning - Inspect's default, into the driver's log"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--log-dir",
+  "values": "a folder",
+  "default": "./logs",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--no-score",
+  "values": "flag",
+  "default": "off",
+  "nullius": "fixed:scored - the score is the unit's verdict"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--no-score-display",
+  "values": "flag",
+  "default": "off",
+  "nullius": "fixed:no display - the driver runs headless"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--generate-config",
+  "values": "a file",
+  "default": "",
+  "nullius": "fixed:none - temperature is an option, the rest Inspect's defaults"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--max-tokens",
+  "values": "N",
+  "default": "the provider's",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--system-message",
+  "values": "text",
+  "default": "",
+  "nullius": "not offered - it would replace the task's own prompt"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--best-of",
+  "values": "N",
+  "default": "1",
+  "nullius": "not offered - one reply per call, as GSMA runs"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--frequency-penalty",
+  "values": "-2 to 2",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--presence-penalty",
+  "values": "-2 to 2",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--logit-bias",
+  "values": "token=bias",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--seed",
+  "values": "N",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--stop-seqs",
+  "values": "text",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--temperature",
+  "values": "0 to 2",
+  "default": "the provider's",
+  "nullius": "option:temperature"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--top-p",
+  "values": "0 to 1",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--top-k",
+  "values": "N",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--num-choices",
+  "values": "N",
+  "default": "1",
+  "nullius": "not offered - one reply per call, as GSMA runs"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--logprobs",
+  "values": "flag",
+  "default": "off",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--top-logprobs",
+  "values": "0 to 20",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--parallel-tool-calls",
+  "values": "flag",
+  "default": "",
+  "nullius": "not offered - GSMA's tasks give the model no tools"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--internal-tools",
+  "values": "flag",
+  "default": "",
+  "nullius": "not offered - GSMA's tasks give the model no tools"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--max-tool-output",
+  "values": "bytes",
+  "default": "",
+  "nullius": "not offered - GSMA's tasks give the model no tools"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--cache-prompt",
+  "values": "auto, true, false",
+  "default": "auto",
+  "nullius": "fixed:auto - Inspect's default"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--verbosity",
+  "values": "low, medium, high",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--effort",
+  "values": "low, medium, high, max",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--reasoning-effort",
+  "values": "none to xhigh",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--reasoning-tokens",
+  "values": "N",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--reasoning-summary",
+  "values": "none, concise, detailed, auto",
+  "default": "",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--reasoning-history",
+  "values": "none, all, last, auto",
+  "default": "auto",
+  "nullius": "fixed:auto - Inspect's default; one call a question"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--response-schema",
+  "values": "a JSON schema",
+  "default": "",
+  "nullius": "not offered - it would change the answer the task's solver reads"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--cache",
+  "values": "a policy",
+  "default": "off",
+  "nullius": "fixed:off - Inspect's default: every call is made"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--batch",
+  "values": "a batch size",
+  "default": "off",
+  "nullius": "fixed:off - Inspect's default: one call a question"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--display",
+  "values": "full, conversation, rich, plain, log, none",
+  "default": "full",
+  "nullius": "fixed:none - the driver runs headless"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--traceback-locals",
+  "values": "flag",
+  "default": "off",
+  "nullius": "not offered - debugging"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--env",
+  "values": "NAME=VALUE",
+  "default": "",
+  "nullius": "not offered - the driver's environment is the run's"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--debug",
+  "values": "flag",
+  "default": "off",
+  "nullius": "not offered - debugging"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--debug-port",
+  "values": "N",
+  "default": "",
+  "nullius": "not offered - debugging"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "--debug-errors",
+  "values": "flag",
+  "default": "off",
+  "nullius": "not offered - debugging"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "INSPECT_EVAL_* variables",
+  "values": "each flag above",
+  "default": "unset",
+  "nullius": "fixed:unset - the driver passes its settings as arguments"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "OPENAI_API_KEY, OPENROUTER_API_KEY, ...",
+  "values": "a provider's key",
+  "default": "",
+  "nullius": "fixed:the relay's word - the key stays in the relay"
+ },
+ {
+  "entry": "inspect eval (the README's and docs' command)",
+  "setting": "HF_TOKEN",
+  "values": "a Hugging Face token",
+  "default": "unset",
+  "nullius": "not offered - GSMA's datasets are public"
+ },
+ {
+  "entry": "src/evals/run_evals.py (python -m evals.run_evals)",
+  "setting": "--full",
+  "values": "off (GSMA/ot-lite), on (GSMA/ot-full)",
+  "default": "off",
+  "nullius": "fixed:a dataset per test and size - each test's · Lite or · Full dataset; a launch may select several"
+ },
+ {
+  "entry": "src/evals/run_evals.py (python -m evals.run_evals)",
+  "setting": "tasks",
+  "values": "telelogs, three_gpp, teleqna, telemath, teletables, oranbench, srsranbench",
+  "default": "these seven",
+  "nullius": "fixed:one test per dataset - 6G-Bench is a dataset too"
+ },
+ {
+  "entry": "src/evals/run_evals.py (python -m evals.run_evals)",
+  "setting": "model",
+  "values": "openrouter/openai/gpt-5.2, openrouter/anthropic/claude-opus-4.5, openrouter/google/gemini-3-flash-preview, openrouter/mistralai/mistral-large-3-2512, openrouter/deepseek/deepseek-v3.2",
+  "default": "these five",
+  "nullius": "setup:original"
+ },
+ {
+  "entry": "src/evals/run_evals.py (python -m evals.run_evals)",
+  "setting": "epochs",
+  "values": "1",
+  "default": "1",
+  "nullius": "fixed:1 - a run's --attempts asks again"
+ },
+ {
+  "entry": "src/evals/run_evals.py (python -m evals.run_evals)",
+  "setting": "temperature",
+  "values": "0.0",
+  "default": "0.0",
+  "nullius": "option:temperature"
+ },
+ {
+  "entry": "src/evals/run_evals.py (python -m evals.run_evals)",
+  "setting": "log_dir",
+  "values": "logs/leaderboard",
+  "default": "logs/leaderboard",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "gsma-labs/satellite (open-telco CLI, run-evals: the leaderboard's submissions)",
+  "setting": "full",
+  "values": "False, always",
+  "default": "False",
+  "nullius": "fixed:the · Lite datasets are the leaderboard's - Full is a dataset of its own"
+ },
+ {
+  "entry": "gsma-labs/satellite (open-telco CLI, run-evals: the leaderboard's submissions)",
+  "setting": "epochs",
+  "values": "N",
+  "default": "1 (DEFAULT_EPOCHS)",
+  "nullius": "fixed:1 - a run's --attempts asks again"
+ },
+ {
+  "entry": "gsma-labs/satellite (open-telco CLI, run-evals: the leaderboard's submissions)",
+  "setting": "max_connections",
+  "values": "N",
+  "default": "10 (DEFAULT_MAX_CONNECTIONS)",
+  "nullius": "fixed:the run's concurrency (-j) - how many questions at once, not what is measured"
+ },
+ {
+  "entry": "gsma-labs/satellite (open-telco CLI, run-evals: the leaderboard's submissions)",
+  "setting": "limit",
+  "values": "N",
+  "default": "none",
+  "nullius": "fixed:the run's --limit - how many questions, not how they are scored"
+ },
+ {
+  "entry": "gsma-labs/satellite (open-telco CLI, run-evals: the leaderboard's submissions)",
+  "setting": "token_limit",
+  "values": "N",
+  "default": "none",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "gsma-labs/satellite (open-telco CLI, run-evals: the leaderboard's submissions)",
+  "setting": "message_limit",
+  "values": "N",
+  "default": "none",
+  "nullius": "fixed:unset - Inspect's default; GSMA's docs, run_evals.py and leaderboard CLI set none"
+ },
+ {
+  "entry": "gsma-labs/satellite (open-telco CLI, run-evals: the leaderboard's submissions)",
+  "setting": "log_format, display, log_samples, log_realtime",
+  "values": "json, none, true, true",
+  "default": "",
+  "nullius": "fixed:a temporary log per question - the relay records each model call, the trial the verdict"
+ },
+ {
+  "entry": "driver (ours)",
+  "setting": "model client",
+  "values": "openai-api/nullius/<model>",
+  "default": "",
+  "nullius": "fixed:Inspect's OpenAI-compatible client to the unit's relay, whatever the provider - GSMA's runs used openrouter/<model>, the same request at their defaults"
+ },
+ {
+  "entry": "driver (ours)",
+  "setting": "agent prompt",
+  "values": "the messages the task's solver sends, joined by a blank line",
+  "default": "",
+  "nullius": "fixed:Nullius's - an agent has no system message, so TeleMath's comes ahead of the question (limitations)"
+ },
+ {
+  "entry": "driver (ours)",
+  "setting": "oracle reply",
+  "values": "'ANSWER: <letter>', \\boxed{<answer>}, {\"WORKING GROUP\": \"<group>\"}",
+  "default": "",
+  "nullius": "fixed:Nullius's - the dataset's answer written as the task's prompt asks for it"
+ },
+ {
+  "entry": "driver (ours)",
+  "setting": "data copy",
+  "values": "the two repositories at pinned revisions, each file checked by its sha256",
+  "default": "",
+  "nullius": "fixed:a copy beside the upstream (.open-telco-data) - downloaded once through the run's Hugging Face endpoint"
+ }
+]

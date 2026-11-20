@@ -9,6 +9,7 @@ import subprocess
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from flask import abort, jsonify, render_template, request
+from nullius.standard import ports
 from nullius import constraints, settings, execution, gitrefs, hosts, prerequisites, providers
 from nullius.harbor import source as harbor_source
 from nullius.catalogue import catalog
@@ -18,6 +19,7 @@ from nullius.standard import boat, definitions, hostreq
 from nullius.standard import recipe as standard_recipe
 
 from .core import app
+from .filters import agent_mark_url
 
 # Harbor agents that call their vendor with a key of their own, beside the model's (read from Harbor's agents): each
 # entry's names are alternatives, any one of them will do. A recipe naming one whose key Settings lacks says so on Review.
@@ -59,6 +61,76 @@ def new_run():
     return render_template("builder/new_run.html", builder_data=data)
 
 
+@app.route("/new-run/agents")
+def new_run_agents():
+    """The Agent step's grid for one benchmark of the standard (?benchmark=key or key@version), as a fragment the
+    builder puts in its page: its agents or capabilities as pick cards (templates/builder/agents.html), or rows with
+    ?view=table, from the entries the Agents page lists (``recipe.entries``), each greyed with the reasons it does not fit."""
+    benches = definitions.load("benchmark", every=True)[0]
+    b = definitions.find(benches, request.args.get("benchmark", ""))
+    if b is None:
+        abort(404)
+    name, b = b["label"], dict(b, label=definitions.title(b))     # its own agents keep its plain name, whatever its version
+    kind = b["family"]
+    found = [e for e in standard_recipe.entries(kind, benches=[b], every=True, own=True)["entries"] if not e["d"].get("example")]
+    found.sort(key=lambda e: 0 if e["d"].get("benchmark") == b["key"] else 2 if e["d"].get("benchmark") else 1)   # its own, the catalogue's, others' own
+    # a benchmark with agents of its own runs them as its Original setup; another offers that setup as one more card
+    setups = [] if any(e["d"].get("benchmark") == b["key"] for e in found) else [k for k in (b.get("setups") or {}) if k == "original"]
+    items = [_setup_card(b, k) for k in setups] + [_pick_card(b, e) for e in found]
+    names = dict(definitions.FROM, benchmark=f"{name}'s own", elsewhere="Other benchmarks' agents")
+    choices = {"protocol": [(p, p) for p in ("ACP", "A command", "Its own script", "JSON lines")
+                            if any(i["protocol"] and i["protocol"]["value"] == p for i in items)],
+               "fit": [(v, t) for v, t in (("fit", "Can run it"), ("unfit", "Cannot")) if any(i["fit"]["value"] == v for i in items)],
+               "from": [(k, v) for k, v in names.items() if any(i["from"]["value"] == k for i in items)],
+               "proves": [(p, s.get("label") or p) for p, s in ports.PORTS.items() if any(x["value"] == p for i in items for x in i["proves"])]}
+    # a filter only where its cards differ
+    return render_template("builder/agents.html", items=items, kind=kind, choices={k: v for k, v in choices.items() if len(v) > 1},
+                           layout="table" if request.args.get("view") == "table" else "cards")
+
+
+def _setup_card(b: dict, key: str) -> dict:
+    """The benchmark as published, run by its own code: a pick card beside the agents or capabilities."""
+    x = b["setups"][key]
+    title = x.get("reference_agent") or ("No agent · Original" if b["family"] == "agent" else "Original " + _kind_of(b))
+    return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": title, "title": x.get("summary", "")},
+            "search": " ".join([title, b["label"], "as published"]), "published": "As published", "protocol": "",
+            "fit": {"text": "Can run it", "value": "fit"}, "from": {"text": b["label"], "value": "benchmark"},
+            "proves": [], "needs": [], "ticks": [], "alert": None}
+
+
+def _kind_of(b: dict) -> str:
+    kinds = sorted({p.split(".", 1)[1].split("/")[0] for p in b.get("needs") or []})
+    return kinds[0] if kinds else "capability"
+
+
+def _pick_card(b: dict, e: dict) -> dict:
+    """An agent's or a capability's pick card for the benchmark ``b``: its name and mark, its protocol, where it comes
+    from, the ports it has proven that ``b`` needs and a tick for each doubt; greyed, why (whole in its tooltip)."""
+    d, why = e["d"], e["fits"][0]["why"]
+    rows = {r["port"]: r for r in e["ports"] if r["state"] == "proven"}
+    needed = [rows[p] for p in b.get("needs") or [] if p in rows]
+    title = definitions.title(d)
+    version = str((d.get("upstream") or {}).get("version") or "")
+    title += f" {version}" if version and version not in title else ""
+    fid = (e["fidelity"] or {}).get("verdict")
+    ticks = ([{"text": "ACP ≠ CLI", "class": "no", "title": f"ACP differs from its own CLI: {fid}"}] if fid and fid != "same" else []) \
+        + [{"text": f"{s['id']} ✗", "class": "no", "title": s["says"]} for r in needed for s in r["skills"] if not s["shown"]] \
+        + ([{"text": "older kit", "class": "no", "title": "proven on an older kit: worth running again"}] if any(r["older_kit"] for r in needed) else [])
+    lacks = [p.split(".", 1)[-1].rsplit("/v", 1)[0].replace("-", " ").replace("_", " ") for p in b.get("needs") or [] if p not in rows]
+    note = ("Belongs to " + d["benchmark_label"]) if d.get("benchmark") else "Lacks " + (", ".join(lacks) or "a port it needs")
+    origin = d.get("from") or "bundled"
+    there = {"text": d["benchmark_label"], "value": "benchmark" if d["benchmark"] == b["key"] else "elsewhere"} \
+        if d.get("benchmark") else {"text": definitions.FROM[origin], "value": origin}
+    return {"pick": {"value": d["_ref"], "disabled": bool(why)}, "id": "pick-" + d["_ref"].replace(":", "-").replace("@", "-"),
+            "icon": agent_mark_url(d["key"]) if b["family"] == "agent" else "", "title": {"text": title, "title": d.get("summary", "")},
+            "search": " ".join([title, d["key"], version, e["protocol"], d.get("summary", "")]),
+            "protocol": {"text": e["protocol"], "value": e["protocol"]}, "published": "",
+            "fit": {"text": "Cannot" if why else "Can run it", "value": "unfit" if why else "fit"}, "from": there,
+            "proves": [{"text": r["label"], "value": r["port"]} for r in rows.values()],
+            "needs": [{"text": r["label"], "title": r["summary"]} for r in needed], "ticks": ticks,
+            "alert": {"text": note, "title": "; ".join(why)} if why else None}
+
+
 @app.route("/recipes")
 def recipes_page():
     """The saved recipes as a table, a column per step. The page checks each one as the builder checks a loaded
@@ -94,11 +166,15 @@ def _builder_data() -> dict:
     gpus = constraints.of(constraints.LOCAL, strict=False).get("gpu_ids")
     host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"]), gpu_ids=gpus).items()}
             for b in definitions.load("benchmark", every=True)[0] if b.get("host")}
-    # boat: why it cannot run here (its key, this machine's programs); boatKey: from a host, only the key matters here
-    boat_why, boat_key = boat.unusable(), boat.unusable(here=False)
-    data["standardHere"] = {"docker": execute.docker_problem(), "boat": boat_why, "boatKey": boat_key,
-                            "boatSizes": {} if boat_key else execute.boat_sizes(),
-                            "boatSpecs": {k: v for k, v in boat.SIZES.items() if v}, "licences": _licence_states(), "host": host}
+    # boat: why its sandboxes cannot run from here (its key, this machine's programs), else what its account
+    # says: the sizes it offers, each with its spec and why it cannot start one, and its VMs at once
+    boat_why = boat.unusable()
+    account = {} if boat_why else execute.boat_account()
+    types = account.get("types") or {}
+    data["standardHere"] = {"docker": execute.docker_problem(), "boat": boat_why,
+                            "boatSizes": [{"key": k, "label": z["label"], "spec": boat.spec(k), "memory_gb": z.get("memory_gb"),
+                                           "why": types.get(k)} for k, z in boat.SIZES.items() if not types or k in types],
+                            "boatSlots": account.get("slots"), "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
     data["local"] = shared_local_client()
     data["recipesWhy"] = WRITE_HERE

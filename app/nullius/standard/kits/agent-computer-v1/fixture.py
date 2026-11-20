@@ -4,7 +4,9 @@ desktop as ``fixture``.
 It reads what to draw from the kit on its stdin, as one JSON object:
 
 - ``{"screen": "see", "words": [three words]}``: the words, drawn large;
-- ``{"screen": "click", "labels": [six words]}``: six buttons, each labelled;
+- ``{"screen": "click", "labels": [six words]}``: six buttons, each labelled,
+  in the screen's centre or, with ``"at": [x, y]``, around that point, given
+  as fractions of the screen's width and height;
 - ``{"screen": "type"}``: a text field;
 - ``{"screen": "drag"}``: a handle labelled MOVE and a zone labelled HERE;
 - ``{"screen": "scroll", "words": [two words]}``: a list with the words at
@@ -219,7 +221,8 @@ class Fixture:
 
     def _click(self):
         frame = self.tk.Frame(self.root, background=BACKGROUND)
-        frame.place(relx=0.5, rely=0.5, anchor="center")
+        x, y = self.values.get("at") or (0.5, 0.5)
+        frame.place(relx=x, rely=y, anchor="center")
         labels = self.values["labels"]
         for i, label in enumerate(labels):
             img = bitmap(self.tk, frame, label, 5, paper="#ffffff")

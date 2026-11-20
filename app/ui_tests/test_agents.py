@@ -83,7 +83,7 @@ class Tabs(unittest.TestCase):
         self.assertIn('/static/brand/marks.svg#openai', html)
         self.assertIn('/static/brand/marks.svg#harbor', html)
         # Beside the logos, an agent without one shows its initials; where none has a logo, no card has an icon.
-        self.assertIn('<span class="ws-avatar std-mark small" aria-hidden="true">EX</span><a class="card-link" href="/agents/reference">', html)
+        self.assertIn('<span class="ws-avatar std-mark small" aria-hidden="true">EX</span><span class="bench-card-name"><a class="card-link" href="/agents/reference">Example agent</a> 1</span>', html)
         fixture_html = self.get("/agents").get_data(as_text=True)
         self.assertIn('<div class="bench-card-title"><a class="card-link" href="/agents/fake">Fake agent</a></div>', fixture_html)
         self.assertNotIn('std-mark', fixture_html)
@@ -137,6 +137,7 @@ class Tabs(unittest.TestCase):
         self.assertIn('<p class="empty-note" data-empty="kits" hidden>No kits match.</p>', page)
         self.assertIn('<dl class="bench-stats"><div><dt>Checks</dt><dd>3</dd></div></dl>', page)
         self.assertNotIn('bench-card-title"><span', page)                                       # kits have no icon
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', page), ["", "title", "port", "checks"])
         for port, info in ports.PORTS.items():
             if not info["kit"]:
                 continue
@@ -174,8 +175,89 @@ class Tabs(unittest.TestCase):
         self.assertIn('href="/agents/fake"', card)
         self.assertIn("<dt>Ports proven</dt><dd>2/7</dd>", card)                      # task and workspace, of the seven agent ports
         self.assertIn("<dt>Benchmarks it runs</dt><dd>1/1</dd>", card)
-        self.assertNotIn("agent.task/v1", card[:card.index("</article>")])            # the detail is on its page
+        self.assertNotIn("agent.task/v1", card[card.index(">"):card.index("</article>")])   # the detail is on its page
         self.assertEqual(self.get("/agents/nope").status_code, 404)
+
+    def test_a_benchmarks_own_agents_are_listed_behind_the_from_filter(self):
+        with patch.object(definitions, "load", _LOAD):
+            html = self.get("/agents").get_data(as_text=True)
+            table = self.get("/agents?view=table").get_data(as_text=True)
+        menu = html[html.index('data-filter-menu="from"'):]
+        menu = menu[:menu.index("</fieldset>")]
+        self.assertIn('data-value="bundled" checked> Bundled', menu)
+        self.assertIn('data-value="benchmark"> A benchmark&#39;s own', menu)     # one click away, off by default
+        card = html[html.index('id="osworld1-openai-cua"'):]
+        card = card[:card.index("</article>")]
+        self.assertIn('data-f-from="benchmark&#10;"', card)
+        self.assertIn('href="/benchmarks/osworld1"', card)
+        self.assertIn('<div class="bench-card-setup">computer-use-preview</div>', card)
+        self.assertIn('<div class="bench-card-runs run-tags" role="group" aria-label="Kind, Uses, Example"><span class="std-tag">Computer use</span></div>', card)
+        self.assertIn('<div class="bench-card-foot"><span class="bench-card-tags"><span class="std-tag">Its own script</span></span>'
+                      '<span class="bench-harness">OSWorld1</span></div>', card)                   # the builder's foot: its protocol, where it comes from
+        self.assertNotIn("Ports proven", card)
+        self.assertIn('id="osworld2-muse-spark"', table)
+        self.assertEqual(self.get("/agents/openai-cua").status_code, 404)                 # its benchmark's page is its page
+
+    def test_runs_on_filters_by_the_benchmarks_each_agent_runs(self):
+        with patch.object(definitions, "load", _LOAD):
+            html = self.get("/agents").get_data(as_text=True)
+        menu = html[html.index('data-filter-menu="runs_on"'):]
+        menu = menu[:menu.index("</fieldset>")]
+        self.assertIn('data-value="osworld1" checked> OSWorld1', menu)
+        self.assertIn('data-value="gsm8k" checked> GSM8K', menu)
+        cards = re.findall(r'<article class="bench-card" data-card id="([^"]+)"[^>]*?data-f-runs_on="([^"]*)"', html)
+        on = sorted(i for i, runs in cards if "osworld1" in runs.split("&#10;"))
+        self.assertEqual(on, sorted(["codex"] + ["osworld1-" + k for k in ("m3", "prompt", "claude", "gpt54", "openai-cua", "qwen", "os-symphony",
+                                                                          "evocua", "autoglm", "autoglm-v", "mano", "muse-spark")]))
+        self.assertNotIn("osworld1", dict(cards)["osworld2-m3"].split("&#10;"))         # another benchmark's own runs it alone
+        own = html[html.index('id="osworld1-m3"'):]
+        self.assertIn('data-unless-from="runs_on"', own[:own.index(">")])                     # Runs on its benchmark shows it, whatever From says
+        self.assertNotIn("data-unless-from", html[html.index('id="codex"'):][:200])
+        # the count the card shows and the filter read one record
+        card = html[html.index('id="codex"'):]
+        n = card[:card.index(">")].split('data-f-runs_on="', 1)[1].split('"', 1)[0].count("&#10;")
+        self.assertIn(f"<dt>Benchmarks it runs</dt><dd>{n}/", card)
+
+    def test_agents_sort_and_filter_by_protocol_and_the_ports_they_prove(self):
+        html = self.get("/agents").get_data(as_text=True)
+        menu = html[html.index('data-tools="sort"'):]
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', menu), ["", "title", "ports", "runs"])
+        self.assertIn('data-tools-btn="filter"', html)                      # both in the one Filter menu, no dropdown of their own
+        self.assertNotIn('data-dropdown', html)
+        self.assertIn('<fieldset data-filter-menu="protocol">\n        <legend>Protocol</legend>', html)
+        self.assertIn('<input type="checkbox" data-value="ACP" checked> ACP', html)
+        self.assertIn('<fieldset data-filter-menu="proves">\n        <legend>Proves</legend>', html)
+        self.assertIn('<input type="checkbox" data-value="agent.task/v1" checked> One task', html)
+        card = html[html.index('id="fake"'):]
+        self.assertIn('data-f-proves="agent.task/v1&#10;agent.workspace/v1&#10;"', card[:card.index(">")])
+        self.assertIn('data-s-ports="2/7"', card[:card.index(">")])
+        caps = self.get("/capabilities").get_data(as_text=True)
+        self.assertIn('data-tools="sort"', caps)
+        self.assertNotIn('data-filter-menu="protocol"', caps)                               # one protocol: nothing to filter
+        self.assertIn('data-filter-menu="runs_on"', caps)                                   # the benchmarks it runs, as agents
+
+    def test_agents_capabilities_and_kits_are_cards_by_default_and_a_table_on_request(self):
+        for url in ("/agents", "/capabilities", "/kits"):
+            html = self.get(url).get_data(as_text=True)
+            self.assertIn(f'href="{url}?view=table" aria-label="Table" title="Table" aria-current="false"', html)
+            self.assertIn(f'href="{url}" aria-label="Cards" title="Cards" aria-current="true"', html)
+            self.assertNotIn("data-table", html)
+            html = self.get(url + "?view=table&q=1").get_data(as_text=True)
+            self.assertIn(f'href="{url}?view=table&amp;q=1" aria-label="Table" title="Table" aria-current="true"', html)
+            self.assertIn(f'href="{url}?q=1" aria-label="Cards" title="Cards" aria-current="false"', html)
+            self.assertNotIn("data-cards", html)
+            self.assertIn('data-col="title" data-type="text" class="sticky-col sticky-edge">Name</th>', html)
+        html = self.get("/agents?view=table").get_data(as_text=True)
+        row = html[html.index('<tr id="fake"'):]; row = row[:row.index("</tr>")]
+        self.assertIn('data-f-proves="agent.task/v1&#10;agent.workspace/v1&#10;"', row)
+        self.assertIn('<a href="/agents/fake">', row)
+        self.assertIn('<td data-col="ports" data-sort="2/7" class="align-right"><span>2/7</span>', row)
+        self.assertIn('<input type="checkbox" data-col="summary" data-off> Summary', html)
+        self.assertNotIn('data-col="kind"', html)                                           # no agent has a kind: no column
+        kits = self.get("/kits?view=table").get_data(as_text=True)
+        self.assertEqual(re.findall(r'<th data-col="(\w+)"', kits), ["title", "family", "port", "checks", "version"])
+        self.assertIn('data-pills="family"', kits)
+        self.assertNotIn('class="row-name"><span', kits)                                     # kits have no icon
 
     def test_the_add_dialog_builds_a_prompt_and_keeps_the_steps_by_hand_for_each_kind(self):
         for url, a, skill, words in (
@@ -302,7 +384,8 @@ class Tabs(unittest.TestCase):
         self.versioned()
         html = self.get("/agents").get_data(as_text=True)
         self.assertEqual(html.count('id="fake"'), 1)
-        self.assertIn("v1.0 · 2 versions", html)
+        self.assertIn('Fake agent</a> 1.0</span>', html)                                     # its default version beside its name
+        self.assertIn("v1.0 · 2 versions", self.get("/agents?view=table").get_data(as_text=True))
         html = self.get("/agents/fake").get_data(as_text=True)                          # the default
         self.assertIn('<nav class="std-versions"', html)
         self.assertIn('href="/agents/fake?v=1.0" aria-current="page"><b>1.0</b><small>2/7 proven · default</small>', html)
@@ -510,8 +593,9 @@ class StandardPieces(unittest.TestCase):
                          [("decoys", False, "1/3"), ("chain", True, "3/3"), ("retry", False, "0/3")])
         self.assertEqual(schema["standard"]["fits"]["fakebench"]["fake"],
                          ["Fake agent has not shown the decoys skill of agent.tools/v1 (chooses the right tool among similar ones)"])
-        js = (Path(web.app.static_folder) / "builder" / "command-builder.js").read_text()
-        self.assertIn('.filter(s => !s.shown).map(s => `<span class="nb-tick no"', js)        # the agent step draws a skill not shown, as a tick
+        grid = self.get("/new-run/agents?benchmark=fakebench").get_data(as_text=True)          # the agent step draws a skill not shown, as a tick
+        card = grid[grid.index('id="pick-fake"'):]
+        self.assertIn('<span class="nb-tick no" title="chooses the right tool among similar ones">decoys ✗</span>', card[:card.index("</article>")])
 
     def test_the_builder_is_given_the_controls_their_proofs_and_whether_docker_runs_here(self):
         from nullius.standard import boat
@@ -523,9 +607,23 @@ class StandardPieces(unittest.TestCase):
         self.assertEqual([(c["key"], c["source"], c["proven"], c["failed"]) for c in ds["controls"]],
                          [("nop", "nullius", None, None), ("oracle", "adapter", None, None)])
         # no benchmark here needs a machine setup
+        sizes = [{"key": "small", "label": "Small", "spec": "2 vCPU, 4 GB", "memory_gb": 4, "why": None},
+                 {"key": "default", "label": "Default", "spec": "4 vCPU, 8 GB", "memory_gb": 8, "why": None},
+                 {"key": "large", "label": "Large", "spec": "", "memory_gb": None, "why": None},
+                 {"key": "xlarge", "label": "XLarge", "spec": "", "memory_gb": None, "why": None}]
         self.assertEqual(schema["standardHere"], {"docker": None, "boat": "no Boat API key: set it in Settings → Sandbox",
-                                                  "boatKey": "no Boat API key: set it in Settings → Sandbox", "boatSizes": {}, "boatSpecs": {"small": "2 vCPU, 4 GB", "default": "4 vCPU, 8 GB"},
-                                                  "licences": {}, "host": {}})
+                                                  "boatSizes": sizes, "boatSlots": None, "licences": {}, "host": {}})
+
+    def test_the_builder_offers_the_boat_sizes_and_vms_at_once_its_account_says(self):
+        from nullius.standard import boat
+        self.fixture()
+        account = {"types": {"small": None, "default": None, "large": "not during the free trial"}, "slots": 2}
+        with patch.object(boat, "unusable", lambda here=True: None), patch.object(web.execute, "boat_account", lambda: account):
+            html = self.get("/new-run").get_data(as_text=True)
+        here = json.loads(re.search(r'<script id="nb-schema" type="application/json">(.*?)</script>', html, re.S).group(1))["standardHere"]
+        self.assertEqual(here["boatSlots"], 2)
+        self.assertEqual([(z["key"], z["why"]) for z in here["boatSizes"]],
+                         [("small", None), ("default", None), ("large", "not during the free trial")])     # xlarge: not the account's
 
     def test_docker_is_refused_on_the_where_step_with_this_machines_reason(self):
         self.fixture()

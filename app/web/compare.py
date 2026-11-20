@@ -1,6 +1,7 @@
 """Runs against runs: whole runs, matched tasks, one task side by side."""
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from functools import partial
 from itertools import zip_longest
@@ -8,6 +9,7 @@ from flask import abort, flash, g, jsonify, redirect, render_template, request, 
 from nullius.traces import behavior, charts, trace, trajectory
 from nullius.runs import classify
 from nullius.runs import verifier
+from nullius import charts as figures
 from nullius import workspace
 
 from .core import app
@@ -135,11 +137,17 @@ def summary_rows(jobs, baseline=True):
     controls = [j.is_control for j in jobs]
     kinds = [j.kind for j in jobs]
 
-    def row(label, cells, raw=None, direction=None, hint="", allow_single=False, unit=None, values=None):
+    def row(key, label, cells, raw=None, direction=None, hint="", allow_single=False, unit=None, values=None):
         r = _row(label, cells, raw, direction, hint, allow_single, exclude=controls)
         given = values if values is not None else r["raw"]
         r["deltas"] = deltas(given, unit, direction, controls) if unit and baseline else [("", "")] * len(cells)
+        r.update(key=key, values=given, unit=unit)
         return r
+
+    def group(name, rows):
+        for r in rows:
+            r["group"] = name
+        return rows
 
     def tok(values):
         return [filters._tokens(v, k) for v, k in zip(values, kinds)]
@@ -148,7 +156,7 @@ def summary_rows(jobs, baseline=True):
     # score - over every part when a trial is scored on its parts - and a run
     # with a score and no pass or fail has nothing solved to count.
     scored = [
-        row("Mean score", ["—" if j.mean_score is None else f"{j.mean_score:.2f}" for j in jobs],
+        row("mean_score", "Mean score", ["—" if j.mean_score is None else f"{j.mean_score:.2f}" for j in jobs],
             [j.mean_score for j in jobs], "higher",
             "The mean of the benchmark's own score, over every part scored when a trial is scored on its parts", unit=SCORE),
     ] if any(j.mean_score is not None for j in jobs) else []
@@ -160,49 +168,55 @@ def summary_rows(jobs, baseline=True):
             groups.setdefault(g["group"], None)
     for g in groups:
         means = [next((x["mean"] for x in j.score_by_group if x["group"] == g), None) for j in jobs]
-        scored.append(row(f"{by.capitalize()} {g}", ["—" if m is None else f"{m:.2f}" for m in means], means, "higher",
+        scored.append(row("score_" + re.sub(r"\W+", "_", str(g).lower()), f"{by.capitalize()} {g}", ["—" if m is None else f"{m:.2f}" for m in means], means, "higher",
                           f"The mean score of the parts with {by} {g}", unit=SCORE))
     cached = [_ratio(j.total_cache_tokens, j.total_input_tokens) for j in jobs]
     return [
-        row("Trials", [len(j.trials) for j in jobs], unit=COUNT, values=[len(j.trials) for j in jobs]),
-        *scored,
-        row("Solved", ["—" if j.scored_only else f"{j.n_resolved}/{len(j.trials)}" for j in jobs],
-            [None if j.scored_only else j.n_resolved for j in jobs], "higher", unit=COUNT),
-        row("Raw rate", [filters._pct(j.raw_solve_rate) for j in jobs],
-            [j.raw_solve_rate for j in jobs], "higher", "Solved ÷ all trials", unit=POINTS),
-        row("Adjusted rate", [filters._pct(j.adjusted_solve_rate) for j in jobs],
-            [j.adjusted_solve_rate for j in jobs], "higher",
-            "Solved ÷ trials that actually ran", unit=POINTS),
-        row("Infra errors", [j.n_infra or "—" for j in jobs],
-            [j.n_infra for j in jobs], "lower",
-            "Trials that never got a fair attempt", unit=COUNT),
-        row("Broke tests", [j.n_regressions or "—" for j in jobs],
-            [j.n_regressions for j in jobs], "lower",
-            "Patches that broke previously-passing tests", unit=COUNT),
-        # Token block, ordered so the arithmetic reads down the column:
-        # prompt size = fresh + cached, then the ratio those two imply.
-        row("Prompt size", tok([j.total_input_tokens for j in jobs]),
-            [j.total_input_tokens or None for j in jobs], "lower",
-            "Total prompt tokens sent, cached ones included", unit=filters._tokens),
-        row("Fresh prompt",
-            tok([j.total_input_tokens - j.total_cache_tokens for j in jobs]),
-            [(j.total_input_tokens - j.total_cache_tokens) or None for j in jobs], "lower",
-            "Prompt tokens NOT served from cache — the expensive part", unit=filters._tokens),
-        # Ranked on the ratio, not the absolute: a bigger cached count only
-        # means a bigger prompt. The share of the prompt reused is the claim.
-        row("Cached", tok([j.total_cache_tokens for j in jobs]),
-            cached, "higher",
-            "Prompt tokens served from cache — ranked by share of the prompt, not the raw count",
-            unit=filters._tokens, values=[j.total_cache_tokens or None for j in jobs]),
-        row("Cached ratio", [filters._pct(c) for c in cached], cached, "higher",
-            "Cached ÷ prompt size — higher means less of the prompt was re-sent", unit=POINTS),
-        row("Output tokens", tok([j.total_output_tokens for j in jobs]),
-            [j.total_output_tokens or None for j in jobs], "lower", unit=filters._tokens),
-        row(COST_LABEL, [filters._usd(j.total_cost_usd, k) for j, k in zip(jobs, kinds)],
-            [j.total_cost_usd for j in jobs], "lower", COST_HINT, allow_single=True, unit=filters._usd),
-        row("Wall time",
-            [f"{j.duration_min:.0f}m" if j.duration_min else "—" for j in jobs],
-            [j.duration_min for j in jobs], "lower", unit=MINUTES),
+        *group("Outcomes", [row("trials", "Trials", [len(j.trials) for j in jobs], unit=COUNT, values=[len(j.trials) for j in jobs])]),
+        *group("Score", scored),
+        *group("Outcomes", [
+            row("solved", "Solved", ["—" if j.scored_only else f"{j.n_resolved}/{len(j.trials)}" for j in jobs],
+                [None if j.scored_only else j.n_resolved for j in jobs], "higher", unit=COUNT),
+            row("raw_rate", "Raw rate", [filters._pct(j.raw_solve_rate) for j in jobs],
+                [j.raw_solve_rate for j in jobs], "higher", "Solved ÷ all trials", unit=POINTS),
+            row("adjusted_rate", "Adjusted rate", [filters._pct(j.adjusted_solve_rate) for j in jobs],
+                [j.adjusted_solve_rate for j in jobs], "higher",
+                "Solved ÷ trials that actually ran", unit=POINTS),
+            row("infra_errors", "Infra errors", [j.n_infra or "—" for j in jobs],
+                [j.n_infra for j in jobs], "lower",
+                "Trials that never got a fair attempt", unit=COUNT),
+            row("broke_tests", "Broke tests", [j.n_regressions or "—" for j in jobs],
+                [j.n_regressions for j in jobs], "lower",
+                "Patches that broke previously-passing tests", unit=COUNT),
+        ]),
+        *group("Tokens", [
+            # Token block, ordered so the arithmetic reads down the column:
+            # prompt size = fresh + cached, then the ratio those two imply.
+            row("prompt_size", "Prompt size", tok([j.total_input_tokens for j in jobs]),
+                [j.total_input_tokens or None for j in jobs], "lower",
+                "Total prompt tokens sent, cached ones included", unit=filters._tokens),
+            row("fresh_prompt", "Fresh prompt",
+                tok([j.total_input_tokens - j.total_cache_tokens for j in jobs]),
+                [(j.total_input_tokens - j.total_cache_tokens) or None for j in jobs], "lower",
+                "Prompt tokens NOT served from cache — the expensive part", unit=filters._tokens),
+            # Ranked on the ratio, not the absolute: a bigger cached count only
+            # means a bigger prompt. The share of the prompt reused is the claim.
+            row("cached", "Cached", tok([j.total_cache_tokens for j in jobs]),
+                cached, "higher",
+                "Prompt tokens served from cache — ranked by share of the prompt, not the raw count",
+                unit=filters._tokens, values=[j.total_cache_tokens or None for j in jobs]),
+            row("cached_ratio", "Cached ratio", [filters._pct(c) for c in cached], cached, "higher",
+                "Cached ÷ prompt size — higher means less of the prompt was re-sent", unit=POINTS),
+            row("output_tokens", "Output tokens", tok([j.total_output_tokens for j in jobs]),
+                [j.total_output_tokens or None for j in jobs], "lower", unit=filters._tokens),
+        ]),
+        *group("Cost and time", [
+            row("cost", COST_LABEL, [filters._usd(j.total_cost_usd, k) for j, k in zip(jobs, kinds)],
+                [j.total_cost_usd for j in jobs], "lower", COST_HINT, allow_single=True, unit=filters._usd),
+            row("wall_time", "Wall time",
+                [f"{j.duration_min:.0f}m" if j.duration_min else "—" for j in jobs],
+                [j.duration_min for j in jobs], "lower", unit=MINUTES),
+        ]),
     ]
 
 
@@ -334,6 +348,58 @@ def compare_detail(row, jobs):
     }
 
 
+# A row's tick labels: its difference's unit, but a rate's ticks are rates and a short run's in seconds.
+AXIS = {POINTS: filters._pct, MINUTES: filters._runtime}
+
+
+def chart(rows, columns, jobs, style, keys):
+    """One chart: the summary rows ``keys`` drawn in ``style``, a run per column that has one, as the table shows it,
+    its colour its column's place; None while a key names no row of this comparison."""
+    if not all(k in rows for k in keys):
+        return None
+    names = [" · ".join(filter(None, (j.agent_label or j.job_id, j.model_name))) for j in jobs]
+
+    def value(row, n, i):
+        v, check = row["values"][i], jobs[i].is_control
+        # a check's figure with no number is the table's real zero: the tokens and cost a control never spent
+        if v is None and check and row["cells"][i] != "—":
+            v = 0
+        return figures.Value(label=f"{n}. {names[i]}" if names.count(names[i]) > 1 else names[i], value=v,
+                             text=str(row["cells"][i]), note=row["deltas"][i][0], check=check, baseline=n == 1 and i == 0,
+                             tag=str(n), series=n)
+
+    return figures.STYLES[style].draw(*(
+        figures.Metric(rows[k]["label"], tuple(value(rows[k], n, c["i"]) for n, c in enumerate(columns, 1) if c["i"] is not None),
+                       AXIS.get(rows[k]["unit"], rows[k]["unit"]))
+        for k in keys))
+
+
+def _charts_requested():
+    """This URL's charts (``chart=<style>:<metric key>[,<metric key>]``, in order) as (style, keys), each with as many
+    keys as its style's axes; None without ``chart=``, and none for ``chart=`` alone."""
+    if "chart" not in request.args:
+        return None
+    out = []
+    for entry in request.args.getlist("chart"):
+        style, _, keys = entry.partition(":")
+        if style in figures.STYLES:
+            n = len(figures.STYLES[style].axes)
+            out.append((style, tuple((keys.split(",") + [""] * n)[:n])))
+    return out
+
+
+def chart_query(charts):
+    """``charts`` as ``chart=`` values; one empty value for none, so no chart stays none."""
+    return [f"{style}:{','.join(keys)}" for style, keys in charts] or [""]
+
+
+def _restyled(chart, style, headline):
+    """``chart`` drawn in ``style``: its first metric kept, the next from the headline rate or the cost."""
+    first = chart[1][0]
+    keys = (first, headline if first != headline else "cost")
+    return style, keys[:len(figures.STYLES[style].axes)]
+
+
 @app.route("/compare")
 def compare():
     """Ordered run columns over whole runs or exact shared tasks, the first the baseline; an empty column
@@ -351,7 +417,7 @@ def compare():
         if ref is not None
     ]
     tasks_view = _view()
-    summary = summary_rows(chosen, baseline=columns[0]["i"] == 0) if not tasks_view and (view.cohort == "whole" or view.shared_tasks) else []
+    summary = summary_rows(chosen, baseline=columns[0]["i"] == 0) if tasks_view != "tasks" and (view.cohort == "whole" or view.shared_tasks) else []
     # There is no truthful wall-clock interval for a subset of parallel trials.
     # Whole-run intervals keep their existing ranking, explicitly labelled.
     if view.cohort == "matched":
@@ -360,8 +426,34 @@ def compare():
         for row in summary:
             if row["label"] == "Wall time":
                 row.update(label="Run wall time", hint="The recorded wall-clock interval of the full run")
+    # the charts, kept by every link once chosen; until then the headline rate, the cost, and the one against the other
+    rows = {r["key"]: r for r in summary}
+    scored = "mean_score" in rows and all(v is None for v in rows.get("adjusted_rate", {}).get("values", [None]))
+    headline = "mean_score" if scored else "adjusted_rate"
+    charts = _charts_requested()
+    keep = {} if charts is None else {"chart": chart_query(charts)}
+    if charts is None:
+        charts = [("bars", (headline,)), ("bars", ("cost",)), ("scatter", ("cost", headline))]
     values = [c["ref"].value for c in columns]
-    to = lambda vs: url_for("compare", pick=vs, cohort=view.cohort, view=tasks_view)
+    at = lambda cs: url_for("compare", pick=values, cohort=view.cohort, view="chart", chart=chart_query(cs))
+    def card(k, style, keys):
+        """A chart's card: its panel, and its links, each changing this chart alone."""
+        put = lambda chart: at(charts[:k] + [chart] + charts[k + 1:])
+
+        def axis(a, name):
+            """The metric menu of the axis ``a``: a link a summary row, by group."""
+            pick = lambda key: put((style, keys[:a] + (key,) + keys[a + 1:]))
+            return {"name": name, "key": keys[a], "label": rows[keys[a]]["label"] if keys[a] in rows else "—",
+                    "groups": {g: [(key, label, pick(key)) for key, label in rs] for g, rs in groups.items()}}
+
+        return {"style": style, "axes": [axis(a, name) for a, name in enumerate(figures.STYLES[style].axes)],
+                "panel": chart(rows, columns, chosen, style, keys) if tasks_view == "chart" else None,
+                "styles": [(s, st.label, put(_restyled((style, keys), s, headline))) for s, st in figures.STYLES.items()],
+                "remove": at(charts[:k] + charts[k + 1:])}
+
+    groups = _metric_groups(summary)
+    cards = [card(k, style, keys) for k, (style, keys) in enumerate(charts)]
+    to = lambda vs: url_for("compare", pick=vs, cohort=view.cohort, view=tasks_view, **keep)
 
     def swap(a, b):
         vs = list(values)
@@ -380,9 +472,18 @@ def compare():
         lists={n: _options(n, baseline) for n in dict.fromkeys(c["ref"].workspace for c in columns)},
         baseline=baseline, benchmarks=[b.title if b else "—" for b in (_benchmark(j.dataset)[0] for j in chosen)],
         order_grouped=grouped, order_alternating=alternating,
-        n_agents=len(by_agent),
-        judgement=tasks_view and _judgement(view), csrf=shared._csrf_token(),
+        n_agents=len(by_agent), keep=keep,
+        judgement=tasks_view == "tasks" and _judgement(view), csrf=shared._csrf_token(),
+        cards=cards, add_chart=at(charts + [("bars", (headline,))]),
     )
+
+
+def _metric_groups(summary):
+    """A chart's metric menu: the summary rows by their group, in the table's order, as (key, label)."""
+    groups = {}
+    for r in summary:
+        groups.setdefault(r["group"], []).append((r["key"], r["label"]))
+    return groups
 
 
 @app.route("/compare/detail/<int:index>")
@@ -467,8 +568,10 @@ def _workspace_options():
 
 
 def _view():
-    """This URL's view: "tasks" for the task table, None (no parameter) for the side-by-side table."""
-    return "tasks" if request.args.get("view") == "tasks" else None
+    """This URL's view: "tasks" for the task table, "chart" for the chart, None (no parameter) for the side-by-side
+    table."""
+    view = request.args.get("view")
+    return view if view in ("tasks", "chart") else None
 
 
 def _comparison_requested():

@@ -60,9 +60,11 @@ NEEDS_SPAN = ("/trial/<job_id>/<trial_name>/trace-span",)
 
 # The Harbor source routes answer 400 without the source they are asked
 # about; asked with one, offline: refs with git unreachable (NO_GIT), the
-# agents of a release pin from the cache only (a GET never builds).
+# agents of a release pin from the cache only (a GET never builds); the
+# builder's agent grid answers 404 without the benchmark it draws.
 HARBOR_QUERY = {"/new-run/harbor/refs": "repo=example/harbor",
-                "/new-run/harbor/agents": "kind=release&version=0.24.0"}
+                "/new-run/harbor/agents": "kind=release&version=0.24.0",
+                "/new-run/agents": "benchmark=gsm8k"}
 NO_GIT = "/nonexistent/nullius-route-test/git"
 
 

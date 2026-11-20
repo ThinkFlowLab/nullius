@@ -11,10 +11,35 @@ from ui_tests.builder_support import AGENT, PIN, CompilerCase
 class StandardBenchmarkSwitch(CompilerCase):
     def test_original_is_default_for_every_benchmark_with_a_reference(self):
         out = self.js('process.stdout.write(JSON.stringify(C.standard().benchmarks.filter(b=>(b.setups||[]).some(s=>s.key==="original"))'
-                      '.map(b=>[b.key,C.createStandard(b.key).others])));')
+                      '.map(b=>[b.key,C.createStandard(b.key).others,(C.ownAgentsOf(b)[0]||{}).key])));')
         self.assertTrue(out)
-        for key, others in out:
-            self.assertEqual(others, ["original"], key)
+        for key, others, own in out:
+            self.assertEqual(others, [own or "original"], key)              # a benchmark with agents of its own: its first
+
+    def test_a_benchmarks_own_agents_are_its_agents_and_greyed_elsewhere(self):
+        out = self.js('const os=C.standardOthers(C.createStandard("osworld1")),g=C.standardOthers(C.createStandard("gsm8k"));'
+                      'const cua=g.find(o=>o.key==="osworld1:openai-cua");'
+                      'process.stdout.write(JSON.stringify([os.filter(o=>o.own).map(o=>o.key).slice(0,2),os.findIndex(o=>!o.own),os.filter(o=>o.own).length,'
+                      'os.some(o=>o.setup&&!o.own),cua.why,cua.benchmark,os.find(o=>o.key==="osworld2:m3").why]));')
+        self.assertEqual(out[0], ["osworld1:m3", "osworld1:prompt"])
+        self.assertEqual((out[1], out[2], out[3]), (12, 12, False))                # first, and no Original tile beside them
+        self.assertEqual((out[4], out[5]), (["OpenAI CUA belongs to OSWorld1"], "osworld1"))   # another benchmark's: the grid's From says so
+        self.assertEqual(out[6], ["MiniMax M3 belongs to OSWorld2"])
+        tags = self.js('const os=C.standardOthers(C.createStandard("osworld1"));'
+                       'process.stdout.write(JSON.stringify([...new Set(os.filter(o=>o.benchmark).map(o=>o.protocol))]));')
+        self.assertEqual(tags, ["Its own script"])                                    # its own and another's read the same
+
+    def test_a_recipe_from_before_reads_as_its_benchmarks_agent(self):
+        out = self.js('const old=o=>C.fromJSON(JSON.stringify({version:1,harness:"standard",benchmark:"osworld1",datasets:["test_small"],others:["original","nop"],bench_options:o}));'
+                      'const a=old({agent:"openai_cua",pause:"1.5"}),b=old({}),c=old({agent:"nope"});'
+                      'a.model_choice="paper";'
+                      'process.stdout.write(JSON.stringify([a.others,a.bench_options,b.others,c.others,C.paperModels(a).models,C.runsOf(a)]));')
+        self.assertEqual(out[0], ["osworld1:openai-cua", "nop"])
+        self.assertEqual(out[1], {"pause": "1.5"})
+        self.assertEqual(out[2], ["osworld1:m3", "nop"])
+        self.assertEqual(out[3], ["osworld1:nope", "nop"])                          # kept, for the server to name
+        self.assertEqual(out[4], ["computer-use-preview"])                          # Like the paper: the chosen agent's models
+        self.assertEqual(out[5], ["original", "nop"])
 
     def test_no_time_limit_is_forced_until_the_user_types_one(self):
         """The benchmark's and the agent's own limits apply by themselves: choosing a setup or a

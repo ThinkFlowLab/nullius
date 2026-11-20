@@ -9,7 +9,7 @@
   ],
   "origin": "official",
   "good_to_know": [
-    "An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. Steps (100) and Pause (3.0 seconds) set that loop.",
+    "An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. A step's observation is the screenshot that loop hands its agent for the next decision, with no capture added; the files a step names are read once its actions and their pauses have run. Steps (100) and Pause (3.0 seconds) set that loop.",
     "Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.",
     "Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.",
     "At this version only the null control has run through Nullius. OSWorld's agents are the same code as in main (044bc33), where M3, PromptAgent and Qwen-CUA completed tasks.",
@@ -58,7 +58,7 @@
   "versions": {
     "044bc33": {
       "good_to_know": [
-        "An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. Steps (100) and Pause (3.0 seconds) set that loop.",
+        "An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. A step's observation is the screenshot that loop hands its agent for the next decision, with no capture added; the files a step names are read once its actions and their pauses have run. Steps (100) and Pause (3.0 seconds) set that loop.",
         "Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.",
         "Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.",
         "Only M3, PromptAgent and Qwen-CUA have completed tasks through Nullius. The other agents were checked up to their first model call.",

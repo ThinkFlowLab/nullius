@@ -43,8 +43,7 @@ def load_driver(up):
 
 
 def bench():
-    with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
-        return json.load(f)
+    return definitions.get("benchmark", "osworld2", root=definitions.CATALOGUE)
 
 
 class Started(Exception):
@@ -445,7 +444,7 @@ class Definition(unittest.TestCase):
         self.assertEqual(definitions.problems(b, "benchmark"), [])
         self.assertEqual(providers.served_as(b["score"]["judge"]["model"], "openrouter"), SONNET)
         with open(os.path.join(HERE, "agents.json"), encoding="utf-8") as f:
-            asked = json.load(f)["agents"]["m3"]["env"]["OSWORLD_USER_SIM_MODEL"]
+            asked = json.load(f)["agents"]["m3"]["start"]["driver"]["env"]["OSWORLD_USER_SIM_MODEL"]
         other, why = definitions.setup(b, "original", "MiniMax-M3", "openrouter")
         self.assertEqual(why, "")
         self.assertEqual(other["sent"], "minimax/minimax-m3")
