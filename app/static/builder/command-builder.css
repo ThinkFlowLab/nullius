@@ -298,4 +298,6 @@
 #nullius-builder #nb-agent-grid .bench-card { padding: 16px; gap: 10px; }
 #nullius-builder #nb-agent-grid .bench-card-title { font-size: 15px; }
 #nullius-builder #nb-agent-grid .std-tag { white-space: nowrap; }
-#nullius-builder #nb-agent-grid .card-link:focus-visible { outline: none; }   /* the card's ring (catalogue.css), not a box round the name */
+#nullius-builder #nb-agent-grid .card-link:focus-visible { outline: none; }
+/* its outlined pills (Protocol, Proven) want more air than snug's text beside text; a phone keeps snug's, for the pinned name */
+@media (min-width: 641px) { #nullius-builder #nb-agent-grid .grid.snug :is(th, td):not(.pick-col) { padding-left: .6rem; padding-right: .6rem; } }   /* the card's ring (catalogue.css), not a box round the name */
