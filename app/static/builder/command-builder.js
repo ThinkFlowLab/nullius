@@ -211,11 +211,11 @@
   // Nullius's own mark for the standard; Harbor's for Harbor
   const runnerMark = x => x.standard ? '<span class="brand-mark nb-nullius-mark" aria-hidden="true"></span>'
     : '<svg aria-hidden="true"><use href="/static/brand/marks.svg#harbor"/></svg>';
-  // Two cards: Harbor, and Nullius (the standard) - a benchmark's own scripts run there, as its Original setup.
+  // A card per runner that runs the benchmark, alone when only one does: Harbor, and Nullius (the standard) - a benchmark's own scripts run there, as its Original setup.
   const runnerCard = (x, on, label, summary, mark) => tile({attr: 'runner', key: x.key, on, mark, title: label, tip: summary || ''});
   const runnerStep = rec => {
     const has = C.runnersOf(C.benchKey(rec)), list = C.runners().filter(x => x.builtin && has.includes(x.key));
-    const cards = list.length > 1 ? `<div class="nb-pick-grid">` + list.map(x => runnerCard(x, x.key === rec.harness, x.label, x.summary, runnerMark(x))).join('') + '</div>'
+    const cards = list.length ? `<div class="nb-pick-grid">` + list.map(x => runnerCard(x, x.key === rec.harness, x.label, x.summary, runnerMark(x))).join('') + '</div>'
       : `<label class="nb-field ui-field-row"><span class="ui-field-copy">Runner</span><span class="nb-fixed">${esc((C.runners().find(x => x.key === rec.harness) || {}).label || rec.harness)}</span></label>`;
     return `<div class="nb-sectionhead"><h2>What runs it?</h2></div>` + cards + (rec.harness === 'harbor' ? harborPanel(rec) : '');
   };
