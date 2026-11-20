@@ -158,8 +158,9 @@ A rerun is another trial run of the round: run `decide --stop 2` on its job fold
 the earlier ones.
 
 In one open round the person may answer stop 1 again with other candidates, merge them into another commit and run
-`select` again. The new answer replaces the kept candidates and the selection. Stop 2 then counts the trials of the
-latest selected commit only. The money of every earlier trial run stays spent.
+`select` again. The new answer replaces the kept candidates and their predictions. Running `select` again replaces the
+selection. Stop 2 then counts the trials of the latest selected commit only. The money of every earlier trial run
+stays spent.
 
 ## Stage 5. Compare and record
 
