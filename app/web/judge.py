@@ -64,6 +64,12 @@ def ws_dir():
     return ws.dir if ws else None
 
 
+def batch_calibration() -> dict:
+    """The workspace's calibration, read once for a batch and passed to each
+    call; {} when there is no sample, so no call reads the store again."""
+    return store.calibration(ws_dir()) or {}
+
+
 def started_of(trial) -> str | None:
     """A trial's start, as its judgement keeps it: a retry runs an attempt
     again under the same name, and an earlier try's record is not its own."""
@@ -248,16 +254,17 @@ def _trial_ids_and_states(trial, traj) -> dict:
     return _states_for(trial, traj, ids)
 
 
-def judge_trial(job, trial, api_key: str, post=None) -> dict:
+def judge_trial(job, trial, api_key: str, post=None, calibration=None) -> dict:
     """Ask every question the trial page shows, one call per state, and keep
-    the merged record. Returns the record as stored."""
+    the merged record. Returns the record as stored. `calibration`: a
+    batch's, read once (`store.calibration`); the workspace's when none."""
     if not trial.has_trajectory:
         raise client.JudgeError(0, "this trial has no trajectory to judge")
     traj = trajectory.load(trial.trajectory_path)
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
     return batch.ask_and_store(ws_dir(), job.job_id, trial.trial_name, _trial_ids_and_states(trial, traj), api_key, post=post,
-                               started=started_of(trial))
+                               calibration=calibration, started=started_of(trial))
 
 
 def _guard():
@@ -300,8 +307,8 @@ def judge_job_route(job_id):
     judged = store.for_job(d, job_id, started_by_name(job), lane=lane) if d else {}
     todo = [t for t in job.trials if t.has_trajectory and t.trial_name not in judged]
     _guard()
-    k = key(lane)
-    done, failed = run_batch(todo, lambda t: judge_trial(job, t, k), lambda t: t.trial_name)
+    k, cal = key(lane), batch_calibration()
+    done, failed = run_batch(todo, lambda t: judge_trial(job, t, k, calibration=cal), lambda t: t.trial_name)
     from flask import flash
     flash(f"{'LLM judge' if lane == 'llm' else 'Decision model'}: judged {done} of {len(todo)} trial(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
     return redirect(url_for("job", job_id=job_id) + "#judgement")
@@ -437,7 +444,7 @@ def compare_summary(view) -> dict | None:
             "margin": comparison.TIE_MARGIN, "question": SIDE_QUESTION}
 
 
-def judge_side(job, trial, api_key: str, post=None) -> dict | None:
+def judge_side(job, trial, api_key: str, post=None, calibration=None) -> dict | None:
     """Score one side: the questions it still lacks under the current
     vocabulary, one call per state, merged over the trial's own record -
     the same record the trial page shows. Nothing when it has them all."""
@@ -453,7 +460,7 @@ def judge_side(job, trial, api_key: str, post=None) -> dict | None:
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
     return batch.ask_and_store(d, job.job_id, trial.trial_name, _states_for(trial, traj, ids), api_key, post=post,
-                               started=started_of(trial))
+                               calibration=calibration, started=started_of(trial))
 
 
 def _sides_todo(view) -> list:
@@ -477,8 +484,8 @@ def judge_compare_route():
     sides = _sides_todo(view)
     todo = list(dict.fromkeys(task for task, _, _ in sides))
     _guard()
-    k = key()
-    done, failed = run_batch(sides, lambda s: judge_side(s[1], s[2], k), lambda s: f"{s[0]} ({s[1].agent_label or s[1].job_id})")
+    k, cal = key(), batch_calibration()
+    done, failed = run_batch(sides, lambda s: judge_side(s[1], s[2], k, calibration=cal), lambda s: f"{s[0]} ({s[1].agent_label or s[1].job_id})")
     from flask import flash
     flash(f"Judged {done} of {len(sides)} side(s) over {len(todo)} pair(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
     return redirect(url_for("compare", pick=view.references, cohort=view.cohort, view=compare_web._view()) + "#judgement")
@@ -532,14 +539,14 @@ def control_states(side, trial) -> dict:
     return batch.states_for(Q.group_ids("feasibility"), build)
 
 
-def judge_control(side, jobs, api_key: str, post=None) -> dict | None:
+def judge_control(side, jobs, api_key: str, post=None, calibration=None) -> dict | None:
     """Ask why one control side did not behave, over its own `control` state,
     stored as that control trial's record. The verdict is not touched."""
     job, trial = _control_trial(side, jobs)
     if trial is None:
         raise client.JudgeError(0, f"{side.control} trial {side.trial_name} is not in this workspace")
     return batch.ask_and_store(ws_dir(), job.job_id, trial.trial_name, control_states(side, trial), api_key, post=post,
-                               started=started_of(trial))
+                               calibration=calibration, started=started_of(trial))
 
 
 def triage_summary(report, jobs) -> dict:
@@ -645,11 +652,11 @@ def task_summary(job) -> dict:
     return {"tasks": len(tasks), "judged": judged, "unjudged": len(tasks_todo(job)), "keyed": bool(key())}
 
 
-def judge_task(job, trial, api_key: str, post=None) -> dict | None:
+def judge_task(job, trial, api_key: str, post=None, calibration=None) -> dict | None:
     """Score one task's instruction over the `task` state alone, stored under
     the dataset's task slot and the instruction's digest - never under the trial."""
     instruction = _task_instruction(trial)
     if not instruction:
         raise client.JudgeError(0, f"no instruction can be read for {trial.task_base}")
     states = batch.states_for(Q.group_ids("task"), lambda kind: judge_state.build(kind, None, instruction=instruction))
-    return batch.ask_and_store(ws_dir(), task_key(job), task_slot(trial), states, api_key, post=post)
+    return batch.ask_and_store(ws_dir(), task_key(job), task_slot(trial), states, api_key, post=post, calibration=calibration)
