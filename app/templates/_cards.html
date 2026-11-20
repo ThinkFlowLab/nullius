@@ -8,9 +8,10 @@
     An item is a dict of display values by field key: a string, a dict {text, class, title, label, href, value, attrs}
     or a list of them, empty for none; a filter and Sort by read a value's `value`, else its text; an action's
     `attrs` are its button's own attributes, its `class` added to the button's, and a `delete` takes the same shape (a quiet
-    trash button). Plus `href` (its title's link), or `pick` {value, on, disabled}: the card is a toggle, its title a
+    trash button). Plus `href` (its title's link), or `pick` {value, on, disabled, one}: the card is a toggle, its title a
     button[data-pick][aria-pressed] that tables.js flips, sending `nullius-pick` {value, pressed} (a disabled one's
-    reason goes in its `alert`), and an enabled one's corner holds the check that marks it chosen; a title's `title` is the tooltip of its link or button;
+    reason goes in its `alert`), and an enabled one's corner holds the check that marks it chosen; `one`, a single
+    choice: choosing it lets the others go, choosing it again keeps it (a radio in a table); a title's `title` is the tooltip of its link or button;
     `id`, `search` (what the search reads), `keys`, and `unless` {field: other}: the item passes the field's filter
     whenever the other field's filter narrows and passes it. A title's `after` is markup in the flow of its name, after its
     last word (a control of its own), and its `class` goes on the title row.
@@ -52,8 +53,8 @@
 
 {# The items of a cards collection as a table (the table toolkit's, with its Columns menu): a column per field the
    table takes that some item fills (a filtered or 'num' one always), in the order of `cols`; the title pinned, its
-   icon before it and a link to `href`, the others as on the card; picks put a checkbox in a leftmost column of no
-   name (its header no tick-all: a pick is one at a time), the name then plain. A field `off` starts hidden. #}
+   icon before it and a link to `href`, the others as on the card; picks put a checkbox (a radio for `one`) in a leftmost
+   column of no name (its header no tick-all: a pick is one at a time), the name then plain. A field `off` starts hidden. #}
 {% macro rows(id, cols, items, search, choices, only, empty, noun, sort, default) %}
 {%- set icon = (cols|selectattr('card', 'equalto', 'icon')|list + [none])[0] %}
 {%- set icons = icon and items|selectattr(icon.key)|list|length > 0 %}
@@ -64,7 +65,7 @@
 {% call(r, c) table(id, shown, rs, attrs, search=search, columns=true, choices=choices, only=only, empty=empty, noun=noun, sort=sort, layout='table', default=default) %}
   {%- set v = r.item.get(c.key) %}{% set by %}{% call(f, x) each(r.item, [c]) %}{{ x.get('value', x.text) }} {% endcall %}{% endset %}
   {%- set pick = r.item.get('pick') %}{% set t = r.item.get((cols|selectattr('card', 'equalto', 'title')|first).key) %}{% set t = t if t is mapping else {'text': t} %}
-  {%- if c.key == '_pick' %}{% call cell(c, class='pick-col') %}<input type="checkbox" data-pick="{{ pick.value }}" aria-label="{{ t.text }}"{% if pick.on %} checked{% endif %}{% if pick.disabled %} disabled{% endif %}>{% endcall %}
+  {%- if c.key == '_pick' %}{% call cell(c, class='pick-col') %}<input type="{{ 'radio' if pick.one else 'checkbox' }}"{% if pick.one %} name="{{ id }}-pick"{% endif %} data-pick="{{ pick.value }}" aria-label="{{ t.text }}"{% if pick.on %} checked{% endif %}{% if pick.disabled %} disabled{% endif %}>{% endcall %}
   {%- else %}{% call cell(c, sort=by|trim) %}{% if c.card == 'title' %}{% set name = t.text %}<span class="row-name"{% if pick and t.title %} title="{{ t.title }}"{% endif %}>{% if icons %}{{ mark(icon, r.item.get(icon.key), name) }}{% endif %}
       {%- if pick %}{{ name }}{% else %}<a href="{{ r.item.href }}">{{ name }}</a>{% endif %}</span>
     {%- elif c.style == 'code' %}<code>{{ v }}</code>
@@ -91,7 +92,7 @@
     {%- set cls = [title.class, v.class]|select|join(' ') %}
     <div class="bench-card-title{{ ' ' ~ cls if cls }}">{% if icons %}{{ mark(icon, item.get(icon.key), name) }}{% endif -%}
       {%- set pick = item.get('pick') %}
-      {%- set link %}{% if pick %}<button type="button" class="card-link" data-pick="{{ pick.value }}" aria-pressed="{{ 'true' if pick.on else 'false' }}"{% if pick.disabled %} disabled{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ name }}</button>
+      {%- set link %}{% if pick %}<button type="button" class="card-link" data-pick="{{ pick.value }}"{% if pick.one %} data-pick-one{% endif %} aria-pressed="{{ 'true' if pick.on else 'false' }}"{% if pick.disabled %} disabled{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ name }}</button>
       {%- else %}<a class="card-link"{% if item.get('href') %} href="{{ item.get('href') }}"{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ name }}</a>{% endif %}{% endset %}
       {%- if v.after %}<span class="bench-card-name">{{ link }} {{ v.after }}</span>{% else %}{{ link }}{% endif %}
       {%- set corner %}{% if pick and not pick.disabled %}<span class="pick-check" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span>{% endif %}{% call(f, v) each(item, by.check) %}<input type="checkbox" data-check value="{{ v.value }}" aria-label="{{ v.text }}">{% endcall %}

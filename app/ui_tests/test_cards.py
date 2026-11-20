@@ -136,6 +136,11 @@ class Macros(unittest.TestCase):
                       '<div class="bench-card-blocker" title="needs agent.tools/v1">Lacks tools</div>', html)
         self.assertNotIn('<a ', html)
 
+    def test_a_single_choice_is_marked_on_its_card(self):   # and a radio in its table: test_builder_benchmarks
+        cols = [dict(key='title', label='Name', card='title')]
+        items = [{'title': 'Alpha', 'pick': {'value': 'a', 'one': True}}, {'title': 'Beta', 'pick': {'value': 'b', 'on': True, 'one': True}}]
+        self.assertIn('<button type="button" class="card-link" data-pick="b" data-pick-one aria-pressed="true">Beta</button>', self.render(cols, items))
+
 
 class Script(unittest.TestCase):
     def test_search_and_filter_hide_cards_and_their_empty_groups(self):
@@ -234,6 +239,40 @@ a.click(); root.querySelectorAll('[title="t"]')[0].dispatch('click', {button: 0}
 process.stdout.write(JSON.stringify([picks, a.getAttribute('aria-pressed'), g.getAttribute('aria-pressed')]));
 """)
         self.assertEqual(got, [[["a", True], ["a", False], ["a", True]], "true", "false"])   # its pill too: the card is the toggle
+
+    def test_a_single_choice_lets_the_others_go_and_stays_chosen(self):
+        got = node(r"""
+global.CustomEvent = class { constructor(type, o) { this.type = type; this.detail = o.detail; } };
+const picks = [], card = v => el('article', {'data-card': ''}, el('div', {}, el('button', {class: 'card-link', 'data-pick': v, 'data-pick-one': '', 'aria-pressed': 'false'}, v)));
+const root = el('div', {id: 'c', 'data-cards': ''}, card('a'), card('b'));
+root.querySelectorAll('[data-pick]').forEach(b => { b.dispatchEvent = ev => b.dispatch(ev.type, {detail: ev.detail}); });
+document.appendChild(el('main', {}, el('div', {id: 'c-tools'}), root, el('p', {'data-empty': 'c', hidden: true}), el('span', {'data-live': 'c', 'data-noun': 'cards'})));
+global.getSelection = () => ({isCollapsed: true});
+T.cards(root);
+root.addEventListener('nullius-pick', e => picks.push([e.detail.value, e.detail.pressed]));
+const a = root.querySelector('[data-pick="a"]'), b = root.querySelector('[data-pick="b"]'), state = () => [a, b].map(x => x.getAttribute('aria-pressed')).join(' ');
+const out = [];
+a.click(); out.push(state()); b.click(); out.push(state()); b.click(); out.push(state());
+process.stdout.write(JSON.stringify([picks, out]));
+""")
+        self.assertEqual(got, [[["a", True], ["b", True], ["b", True]], ["true false", "false true", "false true"]])
+
+    def test_a_row_click_chooses_its_radio(self):
+        got = node(r"""
+global.CustomEvent = class { constructor(type, o) { this.type = type; this.detail = o.detail; } };
+global.getSelection = () => ({isCollapsed: true});
+const row = v => el('tr', {}, el('td', {}, el('input', {type: 'radio', name: 'c-pick', 'data-pick': v})), el('td', {}, v));
+const table = el('table', {}, row('a'), row('b'));
+table.querySelectorAll('[data-pick]').forEach(b => { b.dispatchEvent = ev => b.dispatch(ev.type, {detail: ev.detail}); b.type = 'radio'; });
+document.appendChild(table);
+const picks = [];
+T.picks(table, 'tr');
+table.addEventListener('nullius-pick', e => picks.push([e.detail.value, e.detail.pressed]));
+const tds = table.querySelectorAll('td'), checked = () => table.querySelectorAll('[data-pick]').filter(b => b.checked).map(b => b.dataset.pick).join('');
+tds[1].dispatch('click', {button: 0}); const first = checked(); tds[3].dispatch('click', {button: 0}); tds[3].dispatch('click', {button: 0});
+process.stdout.write(JSON.stringify([picks, first, checked()]));
+""")
+        self.assertEqual(got, [[["a", True], ["b", True], ["b", True]], "a", "b"])
 
     def test_a_card_passes_a_filter_its_unless_column_narrows_to(self):
         got = node(r"""
