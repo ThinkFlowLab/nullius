@@ -55,6 +55,8 @@ import threading
 import time
 from typing import Optional, Protocol
 
+from nullius.redact import redact
+
 PROTOCOL = "2025-06-18"
 LINE_BYTES = 24 * 1024 * 1024                        # one message either way, its newline counted
 OUT_BYTES = 2 * LINE_BYTES                           # answers waiting for a connection's client to read them
@@ -162,7 +164,8 @@ def tools(screen):
         ("prepare", "Before the task alone, in the window between the session's start and the task: runs actions in "
                     "the desktop, each a line of Python with pyautogui and time imported as a step's are, with no "
                     "pause after them, then reads files, any number of paths inside folder. Returns {files}: each in "
-                    "base64, null when there is no such file. Not a step.",
+                    "base64, null when there is no such file. Not a step. An action that exits with an error returns "
+                    "the desktop's words and stops the actions after it.",
          {"type": "object", "additionalProperties": False, "required": ["actions"],
           "properties": {"actions": actions, "files": FILES}}),
         ("click", "One step: a click at the point. Returns the screen as a PNG image after the pause.",
@@ -524,14 +527,20 @@ class Bridge:
 
     def _prepare(self, call):
         """A prepare call, in the loop's thread: its record written, its actions run one at a time with no pause (WAIT
-        does nothing), then its files read. An action the desktop did not end in time stops it."""
+        does nothing), then its files read. An action that fails or does not end in time stops it."""
         if self.prepared:
             with open(self.prepared, "a", encoding="utf-8") as f:
-                f.write(json.dumps({"start": time.time(), "actions": call.actions,
-                                    "files": [named for named, _ in call.files or []]}) + "\n")
+                f.write(json.dumps({"start": time.time(), "actions": [redact(code) for code in call.actions],
+                                    "files": [redact(named) for named, _ in call.files or []]}) + "\n")
         for i, code in enumerate(call.actions):
-            if code.strip() != "WAIT" and self.desktop.python(PREPARE.format(code=code)) is None:
+            if code.strip() == "WAIT":
+                continue
+            reply = self.desktop.python(PREPARE.format(code=code))
+            if reply is None:
                 raise Refused(f"the desktop did not end actions[{i}] in time; the actions after it were not run")
+            if reply.get("returncode", 0) != 0:
+                raise Refused(f"the desktop failed actions[{i}]: {reply.get('error') or reply.get('output') or reply}; "
+                              "the actions after it were not run")
         return {"files": self._files(call.files or [])}
 
     def close_window(self):

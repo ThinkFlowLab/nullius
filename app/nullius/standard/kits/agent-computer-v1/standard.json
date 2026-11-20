@@ -19,7 +19,7 @@
     "scroll": "scrolls a list to read what it shows at first below its edge",
     "recover": "reads an acting call's error and acts again",
     "batch": "sends several actions in one step",
-    "late": "looks again with a step to find what appeared after the task was given"
+    "late": "looks again with a step to find what appeared after the task was given. This check does not bound the number of presses."
   },
   "driver": {
     "unit_end": true,
@@ -132,10 +132,10 @@
       },
       "leak": {
         "units": 9,
-        "looked_for": 1,
-        "short": 8,
+        "looked_for": 2,
+        "short": 7,
         "passed": "9/9",
-        "note": "8 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
+        "note": "7 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
         "on": "2026-11-19"
       },
       "nop": {
@@ -145,7 +145,7 @@
           "at_most": 0.0
         },
         "units": 9,
-        "job": "2026-11-19__10-32-52__agent-computer-v1__kit__prove-nop",
+        "job": "2026-11-19__13-15-24__agent-computer-v1__kit__prove-nop",
         "source": "nullius",
         "on": "2026-11-19"
       },
@@ -156,7 +156,7 @@
           "at_least": 1.0
         },
         "units": 9,
-        "job": "2026-11-19__10-32-52__agent-computer-v1__kit__prove-oracle",
+        "job": "2026-11-19__13-15-24__agent-computer-v1__kit__prove-oracle",
         "source": "nullius",
         "on": "2026-11-19"
       }
