@@ -48,7 +48,8 @@ messages that differ only in the model text they quote then share a signature. A
 end of the detail. An apostrophe inside a word, as in `agent's`, opens no quote. Verifier details keep their quoted
 values, because those separate one assertion from another.
 
-A group is the set of failing trials with one signature. Groups are numbered `g01`, `g02`, ... from the largest.
+A group is the set of failing trials with one signature. Groups are numbered `g01`, `g02`, ... from the largest,
+and groups of one size in the order of their signatures.
 `example` holds the detail of the group's first trial as written, with only key-shaped strings masked.
 
 ## Warnings

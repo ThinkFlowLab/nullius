@@ -92,6 +92,10 @@ means.
    removes it.
 7. The caches of a round, the suite's failures on `base_ref` and each replay, are used only under the adapter that made
    them; a changed `adapter.json` runs its commands again.
+8. A command is the agent's own program. The loop does not limit where it writes. The description of an adapter,
+   a README beside it or a note to the person, names every place its commands write besides `{out_json}`: temporary
+   folders, caches, environments. Read that description before the first loop command that starts an adapter
+   command, and ask the person when an adapter has no description.
 
 ## Exit codes and output
 

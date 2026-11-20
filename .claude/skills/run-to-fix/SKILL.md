@@ -21,7 +21,8 @@ causes, writing tests and fixes in the agent's code.
 - Python 3 with the standard library, git, and bash on a POSIX system: Linux or WSL. The tests of this skill ran
   on Python 3.12.
 - A loop folder the person names, outside every git repository or in a folder its repository ignores. `loop.py`
-  writes only there, and `read` refuses a loop folder that git would list as untracked.
+  writes only there, and `read` refuses a loop folder that git would list as untracked. An adapter command is the
+  agent's own program and can write elsewhere; the adapter's description names where (`references/adapter.md`).
 - An adapter, `adapter.json` in the loop folder: one file per agent with its checkout, its commands and the limits
   of the run (`references/adapter.md`). For an agent of the Nullius catalogue, draft it from
   `catalogue/agents/<key>/agent.json` (`versions.<v>.upstream.repository` and `tag`) and the run's settings, and
@@ -38,11 +39,17 @@ lists every file the loop writes and reads.
 python3 L read --loop DIR --run JOB [--baseline JOB] --budget-usd B [--pass-threshold 1]
 ```
 
-The person names `B`, the budget of the round. `read` runs `health` and `analyze` of `run-analysis`, writes
-`input.json`, `health.txt` and `metrics.json`, and refuses a run that `health` calls not analysable (no trials, one
-shared error, an incomplete or unfinished job) or whose trials name another agent than the adapter. A refusal is the
-answer: give its cause, as `run-analysis` describes for a broken run, and stop. After a round whose stop rule said
-stop, `read` also refuses until the person's words are passed with `--continue-after-stop "..."`.
+The person names `B`, the budget of the round. Before the person names it, say that `B` also pays for the new run
+that `compare` reads, unless that run is the round's own run or one of its trial runs (`references/files.md`, the
+ledger). Ask the person whether a baseline run exists, for `--baseline`, and which reward is a pass, for
+`--pass-threshold`: 1 unless the person names another. A round without a baseline gives no group the warning
+`fails_on_baseline`.
+
+`read` runs `health` and `analyze` of `run-analysis`, writes `input.json`, `health.txt` and `metrics.json`, and
+refuses a run that `health` calls not analysable (no trials, one shared error, an incomplete or unfinished job) or
+whose trials name another agent than the adapter. A refusal is the answer: give its cause, as `run-analysis`
+describes for a broken run, and stop. After a round whose stop rule said stop, `read` also refuses until the
+person's words are passed with `--continue-after-stop "..."`.
 
 ## Stage 2. Find causes
 
@@ -55,6 +62,9 @@ attaches warnings (`references/classes.md`). It writes `trials.csv` and `groups.
 the adapter for the agent's own classes when the adapter has it.
 
 Then read two or three trials of each group, largest first, as `run-analysis/references/investigation.md` describes.
+Read groups of one size in the order of their numbers. Of a group with fewer than 3 trials, read one trial or name
+the group as not read; name each group not read in the `issues` slot of the round's page (stage 5).
+
 When you see a pattern the seven classes do not separate, write it as a found class in `found-classes.json` and run
 `classify` again, so that the script counts it on every trial, the passing ones included. Write each cause to
 `round-NN/causes/<id>.md`: the claim, a line `Rule: <group or found class>` that counts its trials, the trials and
@@ -149,6 +159,9 @@ the earlier ones.
 
 ## Stage 5. Compare and record
 
+When the new run exists already, a round may go from stage 2 to stage 5; `result.json` then says that no targets
+were selected.
+
 ```bash
 python3 L compare --loop DIR --new JOB --against run [--new-cost-usd X]
 ```
@@ -164,8 +177,14 @@ new job holds. When
 some trials of the new run report no cost, the budget part of the stop rule is not checked, unless the person gives the
 run's cost with `--new-cost-usd`. `read` records the text of the stop rule, and `compare` refuses a round whose recorded
 rule is not the rule of the skill it runs: keep that loop folder as it is and start a new one. It
-closes the round and writes `report.html` with `render` of `run-analysis`; fill its prose slots as that skill
-describes (`runs.py render --slots`, then `runs.py check`).
+closes the round and renders `report.html` from `compare-metrics.json` with `render` of `run-analysis`. Write the
+prose slots into `round-NN/prose.json` as that skill describes, then render the page again and check it, with `R`
+the `scripts/runs.py` of `run-analysis`:
+
+```bash
+python3 R render DIR/round-NN/compare-metrics.json --out DIR/round-NN/report.html --slots DIR/round-NN/prose.json
+python3 R check DIR/round-NN/report.html
+```
 
 The stop rule is fixed before a round starts. No new round when the verdict is noise and no group of failing trials
 of the new run has 3 trials or more, or when the budget left is under the price of the cheapest option. That option
@@ -194,11 +213,14 @@ These follow `run-analysis`, with what the loop adds.
 - **A cause is a claim with a count.** It names the rule that counts its trials and the trials it explains. A
   plausible mechanism without a count is a hypothesis; say so.
 - **Respect the noise.** Quote the verdict and its p value with any gain. Do not call a round an improvement on a
-  noise verdict.
+  noise verdict. The verdict on the page is the verdict of `compare`. The gap in standard errors that `runs.py
+  analyze` prints may stand beside it. When the two disagree, the page gives both.
 - **Separate the layers.** Model, agent, harness or benchmark. A claim that a benchmark is defective needs the check
   its warning names.
-- **The person decides.** Never start a written command, pick a size or keep a candidate for the person, and store
-  each answer in the person's words.
+- **The person decides.** Never start a written command, pick a size or keep a candidate for the person. `answer`,
+  `select --size` and `read --continue-after-stop` store the person's words with each answer. `read` stores four
+  answers in `input.json` as values without words: the budget, the pass threshold, the baseline, and the SHA-256 of
+  the adapter the person confirmed.
 - **Nothing sensitive.** No keys, tokens, host addresses or personal identifiers from logs.
 
 ## Limits
@@ -208,6 +230,8 @@ These follow `run-analysis`, with what the loop adds.
 - The classes read only shared files. What one agent writes reaches the loop through a found class or
   `commands.classes`.
 - A trial job gives every task the same number of trials, because `run_tasks` takes one `{repeat}`.
+- A round reads one job folder as its run and one as its new run. A trial that was run again in another job folder
+  enters neither `read` nor `compare`; its effect is then a count by hand, marked as one.
 - A loop stopped with SIGTERM or Ctrl+C stops the adapter command it runs and removes its worktree. A loop killed with
   SIGKILL cannot: its worktree stays under `<loop folder>/worktrees/`, and `git worktree remove --force <path>` in the
   agent's checkout removes it.

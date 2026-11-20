@@ -32,23 +32,26 @@ round that has no `result.json`.
 | `trials.csv` | 2 | `classify` | one row per trial: `trial`, `task`, `class`, `signature`, `reward`, `pair`, `cost_usd`, `model_calls`, `agent_s`, `max_completion_tokens`, `exception_type`, then `found:<id>`, `agent_class:<name>`, `agent_flag:<name>`. `model_calls` is the standard's own count where `result.json` holds one; the page of `run-analysis` counts from the trajectory |
 | `groups.json` | 2 | `classify` | class counts, the rules switched off, the groups with their warnings, the counts of found and agent classes |
 | `agent-classes.json` | 2 | `commands.classes` | the agent's own classes and flags per trial |
+| `logs/classes.log` | 2 | `classify` | the output of `commands.classes` |
 | `causes/<id>.md` | 2 | the assistant | one cause, below |
 | `candidates/<id>/candidate.json` | 3 | `candidate` | the cause, the rule, the effect (`outcome` or `report`), the fix commit, the test and its commit, the trials of the cause and the tasks expected to pass; registering a candidate again removes its `checks.json` |
 | `candidates/<id>/checks.json` | 3 | `check` | the test before and after the fix, the suite against `base_ref`, the replay table at the ref before the fix and at the fix with both refs, the trials of the cause whose label changes, every trial whose label changes, the diff size |
 | `candidates/<id>/*.log` | 3 | `check` | the output of each command |
-| `base/suite.json` | 3 | `check` | the suite's failures on `base_ref`, made once per round |
+| `base/suite.json`, `base/suite.log` | 3 | `check` | the suite's failures on `base_ref`, made once per round, and the suite's output |
 | `replays/<ref>-against-<before ref>.json`, `.log` | 3 | `check` | one replay per pair of refs of a round, made once |
 | `decision-1.md` | stop 1 | `decide --stop 1` | one row per candidate and the checks that did not run |
-| `commands/<name>-<commit>.sh`, `commands/run_tasks*.sh` | 3, 4 | `check`, `select`, `decide --stop 2` | commands a person starts |
+| `commands/<name>-<commit>.sh`, `commands/classes.sh`, `commands/run_tasks*.sh` | 2, 3, 4 | `classify`, `check`, `select`, `decide --stop 2` | commands a person starts |
 | `trial-tasks.txt` | 4 | `select --size` | the tasks of the trial run, one per line (unit ids on a job of the standard), the `{units_file}` of `run_tasks` |
 | `build.json` | 4 | `select --size` | the commit tried, the path `commands.build` printed and its SHA-256 |
+| `logs/build.log` | 4 | `select --size` | the output of `commands.build` |
 | `jobs/` | 4 | the person's run | the job folders that `run_tasks` writes |
 | `trial.json` | stop 2 | `decide --stop 2` | the round's trial runs, the trials per task the round's trial jobs on the selected commit hold together and whether the selection is complete, the results of targets, guards and canaries, the money spent and left, the options |
 | `rerun-tasks.txt`, `full-tasks.txt` | stop 2 | `decide --stop 2` | the tasks of the two options that run something |
 | `decision-2.md` | stop 2 | `decide --stop 2` | the build, the results, the budget left and three options with their price |
 | `compare-metrics.json` | 5 | `compare` | `runs.py analyze` of the run compared against and the new run, labelled by their job folders, or `before` and `new` when the two names are equal |
 | `result.json` | 5 | `compare` | pass rates with their standard error, pairs, the exact test and the verdict, the targets (tested only when the new job alone holds 3 trials of each selected task), the predictions beside their results, the groups of the new run, the stop rule |
-| `report.html` | 5 | `compare`, then the assistant | the page of `runs.py render`, with its prose slots filled by the assistant |
+| `report.html` | 5 | `compare`, then the assistant | the page of `runs.py render` from `compare-metrics.json`, with its prose slots filled by the assistant |
+| `prose.json` | 5 | the assistant | the HTML of each prose slot of `report.html`, the `--slots` file of `runs.py render` |
 
 ## A cause
 
@@ -89,9 +92,11 @@ Not checked: what the files cannot tell.
 }
 ```
 
-Every answer of the person is stored with its date and in the person's words: the candidates kept at stop 1, the
-size and budget of the trial run, the choice at stop 2, and the words that start a round after a stop rule said
-stop. The money a round has spent is the sum of its `trial_runs` plus the new run that `compare` reads. A new run
+Three commands store an answer of the person in `answers`, with its date and in the person's words: `answer` (the
+candidates kept at stop 1, the choice at stop 2), `select --size` (the size and budget of the trial run) and
+`read --continue-after-stop` (the words that start a round after a stop rule said stop). `read` stores four answers
+in `input.json` as values without words: the budget, the pass threshold, the baseline, and the SHA-256 of the
+adapter the person confirmed. The money a round has spent is the sum of its `trial_runs` plus the new run that `compare` reads. A new run
 that is the round's own run adds nothing, because the round did not pay for it; one that is a trial run of the round
 is in the sum already. A trial run
 whose trials do not all report a cost counts with the person's figure (`cost_from`: `the person`) and keeps what its
