@@ -30,26 +30,36 @@
   const isStandard = r => !!(r && r.harness === 'standard');
   const standard = () => schema.standard || {benchmarks: [], agents: [], capabilities: [], fits: {}, ports: {}};
   // A recipe names a benchmark by its key (its default version) or key@version, one of the page's versions.
-  // A version other than the default reads as its own page: its options, setups and proofs.
+  // The entry is the default version's; another version's own page (its upstream, datasets, proofs, setups) is what a
+  // recipe naming it reads. standardBase is the entry itself, with the list of versions.
+  const standardBase = r => standard().benchmarks.find(b => b.key === r.benchmark || b.ref === r.benchmark
+    || (b.versions || []).some(v => v.ref === r.benchmark)) || null;
   const standardBench = r => {
-    const b = standard().benchmarks.find(b => b.key === r.benchmark || b.ref === r.benchmark
-      || (b.versions || []).some(v => v.ref === r.benchmark));
-    const v = b && (b.versions || []).find(v => v.ref === r.benchmark && v.page);
-    return v ? v.page : b || null;
+    const b = standardBase(r);
+    const v = b && (b.versions || []).find(x => x.ref === r.benchmark && !x.default && x.page);
+    return v ? v.page : b;
   };
   // Every agent (or capability) a benchmark of the standard could take, each with the reasons it does not fit: none, it fits.
   // Then the controls it declares (nop, oracle): no agent, no model, always runnable - each with its source
   // (official, adapter, nullius) and, per dataset, its proof.
+  // A benchmark's own agents (recipe.py, _other_page: its `benchmark`), each run by its driver as its Original setup.
+  const ownAgentsOf = b => b ? standard().agents.filter(a => a.benchmark === b.key) : [];
   function standardOthers(r) {
     const b = standardBench(r);
     if (!b) return [];
     const why = standard().fits[r.benchmark] || standard().fits[b.key] || {};
     const controls = (b.controls || []).map(c => ({key: c.key, label: c.label, summary: c.from, protocol: 'no agent', source: c.source,
       version: '', offers: [], proven: {}, options: {}, control: true, why: []}));
-    // its setups (recipe.py, _bench_page): the benchmark as published, run by its own code - beside the agents or capabilities
-    const setups = (b.setups || []).map(x => ({...x, protocol: 'its own code', version: '', offers: [], proven: {}, options: {}, setup: true, why: []}));
-    return (b.family === 'agent' ? standard().agents : standard().capabilities).map(o => ({...o, why: why[o.key] || []})).concat(setups, controls);
+    // its setups (recipe.py, _bench_page): the benchmark as published, run by its own code - beside the agents or capabilities;
+    // a benchmark with agents of its own runs them in its Original setup instead, first among the agents
+    const own = ownAgentsOf(b).map(o => ({...o, why: why[o.key] || [], setup: true, own: true}));
+    const setups = own.length ? [] : (b.setups || []).map(x => ({...x, protocol: 'its own code', version: '', offers: [], proven: {}, options: {}, setup: true, why: []}));
+    const rest = b.family === 'agent' ? standard().agents.filter(o => o.benchmark !== b.key) : standard().capabilities;
+    return own.concat(rest.map(o => ({...o, why: why[o.key] || []})), setups, controls);
   }
+  // the chosen ones of a benchmark's own agents, and what each choice runs as: its own agent, its Original setup
+  const ownChosen = r => ownAgentsOf(standardBench(r)).filter(a => chosenOf(r).includes(a.key));
+  const runsOf = r => { const own = ownAgentsOf(standardBench(r)); return [...new Set(chosenOf(r).map(k => own.some(a => a.key === k) ? 'original' : k))]; };
   // A control that calls no model at all - on a benchmark with no judge - needs no key to run.
   // The agents, capabilities and controls a standard recipe runs, each its own job of the one run.
   const chosenOf = r => Array.isArray(r.others) ? r.others : (r.other ? [r.other] : []);
@@ -61,7 +71,13 @@
   // A step this recipe shows: every one but Setup.
   const stepShown = (r, i) => i !== STEP.setup;
   // Every participant except an unjudged control uses the one selected model.
-  const paperModels = r => ((standardBench(r) || {}).setups || []).find(x => x.key === 'original') || {};
+  // Like the paper's models: the Original setup's, those of the chosen own agents when the benchmark has agents of its own
+  function paperModels(r) {
+    const o = ((standardBench(r) || {}).setups || []).find(x => x.key === 'original') || {}, own = ownChosen(r);
+    if (!own.length || !o.models) return o;
+    const keep = m => own.some(a => a.models.includes(m));
+    return {...o, models: o.models.filter(keep), sent: Object.fromEntries(Object.entries(o.sent || {}).map(([p, ms]) => [p, Object.fromEntries(Object.entries(ms).filter(([m]) => keep(m)))]))};
+  }
   // Like the paper keeps what the paper fixed: its models when it lists them, its judge and its user simulator.
   const paperListed = r => !!(paperModels(r).models || []).length;
   const paperOffered = r => { const b = standardBench(r) || {}; return paperListed(r) || !!(b.judge || b.simulator); };
@@ -139,12 +155,13 @@
   }
   const removeServed = (r, role, at) => setServed(r, role, ((r.served_by || {})[role] || []).filter((_, i) => i !== Number(at)));
   function createStandard(benchmark = '', other = '') {
-    const st = standard(), versioned = benchmark && standardBench({benchmark}),
-      b = st.benchmarks.find(x => x.key === benchmark) || (versioned ? {key: benchmark} : st.benchmarks[0]);
+    const st = standard(), b = (benchmark && standardBase({benchmark})) || st.benchmarks[0];
     const r = {version: 1, harness: 'standard', name: 'standard-experiment', title: 'Standard experiment', benchmark: '', datasets: [], others: [],
       model_choice: 'any', provider: firstAvailable(providersOf({}), 'openai'), model: bareModel(schema.defaultModel || ''), limit: '', concurrency: '', unsandboxed: false, where: 'local',
       backend: 'local', options: {}};
-    return b ? setStandardBenchmark(r, b.key, other) : r;
+    // a version's ref (key@version) opens that version
+    const ref = b && (b.versions || []).some(v => v.ref === benchmark) ? benchmark : b && b.key;
+    return b ? setStandardBenchmark(r, ref, other) : r;
   }
   // Keep only options and values the benchmark accepts.
   const ownOptions = (b, opts) => Object.fromEntries(Object.entries(opts || {}).filter(([k, v]) => {
@@ -153,14 +170,14 @@
   function setStandardBenchmark(r, key, other = '') {
     const b = standardBench({benchmark: key});
     if (!b) return r;
-    const was = standardBench(r);
-    if (was !== b) { r.model_choice = 'any'; delete r.served_by; }
+    const was = standardBench(r), same = !!was && was.key === b.key;     // another version of it keeps the choices
+    if (!same) { r.model_choice = 'any'; delete r.served_by; }
     r.benchmark = key;
-    const kept = was === b ? datasetsOf(r).filter(id => b.datasets.some(d => d.id === id)) : [];
+    const kept = same ? datasetsOf(r).filter(id => b.datasets.some(d => d.id === id)) : [];
     r.datasets = kept.length ? kept : [b.datasets[0].id];
     delete r.dataset;
     const fitting = standardOthers(r).filter(o => !o.why.length);
-    const keys = fitting.map(o => o.key), first = fitting.find(o => o.setup && o.key === 'original')
+    const keys = fitting.map(o => o.key), first = fitting.find(o => o.own) || fitting.find(o => o.setup && o.key === 'original')
       || fitting.find(o => !o.control && !o.setup);
     // Keep explicit choices that still fit; otherwise prefer the benchmark's reference.
     r.others = other && keys.includes(other) ? [other] : chosenOf(r).filter(k => keys.includes(k));
@@ -168,6 +185,7 @@
     if (!r.others.length && first) r.others = [first.key];
     r.options = Object.fromEntries(Object.entries(r.options || {}).filter(([k, v]) => r.others.includes(k) && v && typeof v === 'object'));   // options are each agent's own
     if (r.bench_options) r.bench_options = ownOptions(b, r.bench_options);
+    if (r.bench_options && ownAgentsOf(b).length) delete r.bench_options.agent;     // each own agent is its own choice
     if (was !== b || r.name === 'standard-experiment') { r.name = b.key + '-experiment'; r.title = b.label + ' experiment'; }
     return r;
   }
@@ -184,6 +202,14 @@
     if (['small', 'default', 'large', 'xlarge'].includes(raw.boat_size)) r.boat_size = raw.boat_size;
     if (raw.bench_options && typeof raw.bench_options === 'object' && !Array.isArray(raw.bench_options))   // the benchmark's own options, a word each
       r.bench_options = ownOptions(standardBench(r), Object.fromEntries(Object.entries(raw.bench_options).filter(([, v]) => typeof v === 'string')));
+    // a recipe from before a benchmark's own agents were agents (recipe.py, with_own_agents): its Original with the agent
+    // option is that agent; without the option the first; a name none has kept, for the server to say
+    const own = ownAgentsOf(standardBench(r));
+    if (own.length && r.others.includes('original')) {
+      const v = typeof (raw.bench_options || {}).agent === 'string' ? raw.bench_options.agent : '', a = v ? own.find(x => x.agent === v) : own[0];
+      r.others = [...new Set(r.others.map(k => k === 'original' ? (a ? a.key : standardBench(r).key + ':' + v) : k))];
+    }
+    if (own.length && r.bench_options) delete r.bench_options.agent;
     // Options per choice, {ref: {name: word}}; a single agent also accepts flat {name: word} options.
     if (raw.options && typeof raw.options === 'object' && !Array.isArray(raw.options)) {
       const words = o => Object.fromEntries(Object.entries(o).filter(([, v]) => typeof v === 'string'));
@@ -851,5 +877,5 @@
         at: String(d.at || ''), saved: typeof d.saved === 'string' ? d.saved : ''};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBase,standardBench,standardOthers,ownAgentsOf,ownChosen,runsOf,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });

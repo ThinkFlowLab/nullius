@@ -103,6 +103,12 @@ class Schema(unittest.TestCase):
         self.assertIn("driver.install.locked: the lock file of install.project, which is not set", bad)
         bad = definitions.problems(dict(ok, driver=dict(ok["driver"], install={"project": ".", "locked": "yes"})), "benchmark")
         self.assertIn("driver.install.locked: true or false", bad)
+        self.assertEqual(definitions.problems(dict(ok, driver=dict(ok["driver"], install={"project": ".", "locked": True,
+                                                                                            "virtual": True})), "benchmark"), [])
+        bad = definitions.problems(dict(ok, driver=dict(ok["driver"], install={"project": ".", "virtual": True})), "benchmark")
+        self.assertIn("driver.install.virtual: the lock's packages without the project, which needs install.locked", bad)
+        bad = definitions.problems(dict(ok, driver=dict(ok["driver"], install={"project": ".", "locked": True, "virtual": 1})), "benchmark")
+        self.assertIn("driver.install.virtual: true or false", bad)
 
 
 class Locked(unittest.TestCase):
@@ -128,6 +134,19 @@ class Locked(unittest.TestCase):
         self.assertEqual(req[-1], "mcp==1.30.0")                                    # beside the lock's pins, in one resolution
         self.assertEqual(ran[-1][-3:], ["--no-deps", "-e", "/up/clone[x]"])
         self.assertFalse(any(c[:2] == ["git", "fetch"] for c in ran))               # the clone that was there, not a second one
+
+    def test_a_virtual_project_installs_its_lock_and_not_itself(self):
+        ran = []
+
+        def run(cmd, cwd, log, env=None):
+            ran.append(cmd)
+            if cmd[:2] == ["uv", "export"]:
+                open(cmd[cmd.index("-o") + 1], "w").close()
+        with mock.patch.object(install, "_run", side_effect=run):
+            install._packages({"python": "3.12", "project": ".", "locked": True, "virtual": True},
+                              os.path.join(self.tmp, "w"), {"repository": "r", "tested": "c"}, src="/up/clone")
+        self.assertTrue(any("-r" in c for c in ran))                                # the lock's pins
+        self.assertFalse(any("-e" in c for c in ran))                               # never the project's own build
 
     def _install_with_lock(self, lines, made=()):
         proj = os.path.join(self.tmp, "clone")

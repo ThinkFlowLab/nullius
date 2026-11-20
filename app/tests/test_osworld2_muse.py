@@ -36,8 +36,7 @@ def load_driver(up):
 
 
 def bench():
-    with open(os.path.join(HERE, "..", "standard.json"), encoding="utf-8") as f:
-        return json.load(f)
+    return definitions.get("benchmark", "osworld2@hardened", root=definitions.CATALOGUE)
 
 
 class Started(Exception):
@@ -146,7 +145,10 @@ class Definition(unittest.TestCase):
         self.assertNotIn("pins", other)
         self.assertEqual(other["model"]["side_models"], [f"claude-sonnet-4-6={SONNET}"])
         self.assertFalse(other["comparable"])
-        self.assertTrue(definitions.setup(b, "original", "MiniMax-M3", "openrouter")[0]["comparable"])
+        # M3 compares with the paper in the default version only; the hardened version is never comparable
+        self.assertFalse(definitions.setup(b, "original", "MiniMax-M3", "openrouter")[0]["comparable"])
+        default = definitions.get("benchmark", "osworld2", root=definitions.CATALOGUE)
+        self.assertTrue(definitions.setup(default, "original", "MiniMax-M3", "openrouter")[0]["comparable"])
 
     def test_comparable_names_some_of_the_setups_models(self):
         for value, ok in ((["MiniMax-M3"], True), (True, True), (False, True), ([MUSE], False), (["gpt-5"], False), ([], False),
@@ -175,7 +177,7 @@ class Definition(unittest.TestCase):
         b = bench()
         self.assertEqual(b["limits"]["call_seconds"], 3300)
         with open(os.path.join(HERE, "..", "agents.json"), encoding="utf-8") as f:
-            self.assertNotIn("--request_timeout", json.load(f)["agents"]["muse_spark"]["argv"])
+            self.assertNotIn("--request_timeout", json.load(f)["agents"]["muse-spark"]["start"]["driver"]["argv"])
         for bad in (0, -1, 1.5, True, "3300"):
             b["limits"]["call_seconds"] = bad
             with self.subTest(bad):
@@ -394,7 +396,7 @@ class Runner(unittest.TestCase):
                  for a in n.args if isinstance(a, ast.Constant) and str(a.value).startswith("--")}
         with open(os.path.join(HERE, "..", "agents.json"), encoding="utf-8") as f:
             agents = json.load(f)
-        passed = {w for w in agents["common"] + agents["agents"]["muse_spark"]["argv"] if w.startswith("--")}
+        passed = {w for w in agents["common"] + agents["agents"]["muse-spark"]["start"]["driver"]["argv"] if w.startswith("--")}
         self.assertEqual(passed - known, set())
 
 

@@ -37,8 +37,8 @@ def _root(path, launched, memo) -> dict:
     deleted here, '' when it can: its launch has ended and its record reads,
     as Delete launch asks (``execution.deletable``). What Delete would take is
     worked out when it opens (``workspace_root_ask``). ``launched``:
-    ``runs._held_launches()``. ``memo``: by real path, a root two workspaces
-    share read once."""
+    ``runs._held_launches()``. ``memo``: by real path, a folder two roots
+    name read once."""
     real = os.path.realpath(path)
     if real not in memo:
         name = execution.run_of(real)
@@ -61,25 +61,39 @@ def _root(path, launched, memo) -> dict:
     return {**memo[real], "path": path}
 
 
-def _counts(ws) -> dict:
+def _counts(ws, recs) -> dict:
     """The runs and the checks (nop, oracle) of *ws*, summed over the launches
     its Runs page shows, each counted as there and on the Launches page
     (``runs._tally``). Its roots are walked, each unchanged job read from its
-    cache."""
+    cache. A closed workspace whose jobs had all ended keeps its counts while
+    its roots, their heads (``workspace.heads``) and ``recs``, the run records'
+    ids and states, are unchanged."""
     is_open = shared.STATE["workspace"] is not None and shared.STATE["workspace"].name == ws.name
+    key = None if is_open else (tuple(ws.roots), tuple(ws.job_roots), workspace.heads(ws.job_roots or ws.roots), recs)
+    last = _COUNTS.get(ws.name)
+    if key is not None and last and last[0] == key:
+        return last[1]
     jobs, _, _, groups = runs_web._grouped(None if is_open else ws)
     by_id = {j.job_id: j for j in jobs}
     tallies = [runs_web._tally(g, by_id) for g in groups]
-    return {"runs": sum(t["n_runs"] for t in tallies), "checks": sum(t["n_checks"] for t in tallies)}
+    counts = {"runs": sum(t["n_runs"] for t in tallies), "checks": sum(t["n_checks"] for t in tallies)}
+    if key is not None and all(j.state == "finished" for j in jobs):
+        _COUNTS[ws.name] = (key, counts)
+    else:
+        _COUNTS.pop(ws.name, None)
+    return counts
+
+
+_COUNTS: dict = {}      # workspace name -> (key, _counts) of a workspace whose jobs had all ended
 
 
 @app.route("/workspaces")
 def workspaces_page():
-    wss, memo, launched = workspace.list_all(shared.WS_HOME), {}, runs_web._held_launches()
+    wss, launched = workspace.list_all(shared.WS_HOME), runs_web._held_launches()
     held = [w.name for _, _, holders in launched[0] for w in holders]
+    recs = tuple((e.id, e.state) for e in execution.EXECUTIONS.values())
     return render_template("workspaces/workspaces.html", workspaces=wss, csrf=shared._csrf_token(),
-                           roots={ws.name: [_root(r, launched, memo) for r in ws.roots] for ws in wss},
-                           counts={ws.name: _counts(ws) for ws in wss}, n_judged={ws.name: store.count(ws.dir) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
+                           counts={ws.name: _counts(ws, recs) for ws in wss}, n_judged={ws.name: store.count(ws.dir) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
 
 
 @app.route("/workspaces/open/<name>", methods=["POST"])
@@ -121,6 +135,7 @@ def workspace_rename():
     name = request.form.get("name") or (open_ws.name if open_ws is not None else "")
     label = (request.form.get("label") or "").strip()
     is_open = open_ws is not None and open_ws.name == name
+    back = url_for("workspaces_page", view=request.form.get("view") or None)   # the view it was renamed from
     ws = open_ws if is_open else workspace.load(shared.WS_HOME, name)
     if ws is None:
         flash(Markup(f'No workspace called <span class="mono">{escape(name)}</span>.'), "error")
@@ -129,10 +144,10 @@ def workspace_rename():
             workspace.rename(shared.WS_HOME, ws, label)
         except OSError as exc:
             flash(Markup(f'<span class="mono">{escape(ws.label)}</span> could not be renamed: {escape(exc.strerror or str(exc))}.'), "error")
-            return redirect(url_for("workspaces_page"))
+            return redirect(back)
         if is_open:
             shared.open_workspace(ws)                   # its imports moved with it: read from where it is now
-    return redirect(url_for("workspaces_page"))
+    return redirect(back)
 
 
 @app.route("/workspaces/delete/<name>", methods=["POST"])
@@ -175,6 +190,18 @@ def workspace_unlink(name):
     _reopen([ws.name])
     flash(Markup('Unlinked <span class="mono">{}</span> from <b>{}</b>; its files stay.').format(root, ws.label), "")
     return redirect(url_for("workspaces_page"))
+
+
+@app.route("/workspaces/<name>/roots")
+def workspace_roots(name):
+    """The Roots dialog of one workspace, fetched when it opens: each root as
+    ``_root`` reads it, with why its folder cannot be deleted here."""
+    ws = workspace.load(shared.WS_HOME, name)
+    if ws is None:
+        abort(404)
+    launched, memo = runs_web._held_launches(), {}
+    clash = [w.label for w in workspace.list_all(shared.WS_HOME)].count(ws.label) > 1
+    return render_template("workspaces/_roots.html", ws=ws, rs=[_root(r, launched, memo) for r in ws.roots], clash=clash)
 
 
 @app.route("/workspaces/<name>/roots/ask")

@@ -208,11 +208,17 @@ def _control(other: dict) -> dict:
 def _setup(other: dict) -> dict:
     """A setup's run says which one it is, the model the upstream's code was
     asked as and the one sent in its place, and whether its scores compare with
-    the paper's: only the original's do."""
+    the paper's: only the original's do; and the benchmark's own agent it ran (``agent``), when it has them."""
     if other.get("_kind") != "upstream":
         return {}
-    return {"setup": {"name": other["key"], "asked": other.get("asked", ""), "sent": other.get("sent", ""),
+    return {"setup": {"name": other["key"], **({"agent": other["agent"]} if other.get("agent") else {}),
+                      "asked": other.get("asked", ""), "sent": other.get("sent", ""),
                       "comparable_with_paper": bool(other.get("comparable"))}}
+
+
+def agent_name(other: dict) -> str:
+    """Who ran, as a job's records name it: a benchmark's own agent by its key, else the other side's key."""
+    return other.get("agent") or other["key"]
 
 
 def _version(bench: dict) -> dict:
@@ -506,7 +512,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
     # (a unit id like "set/12") would leave only its last part
     res = {"task_name": f"{bench['key']}/{unit.replace('/', '-')}","trial_name": os.path.basename(trial_dir), "source": bench["key"],
            "started_at": iso(t0), "finished_at": iso(t1),
-           "agent_info": {"name": other["key"], "version": str((other.get("upstream") or {}).get("version") or ""),
+           "agent_info": {"name": agent_name(other), "version": str((other.get("upstream") or {}).get("version") or ""),
                           "model_info": {"name": model}},
            "environment_setup": {"started_at": iso(t0), "finished_at": iso(setup_end)} if setup_end else None,
            "agent_setup": {"started_at": iso(setup_end), "finished_at": iso(agent_ready or agent_unready)}
@@ -607,7 +613,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"served_by": dict(sorted(served_by.items()))} if served_by else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,
-                   "agents": [{"name": other["key"], "model_name": model}],
+                   "agents": [{"name": agent_name(other), "model_name": model}],
                    "datasets": [{"name": f"{bench['key']}/{dataset}", "n_tasks": len(units)}]}, f, indent=2)
 
 

@@ -21,6 +21,9 @@ the user's requested scope, including logs and stored data when requested.
 - Catalogue entries live under `app/nullius/catalogue/`. Capabilities can also
   have leftover folders under the legacy `features/` directory. Remove the
   whole entry folder: an empty folder can still be selected by the loader.
+- A benchmark's own agents are entries of its folder's `agents.json`: they go
+  with the benchmark. Removing one agent alone is removing its entry, and its
+  saved recipes (`<benchmark>:<key>`) then name an agent the compile refuses.
 - For requested runtime cleanup, locate the application's actual profile,
   catalogue, runs, workspaces and standard installs through its settings and
   path APIs. With `uv tool`, use the installed tool's interpreter; the shell's

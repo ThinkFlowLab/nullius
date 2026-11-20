@@ -405,6 +405,18 @@ class Choices(unittest.TestCase):
         self.assertNotIn("example-mem", [o["key"] for o in c["capabilities"]])
 
 
+    def test_another_version_carries_its_whole_page_so_choosing_it_changes_every_step(self):
+        b = next(x for x in recipe.choices()["benchmarks"] if x["key"] == "osworld1")
+        self.assertEqual((b["version"], [d["units"] for d in b["datasets"]][:2]), ("desktop-env-v1.0.3", [360, 368]))
+        other = next(v for v in b["versions"] if not v["default"])
+        self.assertEqual((other["ref"], other["label"]), ("osworld1@044bc33", "main (044bc33)"))
+        page = other["page"]
+        self.assertEqual([d["units"] for d in page["datasets"]][:2], [361, 369])            # its own datasets, not the default's
+        self.assertEqual((page["upstream"]["branch"], page["upstream"]["tested"][:7], page["ref"]), ("main", "044bc33", "osworld1@044bc33"))
+        self.assertEqual(page["versions"], [])
+        self.assertNotEqual(page["setups"][0]["comparable"], b["setups"][0]["comparable"])  # the release's scores are its own
+
+
 class Conformance(unittest.TestCase):
     def test_the_check_names_its_jobs_before_they_exist(self):
         fake = definitions.load("agent", ROOT)[0][0]

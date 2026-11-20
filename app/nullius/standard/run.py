@@ -129,6 +129,11 @@ class BenchmarkRefused(Refused):
     """This benchmark cannot run here; another benchmark may still run."""
 
 
+def computer_port(bench: dict) -> bool:
+    """Whether the benchmark needs the computer port."""
+    return any(str(p).startswith("agent.computer/") for p in bench.get("needs") or [])
+
+
 def setup_request(bench: dict, kind: str, attempt: Optional[int] = None) -> tuple:
     """What a unit's ``setup`` is sent besides the unit and its folder, and how long it may take, for a unit that
     ``kind`` runs (agent, capability, control): ``attempt`` when the benchmark tells attempts apart
@@ -455,7 +460,7 @@ class Run:
                  limit: Optional[int] = None, concurrency: int = 4, jobs_root: str = "jobs", name: Optional[str] = None,
                  turn_seconds: Optional[int] = None, say: Callable[[str], None] = print, env=os.environ,
                  proving: bool = False, unsandboxed: bool = False, judge_model: Optional[str] = None,
-                 backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None,
+                 backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None, shard_by: str = "id",
                  launch: Optional[str] = None, repeat: int = 1, retries: int = RETRIES,
                  retry_if: Optional[Callable[[dict], bool]] = None, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
@@ -463,20 +468,23 @@ class Run:
                  max_usd_per_unit: Optional[float] = None, prices_unreachable: Optional[str] = None,
                  units_file: Optional[dict] = None,
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
-                 max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None, boat_size: str = boat.SIZE):
+                 max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None, boat_size: str = boat.SIZE, relay_container: bool = False):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
         local agents, and for setup checks that run code without Docker.
         ``backend``: ``local``, ``container`` (``docker``, its earlier name), which needs
         no such yes and is refused when docker is missing or not usable, or ``boat``;
+        ``relay_container``: keep local task processes on the host but run each
+        unit's relay in a separate container, as inside a whole-task Boat VM.
         ``boat_size``: its VMs' machine type (``boat.SIZES``), refused when the
         account cannot start it.
         ``options``: the
         agent's or capability's options set for this run, by name; the rest keep
         their defaults, and the job's config records every value.
         ``shard``: (I, N), only the units of shard I of N (``shard``), before
-        ``limit``; ``launch``: the id every shard of one launch records.
+        ``limit``, ``shard_by`` its units' id (by hash) or place (``shard.BY``); ``launch``: the id every
+        shard of one launch records.
         ``units_file``: the units a file lists (:func:`units_file`): only
         those of the dataset run, in the dataset's order, before ``limit``;
         an id the dataset does not hold refuses the run before any unit
@@ -536,8 +544,10 @@ class Run:
         if backend not in BACKENDS:
             raise Refused(f"backend {backend!r} is not one of {list(BACKENDS)}")
         if backend == "boat" and other.get("_kind") not in ("agent", "capability"):
-            backend = "local"                    # a check or a setup: nothing of an agent's runs, so nothing goes to a VM
-        if backend == "boat" and other.get("_kind") == "agent" and "agent.computer/v1" in bench.get("needs", []):
+            # a setup or a check runs on the machine; on Boat it would run here unasked, beside the VMs
+            raise Refused(f"{other['label']} runs on a machine, not in a Boat VM: run it on this machine or a host "
+                          "(--backend local or container)")
+        if backend == "boat" and other.get("_kind") == "agent" and computer_port(bench):
             raise BenchmarkRefused("the computer port uses a socket on this machine, which an agent in a Boat VM "
                                    "cannot reach: choose local processes or the container backend")
         if backend == "boat":
@@ -552,7 +562,10 @@ class Run:
             why = [w for w in why if "does not offer" not in w and "has not passed its kit" not in w]
         if why:
             raise Refused(f"{other['label']} cannot run {bench['label']}: " + "; ".join(why))
-        if backend == "container":
+        self.relay_container = bool(relay_container)
+        if relay_container and backend != "local":
+            raise Refused("a separate relay container requires the local process backend")
+        if backend == "container" or relay_container:
             why = container.unusable()
             if why:
                 raise Refused(f"the container backend cannot run here: {why}")
@@ -735,6 +748,9 @@ class Run:
         self.say = say
         stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
         self.shard = tuple(shard) if shard and shard[1] > 1 else None
+        if shard_by not in shards.BY:
+            raise Refused(f"--shard-by {shard_by!r}: one of {', '.join(shards.BY)}")
+        self.shard_by = shard_by
         self.launch = launch or (shards.launch_id(definitions.job_word(bench), definitions.job_word(other), model)
                                  if self.shard else None)
         self.name = name or (f"{stamp}__{definitions.job_word(bench)}__{definitions.job_word(other)}"
@@ -829,7 +845,7 @@ class Run:
         HELD[lck] = held
         self.say(f"job {self.job_dir}")
         p, control = self.progress, self.other["_kind"] == "control"
-        p.emit("plan", stages=",".join((["image"] if self.backend == "container" or self.container_check else [])
+        p.emit("plan", stages=",".join((["image"] if self.backend == "container" or self.relay_container or self.container_check else [])
                                       + (["upstream"] if install.upstream_dir(self.bench) else [])
                                       + (["dataset"] if self.ds.get("url") else [])
                                       + (["driver"] if install.driver_dir(self.bench) else [])
@@ -854,7 +870,7 @@ class Run:
                 driver.close()
             if self.bench_relay is not None:
                 self.bench_relay.stop()
-            if self.backend == "container":
+            if self.backend == "container" or self.relay_container:
                 container.sweep(self.name)
             raise
         everything = [str(u) for u in units]
@@ -869,7 +885,7 @@ class Run:
                     d.close()
                 if self.bench_relay is not None:
                     self.bench_relay.stop()
-                if self.backend == "container":
+                if self.backend == "container" or self.relay_container:
                     container.sweep(self.name)
                 # the record a refusal in ready() leaves, which the runs list reads (execution's refused):
                 # the job's folder with its progress.jsonl, the driver's working folders and logs taken out
@@ -886,7 +902,7 @@ class Run:
                 p.emit("refused", detail=why)
                 raise Refused(why)
         # the list and the shard, then the limit; each unit keeps its place in the whole dataset (its trial's tag)
-        mine = shards.select(everything, *self.shard) if self.shard else list(enumerate(everything))
+        mine = shards.select(everything, *self.shard, by=self.shard_by) if self.shard else list(enumerate(everything))
         if listed is not None:
             wanted = set(listed)
             mine = [(i, u) for i, u in mine if u in wanted]
@@ -906,7 +922,7 @@ class Run:
                          image=self.setup_driver.image if self.setup_driver else self.image,
                          options=self.options, launch=self.launch or "", bench_options=self.bench_options,
                          # a shard of a list splits the listed units: they are its whole
-                         shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit)
+                         shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit, by=self.shard_by)
                          if self.shard else None, units_file=self.units_file,
                          repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving,
                          timeouts=self.timeouts, max_turns=self.forced_turns, max_calls=self.max_calls,
@@ -915,11 +931,11 @@ class Run:
         work = [(i, u, r) for r in range(1, self.repeat + 1) for i, u in mine]
         self.n_units = len(work)                 # what the progress counts: every run of every unit
         self.feed = live_feed.Writer(os.path.join(self.job_dir, live_feed.FEED), self.name)
-        self.feed.emit("job.start", n_total=len(work), n_concurrent=self.concurrency, agents=[self.other["key"]], tasks=units,
+        self.feed.emit("job.start", n_total=len(work), n_concurrent=self.concurrency, agents=[job.agent_name(self.other)], tasks=units,
                        **({"budget": {k: v for k, v in (("max_usd", self.max_usd), ("unit_max_usd", self.unit_max_usd)) if v is not None}}
                           if self.ledger is not None else {}))   # the live board says the cap
         for pos, (i, u, r) in enumerate(work):
-            self.feed.emit("trial.queued", self.trial_name(i, u, r), agent=self.other["key"], position=pos)
+            self.feed.emit("trial.queued", self.trial_name(i, u, r), agent=job.agent_name(self.other), position=pos)
         results = []
         u0 = time.time()
         self._halt, self._refused, self.halted = threading.Event(), [], None
@@ -952,7 +968,7 @@ class Run:
         futures = []
         try:
             # a model server on this machine's loopback, which the relays' containers cannot reach as written
-            if self.backend == "container" and self.base and container.on_loopback(self.base):
+            if (self.backend == "container" or self.relay_container) and self.base and container.on_loopback(self.base):
                 self.loopback = container.Loopback(self.base, image=self.image, job=self.name).start()
             for iur in work:
                 futures.append(pool.submit(work_unit, iur))
@@ -968,7 +984,7 @@ class Run:
         except BaseException:
             self._stopped.set()
             self._halt.set()
-            if self.backend == "container":
+            if self.backend == "container" or self.relay_container:
                 container.sweep(self.name)
             raise
         finally:
@@ -981,7 +997,7 @@ class Run:
                 d.close()
             if self.bench_relay is not None:
                 self.bench_relay.stop()
-            if self.backend == "container":
+            if self.backend == "container" or self.relay_container:
                 container.sweep(self.name)          # whatever an interrupted unit left
             if getattr(self, "boat", None) is not None:
                 self.boat.close()
@@ -1165,7 +1181,7 @@ class Run:
         p = self.progress
         self.scope_limits = self.scope_ready(limits.scoped(self.constraints), refuse=self.backend == "local")
         owns = any(definitions.own_image(e) for e in (self.bench.get("environments") or {}).values())
-        if self.backend == "container" or self.container_check:
+        if self.backend == "container" or self.relay_container or self.container_check:
             try:
                 tag = container.base_tag()
                 there = container.present(tag)
@@ -1175,7 +1191,7 @@ class Run:
                 raise Refused(f"the Docker image: {e}")
         # every container the run starts takes the caps: its agents', relays' and installs' on the container
         # backend, its checks' and own images' on either
-        if self.backend == "container" or self.container_check or owns:
+        if self.backend == "container" or self.relay_container or self.container_check or owns:
             refusal = Refused if self.backend == "container" else BenchmarkRefused
             try:
                 # Docker can drop a limit with only a warning: a result would look limited when it was not
@@ -1220,7 +1236,7 @@ class Run:
                 with p.stage("driver", cached=install.ready(drv), start=f"installing {self.bench['key']}'s driver environment"):
                     install.driver_packages(self.bench)
         except (install.InstallFailed, container.Unavailable) as e:
-            if self.backend == "container":
+            if self.backend == "container" or self.relay_container:
                 container.sweep(self.name)
             raise BenchmarkRefused(f"could not install what the run needs: {e}")
         try:
@@ -1229,7 +1245,7 @@ class Run:
                 with p.stage("install", cached=install.ready(install.packages_dir(self.other, image=image)), agent=self.other.get("_ref") or self.other["key"]):
                     self.inst = install.packages(self.other, run_in=run_in, image=image)
         except (install.InstallFailed, container.Unavailable) as e:
-            if self.backend == "container":
+            if self.backend == "container" or self.relay_container:
                 container.sweep(self.name)
             raise Refused(f"could not install what the run needs: {e}")
         # An own image has none of what the agent runs on: it is mounted in, fetched once on this machine.
@@ -1290,6 +1306,18 @@ class Run:
             return True
         return False
 
+    def task_given(self, unit: str, ws: str) -> None:
+        """A driver that asks for it (``driver.task_given``) is told, and has answered, before the agent is sent its
+        task: its first prompt, or its command, which holds it. A computer port closes its window before the task
+        there. A failure ends the unit as its environment's, the task never sent."""
+        if self.other.get("_kind") != "agent" or not (self.bench.get("driver") or {}).get("task_given"):
+            return
+        try:
+            self.driver().request("task_given", unit=unit, dir=ws, timeout=END_SECONDS)
+        except jsonl.Failed as e:
+            raise _Ended("EnvironmentSetupError", f"the benchmark was not told that the task is given: {e}",
+                         retryable=not isinstance(e, jsonl.NoReply))
+
     def trial_name(self, i: int, unit: str, r: int = 1) -> str:
         return f"{_slug(unit)}__u{i:04d}" + (f"r{r}" if self.repeat > 1 else "")
 
@@ -1312,7 +1340,7 @@ class Run:
         finally:
             asked, self.local.set_up = self.local.set_up, None
             if asked is not None:
-                if self.unit_ended(*asked) and "agent.computer/v1" in self.bench.get("needs", []):
+                if self.unit_ended(*asked) and computer_port(self.bench):
                     # A failed end leaves the agent's desktop for the driver's exit cleanup.
                     d = getattr(self.local, "driver", None)
                     if d is not None:
@@ -1764,7 +1792,7 @@ class Run:
         record = os.path.join(trial, ".work", "relay")
         side = tuple((self.other.get("model") or {}).get("side_models") or ())
         key_header = self.key_header
-        if self.backend in ("local", "boat"):     # boat: the agent reaches it through its VM's tunnel
+        if self.backend in ("local", "boat") and not getattr(self, "relay_container", False):     # boat: the agent reaches it through its VM's tunnel
             rl = relay.Relay(self.base, self.key, record, prices=getattr(self, "prices", None), model=self.model, side_models=side,
                              key_header=key_header, ledger=self.ledger_file(), serving=getattr(self, "serving", None),
                              timeout=self.call_seconds, max_calls=self.max_calls).start()
@@ -1773,6 +1801,16 @@ class Run:
         routes = {tag + "-judge": self.judge_model} if self.judge_model else {}
         if self.simulator_model:
             routes[tag + "-simulator"] = self.simulator_model
+        if getattr(self, "relay_container", False):
+            door = getattr(self, "loopback", None)
+            rl = container.Unit(self.name, tag, record, image=self.image, app=APP,
+                                base=door.base if door else self.base, key=self.key, model=self.model,
+                                routes=routes, side_models=side, key_header=key_header,
+                                prices=price_list.given(self.models_called(), getattr(self, "prices", None)),
+                                hosts=door.hosts if door else None, ledger=self.ledger_file(),
+                                serving=self.serving, max_calls=self.max_calls, timeout=self.call_seconds).start()
+            rl.unit_url = rl.url(tag)  # driver and agent run on this host, outside the relay container
+            return rl
         doors, listeners = [], []
         if self.other["_kind"] == "agent" and mcp_machine.wanted(setup):
             # the benchmark's own servers run here, in the driver's environment; the agent reaches each
@@ -2268,6 +2306,8 @@ class Run:
                     opened = not first.get("done")
                     if opened:
                         prompt = prompt + "\n\n" + first["message"]
+                if opened:
+                    self.task_given(unit, ws)    # before the first prompt: the window from the session's start closes
                 for _ in range(self.max_turns if opened else 0):
                     transcript.append({"role": "user", "text": prompt})
                     try:
@@ -2311,6 +2351,7 @@ class Run:
     def _command_agent(self, a, env, ws, home, setup, transcript, log, tag, unit, rl, box=None):
         cmd = install.words(a["start"]["command"], {"here": a["_here"], "install": self.inst, "prompt": setup["prompt"]})
         cmd, env = self.place(rl, cmd, env, ws, home, interactive=False, box=box)
+        self.task_given(unit, ws)                # its command holds its task: its session starts with no window
         transcript.append({"role": "user", "text": setup["prompt"]})
         t = time.time()
         try:

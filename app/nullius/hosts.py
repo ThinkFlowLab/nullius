@@ -230,8 +230,9 @@ def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, prog
             result["hostname"] = v.strip() or None
         elif k == "missing" and programs and v.strip() in programs:
             result["missing"].append(v.strip())
-    # the standard's container backend's engine there: docker when the probe finds it, else podman
-    result["engine"] = "docker" if result["docker"] else "podman" if result["podman"] else None
+    # the standard's container backend's engine there, by container.engine's rule: docker unless it does not answer and podman does
+    d, p = result["docker"], result["podman"]
+    result["engine"] = "podman" if p and (not d or (not result["docker_ok"] and result["podman_ok"])) else "docker" if d else None
     result["ok"] = True
     return result
 

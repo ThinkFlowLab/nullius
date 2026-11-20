@@ -128,8 +128,9 @@ class Agreement(unittest.TestCase):
         for row in rows:
             with self.subTest(workspace=row["name"]):
                 block = page.split(f'data-ws="{row["name"]}"', 1)[1].split("</tr>", 1)[0]
+                roots = self.page(f'/workspaces/{row["name"]}/roots')                          # its Roots dialog, fetched when it opens
                 for root in row["roots"]:
-                    self.assertIn(f'<span class="mono">{html.escape(root)}</span>', block)
+                    self.assertIn(f'<span class="mono">{html.escape(root)}</span>', roots)
                 self.assertIn(row["opened"][:16].replace("T", " "), block)
         # the open workspace is the one the page marks, its label in the rename box
         self.assertEqual(rows[0]["name"], self.ws.name)

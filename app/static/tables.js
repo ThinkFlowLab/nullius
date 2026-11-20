@@ -60,7 +60,8 @@ window.NulliusTable = {
      (data-filter-menu) and rows of pills (data-pills). `allowed`: column ->
      the Set of values chosen, or null when all are; every list and row of a
      column shows that one state. A row passes when, for each column, one of
-     its values (data-f-<col>, one per line) is chosen; a choice made at load
+     its values (data-f-<col>, one per line) is chosen, or its data-unless-<col>
+     names a column that narrows and passes it; a choice made at load
      filters from the start. `changed` runs after each change, a list's
      change event included. */
   filters(scope, changed) {
@@ -97,8 +98,9 @@ window.NulliusTable = {
       });
     });
     draw();
-    const passes = row => Object.entries(allowed).every(([col, set]) =>
-      !set || (row.getAttribute('data-f-' + col) ?? '').split('\n').some(v => set.has(v)));
+    // data-unless-<col>="<other>": a row the other column narrows to passes this one whatever it holds
+    const ok = (row, col) => !allowed[col] || (row.getAttribute('data-f-' + col) ?? '').split('\n').some(v => allowed[col].has(v));
+    const passes = row => Object.keys(allowed).every(col => ok(row, col) || (by => !!by && !!allowed[by] && ok(row, by))(row.getAttribute('data-unless-' + col)));
     const clear = () => { Object.keys(allowed).forEach(c => { allowed[c] = null; }); draw(); };
     return {allowed, passes, clear};
   },
@@ -136,6 +138,9 @@ window.NulliusTable = {
       const open = menu.hidden;
       menu.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
+      // one that opens leftwards past the page's edge (a narrow screen) opens rightwards instead
+      menu.style.left = menu.style.right = '';
+      if (open && menu.getBoundingClientRect().left < 0) Object.assign(menu.style, {left: '0', right: 'auto'});
       if (open) menu.querySelector('input:not(:disabled), button, a[href]')?.focus();
     });
     document.addEventListener('click', e => { if (!menu.hidden && away(e.target)) close(); });
@@ -151,7 +156,7 @@ window.NulliusTable = {
      Escape clears it. A column narrows when it does not show every value;
      the Filter button or a dropdown holding such a column is marked
      .narrowed and counts: the Filter button the columns it narrows, a
-     dropdown the values chosen (after None, 0). Clear filters clears every
+     dropdown the values chosen (after None, 0), or the one chosen by name. Clear filters clears every
      column. `changed` runs after any of them. Returns passes(row). */
   narrow(tools, changed) {
     const [fbtn, fmenu] = [tools.querySelector('[data-tools-btn="filter"]'), tools.querySelector('[data-tools="filter"]')];
@@ -162,12 +167,13 @@ window.NulliusTable = {
     }
     const found = row => !q || this.matches(row.dataset.search, q.value);
     const menus = [...(fmenu ? [[fbtn, fmenu, () => 1]] : []),
-                   ...[...tools.querySelectorAll('[data-dropdown]')].map(b => [b, b.parentNode.querySelector('.menu'), set => set.size])];
+                   ...[...tools.querySelectorAll('[data-dropdown]')].map(b => [b, b.parentNode.querySelector('.menu'),
+                     set => set.size === 1 ? b.parentNode.querySelector(`[data-value="${CSS.escape([...set][0])}"]`)?.parentNode.textContent.trim() ?? 1 : set.size])];
     const mark = () => menus.forEach(([btn, menu, n]) => {
       const sets = [...menu.querySelectorAll('[data-filter-menu]')].map(v => f.allowed[v.dataset.filterMenu]).filter(Boolean);
       const count = btn.querySelector('.tools-count');
       btn.classList.toggle('narrowed', sets.length > 0);
-      count.textContent = sets.length ? sets.reduce((sum, set) => sum + n(set), 0) : '';
+      count.textContent = sets.length === 1 ? n(sets[0]) : sets.length ? sets.reduce((sum, set) => sum + n(set), 0) : '';
       count.hidden = !sets.length;
     });
     const narrowed = () => { mark(); changed(); };
@@ -208,7 +214,8 @@ window.NulliusTable = {
   /* A table of the table macro (data-table): its controls row (id
      <table id>-tools), its Columns menu and checkbox column when it has
      them, and its pages; choices kept per viewer under <table id>.cols and
-     .per. */
+     .per. A row holding a pick toggle (the cards macro's rows) toggles it
+     and, chosen, shows whatever the search and filters say. */
   wire(table) {
     const tools = document.getElementById(table.id + '-tools');
     const cmenu = tools.querySelector('[data-tools="columns"]');
@@ -219,7 +226,9 @@ window.NulliusTable = {
     const ticks = table.querySelector('[data-check-all]') ? this.checks(table) : () => {};
     let first = () => {};
     const t = this.toolbar(table, tools, () => first());
-    first = this.pager(table, table.id + '.per', t.passes, ticks);
+    const pick = Boolean(table.querySelector('[data-pick]'));
+    if (pick) this.picks(table, 'tr');
+    first = this.pager(table, table.id + '.per', pick ? r => t.passes(r) || this.chosen(r) : t.passes, ticks);
   },
 
   /* A collection of the cards macro (data-cards): its controls row (id
@@ -229,20 +238,25 @@ window.NulliusTable = {
      how many show once the changes pause, counted in the live region's
      data-noun. A click anywhere on a card but on a control of its own
      follows the card's link, in a new tab or window with the keys or the
-     button a link takes; a click that ends a text selection does not. */
+     button a link takes; a click that ends a text selection does not. A pick
+     card's title is a toggle (`picks`); the page keeps the choice, and a
+     chosen card shows whatever the search and filters say. Sort by, when it
+     has one, sorts the cards within their grids as a table's rows. */
   cards(root) {
     const items = [...root.querySelectorAll('[data-card]')], empty = document.querySelector(`[data-empty="${CSS.escape(root.id)}"]`);
     const live = document.querySelector(`[data-live="${CSS.escape(root.id)}"]`), say = this.voice(live);
     const follow = e => {
       const link = e.target.closest('[data-card]')?.querySelector('.card-link');
       if (!link || e.target.closest('a, button, input, select, textarea, label, summary, [role=button]') || !getSelection().isCollapsed) return;
+      if (link.dataset.pick !== undefined) { if (e.button === 0) link.click(); return; }
       if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) window.open(link.href, '_blank', 'noopener');
       else if (e.button === 0) link.click();
     };
     root.addEventListener('click', follow);
     root.addEventListener('auxclick', follow);
+    this.picks(root);
     const draw = () => {
-      items.forEach(c => { c.hidden = !passes(c); });
+      items.forEach(c => { c.hidden = !passes(c) && !this.chosen(c); });
       root.querySelectorAll('[data-group]').forEach(g => {
         const n = [...g.querySelectorAll('[data-card]')].filter(c => !c.hidden).length, count = g.querySelector('[data-group-n]');
         g.hidden = !n;
@@ -252,9 +266,44 @@ window.NulliusTable = {
       empty.hidden = n > 0;
       say(n ? `${n} of ${items.length} ${live.dataset.noun}` : empty.textContent);
     };
-    const passes = this.narrow(document.getElementById(root.id + '-tools'), draw);
+    const tools = document.getElementById(root.id + '-tools'), passes = this.narrow(tools, draw);
+    const [sbtn, smenu] = [tools.querySelector('[data-tools-btn="sort"]'), tools.querySelector('[data-tools="sort"]')];
+    if (smenu) {   // the table's Sort by, over each card's data-s-<field>
+      const dirs = [...smenu.querySelectorAll('[data-sort-dir]')];
+      const sort = e => {
+        const c = smenu.querySelector('[data-sort-col]:checked'), on = c.value, num = c.dataset.type === 'num';
+        const dir = e?.target.matches('[data-sort-dir]') ? (e.target.value === 'asc' ? 1 : -1) : (num ? -1 : 1);
+        dirs.forEach(r => { r.checked = Boolean(on) && r.value === (dir > 0 ? 'asc' : 'desc'); r.disabled = !on; });
+        const key = card => { const raw = card.getAttribute('data-s-' + on) ?? ''; return num ? parseFloat(raw) || 0 : raw.toLowerCase(); };
+        (on ? [...items].sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; }) : items).forEach(c => c.parentNode.appendChild(c));
+      };
+      smenu.addEventListener('change', sort);
+      sort();
+      this.menu(sbtn, smenu);
+    }
     draw();
   },
+
+  /* The pick toggles under `root`, buttons (data-pick, aria-pressed) or
+     checkboxes (data-pick): a click, Space or Enter flips one and sends nullius-pick {value, pressed} from it; with
+     `row`, a click elsewhere in the row (a selector) that holds one, but on a
+     control of its own or at the end of a text selection, clicks it. */
+  picks(root, row) {
+    root.addEventListener('click', e => {
+      if (row && !e.target.closest('a, button, input, select, textarea, label, summary') && getSelection().isCollapsed) {
+        e.target.closest(row)?.querySelector('[data-pick]')?.click();
+        return;
+      }
+      const b = e.target.closest('[data-pick]');
+      if (!b || b.disabled) return;
+      const pressed = b.type === 'checkbox' ? b.checked : b.getAttribute('aria-pressed') !== 'true';   // a box has ticked itself
+      if (b.type !== 'checkbox') b.setAttribute('aria-pressed', String(pressed));
+      b.dispatchEvent(new CustomEvent('nullius-pick', {bubbles: true, detail: {value: b.dataset.pick, pressed}}));
+    });
+  },
+
+  /* Whether a card or a row holds a pressed pick: chosen, it shows whatever the search and filters say. */
+  chosen(el) { return Boolean(el.querySelector('[data-pick][aria-pressed="true"], [data-pick]:checked')); },
 
   /* A checkbox column (a `check` column, check_cell in each row): the header
      ticks or unticks every visible row, and shows all, none or some of them

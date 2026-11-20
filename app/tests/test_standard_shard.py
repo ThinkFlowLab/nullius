@@ -32,6 +32,12 @@ def read(path):
 class Partition(unittest.TestCase):
     UNITS = [f"set/{i}" for i in range(500)]
 
+    def test_by_position_shard_i_of_n_holds_the_units_at_places_i_minus_1_mod_n(self):
+        units = ["a", "b", "c", "d", "e"]
+        self.assertEqual([shard.select(units, i, 5, by="position") for i in (1, 5)], [[(0, "a")], [(4, "e")]])
+        self.assertEqual(shard.select(units, 2, 2, by="position"), [(1, "b"), (3, "d")])
+        self.assertEqual(shard.record(1, 5, 5, ["a"], by="position")["partition"], shard.BY["position"])
+
     def test_every_unit_is_in_exactly_one_shard(self):
         for n in (1, 2, 3, 7):
             got = [u for i in range(1, n + 1) for _, u in shard.select(self.UNITS, i, n)]

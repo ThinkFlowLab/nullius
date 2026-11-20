@@ -31,8 +31,8 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `osworld2@v2.1` (default) | Original · OSWorld-V2 agents · Like the paper or Any of your choice | `agent`, `max_steps`, `thinking`, `vm_provider`, `websites` |
-| `osworld2@hardened` | Original · OSWorld-V2 agents · Like the paper or Any of your choice | `agent`, `max_steps`, `thinking`, `vm_provider`, `websites`, `write_iops`, `write_mbps` |
+| `osworld2@v2.1` (default) | Original · its own agents · Like the paper or Any of your choice | `agent`, `max_steps`, `thinking`, `vm_provider`, `websites` |
+| `osworld2@hardened` | Original · its own agents · Like the paper or Any of your choice | `agent`, `max_steps`, `thinking`, `vm_provider`, `websites`, `write_iops`, `write_mbps` |
 
 - `key@version`: a revision of the definition and driver; a recipe pins one, the builder offers the default.
 
@@ -50,12 +50,11 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 
 | Option | Value | Refused without (`host`: the driver's machine; `embeddings`: a model the provider serves) |
 |---|---|---|
-| `vm_provider` | `docker` | host: docker, scoring_programs |
+| `vm_provider` | `docker` | host: docker, scoring_programs; vm: a 4 GB VM per unit |
 
 ## Good to know
 
 - Partial credit: each task scores 0 to 1; the score is the mean.
-- osworld2@hardened is OSWorld-V2 with Nullius's fixes for one machine (signed-out mail, a local proxy, a 40 GB disk, write limits, a grader failure as an error): not comparable with the paper.
 
 ## Upstream limitations
 
@@ -71,12 +70,11 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 - Muse Spark's published score came from newer upstream code: scores here do not compare with it.
 - The LLM grader (21 tasks) and the simulated user (6) are Claude Sonnet 4.6: the run's provider must serve it.
 - 29 tasks use the public internet: their outcome can change with the live sites.
-- GitLab tasks 026 and 041, and the 8 that ask for the paid proxy, end in an error in the Original; osworld2@hardened runs them.
+- GitLab tasks 026 and 041, and the 8 that ask for the paid proxy, end in an error; the hardened version runs them.
 - The turn limit ends a unit from outside, unscored; after a spending cap the upstream runs on, its calls refused, to its step limit.
 - Tasks 103 and 104 are not supported: they stay in the datasets, and an agent's unit ends in an error.
 - A slow or loaded machine, or a run across 16:00 UTC (the VM's midnight), can change scores.
-- In osworld2@hardened the null control scores above 0 on 015, 076, 090 and 092, and on 077 in some runs.
-- Only OSWorld-V2's own M3 and Muse Spark run it; no agent from the Agents page yet.
+- Only OSWorld-V2's own M3 and Muse Spark run it; no other agent yet.
 - Fetch the gated tasks and prepare the machine first: see OSWorld2 machine setup in the docs.
 
 ## Cite
