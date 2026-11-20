@@ -335,11 +335,11 @@ def adopt_roots(roots, label="", new=False, into=""):
     Without a label, roots that already have a workspace reopen it — so a
     restart with the same argv lands in the same place, cache and all.
     ``into``: the workspace to add them to while it exists, left closed
-    unless it is open already.
+    unless it is open already; once it is gone, never the open one.
     """
     ws = STATE["workspace"]
     if into and not (ws and ws.name == into):
-        ws = workspace.load(WS_HOME, into) or ws
+        ws = workspace.load(WS_HOME, into)
     if ws and not new:
         ws.roots = list(ws.roots) + [r for r in roots if r not in ws.roots]
         workspace.save(ws)
@@ -348,7 +348,8 @@ def adopt_roots(roots, label="", new=False, into=""):
         return ws
     ws = None if label else workspace.find_by_roots(WS_HOME, roots, besides=execution.runs_root())
     ws = ws or workspace.create(WS_HOME, roots, label)
-    open_workspace(ws)
+    if new or not into or STATE["workspace"] is None:   # a gone ``into`` leaves the open workspace open
+        open_workspace(ws)
     return ws
 
 
