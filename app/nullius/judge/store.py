@@ -14,11 +14,22 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
+import threading
 from typing import Optional
 
 from . import client, questions as Q
 
 _SAFE = re.compile(r"[^A-Za-z0-9._@+-]")
+
+
+_LOCKS: dict = {}                    # one per judgement file: a save reads, merges and writes it whole
+_LOCKS_GUARD = threading.Lock()
+
+
+def _lock(path: str) -> threading.Lock:
+    with _LOCKS_GUARD:
+        return _LOCKS.setdefault(path, threading.Lock())
 
 
 ROOTS = {"decision": "judgements", "llm": "judgements-llm"}     # one directory per judgement
@@ -70,28 +81,37 @@ def is_current(record: Optional[dict]) -> bool:
 
 
 def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "decision",
-         started: Optional[str] = None) -> None:
-    """The record under its question version; other versions kept. A
-    record's answers merge over the version's earlier answers, so judging
-    one question later does not drop the others."""
+         started: Optional[str] = None) -> dict:
+    """The record under its question version, returned as stored; other versions kept. A
+    record's answers and hygiene readings merge over the version's earlier
+    ones, so judging one question later does not drop the others. Saves to
+    one file take turns; each writes through a temporary file of its own."""
     path = _path(ws_dir, job_id, trial_name, lane)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh) or {}
-    except (OSError, ValueError):
-        data = {}
-    version = record.get("questions", Q.VERSION)
-    earlier = data.get(version) or {}
-    if not _of(earlier, started):
-        earlier = {}                     # an earlier try's: none of its answers are this one's
-    merged = dict(record, **({"trial_started_at": started} if started else {}))
-    merged["answers"] = {**(earlier.get("answers") or {}), **(record.get("answers") or {})}
-    data[version] = merged
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=1)
-    os.replace(tmp, path)
+    with _lock(path):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh) or {}
+        except (OSError, ValueError):
+            data = {}
+        version = record.get("questions", Q.VERSION)
+        earlier = data.get(version) or {}
+        if not _of(earlier, started):
+            earlier = {}                     # an earlier try's: none of its answers are this one's
+        merged = dict(record, **({"trial_started_at": started} if started else {}))
+        merged["answers"] = {**(earlier.get("answers") or {}), **(record.get("answers") or {})}
+        if "hygiene" in earlier or "hygiene" in record:
+            merged["hygiene"] = {**(earlier.get("hygiene") or {}), **(record.get("hygiene") or {})}
+        data[version] = merged
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=os.path.basename(path) + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=1)
+            os.replace(tmp, path)
+        except BaseException:
+            os.unlink(tmp)
+            raise
+    return merged
 
 
 def for_job(ws_dir: str, job_id: str, version: Optional[str] = None, lane: str = "decision",

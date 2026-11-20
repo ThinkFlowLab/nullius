@@ -115,9 +115,9 @@ def ask_and_store(ws_dir: str, job_id: str, trial_name: str, states: dict, key, 
         calibration = store.calibration(ws_dir)
     rec = ask_states(states, key, post=post, calibration=calibration)
     if rec is not None:
-        # a call over some of the kinds keeps the earlier readings for the others, as the answers are kept
-        lane = getattr(key, "lane", "decision")                # the LLM judge's records apart from Decision's
-        earlier = store.load(ws_dir, job_id, trial_name, version=rec["questions"], lane=lane, started=started) or {}
-        rec["hygiene"] = {**(earlier.get("hygiene") or {}), **rec.get("hygiene", {})}
-        store.save(ws_dir, job_id, trial_name, rec, lane=lane, started=started)
+        # the LLM judge's records apart from Decision's; a call over some of the kinds keeps the
+        # earlier readings for the others, as the answers are kept (`store.save`), and returns them
+        lane = getattr(key, "lane", "decision")
+        rec.setdefault("hygiene", {})
+        rec["hygiene"] = store.save(ws_dir, job_id, trial_name, rec, lane=lane, started=started)["hygiene"]
     return rec
