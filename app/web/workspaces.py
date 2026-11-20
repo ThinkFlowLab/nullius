@@ -128,8 +128,8 @@ def workspace_refresh():
 def workspace_rename():
     """Rename the workspace a row names, open or not: its label, and its
     directory moved to the label's slug (``workspace.rename``). The open one
-    is read from where it is now. Takes the form token: a rename moves a
-    directory."""
+    is read from where it is now, and the runs filed under it are filed
+    under its new name. Takes the form token: a rename moves a directory."""
     shared._require_csrf()
     open_ws = shared.STATE["workspace"]
     name = request.form.get("name") or (open_ws.name if open_ws is not None else "")
@@ -140,11 +140,15 @@ def workspace_rename():
     if ws is None:
         flash(Markup(f'No workspace called <span class="mono">{escape(name)}</span>.'), "error")
     elif label:
+        old = ws.name
         try:
             workspace.rename(shared.WS_HOME, ws, label)
         except OSError as exc:
             flash(Markup(f'<span class="mono">{escape(ws.label)}</span> could not be renamed: {escape(exc.strerror or str(exc))}.'), "error")
             return redirect(back)
+        for ex in execution.EXECUTIONS.values():
+            if old != ws.name and ex.workspace == old:
+                ex.file_under(ws.name)                  # a restart puts the run back in it by this name
         if is_open:
             shared.open_workspace(ws)                   # its imports moved with it: read from where it is now
     return redirect(back)
