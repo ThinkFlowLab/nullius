@@ -11,7 +11,7 @@ class DataProviderGuidance(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "node is needed to exercise builder warnings")
     def test_missing_provider_and_benchmark_credentials_link_to_their_settings(self):
         script = (Path(__file__).resolve().parents[1] / "static/builder/command-builder.js").read_text()
-        function = script[script.index("  function credentialWarnings("):script.index("  // The benchmark step,", script.index("  function credentialWarnings("))]
+        function = script[script.index("  function credentialWarnings("):script.index("  // one tile: {attr", script.index("  function credentialWarnings("))]
         harness = '''const assert = require('node:assert/strict');
 const esc = s => String(s);
 const button = (label, attrs) => `<button ${attrs}>${label}</button>`;

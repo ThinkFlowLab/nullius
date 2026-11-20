@@ -215,20 +215,13 @@
   };
   // the version a standard recipe names (``key@version``), '' for the default
   const versionOf = rec => C.isStandard(rec) && String(rec.benchmark || '').includes('@') ? String(rec.benchmark).split('@')[1] : '';
-  // Every benchmark of both runners in one list; picking one sets the runner that runs it (Nullius when both do).
+  // Every benchmark of both runners in one list, the Benchmarks page's (placeGrid, /new-run/benchmarks); picking one
+  // sets the runner that runs it (Nullius when both do).
   const benchmarkStep = rec => {
-    const st = C.standard(), sb = C.standardBase(rec), on = C.benchKey(rec), seen = new Set(), tiles = [];
-    const add = (key, title, fam, kind, summary) => { if (seen.has(key)) return; seen.add(key); const c = catOf(key);
-      tiles.push({attr: 'bench', key, on: key === on, title: c.title || title,
-        mark: `<svg aria-hidden="true"><use href="/static/catalogue/marks.svg#bm-${esc(key)}"/></svg>`, cat: c.category, origin: c.origin,
-        fam, famLabel: fam === 'agent' ? 'Agents' : 'Capabilities · ' + kind, tip: c.domain || summary || '', meta: tasksOf(key, key === on ? versionOf(rec) : ''),
-        find: [c.title || title, key, c.category, c.domain, kind].join(' ')}); };
-    st.benchmarks.forEach(x => add(x.key, x.label, x.family, x.kind, x.summary));
-    C.benchmarks().forEach(x => add(x.key, x.title, 'agent', '', x.domain));
-    tiles.sort((a, b) => a.title.localeCompare(b.title, 'en', {sensitivity: 'base'}));
+    const sb = C.standardBase(rec);
     const versions = C.isStandard(rec) && sb && (sb.versions || []).length > 1
       ? `<label class="nb-field">Version of ${esc(sb.label)}<select data-std-version>${sb.versions.map(v => `<option value="${esc(v.ref)}" ${v.ref === rec.benchmark || (v.default && rec.benchmark === sb.key) ? 'selected' : ''}>${esc(v.label || v.version)}${v.default ? ' (the default)' : ''}</option>`).join('')}</select><small>Each version pins its own upstream, datasets and proofs.</small></label>` : '';
-    return `<div class="nb-sectionhead"><h2>Choose a benchmark.</h2></div>` + picker(tiles, [['agent', 'Agents'], ['capability', 'Capabilities']]) + versions;
+    return `<div class="nb-sectionhead"><h2>Choose a benchmark.</h2></div><div id="nb-bench-grid"></div>` + versions;
   };
   // Put the recipe on a runner, keeping the one each runner had: the benchmark follows.
   const toRunner = (target, key) => {
@@ -628,94 +621,66 @@
       return `<p class="nb-note nb-error">${state ? `Replace the expired ${what}` : `Add ${provider ? 'a ' : ''}${what}`} in ${settings}${required ? '' : ' (some tasks may need it)'}.</p>`;
     }).join('');
   }
-  // The benchmark step, both ways (Harbor's catalogue, the standard's benchmarks): a search, filter chips and a grid
-  // of tiles, as the Benchmarks page draws them. The filter hides tiles in place (applyPick), so typing keeps focus.
-  const picks = {}, pickOf = () => (picks[step] ||= {q: '', cat: '', fam: ''});   // each step its own search and filters
-  const catOf = key => (schema.benchmarks || []).find(b => b.key === key) || {};
-  // its tasks; `version`: a version of the standard's that counts its datasets apart (the catalogue entry's ``versions``)
-  const tasksOf = (key, version) => { const total = catOf(key).task_count, own = ((catOf(key).versions || {})[version] || {}).datasets || {};
-    if (Number.isInteger(total) && total > 0) return `${total.toLocaleString('en-US')} tasks`;
-    const t = schema.datasets.filter(d => d.benchmark === key && d.tasks).map(d => (own[d.key] || {}).tasks || d.tasks);
-    return !t.length ? '' : t.every(n => n === t[0]) && t.length > 1 ? `${t[0]} tasks each` : `${t.reduce((a, n) => a + n, 0)} tasks`; };
-  const pickChip = (attr, v, label, on) => `<button type="button" class="nb-pick-chip" data-${attr}="${esc(v)}" aria-pressed="${on}">${esc(label)}</button>`;
-  // one tile: {attr, key, on, title, mark, cat, origin, line, meta, foot, find, fam, data (more attributes), tip (its title)}
-  const tile = t => `<button class="nb-tile${t.disabled ? ' nb-tile-unfit' : ''}" data-${t.attr}="${esc(t.key)}" aria-pressed="${t.on}"${t.data || ''}${t.disabled ? ` disabled aria-disabled="true" title="${esc(t.why || '')}"` : t.tip ? ` title="${esc(t.tip)}"` : ''} data-cat="${esc(t.cat || '')}" data-fam="${esc(t.fam || '')}" data-find="${esc((t.find || t.title).toLowerCase())}">`
+  // one tile: {attr, key, on, title, mark, line, note, meta, foot, data (more attributes), tip (its title)}
+  const tile = t => `<button class="nb-tile${t.disabled ? ' nb-tile-unfit' : ''}" data-${t.attr}="${esc(t.key)}" aria-pressed="${t.on}"${t.data || ''}${t.disabled ? ` disabled aria-disabled="true" title="${esc(t.why || '')}"` : t.tip ? ` title="${esc(t.tip)}"` : ''}>`
     + `<span class="nb-tile-head">${t.mark ? `<span class="nb-mark">${t.mark}</span>` : ''}<strong>${esc(t.title)}</strong><span class="nb-tile-check" aria-hidden="true">${t.on ? '✓' : ''}</span></span>`
-    + (t.cat || t.origin || t.fam ? `<span class="nb-tile-tags">${t.cat ? `<span class="nb-tile-cat">${esc(t.cat)}</span>` : ''}${t.origin === 'community' ? '<span class="nb-tile-community">Community</span>' : ''}${t.famLabel ? `<span class="nb-tile-fam">${esc(t.famLabel)}</span>` : ''}</span>` : '')
     + (t.line ? `<span class="nb-tile-line">${esc(t.line)}</span>` : '') + (t.note ? `<span class="nb-tile-note">${esc(t.note)}</span>` : '')
     + (t.meta || t.foot ? `<span class="nb-tile-foot">${t.meta ? `<span>${esc(t.meta)}</span>` : ''}${t.foot || ''}</span>` : '') + '</button>';
   // a machine to run on: this one or a host, its connection state filled in by Test connection
   const icon = name => `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`;
   const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: icon(v === 'local' ? 'machine' : 'network'), title: t, tip: sub,
     foot: v !== 'local' ? `<span class="nb-state nb-hoststate" data-host-state="${esc(v)}"></span>` : ''});
-  const picker = (tiles, fams, noun = 'benchmark') => {
-    const pick = pickOf(), cats = [...new Set(tiles.map(t => t.cat).filter(Boolean))].sort();
-    return `<div class="nb-pick"><div class="nb-pick-bar">`
-      + `<label class="nb-pick-find"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input type="search" data-pick-find value="${esc(pick.q)}" placeholder="Search ${noun === 'capability' ? 'capabilities' : noun + 's'}" aria-label="Search ${noun === 'capability' ? 'capabilities' : noun + 's'}" autocomplete="off"></label>`
-      + (cats.length > 1 ? `<div class="nb-pick-chips" role="group" aria-label="Category">${pickChip('pick-cat', '', 'All', !pick.cat)}${cats.map(c => pickChip('pick-cat', c, c, pick.cat === c)).join('')}</div>` : '')
-      + (fams ? `<div class="nb-pick-chips" role="group" aria-label="Runs">${pickChip('pick-fam', '', 'Any', !pick.fam)}${fams.map(([v, l]) => pickChip('pick-fam', v, l, pick.fam === v)).join('')}</div>` : '')
-      + `</div><div class="nb-pick-grid">${tiles.map(tile).join('')}</div><p class="nb-pick-none" hidden>No ${noun} matches.</p></div>`;
-  };
-  function applyPick() {
-    const box = root.querySelector('.nb-pick'), pick = pickOf(); if (!box) return;
-    const words = pick.q.toLowerCase().split(/\s+/).filter(Boolean);
-    let shown = 0;
-    box.querySelectorAll('.nb-tile').forEach(t => {
-      const on = t.getAttribute('aria-pressed') === 'true';
-      const fits = (!pick.cat || t.dataset.cat === pick.cat) && (!pick.fam || t.dataset.fam === pick.fam) && words.every(w => t.dataset.find.includes(w));
-      t.hidden = !fits && !on; if (!t.hidden) shown++;
-    });
-    box.querySelectorAll('[data-pick-cat]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pickCat === pick.cat));
-    box.querySelectorAll('[data-pick-fam]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pickFam === pick.fam));
-    box.querySelector('.nb-pick-none').hidden = shown > 0;
-  }
-  // The standard's Agent step grid: drawn by the server for the benchmark (web/builder.py, /new-run/agents) from the
-  // Agents page's entries, run by the card toolkit (tables.js); kept while the benchmark is the same, so a search or a
-  // filter survives each render, and its cards pressed as the recipe chooses (nullius-pick changes the recipe).
-  // Its view, cards or a table, is the viewer's: the toggle switches it in place, never leaving the page.
-  let agentView = 'cards';
-  try { agentView = localStorage.getItem('nb-agent-view') === 'table' ? 'table' : 'cards'; } catch {}
-  const grid = {ref: '', node: null};
-  function placeAgentGrid() {
-    const slot = $('#nb-agent-grid'), rec = r();
+  // The grids drawn by the server and run by the card toolkit (tables.js): the Benchmark step's (/new-run/benchmarks,
+  // one choice) and the standard's Agent step's for its benchmark (/new-run/agents, from the Agents page's entries).
+  // Each is kept while what it draws is the same, so a search or a filter survives each render, and its cards are
+  // pressed as the recipe chooses (nullius-pick changes the recipe). Its view, cards or a table, is the viewer's:
+  // the toggle switches it in place, never leaving the page.
+  const grids = [
+    {slot: 'nb-bench-grid', store: 'nb-bench-view', url: () => '/new-run/benchmarks?', chosen: rec => [C.benchKey(rec)]},
+    {slot: 'nb-agent-grid', store: 'nb-agent-view', url: rec => '/new-run/agents?' + new URLSearchParams({benchmark: rec.benchmark}) + '&', chosen: rec => C.chosenOf(rec)},
+  ];
+  grids.forEach(g => { g.view = 'cards'; g.ref = ''; g.node = null; try { g.view = localStorage.getItem(g.store) === 'table' ? 'table' : 'cards'; } catch {} });
+  const placeGrids = () => grids.forEach(placeGrid);
+  function placeGrid(g) {
+    const slot = $('#' + g.slot), rec = r();
     if (!slot) return;
-    if (grid.ref !== rec.benchmark + ' ' + agentView) { grid.ref = rec.benchmark + ' ' + agentView; grid.node = null; loadAgentGrid(grid.ref); }
-    if (!grid.node) { slot.setAttribute('aria-busy', 'true'); slot.innerHTML = '<div class="page-skeleton" aria-hidden="true">' + '<div class="skel skel-block"></div>'.repeat(3) + '</div>'; return; }
-    slot.replaceWith(grid.node);
-    const chosen = C.chosenOf(rec);
-    grid.node.querySelectorAll('[data-pick]').forEach(b => {   // a card's toggle, or a row's box
+    const ref = g.url(rec) + (g.view === 'table' ? 'view=table' : '');
+    if (g.ref !== ref) { g.ref = ref; g.node = null; loadGrid(g, ref); }
+    if (!g.node) { slot.setAttribute('aria-busy', 'true'); slot.innerHTML = '<div class="page-skeleton" aria-hidden="true">' + '<div class="skel skel-block"></div>'.repeat(3) + '</div>'; return; }
+    slot.replaceWith(g.node);
+    const chosen = g.chosen(rec);
+    g.node.querySelectorAll('[data-pick]').forEach(b => {   // a card's toggle, or a row's box
       const on = !b.disabled && chosen.includes(b.dataset.pick);
-      if (b.type === 'checkbox') b.checked = on; else b.setAttribute('aria-pressed', String(on));
+      if (b.type === 'checkbox' || b.type === 'radio') b.checked = on; else b.setAttribute('aria-pressed', String(on));
     });
     // a choice made elsewhere (a recipe loaded) that the filters hide: the toolkit draws again, and it shows
-    if (grid.node.dataset.wired && [...grid.node.querySelectorAll('[data-pick]')].some(b => b.matches('[aria-pressed="true"], :checked') && b.closest('[data-card], tr').hidden))
-      grid.node.querySelector('[data-search]')?.dispatchEvent(new Event('input'));
-    if (!grid.node.dataset.wired) {
-      grid.node.dataset.wired = '1';
-      const cards = grid.node.querySelector('[data-cards]'), table = grid.node.querySelector('table[data-table]');
+    if (g.node.dataset.wired && [...g.node.querySelectorAll('[data-pick]')].some(b => b.matches('[aria-pressed="true"], :checked') && b.closest('[data-card], tr').hidden))
+      g.node.querySelector('[data-search]')?.dispatchEvent(new Event('input'));
+    if (!g.node.dataset.wired) {
+      g.node.dataset.wired = '1';
+      const cards = g.node.querySelector('[data-cards]'), table = g.node.querySelector('table[data-table]');
       if (cards) NulliusTable.cards(cards);
       if (table) { NulliusTable.sticky(table); NulliusTable.wire(table); }
-      grid.node.querySelectorAll('.seg-toggle a').forEach(a => a.addEventListener('click', e => {
+      g.node.querySelectorAll('.seg-toggle a').forEach(a => a.addEventListener('click', e => {
         e.preventDefault();
-        agentView = new URL(a.href).searchParams.get('view') === 'table' ? 'table' : 'cards';
-        try { localStorage.setItem('nb-agent-view', agentView); } catch {}
-        placeAgentGrid();
+        g.view = new URL(a.href).searchParams.get('view') === 'table' ? 'table' : 'cards';
+        try { localStorage.setItem(g.store, g.view); } catch {}
+        placeGrid(g);
       }));
     }
   }
-  async function loadAgentGrid(ref) {
-    const [benchmark, view] = ref.split(' ');
-    const res = await nulliusFetch('/new-run/agents?' + new URLSearchParams({benchmark, ...(view === 'table' ? {view} : {})})).catch(() => null);
+  async function loadGrid(g, ref) {
+    const res = await nulliusFetch(ref).catch(() => null);
     const html = res && res.ok ? await res.text().catch(() => null) : null;
-    if (grid.ref !== ref) return;   // another benchmark was chosen while it loaded
-    if (html === null) {            // said once; the next render asks again
-      grid.ref = '';
-      const slot = $('#nb-agent-grid');
+    if (g.ref !== ref) return;   // another benchmark or view was chosen while it loaded
+    if (html === null) {         // said once; the next render asks again
+      g.ref = '';
+      const slot = $('#' + g.slot);
       if (slot) { slot.removeAttribute('aria-busy'); slot.innerHTML = '<p class="nb-note nb-error">Could not load the list. Change step and come back to try again.</p>'; }
       return;
     }
-    grid.node = Object.assign(document.createElement('div'), {id: 'nb-agent-grid', innerHTML: html});
-    placeAgentGrid();
+    g.node = Object.assign(document.createElement('div'), {id: g.slot, innerHTML: html});
+    placeGrid(g);
   }
   function modelChoiceCards(rec) {
     const hasPaper = C.paperOffered(rec), on = rec.model_choice || 'any';
@@ -962,7 +927,7 @@
       const rows=own?[...((runnerOut&&runnerOut.review)||[]),...(C.isStandard(rec)?[]:[[S.where,'Where',C.whereLabel(rec)]])]:C.review(rec);
       html='<div class="nb-sectionhead"><h2>Review the experiment.</h2></div>'+rows.map(([i,t,v])=>`<div class="nb-reviewrow"><div><small>${t}</small><strong>${esc(v)}</strong></div>${button('Edit',`data-step="${i}"`)}</div>`).join('')+'<div id="nb-errors" class="nb-errorlist" hidden></div><div id="nb-reviewnotes"></div>'+(schema.local?'<section id="nb-prereq" class="nb-prereq" aria-live="polite"></section>':'')+runPanel();
     }
-    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';applyPick();placeAgentGrid();
+    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';placeGrids();
     if(step===REVIEW&&schema.local){drawPrereq();checkPrereq();}
     $('#nb-back').hidden=step===S.benchmark;
     $('#nb-next').textContent=step===REVIEW?'Export recipe JSON':stepName(steps[nextShown(step,1)],nextShown(step,1))+' →';
@@ -1124,8 +1089,6 @@
     if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check',d.hostreqName);return;}
     if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install',d.hostreqName);return;}
     if(d.copyCode!==undefined){const t=b.closest('.std-code').querySelector('code').textContent;try{await navigator.clipboard.writeText(t);b.textContent='Copied';}catch{b.textContent='Select it';}setTimeout(()=>{b.textContent='Copy';},1500);return;}
-    if(d.pickCat!==undefined){pickOf().cat=d.pickCat;applyPick();return;}
-    if(d.pickFam!==undefined){pickOf().fam=d.pickFam;applyPick();return;}
     if(d.agent){const on=r().agents.includes(d.agent);r().agents=on?r().agents.filter(id=>id!==d.agent):[...r().agents,d.agent];renderForm();refreshPlan();return;}
     else if(d.href){if(!window.nulliusOpenSettings?.(d.href,b))location.href=d.href;return;}
     else if(b.id==='nb-add-custom-agent'){r().customAgents.push('');r().agents.push('custom-'+(r().customAgents.length-1));renderForm();refreshPlan();root.querySelector('[data-custom-agent="'+(r().customAgents.length-1)+'"]')?.focus();return;}
@@ -1136,7 +1099,6 @@
     else if(d.harborScan!==undefined){askScan(true);return;}
     else if(d.harborRefsFresh!==undefined){loadRefs(C.harborRepoUrl(r().harbor.repo),true);return;}
     else if(d.runner){toRunner(d.runner,C.benchKey(r()));}
-    else if(d.bench){toRunner(C.runnerFor(r(),d.bench),d.bench);}
     else if(d.stdBench){C.setStandardBenchmark(r(),d.stdBench);}
     else if(d.stdOther){const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(d.stdOther)?c.filter(k=>k!==d.stdOther):[...c,d.stdOther];delete rec.other;if(rec.options)delete rec.options[d.stdOther];}   // a check
     else if(d.stdDataset){const rec=r(),c=C.datasetsOf(rec);rec.datasets=c.includes(d.stdDataset)?(c.length>1?c.filter(k=>k!==d.stdDataset):c):[...c,d.stdDataset];delete rec.dataset;}
@@ -1177,12 +1139,12 @@
     else return;
     render(d.step!==undefined||['nb-next','nb-back'].includes(b.id));
   });
-  // an agent, a capability or the setup picked or let go on the Agent step's grid; the focus stays on its card
-  root.addEventListener('nullius-pick',event=>{const k=event.detail.value,rec=r(),c=C.chosenOf(rec);rec.others=c.includes(k)?c.filter(x=>x!==k):[...c,k];delete rec.other;if(rec.options)delete rec.options[k];inPlace(()=>render());event.target.focus({preventScroll:true});});
+  // a benchmark chosen on the Benchmark step's grid, or an agent, a capability or the setup picked or let go on the
+  // Agent step's; the page stays where it is and the focus on its card
+  root.addEventListener('nullius-pick',event=>{const k=event.detail.value;if(event.target.closest('#nb-bench-grid')){toRunner(C.runnerFor(r(),k),k);}else{const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(k)?c.filter(x=>x!==k):[...c,k];delete rec.other;if(rec.options)delete rec.options[k];}inPlace(()=>render());event.target.focus({preventScroll:true});});
   root.addEventListener('input',event=>{
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
-    if(d.pickFind!==undefined){pickOf().q=el.value;applyPick();return;}
     if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
     if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
@@ -1218,9 +1180,8 @@
     const el=event.target,d=el.dataset;
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
-    else if(d.stdVersion!==undefined){   // in place: only the card's count changes on this step, so nothing else is drawn again
-      C.setStandardBenchmark(r(),el.value);const key=C.benchKey(r()),meta=root.querySelector(`[data-bench="${CSS.escape(key)}"] .nb-tile-foot > span`);
-      if(meta)meta.textContent=tasksOf(key,versionOf(r()));render(false,false);}
+    else if(d.stdVersion!==undefined){   // in place: nothing else on this step changes
+      C.setStandardBenchmark(r(),el.value);render(false,false);}
     // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
     // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the
     // menu button controls.js puts after it once this change is handled; a typed value is left as it is
