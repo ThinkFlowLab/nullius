@@ -995,6 +995,12 @@
     return i===S.agent&&b?(b.family==='agent'?'Agent':(b.kind||'capability').replace(/^./,c=>c.toUpperCase())):t;}
   // Next and Back skip a step no recipe shows (Setup, its number kept for saved drafts)
   const nextShown=(i,dir)=>{let j=i+dir;while(j>S.benchmark&&j<REVIEW&&!C.stepShown(r(),j))j+=dir;return Math.max(S.benchmark,Math.min(REVIEW,j));};
+  // draw again where the reader is: every scrolled box the builder sits in keeps its offset (a pick redraws the step)
+  function inPlace(draw){
+    const boxes=[];for(let e=root;e;e=e.parentElement)if(e.scrollTop)boxes.push([e,e.scrollTop]);
+    const page=document.scrollingElement,y=page?page.scrollTop:0;
+    draw();boxes.forEach(([e,t])=>{e.scrollTop=t;});if(page)page.scrollTop=y;
+  }
   function render(focus=false,form=true) {
     const nav=$('.nb-steps');
     if(!nav.querySelector('.nb-stepbar'))nav.innerHTML='<span class="nb-stepbar" aria-hidden="true"></span>';
@@ -1174,7 +1180,7 @@
     render(d.step!==undefined||['nb-next','nb-back'].includes(b.id));
   });
   // an agent, a capability or the setup picked or let go on the Agent step's grid; the focus stays on its card
-  root.addEventListener('nullius-pick',event=>{const k=event.detail.value,rec=r(),c=C.chosenOf(rec);rec.others=c.includes(k)?c.filter(x=>x!==k):[...c,k];delete rec.other;if(rec.options)delete rec.options[k];render();event.target.focus();});
+  root.addEventListener('nullius-pick',event=>{const k=event.detail.value,rec=r(),c=C.chosenOf(rec);rec.others=c.includes(k)?c.filter(x=>x!==k):[...c,k];delete rec.other;if(rec.options)delete rec.options[k];inPlace(()=>render());event.target.focus({preventScroll:true});});
   root.addEventListener('input',event=>{
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
