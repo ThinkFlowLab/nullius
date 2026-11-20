@@ -115,6 +115,23 @@ class Fits(unittest.TestCase):
         self.assertEqual(t["gsm8k"]["osworld2:muse-spark"], ["Muse Spark belongs to OSWorld2"])
         self.assertNotIn("osworld1:openai-cua", t.get("locomo", {}))       # a capability benchmark takes none
 
+    def test_one_entry_list_whose_fits_are_the_builders(self):
+        # recipe.entries: the Agents page's list and the builder's Agent step grid; its fits are the builder payload's
+        every = definitions.load("benchmark", every=True)[0]
+        c = recipe.choices()
+        fits, offered = c["fits"], {o["key"] for o in c["agents"] + c["capabilities"]}     # the builder never offers an example
+        for kind in ("agent", "capability"):
+            for b in (x for x in every if x["family"] == kind):
+                ref = definitions.ref_of(b) if "_version" in b else b["key"]
+                with self.subTest(ref):
+                    got = {e["d"]["_ref"]: e["fits"][0] for e in recipe.entries(kind, benches=[b], every=True, own=True)["entries"]
+                           if not e["d"].get("example")}
+                    self.assertEqual({k: f["why"] for k, f in got.items()}, {k: v for k, v in fits[ref].items() if k in offered})
+                    self.assertEqual({f["ref"] for f in got.values()}, {ref})
+        page = {e["d"]["_ref"]: e for e in recipe.entries("agent", own=True)["entries"]}
+        self.assertEqual([f["why"] for f in page["osworld1:openai-cua"]["fits"] if f["key"] == "osworld1"], [[]])
+        self.assertEqual(page["osworld1:openai-cua"]["protocol"], "Its own script")
+
 
 
 RECIPE = {"harness": "standard", "name": "os", "benchmark": "osworld1", "datasets": ["test_small"], "provider": "openrouter",
@@ -130,7 +147,7 @@ class Recipes(unittest.TestCase):
         got = {a["key"]: a for a in recipe.choices()["agents"]}
         cua = got["osworld1:openai-cua"]
         self.assertEqual((cua["benchmark"], cua["agent"], cua["models"], cua["protocol"]),
-                         ("osworld1", "openai_cua", ["computer-use-preview"], "its own script"))
+                         ("osworld1", "openai_cua", ["computer-use-preview"], "Its own script"))
 
     def test_an_own_agent_compiles_to_the_command_of_the_agent_option(self):
         old = self.compiled(others=["original"], bench_options={"agent": "openai_cua", "max_steps": "20"})

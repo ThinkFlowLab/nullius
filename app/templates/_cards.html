@@ -8,8 +8,11 @@
     An item is a dict of display values by field key: a string, a dict {text, class, title, label, href, value, attrs}
     or a list of them, empty for none; a filter and Sort by read a value's `value`, else its text; an action's
     `attrs` are its button's own attributes, its `class` added to the button's, and a `delete` takes the same shape (a quiet
-    trash button). Plus `href` (its title's link),
-    `id`, `search` (what the search reads) and `keys`. A title's `after` is markup in the flow of its name, after its
+    trash button). Plus `href` (its title's link), or `pick` {value, on, disabled}: the card is a toggle, its title a
+    button[data-pick][aria-pressed] that tables.js flips, sending `nullius-pick` {value, pressed} (a disabled one's
+    reason goes in its `alert`), and an enabled one's corner holds the check that marks it chosen; a title's `title` is the tooltip of its link or button;
+    `id`, `search` (what the search reads), `keys`, and `unless` {field: other}: the item passes the field's filter
+    whenever the other field's filter narrows and passes it. A title's `after` is markup in the flow of its name, after its
     last word (a control of its own), and its `class` goes on the title row.
     A field's `class` goes on each of its values; `card_label` names a stat when its column header does not, and a
     value's `label` names it for that item; `style` 'code' sets the text as code; `icon` puts #i-<icon> before a
@@ -49,19 +52,23 @@
 
 {# The items of a cards collection as a table (the table toolkit's, with its Columns menu): a column per field the
    table takes that some item fills (a filtered or 'num' one always), in the order of `cols`; the title pinned, its
-   icon before it and a link to `href`, the others as on the card. A field `off` starts hidden. #}
+   icon before it and a link to `href`, the others as on the card; picks put a checkbox in a leftmost column of no
+   name (its header no tick-all: a pick is one at a time), the name then plain. A field `off` starts hidden. #}
 {% macro rows(id, cols, items, search, choices, only, empty, noun, sort, default) %}
 {%- set icon = (cols|selectattr('card', 'equalto', 'icon')|list + [none])[0] %}
 {%- set icons = icon and items|selectattr(icon.key)|list|length > 0 %}
-{%- set shown = [] %}{% for c in cols if c.table is not sameas false and (c.key in choices or c.type == 'num' or items|selectattr(c.key)|list) %}{% set _ = shown.append(dict(c, sticky=c.card == 'title')) %}{% endfor %}
+{%- set shown = [dict(key='_pick', label='Chosen', blank=true, pick=true, sticky=true)] if items|selectattr('pick')|list else [] %}{% for c in cols if c.table is not sameas false and (c.key in choices or c.type == 'num' or items|selectattr(c.key)|list) %}{% set _ = shown.append(dict(c, sticky=c.card == 'title')) %}{% endfor %}
 {%- set rs = [] %}{% for item in items %}{% set a %}{% if item.get('id') %} id="{{ item.id }}"{% endif %} data-search="{{ item.get('search', '') }}"
-  {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}{% endset %}
+  {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}{% for k, by in (item.get('unless') or {}).items() %} data-unless-{{ k }}="{{ by }}"{% endfor %}{% endset %}
   {%- set _ = rs.append({'item': item, 'attrs': a}) %}{% endfor %}
 {% call(r, c) table(id, shown, rs, attrs, search=search, columns=true, choices=choices, only=only, empty=empty, noun=noun, sort=sort, layout='table', default=default) %}
   {%- set v = r.item.get(c.key) %}{% set by %}{% call(f, x) each(r.item, [c]) %}{{ x.get('value', x.text) }} {% endcall %}{% endset %}
-  {%- call cell(c, sort=by|trim) %}{% if c.card == 'title' %}{% set name = v.text if v is mapping else v %}<span class="row-name">{% if icons %}{{ mark(icon, r.item.get(icon.key), name) }}{% endif %}<a href="{{ r.item.href }}">{{ name }}</a></span>
+  {%- set pick = r.item.get('pick') %}{% set t = r.item.get((cols|selectattr('card', 'equalto', 'title')|first).key) %}{% set t = t if t is mapping else {'text': t} %}
+  {%- if c.key == '_pick' %}{% call cell(c, class='pick-col') %}<input type="checkbox" data-pick="{{ pick.value }}" aria-label="{{ t.text }}"{% if pick.on %} checked{% endif %}{% if pick.disabled %} disabled{% endif %}>{% endcall %}
+  {%- else %}{% call cell(c, sort=by|trim) %}{% if c.card == 'title' %}{% set name = t.text %}<span class="row-name"{% if pick and t.title %} title="{{ t.title }}"{% endif %}>{% if icons %}{{ mark(icon, r.item.get(icon.key), name) }}{% endif %}
+      {%- if pick %}{{ name }}{% else %}<a href="{{ r.item.href }}">{{ name }}</a>{% endif %}</span>
     {%- elif c.style == 'code' %}<code>{{ v }}</code>
-    {%- else %}{% call(f, x) each(r.item, [c]) %}{{ pill(f, x) }} {% endcall %}{% endif %}{% endcall %}
+    {%- else %}{% call(f, x) each(r.item, [c]) %}{{ pill(f, x) }} {% endcall %}{% endif %}{% endcall %}{% endif %}
 {%- endcall %}
 {% endmacro %}
 
@@ -78,14 +85,16 @@
 <div class="bench-grid"{% if by.stat %} style="--stats: {{ by.stat|length }}"{% endif %}>
 {%- for item in items %}
   <article class="bench-card" data-card{% if item.get('id') %} id="{{ item.get('id') }}"{% endif %}{% if item.get('search') %} data-search="{{ item.get('search') }}"{% endif %}{% if item.get('keys') %} data-keys="{{ item.get('keys') }}"{% endif %}
-    {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}
+    {%- for f in cols if f.key in choices %} data-f-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}&#10;{% endcall %}"{% endfor %}{% for k, by in (item.get('unless') or {}).items() %} data-unless-{{ k }}="{{ by }}"{% endfor %}
     {%- for f in fields if sort and not f.blank and (sort is sameas true or f.key in sort) %} data-s-{{ f.key }}="{% call(f, v) each(item, [f]) %}{{ v.get('value', v.text) }}{% endcall %}"{% endfor %}>
     {%- set title = by.title[0] %}{% set v = item.get(title.key) %}{% set v = v if v is mapping else {'text': v} %}{% set name = v.text %}
     {%- set cls = [title.class, v.class]|select|join(' ') %}
     <div class="bench-card-title{{ ' ' ~ cls if cls }}">{% if icons %}{{ mark(icon, item.get(icon.key), name) }}{% endif -%}
-      {%- set link %}<a class="card-link"{% if item.get('href') %} href="{{ item.get('href') }}"{% endif %}>{{ name }}</a>{% endset %}
+      {%- set pick = item.get('pick') %}
+      {%- set link %}{% if pick %}<button type="button" class="card-link" data-pick="{{ pick.value }}" aria-pressed="{{ 'true' if pick.on else 'false' }}"{% if pick.disabled %} disabled{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ name }}</button>
+      {%- else %}<a class="card-link"{% if item.get('href') %} href="{{ item.get('href') }}"{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}>{{ name }}</a>{% endif %}{% endset %}
       {%- if v.after %}<span class="bench-card-name">{{ link }} {{ v.after }}</span>{% else %}{{ link }}{% endif %}
-      {%- set corner %}{% call(f, v) each(item, by.check) %}<input type="checkbox" data-check value="{{ v.value }}" aria-label="{{ v.text }}">{% endcall %}
+      {%- set corner %}{% if pick and not pick.disabled %}<span class="pick-check" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span>{% endif %}{% call(f, v) each(item, by.check) %}<input type="checkbox" data-check value="{{ v.value }}" aria-label="{{ v.text }}">{% endcall %}
       {%- call(f, v) each(item, by.delete) %}<button type="button" class="icon-btn danger{{ ' ' ~ v.class if v.class }}"{% if v.title %} title="{{ v.title }}"{% endif %}{{ v.attrs|xmlattr if v.attrs }}><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg></button>{% endcall %}{% endset %}
       {%- if corner %}<span class="bench-card-corner">{{ corner }}</span>{% endif %}</div>
     {%- call(f, v) each(item, by.text) %}
@@ -98,7 +107,7 @@
     <dl class="bench-stats">{% for f in stats %}{% set v = item.get(f.key) %}{% set v = v if v is mapping else {'text': v} -%}
       <div><dt>{{ v.label or f.card_label or f.label }}</dt><dd{% if f.class %} class="{{ f.class }}"{% endif %}>{{ '—' if v.text is none or v.text == '' else v.text }}</dd></div>{% endfor %}</dl>{% endif %}
     {%- call(f, v) each(item, by.alert) %}
-    <div class="bench-card-blocker">{{ v.text }}</div>{% endcall %}
+    <div class="bench-card-blocker"{% if v.title %} title="{{ v.title }}"{% endif %}>{{ v.text }}</div>{% endcall %}
     {%- set actions %}{% call(f, v) each(item, by.action) %}{% if v.href %}<a class="btn ghost sm" href="{{ v.href }}">{{ v.text }}</a>{% else %}<button type="button" class="btn ghost sm{{ ' ' ~ v.class if v.class }}"{% if v.value %} value="{{ v.value }}"{% endif %}{% if v.title %} title="{{ v.title }}"{% endif %}{{ v.attrs|xmlattr if v.attrs }}>{{ v.text }}</button>{% endif %}{% endcall %}{% endset %}{% if actions %}
     <div class="bench-card-actions">{{ actions }}</div>{% endif %}
     {%- set foot %}{% call(f, v) each(item, by.status) %}{{ pill(f, v) }}{% endcall %}
