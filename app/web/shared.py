@@ -419,8 +419,11 @@ def _jobs_for_workspace(name=None):
     return jobs
 
 
-def _record_workspace():
-    name = request.args.get("workspace") if has_request_context() else None
+def _record_workspace(name=None):
+    """The workspace that holds the record on screen: `name` ("" the open
+    one), else this request's `?workspace=`, else the open one."""
+    if name is None:
+        name = request.args.get("workspace") if has_request_context() else None
     if not name:
         return STATE["workspace"]
     ws = workspace.load(WS_HOME, name)
@@ -437,7 +440,8 @@ def _jobs_for_request():
 def _preserve_record_workspace(endpoint, values):
     """Carry evidence provenance through links, forms, and lazy detail requests."""
     record_endpoints = {"job", "trial", "save_trace", "artifact_page", "conversation_data",
-                        "trace_span_data"}
+                        "trace_span_data", "reconcile_page", "feasibility_page", "judge_trial_route",
+                        "judge_job_route", "judge_tasks_route", "judge_feasibility_route"}
     if has_request_context() and endpoint in record_endpoints and "workspace" not in values:
         name = request.args.get("workspace")
         if name:
