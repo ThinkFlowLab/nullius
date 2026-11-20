@@ -3,6 +3,8 @@ pairs; what the pages show comes from the workspace store. Advisory beside
 the recorded evidence, never in its place."""
 from __future__ import annotations
 
+import functools
+import hashlib
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -558,17 +560,25 @@ def triage_summary(report, jobs) -> dict:
             "question": Q.QUESTIONS["control_failure_cause"]["instructions"] if "control_failure_cause" in Q.QUESTIONS else ""}
 
 
-# -- task-instruction quality: once per dataset and task ---------------------------------
+# -- task-instruction quality: once per dataset, task and instruction text ---------------
 
 def task_key(job) -> str:
     """The store's job slot for a dataset's task judgements: `task:<dataset>`,
-    so an instruction is judged once for every run of that dataset."""
-    return "task:" + (job.dataset or "unknown")
+    so an instruction is judged once for every run of that dataset. The
+    dataset is named by its recorded path, or its registry name, so two
+    datasets of one folder name keep apart; a job that names none has its own."""
+    return "task:" + (job.dataset_path or job.dataset or "job:" + job.job_id)
 
 
-def task_record(job, task_base: str) -> dict | None:
+def task_slot(trial) -> str:
+    """A task's name in its dataset's slot, with a digest of the instruction
+    the judge reads: an edited instruction is a task not yet judged."""
+    return trial.task_base + "@" + hashlib.sha256(_task_instruction(trial).encode("utf-8")).hexdigest()[:16]
+
+
+def task_record(job, trial) -> dict | None:
     d = ws_dir()
-    rec = store.load(d, task_key(job), task_base) if d else None
+    rec = store.load(d, task_key(job), task_slot(trial)) if d else None
     return rec if store.is_current(rec) else None
 
 
@@ -576,7 +586,7 @@ def task_record(job, task_base: str) -> dict | None:
 def task_quality_of(job, trial) -> dict | None:
     """The instruction's score for a trial's task: the expectation, the level
     it rounds to (display only), the judge's confidence; None until judged."""
-    rec = task_record(job, trial.task_base)
+    rec = task_record(job, trial)
     a = (rec.get("answers") or {}).get("instruction_quality") if rec else None
     if not a or not isinstance(a.get("score"), (int, float)):
         return None
@@ -602,7 +612,17 @@ def _task_instruction(trial) -> str:
     """The task's text as the agent received it, from the trial's trajectory."""
     if not trial.has_trajectory:
         return ""
-    traj = trajectory.load(trial.trajectory_path)
+    try:
+        stamp = os.stat(trial.trajectory_path).st_mtime_ns
+    except OSError:
+        return ""
+    return _instruction_at(trial.trajectory_path, stamp)
+
+
+@functools.lru_cache(maxsize=1024)
+def _instruction_at(path: str, stamp: int) -> str:
+    """`_task_instruction` once per trajectory file and change: a job page asks it of every row."""
+    traj = trajectory.load(path)
     return "" if traj.error else judge_state.instruction_of(traj)
 
 
@@ -613,23 +633,23 @@ def tasks_todo(job) -> list:
         if t.task_base in seen:
             continue
         seen.add(t.task_base)
-        if task_record(job, t.task_base) is None and t.has_trajectory:
+        if t.has_trajectory and task_record(job, t) is None:
             out.append(t)
     return out
 
 
 def task_summary(job) -> dict:
     """For the job page: how many of the job's tasks have their instruction judged."""
-    tasks = {t.task_base for t in job.trials}
-    judged = sum(1 for tb in tasks if task_record(job, tb) is not None)
+    tasks = {t.task_base: t for t in reversed(job.trials)}         # each task by its first trial, as tasks_todo reads it
+    judged = sum(1 for t in tasks.values() if task_record(job, t) is not None)
     return {"tasks": len(tasks), "judged": judged, "unjudged": len(tasks_todo(job)), "keyed": bool(key())}
 
 
 def judge_task(job, trial, api_key: str, post=None) -> dict | None:
     """Score one task's instruction over the `task` state alone, stored under
-    the dataset's task slot - never under the trial."""
+    the dataset's task slot and the instruction's digest - never under the trial."""
     instruction = _task_instruction(trial)
     if not instruction:
         raise client.JudgeError(0, f"no instruction can be read for {trial.task_base}")
     states = batch.states_for(Q.group_ids("task"), lambda kind: judge_state.build(kind, None, instruction=instruction))
-    return batch.ask_and_store(ws_dir(), task_key(job), trial.task_base, states, api_key, post=post)
+    return batch.ask_and_store(ws_dir(), task_key(job), task_slot(trial), states, api_key, post=post)

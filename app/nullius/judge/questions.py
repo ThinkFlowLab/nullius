@@ -251,7 +251,7 @@ register("feasibility", {
 
 # --- task-instruction quality: the dataset's own text, no run involved -----------------
 # A Score over the `task` state - the instruction alone. Stored once per
-# dataset and task (`web.judge.task_key`), not per trial: an ambiguous
+# dataset, task and instruction text (`web.judge.task_key`), not per trial: an ambiguous
 # instruction caps every agent on that task, which is a harness finding.
 register("task", {
     "instruction_quality": {
