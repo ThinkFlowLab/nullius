@@ -249,9 +249,8 @@ def settings_host_enrol():
 
 @app.route("/settings/sandbox")
 def settings_sandbox():
-    """The Sandbox section's state, asked when the section opens: docker's, and whether a boat key is
-    set (never the key)."""
-    return jsonify(docker=sandbox.docker_state(), boat={"set": bool(secrets.status(boat.STORE).get(boat.NAME, {}).get("set")),
+    """The Sandbox section's state, asked when the section opens: whether a boat key is set (never the key)."""
+    return jsonify(boat={"set": bool(secrets.status(boat.STORE).get(boat.NAME, {}).get("set")),
                                                         "env": bool(os.environ.get(boat.NAME))})
 
 

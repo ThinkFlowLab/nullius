@@ -1,4 +1,4 @@
-// The Sandbox section: docker's state and whether a Boat key is saved, asked once when the section is first shown.
+// The Sandbox section: whether a Boat key is saved, asked once when the section is first shown.
 (() => {
   const section = document.getElementById('sandbox');
   if (!section) return;
@@ -26,10 +26,7 @@
   const load = async () => {
     asked = true;
     let j;
-    try { j = await (await nulliusFetch(section.dataset.sandbox)).json(); } catch (err) { j = {docker: {ok: false, error: String(err)}, boat: {set: false, env: false}}; }
-    const docker = $('[data-docker-state]');
-    docker.textContent = j.docker.ok ? '✓ ' + j.docker.version : '✕ ' + j.docker.error;
-    docker.className = 'st-row-value ' + (j.docker.ok ? 'ok' : 'bad');
+    try { j = await (await nulliusFetch(section.dataset.sandbox)).json(); } catch (err) { j = {boat: {set: false, env: false}}; }
     boat = j.boat || {set: false, env: false};
     render();
   };
