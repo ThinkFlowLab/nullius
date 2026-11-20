@@ -381,8 +381,8 @@ class FoundClassesOnBothRuns(LoopCase):
         found = self.compare("run")["found_classes"]
         self.assertEqual(found, {"cut_reply": {
             "meaning": STATUS_RULE["meaning"], "file": "agent/output.json",
-            "before": {"trials": 3, "failing_trials": 2, "unreadable": 1},
-            "new": {"trials": 2, "failing_trials": 1, "unreadable": 0}}})
+            "before": {"trials": 3, "failing_trials": 2, "unreadable": 1, "counted_trials": 5},
+            "new": {"trials": 2, "failing_trials": 1, "unreadable": 0, "counted_trials": 5}}})
 
     def test_the_rule_as_the_file_holds_it_when_compare_runs(self) -> None:
         before_dir, _ = self.jobs_of()
@@ -402,8 +402,8 @@ class FoundClassesOnBothRuns(LoopCase):
         self.rules([STATUS_RULE])
         self.read_ok(other, before_dir)
         found = self.compare("baseline")["found_classes"]["cut_reply"]
-        self.assertEqual(found["before"], {"trials": 3, "failing_trials": 2, "unreadable": 1})
-        self.assertEqual(found["new"], {"trials": 2, "failing_trials": 1, "unreadable": 0})
+        self.assertEqual(found["before"], {"trials": 3, "failing_trials": 2, "unreadable": 1, "counted_trials": 5})
+        self.assertEqual(found["new"], {"trials": 2, "failing_trials": 1, "unreadable": 0, "counted_trials": 5})
 
     def test_no_file_and_no_rule_give_an_empty_entry(self) -> None:
         before_dir, _ = self.jobs_of()
@@ -430,6 +430,41 @@ class FoundClassesOnBothRuns(LoopCase):
         self.assertIn("needs either regex, or json_path with value", r.err)
         self.assertEqual(r.err, by_classify.err)
         self.assertFalse(os.path.exists(self.round_file("result.json")))
+
+
+class FoundClassesOnSharedTasks(LoopCase):
+    """`compare` counts each found class on the tasks both runs share, the tasks its verdict pairs."""
+
+    def compare_jobs(self, before: List[Trial], new: List[Trial]) -> Tuple[dict, str]:
+        before_dir = write_job(self.jobs, "before", "alpha", "harbor", before)
+        new_dir = write_job(self.jobs, "new", "alpha", "harbor", new)
+        self.set_adapter(adapter("alpha", NO_LIMITS, {}))
+        write_json(os.path.join(self.loop, "found-classes.json"),
+                   {"schema": "run-to-fix.found-classes/v1", "rules": [STATUS_RULE]})
+        self.read_ok(before_dir, None)
+        r = run(["compare", "--loop", self.loop, "--new", new_dir, "--against", "run"])
+        self.assertEqual(r.code, 0, r.out + r.err)
+        return load(self.round_file("result.json"))["found_classes"]["cut_reply"], r.out
+
+    def test_trials_of_tasks_only_one_run_has_are_not_counted(self) -> None:
+        before = [marked("a__b", "bench/a", 0.0, CUT), marked("b__b", "bench/b", 1.0, CUT),
+                  marked("x__b", "bench/x", 0.0, CUT), marked("y__b", "bench/y", 0.0, CUT)]
+        new = [marked("a-0__n", "bench/a", 0.0, CUT), marked("a-1__n", "bench/a", 1.0, OTHER),
+               marked("a-2__n", "bench/a", 1.0, BROKEN), marked("b__n", "bench/b", 1.0, OTHER),
+               marked("z__n", "bench/z", 0.0, CUT)]
+        found, out = self.compare_jobs(before, new)
+        self.assertEqual(found["before"], {"trials": 2, "failing_trials": 1, "unreadable": 0, "counted_trials": 2})
+        self.assertEqual(found["new"], {"trials": 1, "failing_trials": 1, "unreadable": 1, "counted_trials": 4})
+        self.assertIn("found class cut_reply on 2 shared tasks: before 2 of 2 trials, 1 failing, 0 unreadable; "
+                      "new 1 of 4 trials, 1 failing, 1 unreadable", out)
+
+    def test_runs_with_no_shared_task_give_zero_counts(self) -> None:
+        before = [marked("x__b", "bench/x", 0.0, CUT), marked("y__b", "bench/y", 1.0, CUT)]
+        new = [marked("z__n", "bench/z", 0.0, CUT)]
+        found, out = self.compare_jobs(before, new)
+        zero = {"trials": 0, "failing_trials": 0, "unreadable": 0, "counted_trials": 0}
+        self.assertEqual((found["before"], found["new"]), (zero, zero))
+        self.assertIn("found class cut_reply on 0 shared tasks", out)
 
 
 class ResultOfAnEarlierVersion(LoopCase):

@@ -5,7 +5,7 @@ import argparse
 import collections
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from classifying import classes_of, cross_check, failure_groups, found_counts, found_values, read_rows
 from found import Rule, load_rules
@@ -14,7 +14,7 @@ from rounds import (STOP_RULE, LoopError, call_runs, ledger_round, load_ledger, 
                     recorded_amount, save_ledger, write_json)
 from pricing import describe, price_of, task_costs, usd
 from stats import binomial_two_sided, fisher_two_sided, verdict
-from trials import TrialRow
+from trials import TrialRow, solved_tasks
 
 TARGET_TRIALS = 3
 REPORT_NOT_READ = "this version does not read the agent's report in the new run"
@@ -93,10 +93,12 @@ def predictions_of(predictions: List[dict], new: List[TrialRow]) -> List[dict]:
     return out
 
 
-def found_on_both(rules: List[Rule], runs: List[Tuple[str, List[TrialRow], Dict[str, str]]]) -> dict:
-    """Each found class, as found-classes.json holds it now, counted on the run compared against and the new run."""
+def found_on_both(rules: List[Rule], shared: Set[str], runs: List[Tuple[str, List[TrialRow], Dict[str, str]]]) -> dict:
+    """Each found class, as found-classes.json holds it now, counted on the trials of the shared tasks of each run."""
+    kept = [(label, [r for r in rows if r.task in shared], classes) for label, rows, classes in runs]
     return {rule.id: dict({"meaning": rule.meaning, "file": rule.file},
-                          **{label: found_counts(found_values(rule, rows), classes) for label, rows, classes in runs})
+                          **{label: dict(found_counts(found_values(rule, rows), classes), counted_trials=len(rows))
+                             for label, rows, classes in kept})
             for rule in rules}
 
 
@@ -189,8 +191,10 @@ def cmd_compare(args: argparse.Namespace) -> None:
     entry = ledger_round(ledger, os.path.basename(round_dir))
     classes, signatures = classes_of(new_rows, adapter.limits)
     groups = failure_groups(new_rows, classes, signatures, None)
-    found = found_on_both(rules, [("before", before_rows, classes_of(before_rows, adapter.limits)[0]),
-                                  ("new", new_rows, classes)])
+    # the tasks the verdict pairs, as cross_check counts them
+    shared = set(solved_tasks(before_rows)[0]) & set(solved_tasks(new_rows)[0])
+    found = found_on_both(rules, shared, [("before", before_rows, classes_of(before_rows, adapter.limits)[0]),
+                                          ("new", new_rows, classes)])
     missing = sum(r.cost_usd is None for r in new_rows)
     recorded = sum(r.cost_usd for r in new_rows if r.cost_usd is not None)
     if args.new_cost_usd is not None and not missing:
@@ -231,9 +235,9 @@ def cmd_compare(args: argparse.Namespace) -> None:
     print(f"verdict: {result_verdict} (exact two-sided binomial test on won and lost, p = {p:.3g})")
     print(f"targets: {result['targets']['text']}")
     for rid, f in found.items():
-        print(f"found class {rid}: " + "; ".join(
-            f"{x} {f[x]['trials']} trials, {f[x]['failing_trials']} failing, {f[x]['unreadable']} unreadable"
-            for x in ("before", "new")))
+        print(f"found class {rid} on {len(shared)} shared tasks: " + "; ".join(
+            f"{x} {f[x]['trials']} of {f[x]['counted_trials']} trials, {f[x]['failing_trials']} failing, "
+            f"{f[x]['unreadable']} unreadable" for x in ("before", "new")))
     if rule["cheapest_option"] is not None:
         print(f"cheapest option: {rule['cheapest_option']['what']}, {rule['cheapest_option']['text']}")
     print("stop rule: " + ("stop: " + "; ".join(rule["reasons"]) if rule["stop"] else "go on")
