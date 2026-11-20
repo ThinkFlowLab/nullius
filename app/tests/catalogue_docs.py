@@ -139,6 +139,11 @@ def _page_of(d: dict) -> str:
 def _installed_from(d: dict) -> str:
     """What the install pins: the packages, or the repository at its commit."""
     inst, up = d.get("install") or {}, d.get("upstream") or {}
+    if inst.get("project"):
+        repo = (up.get("repository") or "").replace("https://", "")
+        source = f"`{repo}` at `{str(up.get('tested', ''))[:12]}`"
+        helpers = _chips(list(inst.get("pip") or []) + [x["url"].rsplit("/", 1)[1] for x in inst.get("wheels") or []])
+        return source + ("; " + helpers if helpers else "")
     if inst.get("npm"):
         return _chips(inst["npm"])
     if inst.get("pip") or inst.get("wheels"):
@@ -167,6 +172,8 @@ def _driven(d: dict) -> str:
 
 def _from(d: dict) -> str:
     inst = d.get("install") or {}
+    if inst.get("project"):
+        return "repository"
     source = {"npm": "npm", "pip": "PyPI"}
     return next((source[k] for k in source if inst.get(k)),
                 "repository" if inst.get("project") or (d.get("upstream") or {}).get("repository") else "")
