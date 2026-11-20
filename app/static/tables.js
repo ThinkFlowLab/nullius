@@ -285,7 +285,8 @@ window.NulliusTable = {
   },
 
   /* The pick toggles under `root`, buttons (data-pick, aria-pressed) or
-     checkboxes (data-pick): a click, Space or Enter flips one and sends nullius-pick {value, pressed} from it; with
+     checkboxes (data-pick): a click, Space or Enter flips one and sends nullius-pick {value, pressed} from it. A single
+     choice, a button with data-pick-one or a radio, is pressed again rather than let go, and lets the others go; with
      `row`, a click elsewhere in the row (a selector) that holds one, but on a
      control of its own or at the end of a text selection, clicks it. */
   picks(root, row) {
@@ -296,8 +297,10 @@ window.NulliusTable = {
       }
       const b = e.target.closest('[data-pick]');
       if (!b || b.disabled) return;
-      const pressed = b.type === 'checkbox' ? b.checked : b.getAttribute('aria-pressed') !== 'true';   // a box has ticked itself
-      if (b.type !== 'checkbox') b.setAttribute('aria-pressed', String(pressed));
+      const box = b.type === 'checkbox' || b.type === 'radio', one = b.dataset.pickOne !== undefined;
+      const pressed = box ? b.checked : one || b.getAttribute('aria-pressed') !== 'true';   // a box has ticked itself
+      if (one) root.querySelectorAll('[data-pick-one][aria-pressed="true"]').forEach(x => x.setAttribute('aria-pressed', 'false'));
+      if (!box) b.setAttribute('aria-pressed', String(pressed));
       b.dispatchEvent(new CustomEvent('nullius-pick', {bubbles: true, detail: {value: b.dataset.pick, pressed}}));
     });
   },

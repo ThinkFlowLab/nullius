@@ -201,12 +201,12 @@ class BenchmarksList(PageCase):
     def test_every_listed_benchmark_has_its_mark(self):
         # one mark per benchmark, by key - its maker's logo or a line icon - in the sprite the builder's cards and these pages use
         marks = (Path(__file__).resolve().parents[1] / "static" / "catalogue" / "marks.svg").read_text(encoding="utf-8")
-        builder = (Path(__file__).resolve().parents[1] / "static" / "builder" / "command-builder.js").read_text(encoding="utf-8")
-        self.assertIn("/static/catalogue/marks.svg#bm-${esc(key)}", builder)
+        builder = self.client.get("/new-run/benchmarks").get_data(as_text=True)                  # the builder's cards are these
         for b in catalog.load().listed_benchmarks:
             with self.subTest(b.key):
                 self.assertIn('<symbol id="bm-%s"' % b.key, marks)
                 self.assertIn('marks.svg#bm-%s"' % b.key, self.card(b.key))
+                self.assertIn('marks.svg#bm-%s"' % b.key, builder)
 
     def test_a_page_exists_only_for_a_listed_benchmark(self):
         self.get("/benchmarks/nope", status=404)

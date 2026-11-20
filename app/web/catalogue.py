@@ -24,29 +24,37 @@ from . import shared
 
 @app.route("/benchmarks")
 def benchmarks_page():
-    # the benchmarks of the standard some of whose options need a machine's setup (``host``): a bubble on their card
-    setup = {b["key"]: sorted(b["host"]) for b in standard_definitions.load("benchmark")[0] if b.get("host")}
     cat = shared._catalog_cached()
-    with open(MARKS, encoding="utf-8") as fh:
-        sprite = fh.read()
-    sheet = url_for("static", filename="catalogue/marks.svg")
-    items = [_card(cat, b, setup.get(b.key), sheet if f'<symbol id="bm-{b.key}"' in sprite or _user_mark(cat, b) else None)
-             for b in cat.listed_benchmarks]
-    choices = {"category": [(c, c) for c in cat.categories], "runs": [(way, label) for way, (label, _) in RUNS_WITH.items()],
-               "origin": [(o, o.capitalize()) for o in catalog.ORIGINS]}
-    return render_template("catalogue/benchmarks.html", cat=cat, items=items, choices=choices,
+    return render_template("catalogue/benchmarks.html", cat=cat, items=benchmark_cards(cat), choices=benchmark_choices(cat),
                            prompts=howto.prompts(), catalogue_dir=paths.catalogue_dir())
 
 
 RUNS_WITH = {"standard": ("Nullius", "the Nullius standard"), "harbor": ("Harbor", "Harbor")}
+# what a benchmark evaluates (``recipe.benchmarks``' family): its agents or its capabilities, as a card and its filter say it
+FAMILIES = {"agent": "Agents", "capability": "Capabilities"}
 
 
-def _card(cat, b, needs, sheet) -> dict:
-    """A benchmark's card on the list (templates/_cards.html): ``needs`` what some of its options need installed,
-    ``sheet`` the sprite holding its own mark, none when it has none."""
-    ds = cat.datasets_of(b)
-    tasks, unit = cat.tasks_of(b)
-    return {"href": url_for("benchmark_page", key=b.key), "shelf": b.origin, "keys": " ".join([b.key, *b.datasets]),
+def benchmark_cards(cat) -> list:
+    """The benchmarks as cards (templates/_cards.html), one per row of ``recipe.benchmarks``: what the Benchmarks
+    page and the builder's Benchmark step both draw."""
+    with open(MARKS, encoding="utf-8") as fh:
+        sprite = fh.read()
+    sheet = url_for("static", filename="catalogue/marks.svg")
+    return [_card(row, sheet if f'<symbol id="bm-{row["b"].key}"' in sprite or _user_mark(cat, row["b"]) else None)
+            for row in standard_recipe.benchmarks(cat)]
+
+
+def benchmark_choices(cat) -> dict:
+    """The values the benchmarks' cards are filtered by: their category, what runs them, their origin, what they run."""
+    return {"category": [(c, c) for c in cat.categories], "runs": [(way, label) for way, (label, _) in RUNS_WITH.items()],
+            "origin": [(o, o.capitalize()) for o in catalog.ORIGINS], "evaluates": list(FAMILIES.items())}
+
+
+def _card(row, sheet) -> dict:
+    """A benchmark's card on the list (templates/_cards.html), from a row of ``recipe.benchmarks``: ``sheet`` the
+    sprite holding its own mark, none when it has none."""
+    b, ds, tasks, unit, needs = row["b"], row["datasets"], row["tasks"], row["unit"], row["host"]
+    return {"key": b.key, "href": url_for("benchmark_page", key=b.key), "shelf": b.origin, "keys": " ".join([b.key, *b.datasets]),
             "search": " ".join([b.title, b.category, b.key, *(d.title for d in ds), *b.datasets]),
             "category": b.category, "origin": {"text": b.label, "class": b.origin, "value": b.origin},
             "icon": sheet and f"{sheet}#bm-{b.key}", "title": b.title, "domain": b.domain,
@@ -55,7 +63,9 @@ def _card(cat, b, needs, sheet) -> dict:
             "needs": needs and {"text": "needs " + ", ".join(needs),
                                 "title": f"Some of its options need {', '.join(needs)} installed on the machine it runs on: see its page"},
             "tasks": {"text": tasks, "label": unit.capitalize(), "value": tasks.replace(",", "").split("–")[-1]},
+            "versions": {v: {"text": n, "label": u.capitalize()} for v, (n, u) in row["versions"].items()},
             "datasets": {"text": len(ds), "label": "Datasets" if len(ds) != 1 else "Dataset"},
+            "evaluates": {"text": FAMILIES[row["family"]], "value": row["family"], "title": f"{row['kind'].capitalize()} capabilities" if row["kind"] else ""},
             "scoring": b.scoring, "blocker": b.blocker[:1].upper() + b.blocker[1:]}
 
 

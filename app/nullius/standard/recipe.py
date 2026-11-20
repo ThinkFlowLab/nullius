@@ -108,18 +108,42 @@ def _shown(o: dict, v: str, values: dict) -> str:
     return (o.get("names") or {}).get(v) or v
 
 
+def _capability_kind(b: dict) -> str:
+    """The kind of capability a benchmark runs (``memory``), read from the ports it needs; empty for an agent benchmark."""
+    kinds = sorted({p.split(".", 1)[1].split("/")[0] for p in b.get("needs") or []}) if b.get("family") == "capability" else []
+    return kinds[0] if kinds else ""
+
+
+def benchmarks(cat) -> List[dict]:
+    """The benchmarks the Benchmarks page and the builder's Benchmark step list: each of the catalogue's listed
+    entries (``Catalog.listed_benchmarks``, whichever runner runs it) as ``b``, with its ``datasets``, its ``tasks``
+    and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, None for nothing),
+    what it is run with: ``family`` agent or capability (a benchmark only Harbor runs runs agents) and, for a
+    capability, its ``kind``; and ``versions``, another version's tasks and unit by version."""
+    defs = {d["key"]: d for d in definitions.load("benchmark")[0]}
+    out = []
+    for b in cat.listed_benchmarks:
+        d = defs.get(b.key) or {}
+        tasks, unit = cat.tasks_of(b)
+        out.append({"b": b, "datasets": cat.datasets_of(b), "tasks": tasks, "unit": unit,
+                    "host": sorted(d["host"]) if d.get("host") else None,
+                    "family": d.get("family") or "agent", "kind": _capability_kind(d),
+                    # another version's tasks, when its datasets count differently (``Catalog.in_version``)
+                    "versions": {v: cat.tasks_of(b, cat.in_version(b, v)[1]) for v in b.versions}})
+    return out
+
+
 def _bench_page(b: dict) -> dict:
     """A benchmark as a page shows it. ``controls``: the ones it declares,
     each with who wrote it and where it comes from - what the builder offers
     beside the agents or capabilities. Each dataset carries the same controls,
     each with its ``proven`` record on that dataset (None: not proven), and
     ``proofs``, the units and leak checks the same way (``prove.status``)."""
-    kinds = sorted({p.split(".", 1)[1].split("/")[0] for p in b.get("needs") or []}) if b["family"] == "capability" else []
     status = prove.status(b)
     controls = [{**{k: c[k] for k in ("key", "label", "source", "from", "expect")}, "must": prove.must_score(c["expect"])}
                 for c in (definitions.control(b, w) for w in definitions.CONTROLS) if c]
     versioned = definitions.version_of(b) is not None
-    return {"key": b["key"], "label": b["label"], "summary": b["summary"], "family": b["family"], "kind": kinds[0] if kinds else "",
+    return {"key": b["key"], "label": b["label"], "summary": b["summary"], "family": b["family"], "kind": _capability_kind(b),
             "ref": definitions.ref_of(b) if "_version" in b else b["key"],
             "version": b["_version"] if versioned else "",
             # its versions, each by the ref a recipe names it with (the bare key: the default)

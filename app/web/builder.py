@@ -27,6 +27,7 @@ AGENT_NEEDS = {"cursor-cli": ["CURSOR_API_KEY"], "copilot-cli": ["COPILOT_GITHUB
                "rovodev-cli": ["ROVODEV_USER_API_TOKEN"]}
 from . import shared
 from . import execute
+from . import catalogue
 
 
 @app.route("/new-run")
@@ -59,6 +60,29 @@ def new_run():
         if data["loadSaved"] is None:
             abort(404)
     return render_template("builder/new_run.html", builder_data=data)
+
+
+@app.route("/new-run/benchmarks")
+def new_run_benchmarks():
+    """The Benchmark step's grid, as a fragment the builder puts in its page: the Benchmarks page's cards
+    (``catalogue.benchmark_cards``) as single-choice pick cards (templates/builder/benchmarks.html), or rows with
+    ?view=table; the builder presses the one its recipe names."""
+    cat = shared._catalog_cached()
+    # a community benchmark says so; an official one says nothing
+    # a benchmark with versions carries each one's Tasks (the default's under ""), for the builder to show the chosen one's
+    items = [dict(i, pick={"value": i["key"], "one": True}, id="pick-bench-" + i["key"], title={"text": i["title"], "title": i["domain"]},
+                  origin=i["origin"] if i["shelf"] != "official" else None,
+                  data={"tasks": json.dumps({"": i["tasks"], **i["versions"]})} if i["versions"] else None)
+             for i in catalogue.benchmark_cards(cat)]
+    every = catalogue.benchmark_choices(cat)
+    choices = {k: [(v, t) for v, t in every[k] if any(v in _values(i[k]) for i in items)] for k in ("category", "evaluates", "runs")}
+    return render_template("builder/benchmarks.html", items=items, choices={k: v for k, v in choices.items() if len(v) > 1},
+                           layout="table" if request.args.get("view") == "table" else "cards")
+
+
+def _values(v) -> list:
+    """A card field's filter values: a value's ``value``, else its text."""
+    return [x.get("value", x.get("text")) if isinstance(x, dict) else x for x in (v if isinstance(v, list) else [v])]
 
 
 @app.route("/new-run/agents")

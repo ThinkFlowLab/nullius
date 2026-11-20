@@ -22,7 +22,7 @@ class StandardWhere(CompilerCase):
                                                            "boatSizes": self.SIZES, "boatSlots": slots})
         program = ("const schema=" + json.dumps(schema) + ";const C=require(" + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ")(schema);\n"
                    + line("esc") + line("button") + cut("  const unitsOf = ", "  // the first clause") + line("words")
-                   + cut("  const tile = t =>", "  const picker = ")
+                   + cut("  const tile = t =>", "  // The grids drawn by the server")
                    + cut("  const consentBox = ", "  async function hostReq(") + cut("  function benchOptions(", "  // Only credentials")
                    + "const out={};for(const b of C.standard().benchmarks)for(const backend of " + json.dumps(list(backends)) + "){"
                    + "const r=C.createStandard(b.key);r.backend=backend;" + edit
@@ -143,7 +143,7 @@ class StandardWhere(CompilerCase):
         line = lambda name: re.search(r"^  const %s = .*$" % name, page, re.M).group(0) + "\n"
         schema = dict(self.schema, hosts=[], standardHere={"docker": None, "licences": {}, "host": {"osworld2": {"docker": ["missing"]}}})
         program = ("const schema=" + json.dumps(schema) + ";const C=require(" + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ")(schema);\n"
-                   + line("esc") + line("button") + cut("  const tile = t =>", "  const picker = ") + cut("  function benchOptions(", "  // Only credentials")
+                   + line("esc") + line("button") + cut("  const tile = t =>", "  // The grids drawn by the server") + cut("  function benchOptions(", "  // Only credentials")
                    + "const out={};for(const k of ['osworld2','gsm8k']){const r=C.createStandard(k);out[k]=benchOptions(r,C.standardBench(r),'shared')+benchOptions(r,C.standardBench(r),'setup')+benchOptions(r,C.standardBench(r));}"
                    + "const r=C.createStandard('osworld2'),b=C.standardBench(r);r.datasets=['offline36'];out.offline=benchOptions(r,b,'dataset');r.datasets=['test_v2'];out.all=benchOptions(r,b,'dataset');"
                    + "process.stdout.write(JSON.stringify(out));")
@@ -158,7 +158,7 @@ class StandardWhere(CompilerCase):
         line = lambda name: re.search(r"^  const %s = .*$" % name, page, re.M).group(0) + "\n"
         schema = dict(self.schema, hosts=[], standardHere={"docker": None, "licences": {}, "host": {}})
         program = ("const schema=" + json.dumps(schema) + ";const C=require(" + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ")(schema);\n"
-                   + line("esc") + line("button") + cut("  const tile = t =>", "  const picker = ") + cut("  function benchOptions(", "  // Only credentials")
+                   + line("esc") + line("button") + cut("  const tile = t =>", "  // The grids drawn by the server") + cut("  function benchOptions(", "  // Only credentials")
                    + "const r=C.createStandard('osworld1'),b=C.standardBench(r);r.others=['osworld1:m3','osworld1:claude'];"
                    + "const own=k=>benchOptions(r,b,'own',C.ownAgentsOf(b).find(a=>a.key===k));"
                    + "process.stdout.write(JSON.stringify({m3:own('osworld1:m3'),claude:own('osworld1:claude'),"
