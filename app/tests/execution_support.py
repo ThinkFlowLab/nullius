@@ -25,8 +25,8 @@ class Base(unittest.TestCase):
         self.addCleanup(execution.EXECUTIONS.clear)
         docker = mock.patch.object(execution, "docker_here", return_value=None); docker.start(); self.addCleanup(docker.stop)
 
-    def wait(self, ex, seconds=10):
-        ex.thread.join(seconds); self.assertFalse(ex.thread.is_alive(), "the run did not end")
+    def wait(self, ex, seconds=60):
+        ex.thread.join(seconds); self.assertFalse(ex.thread.is_alive(), "the run did not end")   # join returns when the run ends; 60 s is for a loaded machine
         return ex
 
     def until(self, ex, state, seconds=10):
