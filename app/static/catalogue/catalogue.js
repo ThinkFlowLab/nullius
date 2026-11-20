@@ -57,3 +57,22 @@ document.querySelectorAll('.bench-page .std-copy').forEach(b => b.addEventListen
   try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; } catch { b.textContent = 'Select it'; }
   setTimeout(() => { b.textContent = 'Copy'; }, 1500);
 }));
+
+// A benchmark's versions: every version is on the page, one shown; a version link swaps them in place and keeps ?v=
+// in the address, so the link still opens that version on its own.
+document.querySelectorAll('.bench-page .std-versions').forEach(nav => nav.addEventListener('click', event => {
+  const link = event.target.closest('a');
+  if (!link || event.defaultPrevented || event.button !== 0 ||
+      event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const v = new URL(link.href).searchParams.get('v');
+  event.preventDefault();
+  document.querySelectorAll('.bench-page .std-version[data-version]').forEach(el => { el.hidden = el.dataset.version !== v; });
+  nav.querySelectorAll('a').forEach(a => {
+    if (a === link) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+  const build = document.querySelector('.bench-page [data-build-run]');    // Build a run opens the version shown
+  if (build) { const to = new URL(build.href); to.searchParams.set('standard', link.dataset.ref); build.href = to.pathname + to.search; }
+  const url = new URL(location.href);
+  url.searchParams.set('v', v);
+  history.replaceState(null, '', url.pathname + url.search + location.hash);
+}));

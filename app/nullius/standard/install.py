@@ -258,7 +258,8 @@ def _steps(inst: dict, where: str, up: Optional[dict], src: Optional[str], log: 
                 _submodules(proj, lock, log)
                 step(["uv", "--directory", proj, "pip", "install", "--quiet", "--python", py, "-r", lock]
                      + list(inst.get("pip") or []) + wheels)
-                step(["uv", "pip", "install", "--quiet", "--python", py, "--no-deps", "-e", proj + extras])
+                if not inst.get("virtual"):              # virtual: the lock's packages only, as uv sync leaves a project with no build system
+                    step(["uv", "pip", "install", "--quiet", "--python", py, "--no-deps", "-e", proj + extras])
             else:
                 step(["uv", "pip", "install", "--quiet", "--python", py, "-e", proj + extras])
         if inst.get("prefetch"):

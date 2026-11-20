@@ -30,8 +30,15 @@
   const isStandard = r => !!(r && r.harness === 'standard');
   const standard = () => schema.standard || {benchmarks: [], agents: [], capabilities: [], fits: {}, ports: {}};
   // A recipe names a benchmark by its key (its default version) or key@version, one of the page's versions.
-  const standardBench = r => standard().benchmarks.find(b => b.key === r.benchmark || b.ref === r.benchmark
+  // The entry is the default version's; another version's own page (its upstream, datasets, proofs, setups) is what a
+  // recipe naming it reads. standardBase is the entry itself, with the list of versions.
+  const standardBase = r => standard().benchmarks.find(b => b.key === r.benchmark || b.ref === r.benchmark
     || (b.versions || []).some(v => v.ref === r.benchmark)) || null;
+  const standardBench = r => {
+    const b = standardBase(r);
+    const v = b && (b.versions || []).find(x => x.ref === r.benchmark && !x.default && x.page);
+    return v ? v.page : b;
+  };
   // Every agent (or capability) a benchmark of the standard could take, each with the reasons it does not fit: none, it fits.
   // Then the controls it declares (nop, oracle): no agent, no model, always runnable - each with its source
   // (official, adapter, nullius) and, per dataset, its proof.
@@ -148,11 +155,13 @@
   }
   const removeServed = (r, role, at) => setServed(r, role, ((r.served_by || {})[role] || []).filter((_, i) => i !== Number(at)));
   function createStandard(benchmark = '', other = '') {
-    const st = standard(), b = st.benchmarks.find(x => x.key === benchmark) || st.benchmarks[0];
+    const st = standard(), b = (benchmark && standardBase({benchmark})) || st.benchmarks[0];
     const r = {version: 1, harness: 'standard', name: 'standard-experiment', title: 'Standard experiment', benchmark: '', datasets: [], others: [],
       model_choice: 'any', provider: firstAvailable(providersOf({}), 'openai'), model: bareModel(schema.defaultModel || ''), limit: '', concurrency: '', unsandboxed: false, where: 'local',
       backend: 'local', options: {}};
-    return b ? setStandardBenchmark(r, b.key, other) : r;
+    // a version's ref (key@version) opens that version
+    const ref = b && (b.versions || []).some(v => v.ref === benchmark) ? benchmark : b && b.key;
+    return b ? setStandardBenchmark(r, ref, other) : r;
   }
   // Keep only options and values the benchmark accepts.
   const ownOptions = (b, opts) => Object.fromEntries(Object.entries(opts || {}).filter(([k, v]) => {
@@ -161,10 +170,10 @@
   function setStandardBenchmark(r, key, other = '') {
     const b = standardBench({benchmark: key});
     if (!b) return r;
-    const was = standardBench(r);
-    if (was !== b) { r.model_choice = 'any'; delete r.served_by; }
+    const was = standardBench(r), same = !!was && was.key === b.key;     // another version of it keeps the choices
+    if (!same) { r.model_choice = 'any'; delete r.served_by; }
     r.benchmark = key;
-    const kept = was === b ? datasetsOf(r).filter(id => b.datasets.some(d => d.id === id)) : [];
+    const kept = same ? datasetsOf(r).filter(id => b.datasets.some(d => d.id === id)) : [];
     r.datasets = kept.length ? kept : [b.datasets[0].id];
     delete r.dataset;
     const fitting = standardOthers(r).filter(o => !o.why.length);
@@ -868,5 +877,5 @@
         at: String(d.at || ''), saved: typeof d.saved === 'string' ? d.saved : ''};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBench,standardOthers,ownAgentsOf,ownChosen,runsOf,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBase,standardBench,standardOthers,ownAgentsOf,ownChosen,runsOf,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });

@@ -205,27 +205,29 @@
   // Nullius's own mark for the standard; Harbor's for Harbor
   const runnerMark = x => x.standard ? '<span class="brand-mark nb-nullius-mark" aria-hidden="true"></span>'
     : '<svg aria-hidden="true"><use href="/static/brand/marks.svg#harbor"/></svg>';
-  // Two cards: Harbor, and Nullius (the standard) - a benchmark's own scripts run there, as its Original setup.
+  // A card per runner that runs the benchmark, alone when only one does: Harbor, and Nullius (the standard) - a benchmark's own scripts run there, as its Original setup.
   const runnerCard = (x, on, label, summary, mark) => tile({attr: 'runner', key: x.key, on, mark, title: label, tip: summary || ''});
   const runnerStep = rec => {
     const has = C.runnersOf(C.benchKey(rec)), list = C.runners().filter(x => x.builtin && has.includes(x.key));
-    const cards = list.length > 1 ? `<div class="nb-pick-grid">` + list.map(x => runnerCard(x, x.key === rec.harness, x.label, x.summary, runnerMark(x))).join('') + '</div>'
+    const cards = list.length ? `<div class="nb-pick-grid">` + list.map(x => runnerCard(x, x.key === rec.harness, x.label, x.summary, runnerMark(x))).join('') + '</div>'
       : `<label class="nb-field ui-field-row"><span class="ui-field-copy">Runner</span><span class="nb-fixed">${esc((C.runners().find(x => x.key === rec.harness) || {}).label || rec.harness)}</span></label>`;
     return `<div class="nb-sectionhead"><h2>What runs it?</h2></div>` + cards + (rec.harness === 'harbor' ? harborPanel(rec) : '');
   };
+  // the version a standard recipe names (``key@version``), '' for the default
+  const versionOf = rec => C.isStandard(rec) && String(rec.benchmark || '').includes('@') ? String(rec.benchmark).split('@')[1] : '';
   // Every benchmark of both runners in one list; picking one sets the runner that runs it (Nullius when both do).
   const benchmarkStep = rec => {
-    const st = C.standard(), sb = C.standardBench(rec), on = C.benchKey(rec), seen = new Set(), tiles = [];
+    const st = C.standard(), sb = C.standardBase(rec), on = C.benchKey(rec), seen = new Set(), tiles = [];
     const add = (key, title, fam, kind, summary) => { if (seen.has(key)) return; seen.add(key); const c = catOf(key);
       tiles.push({attr: 'bench', key, on: key === on, title: c.title || title,
         mark: `<svg aria-hidden="true"><use href="/static/catalogue/marks.svg#bm-${esc(key)}"/></svg>`, cat: c.category, origin: c.origin,
-        fam, famLabel: fam === 'agent' ? 'Agents' : 'Capabilities · ' + kind, tip: c.domain || summary || '', meta: tasksOf(key),
+        fam, famLabel: fam === 'agent' ? 'Agents' : 'Capabilities · ' + kind, tip: c.domain || summary || '', meta: tasksOf(key, key === on ? versionOf(rec) : ''),
         find: [c.title || title, key, c.category, c.domain, kind].join(' ')}); };
     st.benchmarks.forEach(x => add(x.key, x.label, x.family, x.kind, x.summary));
     C.benchmarks().forEach(x => add(x.key, x.title, 'agent', '', x.domain));
     tiles.sort((a, b) => a.title.localeCompare(b.title, 'en', {sensitivity: 'base'}));
     const versions = C.isStandard(rec) && sb && (sb.versions || []).length > 1
-      ? `<label class="nb-field">Version of ${esc(sb.label)}<select data-std-version>${sb.versions.map(v => `<option value="${esc(v.ref)}" ${v.ref === rec.benchmark || (v.default && rec.benchmark === sb.key) ? 'selected' : ''}>${esc(v.version)}${v.default ? ' (the default)' : ''}</option>`).join('')}</select><small>Each version pins its own upstream, datasets and proofs.</small></label>` : '';
+      ? `<label class="nb-field">Version of ${esc(sb.label)}<select data-std-version>${sb.versions.map(v => `<option value="${esc(v.ref)}" ${v.ref === rec.benchmark || (v.default && rec.benchmark === sb.key) ? 'selected' : ''}>${esc(v.label || v.version)}${v.default ? ' (the default)' : ''}</option>`).join('')}</select><small>Each version pins its own upstream, datasets and proofs.</small></label>` : '';
     return `<div class="nb-sectionhead"><h2>Choose a benchmark.</h2></div>` + picker(tiles, [['agent', 'Agents'], ['capability', 'Capabilities']]) + versions;
   };
   // Put the recipe on a runner, keeping the one each runner had: the benchmark follows.
@@ -630,9 +632,10 @@
   // of tiles, as the Benchmarks page draws them. The filter hides tiles in place (applyPick), so typing keeps focus.
   const picks = {}, pickOf = () => (picks[step] ||= {q: '', cat: '', fam: ''});   // each step its own search and filters
   const catOf = key => (schema.benchmarks || []).find(b => b.key === key) || {};
-  const tasksOf = key => { const total = catOf(key).task_count;
+  // its tasks; `version`: a version of the standard's that counts its datasets apart (the catalogue entry's ``versions``)
+  const tasksOf = (key, version) => { const total = catOf(key).task_count, own = ((catOf(key).versions || {})[version] || {}).datasets || {};
     if (Number.isInteger(total) && total > 0) return `${total.toLocaleString('en-US')} tasks`;
-    const t = schema.datasets.filter(d => d.benchmark === key && d.tasks).map(d => d.tasks);
+    const t = schema.datasets.filter(d => d.benchmark === key && d.tasks).map(d => (own[d.key] || {}).tasks || d.tasks);
     return !t.length ? '' : t.every(n => n === t[0]) && t.length > 1 ? `${t[0]} tasks each` : `${t.reduce((a, n) => a + n, 0)} tasks`; };
   const pickChip = (attr, v, label, on) => `<button type="button" class="nb-pick-chip" data-${attr}="${esc(v)}" aria-pressed="${on}">${esc(label)}</button>`;
   // one tile: {attr, key, on, title, mark, cat, origin, line, meta, foot, find, fam, data (more attributes), tip (its title)}
@@ -990,14 +993,20 @@
     return i===S.agent&&b?(b.family==='agent'?'Agent':(b.kind||'capability').replace(/^./,c=>c.toUpperCase())):t;}
   // Next and Back skip a step no recipe shows (Setup, its number kept for saved drafts)
   const nextShown=(i,dir)=>{let j=i+dir;while(j>S.benchmark&&j<REVIEW&&!C.stepShown(r(),j))j+=dir;return Math.max(S.benchmark,Math.min(REVIEW,j));};
-  function render(focus=false) {
+  // draw again where the reader is: every scrolled box the builder sits in keeps its offset (a pick redraws the step)
+  function inPlace(draw){
+    const boxes=[];for(let e=root;e;e=e.parentElement)if(e.scrollTop)boxes.push([e,e.scrollTop]);
+    const page=document.scrollingElement,y=page?page.scrollTop:0;
+    draw();boxes.forEach(([e,t])=>{e.scrollTop=t;});if(page)page.scrollTop=y;
+  }
+  function render(focus=false,form=true) {
     const nav=$('.nb-steps');
     if(!nav.querySelector('.nb-stepbar'))nav.innerHTML='<span class="nb-stepbar" aria-hidden="true"></span>';
     nav.querySelectorAll('.nb-step').forEach(b=>b.remove());
     if(!C.stepShown(r(),step))step=nextShown(step,step>S.setup?-1:1);
     const shown=steps.map((t,i)=>i).filter(i=>C.stepShown(r(),i));
     nav.insertAdjacentHTML('afterbegin',shown.map((i,n)=>button(`<em>0${n+1}</em>${stepName(steps[i],i)}`,`data-step="${i}" aria-pressed="${step===i}"`,'nb-step')).join(''));
-    renderForm();refreshPlan();moveUnderline();saveDraft();harborFollow();
+    if(form)renderForm();refreshPlan();moveUnderline();saveDraft();harborFollow();
     if(focus){const heading=$('#nb-form h2');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'nearest'});}}
   }
   async function loadSaved(){try{saved=await store.list();}catch(e){status('Saved recipes cannot be read: '+e.message);}if($('#nb-saved').open)renderSaved();}
@@ -1169,7 +1178,7 @@
     render(d.step!==undefined||['nb-next','nb-back'].includes(b.id));
   });
   // an agent, a capability or the setup picked or let go on the Agent step's grid; the focus stays on its card
-  root.addEventListener('nullius-pick',event=>{const k=event.detail.value,rec=r(),c=C.chosenOf(rec);rec.others=c.includes(k)?c.filter(x=>x!==k):[...c,k];delete rec.other;if(rec.options)delete rec.options[k];render();event.target.focus();});
+  root.addEventListener('nullius-pick',event=>{const k=event.detail.value,rec=r(),c=C.chosenOf(rec);rec.others=c.includes(k)?c.filter(x=>x!==k):[...c,k];delete rec.other;if(rec.options)delete rec.options[k];inPlace(()=>render());event.target.focus({preventScroll:true});});
   root.addEventListener('input',event=>{
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
@@ -1209,7 +1218,9 @@
     const el=event.target,d=el.dataset;
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
-    else if(d.stdVersion!==undefined){C.setStandardBenchmark(r(),el.value);render();}
+    else if(d.stdVersion!==undefined){   // in place: only the card's count changes on this step, so nothing else is drawn again
+      C.setStandardBenchmark(r(),el.value);const key=C.benchKey(r()),meta=root.querySelector(`[data-bench="${CSS.escape(key)}"] .nb-tile-foot > span`);
+      if(meta)meta.textContent=tasksOf(key,versionOf(r()));render(false,false);}
     // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
     // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the
     // menu button controls.js puts after it once this change is handled; a typed value is left as it is

@@ -213,6 +213,61 @@ class BenchmarksList(PageCase):
 
 
 class BenchmarkPage(PageCase):
+    def test_a_benchmark_with_versions_is_the_whole_page_once_per_version_one_shown(self):
+        from html.parser import HTMLParser
+
+        def shown(html):
+            """The page as a reader sees it: every hidden version block left out, its whole subtree."""
+            out, depth = [], [0]
+            void = {"input", "br", "img", "meta", "link", "hr", "source", "wbr"}
+
+            class Strip(HTMLParser):
+                def handle_starttag(self, tag, attrs):
+                    a = dict(attrs)
+                    if depth[0]:
+                        depth[0] += tag not in void
+                    elif "data-version" in a and "hidden" in a and tag not in void:
+                        depth[0] = 1
+                    else:
+                        out.append(self.get_starttag_text())
+
+                def handle_endtag(self, tag):
+                    if depth[0]:
+                        depth[0] -= 1
+                    else:
+                        out.append(f"</{tag}>")
+
+                def handle_data(self, data):
+                    if not depth[0]:
+                        out.append(data)
+            Strip(convert_charrefs=False).feed(html)
+            return "".join(out)
+        html = self.get("/benchmarks/osworld1")
+        nav = re.search(r'<nav class="std-versions".*?</nav>', html, re.S).group(0)
+        self.assertIn('aria-current="page" data-ref="osworld1"><b>desktop-env-v1.0.3</b>', nav)   # the release is the default
+        self.assertIn('data-ref="osworld1@044bc33"', nav)
+        self.assertIn('data-build-run href="/new-run?standard=osworld1"', html)                # Build a run opens the version shown
+        self.assertIn("<b>main (044bc33)</b>", nav)                                          # an untagged pin: its branch
+        page = shown(html)
+        self.assertIn("xlang-ai/OSWorld @ desktop-env-v1.0.3 · 9d6f711", page)
+        self.assertNotIn("xlang-ai/OSWorld @ main · 044bc33", page)
+        self.assertIn("<small>360 tasks</small>", page); self.assertNotIn("<small>361 tasks</small>", page)
+        self.assertIn("368 tasks in 10 domains", page); self.assertNotIn("369 tasks in 10 domains", page)
+        self.assertIn("comparable only with this version", page)                             # its own limitations
+        self.assertIn('name="version" value="desktop-env-v1.0.3"', page)                    # its checks run on it
+        self.assertIn("<dd><span class=\"std-version\" data-version=\"desktop-env-v1.0.3\">368</span>", page)
+        old = shown(self.get("/benchmarks/osworld1?v=044bc33"))
+        self.assertIn("xlang-ai/OSWorld @ main · 044bc33", old)
+        self.assertIn("<small>361 tasks</small>", old); self.assertIn("369 tasks in 10 domains", old)
+        self.assertIn("Only M3, PromptAgent and Qwen-CUA have completed tasks", old)
+        self.assertNotIn("comparable only with this version", old)
+        self.assertIn('name="version" value="044bc33"', old)
+        self.assertIn('data-build-run href="/new-run?standard=osworld1@044bc33"', old)
+        self.assertIn("/tree/044bc33901cb893808e3f91ebc9a17ed8e54b44c", old)                  # its data at its own commit
+        self.assertNotIn("/tree/9d6f711", old)
+        self.get("/benchmarks/osworld1?v=nope", status=404)
+        self.assertNotIn("data-version", self.get("/benchmarks/gsm8k"))                       # one version: nothing to swap
+
     def test_a_proof_short_of_the_full_mark_has_no_green_tick_and_says_its_bound(self):
         # Open Telco's oracle must score at least 93%: 3GPP TSG's scorer cannot read RAN_AH1, so its rows stop short
         html = self.page_html("open-telco")

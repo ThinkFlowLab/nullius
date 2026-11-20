@@ -297,7 +297,7 @@
 /* the Agent step's grid: the card toolkit's (catalogue.css), fitted to the form */
 #nullius-builder .nb-step { border-radius: 0; margin: 0; }   /* catalogue.css has a .nb-step of its own */
 #nullius-builder #nb-agent-grid { margin-bottom: 20px; }
-#nullius-builder #nb-agent-grid .bench-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 12px; }
+#nullius-builder #nb-agent-grid .bench-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 12px; grid-auto-rows: 1fr; }
 #nullius-builder #nb-agent-grid .bench-card { padding: 16px; gap: 10px; }
 #nullius-builder #nb-agent-grid .bench-card-title { font-size: 15px; }
 #nullius-builder #nb-agent-grid .std-tag { white-space: nowrap; }

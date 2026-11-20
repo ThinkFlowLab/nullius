@@ -52,15 +52,14 @@ class AgentGrid(unittest.TestCase):
         self.assertIn('<button type="button" class="card-link" data-pick="osworld1:openai-cua" aria-pressed="false"', cards["osworld1:openai-cua"])
         self.assertIn('<div class="bench-card-foot"><span class="bench-card-tags"><span class="std-tag">Its own script</span></span>'
                       '<span class="bench-harness">OSWorld1</span></div>', cards["osworld1:openai-cua"])   # the Agents page's foot
-        self.assertIn('<span class="std-tag">ACP</span></span><span class="bench-harness">Bundled</span></div>', cards["goose"])
+        self.assertIn('<span class="std-tag">ACP</span></span><span class="bench-harness">Nullius</span></div>', cards["goose"])
         self.assertIn('<div class="bench-card-blocker" title="MiniMax M3 belongs to OSWorld2">Belongs to OSWorld2</div>', cards["osworld2:m3"])
         self.assertIn('data-f-from="elsewhere&#10;"', cards["osworld2:m3"])
         self.assertIn(">Lacks computer</div>", cards["goose"])
         check = '<span class="bench-card-corner"><span class="pick-check" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span></span>'
         self.assertIn('>OpenAI CUA</button>' + check, cards["osworld1:openai-cua"])   # the mark a chosen card shows (CSS, by aria-pressed)
         self.assertNotIn("pick-check", cards["goose"])                                                     # none on one that cannot be chosen
-        self.assertIn('<span class="std-tag" title="', cards["codex@2.2.2"])                     # the ports it proved that it needs
-        self.assertIn(">Computer use</span>", cards["codex@2.2.2"])
+        self.assertNotIn(">Computer use</span>", cards["codex@2.2.2"])                            # what it needs, every card that fits proved
         self.assertNotIn("data-pills", html)                                                        # every filter in the one Filter menu
         menu = unescape(html[html.index('data-tools="filter"'):])
         values = lambda col: re.findall(r'data-value="[^"]*" checked> ([^<]*)<', menu[menu.index(f'data-filter-menu="{col}"'):].split("</fieldset>")[0])
@@ -71,7 +70,7 @@ class AgentGrid(unittest.TestCase):
         self.assertIn('<input type="checkbox" data-value="unfit"> Cannot', fit)
         self.assertLess(html.index("data-dropdown"), html.index('data-tools-btn="filter"'))
         self.assertIn('data-dropdown aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-puzzle"/></svg>Fit<', html)   # an icon as Filter's
-        self.assertIn("> Bundled</label><label><input type=\"checkbox\" data-value=\"benchmark\" checked> OSWorld1's own</label>"
+        self.assertIn("> Nullius</label><label><input type=\"checkbox\" data-value=\"benchmark\" checked> OSWorld1's own</label>"
                       "<label><input type=\"checkbox\" data-value=\"elsewhere\" checked> Other benchmarks' agents", menu)
         self.assertIn('data-filter-menu="proves"', menu)
         self.assertNotIn("data-tools-btn=\"sort\"", html)

@@ -70,14 +70,14 @@ def new_run_agents():
     b = definitions.find(benches, request.args.get("benchmark", ""))
     if b is None:
         abort(404)
-    b = dict(b, label=definitions.title(b))
+    name, b = b["label"], dict(b, label=definitions.title(b))     # its own agents keep its plain name, whatever its version
     kind = b["family"]
     found = [e for e in standard_recipe.entries(kind, benches=[b], every=True, own=True)["entries"] if not e["d"].get("example")]
     found.sort(key=lambda e: 0 if e["d"].get("benchmark") == b["key"] else 2 if e["d"].get("benchmark") else 1)   # its own, the catalogue's, others' own
     # a benchmark with agents of its own runs them as its Original setup; another offers that setup as one more card
     setups = [] if any(e["d"].get("benchmark") == b["key"] for e in found) else [k for k in (b.get("setups") or {}) if k == "original"]
     items = [_setup_card(b, k) for k in setups] + [_pick_card(b, e) for e in found]
-    names = dict(definitions.FROM, benchmark=f"{b['label']}'s own", elsewhere="Other benchmarks' agents")
+    names = dict(definitions.FROM, benchmark=f"{name}'s own", elsewhere="Other benchmarks' agents")
     choices = {"protocol": [(p, p) for p in ("ACP", "A command", "Its own script", "JSON lines")
                             if any(i["protocol"] and i["protocol"]["value"] == p for i in items)],
                "fit": [(v, t) for v, t in (("fit", "Can run it"), ("unfit", "Cannot")) if any(i["fit"]["value"] == v for i in items)],
@@ -95,7 +95,7 @@ def _setup_card(b: dict, key: str) -> dict:
     return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": title, "title": x.get("summary", "")},
             "search": " ".join([title, b["label"], "as published"]), "published": "As published", "protocol": "",
             "fit": {"text": "Can run it", "value": "fit"}, "from": {"text": b["label"], "value": "benchmark"},
-            "proves": [], "needs": [], "ticks": [], "alert": None}
+            "proves": [], "ticks": [], "alert": None}
 
 
 def _kind_of(b: dict) -> str:
@@ -105,7 +105,7 @@ def _kind_of(b: dict) -> str:
 
 def _pick_card(b: dict, e: dict) -> dict:
     """An agent's or a capability's pick card for the benchmark ``b``: its name and mark, its protocol, where it comes
-    from, the ports it has proven that ``b`` needs and a tick for each doubt; greyed, why (whole in its tooltip)."""
+    from, and a tick for each doubt about a port ``b`` needs (that it proved them is what lets it run ``b``); greyed, why (whole in its tooltip)."""
     d, why = e["d"], e["fits"][0]["why"]
     rows = {r["port"]: r for r in e["ports"] if r["state"] == "proven"}
     needed = [rows[p] for p in b.get("needs") or [] if p in rows]
@@ -127,7 +127,7 @@ def _pick_card(b: dict, e: dict) -> dict:
             "protocol": {"text": e["protocol"], "value": e["protocol"]}, "published": "",
             "fit": {"text": "Cannot" if why else "Can run it", "value": "unfit" if why else "fit"}, "from": there,
             "proves": [{"text": r["label"], "value": r["port"]} for r in rows.values()],
-            "needs": [{"text": r["label"], "title": r["summary"]} for r in needed], "ticks": ticks,
+            "ticks": ticks,
             "alert": {"text": note, "title": "; ".join(why)} if why else None}
 
 

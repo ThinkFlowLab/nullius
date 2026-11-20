@@ -269,7 +269,27 @@ class OtherBenchmarks(unittest.TestCase):
         for path in root.glob("*/standard.json"):
             with self.subTest(benchmark=path.parent.name):
                 data = json.loads(path.read_text())
-                self.assertNotIn("versions", data)
+                shared = (data.get("upstream") or {}).get("repository")
+                for name, block in (data.get("versions") or {}).items():
+                    if name == data.get("default"):
+                        continue
+                    up = definitions.resolve(data, name)["upstream"]
+                    # a version beside the default is an upstream release (its tag), a commit of a branch (an untagged
+                    # earlier pin, named by its branch) or a fork (another repository) - never an integration revision
+                    self.assertTrue(up.get("tag") or up.get("branch") or up.get("repository") != shared, name)
+                    self.assertEqual(len(up.get("tested") or ""), 40, name)
+
+
+class UpstreamBranch(unittest.TestCase):
+    def test_an_untagged_pin_names_its_branch_and_reads_by_it(self):
+        ok = {"repository": "https://github.com/o/r", "tested": "a" * 40, "license": "MIT"}
+        self.assertEqual(definitions._upstream(dict(ok, branch="main")), [])
+        for bad in (dict(ok, branch="main", tag="v1"), {"branch": "main", "license": "MIT"}, dict(ok, branch="no spaces")):
+            with self.subTest(bad=bad):
+                self.assertTrue(any("upstream.branch" in p for p in definitions._upstream(bad)))
+        self.assertEqual(definitions.version_label({"upstream": dict(ok, branch="main"), "_version": "aaaaaaa"}), "main (aaaaaaa)")
+        self.assertEqual(definitions.version_label({"upstream": dict(ok, tag="v1.0"), "_version": "v1.0"}), "v1.0")
+        self.assertEqual(definitions.version_label({"upstream": ok, "_version": "x"}), "x")
 
 
 class MachineDocker(unittest.TestCase):

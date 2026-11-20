@@ -123,7 +123,8 @@ def _bench_page(b: dict) -> dict:
             "ref": definitions.ref_of(b) if "_version" in b else b["key"],
             "version": b["_version"] if versioned else "",
             # its versions, each by the ref a recipe names it with (the bare key: the default)
-            "versions": [{"ref": b["key"] if v == b.get("_default") else f"{b['key']}@{v}", "version": v, "default": v == b.get("_default")}
+            "versions": [{"ref": b["key"] if v == b.get("_default") else f"{b['key']}@{v}", "version": v, "default": v == b.get("_default"),
+                          "label": (b.get("_labels") or {}).get(v) or v}
                          for v in b.get("_versions") or []] if versioned else [],
             "environments": {n: {"summary": e.get("summary", ""), "local_ok": bool(e.get("local_ok")), "network": e.get("network"),
                                  "needs_secrets": [{"name": s["name"], "to": s["to"], "kind": s.get("kind") or "value",
@@ -133,7 +134,7 @@ def _bench_page(b: dict) -> dict:
             "needs": list(b.get("needs") or []), "units": b.get("units") or {"noun": "unit", "nouns": "units"},
             "score": (b.get("score") or {}).get("says", ""), "judged": bool((b.get("score") or {}).get("judge")),
             # the upstream it runs: its repository, the release tag when it has one, the commit that is the authority
-            "upstream": {k: str((b.get("upstream") or {}).get(k) or "") for k in ("repository", "tag", "tested")},
+            "upstream": {k: str((b.get("upstream") or {}).get(k) or "") for k in ("repository", "tag", "branch", "tested")},
             "controls": controls,
             # One Original procedure, with separate reference-participant and paper-model metadata.
             "setups": [{"key": k, "label": definitions.setup_label(b, k), "summary": x["summary"],
@@ -213,6 +214,18 @@ def _other_page(o: dict) -> dict:
                if isinstance((o.get("proven") or {}).get("fidelity"), dict) else {})}
 
 
+def _with_versions(b: dict) -> dict:
+    """A benchmark's page for the builder: its default version's, each other version
+    carrying its own whole ``page`` (upstream, datasets, proofs, setups, options), so
+    choosing a version changes everything the steps show, not its name alone."""
+    page = _bench_page(b)
+    for v in page["versions"]:
+        if not v["default"]:
+            other = definitions.find(_all()["benchmark"], v["ref"])
+            v["page"] = dict(_bench_page(dict(other, label=b.get("label") or other["label"])), versions=[]) if other else None
+    return page
+
+
 def _install_words(o: dict) -> list:
     """What a definition installs, in a few words each."""
     inst, up = o.get("install") or {}, o.get("upstream") or {}
@@ -274,7 +287,7 @@ def choices() -> dict:
     d = _all()
     # one entry per benchmark, its default version, which lists the others (``versions``); the fits cover every version
     defaults = [b for b in d["benchmark"] if b.get("_version") == b.get("_default")]
-    return {"benchmarks": [_bench_page(b) for b in defaults],
+    return {"benchmarks": [_with_versions(b) for b in defaults],
             # an example (the reference agent, the example memory) is there to read or copy, never to choose
             "agents": [_other_page(o) for o in d["agent"] + definitions.benchmark_agents(d["benchmark"]) if not o.get("example")],
             "capabilities": [_other_page(o) for o in d["capability"] if not o.get("example")],
@@ -406,8 +419,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if b is None:
         add("benchmark", "Choose a benchmark of the standard.")
         return out
-    b = dict(b, label=definitions.title(b))
-    recipe = with_own_agents(recipe, b)
+    # its own agents are the benchmark's, whatever its version: they keep its plain name
+    base, b = b, dict(b, label=definitions.title(b))
+    recipe = with_own_agents(recipe, base)
     # one dataset or several (``datasets``; a recipe from before names one, ``dataset``): each its own jobs
     wanted = recipe.get("datasets") if isinstance(recipe.get("datasets"), list) else ([recipe["dataset"]] if recipe.get("dataset") else [])
     wanted = list(dict.fromkeys(str(x) for x in wanted if isinstance(x, str)))
@@ -437,11 +451,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         if ref == "model":
             add("agent", "Choose Original, then choose the model on the Model step.")
             continue
-        own = definitions.own_agent(b, ref) if ":" in ref else None      # one of the benchmark's own agents
+        own = definitions.own_agent(base, ref) if ":" in ref else None   # one of the benchmark's own agents
         if ":" in ref and own is None:
             other = definitions.find(definitions.benchmark_agents(d["benchmark"]), ref)
-            add("agent", f"{other['label']} cannot run {b['label']}: " + "; ".join(match.fit(b, other)) + "." if other
-                else f"Choose an agent for {b['label']}: {ref} is not one of its own.")
+            add("agent", f"{other['label']} cannot run {base['label']}: " + "; ".join(match.fit(b, other)) + "." if other
+                else f"Choose an agent for {base['label']}: {ref} is not one of its own.")
             continue
         if ref == "original" or own:
             orig = (b.get("setups") or {}).get("original") or {}
@@ -855,7 +869,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         if p["control"]:
             return [STEP["agent"], "Check", f"{o['label']} ({o['key']}) · {o['source']} · {o['from']}"]
         if p.get("agent"):
-            return [STEP["agent"], "Participant", f"{p['agent']['label']} · {b['label']}'s own"]
+            return [STEP["agent"], "Participant", f"{p['agent']['label']} · {p['agent'].get('benchmark_label') or b['label']}'s own"]
         if p.get("setup"):
             original = (b.get("setups") or {}).get("original") or {}
             label = original.get("reference_agent") or ("No agent · Original" if side == "agent" else "Original " + (_bench_page(b)["kind"] or "capability"))
