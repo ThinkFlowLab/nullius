@@ -22,7 +22,7 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 - **Proven: 2/2.** Passed basic checks out of required basic checks. All must pass to prove the port. Skills are additional checks, required only by benchmarks that ask for them. Open the kit to inspect its checks and shared source.
 
-- **Original procedure, chosen participant and model.** The builder lists reference agents first, or No agent · Original for direct model evaluation. Memory benchmarks offer Original memory alongside compatible capabilities. Like the paper filters documented models and keeps the official user simulator and judge; Like the leaderboard, where a benchmark declares one, runs its simulator, judge, options and attempts; Any of your choice opens the provider catalogue.
+- **Original procedure, chosen participant and model.** The builder lists reference agents first (a benchmark's own agents, such as OSWorld's, in their place), or No agent · Original for direct model evaluation. Memory benchmarks offer Original memory alongside compatible capabilities. Like the paper filters documented models and keeps the official user simulator and judge; Like the leaderboard, where a benchmark declares one, runs its simulator, judge, options and attempts; Any of your choice opens the provider catalogue.
 
 - **Native and combined setups.** A capability's proof does not prove an agent uses it. Native, augmented and replacement setups need separate evidence. A replacement must disable or redirect the native path; an extra tool alone is not a swap. General agent-plus-capability recipes are not supported yet.
 

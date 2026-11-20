@@ -298,8 +298,9 @@ class MachineDocker(unittest.TestCase):
                 self.assertTrue(prerequisites.ready([{"rows": prerequisites.check_here([], setups, which=lambda p: "/usr/bin/" + p)}]))
 
     def test_a_value_shows_its_name_and_the_recipe_keeps_the_value(self):
-        out = recipe.compile(self.a_recipe(["original"], bench_options={"agent": "muse_spark"}))
-        self.assertIn([4, "Agent", "Muse Spark · test_small"], out["review"])
+        out = recipe.compile(self.a_recipe(["original"], bench_options={"agent": "muse_spark"}, model="muse-spark-1.1"))
+        self.assertEqual(out["errors"], [])
+        self.assertIn([4, "Participant", "Muse Spark · OSWorld1's own"], out["review"])       # a recipe from before: its agent
         self.assertIn([6, "Steps per task", "100 (its default) · test_small"], out["review"])
         self.assertIn("agent=muse_spark", out["script"])
         self.assertEqual(out["review"][-1], [7, "Where", "this machine · local backend · VM provider docker"])

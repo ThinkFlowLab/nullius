@@ -533,12 +533,10 @@ class WorkspaceDelete(unittest.TestCase):
         self.assertIn(f'<input type="hidden" name="name" value="{self.ws.name}"><input type="hidden" name="view" value="cards">', card)
         self.assertIn(f'<input type="hidden" name="csrf" value="{self.csrf}">', card)
 
-    def test_the_view_toggle_keeps_the_other_query_and_shows_only_where_asked(self):
+    def test_the_view_toggle_keeps_the_other_query(self):
         html = self.page("/workspaces?view=cards&q=1")
         self.assertIn('href="/workspaces?q=1" aria-label="Table"', html)
         self.assertIn('href="/workspaces?view=cards&amp;q=1" aria-label="Cards"', html)
-        for url in ("/benchmarks", "/kits", "/agents"):
-            self.assertNotIn('aria-label="Table" title="Table"', self.page(url), url)
 
     def test_a_restart_with_the_same_paths_reopens_the_workspace_its_runs_went_into(self):
         runs = self.tmp / "runs"

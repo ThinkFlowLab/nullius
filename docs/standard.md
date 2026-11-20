@@ -143,7 +143,7 @@ record); verifier/reward.txt and score.json
 | Units | Run `-j` at a time, each with its own workspace (a git repository of its own), home and relay |
 | A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost. A 200 with no reply, not streamed, reaches the caller as a 502 (or the 429 or 402 its error held); the record keeps `answered: 200`. A call refused with 400, 413 or 422 records its inline images' types and sizes as `images`, never their bytes |
 | Job name | One run at a time per job name: another is refused before it writes anything. A later run under the same name moves each trial's earlier record aside to the trial's `.work/earlier.<ns>` |
-| Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image. `boat`: each unit's agent or capability in a boat.dev VM of its own (`standard/boat.py`, [The boat backend](#the-boat-backend)) |
+| Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing, is podman under that name, or does not answer (`docker ps` fails) while `podman ps` succeeds. Podman needs no Docker API socket and no `containers.conf` change. Where neither answers, Nullius keeps `docker` and its reason says that podman is on the machine. A host is probed by the same rule. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image. `boat`: each unit's agent or capability in a boat.dev VM of its own (`standard/boat.py`, [The boat backend](#the-boat-backend)) |
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
 | Outcomes | A last model call that got a 429 is `rate_limited` (calls in the order they began; a side model's later 200 does not cover the agent's own), a refused key an API error, both outside the agent's rate, unless the unit passed; a unit asked to stop (a `stop` beside its relay's records) keeps the score its driver gave despite the agent's own last 429; the agent's own last call over the model's context window is `ContextWindowExceededError`, the agent's; an agent past its limit for the unit, every turn included, is the agent's timeout ([time limits](cli/run.md#time-limits)). `"kind": "score"` leaves a score and no pass |
 | Rate limits | After a `rate_limited` end no unit starts for 60 s, or the provider's `Retry-After`, doubling to 300 s while units keep ending so |
@@ -630,9 +630,36 @@ already accepts arbitrary models needs only the `original` method.
 | `units` | A setup may count its own units; `units` is sent `setup` |
 | `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes or the Original setup driver container |
 | `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice |
-| Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper` |
+| Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper`, and the benchmark's own agent that ran (`agent`), whose key is also the job's agent (`agent_info.name`) |
 | Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
 | Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |
+
+### A benchmark's own agents
+
+A benchmark whose upstream ships several agent scripts (OSWorld's) keeps them in
+`agents.json` beside its `standard.json`. Each entry of its `agents` is an agent
+definition (`nullius.agent/v1`) that starts with `start.driver`: the upstream's
+own name for it (`agent`) and what the driver runs in the Original setup
+(`script`, `argv`, `env`, and whatever else the driver reads), with the `models`
+it is published with. It speaks no port, so it has no `offers` or `proven`.
+`common` and `aws` beside `agents` stay driver data.
+
+```json title="agents.json · one entry"
+"openai-cua": {
+  "key": "openai-cua", "label": "OpenAI CUA", "summary": "...",
+  "models": ["computer-use-preview"],
+  "start": {"driver": {"agent": "openai_cua", "script": "scripts/python/run_multienv_openaicua.py", "argv": ["..."], "env": {"...": "..."}}}
+}
+```
+
+| Rule | Detail |
+| --- | --- |
+| Named | `<benchmark>:<key>`, e.g. `osworld1:openai-cua`; the key follows the key rule (lower case, digits, dashes) |
+| Derived, never written | Where it comes from (`from`: `benchmark`; a catalogue agent's is `bundled` or `yours`) and `only_for`, its benchmark. A written `only_for` names that benchmark alone |
+| `options.agent` | `standard.json` writes its `label`, `summary` and `setups`; the loader rebuilds `values` (each entry's `start.driver.agent`, in order), `names`, `about` and `default` (the first), so `when`, `by`, `--bench-option agent=...` and `NULLIUS_OPTION_AGENT` read as before |
+| Checked | Each entry's `models` are among `setups.original.models`; each upstream name once |
+| Offered | On the Agents page behind its From filter (its Runs on filter lists each benchmark's agents, as the builder enables them), and in the builder beside the catalogue's agents; another benchmark greys it with the reason |
+| Run | As the Original setup, its upstream name as the agent option: `nullius standard run osworld1 original --bench-option agent=openai_cua`. Its jobs name it by its key (`openai-cua`); an older job, recorded as `original`, is read the same way from its agent option |
 
 ### Every setting, inventoried
 

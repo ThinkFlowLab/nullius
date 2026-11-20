@@ -54,7 +54,7 @@ def _card(cat, b, needs, sheet) -> dict:
                      for way, (label, name) in RUNS_WITH.items() if way in b.harness],
             "needs": needs and {"text": "needs " + ", ".join(needs),
                                 "title": f"Some of its options need {', '.join(needs)} installed on the machine it runs on: see its page"},
-            "tasks": {"text": tasks, "label": unit.capitalize()},
+            "tasks": {"text": tasks, "label": unit.capitalize(), "value": tasks.replace(",", "").split("–")[-1]},
             "datasets": {"text": len(ds), "label": "Datasets" if len(ds) != 1 else "Dataset"},
             "scoring": b.scoring, "blocker": b.blocker[:1].upper() + b.blocker[1:]}
 

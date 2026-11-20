@@ -42,10 +42,10 @@
 <div class="bench-index">
   {{ page_head('Kits', sub=items|length ~ ' conformance kits') }}
   {#- A card's fields (web/agents.py `_kit_card`); the family's pills filter them. #}
-  {% set cols = [dict(key='family', label='Family', card='tag', class='std-tag', filter='pills'), dict(key='version', label='Version', card='meta'),
-                 dict(key='title', label='Name', card='title'), dict(key='port', label='Port', card='text', style='code'),
-                 dict(key='checks', label='Checks', card='stat')] %}
-  {{ cards('kits', cols, items, search='Name, port, check', choices={'family': [('agent', 'Agents'), ('capability', 'Capabilities')]}, empty='No kits match.', noun='kits') }}
+  {% set cols = [dict(key='title', label='Name', card='title'), dict(key='family', label='Family', card='tag', class='std-tag', filter='pills'),
+                 dict(key='port', label='Port', card='text', style='code'), dict(key='checks', label='Checks', card='stat', type='num'),
+                 dict(key='version', label='Version', card='meta')] %}
+  {{ cards('kits', cols, items, search='Name, port, check', choices={'family': [('agent', 'Agents'), ('capability', 'Capabilities')]}, sort=['title', 'port', 'checks'], empty='No kits match.', noun='kits', layout='table' if request.args.get('view') == 'table' else 'cards', default='cards') }}
 </div>
 {% endif %}
 {% endblock %}

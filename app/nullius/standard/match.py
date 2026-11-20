@@ -5,14 +5,16 @@ capability, and the pair fits when the other side offers - and has proven -
 every port the benchmark needs - and, for a port whose kit has skills, has
 shown each skill the benchmark relies on (``needs_skills``). An agent with
 ``only_for`` - a benchmark's own reference agent - fits those benchmarks
-alone, whatever it has proven. The reasons are sentences a page can show
-beside a greyed-out choice.
+alone, whatever it has proven; a benchmark's own agent (``definitions.own_agents``)
+is bound the same way to its benchmark, and speaks no port to check. The
+reasons are sentences a page can show beside a greyed-out choice.
 """
 from __future__ import annotations
 
 from typing import Dict, List
 
 from nullius.standard import ports
+from nullius.standard import definitions
 from nullius.standard.definitions import CONTROLS, port_skills, ref_of, skills_shown
 
 
@@ -34,7 +36,11 @@ def fit(bench: dict, other: dict) -> List[str]:
     name = f"{other['label']} {version}" if "@" in str(other.get("_ref") or "") else other["label"]
     only = other.get("only_for") or []
     if only and bench.get("key") not in only:
+        if other.get("benchmark"):                 # a benchmark's own agent (its agents.json)
+            return [f"{name} belongs to {other.get('benchmark_label') or other['benchmark']}"]
         return [f"{name} is the reference agent of {', '.join(only)}, and runs no other benchmark"]
+    if "driver" in (other.get("start") or {}):     # its benchmark's driver runs it: no port to prove
+        return []
     why = []
     for p in bench.get("needs") or []:
         on = str((proven.get(p) or {}).get("version") or "")
@@ -58,6 +64,7 @@ def table(benches: List[dict], agents: List[dict], capabilities: List[dict]) -> 
     ``oracle``, which always fit. A benchmark is keyed as an agent is: its
     key for its default version, ``key@version`` for another."""
     out = {}
+    agents = agents + definitions.benchmark_agents(benches)        # a benchmark's own agents beside the catalogue's
     for b in benches:
         others = agents if b.get("family") == "agent" else capabilities
         k = ref_of(b) if "_version" in b else b["key"]

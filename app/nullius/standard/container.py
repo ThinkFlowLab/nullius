@@ -142,11 +142,25 @@ def _runs_podman(path: str) -> bool:
     return head.startswith(b"#!") and re.search(rb"^\s*exec\s+\S*podman\b", head, re.M) is not None
 
 
+def _answers(program: str) -> bool:
+    """Whether ``<program> ps`` succeeds, as the host probe asks (``hosts.PROBE``)."""
+    try:
+        return subprocess.run([program, "ps"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def engine() -> str:
     """``podman`` when it is on the PATH and ``docker`` is not, or is podman
-    under that name; else ``docker``."""
+    under that name, or does not answer while podman does; else ``docker``.
+    Only a machine with both is asked, so one engine costs no call."""
     docker, podman = shutil.which("docker"), shutil.which("podman")
-    return "podman" if podman and (not docker or _runs_podman(docker)) else "docker"
+    if not podman:
+        return "docker"
+    if not docker or _runs_podman(docker):
+        return "podman"
+    return "podman" if not _answers(docker) and _answers(podman) else "docker"
 
 
 DOCKER = engine()                          # the engine's program, chosen once
@@ -271,7 +285,7 @@ def unusable() -> Optional[str]:
         hint = (" (add this user to the docker group, then log in again)"
                 if not podman() and "permission denied" in r.stderr.lower() else "")
         if not podman() and shutil.which("podman"):     # docker wins (engine), so say podman is there
-            hint += ". podman is on this machine: Nullius uses it when docker is not on the PATH"
+            hint += ". podman is on this machine: Nullius uses it when docker does not answer and podman does"
         return f"{DOCKER} is installed but not usable by this user: " + (said[-1][:200] if said else f"exit {r.returncode}") + hint
     if podman():
         try:

@@ -528,7 +528,7 @@ def cmd_run(a):
         if other is None:
             sys.exit(f"{b['label']} declares no {a.other} control (controls in its standard.json)")
     elif a.other in definitions.SETUPS:
-        other, why = definitions.setup(b, a.other, a.model or "", a.provider)
+        other, why = definitions.setup(b, a.other, a.model or "", a.provider, options(a.bench_option).get("agent", ""))
         if other is None:
             print("refused:", why)
             return 2
