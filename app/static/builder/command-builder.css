@@ -281,14 +281,14 @@
 #nullius-builder .std-machines button[aria-pressed=true] { background: var(--nb-tint); }
 #nullius-builder .std-machines button:focus-visible { outline: 2px solid var(--nb-blue); outline-offset: 2px; }
 #nullius-builder .std-machines button:disabled { opacity: .45; cursor: not-allowed; }
-#nullius-builder .std-boat-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: fit-content; max-width: 100%; min-width: 190px; margin-top: 12px; padding: 12px 14px; border: 1px solid var(--nb-blue); border-radius: 10px; background: var(--nb-tint); }
+#nullius-builder .std-boat-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: fit-content; max-width: 100%; min-width: 190px; margin-top: 20px; padding: 12px 14px; border: 1px solid var(--nb-blue); border-radius: 10px; background: var(--nb-tint); }
 #nullius-builder .std-boat-card strong { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; }
 #nullius-builder .std-boat-logo { width: 20px; height: 20px; flex: none; }
 #nullius-builder .std-boat-card > span { font-size: 13px; color: var(--nb-muted); }
 #nullius-builder .std-boat-card.off { border-color: var(--nb-line); background: transparent; cursor: not-allowed; }   /* cannot run here: not chosen, only its link works */
 #nullius-builder .std-boat-card.off > :not(.std-boat-key) { opacity: .5; }
 #nullius-builder .std-boat-card.off .std-boat-key { cursor: pointer; }
-#nullius-builder .std-hosts { margin-top: 12px; grid-template-columns: repeat(auto-fill, minmax(190px, 240px)); }
+#nullius-builder .std-hosts { margin-top: 20px; grid-template-columns: repeat(auto-fill, minmax(190px, 240px)); }
 #nullius-builder .std-isolation { padding: 12px 14px; border: 1px solid var(--nb-line); border-radius: 10px; background: var(--nb-soft); }
 #nullius-builder .std-isolation small { display: block; margin-top: 4px; font-size: 13px; color: var(--nb-muted); }
 #nullius-builder .std-isolation small:empty { display: none; }
