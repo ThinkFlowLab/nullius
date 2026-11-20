@@ -59,7 +59,7 @@ tr:has([data-pick]:not(:disabled)) { cursor: pointer; }
 .bench-card-name > .icon-btn { vertical-align: middle; }
 .bench-mark { flex: none; width: 22px; height: 22px; color: var(--accent); }
 /* a table row's name (_cards.html rows): its icon, then its link */
-.row-name { display: inline-flex; align-items: center; gap: 8px; }
+.row-name { display: inline-flex; align-items: center; gap: 8px; overflow-wrap: break-word; }   /* a name wraps between its words, never inside one: an expand column breaks anywhere, the table scrolls instead */
 .bench-card-domain { margin-top: -6px; font-size: 14px; line-height: 1.5; color: var(--text-dim); overflow-wrap: anywhere; }   /* a long file name breaks rather than spills */
 /* the stats in columns of one width, a column each, each its label then its value; on a card too narrow for one
    line (a phone), two balanced rows: 4 as 2+2, 5 as 3+2, 6 as 3+3 */
