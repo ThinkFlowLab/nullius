@@ -5,7 +5,9 @@ One's, ``<workspace>/judgements-llm/...`` for the LLM judge's (a trial has
 both, apart, ``lane``) - keyed by question version inside. Never under the job's ``agent/`` directory: the
 run tree is Harbor's, and a re-parse of the job does not touch this.
 
-Every version is kept. A read without a version asks for the current one
+Every version is kept, and under each every try of a retried trial: the
+try judged last under the version, each earlier one under
+``<version>@<its start>``. A read without a version asks for the current one
 and falls back to the earlier ones the vocabulary still names
 (``questions.EARLIER``), newest first, so a judgement made under v1 is
 still shown after the bump - under its own version, which the record
@@ -85,11 +87,16 @@ def _of(rec: Optional[dict], started: Optional[str]) -> bool:
     return not started or not rec or rec.get("trial_started_at") in (None, started)
 
 
+def _try(version: str, started: str) -> str:
+    """Where a version keeps an earlier try's record, beside the latest try's under `version`."""
+    return f"{version}@{started}"
+
+
 def _pick(data: dict, version: Optional[str], started: Optional[str] = None) -> Optional[dict]:
     for v in _versions(version):
-        rec = data.get(v)
-        if rec and _of(rec, started):
-            return rec
+        for rec in (data.get(v), started and data.get(_try(v, started))):
+            if rec and _of(rec, started):
+                return rec
     return None
 
 
@@ -119,8 +126,9 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "d
         data = _read(paths)
         version = record.get("questions", Q.VERSION)
         earlier = data.get(version) or {}
-        if not _of(earlier, started):
-            earlier = {}                     # an earlier try's: none of its answers are this one's
+        if not _of(earlier, started):        # another try's: kept beside, and none of its answers are this one's
+            data[_try(version, earlier["trial_started_at"])] = earlier
+            earlier = data.pop(_try(version, started), None) or {}
         merged = dict(record, **({"trial_started_at": started} if started else {}))
         merged["answers"] = {**(earlier.get("answers") or {}), **(record.get("answers") or {})}
         if "hygiene" in earlier or "hygiene" in record:
