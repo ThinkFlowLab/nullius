@@ -72,8 +72,6 @@
       proxy.remove();
     });
   });
-  // Settings opens here from any page but its own: a link to /settings, or a script with nulliusOpenSettings(href, opener)
-  // (the builder's Settings buttons); false when it does not, so the caller navigates instead.
   function open(href, from) {
     const url = new URL(href, location.href);
     if (url.origin !== location.origin || url.pathname !== '/settings' || location.pathname === '/settings') return false;

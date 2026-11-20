@@ -391,7 +391,6 @@
     {% endfor %}{% endfor %}
   </div>{% endif %}
   {% include 'settings/data_providers.html' %}
-  {# its providers' keys, outside the form: asked when the section opens (sandbox.js) #}
   <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}"{% if writable %} data-csrf="{{ csrf }}" data-boat="{{ url_for('settings_sandbox_boat') }}"{% endif %}>
     <div class="st-section-head"><h2 id="sandbox-h">Sandbox</h2><p>Where agents run, apart from this machine.</p></div>
     <div class="st-card" data-boat-card>

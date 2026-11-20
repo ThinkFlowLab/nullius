@@ -52,7 +52,6 @@
   };
   const open = () => { editing = true; render(); form.querySelector('input').focus(); };
   if (edit) edit.addEventListener('click', open);
-  // #sandbox-boat-key (the builder's link when Boat has no key) opens the key's form, as a provider's field does
   const fromHash = () => { if (form && location.hash === '#sandbox-boat-key') open(); };
   window.addEventListener('hashchange', fromHash);
   if (cancel) cancel.addEventListener('click', () => { form.reset(); editing = false; render(); edit.focus(); });

@@ -602,7 +602,6 @@ class BoatRecipe(unittest.TestCase):
         out = recipe.compile(a_recipe(backend="boat"), defs(), boat_unusable=lambda here=True: "no Boat API key: set it in Settings → Sandbox")
         self.assertEqual([e["step"] for e in out["errors"]], [recipe.STEP["where"]])
         self.assertIn("Settings → Sandbox", out["errors"][0]["message"])
-        # the Where step's Boat card links to Settings, so its own error line leaves the key out; Review lists it
         for saved, shown in ((None, True), ("k", False)):
             with mock.patch.object(boat, "key", return_value=saved):
                 out = recipe.compile(a_recipe(backend="boat"), defs(), boat_unusable=lambda here=True: "missing")

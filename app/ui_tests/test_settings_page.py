@@ -1108,7 +1108,7 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('<h3>Docker Hub</h3>', providers)
         self.assertIn('<h3>Hugging Face</h3>', providers)
         self.assertIn('name="token" type="password"', providers)
-        self.assertNotIn("data-docker-state", section)                                  # this machine's engine: under Hosts
+        self.assertNotIn("data-docker-state", section)
         with patch.object(sandbox, "login_user", lambda: self.fail("asked")):
             r = self.client.get("/settings/sandbox"); self.addCleanup(r.close)
         self.assertEqual(r.json, {"boat": {"set": False, "env": False}})

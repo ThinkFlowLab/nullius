@@ -39,7 +39,7 @@ class StandardWhere(CompilerCase):
                 self.assertIn('aria-pressed="true"', card(html, "boat"))
                 self.assertIn('aria-pressed="false"', card(html, "hosts"))
                 self.assertIn(">Sandboxes</button>", html)
-                self.assertNotIn("at once", html)                              # the account's VMs at once: Limits' concurrency says it
+                self.assertNotIn("at once", html)
                 self.assertNotIn("data-std-where", html)                       # no host to add to a sandbox run
                 self.assertNotIn("data-std-backend", html)                     # nothing to choose: the VM is the sandbox
                 self.assertNotIn("not sandboxed", html.lower())
@@ -54,16 +54,16 @@ class StandardWhere(CompilerCase):
         self.assertIn("The agent alone in each problem's VM", ordinary)
         self.assertIn("Answers and keys stay on this machine", ordinary)
         self.assertIn('class="std-boat-card"', ordinary)
-        self.assertIn('class="std-boat-card off"', self.draw(None, backends=("boat",), boat="no Boat API key")["gsm8k boat"])   # cannot run: drawn as not chosen
-        self.assertIn('src="/static/brand/boat.svg"', ordinary)               # Boat's mark, one per theme
+        self.assertIn('class="std-boat-card off"', self.draw(None, backends=("boat",), boat="no Boat API key")["gsm8k boat"])
+        self.assertIn('src="/static/brand/boat.svg"', ordinary)
         self.assertIn('src="/static/brand/boat-dark.svg"', ordinary)
         self.assertNotIn("shards, merged", ordinary)
         gone = self.draw(None, backends=("boat",), boat="no Boat API key: set it in Settings → Sandbox")["gsm8k boat"]
-        self.assertNotIn("disabled", card(gone, "boat"))                   # no key: still chosen, and its card links to Settings
+        self.assertNotIn("disabled", card(gone, "boat"))
         self.assertNotIn("data-std-boat-size", gone)
         self.assertIn('class="nb-inlinebutton std-boat-key" data-href="/settings#sandbox-boat-key">Add API Key</button>', gone)
         missing = self.draw(None, "schema.standardHere.boatKey=true;", backends=("boat",), boat="missing on this machine: ssh")["gsm8k boat"]
-        self.assertIn('<span class="nb-error">missing on this machine: ssh</span>', missing)   # not a key: nothing in Settings fixes it
+        self.assertIn('<span class="nb-error">missing on this machine: ssh</span>', missing)
         self.assertNotIn("std-boat-key", missing)
         self.assertIn('disabled aria-disabled="true" title="missing on this machine: ssh"', card(missing, "boat"))
 

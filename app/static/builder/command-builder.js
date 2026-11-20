@@ -117,9 +117,7 @@
   // An unsupported draft opens nothing; its rejection is shown as a toast.
   else { let d = null; try { d = C.unpackDraft(localStorage.getItem(draftKey), query); } catch {} if (d && d.recipe) { recipe = d.recipe; step = d.step; tab = d.tab; savedId = d.saved; } else if (d && d.gone) opened = d.gone; }
   const saveDraft = () => { try { localStorage.setItem(draftKey, C.packDraft({recipe, step, tab, saved: savedId})); } catch {} };
-  // Settings closed, however it was opened (a builder link, the rail): the builder opens again to read what changed
-  // (a key added or removed), from its draft, so without the query that would replace the recipe and step with a fresh one
-  // (the popup comes after this script in the page, and its close does not bubble: caught on the way down)
+  // Settings closed: reload from the draft to read what changed
   document.addEventListener('close', e => { if (e.target.id === 'settings-modal') { saveDraft(); location.replace(location.pathname); } }, true);
   let compiled, pendingDirs, dirsSequence = 0;
   const r = () => recipe;
@@ -1099,7 +1097,6 @@
     if(d.pickFam!==undefined){pickOf().fam=d.pickFam;applyPick();return;}
     if(d.pickElsewhere!==undefined){pickOf().hide=!pickOf().hide;applyPick();return;}
     if(d.agent){const on=r().agents.includes(d.agent);r().agents=on?r().agents.filter(id=>id!==d.agent):[...r().agents,d.agent];renderForm();refreshPlan();return;}
-    // Settings opens as its popup over the builder (its close reloads the builder: below)
     else if(d.href){if(!window.nulliusOpenSettings?.(d.href,b))location.href=d.href;return;}
     else if(b.id==='nb-add-custom-agent'){r().customAgents.push('');r().agents.push('custom-'+(r().customAgents.length-1));renderForm();refreshPlan();root.querySelector('[data-custom-agent="'+(r().customAgents.length-1)+'"]')?.focus();return;}
     else if(d.removeCustomAgent!==undefined){const i=Number(d.removeCustomAgent),rec=r(),kept=rec.agents.filter(id=>id.startsWith('custom-')&&id!=='custom-'+i).map(id=>Number(id.slice(7)));rec.customAgents.splice(i,1);rec.agents=rec.agents.filter(id=>!id.startsWith('custom-')).concat(kept.map(k=>'custom-'+(k>i?k-1:k)));renderForm();refreshPlan();return;}

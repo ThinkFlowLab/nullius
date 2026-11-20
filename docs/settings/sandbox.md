@@ -1,6 +1,6 @@
 # Sandbox
 
-Where agents run apart from this machine: Boat VMs. Under **Execution**. This machine's Docker or Podman is under [Hosts](run-hosts.md).
+Where agents run apart from this machine: Boat VMs. Under **Execution**.
 
 | Card | Does |
 | --- | --- |

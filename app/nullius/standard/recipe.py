@@ -337,9 +337,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     the run sends it as."""
     d = defs or _all()
     errors, notes = [], []
-    # each problem once: several picks of one kind (a benchmark's own agents) can each find it. shown: the step
-    # already says it where it is fixed (Where's Boat card links a missing key to Settings), so its own error line
-    # leaves it out and only Review lists it
+    # each problem once; shown: the step already says it elsewhere, so only Review lists it
     def add(step, message, shown=False):
         if not any(e["step"] == STEP[step] and e["message"] == message for e in errors):
             errors.append({"step": STEP[step], "message": message, **({"shown": True} if shown else {})})
