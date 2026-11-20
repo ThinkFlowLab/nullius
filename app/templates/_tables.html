@@ -66,8 +66,8 @@
 
 {# A table's controls row (static/tables.js `toolbar`) over the columns `cols`; each feature on only
    when asked. `search`: the search box's name and placeholder, over each row's data-search text; `columns`: the
-   Columns menu; `choices`: column -> its (value, label) pairs to filter by; `only`: column -> the one value chosen
-   at load; then the Sort by menu, unless `sort` is false; a list of keys
+   Columns menu; `choices`: column -> its (value, label) pairs to filter by; `only`: column -> the value chosen
+   at load, or a list of them; then the Sort by menu, unless `sort` is false; a list of keys
    offers those columns only. `views` and `actions`: macros writing a page's own
    buttons, each any number of them, run by the page: views (how the table looks) before Columns, actions (on the
    rows or the selection) after Sort by. `layout` 'table' or 'cards', the one shown: a toggle of links to the
@@ -121,7 +121,7 @@
   {% for c in by.pills %}
   <div class="filter-pills" role="group" aria-label="{{ c.label }}" data-pills="{{ c.key }}">
     {{ icon(c) }}<button type="button" class="filter-pill" data-all="{{ c.key }}" aria-pressed="{{ 'false' if c.key in only else 'true' }}">All</button>
-    {%- for value, text in choices[c.key] %}<button type="button" class="filter-pill" data-value="{{ value }}" aria-pressed="{{ 'true' if only.get(c.key) == value else 'false' }}">{{ text }}</button>{% endfor %}
+    {%- for value, text in choices[c.key] %}<button type="button" class="filter-pill" data-value="{{ value }}" aria-pressed="{{ 'true' if c.key in only and value in ([only[c.key]] if only[c.key] is string else only[c.key]) else 'false' }}">{{ text }}</button>{% endfor %}
   </div>
   {% endfor %}
 </div>
@@ -134,13 +134,13 @@
 {#- A column's `filter_icon`, if it has one. #}
 {% macro icon(c) %}{% if c.filter_icon %}<svg class="ic" aria-hidden="true"><use href="#i-{{ c.filter_icon }}"/></svg>{% endif %}{% endmacro %}
 
-{#- A column's choices as checkboxes, in the Filter menu or a dropdown: all ticked, or only its `only` value. #}
+{#- A column's choices as checkboxes, in the Filter menu or a dropdown: all ticked, or only its `only` values. #}
 {# `legend=false` in a dropdown, whose button already names the category #}
 {% macro values(c, choices, only, legend=true) %}
       <fieldset data-filter-menu="{{ c.key }}"{% if not legend %} aria-label="{{ c.label }}"{% endif %}>
         {% if legend %}<legend>{{ c.label }}</legend>{% endif %}
         <span class="tools-all"><button type="button" class="linkish" data-all="{{ c.key }}">All</button><button type="button" class="linkish" data-none="{{ c.key }}">None</button></span>
-        {% for value, text in choices %}<label><input type="checkbox" data-value="{{ value }}"{% if c.key not in only or only[c.key] == value %} checked{% endif %}> {{ text }}</label>{% endfor %}
+        {% for value, text in choices %}<label><input type="checkbox" data-value="{{ value }}"{% if c.key not in only or value in ([only[c.key]] if only[c.key] is string else only[c.key]) %} checked{% endif %}> {{ text }}</label>{% endfor %}
       </fieldset>
 {% endmacro %}
 

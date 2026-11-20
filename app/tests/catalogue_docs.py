@@ -461,7 +461,8 @@ def _setups(v: dict) -> str:
     fixed = original.get("models") or v.get("simulator") or (v.get("score") or {}).get("judge")
     model_choice = ", ".join((["Like the paper"] if fixed else []) + (["Like the leaderboard"] if v.get("leaderboard") else []) + ["Any of your choice"])
     model_choice = " or ".join(model_choice.rsplit(", ", 1))
-    participant = original.get("reference_agent") or ("Original memory" if v.get("family") == "capability" else "No agent")
+    participant = original.get("reference_agent") or ("its own agents" if definitions.own_agents(v)
+                                                      else "Original memory" if v.get("family") == "capability" else "No agent")
     return f"Original · {participant} · {model_choice}"
 
 

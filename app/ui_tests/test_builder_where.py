@@ -145,6 +145,23 @@ class StandardWhere(CompilerCase):
         self.assertIn('placeholder="Provider default"', html["gsm8k"])
         self.assertEqual(("Website host suffix" in html["offline"], "Website host suffix" in html["all"]), (False, True))
 
+    def test_an_own_agents_settings_are_in_its_tab_and_the_agent_is_no_option(self):
+        page = (APP / "static/builder/command-builder.js").read_text(encoding="utf-8")
+        cut = lambda start, end: page[page.index(start):page.index(end, page.index(start))]
+        line = lambda name: re.search(r"^  const %s = .*$" % name, page, re.M).group(0) + "\n"
+        schema = dict(self.schema, hosts=[], standardHere={"docker": None, "licences": {}, "host": {}})
+        program = ("const schema=" + json.dumps(schema) + ";const C=require(" + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ")(schema);\n"
+                   + line("esc") + line("button") + cut("  const tile = t =>", "  const picker = ") + cut("  function benchOptions(", "  // Only credentials")
+                   + "const r=C.createStandard('osworld1'),b=C.standardBench(r);r.others=['osworld1:m3','osworld1:claude'];"
+                   + "const own=k=>benchOptions(r,b,'own',C.ownAgentsOf(b).find(a=>a.key===k));"
+                   + "process.stdout.write(JSON.stringify({m3:own('osworld1:m3'),claude:own('osworld1:claude'),"
+                   + "rest:['shared','setup','yours','where'].map(s=>benchOptions(r,b,s)).join('')}));")
+        html = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        self.assertIn('data-bench-opt="thinking"', html["m3"])
+        self.assertEqual(html["claude"], "")
+        self.assertNotIn("thinking", html["rest"])
+        self.assertNotIn('"agent"', html["rest"])                                  # no agent select: the agents are tiles
+
 
 if __name__ == "__main__":
     unittest.main()

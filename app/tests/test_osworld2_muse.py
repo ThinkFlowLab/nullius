@@ -36,8 +36,7 @@ def load_driver(up):
 
 
 def bench():
-    with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
-        return json.load(f)
+    return definitions.get("benchmark", "osworld2", root=definitions.CATALOGUE)
 
 
 class Started(Exception):
@@ -175,7 +174,7 @@ class Definition(unittest.TestCase):
         b = bench()
         self.assertEqual(b["limits"]["call_seconds"], 3300)
         with open(os.path.join(HERE, "agents.json"), encoding="utf-8") as f:
-            self.assertNotIn("--request_timeout", json.load(f)["agents"]["muse_spark"]["argv"])
+            self.assertNotIn("--request_timeout", json.load(f)["agents"]["muse-spark"]["start"]["driver"]["argv"])
         for bad in (0, -1, 1.5, True, "3300"):
             b["limits"]["call_seconds"] = bad
             with self.subTest(bad):
@@ -394,7 +393,7 @@ class Runner(unittest.TestCase):
                  for a in n.args if isinstance(a, ast.Constant) and str(a.value).startswith("--")}
         with open(os.path.join(HERE, "agents.json"), encoding="utf-8") as f:
             agents = json.load(f)
-        passed = {w for w in agents["common"] + agents["agents"]["muse_spark"]["argv"] if w.startswith("--")}
+        passed = {w for w in agents["common"] + agents["agents"]["muse-spark"]["start"]["driver"]["argv"] if w.startswith("--")}
         self.assertEqual(passed - known, set())
 
 

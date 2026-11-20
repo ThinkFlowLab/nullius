@@ -52,15 +52,20 @@ def _install_words(o: dict) -> list:
     return out
 
 
-def _entries(kind: str, every: bool = False) -> dict:
+def _entries(kind: str, every: bool = False, own: bool = False) -> dict:
+    """Its entries; ``own``: and the benchmarks' own agents (``definitions.own_agents``), which have no page."""
     others, bad = definitions.load(kind, every=every)
-    benches = [b for b in definitions.load("benchmark")[0] if b["family"] == kind]
+    loaded = definitions.load("benchmark")[0]
+    benches = [b for b in loaded if b["family"] == kind]
+    if own and kind == "agent":
+        others = others + definitions.benchmark_agents(loaded)
     jobs = {j.job_id for j in shared._jobs_for_request()}
     out = []
     for o in others:
-        cand = set(conform.candidates(o))
+        driver = "driver" in (o.get("start") or {})        # a benchmark's own: its driver runs it, it speaks no port
+        cand = set() if driver else set(conform.candidates(o))
         rows = []
-        for p, spec in ports.PORTS.items():
+        for p, spec in ports.PORTS.items() if not driver else ():
             if ports.family(p) != kind or (kind == "capability" and p.split(".", 1)[1].split("/")[0] != o.get("kind")):
                 continue
             rec = (o.get("proven") or {}).get(p) if p in (o.get("offers") or []) else None
@@ -88,24 +93,47 @@ def _entries(kind: str, every: bool = False) -> dict:
 def _page(kind: str):
     example = os.path.join(definitions.CATALOGUE, "agents", "reference") if kind == "agent" else \
         os.path.join(definitions.CATALOGUE, "capabilities", "keyword-memory")
-    found = _entries(kind)
+    found = _entries(kind, own=True)
     return render_template("agents/standard.html", kind=kind, how=howto.steps(kind), prompts=howto.prompts(),
                            catalogue_dir=paths.catalogue_dir(), example_dir=example, problems=found["problems"],
-                           items=[_card(kind, e) for e in found["entries"]], choices=_choices(kind, found["entries"]))
+                           items=[_card(kind, e) for e in found["entries"]], choices=_choices(kind, found["entries"]), only=ONLY.get(kind, {}))
 
 
 def _choices(kind: str, entries: list) -> dict:
-    """An agent list's filters: how Nullius talks to it, and the ports it proves; none for capabilities."""
+    """A list's filters: the benchmarks each entry runs (its ``fits``, what Benchmarks it runs counts); for
+    agents also how Nullius talks to it, the ports it proves and where it comes from."""
+    runs_on = list(dict.fromkeys((f["key"], f["label"]) for e in entries for f in e["fits"]))
     if kind != "agent":
-        return {}
+        return {"runs_on": runs_on} if runs_on else {}
     proven = {p["port"] for e in entries for p in e["ports"] if p["state"] == "proven"}
+    have = {e["d"].get("from") for e in entries}
     return {"protocol": [(x, x[:1].upper() + x[1:]) for x in dict.fromkeys(e["protocol"] for e in entries)],
-            "proves": [(p, spec.get("label") or p) for p, spec in ports.PORTS.items() if p in proven]}
+            "proves": [(p, spec.get("label") or p) for p, spec in ports.PORTS.items() if p in proven],
+            "from": [(k, v) for k, v in definitions.FROM.items() if k in have], "runs_on": runs_on}
+
+
+# The From filter's default: the catalogue's own agents; a benchmark's own are one click away.
+ONLY = {"agent": {"from": ["bundled", "yours"]}}
+
+
+def _runs_on(e: dict) -> list:
+    """The benchmarks an entry runs, by its fits: the Runs on filter's values."""
+    return [{"text": f["label"], "value": f["key"]} for f in e["fits"] if not f["why"]]
 
 
 def _card(kind: str, e: dict) -> dict:
-    """An agent's or a capability's card on its list (templates/_cards.html)."""
+    """An agent's or a capability's card on its list (templates/_cards.html). A benchmark's own agent's
+    opens its benchmark's page and shows its published models in place of ports, installs and versions."""
     d = e["d"]
+    if d.get("from") == "benchmark":
+        computer = any(p.startswith("agent.computer/") for b in definitions.load("benchmark")[0]
+                       if b["key"] == d["benchmark"] for p in b.get("needs") or [])
+        return {"href": url_for("benchmark_page", key=d["benchmark"]), "id": d["_ref"].replace(":", "-"),
+                "search": " ".join([d["label"], d["key"], d["benchmark_label"], e["protocol"], d.get("summary", "")]),
+                "protocol": e["protocol"], "icon": agent_mark_url(d["key"]), "title": d["label"], "summary": d.get("summary"),
+                "from": {"text": definitions.FROM["benchmark"], "value": "benchmark"}, "benchmark": d["benchmark_label"],
+                "uses": "Computer use" if computer else None, "models": ", ".join(d.get("models") or []),
+                "runs_on": _runs_on(e), "hide": ["ports", "runs", "installs"]}
     version, n = (d.get("upstream") or {}).get("version"), len(d.get("_versions") or ())
     return {"href": url_for("agent_page" if kind == "agent" else "feature_page", key=d["key"]), "id": d["key"],
             "search": " ".join([d["label"], d["key"], d.get("kind", ""), e["protocol"], d.get("summary", "")]),
@@ -113,10 +141,10 @@ def _card(kind: str, e: dict) -> dict:
             "example": {"text": "example", "title": "Nullius's own, to read or copy - not an agent to compare"} if d.get("example") else None,
             "version": ("v" + str(version) if version else "") + (f" · {n} versions" if n > 1 else ""),
             "icon": agent_mark_url(d["key"]) if kind == "agent" else None, "title": d["label"],
-            "summary": d.get("summary"),
+            "summary": d.get("summary"), "from": {"text": definitions.FROM[d["from"]], "value": d["from"]} if d.get("from") else None,
             "proves": [{"text": p["label"], "value": p["port"]} for p in e["ports"] if p["state"] == "proven"],
             "ports": "{}/{}".format(sum(p["state"] == "proven" for p in e["ports"]), len(e["ports"])),
-            "runs": "{}/{}".format(sum(not f["why"] for f in e["fits"]), len(e["fits"])),
+            "runs": "{}/{}".format(sum(not f["why"] for f in e["fits"]), len(e["fits"])), "runs_on": _runs_on(e),
             "installs": "yes" if e["install"] else "no"}
 
 

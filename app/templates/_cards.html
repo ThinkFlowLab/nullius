@@ -94,8 +94,8 @@
     <div class="bench-card-runs run-tags" role="group" aria-label="{{ by.badge|map(attribute='label')|join(', ') }}">{{ badges }}</div>{% endif %}
     {%- call(f, v) each(item, by.note) %}
     <div class="bench-card-setup"{% if v.title %} title="{{ v.title }}"{% endif %}>{% if f.icon %}<svg class="ic" aria-hidden="true"><use href="#i-{{ f.icon }}"/></svg>{% endif %}{{ v.text }}</div>{% endcall %}
-    {%- if by.stat %}
-    <dl class="bench-stats">{% for f in by.stat %}{% set v = item.get(f.key) %}{% set v = v if v is mapping else {'text': v} -%}
+    {%- set stats = by.stat|rejectattr('key', 'in', item.get('hide', []))|list %}{% if stats %}
+    <dl class="bench-stats">{% for f in stats %}{% set v = item.get(f.key) %}{% set v = v if v is mapping else {'text': v} -%}
       <div><dt>{{ v.label or f.card_label or f.label }}</dt><dd{% if f.class %} class="{{ f.class }}"{% endif %}>{{ '—' if v.text is none or v.text == '' else v.text }}</dd></div>{% endfor %}</dl>{% endif %}
     {%- call(f, v) each(item, by.alert) %}
     <div class="bench-card-blocker">{{ v.text }}</div>{% endcall %}

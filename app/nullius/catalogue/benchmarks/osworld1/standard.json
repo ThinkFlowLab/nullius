@@ -124,8 +124,7 @@
       "turn_seconds": 7200,
       "side_models": [
         "UI-TARS-1.5-7B"
-      ],
-      "reference_agent": "OSWorld's agents"
+      ]
     },
     "model": {
       "summary": "The same agent with any model in its own model's place: the upstream's code asks for the agent's first published model, with its prompt and action format, and the relay sends the model chosen, every side call included. Its scores compare with other runs of this setup.",
@@ -136,53 +135,10 @@
     "agent": {
       "label": "Agent",
       "summary": "Which of OSWorld's own agents runs: each its script as published, with its own prompts, action format and step limit.",
-      "values": [
-        "m3",
-        "prompt",
-        "claude",
-        "gpt54",
-        "openai_cua",
-        "qwen",
-        "os_symphony",
-        "evocua",
-        "autoglm",
-        "autoglm_v",
-        "mano",
-        "muse_spark"
-      ],
-      "default": "m3",
       "setups": [
         "original",
         "model"
-      ],
-      "names": {
-        "m3": "M3 Agent",
-        "prompt": "PromptAgent",
-        "claude": "Claude computer use",
-        "gpt54": "GPT-5.4",
-        "openai_cua": "OpenAI CUA",
-        "qwen": "Qwen",
-        "os_symphony": "OS-Symphony",
-        "evocua": "EvoCUA",
-        "autoglm": "AutoGLM",
-        "autoglm_v": "AutoGLM-V",
-        "mano": "Mano",
-        "muse_spark": "Muse Spark"
-      },
-      "about": {
-        "m3": "MiniMax's M3Agent: run_multienv_m3.py, MiniMax-M3 over Anthropic's Messages API, 100 steps",
-        "prompt": "OSWorld's PromptAgent: run_multienv.py, GPT-4o on screenshots over Chat Completions, 15 steps",
-        "claude": "Anthropic's computer-use agent: run_multienv_claude.py, Claude with the computer-use beta tool, 50 steps",
-        "gpt54": "OpenAI's GPT-5.4 computer use: run_multienv_gpt54.py, the Responses API's computer tool, 50 steps",
-        "openai_cua": "OpenAI's CUA: run_multienv_openaicua.py, computer-use-preview over the Responses API, 50 steps",
-        "qwen": "Qwen-CUA: run_multienv_qwen.py, qwen3.7-plus over Chat Completions, 50 steps",
-        "os_symphony": "OS-Symphony: run_multienv_os_symphony.py, GPT-5 roles with a UI-TARS-1.5-7B grounder and a search VM, 50 steps",
-        "evocua": "EvoCUA: run_multienv_evocua.py, the EvoCUA-S2 or S1 checkpoint on a model server, 50 steps",
-        "autoglm": "AutoGLM-OS: run_autoglm.py, autoglm-os on the accessibility tree, on a model server, 50 steps",
-        "autoglm_v": "AutoGLM-OS with vision: run_autoglm_v.py, autoglm-os on screenshots, on a model server, 50 steps",
-        "mano": "Mano: run_multienv_mano.py, the mano model on a model server, 15 steps",
-        "muse_spark": "Meta's Muse Spark: run_multienv_muse_spark.py, muse-spark-1.1 over the Responses API, 100 steps"
-      }
+      ]
     },
     "thinking": {
       "summary": "M3_THINKING_MODE: adaptive, as run_multienv_m3.py's own documented invocation exports it (the model decides whether to think; temperature 1, no top_p), or off, the agent's code default when the variable is unset.",

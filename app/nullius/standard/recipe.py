@@ -176,7 +176,8 @@ def protocol(o: dict) -> str:
         return "no agent"
     if o["_kind"] == "capability":
         return "JSON lines"
-    return "ACP" if "acp" in (o.get("start") or {}) else "a command"
+    st = o.get("start") or {}
+    return "ACP" if "acp" in st else "its own script" if "driver" in st else "a command"
 
 
 def skills_of(port: str, record: Optional[dict]) -> List[dict]:
@@ -194,7 +195,10 @@ def skills_of(port: str, record: Optional[dict]) -> List[dict]:
 
 
 def _other_page(o: dict) -> dict:
-    return {"key": o["_ref"], "base": o["key"], "label": definitions.title(o), "summary": o["summary"], "kind": o["_kind"],
+    # a benchmark's own agent: its benchmark, the models it is published with and the upstream's name for it
+    own = {"benchmark": o["benchmark"], "benchmark_label": o["benchmark_label"], "models": list(o.get("models") or []), "agent": o["start"]["driver"]["agent"]} \
+        if "driver" in (o.get("start") or {}) else {}
+    return {**own, "key": o["_ref"], "base": o["key"], "label": definitions.title(o), "summary": o["summary"], "kind": o["_kind"],
             "featureKind": o.get("kind", ""), "protocol": protocol(o), "apis": list((o.get("model") or {}).get("apis") or ["chat"]), "version": str((o.get("upstream") or {}).get("version") or ""),
             "default": o.get("_version") == o.get("_default"),
             "offers": list(o.get("offers") or []),
@@ -217,7 +221,7 @@ def choices() -> dict:
     defaults = [b for b in d["benchmark"] if b.get("_version") == b.get("_default")]
     return {"benchmarks": [_bench_page(b) for b in defaults],
             # an example (the reference agent, the example memory) is there to read or copy, never to choose
-            "agents": [_other_page(o) for o in d["agent"] if not o.get("example")],
+            "agents": [_other_page(o) for o in d["agent"] + definitions.benchmark_agents(d["benchmark"]) if not o.get("example")],
             "capabilities": [_other_page(o) for o in d["capability"] if not o.get("example")],
             "fits": match.table(d["benchmark"], d["agent"], d["capability"]),
             "ports": {p: s["summary"] for p, s in ports.PORTS.items()},
@@ -259,6 +263,20 @@ def chosen_of(recipe: dict) -> List[str]:
     if not isinstance(picked, list):
         picked = [recipe.get("other")] if recipe.get("other") else []
     return list(dict.fromkeys(str(x) for x in picked if isinstance(x, str) and x))
+
+
+def with_own_agents(recipe: dict, bench: dict) -> dict:
+    """A recipe from before a benchmark's own agents were agents (``definitions.own_agents``): its
+    ``original`` with ``bench_options.agent`` is that agent, ``<benchmark>:<key>``, by the upstream's name for
+    it; without the option, the first; a name none has is kept, ``<benchmark>:<name>``, for compile to say."""
+    own, refs = definitions.own_agents(bench), chosen_of(recipe)
+    if not own or "original" not in refs:
+        return recipe
+    opts = dict(recipe["bench_options"]) if isinstance(recipe.get("bench_options"), dict) else {}
+    v = opts.pop("agent", None)
+    a = next((x for x in own if x["start"]["driver"]["agent"] == v), None) if v else own[0]
+    ref = a["_ref"] if a else f"{bench['key']}:{v}"
+    return dict(recipe, others=[ref if r == "original" else r for r in refs], bench_options=opts)
 
 
 def options_for(recipe: dict, ref: str, several: bool):
@@ -319,7 +337,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     the run sends it as."""
     d = defs or _all()
     errors, notes = [], []
-    add = lambda step, message: errors.append({"step": STEP[step], "message": message})
+    # each problem once: several picks of one kind (a benchmark's own agents) can each find it
+    add = lambda step, message: None if {"step": STEP[step], "message": message} in errors \
+        else errors.append({"step": STEP[step], "message": message})
     out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
            "served_models": {}}
     name = str(recipe.get("name") or "")
@@ -331,6 +351,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         add("benchmark", "Choose a benchmark of the standard.")
         return out
     b = dict(b, label=definitions.title(b))
+    recipe = with_own_agents(recipe, b)
     # one dataset or several (``datasets``; a recipe from before names one, ``dataset``): each its own jobs
     wanted = recipe.get("datasets") if isinstance(recipe.get("datasets"), list) else ([recipe["dataset"]] if recipe.get("dataset") else [])
     wanted = list(dict.fromkeys(str(x) for x in wanted if isinstance(x, str)))
@@ -360,7 +381,13 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         if ref == "model":
             add("agent", "Choose Original, then choose the model on the Model step.")
             continue
-        if ref == "original":
+        own = definitions.own_agent(b, ref) if ":" in ref else None      # one of the benchmark's own agents
+        if ":" in ref and own is None:
+            other = definitions.find(definitions.benchmark_agents(d["benchmark"]), ref)
+            add("agent", f"{other['label']} cannot run {b['label']}: " + "; ".join(match.fit(b, other)) + "." if other
+                else f"Choose an agent for {b['label']}: {ref} is not one of its own.")
+            continue
+        if ref == "original" or own:
             orig = (b.get("setups") or {}).get("original") or {}
             picked = str(recipe.get("model") or "").strip()
             if not picked:
@@ -369,11 +396,15 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             method = "model" if recipe.get("model_choice", "any") != "paper" and "model" in (b.get("setups") or {}) else "original"
             if method == "original":
                 picked = definitions.upstream_name(orig, picked, provider_)
-            o, why_not = definitions.setup(b, method, picked, provider_)
+            if own and method == "original" and picked not in own["models"]:
+                add("model", f"{own['label']} is published with {', '.join(own['models'])}: choose one of them"
+                    + (", or Any of your choice for another." if "model" in (b.get("setups") or {}) else "."))
+                continue
+            o, why_not = definitions.setup(b, method, picked, provider_, own["start"]["driver"]["agent"] if own else "")
             if o is None:
                 add("model" if orig else "agent", why_not[0].upper() + why_not[1:] + ".")
                 continue
-            picks.append({"o": o, "control": False, "setup": True, "given": {}, "opts": {}, "model": picked or o["asked"]})
+            picks.append({"o": o, "control": False, "setup": True, "given": {}, "opts": {}, "model": picked or o["asked"], "agent": own})
             continue
         if control:
             o = definitions.control(b, ref)
@@ -408,20 +439,25 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         if chosen_opts.get(k, v) != v:
             add("dataset", f"Like the leaderboard sets {(b.get('options') or {})[k].get('label') or k.replace('_', ' ')} to {v}: choose Any of your choice for {chosen_opts[k]}.")
     chosen_opts = {**(lb.get("bench_options") or {}), **chosen_opts}
+    if definitions.own_agents(b):                  # the agent is each pick's own, never the recipe's
+        chosen_opts.pop("agent", None)
+    agent_of = lambda p: {"agent": p["agent"]["start"]["driver"]["agent"]} if p.get("agent") else {}
     per_ds, needs = {}, {"embeddings": [], "reranker": [], "host": []}
     # each participant's scope and kind: an option an agent's run alone takes (setups: agent) is an agent's
-    scopes = list(dict.fromkeys((p["o"]["key"], None) if p.get("setup") else ("yours", p["o"].get("_kind"))
-                                for p in picks)) or [("yours", None)]
+    scopes = list(dict.fromkeys((p["o"]["key"], None, agent_of(p).get("agent")) if p.get("setup") else ("yours", p["o"].get("_kind"), None)
+                                for p in picks)) or [("yours", None, None)]
     for x in dss:
         # Original's retrievers have machine requirements too; collect the
         # options of every participant that the compiled commands will run.
         vals, bad = {}, []
-        for scope, kind in scopes:
-            chosen, problems = definitions.bench_options_of(b, x["id"], chosen_opts, scope, kind=kind)
+        for scope, kind, agent in scopes:
+            chosen, problems = definitions.bench_options_of(b, x["id"], dict(chosen_opts, **({"agent": agent} if agent else {})), scope, kind=kind)
             vals.update(chosen)
             bad.extend(problems)
         for why_not in dict.fromkeys(bad):
             add("dataset", why_not[0].upper() + why_not[1:] + ".")
+        if len({a for _, _, a in scopes if a}) > 1:
+            vals["agent"] = None                   # several of its own agents: a default by agent is each one's
         per_ds[x["id"]] = vals
         n = definitions.option_needs(b, vals)
         needs["embeddings"] += [m for m in n["embeddings"] if m not in needs["embeddings"]]
@@ -664,7 +700,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     pairs = [(x, p) for x in dss for p in picks]
 
     def word_of(d: dict, p: dict) -> str:
-        return "-".join(([d["id"]] if many else []) + ([definitions.job_word(p["o"])] if several else []))
+        return "-".join(([d["id"]] if many else []) + ([definitions.job_word(p.get("agent") or p["o"])] if several else []))
 
     def launch_of(d: dict, p: dict) -> str:
         return "-".join(filter(None, [name, word_of(d, p)]))
@@ -674,7 +710,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
 
     def options_for_pick(d: dict, p: dict) -> dict:
         """The benchmark's options for this dataset and this pick: a setup's own, or those of the port."""
-        return definitions.bench_options_of(b, d["id"], chosen_opts, p["o"]["key"] if p.get("setup") else "yours",
+        return definitions.bench_options_of(b, d["id"], dict(chosen_opts, **agent_of(p)), p["o"]["key"] if p.get("setup") else "yours",
                                             kind=None if p.get("setup") else p["o"].get("_kind"))[0]
 
     def command_for(d: dict, p: dict, index: int) -> str:
@@ -717,11 +753,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         for d, p in pairs:
             command = command_for(d, p, i)
             commands.append(command)
-            parts.append({"id": word_of(d, p) or definitions.job_word(p["o"]),
-                          "label": " · ".join(([d.get("label") or d["id"]] if many else []) + [p["o"]["label"]]) + (f" · shard {i}/{of}" if of > 1 else ""),
+            parts.append({"id": word_of(d, p) or definitions.job_word(p.get("agent") or p["o"]),
+                          "label": " · ".join(([d.get("label") or d["id"]] if many else []) + [(p.get("agent") or p["o"])["label"]]) + (f" · shard {i}/{of}" if of > 1 else ""),
                           "script": script_for(d, p, command, i)})
             # a shard's launch id, so its run record joins the launch before its job is written (runs.launches)
-            jobs.append({"name": job_of(d, p, i), "agent": p["o"]["_ref"], "dataset": definitions.ref_of(b),
+            jobs.append({"name": job_of(d, p, i), "agent": p["agent"]["key"] if p.get("agent") else p["o"]["_ref"], "dataset": definitions.ref_of(b),
                          **({"launch": launch_of(d, p)} if of > 1 else {})})
         out["shards"].append({"where": where, "index": i, "of": of, "name": f"{name}-shard-{i}of{of}" if of > 1 else name,
                               "command": "\n".join(commands[-len(pairs):]), "script": parts[0]["script"], "parts": parts, "jobs": jobs})
@@ -762,6 +798,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         o = p["o"]
         if p["control"]:
             return [STEP["agent"], "Check", f"{o['label']} ({o['key']}) · {o['source']} · {o['from']}"]
+        if p.get("agent"):
+            return [STEP["agent"], "Participant", f"{p['agent']['label']} · {b['label']}'s own"]
         if p.get("setup"):
             original = (b.get("setups") or {}).get("original") or {}
             label = original.get("reference_agent") or ("No agent · Original" if side == "agent" else "Original " + (_bench_page(b)["kind"] or "capability"))
@@ -774,7 +812,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       ", ".join(f"{x.get('label') or x['id']}" + (f" · {x['units']} {nouns}" if x.get("units") else "") for x in dss)],
                      *[[STEP["limits" if (b.get("options") or {})[k].get("limit") else "dataset" if (b.get("options") or {})[k].get("step") else "agent"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
                         _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)") + f" · {', '.join(x['id'] for x in dss if per_ds[x['id']].get(k) == v)}"]
-                       for k, v in {k: v for vals in per_ds.values() for k, v in vals.items()}.items() if (b.get("options") or {})[k].get("step") != "where"],
+                       for k, v in {k: v for vals in per_ds.values() for k, v in vals.items()}.items()
+                       if (b.get("options") or {})[k].get("step") != "where" and not (k == "agent" and definitions.own_agents(b))
+                       and not ((b.get("options") or {})[k].get("when") or {}).get("agent")
+                       or "agent" in ((b.get("options") or {})[k].get("when") or {}) and any(      # one of its own agents' settings: that agent's
+                           p.get("agent") and p["agent"]["start"]["driver"]["agent"] in b["options"][k]["when"]["agent"] for p in picks)],
                      *[row(p) for p in picks],
                      *[[STEP["agent"], "Options" + (f" of {p['o']['label']}" if several else ""),
                         ", ".join(f"{k} {v}" + ("" if k in p["given"] else " (its default)") for k, v in p["opts"].items())]

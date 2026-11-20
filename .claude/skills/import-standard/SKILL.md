@@ -447,7 +447,12 @@ upstream rule as a Nullius defect. Show one **Original** procedure. Model select
 **Like the paper** filters documented models; **Any of your choice** uses the
 provider catalogue. Do not invent paper models. Declare `reference_agent` on
 `setups.original` when upstream runs a named agent; otherwise the builder shows
-**No agent · Original**, or **Original memory** for a memory benchmark. The
+**No agent · Original**, or **Original memory** for a memory benchmark. An
+upstream that ships several agent scripts brings them as its own agents:
+`agents.json` beside `standard.json`, each entry an agent with `start.driver`
+and its published `models` (docs/standard.md, "A benchmark's own agents"),
+`options.agent` written with its label, summary and setups only; recipes then
+name one as `<benchmark>:<key>`. The
 `original` / `model` driver methods preserve upstream model aliases; they are
 not separate user-facing setups. Recipes select `others: ["original"]`, one
 `model`, and `model_choice: "paper" | "any"`.

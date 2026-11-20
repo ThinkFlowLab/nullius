@@ -178,6 +178,42 @@ class Tabs(unittest.TestCase):
         self.assertNotIn("agent.task/v1", card[card.index(">"):card.index("</article>")])   # the detail is on its page
         self.assertEqual(self.get("/agents/nope").status_code, 404)
 
+    def test_a_benchmarks_own_agents_are_listed_behind_the_from_filter(self):
+        with patch.object(definitions, "load", _LOAD):
+            html = self.get("/agents").get_data(as_text=True)
+            table = self.get("/agents?view=table").get_data(as_text=True)
+        menu = html[html.index('data-filter-menu="from"'):]
+        menu = menu[:menu.index("</fieldset>")]
+        self.assertIn('data-value="bundled" checked> Bundled', menu)
+        self.assertIn('data-value="benchmark"> A benchmark&#39;s own', menu)     # one click away, off by default
+        card = html[html.index('id="osworld1-openai-cua"'):]
+        card = card[:card.index("</article>")]
+        self.assertIn('data-f-from="benchmark&#10;"', card)
+        self.assertIn('href="/benchmarks/osworld1"', card)
+        self.assertIn('<span class="cat-tag">OSWorld1</span>', card)
+        self.assertIn('<div class="bench-card-setup">computer-use-preview</div>', card)
+        self.assertIn("Computer use", card)
+        self.assertNotIn("Ports proven", card)
+        self.assertIn('id="osworld2-muse-spark"', table)
+        self.assertEqual(self.get("/agents/openai-cua").status_code, 404)                 # its benchmark's page is its page
+
+    def test_runs_on_filters_by_the_benchmarks_each_agent_runs(self):
+        with patch.object(definitions, "load", _LOAD):
+            html = self.get("/agents").get_data(as_text=True)
+        menu = html[html.index('data-filter-menu="runs_on"'):]
+        menu = menu[:menu.index("</fieldset>")]
+        self.assertIn('data-value="osworld1" checked> OSWorld1', menu)
+        self.assertIn('data-value="gsm8k" checked> GSM8K', menu)
+        cards = re.findall(r'<article class="bench-card" data-card id="([^"]+)"[^>]*?data-f-runs_on="([^"]*)"', html)
+        on = sorted(i for i, runs in cards if "osworld1" in runs.split("&#10;"))
+        self.assertEqual(on, sorted(["codex"] + ["osworld1-" + k for k in ("m3", "prompt", "claude", "gpt54", "openai-cua", "qwen", "os-symphony",
+                                                                          "evocua", "autoglm", "autoglm-v", "mano", "muse-spark")]))
+        self.assertNotIn("osworld1", dict(cards)["osworld2-m3"].split("&#10;"))         # another benchmark's own runs it alone
+        # the count the card shows and the filter read one record
+        card = html[html.index('id="codex"'):]
+        n = card[:card.index(">")].split('data-f-runs_on="', 1)[1].split('"', 1)[0].count("&#10;")
+        self.assertIn(f"<dt>Benchmarks it runs</dt><dd>{n}/", card)
+
     def test_agents_sort_and_filter_by_protocol_and_the_ports_they_prove(self):
         html = self.get("/agents").get_data(as_text=True)
         menu = html[html.index('data-tools="sort"'):]
@@ -193,7 +229,8 @@ class Tabs(unittest.TestCase):
         self.assertIn('data-s-ports="2/7"', card[:card.index(">")])
         caps = self.get("/capabilities").get_data(as_text=True)
         self.assertIn('data-tools="sort"', caps)
-        self.assertNotIn("data-filter-menu", caps)                                          # one protocol: nothing to filter
+        self.assertNotIn('data-filter-menu="protocol"', caps)                               # one protocol: nothing to filter
+        self.assertIn('data-filter-menu="runs_on"', caps)                                   # the benchmarks it runs, as agents
 
     def test_agents_capabilities_and_kits_are_cards_by_default_and_a_table_on_request(self):
         for url in ("/agents", "/capabilities", "/kits"):

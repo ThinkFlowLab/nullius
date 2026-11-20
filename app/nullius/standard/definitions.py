@@ -71,6 +71,17 @@ of its own behaviour, each with its allowed values and a default that is the
 vendor's own, filled into its templates as ``{opt_<name>}`` (:func:`options_of`).
 An agent may name its own non-interactive command (``fidelity.command``), which
 ``fidelity`` drives beside ACP to show both send the model the same requests.
+
+A benchmark may bring its **own agents**: ``agents.json`` beside its
+``standard.json``, keyed JSON whose ``agents`` are agent definitions that start
+with ``start.driver`` - the upstream's own value (``agent``) and what its driver
+runs (``script``, ``argv``, ``env``) in the benchmark's Original setup - each
+with the ``models`` it is published with. Such an agent speaks no port: no
+``offers``, no ``proven``. Where an agent comes from (``from``: ``bundled``,
+``yours``, ``benchmark``) and a benchmark agent's ``only_for`` (its benchmark)
+are derived from where it sits, never written; :func:`own_agents` lists them,
+each named ``<benchmark>:<key>``, and the loader rebuilds the benchmark's
+``options.agent`` (its values, names, about and default) from them.
 """
 from __future__ import annotations
 
@@ -1256,16 +1267,22 @@ def settings_problems(versions: List[dict]) -> List[str]:
     return bad
 
 
-def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple:
+def setup(bench: dict, which: str, model: str = "", provider: str = "", agent: str = "") -> tuple:
     """The setup ``which`` of ``bench`` as the other side of a run, with
     ``model`` on ``provider``: (definition, why not). The definition says the
     model the upstream's code is asked as (``asked``) and the one the relay
     sends (``sent``). ``original`` takes only the paper's models, on a
-    provider that serves them; ``model`` takes any, asked as its ``runs_as``.
+    provider that serves them; ``model`` takes any, asked as its ``runs_as`` - or,
+    on a benchmark with agents of its own, as the agent's first model, the one its driver asks.
+    On a benchmark with agents of its own, ``agent`` is the upstream's name of
+    the one that runs (its agent option; none, the first), whose key the
+    definition carries (``agent``).
     (None, why) when the benchmark has no such setup or the model is refused."""
     s = bench.get("setups") or {}
     if which not in SETUPS or not isinstance(s.get(which), dict):
         return None, f"{bench['label']} has no {which} setup"
+    own = own_agents(bench)
+    mine = next((a for a in own if a["start"]["driver"]["agent"] == agent), None) if agent else (own[0] if own else None)
     orig, x = s["original"], s[which]
     model = (model or "").strip()
     side = []
@@ -1292,12 +1309,126 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple
     else:
         if not model:
             return None, f"the model setup needs a model: the one to put in {orig['default']}'s place"
-        asked, sent = x["runs_as"], model
+        asked, sent = (mine["models"][0] if mine else x["runs_as"]), model      # its own agent asks its own first model
     units = orig.get("units") or bench.get("units") or {"noun": "unit", "nouns": "units"}
-    return {"model": {"side_models": side}, "key": which, "label": f"{bench['label']} {setup_label(bench, which).lower()}",
+    return {**({"agent": mine["key"]} if mine else {}), "model": {"side_models": side}, "key": which, "label": f"{bench['label']} {setup_label(bench, which).lower()}",
             "summary": x["summary"], "asked": asked, "sent": sent, "units": units, "comparable": which == "original" and comparable(x, model),
             "turn_seconds": orig.get("turn_seconds"), "upstream": {}, "_kind": "upstream", "_ref": which,
             "_here": bench.get("_here", "")}, ""
+
+
+AGENTS_FILE = "agents.json"
+FROM = {"bundled": "Bundled", "yours": "Yours", "benchmark": "A benchmark's own"}
+
+
+def _driver_agent(d: dict) -> List[str]:
+    """An agent of a benchmark's ``agents.json``: ``start.driver``, what the benchmark's driver runs; the
+    models it is published with; no port, so no ``offers`` and no ``proven``; its benchmark in ``only_for``."""
+    st, bad = d["start"], []
+    if "acp" in st or "command" in st:
+        bad.append("start: acp, command or driver, one of them")
+    drv = st["driver"]
+    if not isinstance(drv, dict):
+        return bad + ["start.driver: {agent, script, argv, env}, what the benchmark's driver runs"]
+    if not isinstance(drv.get("agent"), str) or not _OPTION_VALUE.match(drv["agent"]):
+        bad.append("start.driver.agent: the upstream's own name for it, a plain word")
+    if not isinstance(drv.get("script"), str) or not _RELATIVE.match(drv["script"]):
+        bad.append("start.driver.script: its script, a path in the upstream")
+    if not isinstance(drv.get("argv", []), list) or not all(isinstance(w, str) for w in drv.get("argv", [])):
+        bad.append("start.driver.argv: the words its documented invocation passes")
+    env = drv.get("env", {})
+    if not isinstance(env, dict) or not all(_ENV_NAME.match(str(k)) and isinstance(v, str) for k, v in env.items()):
+        bad.append("start.driver.env: variable names and templates")
+    if d.get("offers") or d.get("proven"):
+        bad.append("offers, proven: none - a benchmark's own agent speaks no port, its driver runs it")
+    only = d.get("only_for")
+    if not isinstance(only, list) or len(only) != 1:
+        bad.append(f"start.driver: a benchmark's own agent, in its folder's {AGENTS_FILE}")
+    ms = d.get("models")
+    if not isinstance(ms, list) or not ms or len(set(map(str, ms))) != len(ms) \
+            or not all(isinstance(m, str) and _MODEL_NAME.match(m) for m in ms):
+        bad.append("models: the models it is published with, each once, as its code names them")
+    return bad
+
+
+def _own_entry(bench: dict, key: str, e: dict) -> dict:
+    """One entry of a benchmark's ``agents.json`` as an agent definition: where it comes from and the one
+    benchmark it runs derived from its folder."""
+    return dict(e, schema=KINDS["agent"]["schema"], only_for=[bench.get("key")], benchmark=bench.get("key"),
+                benchmark_label=bench.get("label"), _kind="agent", _here=bench.get("_here", ""),
+                _ref=f"{bench.get('key')}:{key}", _version="", _versions=[""], _default="", **{"from": "benchmark"})
+
+
+def own_agents(bench: dict) -> List[dict]:
+    """A benchmark's own agents (its ``agents.json``), each an agent definition named ``<benchmark>:<key>``."""
+    rows = bench.get("_agents")
+    return [_own_entry(bench, k, e) for k, e in rows.items() if isinstance(e, dict)] if isinstance(rows, dict) else []
+
+
+def benchmark_agents(benches: List[dict]) -> List[dict]:
+    """Every benchmark's own agents, once: those of each benchmark's default version."""
+    return [a for b in benches if b.get("_version") == b.get("_default") for a in own_agents(b)]
+
+
+def own_agent(bench: dict, ref: str) -> Optional[dict]:
+    """The benchmark's own agent ``ref`` names (``<benchmark>:<key>``), or None."""
+    return next((a for a in own_agents(bench) if a["_ref"] == ref), None)
+
+
+def _with_agents(d: dict, here: str) -> dict:
+    """A benchmark whose folder holds ``agents.json``: its entries (``_agents``) and ``options.agent``
+    rebuilt from them - the upstream values in order, their labels and summaries, the first the default."""
+    path = os.path.join(here, AGENTS_FILE)
+    if not isinstance(d, dict) or not os.path.isfile(path):
+        return d
+    with open(path) as f:
+        raw = json.load(f)
+    rows = raw.get("agents") if isinstance(raw, dict) else None
+    d = dict(d, _agents=rows)
+    opt = (d.get("options") or {}).get("agent") if isinstance(d.get("options"), dict) else None
+    if not isinstance(opt, dict) or not isinstance(rows, dict):
+        return d
+    written = [k for k in ("values", "names", "about", "default") if k in opt]
+    if written:
+        return dict(d, _agents_written=written)
+    es = [e for e in rows.values() if isinstance(e, dict)]
+    ups = [((e.get("start") or {}).get("driver") or {}).get("agent") if isinstance(e.get("start"), dict) else None for e in es]
+    opt = dict(opt, values=ups, names={u: e.get("label") for u, e in zip(ups, es)},
+               about={u: e.get("summary") for u, e in zip(ups, es)}, default=ups[0] if ups else None)
+    return dict(d, options=dict(d["options"], agent=opt))
+
+
+def _own_agents(d: dict) -> List[str]:
+    """A benchmark's ``agents.json``: each entry an agent (:func:`_driver_agent`) keyed by its key, each
+    upstream value once, each model among the Original setup's; ``options.agent`` with its label, summary
+    and setups only, the rest rebuilt from the file."""
+    if "_agents" not in d:
+        return []
+    rows, w = d["_agents"], AGENTS_FILE
+    if not isinstance(rows, dict) or not rows:
+        return [f"{w}: agents, key -> an agent (nullius.agent/v1, start.driver)"]
+    bad = [f"options.agent.{k}: from {w}, not written here (label, summary and setups only)" for k in d.get("_agents_written") or []]
+    if not isinstance((d.get("options") or {}).get("agent"), dict):
+        bad.append(f"options.agent: {{label, summary, setups}}, its values from {w}")
+    orig = (d.get("setups") or {}).get("original") or {}
+    seen = set()
+    for k, e in rows.items():
+        at = f"{w}: agents.{k}"
+        if not isinstance(e, dict):
+            bad.append(f"{at}: an object")
+            continue
+        if "only_for" in e and e["only_for"] != [d.get("key")]:
+            bad.append(f"{at}.only_for: its own benchmark ({d.get('key')}) alone, or left out")
+        if e.get("key") != k:
+            bad.append(f"{at}.key: {k}, its name in agents")
+        bad += [f"{at}: {p}" for p in problems(_own_entry(d, k, dict(e, only_for=[d.get("key")])), "agent")]
+        up = ((e.get("start") or {}).get("driver") or {}).get("agent") if isinstance(e.get("start"), dict) else None
+        if up in seen:
+            bad.append(f"{at}.start.driver.agent: {up} is another entry's")
+        seen.add(up)
+        if isinstance(orig.get("models"), list) and isinstance(e.get("models"), list):
+            bad += [f"{at}.models: {m} is not one of setups.original.models" for m in e["models"] if m not in orig["models"]]
+    return bad
 
 
 def problems(d: dict, kind: str) -> List[str]:
@@ -1413,6 +1544,7 @@ def problems(d: dict, kind: str) -> List[str]:
         bad += _controls(d.get("controls"))
         bad += _leaderboard(d)
         bad += _setups(d.get("setups"))
+        bad += _own_agents(d)
         bad += _environments(d.get("environments"), d.get("_here"))
         envs = d.get("environments") if isinstance(d.get("environments"), dict) else {}
         if d.get("family") == "capability":
@@ -1423,6 +1555,8 @@ def problems(d: dict, kind: str) -> List[str]:
                 bad.append(f"datasets[{i}].environment: one of environments ({', '.join(envs) or 'none declared'})")
         if d.get("proven") is not None and not isinstance(d.get("proven"), dict):
             bad.append("proven: an object, per dataset, written by cli prove")
+    elif kind == "agent" and "driver" in (d.get("start") or {}):
+        bad += _driver_agent(d)
     elif kind == "agent":
         st = d.get("start") or {}
         if ("acp" in st) == ("command" in st):
@@ -1489,6 +1623,8 @@ def _read(path: str, kind: str, key: str) -> Tuple[Optional[dict], List[str]]:
     try:
         with open(path) as f:
             d = names.definition(json.load(f))
+        if kind == "benchmark":
+            d = _with_agents(d, os.path.dirname(path))
     except (OSError, ValueError, TypeError, AttributeError) as e:
         return None, [f"{kind} {key}: {e}"]
     try:
@@ -1498,9 +1634,14 @@ def _read(path: str, kind: str, key: str) -> Tuple[Optional[dict], List[str]]:
     bad = [f"{kind} {key}: {p}" for p in found]
     if isinstance(d, dict) and d.get("key") != key:
         bad.append(f"{kind} {key}: key {d.get('key')!r} is not its folder's name")
+    if kind == "agent" and isinstance(d, dict) and "driver" in (d.get("start") or {}):
+        bad.append(f"{kind} {key}: start.driver: only an entry of a benchmark's {AGENTS_FILE}")
     if bad:
         return None, bad
     d = dict(d, _here=os.path.dirname(path), _kind=kind)
+    if kind == "agent":                          # where it comes from: the user's catalogue, or the bundle
+        user = os.path.realpath(paths.catalogue_dir())
+        d["from"] = "yours" if os.path.realpath(path).startswith(user + os.sep) else "bundled"
     return d, []
 
 

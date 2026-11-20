@@ -31,7 +31,7 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `osworld2` | Original · OSWorld-V2 agents · Like the paper or Any of your choice | `agent`, `max_steps`, `thinking`, `vm_provider`, `websites`, `write_iops`, `write_mbps` |
+| `osworld2` | Original · its own agents · Like the paper or Any of your choice | `agent`, `max_steps`, `thinking`, `vm_provider`, `websites`, `write_iops`, `write_mbps` |
 
 ## Options
 
@@ -62,7 +62,7 @@ Long-horizon, real-world tasks on an Ubuntu desktop, across its apps, each in a 
 - Tasks 103 and 104 are not supported: they stay in the datasets, and an agent's unit ends in an error.
 - A slow or loaded machine, or a run across 16:00 UTC (the VM's midnight), can change scores.
 - The null control scores above 0 on 015, 076, 090 and 092, and on 077 in some runs.
-- Only OSWorld-V2's own M3 and Muse Spark run it; no agent from the Agents page yet.
+- Only OSWorld-V2's own M3 and Muse Spark run it; no other agent yet.
 - Fetch the gated tasks and prepare the machine first: see OSWorld2 machine setup in the docs.
 
 ## Cite

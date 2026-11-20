@@ -92,7 +92,6 @@
   "setups": {
     "original": {
       "summary": "OSWorld-V2's own agent, M3 or Muse Spark, as published, on a Docker VM.",
-      "reference_agent": "OSWorld-V2 agents",
       "models": [
         "MiniMax-M3",
         "muse-spark-1.3"
@@ -121,21 +120,9 @@
     "agent": {
       "label": "Agent",
       "summary": "Which of OSWorld-V2's own agents runs: each its script as published, with its own prompts, tools and history, asking the model it is published with.",
-      "values": [
-        "m3",
-        "muse_spark"
-      ],
-      "default": "m3",
       "setups": [
         "original"
-      ],
-      "names": {
-        "m3": "MiniMax M3",
-        "muse_spark": "Muse Spark"
-      },
-      "about": {
-        "m3": "as in the paper"
-      }
+      ]
     },
     "max_steps": {
       "label": "Steps per task",
