@@ -48,7 +48,7 @@
     const own = ownAgentsOf(b).map(o => ({...o, why: why[o.key] || [], setup: true, own: true}));
     const setups = own.length ? [] : (b.setups || []).map(x => ({...x, protocol: 'its own code', version: '', offers: [], proven: {}, options: {}, setup: true, why: []}));
     const rest = b.family === 'agent' ? standard().agents.filter(o => o.benchmark !== b.key) : standard().capabilities;
-    return own.concat(rest.map(o => ({...o, why: why[o.key] || [], elsewhere: !!o.benchmark})), setups, controls);
+    return own.concat(rest.map(o => ({...o, why: why[o.key] || []})), setups, controls);
   }
   // the chosen ones of a benchmark's own agents, and what each choice runs as: its own agent, its Original setup
   const ownChosen = r => ownAgentsOf(standardBench(r)).filter(a => chosenOf(r).includes(a.key));

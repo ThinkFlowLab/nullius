@@ -5,7 +5,7 @@
    all read: `key` (the data-col), `label`; `type` 'text' (default) or 'num', how it sorts; `align` 'left', 'center'
    or 'right' (a 'num' column's default), of its header and cells; `sticky`: pinned while the table scrolls, the last
    one drawing the edge; `blank`: no visible name (a status, the actions), neither sorted nor in the Columns menu;
-   `check`: blank, a checkbox that ticks every visible row (check_cell in each row); `sr`: the label for a screen
+   `check`: blank, a checkbox that ticks every visible row (check_cell in each row); `pick`: blank, as narrow, with no such box; `sr`: the label for a screen
    reader only; `title`: its tooltip; `menu` false: not in the Columns menu; `fixed`: in it, always on; `off`: off
    until the viewer chooses; `width` in a table macro's table: 'fit' (default), as wide as its widest cell on one
    line, or 'expand', the rest of the width, wrapping; `table` false: on cards only (_cards.html, where `card` names
@@ -23,7 +23,7 @@
 {# The header cells of `cols`. #}
 {% macro heads(cols) %}{% set edge = edge_of(cols) %}
 {%- for c in cols %}{% set named = not (c.blank or c.check) %}
-      <th data-col="{{ c.key }}"{% if named %} data-type="{{ c.type or 'text' }}"{% else %} scope="col"{% endif %}{{ classes(c, c.key == edge, 'pick-col' if c.check) }}{% if c.title %} title="{{ c.title }}"{% endif %}>
+      <th data-col="{{ c.key }}"{% if named %} data-type="{{ c.type or 'text' }}"{% else %} scope="col"{% endif %}{{ classes(c, c.key == edge, 'pick-col' if c.check or c.pick) }}{% if c.title %} title="{{ c.title }}"{% endif %}>
         {%- if c.check %}<input type="checkbox" data-check-all aria-label="{{ c.label }}" title="{{ c.label }}">{% elif c.sr or c.blank %}<span class="sr">{{ c.label }}</span>{% else %}{{ c.label }}{% endif %}</th>
 {%- endfor %}
 {%- endmacro %}
@@ -74,7 +74,7 @@
    page's other one, its other query kept, at the end; `default` the view a page shows without ?view=, the other
    one's link carrying ?view=<it>. The search goes left, the buttons right. A column's
    `filter` says where its choices go, one form or a list of them: 'button' (the default), in the Filter menu;
-   'dropdown', a menu of its own; 'pills', a row of toggles under the controls. A column's `filter_icon`, a sprite id
+   'dropdown', a menu of its own; 'pills', a row of toggles under the controls, the first named by `all` (All). A column's `filter_icon`, a sprite id
    without its `i-`, leads its dropdown's button and its pills. `id`: the table's. #}
 {% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none, sort=true, layout=none, default='table') %}
 {%- set by = {'button': [], 'dropdown': [], 'pills': []} %}{% for c in cols if c.key in choices %}{% for f in ([c.filter] if c.filter is string else c.filter or ['button']) %}{% set _ = by[f].append(c) %}{% endfor %}{% endfor %}
@@ -120,7 +120,7 @@
   </div>{% endif %}
   {% for c in by.pills %}
   <div class="filter-pills" role="group" aria-label="{{ c.label }}" data-pills="{{ c.key }}">
-    {{ icon(c) }}<button type="button" class="filter-pill" data-all="{{ c.key }}" aria-pressed="{{ 'false' if c.key in only else 'true' }}">All</button>
+    {{ icon(c) }}<button type="button" class="filter-pill" data-all="{{ c.key }}" aria-pressed="{{ 'false' if c.key in only else 'true' }}">{{ c.all or 'All' }}</button>
     {%- for value, text in choices[c.key] %}<button type="button" class="filter-pill" data-value="{{ value }}" aria-pressed="{{ 'true' if c.key in only and value in ([only[c.key]] if only[c.key] is string else only[c.key]) else 'false' }}">{{ text }}</button>{% endfor %}
   </div>
   {% endfor %}

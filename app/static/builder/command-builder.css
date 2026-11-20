@@ -294,3 +294,13 @@
 #nullius-builder .std-isolation small:empty { display: none; }
 #nullius-builder .std-boat-sizes .nb-tile { min-height: 60px; }
 #nullius-builder .std-boat-sizes .nb-tile-note { font-size: 13px; line-height: 1.4; }
+/* the Agent step's grid: the card toolkit's (catalogue.css), fitted to the form */
+#nullius-builder .nb-step { border-radius: 0; margin: 0; }   /* catalogue.css has a .nb-step of its own */
+#nullius-builder #nb-agent-grid { margin-bottom: 20px; }
+#nullius-builder #nb-agent-grid .bench-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 12px; }
+#nullius-builder #nb-agent-grid .bench-card { padding: 16px; gap: 10px; }
+#nullius-builder #nb-agent-grid .bench-card-title { font-size: 15px; }
+#nullius-builder #nb-agent-grid .std-tag { white-space: nowrap; }
+#nullius-builder #nb-agent-grid .card-link:focus-visible { outline: none; }
+/* its outlined pills (Protocol, Proven) want more air than snug's text beside text; a phone keeps snug's, for the pinned name */
+@media (min-width: 641px) { #nullius-builder #nb-agent-grid .grid.snug :is(th, td):not(.pick-col) { padding-left: .6rem; padding-right: .6rem; } }   /* the card's ring (catalogue.css), not a box round the name */

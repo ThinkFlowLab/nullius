@@ -264,12 +264,12 @@ process.stdout.write(JSON.stringify(out));
 ''')
         self.assertEqual(got["start"], ["All", "abc", "abc", "", "", "1–25 of 30"])
         self.assertEqual(got["page2"], "11–20 of 30")
-        self.assertEqual(got["a"], [["a", "a", "a", "1", "1", "1–10 of 10"], "L0"])
+        self.assertEqual(got["a"], [["a", "a", "a", "a", "1", "1–10 of 10"], "L0"])   # one value chosen: the dropdown names it
         self.assertEqual(got["ab"], ["ab", "ab", "ab", "2", "1", "1–10 of 20"])
-        self.assertEqual(got["dropped"], ["b", "b", "b", "1", "1", "1–10 of 10"])
+        self.assertEqual(got["dropped"], ["b", "b", "b", "b", "1", "1–10 of 10"])
         self.assertEqual(got["none"], ["All", "abc", "abc", "", "", "1–10 of 30"])
         self.assertEqual(got["every"], got["none"])
-        self.assertEqual(got["two"], ["c", "c", "c", "1", "2", "1–5 of 5"])                   # the Filter counts its columns
+        self.assertEqual(got["two"], ["c", "c", "c", "c", "2", "1–5 of 5"])                   # the Filter counts its columns
         self.assertEqual(got["all"], ["All", "abc", "abc", "", "1", "1–10 of 15"])
         self.assertEqual(got["nothing"], [["", "", "", "0", "2", ""], True])                  # None: no pill pressed, nothing shows
         self.assertEqual(got["clear"], ["All", "abc", "abc", "", "", "1–10 of 30"])
@@ -294,7 +294,7 @@ const t = make({kind: 'b'}), out = [look(t)];
 pill(t, null); out.push(look(t));
 process.stdout.write(JSON.stringify(out));
 ''')
-        self.assertEqual(got, [["b", "b", "b", "1", "1", "1–10 of 10"], ["All", "abc", "abc", "", "", "1–25 of 30"]])
+        self.assertEqual(got, [["b", "b", "b", "b", "1", "1–10 of 10"], ["All", "abc", "abc", "", "", "1–25 of 30"]])
 
 
 class Checks(unittest.TestCase):

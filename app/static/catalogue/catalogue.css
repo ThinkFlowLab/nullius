@@ -24,9 +24,26 @@
 .card-link::after { content: ""; position: absolute; inset: -1px; border-radius: 12px; }
 .card-link:focus-visible { outline: none; }
 .card-link:focus-visible::after { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
+/* a pick card (_cards.html `pick`): its title a toggle; chosen, it is marked; disabled, its reason says why */
+button.card-link { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: left; cursor: pointer; }
+button.card-link:disabled { cursor: not-allowed; }
+/* a pick row: chosen, tinted to its pinned name; disabled, faint (not translucent: its pinned name covers what scrolls under) */
+.table-wrap .grid tbody tr:has([data-pick]:checked) > td { background: var(--accent-soft); }
+.table-wrap .grid tbody tr:has([data-pick]:disabled) > td { color: var(--text-faint); }
+tr:has([data-pick]:disabled) .row-name > :first-child { opacity: .55; }
+tr:has([data-pick]:not(:disabled)) { cursor: pointer; }
+.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) { border-color: var(--accent); background: var(--accent-soft); }
+.pick-check { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--btn-fg); visibility: hidden; }
+.pick-check .ic { width: 12px; height: 12px; stroke-width: 3; }
+.bench-card:has([data-pick][aria-pressed="true"]) .pick-check { visibility: visible; }
+.bench-card:has(> .bench-card-title [data-pick]:disabled) { opacity: .55; }
+.bench-card:has(> .bench-card-title [data-pick]:disabled):hover { border-color: var(--border-soft); }
 .bench-card :is(input, button, .btn, [title]) { position: relative; z-index: 1; }
 .bench-card [title]:not(input, button, .btn) { cursor: pointer; }   /* raised for its tooltip, it still opens the card */
-.bench-card-foot .bench-harness { margin-left: auto; }
+.bench-card .card-link { position: static; z-index: auto; }   /* with a tooltip too: its ::after stretches over the card, not round its name */
+.bench-card-foot .bench-harness { margin-left: auto; text-align: right; }
+/* the foot on a card's last line, wherever its badges or stats would put it */
+.bench-card-foot:not(.bench-card-runs ~ *, .bench-stats ~ *) { margin-top: auto; }
 .bench-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .bench-shelf.st-community .bench-card { background: transparent; border-style: dashed; border-color: var(--border); }
 .bench-shelf.st-community .bench-card:hover { border-color: var(--accent); }
