@@ -1,5 +1,6 @@
 """Where a judgement lives: the workspace's own store, beside the parsed
-jobs - ``<workspace>/judgements/<job_id>/<trial_name>.json`` for System
+jobs - ``<workspace>/judgements/<job_id>/<trial_name>.json`` (each name
+spelled by `key`) for System
 One's, ``<workspace>/judgements-llm/...`` for the LLM judge's (a trial has
 both, apart, ``lane``) - keyed by question version inside. Never under the job's ``agent/`` directory: the
 run tree is Harbor's, and a re-parse of the job does not touch this.
@@ -11,6 +12,7 @@ still shown after the bump - under its own version, which the record
 carries - and a write always lands under the version the record names."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -39,8 +41,36 @@ def _root(ws_dir: str, lane: str) -> str:
     return os.path.join(ws_dir, ROOTS.get(lane, "judgements"))
 
 
-def _path(ws_dir: str, job_id: str, trial_name: str, lane: str = "decision") -> str:
-    return os.path.join(_root(ws_dir, lane), _SAFE.sub("_", job_id), _SAFE.sub("_", trial_name) + ".json")
+def key(name: str) -> str:
+    """A job id's or trial name's file name: the name itself when every
+    character is safe, else its safe spelling and a digest of the name, so
+    two names never share a file (no safe spelling holds a ``~``)."""
+    safe = _SAFE.sub("_", name)
+    return safe if safe == name else f"{safe}~{hashlib.sha256(name.encode('utf-8')).hexdigest()[:10]}"
+
+
+def _names(name: str) -> tuple:
+    """`key`, then the safe spelling alone that a store written before `key` used, still read."""
+    return tuple(dict.fromkeys((key(name), _SAFE.sub("_", name))))
+
+
+def _paths(ws_dir: str, job_id: str, trial_name: str, lane: str = "decision") -> list:
+    """Where a judgement is written, then where an older store may hold it."""
+    root = _root(ws_dir, lane)
+    return [os.path.join(root, j, t + ".json") for j in _names(job_id) for t in _names(trial_name)]
+
+
+def _read(paths) -> dict:
+    """The first judgement file of `paths` there is, read; {} when there is none or it cannot be read."""
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return json.load(fh) or {}
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            return {}
+    return {}
 
 
 def _versions(version: Optional[str]) -> tuple:
@@ -68,11 +98,7 @@ def load(ws_dir: str, job_id: str, trial_name: str, version: Optional[str] = Non
     """The record under `version`; with none named, the current version or
     the newest earlier one that has a record. `started`: the trial's own
     start, so a record of an earlier try under its name is none of its."""
-    try:
-        with open(_path(ws_dir, job_id, trial_name, lane), encoding="utf-8") as fh:
-            return _pick(json.load(fh) or {}, version, started)
-    except (OSError, ValueError):
-        return None
+    return _pick(_read(_paths(ws_dir, job_id, trial_name, lane)), version, started)
 
 
 def is_current(record: Optional[dict]) -> bool:
@@ -86,14 +112,11 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "d
     record's answers and hygiene readings merge over the version's earlier
     ones, so judging one question later does not drop the others. Saves to
     one file take turns; each writes through a temporary file of its own."""
-    path = _path(ws_dir, job_id, trial_name, lane)
+    paths = _paths(ws_dir, job_id, trial_name, lane)
+    path = paths[0]
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with _lock(path):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                data = json.load(fh) or {}
-        except (OSError, ValueError):
-            data = {}
+        data = _read(paths)
         version = record.get("questions", Q.VERSION)
         earlier = data.get(version) or {}
         if not _of(earlier, started):
@@ -114,33 +137,22 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "d
     return merged
 
 
-def for_job(ws_dir: str, job_id: str, version: Optional[str] = None, lane: str = "decision",
-            started: Optional[dict] = None) -> dict:
-    """Every judged trial of a job: {trial_name: record}, each the current
-    version's record or the newest earlier one, as `load` picks it.
-    `started`: {trial_name: its start}, as `load` takes it."""
-    d = os.path.join(_root(ws_dir, lane), _SAFE.sub("_", job_id))
+def for_job(ws_dir: str, job_id: str, started: dict, version: Optional[str] = None, lane: str = "decision") -> dict:
+    """The judged trials of a job: {trial_name: record} for each trial of
+    `started` - {trial_name: its start}, every trial of the job - that has
+    one, as `load` picks it. Nothing else under the job's name is a trial of
+    it: a v1 pair record is not."""
     out = {}
-    try:
-        names = os.listdir(d)
-    except OSError:
-        return out
-    for n in names:
-        if not n.endswith(".json"):
-            continue
-        try:
-            with open(os.path.join(d, n), encoding="utf-8") as fh:
-                rec = _pick(json.load(fh) or {}, version, (started or {}).get(n[:-5]))
-        except (OSError, ValueError):
-            continue
+    for name, start in started.items():
+        rec = load(ws_dir, job_id, name, version, lane, start)
         if rec:
-            out[n[:-5]] = rec
+            out[name] = rec
     return out
 
 
 def job_dirs(ws_dir: str, job_ids) -> list:
     """The folders that hold these jobs' judgements, in every lane."""
-    return [d for lane in ROOTS for j in job_ids if os.path.isdir(d := os.path.join(_root(ws_dir, lane), _SAFE.sub("_", j)))]
+    return [d for lane in ROOTS for j in job_ids for n in _names(j) if os.path.isdir(d := os.path.join(_root(ws_dir, lane), n))]
 
 
 def count(ws_dir: str) -> int:
@@ -154,7 +166,7 @@ def all_records(ws_dir: str, job_id: Optional[str] = None, lane: str = "decision
     version, record). One job's when `job_id` is given."""
     root = _root(ws_dir, lane)
     try:
-        jobs = [_SAFE.sub("_", job_id)] if job_id else sorted(os.listdir(root))
+        jobs = list(_names(job_id)) if job_id else sorted(os.listdir(root))
     except OSError:
         return
     for j in jobs:

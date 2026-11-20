@@ -154,14 +154,11 @@ def _rank(row: dict) -> tuple:
     return (-(row["confidence"] or 0.0), -(row["p"] or 0.0), row["trial_name"])
 
 
-def reconcile(job, records: dict, threshold: float = THRESHOLD, key=None) -> dict:
+def reconcile(job, records: dict, threshold: float = THRESHOLD) -> dict:
     """The job's reconciliation: rows by status (each list ranked strongest
     first), and the counts the page states. `records` is the store's
-    {stored name: record}; `key` maps a trial name to its stored name (the
-    store's own sanitiser), identity when not given. Reads the job; writes
-    nothing."""
-    key = key or (lambda name: name)
-    rows = [row_of(t, records.get(key(t.trial_name)), threshold) for t in job.trials]
+    {trial name: record}. Reads the job; writes nothing."""
+    rows = [row_of(t, records.get(t.trial_name), threshold) for t in job.trials]
     by_status = {s: sorted((r for r in rows if r["status"] == s), key=_rank) for s in STATUSES}
     judged = sum(1 for r in rows if r["choice"] is not None)
     asked = sum(1 for t in job.trials if t.outcome not in (classify.RESOLVED, classify.SCORED))
