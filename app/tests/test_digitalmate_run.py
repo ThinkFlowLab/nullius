@@ -5,7 +5,6 @@ No model, network, runtime installation or real process is needed by these tests
 from __future__ import annotations
 
 import importlib.util
-import json
 from pathlib import Path
 import signal
 import subprocess
@@ -37,29 +36,20 @@ class PreparedInstallTests(unittest.TestCase):
 
     def prepare(self):
         for relative in (
-            "runtime/bin/python", ".digitalmate-runtime-ready",
+            "runtime/bin/python",
             "src/harness/personal-agent/services/agent_bridge/src/server_engine/workswarm_launcher.py",
         ):
             file = self.install / relative
             file.parent.mkdir(parents=True, exist_ok=True)
             file.touch()
-        (self.install / ".digitalmate-runtime-ready").write_text(json.loads((AGENT / "agent.json").read_text())["upstream"]["tested"])
 
-    def test_runtime_must_be_prepared_before_a_process_starts(self):
+    def test_runtime_must_be_installed_before_a_process_starts(self):
         with patch.object(adapter.subprocess, "Popen") as launch:
-            with self.assertRaisesRegex(RuntimeError, "runtime is not prepared"):
+            with self.assertRaisesRegex(RuntimeError, "missing its runtime"):
                 adapter.run(self.install, "question")
             self.prepare()
-            (self.install / ".digitalmate-runtime-ready").unlink()
-            with self.assertRaisesRegex(RuntimeError, "runtime is not prepared"):
-                adapter.run(self.install, "question")
-            launch.assert_not_called()
-
-    def test_stale_runtime_pin_is_refused(self):
-        self.prepare()
-        (self.install / ".digitalmate-runtime-ready").write_text("0" * 40)
-        with patch.object(adapter.subprocess, "Popen") as launch:
-            with self.assertRaisesRegex(RuntimeError, "runtime pin differs"):
+            (self.install / "runtime/bin/python").unlink()
+            with self.assertRaisesRegex(RuntimeError, "missing its runtime"):
                 adapter.run(self.install, "question")
             launch.assert_not_called()
 
@@ -67,7 +57,7 @@ class PreparedInstallTests(unittest.TestCase):
         self.prepare()
         (self.install / "src/harness/personal-agent/services/agent_bridge/src/server_engine/workswarm_launcher.py").unlink()
         with patch.object(adapter.subprocess, "Popen") as launch:
-            with self.assertRaisesRegex(RuntimeError, "missing its product launcher"):
+            with self.assertRaisesRegex(RuntimeError, "product launcher"):
                 adapter.run(self.install, "question")
             launch.assert_not_called()
 

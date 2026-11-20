@@ -4,7 +4,8 @@ Everything goes under ``STANDARD_DIR`` (``standard/`` in the persistent user dat
 
 - ``agents/<key>/<digest>/`` and ``capabilities/<key>/<digest>/``: the packages a
   definition's ``install`` names (``npm`` into ``node_modules``, ``pip`` and
-  ``wheels`` - a wheel by its URL, checked by its sha256 - into a ``uv`` environment), the digest taken over that list so a re-pin installs
+  ``wheels`` - a wheel by its URL, checked by its sha256 - into a ``uv`` environment, then
+  its ``commands``, the upstream's own install steps), the digest taken over that list so a re-pin installs
   beside the old one rather than over it;
 - ``drivers/<key>/<digest>/``: a benchmark's ``driver.install`` the same way -
   the environment its upstream's own code needs, which its driver imports
@@ -262,6 +263,8 @@ def _steps(inst: dict, where: str, up: Optional[dict], src: Optional[str], log: 
         if inst.get("prefetch"):
             step([py, "-c", "import sys\nfrom huggingface_hub import snapshot_download\nfor m in sys.argv[1:]: snapshot_download(m)"]
                  + list(inst["prefetch"]), env={"HF_HUB_CACHE": os.path.join(where, HF)})
+    for cmd in inst.get("commands") or []:          # the upstream's own installer, once its packages are in
+        step([w.replace("{install}", where) for w in cmd])
 
 
 def process_env(d: dict, where: str, home: str, options: Optional[dict] = None) -> dict:

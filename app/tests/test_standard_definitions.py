@@ -70,6 +70,16 @@ class Problems(unittest.TestCase):
         self.bad(ok, "capability", lambda d: d["env"].update(X="{key}"), "env.X: {key} is not a slot")
         self.bad(ok, "capability", lambda d: d["env"].update(X="$(rm -rf ~)"), "env.X: a variable name and a plain template")
 
+    def test_install_commands_are_plain_words_naming_only_the_install(self):
+        cmds = [["uv", "pip", "install", "--python", "{install}/.venv/bin/python", "{install}/src/svc[geo,web]"],
+                ["{install}/runtime/bin/python", "{install}/src/install.py"]]
+        ok = dict(AGENT, install={"pip": ["agent==1.0"], "commands": cmds})
+        self.assertEqual(definitions.problems(ok, "agent"), [])
+        self.bad(ok, "agent", lambda d: d["install"].update(commands=[]), "install.commands: a list of commands")
+        self.bad(ok, "agent", lambda d: d["install"].update(commands=["uv pip install x"]), "install.commands[0]: a list of words")
+        self.bad(ok, "agent", lambda d: d["install"]["commands"][1].append("{home}/x"), "install.commands[1]: {home} is not a slot")
+        self.bad(ok, "agent", lambda d: d["install"]["commands"][1].append("$(curl x)"), "is not a plain word")
+
     def test_a_wheel_by_url_is_pinned_by_its_digest(self):
         wheel = {"url": "https://example.org/r/model-1.0-py3-none-any.whl", "sha256": "a" * 64}
         ok = dict(CAPABILITY, install={"pip": ["lib==1.0"], "wheels": [wheel]})

@@ -71,7 +71,7 @@ and its resources.
   GitLab: made once on the run's machine with its token, its tasks' lock, the stack's command line), `proxy` (a
   tinyproxy of a unit's own for the tasks that ask for a proxy) and, in `startup/`,
   `sitecustomize`: its VMs' disk write limit in every process its driver starts), `catalogue/agents/<key>/`
-  (the reference `agent`; DigitalMate's `run`, `gateway` and `prepare` (product startup, task submission and runtime installation);
+  (the reference `agent`; DigitalMate's `run` and `gateway` (product startup and task submission);
   JiuwenSwarm's `agent` and mini-swe-agent's `run`, the wrappers that start them) and `catalogue/capabilities/<key>/` (the keyword-memory `capability`); `workspace` (and
   `workspace_cli`, its shell command),
   `cli` and `__main__` (the unified `nullius` and `python -m nullius` commands),

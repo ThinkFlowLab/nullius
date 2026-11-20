@@ -44,13 +44,8 @@ def run(install: Path, prompt: str) -> str:
     source = install / "src"
     runtime = install / "runtime/bin/python"
     launcher = source / "harness/personal-agent/services/agent_bridge/src/server_engine/workswarm_launcher.py"
-    if not runtime.is_file() or not (install / ".digitalmate-runtime-ready").is_file():
-        raise RuntimeError("DigitalMate runtime is not prepared; run app/nullius/catalogue/agents/digitalmate/prepare.py first")
-    expected = json.loads(Path(__file__).with_name("agent.json").read_text())["upstream"]["tested"]
-    if (install / ".digitalmate-runtime-ready").read_text().strip() != expected:
-        raise RuntimeError("DigitalMate runtime pin differs; run prepare.py for this definition")
-    if not launcher.is_file():
-        raise RuntimeError("Pinned DigitalMate installation is missing its product launcher")
+    if not runtime.is_file() or not launcher.is_file():
+        raise RuntimeError("DigitalMate installation is missing its runtime or product launcher")
     for name in ("API_BASE", "API_KEY", "MODEL_NAME"):
         if not os.environ.get(name):
             raise RuntimeError("Nullius relay setting is missing: " + name)
