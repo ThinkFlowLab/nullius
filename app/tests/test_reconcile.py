@@ -96,10 +96,10 @@ class Rows(unittest.TestCase):
         self.assertEqual([r["task"] for r in out["rows"]["other"]], ["failed"]); self.assertEqual(out["rows"]["disagree"][0]["task"], "setup")
         self.assertEqual(out["rows"]["disagree"][0]["version"], "judgement.questions.v1"); self.assertEqual(out["counts"]["other"], 1)
 
-    def test_the_stored_name_is_mapped_through_key_and_nothing_is_written(self):
-        recs = {"KEY:failed__x": record("environment_error", 0.9)}
+    def test_a_record_is_found_by_its_trial_name_and_nothing_is_written(self):
+        recs = {"failed__x": record("environment_error", 0.9)}
         before = [(t.trial_name, t.outcome, t.reward) for t in self.job.trials]
-        out = R.reconcile(self.job, recs, key=lambda n: "KEY:" + n)
+        out = R.reconcile(self.job, recs)
         self.assertEqual(out["rows"]["disagree"][0]["task"], "failed")
         self.assertEqual([(t.trial_name, t.outcome, t.reward) for t in self.job.trials], before)         # the trials are read, never written
         self.assertEqual(self.by_task["odd"].outcome, "unknown")

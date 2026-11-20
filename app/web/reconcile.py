@@ -31,8 +31,8 @@ def threshold_requested() -> float:
 
 def view_of(job, threshold: float) -> dict:
     d = ws_dir()
-    records = store.for_job(d, job.job_id, started=judge.started_by_name(job)) if d else {}
-    return reconcile.reconcile(job, records, threshold, key=lambda name: store._SAFE.sub("_", name))
+    records = store.for_job(d, job.job_id, judge.started_by_name(job)) if d else {}
+    return reconcile.reconcile(job, records, threshold)
 
 
 @app.route("/job/<job_id>/reconcile")

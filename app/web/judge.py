@@ -69,8 +69,8 @@ def started_of(trial) -> str | None:
 
 
 def started_by_name(job) -> dict:
-    """{store key: start} for every trial of a job: what `store.for_job` checks its records against."""
-    return {store._SAFE.sub("_", t.trial_name): started_of(t) for t in job.trials}
+    """{trial name: start} for every trial of a job: what `store.for_job` reads its records for."""
+    return {t.trial_name: started_of(t) for t in job.trials}
 
 
 def judgement_of(job, trial, lane: str = "decision") -> dict | None:
@@ -295,8 +295,8 @@ def judge_job_route(job_id):
         abort(404)
     lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "decision"
     d = ws_dir()
-    judged = store.for_job(d, job_id, lane=lane, started=started_by_name(job)) if d else {}
-    todo = [t for t in job.trials if t.has_trajectory and store._SAFE.sub("_", t.trial_name) not in judged]
+    judged = store.for_job(d, job_id, started_by_name(job), lane=lane) if d else {}
+    todo = [t for t in job.trials if t.has_trajectory and t.trial_name not in judged]
     _guard()
     k = key(lane)
     done, failed = run_batch(todo, lambda t: judge_trial(job, t, k), lambda t: t.trial_name)
@@ -315,12 +315,12 @@ def job_summary(job) -> dict:
     the board's record -> judge lanes (`nullius.judge.lanes`), whose status
     for each trial is also in `by_trial`."""
     d = ws_dir()
-    judged = store.for_job(d, job.job_id, started=started_by_name(job)) if d else {}
+    judged = store.for_job(d, job.job_id, started_by_name(job)) if d else {}
     flag_ids = [q for q in Q.group_ids("trial") if Q.QUESTIONS[q].get("flag")]
-    board = lanes.board(job, judged, key=lambda name: store._SAFE.sub("_", name))
+    board = lanes.board(job, judged)
     by_trial = {}
     for t in job.trials:
-        rec = judged.get(store._SAFE.sub("_", t.trial_name))
+        rec = judged.get(t.trial_name)
         if rec is None:
             continue
         answers = rec.get("answers") or {}
@@ -337,7 +337,7 @@ def job_summary(job) -> dict:
             causes[r["cause"]] = causes.get(r["cause"], 0) + 1
         for q in r["flags"]:
             raised[q] = raised.get(q, 0) + 1
-    return {"judged": len(judged), "trials": len(job.trials), "unjudged": len([t for t in job.trials if store._SAFE.sub("_", t.trial_name) not in judged]),
+    return {"judged": len(judged), "trials": len(job.trials), "unjudged": len([t for t in job.trials if t.trial_name not in judged]),
             "causes": sorted(causes.items(), key=lambda kv: -kv[1]), "n_cause": sum(causes.values()), "keyed": bool(key()),
             "flags": sorted(raised.items(), key=lambda kv: (-kv[1], kv[0])), "by_trial": by_trial,
             "truncation": store.truncation_report(d, job.job_id) if d and judged else None,
@@ -348,8 +348,8 @@ def job_summary(job) -> dict:
 def _llm_count(d, job) -> dict:
     """The LLM judge's own count for the job's button: it judges apart from
     Decision, so a trial judged by one is still unjudged by the other."""
-    judged = store.for_job(d, job.job_id, lane="llm", started=started_by_name(job)) if d else {}
-    return {"unjudged": len([t for t in job.trials if store._SAFE.sub("_", t.trial_name) not in judged]), "keyed": bool(key("llm"))}
+    judged = store.for_job(d, job.job_id, started_by_name(job), lane="llm") if d else {}
+    return {"unjudged": len([t for t in job.trials if t.trial_name not in judged]), "keyed": bool(key("llm"))}
 
 
 # --- the compare page: each side scored alone, the pick made in code ----------------
