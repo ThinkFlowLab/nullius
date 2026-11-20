@@ -184,7 +184,7 @@ class Tabs(unittest.TestCase):
             table = self.get("/agents?view=table").get_data(as_text=True)
         menu = html[html.index('data-filter-menu="from"'):]
         menu = menu[:menu.index("</fieldset>")]
-        self.assertIn('data-value="bundled" checked> Bundled', menu)
+        self.assertIn('data-value="bundled" checked> Nullius', menu)
         self.assertIn('data-value="benchmark"> A benchmark&#39;s own', menu)     # one click away, off by default
         card = html[html.index('id="osworld1-openai-cua"'):]
         card = card[:card.index("</article>")]

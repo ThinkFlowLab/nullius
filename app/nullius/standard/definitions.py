@@ -1343,7 +1343,7 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "", agent: s
 
 
 AGENTS_FILE = "agents.json"
-FROM = {"bundled": "Bundled", "yours": "Yours", "benchmark": "A benchmark's own"}
+FROM = {"bundled": "Nullius", "yours": "Yours", "benchmark": "A benchmark's own"}
 
 
 def _driver_agent(d: dict) -> List[str]:
