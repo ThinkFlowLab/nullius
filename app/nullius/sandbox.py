@@ -1,10 +1,6 @@
-"""The Settings page's Sandbox: the container backend's engine on this machine,
-docker or podman (``container.DOCKER``), and its Docker Hub login under Data
-providers.
+"""The container engine's Docker Hub login, under Data providers: docker or
+podman (``container.DOCKER``).
 
-Two things, each something a user acts on:
-
-- **Engine**: whether it answers, and its name and version (``container.unusable``).
 - **Registry login**: Docker Hub limits anonymous pulls, which stops a
   benchmark with an image per unit part-way. The username and an access token
   go to ``docker login --password-stdin`` (``podman login ... docker.io``)
@@ -19,7 +15,6 @@ import base64
 import json
 import os
 import re
-import shutil
 import subprocess
 from typing import List, Optional
 
@@ -29,37 +24,6 @@ REGISTRY = "https://index.docker.io/v1/"            # Docker Hub, as docker name
 HUB = "docker.io"                                   # as podman names it: without it, podman logs in to its first search registry
 _USER = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 _TOKEN_MAX = 4096
-
-
-def docker_state() -> dict:
-    """{ok, version} when the engine answers - its name and version, ``podman
-    6.1.4`` - else {ok: False, error}; with ``also``, the other engine when both
-    are installed (``_other``), so the page says why this one is in use."""
-    why = container.unusable()
-    state = {"ok": False, "error": why} if why else None
-    if state is None:
-        r = container._docker(["version", "--format", "{{.Server.Version}}"], timeout=30, check=False)
-        state = {"ok": True, "version": f"{container.DOCKER} {r.stdout.strip()}"}
-    also = _other()
-    return dict(state, also=also) if also else state
-
-
-def _other() -> Optional[dict]:
-    """The engine not in use, when it is installed too and is not the same program
-    (podman's ``docker``): {name, ok, said}, ``said`` its version or why it does not answer."""
-    other = "podman" if container.DOCKER == "docker" else "docker"
-    path = shutil.which(other)
-    if not path or (other == "docker" and container._runs_podman(path)):
-        return None
-    try:
-        r = subprocess.run([other, "version", "--format", "{{.Server.Version}}"], stdin=subprocess.DEVNULL,
-                           capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.SubprocessError) as e:
-        return {"name": other, "ok": False, "said": str(e)[:200]}
-    if r.returncode == 0 and r.stdout.strip():
-        return {"name": other, "ok": True, "said": f"{other} {r.stdout.strip()}"}
-    lines = (r.stderr or r.stdout).strip().splitlines()
-    return {"name": other, "ok": False, "said": lines[-1][:200] if lines else f"exit {r.returncode}"}
 
 
 def _config_dir() -> str:

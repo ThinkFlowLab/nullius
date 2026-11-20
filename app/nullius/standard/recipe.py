@@ -392,9 +392,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     the run sends it as."""
     d = defs or _all()
     errors, notes = [], []
-    # each problem once: several picks of one kind (a benchmark's own agents) can each find it
-    add = lambda step, message: None if {"step": STEP[step], "message": message} in errors \
-        else errors.append({"step": STEP[step], "message": message})
+    # each problem once; shown: the step already says it elsewhere, so only Review lists it
+    def add(step, message, shown=False):
+        if not any(e["step"] == STEP[step] and e["message"] == message for e in errors):
+            errors.append({"step": STEP[step], "message": message, **({"shown": True} if shown else {})})
     out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
            "served_models": {}}
     name = str(recipe.get("name") or "")
@@ -652,7 +653,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     elif backend == "boat" and targets != ["local"]:
         add("where", "Hosts and Boat sandboxes do not mix: choose Hosts, or Sandboxes alone.")
     elif backend == "boat" and boat_unusable is not None and (why := boat_unusable(True)):
-        add("where", f"Boat cannot run: {why}.")
+        add("where", f"Boat cannot run: {why}.", shown=not boat.key())
     elif backend == "boat" and boat_size_problem is not None and str(recipe.get("boat_size") or boat.SIZE) in boat.SIZES:
         why = boat_size_problem(str(recipe.get("boat_size") or boat.SIZE))
         if why:
@@ -676,7 +677,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     elsewhere = [definitions.setup_label(b, "original") if p.get("setup") else p["o"]["label"] for p in picks
                  if not whole and (p["control"] or p.get("setup") or (computer and side == "agent"))]
     if backend == "boat" and elsewhere:
-        add("where", f"{', '.join(elsewhere)} cannot run in a Boat VM yet: choose Hosts.")
+        add("where", f"{', '.join(elsewhere)} cannot run in a Boat VM: choose Hosts.")
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
     spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"])
     paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])

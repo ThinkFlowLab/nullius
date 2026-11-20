@@ -84,20 +84,6 @@ class EngineTest(unittest.TestCase):
             with self.subTest(want=want):
                 self.assertEqual(self.engine(), want)
 
-    def test_the_sandbox_says_the_other_engine_when_both_are_installed(self):
-        from nullius import sandbox
-        def other(engine):
-            with mock.patch.dict(os.environ, {"PATH": self.tmp}), mock.patch.object(container, "DOCKER", engine):
-                return sandbox._other()
-        self.program("podman", "#!/bin/sh\necho 5.4.2\n")
-        self.assertIsNone(other("podman"))                                   # podman alone: nothing else to say
-        self.program("docker", "#!/bin/sh\necho 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock' >&2\nexit 1\n")
-        self.assertEqual(other("podman"), {"name": "docker", "ok": False,
-                                           "said": "Cannot connect to the Docker daemon at unix:///var/run/docker.sock"})
-        self.assertEqual(other("docker"), {"name": "podman", "ok": True, "said": "podman 5.4.2"})
-        self.program("docker", "#!/bin/sh\nexec podman \"$@\"\n")               # podman-docker's docker: the same program
-        self.assertIsNone(other("podman"))
-
     def test_the_host_probe_and_the_run_there_pick_the_same_engine(self):
         from nullius import hosts
         for tool in ("sh", "sed", "grep", "hostname"):

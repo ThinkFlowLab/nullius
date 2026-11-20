@@ -109,6 +109,8 @@
   // An unsupported draft opens nothing; its rejection is shown as a toast.
   else { let d = null; try { d = C.unpackDraft(localStorage.getItem(draftKey), query); } catch {} if (d && d.recipe) { recipe = d.recipe; step = d.step; tab = d.tab; savedId = d.saved; } else if (d && d.gone) opened = d.gone; }
   const saveDraft = () => { try { localStorage.setItem(draftKey, C.packDraft({recipe, step, tab, saved: savedId})); } catch {} };
+  // Settings closed: reload from the draft to read what changed
+  document.addEventListener('close', e => { if (e.target.id === 'settings-modal') { saveDraft(); location.replace(location.pathname); } }, true);
   let compiled, pendingDirs, dirsSequence = 0;
   const r = () => recipe;
   const store = recipeStore({request: (...a) => nulliusFetch(...a), csrf: schema.csrf, storage: (() => { try { return localStorage; } catch { return {length: 0}; } })()});
@@ -480,9 +482,6 @@
     const web = agentRun && Object.values((b || {}).environments || {}).some(e => e.network);   // an agent's public web proxy
     // a VM benchmark's provider of one value goes on the fixed line; several are its cards (benchOptions)
     const provider = vms && Object.values(b.options || {}).find(o => o.step === 'where' && o.values && o.values.length === 1 && Object.values(o.needs || {}).some(n => n && n.vm));
-    // what a sandbox cannot run (recipe.py): a setup or a check runs on a machine; the computer port's socket is on this one
-    // a benchmark booting VMs of its own runs each unit whole in a VM, with a relay container in each VM (boat_units)
-    const outside = !sandboxes ? [] : selected.filter(o => !vms && (o.setup || o.control || ((b.needs || []).some(p => p.startsWith('agent.computer/')) && b.family === 'agent'))).map(o => o.label);
     let sizes = '';
     if (sandboxes && !here.boat) {
       const offered = boatSizes(rec, b), fit = offered.find(z => !z.why);
@@ -493,8 +492,8 @@
           disabled: !!z.why, why: z.why, note: z.note || z.spec, title: z.label})).join('')}</div>`;
     }
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
-      + `<div class="std-machines" role="group" aria-label="Machines">${kind('hosts', 'Hosts')}${kind('boat', 'Sandboxes', here.boat || '')}</div>`
-      + (sandboxes ? `<div class="std-boat-card"><strong>Boat</strong><span>One VM per ${esc(noun)}</span>${here.boatSlots ? `<span class="std-boat-slots">${here.boatSlots} at once on this account</span>` : ''}${here.boat ? `<span class="nb-error">${esc(here.boat)}</span>` : ''}</div>` + sizes
+      + `<div class="std-machines" role="group" aria-label="Machines">${kind('hosts', 'Hosts')}${kind('boat', 'Sandboxes', here.boatKey ? here.boat || '' : '')}</div>`
+      + (sandboxes ? `<div class="std-boat-card${here.boat ? ' off' : ''}"><strong><img class="std-boat-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="std-boat-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">Boat</strong>${here.boat ? (here.boatKey ? `<span class="nb-error">${esc(here.boat)}</span>` : button('Add API Key', 'data-href="/settings#sandbox-boat-key"', 'nb-inlinebutton std-boat-key')) : ''}</div>` + sizes
         : `<div class="nb-pick-grid nb-where std-hosts">${machine('local', 'This machine', 'Runs here')}${H.map(h => machine(h.entry, h.label, 'Over SSH')).join('')}</div>`
         + (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : ''))
       + '<div class="nb-sectionhead std-wherehead"><h3>Isolation</h3></div>'
@@ -506,7 +505,6 @@
             : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>')
       + (b ? benchOptions(rec, b, 'where') : '')
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
-      + (outside.length ? `<p class="nb-note nb-error">${esc(outside.join(', '))} cannot run in a Boat VM yet: choose Hosts.</p>` : '')
       + (dockerOnly.length && backend !== 'container' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - ${sandboxes ? 'in a Boat VM' : 'on local processes'} their units are recorded as not run.</p>` : '')
       + (sandboxes ? '' : hostSetup(rec));
   }
@@ -974,7 +972,7 @@
       const out=runnerOut||{errors:[],notes:[]};
       compiled={errors:out.errors||[],notes:out.notes||[]};
     }else{compiled=C.compile(rec);}
-    $('#nb-localerrors').textContent=compiled.errors.filter(e=>e.step===step).map(e=>e.message).join(' ');
+    $('#nb-localerrors').textContent=compiled.errors.filter(e=>e.step===step&&!e.shown).map(e=>e.message).join(' ');
     const errors=$('#nb-errors');
     if(errors){
       errors.hidden=!compiled.errors.length;
@@ -1120,7 +1118,7 @@
     if(d.pickCat!==undefined){pickOf().cat=d.pickCat;applyPick();return;}
     if(d.pickFam!==undefined){pickOf().fam=d.pickFam;applyPick();return;}
     if(d.agent){const on=r().agents.includes(d.agent);r().agents=on?r().agents.filter(id=>id!==d.agent):[...r().agents,d.agent];renderForm();refreshPlan();return;}
-    else if(d.href){location.href=d.href;return;}
+    else if(d.href){if(!window.nulliusOpenSettings?.(d.href,b))location.href=d.href;return;}
     else if(b.id==='nb-add-custom-agent'){r().customAgents.push('');r().agents.push('custom-'+(r().customAgents.length-1));renderForm();refreshPlan();root.querySelector('[data-custom-agent="'+(r().customAgents.length-1)+'"]')?.focus();return;}
     else if(d.removeCustomAgent!==undefined){const i=Number(d.removeCustomAgent),rec=r(),kept=rec.agents.filter(id=>id.startsWith('custom-')&&id!=='custom-'+i).map(id=>Number(id.slice(7)));rec.customAgents.splice(i,1);rec.agents=rec.agents.filter(id=>!id.startsWith('custom-')).concat(kept.map(k=>'custom-'+(k>i?k-1:k)));renderForm();refreshPlan();return;}
     // The Harbor panel (Runner step): a release or a repository, a ref of it, installed and asked for its agents.

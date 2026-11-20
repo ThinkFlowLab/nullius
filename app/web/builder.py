@@ -174,7 +174,7 @@ def _builder_data() -> dict:
     data["standardHere"] = {"docker": execute.docker_problem(), "boat": boat_why,
                             "boatSizes": [{"key": k, "label": z["label"], "spec": boat.spec(k), "memory_gb": z.get("memory_gb"),
                                            "why": types.get(k)} for k, z in boat.SIZES.items() if not types or k in types],
-                            "boatSlots": account.get("slots"), "licences": _licence_states(), "host": host}
+                            "boatSlots": account.get("slots"), "boatKey": bool(boat.key()), "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
     data["local"] = shared_local_client()
     data["recipesWhy"] = WRITE_HERE
