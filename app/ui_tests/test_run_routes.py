@@ -447,6 +447,15 @@ class ResumeIntoWorkspace(unittest.TestCase):
         self.assertNotIn(self.jobs, workspace.load(self.home, other.name).roots)
         self.assertEqual(json.loads(self.record.read_text())["workspace"], self.ws.name)
 
+    def test_a_run_filed_under_a_name_no_workspace_has_stays_out_of_the_open_one(self):
+        workspace.rename(self.home, self.ws, "sharp lemur")                                    # its record not refiled: the name is gone
+        self.ws.opened = "2000-01-01T00:00:00+00:00"; workspace.save(self.ws)
+        other = workspace.create(self.home, [str(self.tmp / "a")], label="quiet otter")
+        web.shared.open_workspace(other)
+        self.assertEqual(self.restart().name, other.name)                                  # the open one stays open
+        self.assertEqual(workspace.load(self.home, other.name).roots, [str(self.tmp / "a")])
+        self.assertIn(self.jobs, workspace.load(self.home, "sharp-lemur").roots)
+
     def test_a_restart_leaves_a_closed_workspace_closed(self):
         r = self.client.post("/change-source", data={"csrf": self.csrf}); self.addCleanup(r.close)
         self.assertEqual(r.status_code, 302)
