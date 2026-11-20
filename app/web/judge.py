@@ -59,8 +59,11 @@ def run_batch(items, ask, name) -> tuple:
     return done, failed
 
 
-def ws_dir():
-    ws = shared.STATE.get("workspace")
+def ws_dir(name=None):
+    """The judgement store of the workspace that holds the job on screen
+    (`shared._record_workspace`): a job opened from another workspace, or a
+    Compare column (`name`), keeps its judgements in its own."""
+    ws = shared._record_workspace(name)
     return ws.dir if ws else None
 
 
@@ -387,11 +390,10 @@ def side_ids(trial) -> list:
     return own + [q for q in Q.for_trial(trial.outcome == "resolved", trial.outcome) if q not in own]
 
 
-def side_of(job, trial) -> dict | None:
+def side_of(job, trial, d) -> dict | None:
     """One side's score as the compare page shows it, from the trial's own
-    current record: the expectation, the level it rounds to, the judge's
+    current record in its column's store `d`: the expectation, the level it rounds to, the judge's
     confidence, the provenance. None until scored under the current vocabulary."""
-    d = ws_dir()
     rec = store.load(d, job.job_id, trial.trial_name, started=started_of(trial)) if d else None
     if not rec or not store.is_current(rec):
         return None
@@ -406,8 +408,8 @@ def side_of(job, trial) -> dict | None:
 
 def pair_records(view) -> dict:
     """{task: record} for the pairs judged under v1 - the pair state, the
-    model's own pick - under job A in the open workspace. Read, never written."""
-    d = ws_dir()
+    model's own pick - under job A in its column's workspace. Read, never written."""
+    d = ws_dir(view.selected[0].workspace) if view.selected else None
     if d is None or len(view.jobs) != 2:
         return {}
     out = {}
@@ -429,8 +431,9 @@ def compare_summary(view) -> dict | None:
     pairs = pairs_of(view)
     legacy = pair_records(view)
     rows, judged, earlier = {}, 0, 0
+    da, db = (ws_dir(s.workspace) for s in view.selected)
     for task, a, b in pairs:
-        sa, sb = side_of(view.jobs[0], a), side_of(view.jobs[1], b)
+        sa, sb = side_of(view.jobs[0], a, da), side_of(view.jobs[1], b, db)
         if sa or sb:
             verdict = comparison.better_of(sa and sa["score"], sb and sb["score"])
             rows[task] = {"a": sa, "b": sb, "verdict": verdict, "earlier": False}
@@ -444,13 +447,13 @@ def compare_summary(view) -> dict | None:
             "margin": comparison.TIE_MARGIN, "question": SIDE_QUESTION}
 
 
-def judge_side(job, trial, api_key: str, post=None, calibration=None) -> dict | None:
+def judge_side(job, trial, d, api_key: str, post=None, calibration=None) -> dict | None:
     """Score one side: the questions it still lacks under the current
-    vocabulary, one call per state, merged over the trial's own record -
-    the same record the trial page shows. Nothing when it has them all."""
+    vocabulary, one call per state, merged over the trial's own record in
+    its column's store `d` - the same record the trial page shows. Nothing
+    when it has them all."""
     if not trial.has_trajectory:
         raise client.JudgeError(0, "this trial has no trajectory to judge")
-    d = ws_dir()
     rec = store.load(d, job.job_id, trial.trial_name, started=started_of(trial))
     have = (rec.get("answers") or {}) if store.is_current(rec) else {}
     ids = [q for q in side_ids(trial) if q not in have]
@@ -464,12 +467,13 @@ def judge_side(job, trial, api_key: str, post=None, calibration=None) -> dict | 
 
 
 def _sides_todo(view) -> list:
-    """(job, trial) for every side of an unjudged pair that lacks its score."""
+    """(task, job, trial, its column's store) for every side of an unjudged pair that lacks its score."""
     out = []
+    da, db = (ws_dir(s.workspace) for s in view.selected)
     for task, a, b in pairs_of(view):
-        for job, t in ((view.jobs[0], a), (view.jobs[1], b)):
-            if side_of(job, t) is None:
-                out.append((task, job, t))
+        for job, t, d in ((view.jobs[0], a, da), (view.jobs[1], b, db)):
+            if side_of(job, t, d) is None:
+                out.append((task, job, t, d))
     return out
 
 
@@ -482,10 +486,10 @@ def judge_compare_route():
     if len(view.jobs) != 2:
         abort(400, description="A judged comparison needs exactly two runs.")
     sides = _sides_todo(view)
-    todo = list(dict.fromkeys(task for task, _, _ in sides))
+    todo = list(dict.fromkeys(s[0] for s in sides))
     _guard()
     k, cal = key(), batch_calibration()
-    done, failed = run_batch(sides, lambda s: judge_side(s[1], s[2], k, calibration=cal), lambda s: f"{s[0]} ({s[1].agent_label or s[1].job_id})")
+    done, failed = run_batch(sides, lambda s: judge_side(s[1], s[2], s[3], k, calibration=cal), lambda s: f"{s[0]} ({s[1].agent_label or s[1].job_id})")
     from flask import flash
     flash(f"Judged {done} of {len(sides)} side(s) over {len(todo)} pair(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
     return redirect(url_for("compare", pick=view.references, cohort=view.cohort, view=compare_web._view()) + "#judgement")

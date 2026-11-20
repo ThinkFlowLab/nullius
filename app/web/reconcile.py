@@ -14,11 +14,6 @@ from .core import app
 from . import judge, shared
 
 
-def ws_dir():
-    ws = shared.STATE.get("workspace")
-    return ws.dir if ws else None
-
-
 def threshold_requested() -> float:
     """`?threshold=` as a number in 0..1, else the module's default."""
     raw = request.args.get("threshold")
@@ -30,7 +25,7 @@ def threshold_requested() -> float:
 
 
 def view_of(job, threshold: float) -> dict:
-    d = ws_dir()
+    d = judge.ws_dir()
     records = store.for_job(d, job.job_id, judge.started_by_name(job)) if d else {}
     return reconcile.reconcile(job, records, threshold)
 

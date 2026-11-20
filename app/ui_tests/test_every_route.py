@@ -244,7 +244,7 @@ class EveryRoute(unittest.TestCase):
         with patch.object(judge, "judge_trial", stub), patch.object(judge, "judge_side", stub), \
              patch.object(judge, "judge_task", stub), patch.object(judge, "judge_control", stub), \
              patch.object(judge, "tasks_todo", lambda j: list(j.trials)), \
-             patch.object(judge, "_sides_todo", lambda view: [(t.task_base, job, t) for t in job.trials]), \
+             patch.object(judge, "_sides_todo", lambda view: [(t.task_base, job, t, None) for t in job.trials]), \
              patch.dict(os.environ, TYPESAFE_API_KEY="ts-fake"):
             with self.client.session_transaction() as sess:
                 sess["csrf"] = "route-token"
