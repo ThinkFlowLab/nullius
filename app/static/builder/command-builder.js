@@ -211,13 +211,15 @@
       : `<label class="nb-field ui-field-row"><span class="ui-field-copy">Runner</span><span class="nb-fixed">${esc((C.runners().find(x => x.key === rec.harness) || {}).label || rec.harness)}</span></label>`;
     return `<div class="nb-sectionhead"><h2>What runs it?</h2></div>` + cards + (rec.harness === 'harbor' ? harborPanel(rec) : '');
   };
+  // the version a standard recipe names (``key@version``), '' for the default
+  const versionOf = rec => C.isStandard(rec) && String(rec.benchmark || '').includes('@') ? String(rec.benchmark).split('@')[1] : '';
   // Every benchmark of both runners in one list; picking one sets the runner that runs it (Nullius when both do).
   const benchmarkStep = rec => {
     const st = C.standard(), sb = C.standardBase(rec), on = C.benchKey(rec), seen = new Set(), tiles = [];
     const add = (key, title, fam, kind, summary) => { if (seen.has(key)) return; seen.add(key); const c = catOf(key);
       tiles.push({attr: 'bench', key, on: key === on, title: c.title || title,
         mark: `<svg aria-hidden="true"><use href="/static/catalogue/marks.svg#bm-${esc(key)}"/></svg>`, cat: c.category, origin: c.origin,
-        fam, famLabel: fam === 'agent' ? 'Agents' : 'Capabilities · ' + kind, tip: c.domain || summary || '', meta: tasksOf(key),
+        fam, famLabel: fam === 'agent' ? 'Agents' : 'Capabilities · ' + kind, tip: c.domain || summary || '', meta: tasksOf(key, key === on ? versionOf(rec) : ''),
         find: [c.title || title, key, c.category, c.domain, kind].join(' ')}); };
     st.benchmarks.forEach(x => add(x.key, x.label, x.family, x.kind, x.summary));
     C.benchmarks().forEach(x => add(x.key, x.title, 'agent', '', x.domain));
@@ -632,9 +634,10 @@
   // of tiles, as the Benchmarks page draws them. The filter hides tiles in place (applyPick), so typing keeps focus.
   const picks = {}, pickOf = () => (picks[step] ||= {q: '', cat: '', fam: ''});   // each step its own search and filters
   const catOf = key => (schema.benchmarks || []).find(b => b.key === key) || {};
-  const tasksOf = key => { const total = catOf(key).task_count;
+  // its tasks; `version`: a version of the standard's that counts its datasets apart (the catalogue entry's ``versions``)
+  const tasksOf = (key, version) => { const total = catOf(key).task_count, own = ((catOf(key).versions || {})[version] || {}).datasets || {};
     if (Number.isInteger(total) && total > 0) return `${total.toLocaleString('en-US')} tasks`;
-    const t = schema.datasets.filter(d => d.benchmark === key && d.tasks).map(d => d.tasks);
+    const t = schema.datasets.filter(d => d.benchmark === key && d.tasks).map(d => (own[d.key] || {}).tasks || d.tasks);
     return !t.length ? '' : t.every(n => n === t[0]) && t.length > 1 ? `${t[0]} tasks each` : `${t.reduce((a, n) => a + n, 0)} tasks`; };
   const pickChip = (attr, v, label, on) => `<button type="button" class="nb-pick-chip" data-${attr}="${esc(v)}" aria-pressed="${on}">${esc(label)}</button>`;
   // one tile: {attr, key, on, title, mark, cat, origin, line, meta, foot, find, fam, data (more attributes), tip (its title)}
@@ -992,14 +995,14 @@
     return i===S.agent&&b?(b.family==='agent'?'Agent':(b.kind||'capability').replace(/^./,c=>c.toUpperCase())):t;}
   // Next and Back skip a step no recipe shows (Setup, its number kept for saved drafts)
   const nextShown=(i,dir)=>{let j=i+dir;while(j>S.benchmark&&j<REVIEW&&!C.stepShown(r(),j))j+=dir;return Math.max(S.benchmark,Math.min(REVIEW,j));};
-  function render(focus=false) {
+  function render(focus=false,form=true) {
     const nav=$('.nb-steps');
     if(!nav.querySelector('.nb-stepbar'))nav.innerHTML='<span class="nb-stepbar" aria-hidden="true"></span>';
     nav.querySelectorAll('.nb-step').forEach(b=>b.remove());
     if(!C.stepShown(r(),step))step=nextShown(step,step>S.setup?-1:1);
     const shown=steps.map((t,i)=>i).filter(i=>C.stepShown(r(),i));
     nav.insertAdjacentHTML('afterbegin',shown.map((i,n)=>button(`<em>0${n+1}</em>${stepName(steps[i],i)}`,`data-step="${i}" aria-pressed="${step===i}"`,'nb-step')).join(''));
-    renderForm();refreshPlan();moveUnderline();saveDraft();harborFollow();
+    if(form)renderForm();refreshPlan();moveUnderline();saveDraft();harborFollow();
     if(focus){const heading=$('#nb-form h2');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'nearest'});}}
   }
   async function loadSaved(){try{saved=await store.list();}catch(e){status('Saved recipes cannot be read: '+e.message);}if($('#nb-saved').open)renderSaved();}
@@ -1211,7 +1214,9 @@
     const el=event.target,d=el.dataset;
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
-    else if(d.stdVersion!==undefined){C.setStandardBenchmark(r(),el.value);render();}
+    else if(d.stdVersion!==undefined){   // in place: only the card's count changes on this step, so nothing else is drawn again
+      C.setStandardBenchmark(r(),el.value);const key=C.benchKey(r()),meta=root.querySelector(`[data-bench="${CSS.escape(key)}"] .nb-tile-foot > span`);
+      if(meta)meta.textContent=tasksOf(key,versionOf(r()));render(false,false);}
     // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
     // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the
     // menu button controls.js puts after it once this change is handled; a typed value is left as it is
