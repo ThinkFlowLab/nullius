@@ -95,7 +95,7 @@ def _setup_card(b: dict, key: str) -> dict:
     return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": title, "title": x.get("summary", "")},
             "search": " ".join([title, b["label"], "as published"]), "published": "As published", "protocol": "",
             "fit": {"text": "Can run it", "value": "fit"}, "from": {"text": b["label"], "value": "benchmark"},
-            "proves": [], "needs": [], "ticks": [], "alert": None}
+            "proves": [], "ticks": [], "alert": None}
 
 
 def _kind_of(b: dict) -> str:
@@ -105,7 +105,7 @@ def _kind_of(b: dict) -> str:
 
 def _pick_card(b: dict, e: dict) -> dict:
     """An agent's or a capability's pick card for the benchmark ``b``: its name and mark, its protocol, where it comes
-    from, the ports it has proven that ``b`` needs and a tick for each doubt; greyed, why (whole in its tooltip)."""
+    from, and a tick for each doubt about a port ``b`` needs (that it proved them is what lets it run ``b``); greyed, why (whole in its tooltip)."""
     d, why = e["d"], e["fits"][0]["why"]
     rows = {r["port"]: r for r in e["ports"] if r["state"] == "proven"}
     needed = [rows[p] for p in b.get("needs") or [] if p in rows]
@@ -127,7 +127,7 @@ def _pick_card(b: dict, e: dict) -> dict:
             "protocol": {"text": e["protocol"], "value": e["protocol"]}, "published": "",
             "fit": {"text": "Cannot" if why else "Can run it", "value": "unfit" if why else "fit"}, "from": there,
             "proves": [{"text": r["label"], "value": r["port"]} for r in rows.values()],
-            "needs": [{"text": r["label"], "title": r["summary"]} for r in needed], "ticks": ticks,
+            "ticks": ticks,
             "alert": {"text": note, "title": "; ".join(why)} if why else None}
 
 

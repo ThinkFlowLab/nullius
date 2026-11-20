@@ -59,8 +59,7 @@ class AgentGrid(unittest.TestCase):
         check = '<span class="bench-card-corner"><span class="pick-check" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span></span>'
         self.assertIn('>OpenAI CUA</button>' + check, cards["osworld1:openai-cua"])   # the mark a chosen card shows (CSS, by aria-pressed)
         self.assertNotIn("pick-check", cards["goose"])                                                     # none on one that cannot be chosen
-        self.assertIn('<span class="std-tag" title="', cards["codex@2.2.2"])                     # the ports it proved that it needs
-        self.assertIn(">Computer use</span>", cards["codex@2.2.2"])
+        self.assertNotIn(">Computer use</span>", cards["codex@2.2.2"])                            # what it needs, every card that fits proved
         self.assertNotIn("data-pills", html)                                                        # every filter in the one Filter menu
         menu = unescape(html[html.index('data-tools="filter"'):])
         values = lambda col: re.findall(r'data-value="[^"]*" checked> ([^<]*)<', menu[menu.index(f'data-filter-menu="{col}"'):].split("</fieldset>")[0])
