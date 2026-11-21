@@ -1,12 +1,15 @@
 """Runs against runs: whole runs, matched tasks, one task side by side."""
 from __future__ import annotations
 
+import re
+from dataclasses import replace
 from functools import partial
 from itertools import zip_longest
-from flask import abort, flash, redirect, render_template, request, url_for
+from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 from nullius.traces import behavior, charts, trace, trajectory
 from nullius.runs import classify
 from nullius.runs import verifier
+from nullius import charts as figures
 from nullius import workspace
 
 from .core import app
@@ -51,6 +54,7 @@ def rank_cells(raw, direction, allow_single=False, cells=None, exclude=None):
     no value are never marked — a missing measurement isn't a loss. Normally a
     metric needs two values to have a winner; *allow_single* marks the only
     reported value anyway (used for cost, which not every agent records yet).
+    A single column has nothing to win against.
 
     Ranking uses the raw numbers, but *cells* (the rendered text) decides
     equality: two runs showing "$0.01" or "100%" must both win, even though
@@ -66,7 +70,7 @@ def rank_cells(raw, direction, allow_single=False, cells=None, exclude=None):
     entrants = [i for i in range(n) if not exclude[i]]
     reported = [i for i in entrants if raw[i] is not None]
     values = [raw[i] for i in reported]
-    if not direction or len(values) < (1 if allow_single else 2):
+    if not direction or n < 2 or len(values) < (1 if allow_single else 2):
         return [""] * n
 
     shown = list(cells) if cells else [None] * n
@@ -93,7 +97,7 @@ def rank_cells(raw, direction, allow_single=False, cells=None, exclude=None):
 def _row(label, cells, raw=None, direction=None, hint="", allow_single=False, exclude=None):
     raw = raw if raw is not None else [None] * len(cells)
     return {
-        "label": label, "hint": hint, "cells": cells,
+        "label": label, "hint": hint, "cells": cells, "raw": raw,
         "classes": rank_cells(raw, direction, allow_single, cells, exclude),
     }
 
@@ -102,8 +106,29 @@ def _ratio(part, whole):
     return (part / whole) if (part and whole) else None
 
 
-def summary_rows(jobs):
-    """The numeric half of the side-by-side table, with winners marked.
+# A difference's unit, as each row reads it.
+COUNT, SCORE, MINUTES = str, "{:.2f}".format, "{:.0f}m".format
+POINTS = lambda d: f"{d * 100:.0f} pp"
+
+
+def deltas(values, unit, direction, controls):
+    """Each column's difference from the first, in the row's ``unit``: (text, 'ok', 'bad' or ''), coloured by the
+    row's ``direction``; nothing for the first column or where either value is missing, uncoloured for a check."""
+    base = values[0] if values else None
+    out = [("", "")]
+    for v, control in zip(values[1:], controls[1:]):
+        if v is None or base is None:
+            out.append(("", ""))
+            continue
+        d = round(v - base, 9)          # a float's last digits are no difference ($0.03 - $0.02)
+        tone = "" if not d or not direction or control or controls[0] else "ok" if (d > 0) == (direction == "higher") else "bad"
+        out.append(("±0" if not d else ("+" if d > 0 else "−") + unit(abs(d)), tone))
+    return out
+
+
+def summary_rows(jobs, baseline=True):
+    """The numeric half of the side-by-side table, with winners marked and,
+    under ``baseline``, each column's difference from the first.
 
     Control runs (oracle/nop) are excluded from every ranking, and their token
     and cost cells render a real 0 rather than the "—" used for a missing
@@ -112,8 +137,17 @@ def summary_rows(jobs):
     controls = [j.is_control for j in jobs]
     kinds = [j.kind for j in jobs]
 
-    def row(label, cells, raw=None, direction=None, hint="", allow_single=False):
-        return _row(label, cells, raw, direction, hint, allow_single, exclude=controls)
+    def row(key, label, cells, raw=None, direction=None, hint="", allow_single=False, unit=None, values=None):
+        r = _row(label, cells, raw, direction, hint, allow_single, exclude=controls)
+        given = values if values is not None else r["raw"]
+        r["deltas"] = deltas(given, unit, direction, controls) if unit and baseline else [("", "")] * len(cells)
+        r.update(key=key, values=given, unit=unit)
+        return r
+
+    def group(name, rows):
+        for r in rows:
+            r["group"] = name
+        return rows
 
     def tok(values):
         return [filters._tokens(v, k) for v, k in zip(values, kinds)]
@@ -122,9 +156,9 @@ def summary_rows(jobs):
     # score - over every part when a trial is scored on its parts - and a run
     # with a score and no pass or fail has nothing solved to count.
     scored = [
-        row("Mean score", ["—" if j.mean_score is None else f"{j.mean_score:.2f}" for j in jobs],
+        row("mean_score", "Mean score", ["—" if j.mean_score is None else f"{j.mean_score:.2f}" for j in jobs],
             [j.mean_score for j in jobs], "higher",
-            "The mean of the benchmark's own score, over every part scored when a trial is scored on its parts"),
+            "The mean of the benchmark's own score, over every part scored when a trial is scored on its parts", unit=SCORE),
     ] if any(j.mean_score is not None for j in jobs) else []
     # and by the field the benchmark breaks it down by (a question's category), a row a value
     by = next((j.parts_by for j in jobs if j.parts_by), "")
@@ -134,49 +168,55 @@ def summary_rows(jobs):
             groups.setdefault(g["group"], None)
     for g in groups:
         means = [next((x["mean"] for x in j.score_by_group if x["group"] == g), None) for j in jobs]
-        scored.append(row(f"{by.capitalize()} {g}", ["—" if m is None else f"{m:.2f}" for m in means], means, "higher",
-                          f"The mean score of the parts with {by} {g}"))
+        scored.append(row("score_" + re.sub(r"\W+", "_", str(g).lower()), f"{by.capitalize()} {g}", ["—" if m is None else f"{m:.2f}" for m in means], means, "higher",
+                          f"The mean score of the parts with {by} {g}", unit=SCORE))
+    cached = [_ratio(j.total_cache_tokens, j.total_input_tokens) for j in jobs]
     return [
-        row("Trials", [len(j.trials) for j in jobs]),
-        *scored,
-        row("Solved", ["—" if j.scored_only else f"{j.n_resolved}/{len(j.trials)}" for j in jobs],
-            [None if j.scored_only else j.n_resolved for j in jobs], "higher"),
-        row("Raw rate", [filters._pct(j.raw_solve_rate) for j in jobs],
-            [j.raw_solve_rate for j in jobs], "higher", "Solved ÷ all trials"),
-        row("Adjusted rate", [filters._pct(j.adjusted_solve_rate) for j in jobs],
-            [j.adjusted_solve_rate for j in jobs], "higher",
-            "Solved ÷ trials that actually ran"),
-        row("Infra errors", [j.n_infra or "—" for j in jobs],
-            [j.n_infra for j in jobs], "lower",
-            "Trials that never got a fair attempt"),
-        row("Broke tests", [j.n_regressions or "—" for j in jobs],
-            [j.n_regressions for j in jobs], "lower",
-            "Patches that broke previously-passing tests"),
-        # Token block, ordered so the arithmetic reads down the column:
-        # prompt size = fresh + cached, then the ratio those two imply.
-        row("Prompt size", tok([j.total_input_tokens for j in jobs]),
-            [j.total_input_tokens or None for j in jobs], "lower",
-            "Total prompt tokens sent, cached ones included"),
-        row("Fresh prompt",
-            tok([j.total_input_tokens - j.total_cache_tokens for j in jobs]),
-            [(j.total_input_tokens - j.total_cache_tokens) or None for j in jobs], "lower",
-            "Prompt tokens NOT served from cache — the expensive part"),
-        # Ranked on the ratio, not the absolute: a bigger cached count only
-        # means a bigger prompt. The share of the prompt reused is the claim.
-        row("Cached", tok([j.total_cache_tokens for j in jobs]),
-            [_ratio(j.total_cache_tokens, j.total_input_tokens) for j in jobs], "higher",
-            "Prompt tokens served from cache — ranked by share of the prompt, not the raw count"),
-        row("Cached ratio",
-            [filters._pct(_ratio(j.total_cache_tokens, j.total_input_tokens)) for j in jobs],
-            [_ratio(j.total_cache_tokens, j.total_input_tokens) for j in jobs], "higher",
-            "Cached ÷ prompt size — higher means less of the prompt was re-sent"),
-        row("Output tokens", tok([j.total_output_tokens for j in jobs]),
-            [j.total_output_tokens or None for j in jobs], "lower"),
-        row(COST_LABEL, [filters._usd(j.total_cost_usd, k) for j, k in zip(jobs, kinds)],
-            [j.total_cost_usd for j in jobs], "lower", COST_HINT, allow_single=True),
-        row("Wall time",
-            [f"{j.duration_min:.0f}m" if j.duration_min else "—" for j in jobs],
-            [j.duration_min for j in jobs], "lower"),
+        *group("Outcomes", [row("trials", "Trials", [len(j.trials) for j in jobs], unit=COUNT, values=[len(j.trials) for j in jobs])]),
+        *group("Score", scored),
+        *group("Outcomes", [
+            row("solved", "Solved", ["—" if j.scored_only else f"{j.n_resolved}/{len(j.trials)}" for j in jobs],
+                [None if j.scored_only else j.n_resolved for j in jobs], "higher", unit=COUNT),
+            row("raw_rate", "Raw rate", [filters._pct(j.raw_solve_rate) for j in jobs],
+                [j.raw_solve_rate for j in jobs], "higher", "Solved ÷ all trials", unit=POINTS),
+            row("adjusted_rate", "Adjusted rate", [filters._pct(j.adjusted_solve_rate) for j in jobs],
+                [j.adjusted_solve_rate for j in jobs], "higher",
+                "Solved ÷ trials that actually ran", unit=POINTS),
+            row("infra_errors", "Infra errors", [j.n_infra or "—" for j in jobs],
+                [j.n_infra for j in jobs], "lower",
+                "Trials that never got a fair attempt", unit=COUNT),
+            row("broke_tests", "Broke tests", [j.n_regressions or "—" for j in jobs],
+                [j.n_regressions for j in jobs], "lower",
+                "Patches that broke previously-passing tests", unit=COUNT),
+        ]),
+        *group("Tokens", [
+            # Token block, ordered so the arithmetic reads down the column:
+            # prompt size = fresh + cached, then the ratio those two imply.
+            row("prompt_size", "Prompt size", tok([j.total_input_tokens for j in jobs]),
+                [j.total_input_tokens or None for j in jobs], "lower",
+                "Total prompt tokens sent, cached ones included", unit=filters._tokens),
+            row("fresh_prompt", "Fresh prompt",
+                tok([j.total_input_tokens - j.total_cache_tokens for j in jobs]),
+                [(j.total_input_tokens - j.total_cache_tokens) or None for j in jobs], "lower",
+                "Prompt tokens NOT served from cache — the expensive part", unit=filters._tokens),
+            # Ranked on the ratio, not the absolute: a bigger cached count only
+            # means a bigger prompt. The share of the prompt reused is the claim.
+            row("cached", "Cached", tok([j.total_cache_tokens for j in jobs]),
+                cached, "higher",
+                "Prompt tokens served from cache — ranked by share of the prompt, not the raw count",
+                unit=filters._tokens, values=[j.total_cache_tokens or None for j in jobs]),
+            row("cached_ratio", "Cached ratio", [filters._pct(c) for c in cached], cached, "higher",
+                "Cached ÷ prompt size — higher means less of the prompt was re-sent", unit=POINTS),
+            row("output_tokens", "Output tokens", tok([j.total_output_tokens for j in jobs]),
+                [j.total_output_tokens or None for j in jobs], "lower", unit=filters._tokens),
+        ]),
+        *group("Cost and time", [
+            row("cost", COST_LABEL, [filters._usd(j.total_cost_usd, k) for j, k in zip(jobs, kinds)],
+                [j.total_cost_usd for j in jobs], "lower", COST_HINT, allow_single=True, unit=filters._usd),
+            row("wall_time", "Wall time",
+                [f"{j.duration_min:.0f}m" if j.duration_min else "—" for j in jobs],
+                [j.duration_min for j in jobs], "lower", unit=MINUTES),
+        ]),
     ]
 
 
@@ -308,14 +348,63 @@ def compare_detail(row, jobs):
     }
 
 
+# A row's tick labels: its difference's unit, but a rate's ticks are rates and a short run's in seconds.
+AXIS = {POINTS: filters._pct, MINUTES: filters._runtime}
+
+
+def chart(rows, columns, jobs, style, keys):
+    """One chart: the summary rows ``keys`` drawn in ``style``, a run per column that has one, as the table shows it,
+    its colour its column's place; None while a key names no row of this comparison."""
+    if not all(k in rows for k in keys):
+        return None
+    names = [" · ".join(filter(None, (j.agent_label or j.job_id, j.model_name))) for j in jobs]
+
+    def value(row, n, i):
+        v, check = row["values"][i], jobs[i].is_control
+        # a check's figure with no number is the table's real zero: the tokens and cost a control never spent
+        if v is None and check and row["cells"][i] != "—":
+            v = 0
+        return figures.Value(label=f"{n}. {names[i]}" if names.count(names[i]) > 1 else names[i], value=v,
+                             text=str(row["cells"][i]), note=row["deltas"][i][0], check=check, baseline=n == 1 and i == 0,
+                             tag=str(n), series=n)
+
+    return figures.STYLES[style].draw(*(
+        figures.Metric(rows[k]["label"], tuple(value(rows[k], n, c["i"]) for n, c in enumerate(columns, 1) if c["i"] is not None),
+                       AXIS.get(rows[k]["unit"], rows[k]["unit"]))
+        for k in keys))
+
+
+def _charts_requested():
+    """This URL's charts (``chart=<style>:<metric key>[,<metric key>]``, in order) as (style, keys), each with as many
+    keys as its style's axes; None without ``chart=``, and none for ``chart=`` alone."""
+    if "chart" not in request.args:
+        return None
+    out = []
+    for entry in request.args.getlist("chart"):
+        style, _, keys = entry.partition(":")
+        if style in figures.STYLES:
+            n = len(figures.STYLES[style].axes)
+            out.append((style, tuple((keys.split(",") + [""] * n)[:n])))
+    return out
+
+
+def chart_query(charts):
+    """``charts`` as ``chart=`` values; one empty value for none, so no chart stays none."""
+    return [f"{style}:{','.join(keys)}" for style, keys in charts] or [""]
+
+
+def _restyled(chart, style, headline):
+    """``chart`` drawn in ``style``: its first metric kept, the next from the headline rate or the cost."""
+    first = chart[1][0]
+    keys = (first, headline if first != headline else "cost")
+    return style, keys[:len(figures.STYLES[style].axes)]
+
+
 @app.route("/compare")
 def compare():
-    """Qualified, ordered run columns over whole runs or exact shared tasks."""
-    view = _comparison_requested()
-    if len(view.selected) < 2:
-        if view.selected:
-            flash("Choose two different runs to compare.", "error")
-        return compare_picker()
+    """Ordered run columns over whole runs or exact shared tasks, the first the baseline; an empty column
+    (``pick=<workspace>:``) waits for its run."""
+    view, columns = _columns_requested()
     chosen = view.jobs
     by_agent: dict = {}
     for selection in view.selected:
@@ -327,7 +416,8 @@ def compare():
         for ref in tier
         if ref is not None
     ]
-    summary = summary_rows(chosen) if view.cohort == "whole" or view.shared_tasks else []
+    tasks_view = _view()
+    summary = summary_rows(chosen, baseline=columns[0]["i"] == 0) if tasks_view != "tasks" and (view.cohort == "whole" or view.shared_tasks) else []
     # There is no truthful wall-clock interval for a subset of parallel trials.
     # Whole-run intervals keep their existing ranking, explicitly labelled.
     if view.cohort == "matched":
@@ -336,15 +426,64 @@ def compare():
         for row in summary:
             if row["label"] == "Wall time":
                 row.update(label="Run wall time", hint="The recorded wall-clock interval of the full run")
+    # the charts, kept by every link once chosen; until then the headline rate, the cost, and the one against the other
+    rows = {r["key"]: r for r in summary}
+    scored = "mean_score" in rows and all(v is None for v in rows.get("adjusted_rate", {}).get("values", [None]))
+    headline = "mean_score" if scored else "adjusted_rate"
+    charts = _charts_requested()
+    keep = {} if charts is None else {"chart": chart_query(charts)}
+    if charts is None:
+        charts = [("bars", (headline,)), ("bars", ("cost",)), ("scatter", ("cost", headline))]
+    values = [c["ref"].value for c in columns]
+    at = lambda cs: url_for("compare", pick=values, cohort=view.cohort, view="chart", chart=chart_query(cs))
+    def card(k, style, keys):
+        """A chart's card: its panel, and its links, each changing this chart alone."""
+        put = lambda chart: at(charts[:k] + [chart] + charts[k + 1:])
+
+        def axis(a, name):
+            """The metric menu of the axis ``a``: a link a summary row, by group."""
+            pick = lambda key: put((style, keys[:a] + (key,) + keys[a + 1:]))
+            return {"name": name, "key": keys[a], "label": rows[keys[a]]["label"] if keys[a] in rows else "—",
+                    "groups": {g: [(key, label, pick(key)) for key, label in rs] for g, rs in groups.items()}}
+
+        return {"style": style, "axes": [axis(a, name) for a, name in enumerate(figures.STYLES[style].axes)],
+                "panel": chart(rows, columns, chosen, style, keys) if tasks_view == "chart" else None,
+                "styles": [(s, st.label, put(_restyled((style, keys), s, headline))) for s, st in figures.STYLES.items()],
+                "remove": at(charts[:k] + charts[k + 1:])}
+
+    groups = _metric_groups(summary)
+    cards = [card(k, style, keys) for k, (style, keys) in enumerate(charts)]
+    to = lambda vs: url_for("compare", pick=vs, cohort=view.cohort, view=tasks_view, **keep)
+
+    def swap(a, b):
+        vs = list(values)
+        vs[a], vs[b] = vs[b], vs[a]
+        return to(vs)
+
+    for k, c in enumerate(columns):
+        # an empty column of two would come straight back
+        c.update(remove=(len(values) > 2 or c["ref"].job_id) and to(values[:k] + values[k + 1:]), left=k and swap(k, k - 1), right=k + 1 < len(values) and swap(k, k + 1))
+    baseline = chosen[0].dataset if columns[0]["i"] == 0 else ""
     return render_template(
         "compare/compare.html", comparison=view, selections=view.selected, jobs=chosen,
-        tasks=view.tasks, summary=summary,
+        tasks=view.tasks, summary=summary, columns=columns, workspace_options=_workspace_options(),
         n_differing=view.n_differing, n_shared=view.shared_tasks,
-        picks=view.references, cohort=view.cohort,
+        picks=values, cohort=view.cohort, view=tasks_view, add=to(values + [columns[-1]["ref"].workspace + ":"]),
+        lists={n: _options(n, baseline) for n in dict.fromkeys(c["ref"].workspace for c in columns)},
+        baseline=baseline, benchmarks=[b.title if b else "—" for b in (_benchmark(j.dataset)[0] for j in chosen)],
         order_grouped=grouped, order_alternating=alternating,
-        n_agents=len(by_agent),
-        judgement=_judgement(view), csrf=shared._csrf_token(),
+        n_agents=len(by_agent), keep=keep,
+        judgement=tasks_view == "tasks" and _judgement(view), csrf=shared._csrf_token(),
+        cards=cards, add_chart=at(charts + [("bars", (headline,))]),
     )
+
+
+def _metric_groups(summary):
+    """A chart's metric menu: the summary rows by their group, in the table's order, as (key, label)."""
+    groups = {}
+    for r in summary:
+        groups.setdefault(r["group"], []).append((r["key"], r["label"]))
+    return groups
 
 
 @app.route("/compare/detail/<int:index>")
@@ -352,10 +491,11 @@ def compare_detail_row(index):
     """One task's detail row, built when it is opened: building every row of
     the page loaded and analysed every trajectory of every run compared
     (2 x 500 trials took 10 to 12 s and 4.8 MB of HTML)."""
-    view = _comparison_requested()
-    if len(view.selected) < 2 or not 0 <= index < len(view.tasks):
+    view, columns = _columns_requested()
+    if not view.selected or not 0 <= index < len(view.tasks):
         abort(404)
-    return render_template("compare/_detail.html", jobs=view.jobs, d=compare_detail(view.tasks[index].trials, view.jobs))
+    return render_template("compare/_detail.html", jobs=view.jobs, columns=columns,
+                           d=compare_detail(view.tasks[index].trials, view.jobs))
 
 
 def _judgement(view):
@@ -363,8 +503,85 @@ def _judgement(view):
     return judge.compare_summary(view) if view.cohort == "matched" else None
 
 
+def _runs(name):
+    """A workspace's runs as Compare offers them (``runs.offered``), once a request."""
+    from . import runs
+    memo = g.setdefault("_compare_runs", {})
+    if name not in memo:
+        active = shared.STATE["workspace"]
+        ws = None
+        if name and not (active and name == active.name):
+            ws = workspace.load(shared.WS_HOME, name)
+            if ws is None:
+                abort(404, description="That workspace is unavailable.")
+        memo[name] = runs.offered(ws)
+    return memo[name]
+
+
+def _benchmark(dataset):
+    """A recorded dataset's catalogue benchmark and dataset entry, None for either the catalogue lacks."""
+    cat = shared._catalog_cached()
+    d = cat and next((d for d in cat.datasets if dataset and dataset in (d.key, d.registry, d.hub)), None)
+    return d and cat.benchmark(d.benchmark), d
+
+
+def _where(dataset):
+    """A recorded dataset as the catalogue names it, "Benchmark / Dataset", else its own name."""
+    b, d = _benchmark(dataset)
+    return (b.title if b.title == d.title else f"{b.title} / {d.title}") if b else shared.dataset_title(dataset) or "—"
+
+
+def _options(name, dataset=""):
+    """A column's run list from the workspace ``name``: newest launch first, ``dataset``'s runs before the rest
+    (``same`` of them), a run sharded over several machines once."""
+    from nullius.compare import comparison
+    runs = [{"value": comparison.RunRef(name, job.job_id).value, "id": job.job_id, "launch": launch.key,
+             "agent": job.agent_label or "—", "model": job.model_name or "", "where": _where(job.dataset),
+             "dataset": job.dataset, "date": filters._dt(job.started_at), "check": job.is_control,
+             "shards": len(job.merged_from) or len(ids)}
+            for launch, job, ids, _ in _runs(name)]
+    same = [r for r in runs if dataset and r["dataset"] == dataset]
+    return {"runs": same + [r for r in runs if not (dataset and r["dataset"] == dataset)], "same": len(same)}
+
+
+@app.route("/compare/runs")
+def compare_runs():
+    """A workspace's runs (the open one by default) for a column's run list, as JSON; ``dataset``: the
+    baseline's, listed first."""
+    active = shared.STATE["workspace"]
+    name = request.args.get("workspace", active.name if active else "")
+    if name not in {o["name"] for o in _workspace_options()}:
+        abort(404, description="That workspace is unavailable.")
+    return jsonify(_options(name, request.args.get("dataset", "")))
+
+
+def _workspace_options():
+    """The workspaces a column can pick from: every saved one, the open one, and the active source when it has no workspace."""
+    saved = workspace.list_all(shared.WS_HOME)
+    active = shared.STATE["workspace"]
+    options = [{"name": ws.name, "label": ws.label} for ws in saved]
+    if active and active.name not in {option["name"] for option in options}:
+        options.insert(0, {"name": active.name, "label": active.label})
+    if not options or (not active and shared.STATE["roots"]):
+        options.insert(0, {"name": "", "label": "Active source"})
+    return options
+
+
+def _view():
+    """This URL's view: "tasks" for the task table, "chart" for the chart, None (no parameter) for the side-by-side
+    table."""
+    view = request.args.get("view")
+    return view if view in ("tasks", "chart") else None
+
+
 def _comparison_requested():
-    """Resolve only the workspaces named by this URL, without switching one."""
+    return _columns_requested()[0]
+
+
+def _columns_requested():
+    """This URL's comparison and its columns, in order: {"ref", "i" its run's place in the comparison, None
+    when empty}. Resolves only the workspaces it names, without switching one. A shard's id stands for its
+    whole run, and a run picked twice is one column."""
     from nullius.compare import comparison
     active = shared.STATE["workspace"]
     active_name = active.name if active else ""
@@ -374,58 +591,35 @@ def _comparison_requested():
         values = [comparison.RunRef(active_name, job_id).value
                   for job_id in request.args.getlist("job")]
     try:
-        refs = [comparison.RunRef.parse(value) for value in values]
+        refs = [comparison.RunRef.parse(value, empty=True) for value in values]
+        if not refs:
+            refs = [comparison.RunRef(active_name or _workspace_options()[0]["name"], "")]
         names = list(dict.fromkeys(ref.workspace for ref in refs))
-        jobs = {name: shared._jobs_for_workspace(name) for name in names}
+        runs = {name: _runs(name) for name in names}
+        whole = {name: {i: job.job_id for _, job, ids, _ in rs for i in ids} for name, rs in runs.items()}
+        refs = [replace(ref, job_id=whole[ref.workspace].get(ref.job_id, ref.job_id)) for ref in refs]
+        refs = [ref for k, ref in enumerate(refs) if not ref.job_id or ref not in refs[:k]]
+        # never one column alone: an empty one waits beside it
+        refs += [comparison.RunRef(refs[-1].workspace, "")] * (2 - len(refs))
         labels = {}
         for name in names:
             ws = active if name == active_name else workspace.load(shared.WS_HOME, name)
             labels[name] = ws.label if ws else "Active source"
-        selected = comparison.resolve(values, jobs, labels)
-        return comparison.build(selected, request.args.get("cohort", "whole"))
+        selected = comparison.resolve([ref.value for ref in refs if ref.job_id],
+                                      {name: [job for _, job, _, _ in rs] for name, rs in runs.items()}, labels)
+        view = comparison.build(selected, request.args.get("cohort", "whole"))
     except ValueError as exc:
         abort(400, description=str(exc))
+    place = {s.ref: k for k, s in enumerate(view.selected)}
+    shards = {(name, job.job_id): rows for name, rs in runs.items() for _, job, _, rows in rs}
+    return view, [{"ref": ref, "i": place.get(ref), "label": labels[ref.workspace],
+                   "shards": shards.get((ref.workspace, ref.job_id), [])} for ref in refs]
 
 
 @app.route("/compare/pick")
 def compare_picker():
-    """Choose real runs from two saved workspaces; reads never open or refresh."""
-    from nullius.compare import comparison
-    saved = workspace.list_all(shared.WS_HOME)
-    active = shared.STATE["workspace"]
-    options = [{"name": ws.name, "label": ws.label} for ws in saved]
-    if active and active.name not in {option["name"] for option in options}:
-        options.insert(0, {"name": active.name, "label": active.label})
-    if not options or (not active and shared.STATE["roots"]):
-        options.insert(0, {"name": "", "label": "Active source"})
-    values = request.args.getlist("pick")
-    try:
-        refs = [comparison.RunRef.parse(value) for value in values[:2]]
-    except ValueError as exc:
-        abort(400, description=str(exc))
-    default_left = refs[0].workspace if refs else (active.name if active else options[0]["name"])
-    left = request.args.get("left", default_left)
-    default_right = refs[1].workspace if len(refs) > 1 else next(
-        (option["name"] for option in options if option["name"] != left), left)
-    right = request.args.get("right", default_right)
-    choices, loaded = [], {}
-    for index, name in enumerate((left, right)):
-        if name not in {option["name"] for option in options}:
-            abort(404, description="That workspace is unavailable.")
-        if name not in loaded:
-            loaded[name] = shared._jobs_for_workspace(name)
-        jobs = loaded[name]
-        selected = refs[index].value if len(refs) > index and refs[index].workspace == name else ""
-        if not selected and jobs:
-            run_index = 1 if index == 1 and left == right and len(jobs) > 1 else 0
-            selected = comparison.RunRef(name, jobs[run_index].job_id).value
-        choices.append({"name": name, "label": next(option["label"] for option in options if option["name"] == name),
-                        "jobs": jobs, "selected": selected})
-    cohort = request.args.get("cohort", "whole")
-    if cohort not in {"whole", "matched"}:
-        abort(400, description="Choose whole runs or matched tasks as the comparison cohort.")
-    return render_template("compare/compare_picker.html", workspace_options=options,
-                           choices=choices, cohort=cohort)
+    """The old picker's links: its picks as columns."""
+    return redirect(url_for("compare", pick=request.args.getlist("pick"), cohort=request.args.get("cohort", "whole"), view=_view()))
 
 
 def trace_panel(t, chart_filter=None):
@@ -459,15 +653,15 @@ def trace_panel(t, chart_filter=None):
 @app.route("/compare/task/<path:task>")
 def compare_task(task):
     """Full detail of the same last indexed attempt shown in the task table."""
-    view = _comparison_requested()
-    if len(view.selected) < 2:
-        return redirect(url_for("compare_picker", cohort=view.cohort))
+    view, columns = _columns_requested()
+    if not view.selected:
+        return redirect(url_for("compare", pick=[c["ref"].value for c in columns], cohort=view.cohort, view=_view()))
     dataset = request.args.get("dataset")
     matches = [row for row in view.tasks if row.task == task and (dataset is None or row.dataset == dataset)]
     if len(matches) != 1:
         if len(matches) > 1:
             flash("That task name occurs in different datasets. Choose its dataset row first.", "error")
-            return redirect(url_for("compare", pick=view.references, cohort=view.cohort))
+            return redirect(url_for("compare", pick=view.references, cohort=view.cohort, view=_view()))
         abort(404, description="This task is not in the selected comparison cohort.")
     row = matches[0]
     # One legend state for every side: a kind switched off in a chart is off in
@@ -475,15 +669,34 @@ def compare_task(task):
     # trace filter (`hide`) is deliberately not offered here — a filtered view
     # belongs to one trial, and is saved from its own page.
     cfilt = charts.ChartFilter.of(request.args.getlist("chart_off"))
+    # Each side shows one attempt: the one `attempt=<run>/<trial>` names, else
+    # the last indexed, as the task table does.
+    asked = dict(value.rsplit("/", 1) for value in request.args.getlist("attempt") if "/" in value)
+    sides = []
+    for selection, job, t, group in zip(view.selected, view.jobs, row.trials, row.tried):
+        # the row's own attempts, so this page and the table count the same ones
+        tried = list(group.trials) if group else []
+        chosen = next((x for x in tried if x.trial_name == asked.get(selection.value)), t)
+        sides.append((selection, job, chosen, group))
+    picks = [c["ref"].value for c in columns]
+    chosen_query = [f"{sel.value}/{c.trial_name}" for sel, _, c, group in sides if c and group and group.n > 1]
     panels = []
-    for selection, job, t, attempts in zip(view.selected, view.jobs, row.trials, row.attempts):
+    for selection, job, t, group in sides:
         traj = trajectory.load(t.trajectory_path) if (t and t.has_trajectory) else None
+        links = []
+        if group and group.n > 1:
+            others = [q for q in chosen_query if q.rsplit("/", 1)[0] != selection.value]
+            links = [{"trial": x, "current": x.trial_name == t.trial_name,
+                      "href": url_for("compare_task", task=task, pick=picks, cohort=view.cohort, view=_view(),
+                                      dataset=row.dataset, attempt=others + [f"{selection.value}/{x.trial_name}"],
+                                      **cfilt.query)}
+                     for x in group.trials]
         panels.append({"job": job, "selection": selection, "trial": t,
-                       "attempts": attempts,
+                       "tried": group, "attempt_links": links,
                        "traj": traj if traj and not traj.error else None,
                        **trace_panel(t, cfilt)})
     return render_template(
         "compare/compare_task.html", task=task, dataset=row.dataset, panels=panels,
-        comparison=view, picks=view.references, cohort=view.cohort,
+        comparison=view, picks=picks, cohort=view.cohort, view=_view(), chosen=chosen_query,
         chart_filter=cfilt, no_filter=trace.Filter(),
     )

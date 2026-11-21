@@ -1,41 +1,13 @@
 (() => {
   const hash = () => { try { return decodeURIComponent(location.hash.slice(1)); } catch { return ''; } };
 
-  // Hash links (/benchmarks#key, /benchmarks#dataset) open the benchmark's page; category or origin chips and the
-  // Find box keep the cards that match, and a shelf left empty folds away.
-  const cards = [...document.querySelectorAll('.bench-card')];
+  // Hash links (/benchmarks#key, /benchmarks#dataset, /kits#key) open the card's own page; the search and filters
+  // are the card toolkit's (static/tables.js).
+  const cards = [...document.querySelectorAll('.bench-card[data-keys]')];
   if (cards.length) {
     const key = hash();
     const owner = key && cards.find(c => c.dataset.keys.split(' ').includes(key));
-    if (owner) {
-      location.replace(owner.href + (key === owner.dataset.keys.split(' ')[0] ? '' : '#' + encodeURIComponent(key)));
-      return;
-    }
-    const find = document.getElementById('bench-find');
-    const chips = [...document.querySelectorAll('[data-filter] .bench-cat')];
-    const none = document.getElementById('bench-none');
-    // one value per filter group (category, origin); '' keeps every card
-    const picked = {};
-    const apply = () => {
-      const words = (find?.value || '').toLowerCase().split(/\s+/).filter(Boolean);
-      cards.forEach(c => {
-        // Only runners are a space-separated list; categories may contain spaces.
-        c.hidden = !(Object.entries(picked).every(([f, v]) => !v || (f === 'runs' ? (c.dataset[f] || '').split(' ').includes(v) : c.dataset[f] === v)) && words.every(w => c.dataset.find.includes(w)));
-      });
-      document.querySelectorAll('[data-shelf]').forEach(shelf => {
-        const shown = shelf.querySelectorAll('.bench-card:not([hidden])').length;
-        shelf.hidden = !shown;
-        shelf.querySelector('.shelf-n').textContent = shown;
-      });
-      chips.forEach(chip => {
-        const on = chip.dataset.value === (picked[chip.closest('[data-filter]').dataset.filter] || '');
-        chip.classList.toggle('on', on);
-        chip.setAttribute('aria-pressed', String(on));
-      });
-      if (none) none.hidden = cards.some(c => !c.hidden);
-    };
-    chips.forEach(chip => chip.addEventListener('click', () => { picked[chip.closest('[data-filter]').dataset.filter] = chip.dataset.value; apply(); }));
-    find?.addEventListener('input', apply);
+    if (owner) location.replace(owner.querySelector('.card-link').href + (key === owner.dataset.keys.split(' ')[0] ? '' : '#' + encodeURIComponent(key)));
     return;
   }
 
@@ -84,4 +56,23 @@ document.querySelectorAll('.bench-page .std-copy').forEach(b => b.addEventListen
   const text = b.closest('.std-code').querySelector('code').textContent;
   try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; } catch { b.textContent = 'Select it'; }
   setTimeout(() => { b.textContent = 'Copy'; }, 1500);
+}));
+
+// A benchmark's versions: every version is on the page, one shown; a version link swaps them in place and keeps ?v=
+// in the address, so the link still opens that version on its own.
+document.querySelectorAll('.bench-page .std-versions').forEach(nav => nav.addEventListener('click', event => {
+  const link = event.target.closest('a');
+  if (!link || event.defaultPrevented || event.button !== 0 ||
+      event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const v = new URL(link.href).searchParams.get('v');
+  event.preventDefault();
+  document.querySelectorAll('.bench-page .std-version[data-version]').forEach(el => { el.hidden = el.dataset.version !== v; });
+  nav.querySelectorAll('a').forEach(a => {
+    if (a === link) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+  const build = document.querySelector('.bench-page [data-build-run]');    // Build a run opens the version shown
+  if (build) { const to = new URL(build.href); to.searchParams.set('standard', link.dataset.ref); build.href = to.pathname + to.search; }
+  const url = new URL(location.href);
+  url.searchParams.set('v', v);
+  history.replaceState(null, '', url.pathname + url.search + location.hash);
 }));

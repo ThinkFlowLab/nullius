@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 from nullius import workspace
 from nullius.runs import launches, parse
+from nullius.standard.proofs import prove
 from nullius.standard.runner import job, merge, shard
 
 BENCH = {"key": "fakebench", "_ref": "fakebench", "family": "agent", "needs": ["agent.workspace/v1"],
@@ -31,6 +32,12 @@ def read(path):
 
 class Partition(unittest.TestCase):
     UNITS = [f"set/{i}" for i in range(500)]
+
+    def test_by_position_shard_i_of_n_holds_the_units_at_places_i_minus_1_mod_n(self):
+        units = ["a", "b", "c", "d", "e"]
+        self.assertEqual([shard.select(units, i, 5, by="position") for i in (1, 5)], [[(0, "a")], [(4, "e")]])
+        self.assertEqual(shard.select(units, 2, 2, by="position"), [(1, "b"), (3, "d")])
+        self.assertEqual(shard.record(1, 5, 5, ["a"], by="position")["partition"], shard.BY["position"])
 
     def test_every_unit_is_in_exactly_one_shard(self):
         for n in (1, 2, 3, 7):
@@ -63,14 +70,16 @@ class Partition(unittest.TestCase):
 
 
 def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="gpt-5-mini", bench=BENCH, other=AGENT,
-                planned=None, t0=1_760_000_000.0, failed=(), budget=None, backend="local", reward=lambda place: float(place % 2)):
+                planned=None, t0=1_760_000_000.0, failed=(), budget=None, backend="local", bench_options=None,
+                reward=lambda place: float(place % 2)):
     """A shard job as a run writes it: its config, a trial per unit (tagged by
     the unit's place in the whole dataset), its result."""
     d = os.path.join(root, name)
     os.makedirs(d)
     planned = list(units) if planned is None else planned
     job.write_config(d, job=name, bench=bench, other=other, model=model, provider="openai", dataset="all", units=planned,
-                     concurrency=2, granted=True, launch=launch, shard=shard.record(index, of, total, planned), backend=backend)
+                     concurrency=2, granted=True, launch=launch, shard=shard.record(index, of, total, planned), backend=backend,
+                     bench_options=bench_options)
     results = []
     for k, u in enumerate(units):
         place = int(u.split("-")[1])
@@ -82,7 +91,7 @@ def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="g
         results.append(job.write_trial(trial, job=name, bench=bench, other=other, model=model, unit=u, t0=t0 + k, t1=t0 + k + 5,
                                        produce=(t0 + k, t0 + k + 4), score=None if exc else {"reward": reward(place)},
                                        exception=exc, calls=[], trajectory=None))
-    job.write_result(d, name, t0, t0 + 10 * (index + 1), results, len(planned), budget=budget)
+    job.write_result(d, name, t0, t0 + 10 * (min(index, 9) + 1), results, len(planned), budget=budget)
     return d
 
 
@@ -118,6 +127,42 @@ class Merge(unittest.TestCase):
         self.assertEqual(read((os.path.join(src, "result.json")))["standard"]["job"], f"run-shard-{shard.of('t-1', 3)}of3")
         self.assertTrue(os.path.samefile(os.path.join(src, "workspace", "solution.py"),
                                          os.path.join(got["out"], "t-1__u0001", "workspace", "solution.py")))
+
+    def retried(self, dirs, retries=1):
+        """The launch allowed each attempt one retry, and the first shard's first attempt took it: its try
+        before kept under retried/, as a run leaves it. The attempt's name."""
+        for d in dirs:
+            cfg = read(os.path.join(d, "config.json"))
+            cfg["standard"]["retries"] = retries
+            with open(os.path.join(d, "config.json"), "w") as f:
+                json.dump(cfg, f)
+        t = sorted(n for n in os.listdir(dirs[0]) if "__u" in n)[0]
+        res = read(os.path.join(dirs[0], t, "result.json"))
+        first = dict(res, exception_info={"exception_type": "RateLimitError", "exception_message": "HTTP 429"})
+        os.makedirs(os.path.join(dirs[0], "retried", t + ".try-1"))
+        with open(os.path.join(dirs[0], "retried", t + ".try-1", "result.json"), "w") as f:
+            json.dump(first, f)
+        res["standard"]["retries"] = 1
+        with open(os.path.join(dirs[0], t, "result.json"), "w") as f:
+            json.dump(res, f)
+        return t
+
+    def test_the_merged_job_keeps_each_shards_earlier_tries(self):
+        dirs = self.shards()
+        t = self.retried(dirs)
+        got = merge.merge(dirs, os.path.join(self.tmp, "out", "run"))
+        self.assertEqual(read(os.path.join(got["out"], "retried", t + ".try-1", "result.json"))["standard"]["job"], "run")
+        j = parse.parse_job(got["out"])
+        self.assertEqual((len(j.trials), j.retries, j.n_retries), (10, 1, 1))     # a kept try is no trial; the retry is counted
+        attempt = next(x for x in j.trials if x.trial_name == t)
+        self.assertEqual([(n, x.outcome) for n, x in parse.tries(attempt)], [(1, "rate_limited"), (2, attempt.outcome)])
+
+    def test_shards_that_allowed_different_retries_are_not_one_launch(self):
+        dirs = self.shards()
+        self.retried(dirs[:1], retries=2)
+        with self.assertRaises(merge.Refused) as e:
+            merge.merge(dirs, os.path.join(self.tmp, "never"))
+        self.assertIn("retries per attempt", str(e.exception))
 
     def test_the_merged_job_carries_the_shards_spending_caps_as_one(self):
         """Each shard ran under its share of the run's cap: the merged job says the whole cap, what all of them
@@ -201,6 +246,36 @@ class Merge(unittest.TestCase):
         j = parse.parse_job(got["out"])
         self.assertEqual((j.n_total_trials, len(j.trials)), (len(self.split[1]) + len(planned), len(self.split[1]) + len(planned) - 1))
 
+    def test_a_launch_of_one_unit_per_shard_merges_and_says_only_the_units_it_lacks(self):
+        n = 2 ** 64
+        units = [f"t-{i}" for i in range(10)]
+        dirs = [write_shard(self.tmp, f"one-{u}", [u], shard.of(u, n), n) for u in units[:-1]]
+        got = merge.merge(dirs, os.path.join(self.tmp, "out"))
+        self.assertEqual((got["trials"], got["notes"]), (9, ["1 of the dataset's 10 units are not in the merge"]))
+
+    def test_shards_run_with_different_benchmark_options_keep_each_its_own(self):
+        same = {"websites": "none", "gitlab": "none"}
+        dirs = [write_shard(self.tmp, "s1", self.split[1], 1, 3, bench_options=same),
+                write_shard(self.tmp, "s2", self.split[2], 2, 3, bench_options=dict(same, gitlab="gitlab.example")),
+                write_shard(self.tmp, "s3", self.split[3], 3, 3, bench_options=same)]
+        std = read(os.path.join(merge.merge(dirs, os.path.join(self.tmp, "out"))["out"], "config.json"))["standard"]
+        self.assertNotIn("benchmark_options", std)
+        self.assertEqual([m["benchmark_options"]["gitlab"] for m in std["merged_from"]], ["none", "gitlab.example", "none"])
+        alike = [write_shard(self.tmp, f"a{i}", self.split[i], i, 3, bench_options=same) for i in (1, 2, 3)]
+        std = read(os.path.join(merge.merge(alike, os.path.join(self.tmp, "alike"))["out"], "config.json"))["standard"]
+        self.assertEqual(std["benchmark_options"], same)
+        self.assertNotIn("benchmark_options", std["merged_from"][0])
+
+    def test_a_merge_of_merges_keeps_the_options_of_its_inner_shards(self):
+        same = {"websites": "none", "gitlab": "none"}
+        inner = merge.merge([write_shard(self.tmp, "s1", self.split[1], 1, 3),
+                             write_shard(self.tmp, "s2", self.split[2], 2, 3, bench_options=dict(same, gitlab="gitlab.example"))],
+                            os.path.join(self.tmp, "inner"))["out"]
+        outer = merge.merge([inner, write_shard(self.tmp, "s3", self.split[3], 3, 3, bench_options=same)],
+                            os.path.join(self.tmp, "outer"), force=True)["out"]
+        self.assertEqual(prove._options_of(read(os.path.join(outer, "config.json"))),
+                         [dict(same, gitlab="gitlab.example"), same, {}])
+
     def test_a_job_that_is_no_shard_or_an_out_that_is_taken_is_refused(self):
         dirs = self.shards()
         os.makedirs(os.path.join(self.tmp, "taken", "x"))
@@ -247,8 +322,7 @@ class Fold(unittest.TestCase):
             first = launches.fold([workspace.load_job(ws, d)[0] for d in dirs])
             self.assertEqual(launches.fold([workspace.load_job(ws, d)[0] for d in dirs]), first)
             self.assertEqual(check.call_count, 1)
-            trial = os.path.join(dirs[1], sorted(n for n in os.listdir(dirs[1]) if n.startswith("t-"))[0], "result.json")
-            with open(trial, "a") as f:
+            with open(os.path.join(dirs[1], "result.json"), "a") as f:     # an ended shard is read again by its own record
                 f.write("\n")
             launches.fold([workspace.load_job(ws, d)[0] for d in dirs])
             self.assertEqual(check.call_count, 2)
@@ -278,17 +352,25 @@ class Launches(unittest.TestCase):
 
     def test_shards_started_by_separate_run_records_join_one_launch(self):
         jobs = [a_job("r-shard-1of2", 0, "r"), a_job("r-shard-2of2", 0.1, "r")]
-        records = {"e1": ("r-shard-1of2", ["r-shard-1of2"], None), "e2": ("r-shard-2of2", ["r-shard-2of2", "r-shard-2of2-pending"], None)}
+        records = {"e1": ("r-shard-1of2", ["r-shard-1of2"], None, set()), "e2": ("r-shard-2of2", ["r-shard-2of2", "r-shard-2of2-pending"], None, set())}
         out = launches.group(jobs, records)
         self.assertEqual(len(out), 1)
         self.assertEqual((out[0].job_ids, out[0].pending), (["r-shard-1of2", "r-shard-2of2"], ["r-shard-2of2-pending"]))
         self.assertEqual(out[0].prefix, "r-shard-*")
         self.assertEqual(out[0].title, "r")                                  # named by its launch id, not the jobs' prefix
 
+    def test_shards_whose_jobs_are_not_written_join_their_launch_by_the_plans_launch_id(self):
+        records = {f"e{i}": (f"r-shard-{i}of3", [f"r-shard-{i}of3"], None, {"r"}) for i in (1, 2, 3)}
+        for written in ([], [a_job("r-shard-2of3", 0, "r")]):
+            out = launches.group(written, records)
+            self.assertEqual(len(out), 1, written)
+            self.assertEqual(sorted(out[0].job_ids + out[0].pending), ["r-shard-1of3", "r-shard-2of3", "r-shard-3of3"])
+            self.assertEqual(out[0].title, "r")
+
     def test_a_launch_of_no_shards_or_of_several_launches_is_named_by_its_prefix(self):
         out = launches.group([a_job("x-1", 0), a_job("x-2", 0.2)])
         self.assertEqual(out[0].title, out[0].prefix)
-        mixed = launches.group([a_job("m-a", 0, "L1"), a_job("m-b", 0.1, "L2")], {"e": ("m", ["m-a", "m-b"], None)})
+        mixed = launches.group([a_job("m-a", 0, "L1"), a_job("m-b", 0.1, "L2")], {"e": ("m", ["m-a", "m-b"], None, set())})
         self.assertEqual((len(mixed), mixed[0].title), (1, mixed[0].prefix))
 
     def test_a_job_with_no_launch_groups_as_before(self):

@@ -6,10 +6,10 @@
     PYTHONPATH=app python3 -m nullius.standard.cli pins BENCHMARK[@VERSION] [--tag TAG] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
-    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--repeat K] [--option NAME=VALUE ...] [--unsandboxed | --backend container]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--constraint KEY=VALUE ...] [--unsandboxed | --backend container]
+    PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--attempts K] [--option NAME=VALUE ...] [--unsandboxed | --backend container | --backend boat]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS ...] [--max-turns N] [--max-calls N] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container | --backend boat [--boat-size SIZE]]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
-    PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N]
+    PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N] [--bench-option NAME=VALUE ...] [--job nop|oracle=JOB_DIR ...]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
     PYTHONPATH=app python3 -m nullius.standard.cli merge JOB_DIR... -o OUT [--force]
     PYTHONPATH=app python3 -m nullius.standard.cli fidelity AGENT --model M [--provider P] [--option NAME=VALUE ...] [--passes N] --unsandboxed
@@ -19,6 +19,9 @@ an agent's run or conformance check there is refused without ``--unsandboxed``.
 ``--backend container`` (``docker``, its earlier name) runs each unit's agent or capability in a container whose
 only way out is the unit's relay, or a public web proxy when its environment
 declares ``network`` (``standard/containers/container.py``), and needs no such yes.
+``--backend boat`` runs each unit's agent or capability in a boat.dev VM of its
+own, whose only way out is a tunnel to the unit's relay on this machine
+(``standard/boat.py``); its API key is Settings → Sandbox's, or ``BOAT_API_KEY``.
 A benchmark's control (``nop``, ``oracle``: its ``controls``) runs no agent
 and calls no model - only a judged benchmark's judge - so it asks for neither.
 ``prove`` runs a benchmark's controls and checks its units and that nothing
@@ -31,7 +34,7 @@ definitions (or one file); ``new`` writes a definition to fill in, or a new
 version of an agent or a capability (``new version``: the default's pins, with
 the version replaced, and nothing proven); ``fit`` says, for one benchmark, what can run it and
 why the rest cannot; ``conform`` runs the kits and writes what passed into the
-definition - the port, and each skill of its kit shown or not (``--repeat K``:
+definition - the port, and each skill of its kit shown or not (``--attempts K``:
 each check K times, held by a majority); ``run`` runs a benchmark into a job under ``--jobs`` (``jobs_standard/``),
 which the application opens like any other; ``fidelity`` drives an agent over
 ACP and through its own command, compares the requests its model was sent, and
@@ -43,6 +46,9 @@ the machine the command runs on, ``--from-run`` or not; ``merge``
 puts a launch's shard jobs together into one job (``standard/runner/merge.py``). ``--option``
 sets one of the agent's or capability's options (``options`` in its definition);
 the rest keep the vendor's defaults, and the job's config records them all.
+``--served-by [MODEL=]SLUG[,SLUG...]`` lets only those serving providers answer
+a model on OpenRouter, in that order (``run.served_by``); each call's record
+names the provider that served it.
 A run says each stage before its first unit, and each unit's end, as one
 ``[nullius] stage=...`` line on stderr and in the job's ``progress.jsonl``
 (``nullius/progress.py``): what the run's page shows while it goes.
@@ -54,7 +60,9 @@ read: the key is the one the run was handed, ``OPENAI_API_KEY``, and the
 endpoint ``OPENAI_BASE_URL`` when it names one (``run_env``). The licences a
 benchmark's environments declare are never in either: the run reads them from
 the benchmark's store (``nullius.secrets``) on this machine, or, on a host, from
-the one line its launcher handed it (``licences``).
+the one line its launcher handed it (``licences``). A data provider's token the
+benchmark declares is the exception: a run without ``--from-run`` takes the
+provider's variable (``HF_TOKEN``) from the environment first.
 """
 from __future__ import annotations
 
@@ -65,13 +73,16 @@ import shutil
 import signal
 import sys
 import tempfile
+import time
 
-from nullius import constraints as limits, paths, prices as price_list, progress, secrets, settings
+from nullius.standard.retries import MAX_RETRIES, RETRIES
+from nullius import constraints as limits, paths, prices as price_list, progress, providers, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed, just like the unified CLI does.
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
     settings.load(paths.settings_file())
 
+from nullius.standard import boat
 from nullius.standard.contract import definitions, match, ports
 from nullius.standard.proofs import conform, fidelity, pins, prove
 from nullius.standard.runner import job, merge, run, shard
@@ -98,26 +109,29 @@ def run_env(provider: str, env=os.environ) -> dict:
     """The environment a run started by Nullius reads its provider from:
     ``execution``'s launcher hands every run its one key as ``OPENAI_API_KEY``
     and its endpoint as ``OPENAI_BASE_URL`` (empty for OpenAI's own), so they
-    are named here as the provider's own settings and nothing else is."""
-    p = run.PROVIDERS[provider]
-    out = {k: v for k, v in env.items() if k in run.KEEP}
+    are named here as the provider's own settings and nothing else is - but
+    the Boat key, handed the same way to a run on Boat: on a host, the only
+    way it has one."""
+    out = {k: v for k, v in env.items() if k in run.KEEP or k == boat.NAME}
     if env.get("OPENAI_API_KEY"):
-        out[p["key"]] = env["OPENAI_API_KEY"]
-    if "base_var" in p and env.get("OPENAI_BASE_URL"):
-        out[p["base_var"]] = env["OPENAI_BASE_URL"]
+        out[providers.key_setting(provider)] = env["OPENAI_API_KEY"]
+    if provider == "custom" and env.get("OPENAI_BASE_URL"):
+        out["MODEL_API_URL"] = env["OPENAI_BASE_URL"]
     return out
 
 
-def licences(bench: dict, env=os.environ):
+def licences(bench: dict, env=os.environ, from_run: bool = False):
     """(``run.Licences``, the folder to remove after) for a run on a host,
     whose launcher handed it the benchmark's licences as one line
     (``secrets.HANDED``, ``execution``): a licence file is written to
     ``NULLIUS_LICENCE_DIR`` - in memory, ``/dev/shm`` - and nowhere else.
-    The line leaves this process's environment once read. (None, None) on
-    this machine: the run reads the benchmark's own store."""
+    The line leaves this process's environment once read. On this machine
+    the run reads the benchmark's own store; a headless run (not
+    ``from_run``) first takes a data provider's token the benchmark declares
+    from ``env``, under the provider's variable (``HF_TOKEN``)."""
     line = env.pop(secrets.HANDED, None)
     if not line:
-        return None, None
+        return (None if from_run else run.Licences(bench, environ=env)), None
     shm = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
     spill = env.get("NULLIUS_LICENCE_DIR") or os.path.join(shm, f"nullius-{os.getpid()}")
     return run.Licences.handed(bench, secrets.unpack(line), spill), spill
@@ -437,15 +451,20 @@ def cmd_new(a):
     return 0
 
 
-def options(pairs) -> dict:
+def options(pairs, flag: str = "--option", form: str = "NAME=VALUE") -> dict:
     """``--option name=value``, repeatable, as {name: value}."""
     out = {}
     for p in pairs or []:
         name, eq, value = p.partition("=")
         if not eq or not name:
-            sys.exit(f"--option {p!r}: NAME=VALUE")
+            sys.exit(f"{flag} {p!r}: {form}")
         out[name.strip()] = value.strip()
     return out
+
+
+def timeouts(pairs) -> dict:
+    """``--timeout PHASE=SECONDS``, repeatable, as {phase: seconds}; ``run`` checks the phases and the values."""
+    return options(pairs, "--timeout", "PHASE=SECONDS")
 
 
 def constraint_values(pairs) -> dict:
@@ -472,6 +491,17 @@ def prices(given) -> dict:
             sys.exit(str(e))
         out[name] = row
     return out
+
+
+def _retries(value: str) -> int:
+    """``--retries``: a whole number from 0 to ``MAX_RETRIES``."""
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a whole number")
+    if not 0 <= n <= MAX_RETRIES:
+        raise argparse.ArgumentTypeError(f"{n} is not between 0 and {MAX_RETRIES}")
+    return n
 
 
 def cmd_conform(a):
@@ -501,7 +531,7 @@ def cmd_run(a):
         if other is None:
             sys.exit(f"{b['label']} declares no {a.other} control (controls in its standard.json)")
     elif a.other in definitions.SETUPS:
-        other, why = definitions.setup(b, a.other, a.model or "", a.provider)
+        other, why = definitions.setup(b, a.other, a.model or "", a.provider, options(a.bench_option).get("agent", ""))
         if other is None:
             print("refused:", why)
             return 2
@@ -519,14 +549,28 @@ def cmd_run(a):
     if why:
         print("refused: constraints:", why)
         return 2
-    held, spill = licences(b)
+    if a.backend == "boat" and definitions.boots_vms(b):
+        return _boat_units(a, b, other)
+    # a cap counts each call at its model's price: the public list fetched first (Settings, Model prices); a machine
+    # that cannot reach it runs uncapped where a model has no price, and says so (run.Run)
+    unreachable = None
+    if a.max_usd is not None or a.max_usd_per_unit is not None:
+        try:
+            price_list.update()
+        except ValueError as e:
+            unreachable = str(e)
+    held, spill = licences(b, from_run=a.from_run)
     try:
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=a.dataset, limit=a.limit,
                       concurrency=a.concurrency, jobs_root=a.jobs, name=a.name, unsandboxed=a.unsandboxed, judge_model=a.judge_model, backend=a.backend,
-                      simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
-                      licences=held, bench_options=options(a.bench_option), repeat=a.repeat, remove_images=a.remove_images,
-                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, constraints=given,
+                      boat_size=a.boat_size, relay_container=a.relay_container, simulator_model=a.simulator_model, options=options(a.option), shard=_shard(a.shard), launch=a.launch,
+                      shard_by=a.shard_by, licences=held, bench_options=options(a.bench_option), repeat=a.repeat, retries=a.retries,
+                      remove_images=a.remove_images,
+                      prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, prices_unreachable=unreachable,
+                      constraints=given,
+                      timeouts=timeouts(a.timeout), max_turns=a.max_turns, max_calls=a.max_calls,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
+                      **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
         print("refused:", e)
@@ -538,6 +582,94 @@ def cmd_run(a):
     # no unit reached a verdict (a refusing endpoint, every unit an error): the run failed, and says so
     # by its exit status, so a launch of several agents pauses rather than running the next into the same error.
     # A run its spending cap stopped did what was asked of it: no failure
+    return 3 if failed else 0
+
+
+def boat_credentials(a, bench, other, vals) -> dict:
+    """Only the selected provider and declared benchmark licences cross SSH stdin."""
+    import base64
+    needs = definitions.option_needs(bench, vals)
+    out = {}
+    if other["_kind"] != "control" or (bench.get("score") or {}).get("judge") or needs["embeddings"] or needs["reranker"]:
+        base, key = run.provider_endpoint(a.provider, run_env(a.provider) if a.from_run else os.environ)
+        out.update(OPENAI_API_KEY=key, OPENAI_BASE_URL=base)
+    held, spill = licences(bench, from_run=a.from_run)
+    try:
+        held = held or run.Licences(bench)
+        values = {}
+        for name in held.kinds:
+            item = held.get(name)
+            if item:
+                if item["kind"] == "file":
+                    with open(item["path"], "rb") as f:
+                        value = f.read()
+                else:
+                    value = item["value"].encode()
+                values[name] = base64.b64encode(value).decode()
+        if values:
+            out[secrets.HANDED] = base64.b64encode(json.dumps(values).encode()).decode()
+    finally:
+        if spill:
+            shutil.rmtree(spill, ignore_errors=True)
+    return out
+
+
+def _boat_units(a, b, other) -> int:
+    """A benchmark whose units boot VMs of their own, on Boat: each unit whole in a Boat VM (``boat_units``)."""
+    from nullius.standard import boat_units
+    if a.units or a.shard:
+        print("refused: whole-task Boat runs do not accept --units or --shard; choose a dataset and --limit")
+        return 2
+    ds = a.dataset or b["datasets"][0]["id"]
+    vals, bad = definitions.bench_options_of(b, ds, options(a.bench_option),
+                                            a.other if other["_kind"] == "upstream" else "yours",
+                                            kind=other["_kind"])
+    if bad:
+        print("refused:", "; ".join(bad))
+        return 2
+    words = [b["key"] if "_version" not in b else definitions.ref_of(b), a.other, "--provider", a.provider,
+             "--dataset", ds, "--attempts", str(a.repeat), "--retries", str(a.retries)]
+    for field in ("model", "judge_model", "simulator_model", "max_usd_per_unit", "max_turns", "max_calls"):
+        value = getattr(a, field)
+        if value is not None:
+            words += ["--" + field.replace("_", "-"), str(value)]
+    for field in ("bench_option", "option", "timeout", "constraint", "served_by", "price"):
+        for value in getattr(a, field) or []:
+            words += ["--" + field.replace("_", "-"), value]
+    # Saved price overrides belong to the launching profile, not the fresh VM.
+    needs = definitions.option_needs(b, vals)
+    models = [a.model, other.get("sent"), a.judge_model or providers.served_as((b.get("score", {}).get("judge") or {}).get("model", ""), a.provider),
+              a.simulator_model or providers.served_as((b.get("simulator") or {}).get("model", ""), a.provider),
+              *[providers.served_as(m, a.provider) for m in needs["embeddings"] + needs["reranker"]]]
+    explicit = prices(a.price)
+    for model, row in price_list.given(models, price_list.table()).items():
+        if model not in explicit:
+            words += ["--price", model + "=" + ",".join(str(row.get(k, "")) for k in price_list.RATES).rstrip(",")]
+    if a.remove_images:
+        words.append("--remove-images")
+    try:
+        _, wanted = boat_units.plan(b, ds, a.limit)
+        if a.max_usd is not None:
+            if not 0 < a.max_usd < float("inf"):
+                raise boat_units.Refused("--max-usd must be finite and above zero")
+            # Independent VMs cannot share a ledger: each gets an equal, bounded share.
+            words += ["--max-usd", str(a.max_usd / len(wanted))]
+        creds = boat_credentials(a, b, other, vals)
+    except (run.Refused, boat_units.Refused) as e:
+        print("refused:", e)
+        return 2
+    stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
+    name = a.name or f"{stamp}__{definitions.job_word(b)}__{definitions.job_word(other)}"
+    try:
+        job_dir, failed = boat_units.run(b, words, dataset=a.dataset or b["datasets"][0]["id"], limit=a.limit,
+                                         concurrency=a.concurrency, jobs_root=a.jobs, name=name, size=a.boat_size,
+                                         launch=a.launch or shard.launch_id(definitions.job_word(b), definitions.job_word(other), ""),
+                                         needs=definitions.option_needs(b, vals)["host"], credentials=creds, say=lambda s: print(s, flush=True),
+                                         env={**os.environ, **run_env(a.provider)} if a.from_run else os.environ)
+    except (boat_units.Refused, boat.Unavailable, merge.Refused) as e:
+        print("refused:", e)
+        return 2
+    print(job_dir)
     return 3 if failed else 0
 
 
@@ -598,11 +730,16 @@ def cmd_fidelity(a):
 
 def cmd_prove(a):
     b = _bench(a.benchmark)
-    held, spill = licences(b)
+    jobs = options(a.job)
+    for c in jobs:
+        if c not in definitions.CONTROLS:
+            sys.exit(f"--job {c}=...: a control, {' or '.join(definitions.CONTROLS)}")
+    held, spill = licences(b, from_run=a.from_run)
     try:
         got = prove.prove(b, dataset=a.dataset, limit=a.limit, jobs_root=a.jobs, provider=a.provider, judge_model=a.judge_model,
                           stamp=a.stamp, concurrency=a.concurrency, say=print, shard=_shard(a.shard), launch=a.launch,
-                          env=run_env(a.provider) if a.from_run else None, licences=held, remove_images=a.remove_images)
+                          env=run_env(a.provider) if a.from_run else None, licences=held,
+                          bench_options=options(a.bench_option), jobs=jobs, remove_images=a.remove_images)
     except run.Refused as e:
         print("refused:", e)
         return 2
@@ -653,13 +790,18 @@ def main(argv=None):
                        + ("; or nop, oracle: a control the benchmark declares; or original, model: one of its setups" if name == "run" else ""))
         p.add_argument("--model", required=name == "conform",
                        help="the model (a control needs none; original takes one of the paper's, its first by default)" if name == "run" else None)
-        p.add_argument("--provider", default="openai", choices=sorted(run.PROVIDERS))
+        p.add_argument("--provider", default="openai", choices=sorted(providers.PROVIDERS))
         p.add_argument("--jobs", default="jobs_standard", help="where jobs are written (default jobs_standard/, gitignored)")
         p.add_argument("--unsandboxed", action="store_true",
                        help="allow an agent, or a setup check without Docker, to execute code on this machine as you")
         p.add_argument("--backend", default="local", type=definitions.names.backend, choices=list(run.BACKENDS),
-                       help="local processes (the default), or container: each unit in a container, its relay beside it "
-                            "(docker: its earlier name)")
+                       help="local processes (the default); container: each unit in a container, its relay beside it "
+                            "(docker: its earlier name); boat: each unit's agent in a boat.dev VM of its own")
+        if name == "run":
+            p.add_argument("--relay-container", action="store_true",
+                           help="run the relay in a separate container while task processes run on this host")
+            p.add_argument("--boat-size", default=boat.SIZE, choices=list(boat.SIZES),
+                           help="on the boat backend, its VMs' machine type (default small: 2 vCPU, 4 GB)")
         p.add_argument("--from-run", action="store_true",
                        help="started by Nullius: the key is OPENAI_API_KEY (and OPENAI_BASE_URL), saved settings are not read")
         p.add_argument("--option", action="append", metavar="NAME=VALUE",
@@ -669,7 +811,7 @@ def main(argv=None):
         elif name == "conform":
             p.add_argument("--port", type=definitions.names.port, action="append", help="only this port's kit (repeatable)")
             p.add_argument("--stamp", help="the time stamp the kit jobs are named with (default: now)")
-            p.add_argument("--repeat", type=int, default=1, metavar="K",
+            p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
                            help="run each check K times; a check passes when it passes in most of them (default 1)")
         else:
             p.add_argument("--dataset")
@@ -680,12 +822,19 @@ def main(argv=None):
             p.add_argument("-j", "--concurrency", type=int, default=4)
             p.add_argument("--judge-model", help="a benchmark scored by a model: this judge instead of its official one")
             p.add_argument("--simulator-model", help="a benchmark whose user a model plays: this model instead of its official one")
-            p.add_argument("--repeat", type=int, default=1, metavar="K",
-                           help="run each unit K times, each an attempt of its own (the upstream's --num-trials, pass^k); default 1")
+            p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
+                           help="run each unit K times, each an attempt counted whatever its result "
+                                "(the upstream's --num-trials, pass^k); default 1")
+            p.add_argument("--retries", type=_retries, default=RETRIES, metavar="N",
+                           help="run a failed attempt again, up to N times, after the other units: never after a timeout, "
+                                f"a wrong key or model, spent credit or a cap; 0 to {MAX_RETRIES}, default {RETRIES}")
             p.add_argument("--remove-images", action="store_true",
                            help="remove each image this run pulls or builds when its last unit ends (default: kept for the next run)")
             p.add_argument("--name")
             p.add_argument("--shard", metavar="I/N", help="only shard I of N of the units: by the unit id's hash, before --limit")
+            if name == "run":
+                p.add_argument("--shard-by", choices=list(shard.BY), default="id",
+                               help="split by the unit id's hash (id, the default) or by its place in the dataset (position)")
             p.add_argument("--launch", help="the launch id every shard records (default: the day, the benchmark, the agent, the model)")
             p.add_argument("--bench-option", action="append", metavar="NAME=VALUE",
                            help="one of the benchmark's own options (repeatable: a search, a mode); the rest keep their defaults")
@@ -696,19 +845,34 @@ def main(argv=None):
             p.add_argument("--constraint", action="append", metavar="KEY=VALUE",
                            help="what the machine allows the run, repeatable: cpus, memory_mb, processes and cpu_set on its "
                                 "containers and, through a systemd scope, on its processes here; concurrency; gpu_ids (empty for none)")
+            p.add_argument("--served-by", action="append", metavar="[MODEL=]SLUG[,SLUG...]",
+                           help="on OpenRouter, the serving providers that may answer a model, tried in this order and no "
+                                "other (repeatable; without MODEL=, the run's model); each call records which one did")
             p.add_argument("--max-usd-per-unit", type=float, metavar="USD",
                            help="each unit's own spending cap: a unit that reaches it is cut off there, and the run goes on")
+            p.add_argument("--timeout", action="append", metavar="PHASE=SECONDS",
+                           help="a unit's time limit for one phase, forced over the task's, the benchmark's and the default "
+                                "(repeatable): setup, image, agent (its whole work on the unit), verify, score")
+            p.add_argument("--max-turns", type=int, metavar="N",
+                           help="the most agent turns in a conversation, over the benchmark's limits.turns")
+            p.add_argument("--max-calls", type=int, metavar="N",
+                           help="the most model calls a unit's agent may make, the whole unit through: past it the relay refuses "
+                                "the next call and the unit is the agent's error, as a timeout is")
     v = sub.add_parser("prove", help="prove a benchmark: its controls, its units, no leak; record what passed")
     v.add_argument("benchmark")
     v.add_argument("--dataset", help="one dataset (default: each)")
     v.add_argument("--limit", type=int, help="the first N units of each dataset (the record says so)")
-    v.add_argument("--provider", default="openai", choices=sorted(run.PROVIDERS), help="a judged benchmark's: the judge's provider")
+    v.add_argument("--provider", default="openai", choices=sorted(providers.PROVIDERS), help="a judged benchmark's: the judge's provider")
     v.add_argument("--judge-model", help="a judged benchmark: this judge instead of its official one")
     v.add_argument("-j", "--concurrency", type=int, default=4)
     v.add_argument("--jobs", default="jobs_standard", help="where the control jobs are written (default jobs_standard/)")
     v.add_argument("--stamp", help="the time stamp the control jobs are named with (default: now)")
     v.add_argument("--shard", metavar="I/N", help="the controls and the leak check on shard I of N only")
     v.add_argument("--launch", help="the launch id the control jobs of every shard record")
+    v.add_argument("--bench-option", action="append", metavar="NAME=VALUE",
+                   help="one of the benchmark's own options (repeatable), for the checks' driver and the controls' runs")
+    v.add_argument("--job", action="append", metavar="CONTROL=JOB_DIR",
+                   help="a finished control job over the whole dataset, checked against its bound instead of running the control")
     v.add_argument("--remove-images", action="store_true",
                    help="remove each image this proof pulls or builds after its unit, so the oracle pulls it again (default: kept)")
     g = sub.add_parser("merge", help="merge the shard jobs of one launch into one job")

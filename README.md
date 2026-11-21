@@ -143,7 +143,7 @@ site](app/site/README.md).
 | [Judgement](docs/judgement.md) | What a judge model is asked |
 | [The Nullius standard](docs/standard.md) | Ports, kits, setups, controls, proofs; importing |
 | [Architecture](docs/how-it-works.md) | Execution paths, a run on disk, the pages |
-| [Settings](docs/settings/README.md) | Providers, System One, LLM judge, hosts, keys |
+| [Settings](docs/settings/README.md) | Providers, Decision, LLM judge, hosts, keys |
 | [Benchmarks](docs/benchmarks/supported/README.md), [Agents](docs/agents/supported/README.md), [Capabilities](docs/capabilities/supported/README.md) | What is supported; adding one |
 | [CLI](docs/cli/README.md) | Every command, by topic |
 | [Metric field guide](docs/field-guide.md) | Every metric and outcome |

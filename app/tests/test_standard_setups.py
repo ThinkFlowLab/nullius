@@ -300,6 +300,12 @@ class Recipe(unittest.TestCase):
         r.update(**kw)
         return recipe.compile(r)
 
+    def test_a_setup_and_a_judge_need_a_provider_that_serves_chat(self):
+        said = [e["message"] for e in self.compiled(others=["original"], provider="anthropic", model="claude-x")["errors"]]
+        self.assertIn("Anthropic does not serve what LoCoMo original speaks: choose another provider.", said)
+        said = [e["message"] for e in self.compiled(others=["nop"], benchmark="longmemeval", datasets=["longmemeval_s"], provider="anthropic")["errors"]]
+        self.assertIn("Anthropic does not serve what LongMemEval's judge speaks: choose another provider.", said)
+
     def test_one_original_participant_uses_the_selected_model_scope(self):
         paper = self.compiled(others=["original"], model_choice="paper", model="gpt-3.5-turbo-16k")
         custom = self.compiled(others=["original"], model_choice="any", model="vendor/their-model")
@@ -313,7 +319,8 @@ class Recipe(unittest.TestCase):
     def test_the_upstream_agents_a_setup_runs_name_its_participant(self):
         out = self.compiled(benchmark="osworld1", datasets=["test_small"], others=["original"], model_choice="paper", model="MiniMax-M3")
         self.assertEqual(out["errors"], [])
-        self.assertIn([recipe.STEP["agent"], "Participant", "OSWorld's agents"], out["review"])
+        self.assertIn([recipe.STEP["agent"], "Participant", "M3 Agent · OSWorld1's own"], out["review"])
+        self.assertNotIn("Agent", [r[1] for r in out["review"]])                     # the agent is the participant, not an option
 
     def test_paper_filter_also_applies_to_a_memory_capability(self):
         out = self.compiled(others=["mem0"], model_choice="paper", model="gpt-3.5-turbo-16k")
@@ -340,7 +347,7 @@ class Recipe(unittest.TestCase):
                    model_choice="leaderboard")
         out = self.compiled(**tau)
         self.assertEqual(out["errors"], [])
-        for words in ("--model their-model", "--simulator-model gpt-5.2", "--bench-option user_reasoning_effort=low", "--repeat 4"):
+        for words in ("--model their-model", "--simulator-model gpt-5.2", "--bench-option user_reasoning_effort=low", "--attempts 4"):
             self.assertIn(words, out["script"])
         self.assertNotIn("--judge-model", out["script"])
         self.assertIn("--simulator-model openai/gpt-5.2", self.compiled(**{**tau, "provider": "openrouter"})["script"])

@@ -25,6 +25,8 @@ if not __package__:
 
 import argparse  # noqa: E402
 
+from werkzeug.serving import is_running_from_reloader  # noqa: E402
+
 if __package__:  # the wheel's private web namespace
     from .web.core import app
     from .web import shared
@@ -33,7 +35,7 @@ else:  # python app/app.py, and the source route suite
     from web.core import app
     from web import shared
     from web import filters, runs, traces, compare, builder, catalogue, agents, settings, workspaces, execute, judge, feasibility, reconcile, judge_tasks, onboarding
-from nullius import execution  # noqa: E402  - recorded runs, picked up again at start
+from nullius import execution, workspace  # noqa: E402  - recorded runs, picked up again at start; the workspace left open
 
 
 def _port(value: str) -> int:
@@ -64,6 +66,13 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
+    # Runs started from the builder before this start: the ones still going
+    # are followed again (they run detached on their target), the rest listed.
+    # With --debug the reloader's watcher runs this too; the server it starts follows them.
+    try:
+        back = execution.restore() if not args.debug or is_running_from_reloader() else []
+    except execution.Followed as exc:
+        sys.exit(f"nullius: {exc}")
 
     values = args.paths or [
         p for p in os.environ.get("JOB_ROOTS", "").split(os.pathsep) if p
@@ -80,10 +89,12 @@ def main(argv=None) -> None:
         for r in ws.roots:
             print(f"  {r}")
     elif not unmatched:
-        print("No job path given — the web page will ask for one, or offer a workspace.")
-    # Runs started from the builder before this start: the ones still going
-    # are followed again (they run detached on their target), the rest listed.
-    back = execution.restore()
+        ws = workspace.last_open(shared.WS_HOME)
+        if ws:
+            shared.open_workspace(ws)
+            print(f"Workspace {ws.name!r} ({ws.dir}) reopened")
+        else:
+            print("No job path given — the web page will ask for one, or offer a workspace.")
     for ex in back:
         print(f"Run {ex.plan.name} picked up again on {ex.plan.host.label if ex.plan.host else 'this machine'} ({ex.state})")
         shared.adopt_roots([ex.jobs], into=ex.workspace)   # its job root back in the workspace it started in

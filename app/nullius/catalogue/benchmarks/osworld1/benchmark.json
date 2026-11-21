@@ -9,9 +9,10 @@
   ],
   "origin": "official",
   "good_to_know": [
+    "An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. A step's observation is the screenshot that loop hands its agent for the next decision, with no capture added; the files a step names are read once its actions and their pauses have run. Steps (100) and Pause (3.0 seconds) set that loop.",
     "Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.",
     "Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.",
-    "Only M3, PromptAgent and Qwen-CUA have completed tasks through Nullius. The other agents were checked up to their first model call.",
+    "At this version only the null control has run through Nullius. OSWorld's agents are the same code as in main (044bc33), where M3, PromptAgent and Qwen-CUA completed tasks.",
     "Each task's VM takes 4 cores and 4 GB of memory; OS-Symphony can start a second. Run no more tasks at once than the machine holds.",
     "Prepare the machine before the first run (Docker, KVM, five system libraries, a VM image of about 25 GB): see OSWorld1 machine setup under Benchmarks in the documentation.",
     "Scores depend on the machine's speed, because OSWorld waits a fixed time after each action. Compare runs made on similar machines.",
@@ -25,24 +26,67 @@
     "Each VM's ports are open on every network interface; one runs any command in the VM. Bind Docker's ports to 127.0.0.1, or keep the machine off untrusted networks."
   ],
   "limitations": [
-    "No agent from the Agents page can run it yet.",
+    "An agent needs the computer port, proven by its conformance kit. The agent side has been checked on a fake desktop alone.",
+    "Preparing the VM image (its lock and its download) is not bounded by a unit's setup time; the core's own limit on setup ends it.",
+    "A VM start that hangs holds the start gate until its unit's setup time ends; units waiting for the gate fail at the end of theirs.",
+    "On the local backend an agent runs as you and can write where you can, the runner's folder included.",
+    "A runner let go at the end of scoring's time that then ends by itself is scored from its complete result.",
+    "A stop during the runner's last clean-up keeps the result already written.",
+    "A driver killed outright leaves the runner to stop on its own; a kill during a VM's start can leave that VM.",
+    "A reaper checks a runner's start time before it ends the runner's group; a process number reused in between is not caught.",
+    "The agent's python and upload calls do not mark OSWorld's desktop as used; each unit's desktop is reset once, before the agent's first call.",
     "Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.",
     "The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.",
-    "A task still running after 2 hours is stopped and gets no score."
+    "A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes; past any of them the task gets no score.",
+    "Its evaluator fixes, key repeat turned off in the VM and one retired task make its scores comparable only with this version's, not with the paper's or main (044bc33)'s."
   ],
   "datasets": [
     {
       "key": "osworld1",
       "title": "OSWorld, Ubuntu tasks",
-      "tasks": 369,
+      "tasks": 368,
       "official": "https://github.com/xlang-ai/OSWorld",
       "source": "GitHub",
       "registry": "",
       "hub": "",
       "verifier": "OSWorld's own evaluator, DesktopEnv.evaluate: the task's evaluator functions on the VM's final state.",
-      "notes": "369 tasks in 10 domains; 361 without Google Drive. Apache-2.0."
+      "notes": "368 tasks in 10 domains; 360 without Google Drive. Apache-2.0."
     }
   ],
   "citation": "@misc{OSWorld,\n      title={OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments}, \n      author={Tianbao Xie and Danyang Zhang and Jixuan Chen and Xiaochuan Li and Siheng Zhao and Ruisheng Cao and Toh Jing Hua and Zhoujun Cheng and Dongchan Shin and Fangyu Lei and Yitao Liu and Yiheng Xu and Shuyan Zhou and Silvio Savarese and Caiming Xiong and Victor Zhong and Tao Yu},\n      year={2024},\n      eprint={2404.07972},\n      archivePrefix={arXiv},\n      primaryClass={cs.AI}\n}",
-  "citation_source": "https://github.com/xlang-ai/OSWorld"
+  "citation_source": "https://github.com/xlang-ai/OSWorld",
+  "versions": {
+    "044bc33": {
+      "good_to_know": [
+        "An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. A step's observation is the screenshot that loop hands its agent for the next decision, with no capture added; the files a step names are read once its actions and their pauses have run. Steps (100) and Pause (3.0 seconds) set that loop.",
+        "Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.",
+        "Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.",
+        "Only M3, PromptAgent and Qwen-CUA have completed tasks through Nullius. The other agents were checked up to their first model call.",
+        "Each task's VM takes 4 cores and 4 GB of memory; OS-Symphony can start a second. Run no more tasks at once than the machine holds.",
+        "Prepare the machine before the first run (Docker, KVM, five system libraries, a VM image of about 25 GB): see OSWorld1 machine setup under Benchmarks in the documentation.",
+        "Scores depend on the machine's speed, because OSWorld waits a fixed time after each action. Compare runs made on similar machines.",
+        "OSWorld's infeasible tasks are listed publicly, and its scorer checks only the last action. An agent that looks a task up online and answers FAIL scores it."
+      ],
+      "limitations": [
+        "An agent needs the computer port, proven by its conformance kit. The agent side has been checked on a fake desktop alone.",
+        "Preparing the VM image (its lock and its download) is not bounded by a unit's setup time; the core's own limit on setup ends it.",
+        "A VM start that hangs holds the start gate until its unit's setup time ends; units waiting for the gate fail at the end of theirs.",
+        "On the local backend an agent runs as you and can write where you can, the runner's folder included.",
+        "A runner let go at the end of scoring's time that then ends by itself is scored from its complete result.",
+        "A stop during the runner's last clean-up keeps the result already written.",
+        "A driver killed outright leaves the runner to stop on its own; a kill during a VM's start can leave that VM.",
+        "A reaper checks a runner's start time before it ends the runner's group; a process number reused in between is not caught.",
+        "The agent's python and upload calls do not mark OSWorld's desktop as used; each unit's desktop is reset once, before the agent's first call.",
+        "Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.",
+        "The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.",
+        "A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes; past any of them the task gets no score."
+      ],
+      "datasets": {
+        "osworld1": {
+          "tasks": 369,
+          "notes": "369 tasks in 10 domains; 361 without Google Drive. Apache-2.0."
+        }
+      }
+    }
+  }
 }

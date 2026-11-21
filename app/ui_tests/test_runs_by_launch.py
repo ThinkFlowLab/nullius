@@ -60,7 +60,7 @@ class RunsByLaunch(unittest.TestCase):
         self.stack.enter_context(patch.object(workspace, "job_index", return_value={}))
         self.stack.enter_context(patch.object(workspace, "load", side_effect=lambda home, name: self.ws))
         self.jobs = [self.later, self.strong, self.nop, self.weak, self.oracle]
-        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: self.jobs))
+        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: self.jobs))
         self.stack.enter_context(patch.object(web.shared, "_jobs_for_request", side_effect=lambda: self.jobs))
         self.stack.enter_context(patch.dict(execution.EXECUTIONS, {}, clear=True))
         self.client = web.app.test_client()
@@ -142,12 +142,39 @@ class RunsByLaunch(unittest.TestCase):
                 if says:
                     self.assertIn(says, block)
 
+    def test_finished_kits_do_not_inherit_the_shared_process_state(self):
+        from nullius.standard.runner import job
+        with tempfile.TemporaryDirectory() as root:
+            plan = execution.Plan(name="kits", script="conform", runner="standard",
+                                  jobs=[{"name": "kit-conversation"}, {"name": "kit-tools"}, {"name": "kit-computer"}])
+            ex = execution.Execution(plan, root=root)
+            ex.launched = "run"
+            self.jobs = []
+            for name in ("kit-conversation", "kit-tools", "kit-computer"):
+                ok = name != "kit-computer"
+                j = write_job(ex.jobs, name, "my-agent", {"a": 1 if ok else "RuntimeError"}, n_tasks=1)
+                job.write_result(j.dir, name, 1, 2, [{}] if ok else [{"exception_info": {"exception_type": "RuntimeError"}}], 1)
+                self.jobs.append(parse.parse_job(j.dir))
+            execution.EXECUTIONS[ex.id] = ex
+            for state in ("running", "failed"):
+                with self.subTest(state=state):
+                    ex.state = state
+                    ex.finished = 3 if state == "failed" else None
+                    ex.ends = {"run": {"rc": 1, "at": 3}} if state == "failed" else {}
+                    html = self.get("/runs")
+                    for name in ("kit-conversation", "kit-tools", "kit-computer"):
+                        row = next(row for row in re.findall(r"<tr\b.*?</tr>", html, re.S)
+                                   if f"{name}</small>" in row)
+                        expected = state if name == "kit-computer" else "finished"
+                        self.assertIn(f'class="la-state {expected}"', row)
+                    self.assertEqual(ex.state, state)
+
     def test_a_later_paused_shard_has_a_resume_link(self):
         from web.runs import _launch_view
         group = SimpleNamespace(job_ids=[], pending=["first", "second"], source="record", dataset="")
-        first = SimpleNamespace(state="done", plan=SimpleNamespace(recipe={}), refused=lambda _: None, never_ran=lambda _: False)
-        second = SimpleNamespace(state="paused", plan=SimpleNamespace(recipe={}), live_state=lambda _: "paused")
-        with patch.object(execution, "for_job", side_effect=lambda key: {"first": first, "second": second}[key]), \
+        first = SimpleNamespace(state="done", plan=SimpleNamespace(recipe={}, jobs=[]), refused=lambda _: None, never_ran=lambda _: False)
+        second = SimpleNamespace(state="paused", plan=SimpleNamespace(recipe={}, jobs=[]), live_state=lambda _: "paused")
+        with patch("web.shared.run_for", side_effect=lambda key: {"first": first, "second": second}[key]), \
              patch("web.runs._control_planned", return_value=""):
             self.assertEqual(_launch_view(group, {}, {}, {})["paused"], "second")
 
@@ -206,7 +233,7 @@ class RunsByLaunch(unittest.TestCase):
         with patch.dict(execution.EXECUTIONS, {"r2": ex}, clear=True):
             page = self.get("/job/exp-1008-codex")                                     # its own page, before Harbor writes it
         self.assertIn('id="execution-state">queued</span>', page)
-        self.assertIn("· the run: running", page)
+        self.assertIn("· the launch: running", page)
 
     def test_a_standard_launch_draws_its_controls_whatever_their_state(self):
         # A standard job carries a runner; its declared controls are still task checks, before and after they are written.
@@ -246,7 +273,7 @@ class RunsByLaunch(unittest.TestCase):
                 with patch.dict(execution.EXECUTIONS, {"r5": ex}, clear=True):
                     html = self.get("/runs")
                 block = next(b for b in blocks(html) if 'data-launch="run:r5"' in b)
-                self.assertIn("· 3 runs</span>", block)
+                self.assertIn("· 1 run · 2 checks</span>", block)
                 self.assertEqual(block.count("<tr class="), 3)                       # every run counted is drawn
                 self.assertEqual(re.findall(r'<tr class="la-control st-([^"]+)" data-control="(\w+)"', block),
                                  list(zip(states, ("nop", "oracle"))))
@@ -287,10 +314,34 @@ class RunsByLaunch(unittest.TestCase):
         html = self.get("/runs?view=all")
         self.assertIn('id="view-launch" class="launches" hidden', html)
         self.assertIn('<div id="view-all">', html)
+        between = html[html.index('<div id="view-launch"'):html.index('<div id="view-all"')]
+        self.assertEqual(between.count("<div"), between.count("</div>"))           # a sibling, never inside the hidden view
         self.assertIn('aria-pressed="true">All runs</a>', html)
         for job in self.jobs:
             self.assertIn(f'<td data-col="run"><a href="/job/{job.job_id}">', html)   # every run, one row
         self.assertIn("Tick two or more runs to compare", html)
+
+    def test_the_flat_table_has_one_controls_row(self):
+        html = re.sub(r">\s+<", "><", self.get("/runs?view=all"))
+        view = html[html.index('<div id="view-all">'):]
+        tools = view[:view.index('<div class="table-wrap">')]
+        self.assertEqual(tools.count('class="table-tools'), 1)                               # the toolkit's row, no other
+        self.assertIn('placeholder="Search by run, agent, model, benchmark or dataset"', tools)
+        self.assertEqual(re.findall(r'data-slot="(\w+)"|data-tools-btn="(\w+)"|id="(density-btn|compare-btn)"', tools),
+                         [("views", "", ""), ("", "", "density-btn"), ("", "columns", ""), ("", "filter", ""), ("", "sort", ""),
+                          ("actions", "", ""), ("", "", "compare-btn")])
+        self.assertEqual(re.findall(r'data-filter-menu="(\w+)"', tools), ["agent", "model", "dataset"])
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools), [""] + [c["key"] for c in web.shared.COLUMNS])
+        self.assertIn('<button class="btn sm" type="submit" id="compare-btn" aria-disabled="true" aria-describedby="compare-why" '
+                      'title="Tick two or more runs to compare">Compare</button><span class="sr" id="compare-why">Tick two or more runs to compare</span>', tools)
+        head = view[view.index("<thead>"):view.index("</thead>")]
+        self.assertNotIn("filter-btn", head)                                                     # a header sorts, and filters nothing
+        self.assertNotIn("<button", head)
+        for job in self.jobs:
+            with self.subTest(job=job.job_id):
+                search = re.search(rf'<tr data-search="([^"]*)"[^>]*><td class="pick-col"><input type="checkbox" data-check value="{job.job_id}"', view).group(1)
+                self.assertTrue(search.startswith(f"{job.job_id} {job.agent_label} {job.model_name}"), search)
+                self.assertIn(job.dataset, search)
 
 
 if __name__ == "__main__":

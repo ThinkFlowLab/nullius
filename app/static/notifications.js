@@ -43,7 +43,8 @@
   new MutationObserver(() => {
     const tray = document.querySelector('.toasts');
     if (tray && tray.parentElement !== host()) {
-      host().append(tray); if (tray.showPopover && !tray.matches(':popover-open')) tray.showPopover();
+      host().append(tray); tray.setAttribute('popover', 'manual');   // base.html's flashed tray has none
+      if (tray.showPopover && !tray.matches(':popover-open')) tray.showPopover();
     }
   }).observe(document.body, {subtree: true, attributes: true, attributeFilter: ['open']});
 })();

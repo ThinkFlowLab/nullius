@@ -12,6 +12,7 @@ from flask import abort, flash, g, has_request_context, request, session
 from markupsafe import Markup, escape
 from werkzeug.exceptions import Forbidden
 from nullius import importers as harnesses
+from nullius.runs import parse
 from nullius import execution
 from nullius.catalogue import catalog
 from nullius import workspace
@@ -141,14 +142,21 @@ def dataset_info(name):
     }
 
 
-# Runs-table columns, in render order. Drives the show/hide menu; the template
-# tags every th/td with the matching data-col.
+# The runs table's columns, in render order, as _tables.html defines a column: its headers and Columns menu.
 COLUMNS = [
-    ("run", "Run"), ("agent", "Agent"), ("version", "Version"), ("start", "Start"), ("end", "End"), ("time", "Time"),
-    ("model", "Model"), ("dataset", "Dataset"), ("mix", "Mix"),
-    ("trials", "Trials"), ("solved", "Solved"), ("raw", "Raw"),
-    ("adjusted", "Adjusted"), ("infra", "Infra errors"), ("broke", "Broke tests"),
-    ("tokens", "Tokens"), ("cost", "Cost"),
+    dict(key="run", label="Run", sticky=True), dict(key="agent", label="Agent"),
+    dict(key="version", label="Version", title="The agent's version as the run recorded it, or the runner and its commit"),
+    dict(key="start", label="Start", type="num", align="left"), dict(key="end", label="End", type="num", align="left", off=True),
+    dict(key="time", label="Time", type="num"), dict(key="model", label="Model", off=True),
+    dict(key="dataset", label="Dataset", off=True), dict(key="mix", label="Mix", type="num", align="left"),
+    dict(key="trials", label="Trials", type="num"), dict(key="solved", label="Solved", type="num"),
+    dict(key="raw", label="Raw", type="num", title="Solved ÷ all trials", off=True),
+    dict(key="adjusted", label="Adjusted", type="num", title="Solved ÷ trials that actually ran (excludes infra failures)"),
+    dict(key="infra", label="Infra errors", type="num",
+         title="Trials that never got a fair attempt — rate limits and setup failures. Excluded from Adjusted."),
+    dict(key="broke", label="Broke tests", type="num", title="Trials whose patch broke previously-passing tests"),
+    dict(key="tokens", label="Tokens", type="num", title="Input + output tokens across the run"),
+    dict(key="cost", label="Cost", type="num", title="Only recorded by agents that report it"),
 ]
 
 
@@ -314,6 +322,10 @@ def open_workspace(ws, refresh=False):
 
 
 def close_workspace():
+    ws = STATE["workspace"]
+    if ws is not None:
+        ws.closed = True
+        workspace.save(ws)
     STATE.update({"workspace": None, "roots": [], "label": "", "job_roots": []})
 
 
@@ -322,21 +334,22 @@ def adopt_roots(roots, label="", new=False, into=""):
 
     Without a label, roots that already have a workspace reopen it — so a
     restart with the same argv lands in the same place, cache and all.
-    ``into``: the workspace to add them to while it exists, opened only
-    when none is open.
+    ``into``: the workspace to add them to while it exists, left closed
+    unless it is open already; once it is gone, never the open one.
     """
     ws = STATE["workspace"]
     if into and not (ws and ws.name == into):
-        ws = workspace.load(WS_HOME, into) or ws
+        ws = workspace.load(WS_HOME, into)
     if ws and not new:
         ws.roots = list(ws.roots) + [r for r in roots if r not in ws.roots]
         workspace.save(ws)
-        if STATE["workspace"] in (None, ws):
+        if STATE["workspace"] is ws:
             open_workspace(ws)
         return ws
     ws = None if label else workspace.find_by_roots(WS_HOME, roots, besides=execution.runs_root())
     ws = ws or workspace.create(WS_HOME, roots, label)
-    open_workspace(ws)
+    if new or not into or STATE["workspace"] is None:   # a gone ``into`` leaves the open workspace open
+        open_workspace(ws)
     return ws
 
 
@@ -352,14 +365,46 @@ def _load_jobs():
     ws = STATE["workspace"]
     if ws is None:
         return []
-    return workspace.load_jobs(ws, STATE["job_roots"])
+    return workspace.load_jobs(ws, STATE["job_roots"], run_ends())
+
+
+def request_memo(name: str) -> dict:
+    """A dict kept for the rest of this request under *name*; a new one outside a request."""
+    return g.setdefault(f"_memo_{name}", {}) if has_request_context() else {}
+
+
+def _owners() -> dict:
+    """``execution.owners``, once per request: a page asks it of every job it lists."""
+    memo = request_memo("owners")
+    if "owners" not in memo:
+        memo["owners"] = execution.owners()
+    return memo["owners"]
+
+
+def run_for(job_id):
+    """``execution.for_job`` over this request's ``_owners``."""
+    return execution.for_job(job_id, _owners())
+
+
+def ended_for(job_id):
+    """``execution.ended_for`` over this request's ``_owners``."""
+    return execution.ended_for(job_id, _owners())
+
+
+def run_ends():
+    """``execution.run_ends`` over this request's ``_owners``, once per request:
+    the Workspaces page reads every workspace."""
+    memo = request_memo("run_ends")
+    if "run_ends" not in memo:
+        memo["run_ends"] = execution.run_ends(_owners())
+    return memo["run_ends"]
 
 
 def _jobs_for_workspace(name=None):
     """Read an indexed workspace without making it active or converting sources.
     Once per request and workspace: a page that asks for the jobs several
     times (the job page's controls, the rail, a summary) walks them once."""
-    memo = g.setdefault("_jobs", {}) if has_request_context() else {}
+    memo = request_memo("jobs")
     key = name if name and not (STATE["workspace"] and name == STATE["workspace"].name) else ""
     if key in memo:
         return memo[key]
@@ -369,13 +414,16 @@ def _jobs_for_workspace(name=None):
         ws = workspace.load(WS_HOME, name)
         if ws is None:
             abort(404)
-        jobs = workspace.load_jobs(ws, ws.job_roots or ws.roots)
+        jobs = workspace.load_jobs(ws, ws.job_roots or ws.roots, run_ends())
     memo[key] = jobs
     return jobs
 
 
-def _record_workspace():
-    name = request.args.get("workspace") if has_request_context() else None
+def _record_workspace(name=None):
+    """The workspace that holds the record on screen: `name` ("" the open
+    one), else this request's `?workspace=`, else the open one."""
+    if name is None:
+        name = request.args.get("workspace") if has_request_context() else None
     if not name:
         return STATE["workspace"]
     ws = workspace.load(WS_HOME, name)
@@ -392,7 +440,8 @@ def _jobs_for_request():
 def _preserve_record_workspace(endpoint, values):
     """Carry evidence provenance through links, forms, and lazy detail requests."""
     record_endpoints = {"job", "trial", "save_trace", "artifact_page", "conversation_data",
-                        "trace_span_data"}
+                        "trace_span_data", "reconcile_page", "feasibility_page", "judge_trial_route",
+                        "judge_job_route", "judge_tasks_route", "judge_feasibility_route"}
     if has_request_context() and endpoint in record_endpoints and "workspace" not in values:
         name = request.args.get("workspace")
         if name:
@@ -401,6 +450,22 @@ def _preserve_record_workspace(endpoint, values):
 
 def _find_job(jobs, job_id):
     return next((j for j in jobs if j.job_id == job_id), None)
+
+
+def _job_for_request(job_id):
+    """``_find_job(_jobs_for_request(), job_id)``, reading only the job's own
+    folder when the open workspace has exactly one of that name (a view of one
+    of a job's agents is ``<folder>~<agent>``). The whole workspace on any
+    doubt: another workspace asked for, no such folder, or several."""
+    ws = STATE["workspace"]
+    if ws is not None and not request.args.get("workspace") and "" not in request_memo("jobs"):
+        names = {job_id, job_id.rsplit("~", 1)[0]}
+        dirs = [d for d in parse.find_job_dirs(STATE["job_roots"]) if os.path.basename(d) in names]
+        if len(dirs) == 1:
+            job = _find_job(parse.split_agents([workspace.load_job(ws, dirs[0], runs=run_ends())[0]]), job_id)
+            if job is not None:
+                return job
+    return _find_job(_jobs_for_request(), job_id)
 
 
 def _safe_dest(base: str, rel: str) -> str | None:

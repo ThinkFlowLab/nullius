@@ -49,6 +49,9 @@ class Here(unittest.TestCase):
         self.assertEqual((rows["setup:sandbox"]["state"], rows["setup:sandbox"]["detail"]), ("missing", "bwrap not on PATH"))
         self.assertEqual(rows["setup:sandbox"]["install"], ["sudo apt-get install -y bubblewrap"])
         self.assertFalse(prerequisites.ready([{"rows": list(rows.values())}]))
+        self.assertEqual(rows["setup:sandbox"]["label"], "sandbox")
+        named = {n: dict(x, label="Sandbox") for n, x in SETUP.items()}
+        self.assertEqual(by_name(prerequisites.check_here([], named, which=lambda p: p in have))["setup:sandbox"]["label"], "Sandbox")
 
     def test_the_docker_answer_is_kept_a_minute_unless_asked_fresh(self):
         calls = []
@@ -109,6 +112,19 @@ class OnAHost(unittest.TestCase):
         self.assertEqual(sorted(asked["programs"]), ["bwrap", "git", "python3", "srt"])
         self.assertEqual((rows["python3"]["state"], rows["git"]["state"], rows["setup:sandbox"]["state"]), ("ok", "missing", "missing"))
         self.assertEqual(prerequisites.check_host(self.HOST, ["docker"], test=self.probe())[1]["state"], "ok")
+        named = {n: dict(x, label="Sandbox") for n, x in SETUP.items()}
+        self.assertEqual(by_name(prerequisites.check_host(self.HOST, [], named, test=self.probe()))["setup:sandbox"]["label"], "Sandbox")
+
+    def test_a_boat_run_s_programs_are_asked_of_its_host(self):
+        # a run on Boat starts and fills its VMs from the host: ssh, ssh-keygen, rsync and tar there
+        asked = {}
+
+        def test(host, programs=None):
+            asked["programs"] = programs
+            return self.probe(missing=["rsync"])(host)
+        rows = by_name(prerequisites.check_host(self.HOST, ["python3", "git", "ssh", "ssh-keygen", "rsync", "tar"], test=test))
+        self.assertEqual(sorted(asked["programs"]), ["git", "python3", "rsync", "ssh", "ssh-keygen", "tar"])
+        self.assertEqual((rows["ssh"]["state"], rows["rsync"]["state"]), ("ok", "missing"))
 
     def test_a_host_s_docker_with_userns_remap_is_said_for_the_standard_alone(self):
         remapped = self.probe(docker_userns=True)

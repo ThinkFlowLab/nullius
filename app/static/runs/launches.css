@@ -1,14 +1,17 @@
 /* The Runs page: runs grouped by the launch that made them. A launch is one block - its task checks, its agents
    on one 0-100% scale, raw as a tick on the adjusted bar - and the flat table is the second view. */
-.runs-head { justify-content: space-between; }
-.runs-acts { display: inline-flex; flex-wrap: wrap; gap: 8px; }
-.runs-glance { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -1.2rem 0 1rem; font-size: 13px; color: var(--text-dim); }
+.runs-glance { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 1rem; font-size: 13px; color: var(--text-dim); }
 .runs-glance b { color: var(--text); font-weight: 500; }
 .runs-glance .st-paused b, .runs-glance .st-stopping b { color: var(--patch_failed_tests); }
 .runs-glance .st-stopped b, .runs-glance .st-failed b, .runs-glance .st-not b { color: var(--bad); }
 
-.runs-views { display: inline-flex; gap: 2px; padding: 2px; margin: 4px 0 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.runs-views .rv { padding: 4px 12px; border-radius: 6px; font-size: 13px; color: var(--text-dim); text-decoration: none; }
+/* The view toggle leads the outcome chips' row; the chips wrap beside it, so it never moves as they change. */
+.runs-filters { display: flex; align-items: flex-start; gap: .45rem .9rem; margin-bottom: 1.5rem; }
+.runs-filters .legend { flex: 1; margin-bottom: 0; }
+@media (max-width: 640px) { .runs-filters { flex-direction: column; } }
+/* As tall as a chip: its border, padding and line-height, less the toggle's own 2px inset. */
+.runs-views { display: inline-flex; flex: none; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); }
+.runs-views .rv { padding: calc(.4rem - 2px) .7rem; border-radius: 99px; font-size: .77rem; line-height: 1; color: var(--text-dim); text-decoration: none; }
 .runs-views .rv.on { background: var(--accent-soft); color: var(--text); }
 
 .launches { display: grid; gap: 14px; margin-bottom: 1.5rem; }
@@ -68,6 +71,11 @@
 .la-mix span + span { box-shadow: inset 1.5px 0 0 var(--surface); }
 .la-go { text-align: right; white-space: nowrap; font-size: 12.5px; }
 .launch-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 18px; border-top: 1px solid var(--border-soft); font-size: 12.5px; color: var(--text-dim); }
+/* a launch's Delete asks in the Add dialog's frame (catalogue.css, dialog.std-how), narrower */
+dialog.std-how.launch-delete { width: min(520px, calc(100vw - 32px)); }
+.launch-delete ul { margin: 12px 0 0; padding-left: 1.2em; }
+.launch-delete label { display: block; margin: 4px 0; overflow-wrap: anywhere; }
+.launch-delete-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
 @media (max-width: 900px) { .launch-agents .lh-more { display: none; } }
 @media (max-width: 640px) {
@@ -103,3 +111,23 @@
 .launch-agents tr.la-shard .la-who a { font-weight: 400; color: var(--text-dim); }
 .la-note { color: var(--patch_failed_tests); }
 .la-gap { display: block; margin-top: 2px; font: 11.5px var(--sans); color: var(--patch_failed_tests); }
+
+/* the Launches page: one row per launch */
+#launches .launch-open { display: inline; }
+#launches .launch-open .linkish { padding: 0; text-align: left; }
+#launches .launch-add-btn:focus-visible { color: var(--text); }
+/* State and Launch stay put while the table scrolls sideways; State's header is its name for a screen reader only */
+#launches :is(th, td)[data-col="state"] { width: 2.2rem; min-width: 2.2rem; padding-left: 0; padding-right: 0; text-align: center; }
+/* a run's state: its icon, coloured as the Runs page's state dots */
+#launches td[data-col="state"] .ic { vertical-align: middle; }
+#launches .st-finished, #launches .st-running, #launches .st-preparing { color: var(--resolved); }
+#launches .st-failed, #launches .st-refused, #launches .st-stopped { color: var(--bad); }
+#launches .st-paused, #launches .st-stopping { color: var(--patch_failed_tests); }
+#launches .st-running { animation: state-beat 2s ease-in-out infinite; }
+@keyframes state-beat { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { #launches .st-running { animation: none; } }
+.launch-delete select { margin-left: 8px; }
+/* Add to workspace: the name field only for a new workspace, under its label as the select is */
+.launch-delete .launch-add-new { display: none; }
+.launch-delete .launch-add-new input { display: block; width: 100%; margin-top: 4px; }
+.launch-delete form:has(option[value=""]:checked) .launch-add-new { display: block; }

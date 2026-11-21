@@ -17,6 +17,7 @@ a diagnostic and no planned files written. `--apply` performs the copy; the
 default is a preview.
 
 A refusal is one line on stderr, nothing partial written; the standard's commands exit non-zero on a failed check or a differing fidelity field.
+One exception: `conform` without `--port` passes over a kit refused for what its benchmark needs of this machine, writes the proofs of the other kits and exits 1; when every kit is refused, it writes nothing and exits 2.
 
 ## Output
 

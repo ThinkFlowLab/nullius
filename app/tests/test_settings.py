@@ -43,14 +43,14 @@ class Table(unittest.TestCase):
 
     def test_the_page_offers_what_a_person_sets_and_no_more(self):
         self.assertEqual([v.name for v in settings.VARIABLES],
-                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "SYSTEM_ONE_PROVIDER", "SYSTEM_ONE_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_MODEL", "AGENT_KEYS", "HOSTS", "HF_ENDPOINT", "HOST_CONSTRAINTS"])
+                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "DECISION_PROVIDER", "DECISION_PROTOCOL", "DECISION_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_PROTOCOL", "LLM_JUDGE_MODEL",
+                          "OPENROUTER", "OPENAI", "ANTHROPIC", "TYPESAFE", "AGENT_KEYS", "HOSTS", "HF_ENDPOINT", "HOST_CONSTRAINTS"])
         self.assertEqual(sorted(v.name for v in settings.VARIABLES if v.secret), ["ANTHROPIC_API_KEY", "MODEL_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"])
         self.assertEqual(settings.BY_NAME["MODEL_API_URL"].kind, "endpoint")                         # shown, so it may hold no credential
         for name in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"):
             self.assertEqual(settings.BY_NAME[name].example, "")                               # no placeholder on a settings field
         self.assertEqual({settings.BY_NAME[n].group for n in ("MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY")}, {"Model credentials"})
-        from nullius import providers
-        self.assertIn(providers.PROVIDER_BASE["openrouter"], settings.BY_NAME["OPENROUTER_API_KEY"].purpose)   # the endpoint is fixed, and said
+        self.assertEqual({settings.BY_NAME[n].kind for n in ("OPENROUTER", "OPENAI", "ANTHROPIC", "TYPESAFE")}, {"provider"})   # a preset's additions
         self.assertIn("OpenAI-compatible", settings.BY_NAME["MODEL_API_KEY"].purpose)
 
     def test_the_servers_address_and_port_are_start_up_options(self):
@@ -254,6 +254,27 @@ class File(unittest.TestCase):
         settings.save_many(self.path, {"LLM_JUDGE_PROVIDER": "local:GPU"})
         with self.assertRaises(ValueError):
             settings.save_many(self.path, {"LLM_JUDGE_PROVIDER": "local:gpu"})
+
+    def test_a_decision_setting_saved_under_its_old_name_reads_as_the_new_one(self):
+        """Saved before the rename: the page shows it set, nothing calls it unread, and a save of
+        another setting keeps it and writes it under the new name."""
+        self.write("SYSTEM_ONE_MODEL=typesafe/jev-1.14\nSYSTEM_ONE_PROVIDER=openrouter\nHOSTS=bench\n")
+        settings.load(self.path)
+        by = {st["name"]: st for st in settings.states(self.path)}
+        self.assertEqual((by["DECISION_MODEL"]["source"], by["DECISION_MODEL"]["shown"]), ("file", "typesafe/jev-1.14"))
+        self.assertEqual(settings.unread(self.path), [])
+        settings.save_many(self.path, {"DECISION_PROVIDER": "typesafe"})          # the provider alone: the model stays
+        with open(self.path) as fh:
+            self.assertEqual(fh.read(), "DECISION_MODEL=typesafe/jev-1.14\nDECISION_PROVIDER=typesafe\nHOSTS=bench\n")
+        self.assertEqual(os.environ["DECISION_MODEL"], "typesafe/jev-1.14")
+
+    def test_with_both_names_in_the_file_the_new_one_is_read_and_a_save_removes_the_old(self):
+        self.write("SYSTEM_ONE_MODEL=old\nDECISION_MODEL=new\n")
+        settings.load(self.path)
+        self.assertEqual(os.environ["DECISION_MODEL"], "new")
+        self.assertEqual([u["instead"] for u in settings.unread(self.path)], ["DECISION_MODEL"])
+        settings.save_many(self.path, {"DECISION_MODEL": "newer"})
+        self.assertEqual(settings.in_file(self.path), {"DECISION_MODEL": "newer"})
 
     def test_an_endpoint_url_is_shown_so_it_holds_no_credential(self):
         """An endpoint's URL is shown on the page: an http(s) URL with a host,

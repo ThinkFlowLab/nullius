@@ -47,7 +47,8 @@ and its resources. The source layout stays under `app/`.
 - `app/nullius/` — its backend, one package per purpose: `runs/` (reading one
   Harbor job tree: `parse`, `classify`, `live`, `artifacts`,
   `feasibility`, `launches`, `verifier` - a verifier's report read by its
-  benchmark's report block - and the `cli`), `traces/` (`trace`, the reader, with its span tree `spans`,
+  benchmark's report block - `attempts`, a task's attempts in one job with
+  their pass count and pass@k, and the `cli`), `traces/` (`trace`, the reader, with its span tree `spans`,
   its `fold`, its time accounting `breakdown` and its layout `waterfall`; `trajectory`,
   `conversation`, `charts`, `behavior`, `otel`), `compare/` (`comparison` and its `cli`),
   `catalogue/` (`catalog`, which loads one folder per benchmark
@@ -57,7 +58,7 @@ and its resources. The source layout stays under `app/`.
   a Harbor benchmark added from the Benchmarks page's form; `citation`, an entry's
   BibTeX read into the paper its page shows; `storage`, whole-folder user overlays and restoring bundled entries; `sources`, where each dataset's data comes
   from for each way it runs), `recipes/`
-  (`launch`, the builder's vocabulary), `providers` (where a run's model calls go, and the builder's steps),
+  (`launch`, the builder's vocabulary; `store`, its saved recipes), `providers` (the model provider registry: protocols, presets and each provider's record, read by every consumer; and the builder's steps),
   `harbor/` (`source`: the Harbor a recipe pins - built, kept, scanned for its agents;
   `feed`: the live feed any Harbor writes, from its own trial hooks),
   `importers/` (`atif` ATIF, `otel` OpenTelemetry, and the `cli`), `judge/` (`questions`, `state`, `client`, `store`, `batch`, `reconcile`, `lanes`),
@@ -67,24 +68,30 @@ and its resources. The source layout stays under `app/`.
   `protocols/`: `jsonl`, `acp`, `cancellation` (interruptible protocol waits);
   `calls/`: `relay`, `ledger` (a run's spending cap);
   `containers/`: `container` (the container backend), `setup_container` (an Original setup's driver and its Linux dependencies in Docker), `forward` (a licence server's one door from it, or a benchmark's MCP server's), `web_services` (HTTP fixtures a driver's setup declares, each behind a unit-local Docker door), `mcp_machine` and `mcp_bridge` (a benchmark's MCP server run on the machine, in its driver's environment, and the agent's bridge to it), `egress` (an own image's check's proxy to public addresses);
-  `runner/`: `run`, `job`, `pace` (how soon the next unit starts after one ends rate-limited), `shard` and `merge` (one run over many machines), `payload` (a snapshot of the running backend and effective catalogue for a remote host);
+  `runner/`: `run`, `job`, `pace` (how soon the next unit starts after a rate limit), `shard` and `merge` (one run over many machines), `payload` (a snapshot of the running backend and effective catalogue for a remote host);
   `proofs/`: `conform`, `fidelity` (ACP against the agent's own CLI), `prove` (a benchmark's controls and proofs), `pins` (image digests checked against registry tags);
   `pages/`: `recipe` (the builder's standard recipe), `howto` (the How to add steps);
-  and the `cli` at its top;
+  and at its top the `cli`, with what no folder holds yet: `retries` (what an attempt is tried again after, and how many times), `boat` (the boat backend: each unit's agent in a boat.dev VM) and `boat_units` (a benchmark whose units boot a VM of their own, each unit whole in a Boat VM), `computer_port` and `computer_pipe` (the computer port's MCP server, served by a desktop benchmark's runner over the benchmark's own loop, and the session's stdio pipe to it);
   conformance kits under `standard/kits/`, each a benchmark: a `driver` and, for the
   tools kit, an MCP server `mcp_kit`) - the definitions it reads are in the catalogue:
   a benchmark's `standard.json` and `driver` in its folder (τ³-bench's also the MCP
   server of its domains' tools, `mcp_server`: the upstream's own, run on the machine; OSWorld1's also its null control's
-  agent, `nop`), `catalogue/agents/<key>/`
+  agent, `nop`, and the `runner` of a unit an agent runs: the upstream's loop with the computer port's bridge; OSWorld2's also `nop`, `api_logs` (each image of its API logs kept once), `websites` (its mock
+  websites: the checks before a VM start, Overleaf's lock and reset, the stack's command line), `gitlab_server` (its
+  GitLab: made once on the run's machine with its token, its tasks' lock, the stack's command line), `proxy` (a
+  tinyproxy of a unit's own for the tasks that ask for a proxy) and, in `startup/`,
+  `sitecustomize`: its VMs' disk write limit in every process its driver starts), `catalogue/agents/<key>/`
   (the reference `agent`; JiuwenSwarm's `agent` and mini-swe-agent's `run`, the wrappers that start them) and `catalogue/capabilities/<key>/` (the keyword-memory `capability`); `workspace` (and
   `workspace_cli`, its shell command),
   `cli` and `__main__` (the unified `nullius` and `python -m nullius` commands),
-  `paths` (user config, data and cache locations), `ondisk` (a file written whole then renamed into place, a lock, a digest), `prices` (the user's model price list: fetched on request, never by a run; what a cost is estimated from), `migrate` (explicit copying of legacy checkout storage), `settings`, `hosts`, `constraints` (what Nullius may use on each machine: one table, the container and systemd scope probes, the warnings), `execution`, `progress` (what a run is doing, one line per stage), `prerequisites` (what a recipe needs of each machine it runs on, asked before Run and again as it starts), `onboarding` (the Getting started checklist: what this machine
+  `paths` (user config, data and cache locations), `ondisk` (a file written whole then renamed into place, a lock, a digest), `prices` (the user's model price list: fetched on request and before a capped run; what a cost is estimated from), `migrate` (explicit copying of legacy checkout storage), `settings`, `hosts`, `constraints` (what Nullius may use on each machine: one table, the container and systemd scope probes, the warnings), `execution`, `progress` (what a run is doing, one line per stage), `prerequisites` (what a recipe needs of each machine it runs on, asked before Run and again as it starts), `onboarding` (the Getting started checklist: what this machine
   says is done, and where each step is done), `gitrefs` (a repository's branches and tags,
-  by `git ls-remote`), `secrets` (a benchmark's licences, kept per benchmark outside the repository, and the Hugging Face token of Data providers), `sandbox` (Docker's state, and the Docker Hub login Data providers uses) and `redact` at the top.
+  by `git ls-remote`), `secrets` (a benchmark's licences, kept per benchmark outside the repository, and the Hugging Face token of Data providers), `sandbox` (the Docker Hub login Data providers uses), `charts` (categorical charts, bars, dots and a scatter, and their style registry: Compare's Chart view) and `redact` at the top.
 - `app/templates/`, `app/static/` — the interface, grouped by the same capability
   names (`runs/`, `traces/`, `builder/`, …; `base.html`, `style.css` and the fonts at the top), including the command
-  builder's JavaScript, which owns the generated recipes.
+  builder's JavaScript, which owns the generated recipes. `app/templates/_tables.html` and
+  `app/static/tables.js` are the table toolkit: one column list builds a table's headers, cells and controls.
+  `app/templates/_cards.html` lays the same field list out as cards, one slot per field.
 - `app/tests/`, `app/ui_tests/` — the backend suite and the route suite.
   Beside the backend tests sit scripts run by hand:
   `app/tests/field_contract.py`, which refreshes the `field_contract.json` the
@@ -121,7 +128,7 @@ a recipe without a pin), and the viewer never imports it.
 
 `nullius paths` lists persistent locations. On Linux, settings, the model price
 list and benchmark licences live under `~/.config/nullius/`, user catalogue entries, workspaces,
-runs and standard installs under `~/.local/share/nullius/`, and caches under
+runs, saved builder recipes and standard installs under `~/.local/share/nullius/`, and caches under
 `~/.cache/nullius/`. XDG variables move those roots; `NULLIUS_HOME` selects a
 separate profile with `config/`, `data/` and `cache/`. Existing storage overrides
 still apply. Settings saves owner-only JSON; process environment values win.
@@ -216,27 +223,21 @@ PYTHONPATH=app python3 -m nullius.importers.cli --list
 Debug mode is off by default. Use `--debug` only for development; `--no-debug`
 overrides an explicit `DEBUG=1` environment setting.
 
-**CI** runs the experimental PR judge, backend and route suites, and a temporary
-wheel install/reinstall check on pull requests. `app/packaging/verify.py` checks
-runtime assets, one backend provider, installed commands and pages, and user
-storage preservation. The `tests` workflow also runs by hand.
-The manual `draft release` workflow (`.github/workflows/release.yml`) runs both
-suites and uses `app/packaging/release.py` to build and verify a release's
-wheel and source archive, then attaches them and `SHA256SUMS` to a draft
-release (a prerelease for an `rc` tag). It does not publish or upload to PyPI; see
-`app/packaging/README.md` and the versioned notes under `docs/releases/`.
-The separate manual `publish to PyPI` workflow (`.github/workflows/publish.yml`)
-requires confirmation and a reviewed, published GitHub release. It verifies
-the downloaded assets before a separate `pypi` environment job uploads the
-same bytes through Trusted Publishing. PyPI and environment configuration
-must be completed before that workflow can publish.
-The `docker tests` workflow (`.github/workflows/docker-tests.yml`) builds the
-standard's base image and runs the backend suite with the docker tier, nightly
-and by hand, never on a pull request. The `documentation site` workflow
-is run by hand and only checks: the host builds and publishes the site from
-`docs-release`, advanced to the release tag only after the PyPI upload succeeds.
-Preview deployments are disabled; `bash app/site/host-build.sh` is the same check locally. See
-`app/site/README.md`.
+**CI** (`.github/workflows/`):
+
+- `tests`: backend and route suites, actionlint, and a wheel install check
+  (`app/packaging/verify.py`). Non-draft pull requests, and by hand.
+- `judge-pr`: the PR judge, below. Non-draft pull requests, and `/judge`.
+- `docker-tests`: the backend suite with the docker tier. Nightly, and by hand.
+- `draft release` (`release.yml`): builds and verifies a release's wheel and
+  source archive into a draft GitHub release. By hand; never publishes.
+- `publish to PyPI` (`publish.yml`): uploads a reviewed, published release's
+  verified assets by Trusted Publishing. By hand, with confirmation.
+- `documentation site`: checks the site build, by hand
+  (`bash app/site/host-build.sh` locally). The host publishes from
+  `docs-release`, advanced to the release tag after the PyPI upload.
+
+See `app/packaging/README.md`, `docs/releases/` and `app/site/README.md`.
 
 **UI checks:** routine interface changes require relevant unit and route tests
 plus focused browser checks of the affected pages and interactions, including
@@ -300,6 +301,18 @@ one assistant or one benchmark.
 
 Use `nullius.thinkflowlab@proton.me` for Nullius-owned contact email addresses,
 including security reports.
+
+### Documentation
+
+`docs/` is terse: fragments and tables, the fewest words that change what a
+reader chooses, does or concludes.
+
+- Keep guarantees, requirements, refusals and their fix. Drop the mechanism
+  (flags, files, protocols, how a key travels), interface narration, history
+  and asides.
+- A table cell is a line, not a paragraph. One fact lives on one page; others link.
+- A prerequisite Review already checks is not repeated.
+- `docs/standard.md` headings are never renamed: the import skills cite them.
 
 ### Attribution
 
@@ -431,7 +444,7 @@ One line each; the code and the pages carry the rest.
   upstream's own code at a pin, its dependencies in its own environment, and
   any code of ours beyond glue is asked about first
 - Settings, its variables and their validation — `app/nullius/settings.py`;
-  run hosts, keys and the connection test — `app/nullius/hosts.py`
+  hosts, keys and the connection test — `app/nullius/hosts.py`
 - Removing a benchmark, agent or capability throughout the app, including
   generated artifacts and requested runtime data — `/remove-integration`
   (`.claude/skills/remove-integration/SKILL.md`)

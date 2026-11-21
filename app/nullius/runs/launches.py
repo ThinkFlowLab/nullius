@@ -18,7 +18,8 @@ Either way, the shards of one launch of the Nullius standard - jobs whose
 config names the same ``launch`` id (``Job.launch_id``), each run on a machine
 of its own, perhaps by a run record of its own, perhaps hours apart - are one
 launch: a shard joins the launch that holds another shard of its id before
-any other rule is asked.
+any other rule is asked. A run record's plan names the launch id of its shards
+too, so a shard joins its launch before its job is written.
 
 ``group`` reads no file: it takes the parsed jobs and the records' job lists,
 and groups. Newest launch first. ``fold`` reads one participant's shards as
@@ -129,20 +130,21 @@ def fold(shards):
 
 def group(jobs, records: dict | None = None, window: float = WINDOW_SEC) -> list[Launch]:
     """``jobs``: the parsed jobs (``job_id``, ``dataset``, ``started_at``).
-    ``records``: ``{execution id: (name, [job ids], launched at)}``, the builder's
-    run records, the time in seconds. Returns the launches, newest first, each job in exactly one."""
+    ``records``: ``{execution id: (name, [job ids], launched at, {launch ids})}``,
+    the builder's run records, the time in seconds, the launch ids its plan
+    names for its shards. Returns the launches, newest first, each job in exactly one."""
     records = records or {}
     by_id = {j.job_id: j for j in jobs}
     placed: set[str] = set()
     out: list[Launch] = []
-    for key, (name, ids, launched) in records.items():
+    for key, (name, ids, launched, planned) in records.items():
         mine = [i for i in ids if i in by_id and i not in placed]
         pending = [i for i in ids if i not in by_id and i not in placed]
         if not mine and not pending:
             continue
         placed.update(mine + pending)
         written = sorted((by_id[i] for i in mine), key=_start_key)
-        ids = {_launch_id(j) for j in written} - {""}
+        ids = ({_launch_id(j) for j in written} | set(planned)) - {""}
         home = next((l for l in out if l.launch_ids & ids), None)
         if home is not None:                     # another shard of a launch a record placed already
             _join(home, written, pending)

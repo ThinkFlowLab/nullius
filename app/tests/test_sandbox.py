@@ -52,11 +52,6 @@ class Login(unittest.TestCase):
         with mock.patch.object(container, "_docker", side_effect=container.Unavailable("podman is not installed on this machine")):
             self.assertIsNone(sandbox.login_user())                              # the page still answers
 
-    def test_the_engine_is_named_with_its_version(self):
-        with mock.patch.object(container, "DOCKER", "podman"), mock.patch.object(container, "unusable", return_value=None), \
-                mock.patch.object(container, "_docker", return_value=done(out="6.1.4\n")):
-            self.assertEqual(sandbox.docker_state(), {"ok": True, "version": "podman 6.1.4"})
-
     def test_a_bad_username_or_empty_token_asks_docker_nothing(self):
         with mock.patch.object(container, "_docker", lambda *a, **kw: self.fail("docker asked")):
             self.assertFalse(sandbox.login("", "t")["ok"])

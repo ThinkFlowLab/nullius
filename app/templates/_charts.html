@@ -1,0 +1,19 @@
+{#- A categorical chart (nullius/charts.py): `p`, a Panel, as an SVG of the marks and texts it was given, already
+    placed, and a table of its values for a screen reader. `id` names its title. #}
+{% macro panel(p, id) %}
+<svg class="fig-svg" viewBox="{{ p.viewbox }}" role="img" aria-labelledby="{{ id }}-title">
+  <title id="{{ id }}-title">{{ p.title }}</title>
+  {% for m in p.marks %}{% set tip %}{% if m.title %}<title>{{ m.title }}</title>{% endif %}{% endset %}
+  {%- if m.shape == 'rect' %}<rect class="{{ m.cls }}" x="{{ m.x }}" y="{{ m.y }}" width="{{ m.w }}" height="{{ m.h }}" rx="2">{{ tip }}</rect>
+  {%- elif m.shape == 'circle' %}<circle class="{{ m.cls }}" cx="{{ m.x }}" cy="{{ m.y }}" r="{{ m.r }}">{{ tip }}</circle>
+  {%- else %}<line class="{{ m.cls }}" x1="{{ m.x }}" y1="{{ m.y }}" x2="{{ m.x2 }}" y2="{{ m.y2 }}">{{ tip }}</line>{% endif %}
+  {% endfor %}
+  {% for t in p.texts %}<text class="{{ t.cls }}" x="{{ t.x }}" y="{{ t.y }}" text-anchor="{{ t.anchor }}">{% for line in t.lines %}<tspan x="{{ t.x }}"{% if not loop.first %} dy="{{ t.leading }}"{% endif %}>{{ line }}</tspan>{% endfor %}</text>
+  {% endfor %}
+</svg>
+<div class="sr"><table>
+  <caption>{{ p.title }}</caption>
+  <thead><tr>{% for h in p.table[0] %}<th scope="col">{{ h }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for row in p.table[1] %}<tr>{% for cell in row %}{% if loop.first %}<th scope="row">{{ cell }}</th>{% else %}<td>{{ cell }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
+</table></div>
+{% endmacro %}

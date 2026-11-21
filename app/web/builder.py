@@ -9,15 +9,19 @@ import subprocess
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from flask import abort, jsonify, render_template, request
+from nullius.standard.contract import ports
 from nullius import constraints, settings, execution, gitrefs, hosts, prerequisites, providers
 from nullius.harbor import source as harbor_source
 from nullius.catalogue import catalog
 from nullius.recipes import launch as command_builder
+from nullius.recipes import store as recipe_store
+from nullius.standard import boat
 from nullius.standard.contract import definitions
-from nullius.standard.pages import recipe as standard_recipe
 from nullius.standard.requirements import hostreq
+from nullius.standard.pages import recipe as standard_recipe
 
 from .core import app
+from .filters import agent_mark_url
 
 # Harbor agents that call their vendor with a key of their own, beside the model's (read from Harbor's agents): each
 # entry's names are alternatives, any one of them will do. A recipe naming one whose key Settings lacks says so on Review.
@@ -25,13 +29,146 @@ AGENT_NEEDS = {"cursor-cli": ["CURSOR_API_KEY"], "copilot-cli": ["COPILOT_GITHUB
                "rovodev-cli": ["ROVODEV_USER_API_TOKEN"]}
 from . import shared
 from . import execute
+from . import catalogue
 
 
 @app.route("/new-run")
 def new_run():
     """Build a Harbor recipe; never execute it from this route."""
-    active = shared.STATE.get("workspace")
-    data = command_builder.payload(catalog.load(), shared._load_jobs(), active.name if active else "")
+    data = _builder_data()
+    # ?run=<job id>: the recipe a run of this application was started from,
+    # opened as it was. ?like=<job id>, the job page's "New run like
+    # this": that recipe when the run kept one, else what the job recorded -
+    # its launch, its Harbor and what its trials say ran - for the recipe core
+    # to rebuild a recipe from (fromJob). ?saved=<id>: a saved recipe, as the
+    # Saved recipes dialog loads it. Individual query fields also prefill the form.
+    like = request.args.get("like")
+    run = request.args.get("run") or (like if like and _kept_recipe(like) else None)
+    if run:
+        ex = execution.for_job(run)
+        if ex is None or not ex.plan.recipe:
+            abort(404)
+        data["loadRecipe"] = ex.plan.recipe
+        data["loadRun"] = run
+    elif like:
+        job = shared._job_for_request(like)
+        if job is None:
+            abort(404)
+        data["loadLike"] = {"job": job.job_id, "agent": job.agent_name, "launch": job.launch,
+                            "harbor": {"version": job.harbor_version, "editable": job.harbor_editable},
+                            "env": next((t.env_type for t in job.trials if t.env_type), "")}
+    elif request.args.get("saved"):
+        data["loadSaved"] = next((x for x in recipe_store.listing() if x["id"] == request.args["saved"]), None)
+        if data["loadSaved"] is None:
+            abort(404)
+    return render_template("builder/new_run.html", builder_data=data)
+
+
+@app.route("/new-run/benchmarks")
+def new_run_benchmarks():
+    """The Benchmark step's grid, as a fragment the builder puts in its page: the Benchmarks page's cards
+    (``catalogue.benchmark_cards``) as single-choice pick cards (templates/builder/benchmarks.html), or rows with
+    ?view=table; the builder presses the one its recipe names."""
+    cat = shared._catalog_cached()
+    # a community benchmark says so; an official one says nothing
+    # a benchmark with versions carries each one's Tasks (the default's under ""), for the builder to show the chosen one's
+    items = [dict(i, pick={"value": i["key"], "one": True}, id="pick-bench-" + i["key"], title={"text": i["title"], "title": i["domain"]},
+                  origin=i["origin"] if i["shelf"] != "official" else None,
+                  data={"tasks": json.dumps({"": i["tasks"], **i["versions"]})} if i["versions"] else None)
+             for i in catalogue.benchmark_cards(cat)]
+    every = catalogue.benchmark_choices(cat)
+    choices = {k: [(v, t) for v, t in every[k] if any(v in _values(i[k]) for i in items)] for k in ("category", "evaluates", "runs")}
+    return render_template("builder/benchmarks.html", items=items, choices={k: v for k, v in choices.items() if len(v) > 1},
+                           layout="table" if request.args.get("view") == "table" else "cards")
+
+
+def _values(v) -> list:
+    """A card field's filter values: a value's ``value``, else its text."""
+    return [x.get("value", x.get("text")) if isinstance(x, dict) else x for x in (v if isinstance(v, list) else [v])]
+
+
+@app.route("/new-run/agents")
+def new_run_agents():
+    """The Agent step's grid for one benchmark of the standard (?benchmark=key or key@version), as a fragment the
+    builder puts in its page: its agents or capabilities as pick cards (templates/builder/agents.html), or rows with
+    ?view=table, from the entries the Agents page lists (``recipe.entries``), each greyed with the reasons it does not fit."""
+    benches = definitions.load("benchmark", every=True)[0]
+    b = definitions.find(benches, request.args.get("benchmark", ""))
+    if b is None:
+        abort(404)
+    name, b = b["label"], dict(b, label=definitions.title(b))     # its own agents keep its plain name, whatever its version
+    kind = b["family"]
+    found = [e for e in standard_recipe.entries(kind, benches=[b], every=True, own=True)["entries"] if not e["d"].get("example")]
+    found.sort(key=lambda e: 0 if e["d"].get("benchmark") == b["key"] else 2 if e["d"].get("benchmark") else 1)   # its own, the catalogue's, others' own
+    # a benchmark with agents of its own runs them as its Original setup; another offers that setup as one more card
+    setups = [] if any(e["d"].get("benchmark") == b["key"] for e in found) else [k for k in (b.get("setups") or {}) if k == "original"]
+    items = [_setup_card(b, k) for k in setups] + [_pick_card(b, e) for e in found]
+    names = dict(definitions.FROM, benchmark=f"{name}'s own", elsewhere="Other benchmarks' agents")
+    choices = {"protocol": [(p, p) for p in ("ACP", "A command", "Its own script", "JSON lines")
+                            if any(i["protocol"] and i["protocol"]["value"] == p for i in items)],
+               "fit": [(v, t) for v, t in (("fit", "Can run it"), ("unfit", "Cannot")) if any(i["fit"]["value"] == v for i in items)],
+               "from": [(k, v) for k, v in names.items() if any(i["from"]["value"] == k for i in items)],
+               "proves": [(p, s.get("label") or p) for p, s in ports.PORTS.items() if any(x["value"] == p for i in items for x in i["proves"])]}
+    # a filter only where its cards differ
+    return render_template("builder/agents.html", items=items, kind=kind, choices={k: v for k, v in choices.items() if len(v) > 1},
+                           layout="table" if request.args.get("view") == "table" else "cards")
+
+
+def _setup_card(b: dict, key: str) -> dict:
+    """The benchmark as published, run by its own code: a pick card beside the agents or capabilities."""
+    x = b["setups"][key]
+    title = x.get("reference_agent") or ("No agent · Original" if b["family"] == "agent" else "Original " + _kind_of(b))
+    return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": title, "title": x.get("summary", "")},
+            "search": " ".join([title, b["label"], "as published"]), "published": "As published", "protocol": "",
+            "fit": {"text": "Can run it", "value": "fit"}, "from": {"text": b["label"], "value": "benchmark"},
+            "proves": [], "ticks": [], "alert": None}
+
+
+def _kind_of(b: dict) -> str:
+    kinds = sorted({p.split(".", 1)[1].split("/")[0] for p in b.get("needs") or []})
+    return kinds[0] if kinds else "capability"
+
+
+def _pick_card(b: dict, e: dict) -> dict:
+    """An agent's or a capability's pick card for the benchmark ``b``: its name and mark, its protocol, where it comes
+    from, and a tick for each doubt about a port ``b`` needs (that it proved them is what lets it run ``b``); greyed, why (whole in its tooltip)."""
+    d, why = e["d"], e["fits"][0]["why"]
+    rows = {r["port"]: r for r in e["ports"] if r["state"] == "proven"}
+    needed = [rows[p] for p in b.get("needs") or [] if p in rows]
+    title = definitions.title(d)
+    version = str((d.get("upstream") or {}).get("version") or "")
+    title += f" {version}" if version and version not in title else ""
+    fid = (e["fidelity"] or {}).get("verdict")
+    ticks = ([{"text": "ACP ≠ CLI", "class": "no", "title": f"ACP differs from its own CLI: {fid}"}] if fid and fid != "same" else []) \
+        + [{"text": f"{s['id']} ✗", "class": "no", "title": s["says"]} for r in needed for s in r["skills"] if not s["shown"]] \
+        + ([{"text": "older kit", "class": "no", "title": "proven on an older kit: worth running again"}] if any(r["older_kit"] for r in needed) else [])
+    lacks = [p.split(".", 1)[-1].rsplit("/v", 1)[0].replace("-", " ").replace("_", " ") for p in b.get("needs") or [] if p not in rows]
+    note = ("Belongs to " + d["benchmark_label"]) if d.get("benchmark") else "Lacks " + (", ".join(lacks) or "a port it needs")
+    origin = d.get("from") or "bundled"
+    there = {"text": d["benchmark_label"], "value": "benchmark" if d["benchmark"] == b["key"] else "elsewhere"} \
+        if d.get("benchmark") else {"text": definitions.FROM[origin], "value": origin}
+    return {"pick": {"value": d["_ref"], "disabled": bool(why)}, "id": "pick-" + d["_ref"].replace(":", "-").replace("@", "-"),
+            "icon": agent_mark_url(d["key"]) if b["family"] == "agent" else "", "title": {"text": title, "title": d.get("summary", "")},
+            "search": " ".join([title, d["key"], version, e["protocol"], d.get("summary", "")]),
+            "protocol": {"text": e["protocol"], "value": e["protocol"]}, "published": "",
+            "fit": {"text": "Cannot" if why else "Can run it", "value": "unfit" if why else "fit"}, "from": there,
+            "proves": [{"text": r["label"], "value": r["port"]} for r in rows.values()],
+            "ticks": ticks,
+            "alert": {"text": note, "title": "; ".join(why)} if why else None}
+
+
+@app.route("/recipes")
+def recipes_page():
+    """The saved recipes as a table, a column per step. The page checks each one as the builder checks a loaded
+    recipe: a Harbor one in the recipe core, a standard one by the compile of its Review step, done here."""
+    items = recipe_store.listing()
+    compiled = {x["id"]: _standard_compile(x["recipe"]) for x in items if x["recipe"].get("harness") == standard_recipe.HARNESS}
+    return render_template("builder/recipes.html", recipes=items, compiled=compiled, builder_data=_builder_data())
+
+
+def _builder_data() -> dict:
+    """What the recipe core reads (command-builder-core.js): the vocabulary, this machine and Settings."""
+    data = command_builder.payload(catalog.load(), shared._load_jobs())
     # Execution sets these credential variables from Settings.
     data["credentialVars"] = {"key": "API_TOKEN", "url": "API_URL"}
     # Where a recipe can run: this machine, or the hosts named in Settings.
@@ -55,30 +192,19 @@ def new_run():
     gpus = constraints.of(constraints.LOCAL, strict=False).get("gpu_ids")
     host = {b["key"]: {n: [why] for n, why in hostreq.problems(b, list(b["host"]), gpu_ids=gpus).items()}
             for b in definitions.load("benchmark", every=True)[0] if b.get("host")}
-    data["standardHere"] = {"docker": execute.docker_problem(), "licences": _licence_states(), "host": host}
+    # boat: why its sandboxes cannot run from here (its key, this machine's programs), else what its account
+    # says: the sizes it offers, each with its spec and why it cannot start one, and its VMs at once
+    boat_why = boat.unusable()
+    account = {} if boat_why else execute.boat_account()
+    types = account.get("types") or {}
+    data["standardHere"] = {"docker": execute.docker_problem(), "boat": boat_why,
+                            "boatSizes": [{"key": k, "label": z["label"], "spec": boat.spec(k), "memory_gb": z.get("memory_gb"),
+                                           "why": types.get(k)} for k, z in boat.SIZES.items() if not types or k in types],
+                            "boatSlots": account.get("slots"), "boatKey": bool(boat.key()), "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
     data["local"] = shared._local_client()
-    # ?run=<job id>: the recipe a run of this application was started from,
-    # opened as it was. ?like=<job id>, the job page's "New run like
-    # this": that recipe when the run kept one, else what the job recorded -
-    # its launch, its Harbor and what its trials say ran - for the recipe core
-    # to rebuild a recipe from (fromJob). Individual query fields also prefill the form.
-    like = request.args.get("like")
-    run = request.args.get("run") or (like if like and _kept_recipe(like) else None)
-    if run:
-        ex = execution.for_job(run)
-        if ex is None or not ex.plan.recipe:
-            abort(404)
-        data["loadRecipe"] = ex.plan.recipe
-        data["loadRun"] = run
-    elif like:
-        job = shared._find_job(shared._jobs_for_request(), like)
-        if job is None:
-            abort(404)
-        data["loadLike"] = {"job": job.job_id, "agent": job.agent_name, "launch": job.launch,
-                            "harbor": {"version": job.harbor_version, "editable": job.harbor_editable},
-                            "env": next((t.env_type for t in job.trials if t.env_type), "")}
-    return render_template("builder/new_run.html", builder_data=data)
+    data["recipesWhy"] = WRITE_HERE
+    return data
 
 
 @app.route("/new-run/runner", methods=["POST"])
@@ -93,10 +219,16 @@ def new_run_runner():
     if len(json.dumps(recipe)) > 200_000:
         abort(413)
     if recipe.get("harness") == standard_recipe.HARNESS:
-        out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, unpriced=execute.unpriced)
-        return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm")}
+        return _standard_compile(recipe)
     return {"errors": [{"step": providers.STEP["runner"], "message": providers.GONE}],
             "notes": [], "review": []}, 404
+
+
+def _standard_compile(recipe: dict) -> dict:
+    out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, boat_unusable=boat.unusable,
+                                  boat_size_problem=execute.boat_size_problem, unpriced=execute.unpriced)
+    # served_models: each model field's model as the run sends it, which Served by lists the providers of
+    return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models")}
 
 
 @app.route("/new-run/prerequisites", methods=["POST"])
@@ -120,7 +252,7 @@ def new_run_prerequisites():
         if out["errors"]:
             return jsonify(machines=[], ready=False, errors=[e["message"] for e in out["errors"]])
         wheres = [sh["where"] for sh in out["shards"]]
-        needs = ["engine"] if out["docker"] else []
+        needs = (["engine"] if out["docker"] else []) + (list(boat.PROGRAMS) if recipe.get("backend") == "boat" else [])
         h = out.get("host") or {}
         b = definitions.get("benchmark", h.get("benchmark", "")) if h.get("needs") else None
         setups = {n["name"]: {**n, "install": hostreq.install_lines(b, [n["name"]])}
@@ -229,6 +361,57 @@ def _licence_states() -> dict:
             if got and s["name"] not in held:
                 held[s["name"]] = {k: got[k] for k in ("set", "on", "expires", "expired")}
     return out
+
+
+# Saved recipes (nullius/recipes/store.py): anyone who can open the builder reads them; a browser on this machine
+# alone writes them, with the form token.
+WRITE_HERE = "Saved recipes change from a browser on the application host only."
+
+
+def _recipe_write():
+    shared._require_csrf()
+    if not shared._local_client():
+        abort(403, description=WRITE_HERE)
+    if request.content_length and request.content_length > 10 * recipe_store.MAX_BYTES:
+        abort(413)
+    return request.get_json(silent=True)
+
+
+@app.route("/new-run/recipes")
+def recipes_list():
+    return jsonify(recipes=recipe_store.listing())
+
+
+@app.route("/new-run/recipes", methods=["POST"])
+def recipes_save():
+    body = _recipe_write() or {}
+    try:
+        return jsonify(ok=True, recipe=recipe_store.save(body.get("recipe"), body.get("id")))
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+
+
+@app.route("/new-run/recipes/<recipe_id>", methods=["DELETE"])
+def recipes_delete(recipe_id):
+    _recipe_write()
+    try:
+        return jsonify(ok=recipe_store.delete(recipe_id))
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+
+
+@app.route("/new-run/recipes/import", methods=["POST"])
+def recipes_import():
+    """One recipe or a list, or {"recipes": [...], "lenient": true}: each one added unless its name is saved
+    already. Lenient (the builder's move of its earlier browser list) adds the good ones and names the bad."""
+    body = _recipe_write()
+    wrapped = isinstance(body, dict) and "recipes" in body
+    items = body["recipes"] if wrapped else body
+    items = items if isinstance(items, list) else [items]
+    try:
+        return jsonify(ok=True, **recipe_store.import_(items, lenient=wrapped and body.get("lenient") is True))
+    except ValueError as e:
+        return jsonify(ok=False, error="Not imported: " + str(e)), 400
 
 
 def _kept_recipe(job_id: str) -> bool:
@@ -390,6 +573,24 @@ def new_run_registry():
         _REGISTRY_SCAN["names"] = _fetch_registry_names() or []
         _REGISTRY_SCAN["hub"] = _fetch_hub_names() or []
     return _REGISTRY_SCAN
+
+
+@app.route("/new-run/endpoints", methods=["POST"])
+def new_run_endpoints():
+    """The serving providers OpenRouter lists for one model, for the Model step's Served by; asked as the
+    model list is, with the key kept on this machine."""
+    shared._require_csrf()
+    if not shared._local_client():
+        abort(403)
+    body = request.get_json(silent=True)
+    provider = body.get("provider") if isinstance(body, dict) else None
+    model = body.get("model") if isinstance(body, dict) else None
+    if providers.split(provider)[0] != "openrouter" or not isinstance(model, str) or not model.strip():
+        return jsonify(ok=False, endpoints=[], message="Only OpenRouter routes a model to several providers: choose it and a model."), 400
+    try:
+        return jsonify(ok=True, endpoints=providers.list_endpoints(provider, model))
+    except ValueError as error:
+        return jsonify(ok=False, endpoints=[], message=str(error)), 502
 
 
 @app.route("/new-run/models", methods=["POST"])

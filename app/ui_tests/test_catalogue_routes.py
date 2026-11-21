@@ -12,9 +12,8 @@ each one shows.
 No workspace is opened; the pages read the shipped catalogue only."""
 from __future__ import annotations
 
+import json
 import re
-import shutil
-import subprocess
 import unittest
 from contextlib import ExitStack
 from html import unescape
@@ -50,7 +49,7 @@ class PageCase(unittest.TestCase):
 
     def card(self, key):
         """One benchmark's card on the list, as markup."""
-        match = re.search(r'<a class="bench-card" href="/benchmarks/%s".*?</a>\s*(?=<a class="bench-card"|</div>\s*</section>)' % re.escape(key), self.html, re.S)
+        match = re.search(r'<article class="bench-card"(?:(?!</article>).)*href="/benchmarks/%s".*?</article>' % re.escape(key), self.html, re.S)
         self.assertIsNotNone(match, key)
         return match.group(0)
 
@@ -77,22 +76,68 @@ class OriginTags(PageCase):
         self.assertIn('<span class="origin-tag official">Official</span>', self.page_html(key))
         self.assertIn('<span class="origin-tag official">Official</span>', self.card("gaia"))
         self.assertIn('<span class="origin-tag official">Official</span>', self.page_html("gaia"))
-        self.assertIn('<div class="bench-card-tags"><span class="cat-tag">', self.card(key))       # beside the category, on the left
+        self.assertIn('<span class="bench-card-tags"><span class="cat-tag">', self.card(key))      # beside the category, on the left
 
     def test_the_list_filters_by_what_runs_it(self):
         html = self.get("/benchmarks")
-        self.assertIn('data-filter="runs"', html)
-        self.assertIn('data-runs="standard harbor"', self.card("swe-bench-verified")); self.assertIn('data-runs="standard"', self.card("longmemeval"))
+        self.assertIn('<fieldset data-filter-menu="runs" aria-label="Runs with">', html)
+        self.assertIn('data-f-runs="standard&#10;harbor&#10;"', self.card("swe-bench-verified")); self.assertIn('data-f-runs="standard&#10;"', self.card("longmemeval"))
+        self.assertIn('<input type="checkbox" data-value="standard" checked> Nullius', html)            # its value, by its label
+
+    def test_the_list_sorts_by_name_tasks_and_datasets_on_each_shelf(self):
+        html = self.get("/benchmarks")
+        menu = html[html.index('data-tools="sort"'):]
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', menu), ["", "title", "tasks", "datasets"])
+        self.assertIn('value="tasks" data-type="num"> Tasks', menu)
+        self.assertIn('data-s-title="SWE-bench Verified" data-s-tasks="500" data-s-datasets="1"', self.card("swe-bench-verified"))
+        self.assertIn('data-group-n>', html[html.index('data-shelf="official"'):html.index("data-s-title")])    # within its shelf
 
     def test_the_list_filters_by_origin(self):
         html = self.get("/benchmarks")
-        self.assertIn('data-filter="origin"', html)
+        self.assertIn('<fieldset data-filter-menu="origin" aria-label="Origin">', html)
         for o in catalog.ORIGINS:
-            self.assertIn(f'data-value="{o}"', html)
-        self.assertIn('data-origin="official"', self.card("terminal-bench"))
-        self.assertIn('data-origin="official"', self.card("longmemeval"))
-        self.assertIn('data-origin="official"', self.card("gaia"))
-        self.assertNotIn('data-value="experiment"', html)
+            self.assertIn(f'<input type="checkbox" data-value="{o}" checked> {o.capitalize()}', html)
+        self.assertIn('data-f-origin="official&#10;"', self.card("terminal-bench"))
+        self.assertIn('data-f-origin="official&#10;"', self.card("longmemeval"))
+        self.assertIn('data-f-origin="official&#10;"', self.card("gaia"))
+        self.assertNotIn('data-value="Experiment"', html)
+
+    def test_the_list_is_cards_by_default_and_a_table_on_request(self):
+        self.assertIn('href="/benchmarks?view=table" aria-label="Table" title="Table" aria-current="false"', self.html)
+        self.assertIn('href="/benchmarks" aria-label="Cards" title="Cards" aria-current="true"', self.html)
+        self.assertNotIn("data-table", self.html)
+        html = self.get("/benchmarks?view=table&q=1")
+        self.assertIn('href="/benchmarks?view=table&amp;q=1" aria-label="Table" title="Table" aria-current="true"', html)
+        self.assertIn('href="/benchmarks?q=1" aria-label="Cards" title="Cards" aria-current="false"', html)   # the default has no view
+        self.assertNotIn("data-cards", html); self.assertNotIn('class="bench-card"', html)
+        heads = re.findall(r'<th data-col="(\w+)"', html)
+        self.assertEqual(heads[:3], ["title", "category", "origin"])
+        self.assertNotIn("icon", heads)                                                     # the mark is in the name cell
+        row = re.search(r'<tr data-search="[^"]*"[^>]*data-f-origin="official&#10;"[^>]*>(?:(?!</tr>).)*href="/benchmarks/swe-bench-verified".*?</tr>', html, re.S).group(0)
+        self.assertIn('data-f-runs="standard&#10;harbor&#10;"', row)
+        self.assertIn('<td data-col="tasks" data-sort="500" class="align-right">', row)
+        self.assertIn('data-pills="category"', html); self.assertIn('data-filter-menu="origin"', html)
+        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', html[html.index('data-tools="sort"'):]), ["", "title", "tasks", "datasets"])
+        self.assertIn('<input type="checkbox" data-col="needs" data-off> Needs', html)       # secondary: off until chosen
+        origins = re.findall(r'data-f-origin="(\w+)&#10;"', html)
+        self.assertEqual(origins, sorted(origins, key=list(catalog.ORIGINS).index))         # the shelves' order
+
+    def test_the_list_filters_by_category_pills_and_two_dropdowns(self):
+        tools = self.html.split('id="benchmarks-tools"', 1)[1].split('id="benchmarks"', 1)[0]
+        self.assertIn('<div class="filter-pills" role="group" aria-label="Category" data-pills="category">', tools)
+        self.assertIn('data-all="category" aria-pressed="true">All</button>', tools)
+        for c in web.shared._catalog_cached().categories:
+            self.assertIn(f'<button type="button" class="filter-pill" data-value="{c}" aria-pressed="false">{c}</button>', tools)
+        self.assertEqual(re.findall(r'data-dropdown aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-(\w+)"/></svg>([^<]+)<', tools),
+                         [("origin", "Origin"), ("runner", "Runs with")])
+        self.assertEqual(re.findall(r'data-filter-menu="(\w+)"', tools), ["origin", "runs"])
+        self.assertNotIn('data-tools-btn="filter"', tools)                                      # no Filter button: each has its own
+        self.assertIn('<span class="sr" data-live="benchmarks" data-noun="benchmarks" aria-live="polite"></span>', self.html)
+
+    def test_the_list_searches_by_name_category_and_dataset(self):
+        self.assertIn('<input type="search" data-search placeholder="Name, category, dataset"', self.html)
+        self.assertIn('data-search="LongMemEval Memory longmemeval', self.card("longmemeval"))
+        self.assertIn('<p class="empty-note" data-empty="benchmarks" hidden>No benchmark matches.</p>', self.html)
 
 
 class CitationSeal(PageCase):
@@ -118,7 +163,7 @@ class BenchmarksList(PageCase):
         cat = catalog.Catalog(benchmarks=[benchmark], datasets=datasets)
         with patch.object(web.shared, "_catalog_cached", return_value=cat):
             self.html = self.get("/benchmarks")
-            self.assertIn("165 tasks", visible(self.card("overlap")))
+            self.assertIn("Tasks 165", visible(self.card("overlap")))
             page = self.page("overlap")
             self.assertIn("Tasks 165", page)
             self.assertNotIn("26–165", page)
@@ -127,9 +172,9 @@ class BenchmarksList(PageCase):
 
     def test_every_listed_benchmark_is_a_card_opening_its_page(self):
         cat = catalog.load()
-        keys = re.findall(r'<a class="bench-card" href="/benchmarks/([^"]+)"', self.html)
+        keys = re.findall(r'<a class="card-link" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
-        self.assertEqual(len(keys), 9)
+        self.assertEqual(len(keys), 11)
         # two shelves, the official benchmarks then the community benchmarks; a shelf with nothing on it is not shown
         official = self.html[self.html.index('data-shelf="official"'):].split('</section>', 1)[0]
         for b in cat.listed_benchmarks:
@@ -139,10 +184,10 @@ class BenchmarksList(PageCase):
 
     def test_a_card_says_what_it_holds(self):
         swe = visible(self.card("swe-bench-verified"))
-        for fact in ("Coding", "Harbor", "SWE-bench Verified", "500 tasks", "1 dataset", "Tests scored by"):
+        for fact in ("Coding", "Harbor", "SWE-bench Verified", "Tasks 500", "Dataset 1", "Scored by Tests"):
             self.assertIn(fact, swe)
         memory = visible(self.card("longmemeval"))
-        for fact in ("Nullius", "500 tasks each", "3 datasets", "GPT-4o judge scored by"):
+        for fact in ("Nullius", "Tasks each 500", "Datasets 3", "Scored by GPT-4o judge"):
             self.assertIn(fact, memory)
         self.assertNotIn("benchmark.json", memory)                                  # the folder is on the benchmark's page, not its card
         self.assertIn('data-keys="longmemeval longmemeval-s longmemeval-m longmemeval-oracle"', self.card("longmemeval"))
@@ -150,24 +195,91 @@ class BenchmarksList(PageCase):
     def test_an_anchor_from_the_one_page_list_goes_on_to_its_page(self):
         # /benchmarks#longmemeval-m was a dataset inside a card; now it is that benchmark's page, at that tab
         script = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("location.replace(owner.href", script)
+        self.assertIn("location.replace(owner.querySelector('.card-link').href", script)
         self.assertIn("dataset.keys.split(' ')", script)
 
     def test_every_listed_benchmark_has_its_mark(self):
         # one mark per benchmark, by key - its maker's logo or a line icon - in the sprite the builder's cards and these pages use
         marks = (Path(__file__).resolve().parents[1] / "static" / "catalogue" / "marks.svg").read_text(encoding="utf-8")
-        builder = (Path(__file__).resolve().parents[1] / "static" / "builder" / "command-builder.js").read_text(encoding="utf-8")
-        self.assertIn("/static/catalogue/marks.svg#bm-${esc(key)}", builder)
+        builder = self.client.get("/new-run/benchmarks").get_data(as_text=True)                  # the builder's cards are these
         for b in catalog.load().listed_benchmarks:
             with self.subTest(b.key):
                 self.assertIn('<symbol id="bm-%s"' % b.key, marks)
                 self.assertIn('marks.svg#bm-%s"' % b.key, self.card(b.key))
+                self.assertIn('marks.svg#bm-%s"' % b.key, builder)
 
     def test_a_page_exists_only_for_a_listed_benchmark(self):
         self.get("/benchmarks/nope", status=404)
 
 
 class BenchmarkPage(PageCase):
+    def test_a_benchmark_with_versions_is_the_whole_page_once_per_version_one_shown(self):
+        from html.parser import HTMLParser
+
+        def shown(html):
+            """The page as a reader sees it: every hidden version block left out, its whole subtree."""
+            out, depth = [], [0]
+            void = {"input", "br", "img", "meta", "link", "hr", "source", "wbr"}
+
+            class Strip(HTMLParser):
+                def handle_starttag(self, tag, attrs):
+                    a = dict(attrs)
+                    if depth[0]:
+                        depth[0] += tag not in void
+                    elif "data-version" in a and "hidden" in a and tag not in void:
+                        depth[0] = 1
+                    else:
+                        out.append(self.get_starttag_text())
+
+                def handle_endtag(self, tag):
+                    if depth[0]:
+                        depth[0] -= 1
+                    else:
+                        out.append(f"</{tag}>")
+
+                def handle_data(self, data):
+                    if not depth[0]:
+                        out.append(data)
+            Strip(convert_charrefs=False).feed(html)
+            return "".join(out)
+        html = self.get("/benchmarks/osworld1")
+        nav = re.search(r'<nav class="std-versions".*?</nav>', html, re.S).group(0)
+        self.assertIn('aria-current="page" data-ref="osworld1"><b>desktop-env-v1.0.3</b>', nav)   # the release is the default
+        self.assertIn('data-ref="osworld1@044bc33"', nav)
+        self.assertIn('data-build-run href="/new-run?standard=osworld1"', html)                # Build a run opens the version shown
+        self.assertIn("<b>main (044bc33)</b>", nav)                                          # an untagged pin: its branch
+        page = shown(html)
+        self.assertIn("xlang-ai/OSWorld @ desktop-env-v1.0.3 · 9d6f711", page)
+        self.assertNotIn("xlang-ai/OSWorld @ main · 044bc33", page)
+        self.assertIn("<small>360 tasks</small>", page); self.assertNotIn("<small>361 tasks</small>", page)
+        self.assertIn("368 tasks in 10 domains", page); self.assertNotIn("369 tasks in 10 domains", page)
+        self.assertIn("comparable only with this version", page)                             # its own limitations
+        self.assertIn('name="version" value="desktop-env-v1.0.3"', page)                    # its checks run on it
+        self.assertIn("<dd><span class=\"std-version\" data-version=\"desktop-env-v1.0.3\">368</span>", page)
+        old = shown(self.get("/benchmarks/osworld1?v=044bc33"))
+        self.assertIn("xlang-ai/OSWorld @ main · 044bc33", old)
+        self.assertIn("<small>361 tasks</small>", old); self.assertIn("369 tasks in 10 domains", old)
+        self.assertIn("Only M3, PromptAgent and Qwen-CUA have completed tasks", old)
+        self.assertNotIn("comparable only with this version", old)
+        self.assertIn('name="version" value="044bc33"', old)
+        self.assertIn('data-build-run href="/new-run?standard=osworld1@044bc33"', old)
+        self.assertIn("/tree/044bc33901cb893808e3f91ebc9a17ed8e54b44c", old)                  # its data at its own commit
+        self.assertNotIn("/tree/9d6f711", old)
+        self.get("/benchmarks/osworld1?v=nope", status=404)
+        self.assertNotIn("data-version", self.get("/benchmarks/gsm8k"))                       # one version: nothing to swap
+
+    def test_a_proof_short_of_the_full_mark_has_no_green_tick_and_says_its_bound(self):
+        # Open Telco's oracle must score at least 93%: 3GPP TSG's scorer cannot read RAN_AH1, so its rows stop short
+        html = self.page_html("open-telco")
+        row = lambda label: re.search(r'<th scope="row">%s<.*?</tr>' % re.escape(label), html, re.S).group(0)
+        self.assertIn('<span class="std-proof std-proof-part" title="93.55%, at least 93% needed · proven on', row("3GPP TSG · Full"))
+        self.assertIn("✓ 1871/2000</span>", row("3GPP TSG · Full"))
+        self.assertIn('<span class="std-proof std-proof-part" title="94%, at least 93% needed · proven on', row("3GPP TSG · Lite"))
+        self.assertIn("the reference answers: must score at least 93% - made by Nullius", row("3GPP TSG · Lite"))
+        self.assertIn('<span class="std-proof std-proof-ok" title="proven on', row("TeleQnA · Lite"))      # every unit: green
+        self.assertNotIn("std-proof-part", row("TeleQnA · Lite"))
+        self.assertIn("no answer at all: must score nothing", row("TeleQnA · Lite"))
+
     def test_a_benchmark_on_both_runners_opens_the_builder(self):
         self.assertEqual(self.route_case("swe-bench-verified"), "multi-route")
         html, text = self.page_html("swe-bench-verified"), self.page("swe-bench-verified")
@@ -201,12 +313,29 @@ class BenchmarkPage(PageCase):
         self.assertIn("benchmarks/swe-bench-verified/ ├─ benchmark.json ├─ driver.py ├─ images.json ├─ standard.json └─ upstream-settings.json", self.page("swe-bench-verified"))
         self.assertIn("benchmarks/terminal-bench/ ├─ benchmark.json ├─ driver.py ├─ standard.json └─ upstream-settings.json", self.page("terminal-bench"))
 
+    def test_an_option_with_a_pattern_shows_its_example_not_the_pattern(self):
+        for key in ("osworld2", "gsm8k", "humaneval", "gaia", "osworld1", "tau3-bench"):
+            html, opts = self.page_html(key), json.loads((Path(catalog.__file__).parent / "benchmarks" / key / "standard.json").read_text())["options"]
+            for o in opts.values():
+                if "pattern" in o:
+                    self.assertIn("e.g. <code>%s</code>" % o["example"], html)
+                    self.assertNotIn(o["pattern"], unescape(html))
+        self.assertNotIn("Provider default", self.page("osworld1"))
+
     def test_a_machine_setup_says_what_checks_it_and_what_installs_it(self):
         osworld = self.page("osworld1")
         self.assertIn("Setup: docker", osworld)
         self.assertIn("Checked by docker on PATH, on each machine a run uses; the builder's Where step checks it.", osworld)
         self.assertNotIn("nothing installs it", osworld)
         self.assertIn("the builder's Where step checks it and can install it.", self.page("tau3-bench"))
+
+    def test_a_machine_setup_shows_its_label_and_its_key_without_one(self):
+        osworld2 = self.page("osworld2")
+        for label in ("Docker", "Scoring tools"):
+            self.assertIn("Setup: " + label, osworld2)
+            self.assertIn("needs " + label, osworld2)
+        self.assertNotIn("Setup: scoring_programs", osworld2)
+        self.assertIn("Setup: docker", self.page("osworld1"))
 
 
 class DatasetsOnTheirPage(PageCase):
@@ -310,42 +439,6 @@ class SetupsOnTheirPage(PageCase):
             self.assertIn('<h3>Original</h3>', section)
             self.assertNotIn('Original, your model', section)
             self.assertNotIn('<h3>Your ', section)
-
-
-class CategoryFilters(unittest.TestCase):
-    def test_multiword_categories_and_multiple_runners(self):
-        node = shutil.which("node")
-        if not node:
-            self.skipTest("node is needed to exercise catalogue filters")
-        script = Path(__file__).resolve().parents[1] / "static/catalogue/catalogue.js"
-        program = r"""
-const assert = require('node:assert/strict');
-const cards = [
- {dataset: {category:'Tool use', runs:'standard harbor', find:'appworld', keys:'appworld'}},
- {dataset: {category:'Customer service', runs:'standard', find:'tau', keys:'tau'}},
- {dataset: {category:'Coding', runs:'harbor', find:'swe', keys:'swe'}}
-];
-const chips = [['category','Tool use'], ['category','Customer service'], ['category',''],
- ['runs','harbor'], ['runs','standard'], ['runs','']].map(([filter,value])=>({
- dataset:{value}, closest:()=>({dataset:{filter}}),
- classList:{toggle(){}}, setAttribute(){}, addEventListener(_,fn){this.click=fn;}
-}));
-const none={};
-global.location={hash:''};
-global.document={
- querySelectorAll:s=>s==='.bench-card'?cards:s==='[data-filter] .bench-cat'?chips:[],
- getElementById:id=>id==='bench-none'?none:null
-};
-require(process.argv[1]);
-const shown=()=>cards.filter(c=>!c.hidden).map(c=>c.dataset.keys);
-chips[0].click(); assert.deepEqual(shown(),['appworld']);
-chips[3].click(); assert.deepEqual(shown(),['appworld']);
-chips[1].click(); assert.deepEqual(shown(),[]); assert.equal(none.hidden,false);
-chips[4].click(); assert.deepEqual(shown(),['tau']);
-chips[2].click(); assert.deepEqual(shown(),['appworld','tau']);
-chips[5].click(); assert.equal(shown().length,3);
-"""
-        subprocess.run([node, "-e", program, str(script)], check=True, capture_output=True, text=True)
 
 
 if __name__ == "__main__":

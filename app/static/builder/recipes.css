@@ -1,0 +1,18 @@
+/* The Recipes page: one row per saved recipe; Info and Delete in one dialog (the Launches page's, runs/launches.css). */
+.rcp-name { overflow-wrap: anywhere; }   /* a name wraps, never cut */
+.rcp-warn { display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12.5px; color: var(--patch_failed_tests); cursor: help; }
+.rcp-warn .ic { width: 14px; height: 14px; }
+.rcp-val { display: block; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* the whole value is its tooltip */
+#recipes td[data-col="name"] { white-space: normal; }
+dialog.std-how.launch-delete.wide { width: min(56rem, calc(100vw - 32px)); }
+.launch-delete .rcp-problems { list-style: none; padding: 0; margin: 12px 0 0; }
+.rcp-problems li { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; margin-top: 4px; border-radius: 8px; font-size: 13px;
+  background: color-mix(in srgb, var(--patch_failed_tests) 12%, var(--surface)); }
+.rcp-problems .ic { width: 14px; height: 14px; color: var(--patch_failed_tests); align-self: center; }
+.rcp-step h3 em { font-style: normal; margin-right: 8px; }
+.rcp-row { display: grid; grid-template-columns: minmax(7rem, 12rem) 1fr; gap: 12px; padding: 4px 0; border-top: 1px solid var(--border-soft); }
+.rcp-row small { color: var(--text-dim); }
+.rcp-row span { overflow-wrap: anywhere; }
+.rcp-json { max-height: 22rem; overflow: auto; margin: 4px 0 0; padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: 8px;
+  background: var(--surface-2); font-size: 12px; line-height: 1.5; }
+@media (max-width: 640px) { .rcp-row { grid-template-columns: 1fr; gap: 0; } }

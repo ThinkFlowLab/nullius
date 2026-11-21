@@ -1,0 +1,88 @@
+{% from '_tables.html' import table, cell, greyed %}
+{% from 'runs/_launch_ask.html' import delete_ask, dialogs %}
+{% extends "base.html" %}
+{% from '_page.html' import page_head %}
+{% block title %}Launches — Nullius{% endblock %}
+{% block crumb %}/ launches{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
+<script src="{{ url_for('static', filename='tables.js') }}"></script>{% endblock %}
+
+{#- A workspace that holds the launch: opened on the Runs page at that launch. #}
+{% macro open_at(ws, L, label) %}
+{%- if workspace and ws.name == workspace.name %}<a href="{{ url_for('launch_open', key=L.key) }}">{{ label }}</a>
+{%- else %}<form method="post" action="{{ url_for('workspace_open', name=ws.name) }}" class="header-form launch-open"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="launch" value="{{ L.key }}"><button class="linkish" type="submit">{{ label }}</button></form>{% endif %}
+{%- endmacro %}
+
+{#- A run state as its icon, the word its tooltip and name. #}
+{% macro state_icon(state) %}{% set icon = {'running': 'play', 'preparing': 'hourglass', 'stopping': 'stopping', 'paused': 'pause', 'failed': 'alert',
+  'refused': 'refused', 'stopped': 'stop', 'finished': 'check'} %}
+{%- if state %}<svg class="ic st-{{ state }}" role="img" aria-label="{{ state }}"><title>{{ state }}</title><use href="#i-{{ icon[state] }}"/></svg>{% endif %}
+{%- endmacro %}
+
+{#- A launch's row: what its search and filters read. #}
+{% macro launch_tr(r) %}{% set L = r.launch %}{% set wss = r.workspaces %} data-launch="{{ L.key }}" data-search="{{ ([L.key, L.title, r.bench[0] if r.bench else ''] + r.agents + wss|map(attribute='label')|list)|select|join(' ') }}" data-f-bench="{{ r.bench[0] if r.bench }}" data-f-dataset="{{ r.datasets|map('first')|join('\n') }}" data-f-state="{{ r.state }}" data-f-machines="{{ r.machines|join('\n') }}" data-f-ws="{{ wss|map(attribute='name')|join('\n') }}"{% endmacro %}
+
+{#- A benchmark or a dataset: linked to its catalogue page when it has one. #}
+{% macro entry(e) %}{% if e[1] %}<a href="{{ e[1] }}">{{ e[0] }}</a>{% else %}{{ e[0] }}{% endif %}{% endmacro %}
+
+{% block body %}
+{{ page_head('Launches') }}
+
+{% if rows %}
+{% set cols = [dict(key='state', label='State', type='num', align='left', sticky=true, sr=true, fixed=true), dict(key='launch', label='Launch', sticky=true, menu=false, width='expand'),
+               dict(key='bench', label='Benchmark'), dict(key='dataset', label='Dataset'), dict(key='started', label='Started', type='num', align='left'),
+               dict(key='runs', label='Runs', type='num'), dict(key='checks', label='Checks', type='num', off=true),
+               dict(key='shards', label='Shards', type='num'), dict(key='machines', label='Machines', off=true),
+               dict(key='size', label='Size', type='num', off=true), dict(key='ws', label='Workspaces'), dict(key='actions', label='Actions', blank=true)] %}
+{% call(r, c) table('launches', cols, rows, launch_tr, search='Search by launch, agent, benchmark or workspace', columns=true, choices=choices, only=only, empty='No launch matches.', noun='launches') %}
+  {%- set L = r.launch %}{% set wss = r.workspaces %}
+  {%- if c.key == 'state' %}{% call cell(c, sort=telling.index(r.state) if r.state in telling else telling|length) %}{{ state_icon(r.state) }}{% endcall %}
+  {%- elif c.key == 'launch' %}{% call cell(c, sort=L.title) %}{% if wss %}{{ open_at(wss[0], L, L.title) }}{% else %}{{ L.title }}{% endif %}{% endcall %}
+  {%- elif c.key == 'bench' %}{% call cell(c) %}{% if r.bench %}{{ entry(r.bench) }}{% endif %}{% endcall %}
+  {%- elif c.key == 'dataset' %}{% call cell(c) %}{% for d in r.datasets %}{{ entry(d) }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% endcall %}
+  {%- elif c.key == 'started' %}{% call cell(c, sort=L.started|ts, class='faint') %}{{ L.started|dt }}{% endcall %}
+  {%- elif c.key == 'runs' %}{% call cell(c) %}{{ r.n_runs }}{% endcall %}
+  {%- elif c.key == 'checks' %}{% call cell(c) %}{{ r.n_checks }}{% endcall %}
+  {%- elif c.key == 'shards' %}{% call cell(c) %}{{ r.shards or 1 }}{% endcall %}
+  {%- elif c.key == 'machines' %}{% call cell(c, sort=r.machines|sort|join(' ')) %}{{ r.machines|join(', ') }}{% endcall %}
+  {%- elif c.key == 'size' %}{% call cell(c, sort=r.bytes, class='nowrap') %}{{ r.bytes|filesizeformat }}{% endcall %}
+  {%- elif c.key == 'ws' %}{% call cell(c, sort=wss|map(attribute='label')|sort|join(' ')) %}{% for w in wss %}{{ open_at(w, L, w.label) }}{% if not loop.last %}<br>{% endif %}{% else %}<span class="faint">none</span>{% endfor %}{% endcall %}
+  {%- elif c.key == 'actions' %}{% call cell(c, class='acts-col') %}
+        <button type="button" class="icon-btn launch-add-btn" aria-haspopup="dialog" aria-label="Add launch {{ L.title }} to a workspace" title="Add to workspace" data-add="{{ url_for('launch_add', key=L.key) }}" data-title="{{ L.title }}"><svg class="ic"><use href="#i-ws-add"/></svg></button>
+        {% if not r.why %}{{ delete_ask(L, none, 'launches', icon=true) }}
+        {%- else %}{{ greyed('Delete launch ' ~ L.title, 'Delete launch', r.why, 'why-' ~ L.key) }}{% endif %}
+      {% endcall %}
+  {%- endif %}
+{% endcall %}
+{#- Add, once for the page: its button fills in the launch, and drops the workspaces its row already lists. #}
+<template class="launch-add">
+  <div class="std-how-head"><h2 id="launch-delete-h"></h2></div>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>Workspace <select name="workspace">{% for w in workspaces %}<option value="{{ w.name }}">{{ w.label }}</option>{% endfor %}<option value="">New workspace…</option></select></label>
+    <label class="launch-add-new">Name <input type="text" name="label" placeholder="Optional" spellcheck="false" autocomplete="off"></label>
+    <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost">Cancel</button><button type="submit" class="btn">Add</button></div>
+  </form>
+</template>
+{{ dialogs({'launch-delete-btn': 'launch-ask', 'launch-add-btn': 'launch-add'}) }}
+<script>
+(() => {
+  // ?ws= ticked its workspace alone at load; from here the filter lives in the page, as the others do
+  const url = new URL(location.href);
+  if (url.searchParams.has('ws')) { url.searchParams.delete('ws'); history.replaceState(history.state, '', url); }
+  // after dialogs() has drawn the Add template: this launch's heading, action and the workspaces it is not in yet
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.launch-add-btn');
+    if (!b) return;
+    const d = document.getElementById('launch-delete'), has = b.closest('[data-launch]').dataset.fWs.split('\n');
+    d.querySelector('h2').textContent = 'Add launch ' + b.dataset.title;
+    d.querySelector('form').action = b.dataset.add;
+    d.querySelectorAll('option[value]:not([value=""])').forEach(o => { if (has.includes(o.value)) o.remove(); });
+  });
+})();
+</script>
+{% else %}
+<div class="alert">No launch yet.</div>
+{% endif %}
+{% endblock %}

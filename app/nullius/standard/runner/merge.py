@@ -9,8 +9,9 @@ verdicts, the earliest start and the latest end - and its ``config.json``
 the shards' with ``shard`` taken out and ``merged_from`` put in.
 
 What is merged must be one launch: the same launch id, benchmark and
-version, dataset, agent or capability and model, and the same number of shards
-- else it is refused, naming what differs, unless ``force``. Two trials of
+version, dataset, agent or capability and model, the same serving providers
+pinned for each model (``served_by``) and the same number of shards - else it
+is refused, naming what differs, unless ``force``. Two trials of
 one unit are always refused, with the units named: one of them would be
 counted twice. So are shards whose lists of units (``run.units_file``) hold
 different units, or a shard of a list and one of none: the merged job
@@ -18,7 +19,11 @@ records one list. The units are compared in any order; a list's name,
 comments, line endings and sha256 may differ from shard to shard, and the
 merged job records the first shard's list. Units no shard ran
 are not a refusal - a shard may be missing, or stopped early - and are said:
-the shards absent, and the units a shard planned and has no trial for.
+the shards absent, and the units a shard planned and has no trial for. A
+trial whose record names another job, benchmark, version, control or agent
+than its shard, or a job itself merged despite differences, is refused
+unless ``force``. Shards run with different benchmark options keep them each
+in ``merged_from``.
 
 Files are hard-linked into the merged job where the file system allows (a
 copy where it does not), so a merge of a thousand trials costs no second
@@ -40,7 +45,13 @@ from nullius.standard.contract.names import backend as backend_name
 SAME = (("launch", ("standard", "launch")), ("benchmark", ("standard", "benchmark")),
         ("benchmark version", ("standard", "benchmark_version")), ("dataset", ("datasets", 0, "name")),
         ("agent or capability", ("standard", "plugged")), ("model", ("agents", 0, "model_name")),
-        ("backend", ("standard", "backend")), ("number of shards", ("standard", "shard", "of")))
+        ("backend", ("standard", "backend")), ("serving providers", ("standard", "served_by")),
+        ("number of shards", ("standard", "shard", "of")), ("retries per attempt", ("standard", "retries")))
+
+
+LISTED = 1000
+OWN = (("benchmark", ("standard", "benchmark")), ("benchmark version", ("standard", "benchmark_version")),
+       ("control", ("standard", "control", "name")), ("agent or capability", ("standard", "plugged")))
 
 
 class Refused(Exception):
@@ -67,15 +78,52 @@ def _at(d, path):
     return d
 
 
+def _same(cfg: dict, path) -> object:
+    """What a shard's config says at ``path`` (``SAME``); a shard written before ``retries`` was recorded allowed none."""
+    got = _at(cfg, path)
+    return got or 0 if path == ("standard", "retries") else got
+
+
 def _listed(cfg: dict) -> Optional[tuple]:
     """The units a shard's list holds (``standard.units_file``), sorted; None for a shard of no list."""
     units = _at(cfg, ("standard", "units_file", "units"))
     return tuple(sorted(str(u) for u in units)) if isinstance(units, list) else None
 
 
+def _served(shards: List[dict], results: List[dict]) -> Optional[dict]:
+    """The merged job's ``served`` (``job.served_total``), made of each shard's whole one - its trials' and its
+    benchmark relay's calls, an ``unknown`` kept - else, for a shard that has none, of its trials'. A model the
+    shards pinned differently - merged with ``force`` - reads ``unknown``: the merged config keeps the first
+    shard's pin, which the others' calls were never held to."""
+    parts = []
+    for s in shards:
+        whole = (s.get("result") or {}).get("served")
+        if isinstance(whole, dict):
+            parts.append(whole)
+        else:
+            parts.append(job.served_total([r for r in results if (r.get("standard") or {}).get("shard_job") == s.get("name")]))
+    who = job.served_total([{"standard": {"served": p}} for p in parts if p])
+    pins = [_at(s["config"], ("standard", "served_by")) or {} for s in shards]
+    pins = [p if isinstance(p, dict) else {} for p in pins]
+    differ = sorted(m for m in {m for p in pins for m in p} if len({json.dumps(p.get(m)) for p in pins}) > 1)
+    if differ:
+        who = who or {"calls": {}, "unnamed": 0}
+        who["held"] = dict(who.get("held") or {}, **{m: "unknown" for m in differ})
+    return who
+
+
 def _trials(job_dir: str) -> List[str]:
     return sorted(n for n in os.listdir(job_dir)
                   if not n.startswith(".") and os.path.isfile(os.path.join(job_dir, n, "result.json")))
+
+
+def _tries(job_dir: str, trial: str) -> List[str]:
+    """The tries of ``trial`` before its last, kept in the job's ``retried/`` (``run.run_again``): their folders' names."""
+    kept = os.path.join(job_dir, "retried")
+    if not os.path.isdir(kept):
+        return []
+    return sorted(n for n in os.listdir(kept) if n.startswith(trial + ".try-") and n[len(trial) + 5:].isdigit()
+                  and os.path.isfile(os.path.join(kept, n, "result.json")))
 
 
 def _link_tree(src: str, dest: str) -> None:
@@ -123,14 +171,15 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
                       + " (--force does not merge them)")
     differ = []
     for label, path in SAME:
-        seen = {json.dumps(_at(s["config"], path)) for s in shards}
+        seen = {json.dumps(_same(s["config"], path), sort_keys=True) for s in shards}      # a mapping by its content
         if len(seen) > 1:
-            differ.append(f"{label}: " + ", ".join(f"{s['name']} {_at(s['config'], path)!r}" for s in shards))
+            differ.append(f"{label}: " + ", ".join(f"{s['name']} {_same(s['config'], path)!r}" for s in shards))
     if differ and not force:
         raise Refused("the shards are not of one launch - " + "; ".join(differ) + " (--force merges them anyway)")
     # every trial by its unit: two of one unit are never merged, force or not
     by_unit: Dict[str, List[tuple]] = {}
     names: Dict[str, List[str]] = {}
+    foreign = []
     for s in shards:
         s["trials"] = _trials(s["dir"])
         s["results"] = [_read(os.path.join(s["dir"], t, "result.json")) for t in s["trials"]]
@@ -138,6 +187,22 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
             unit = _at(res, ("standard", "unit")) or t
             by_unit.setdefault(str(unit), []).append((s["name"], t))
             names.setdefault(t, []).append(s["name"])
+            wrong = [label for label, path in OWN if _at(res, path) != _at(s["config"], path)]
+            if _at(res, ("standard", "job")) != (s["config"].get("job_name") or s["name"]):
+                wrong.append("job")
+            if wrong:
+                foreign.append(f"{s['name']}/{t} names another {', '.join(wrong)} than its job")
+    inherited = [f"{s['name']}: {w}" for s in shards for w in _at(s["config"], ("standard", "merged_despite")) or []]
+    if inherited:
+        if not force:
+            raise Refused("a job given was itself merged despite differences - " + "; ".join(inherited[:5])
+                          + " (--force merges it anyway, and the merge says so)")
+        differ += inherited
+    if foreign:
+        shown = f"{len(foreign)} trial(s) not of the job they are in: " + "; ".join(foreign[:5]) + (" ..." if len(foreign) > 5 else "")
+        if not force:
+            raise Refused(shown + " (--force merges them anyway, and the merge says so)")
+        differ.append(shown)
     twice = {u: w for u, w in by_unit.items() if len(w) > 1}
     if twice:
         shown = "; ".join(f"{u} in {', '.join(f'{j}/{t}' for j, t in w)}" for u, w in sorted(twice.items())[:10])
@@ -152,9 +217,10 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
     if len(of) == 1:
         n = of.pop()
         have = sorted(s["shard"].get("index") for s in shards if s["shard"])
-        absent = [i for i in range(1, (n or 0) + 1) if i not in have]
-        if absent:
-            notes.append(f"shard{'s' if len(absent) > 1 else ''} {', '.join(f'{i}/{n}' for i in absent)} not in the merge")
+        if isinstance(n, int) and n <= LISTED:
+            absent = [i for i in range(1, n + 1) if i not in have]
+            if absent:
+                notes.append(f"shard{'s' if len(absent) > 1 else ''} {', '.join(f'{i}/{n}' for i in absent)} not in the merge")
         dup = sorted({i for i in have if have.count(i) > 1})
         if dup:
             notes.append(f"shard{'s' if len(dup) > 1 else ''} {', '.join(f'{i}/{n}' for i in dup)} given more than once (their units differ)")
@@ -205,8 +271,9 @@ def _budget(budgets: list) -> Optional[dict]:
 
 
 def result_of(shards: list, results: List[dict]) -> dict:
-    """The merged job's ``result.json``, but its ``id``: ``shards`` as ``check`` reads them, ``results`` every
-    trial's record. The runs page folds a launch's shards with it (``runs.launches.fold``)."""
+    """The merged job's ``result.json``, but its ``id`` and its ``served`` (``_served``, which ``merge`` adds):
+    ``shards`` as ``check`` reads them, ``results`` every trial's record. The runs page folds a launch's shards
+    with it (``runs.launches.fold``)."""
     planned = sum(int(s["result"].get("n_total_trials") or len(s["trials"])) for s in shards)
     starts = [s["result"].get("started_at") for s in shards if s["result"].get("started_at")]
     ends = [s["result"].get("finished_at") for s in shards if s["result"].get("finished_at")]
@@ -218,7 +285,8 @@ def result_of(shards: list, results: List[dict]) -> dict:
     return {"started_at": min(starts) if starts else None, "finished_at": max(ends) if ends else None,
             "n_total_trials": planned,
             "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
-                      "n_cancelled_trials": max(0, planned - len(results)), "n_running_trials": 0, "n_pending_trials": 0},
+                      "n_cancelled_trials": max(0, planned - len(results)), "n_running_trials": 0, "n_pending_trials": 0,
+                      "n_retries": job.n_retries(results)},
             "standard": {"passed": sum(1 for w in rewards if w.get("reward") == 1.0),
                          "scored": len(scores), "mean_score": job.mean_score(results)},
             **({"budget": budget} if budget else {})}
@@ -237,26 +305,35 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
     results = []
     for s in shards:
         for t in s["trials"]:
-            src, dest = os.path.join(s["dir"], t), os.path.join(out, t)
-            _link_tree(src, dest)
-            # the trial's record is its own copy, naming the merged job and the shard it came from
-            res = _read(os.path.join(src, "result.json"))
-            std = dict(res.get("standard") or {}, job=name, shard_job=s["name"])
-            res["standard"] = std
-            os.unlink(os.path.join(dest, "result.json"))
-            with open(os.path.join(dest, "result.json"), "w", encoding="utf-8") as f:
-                json.dump(res, f, indent=1)
-            results.append(res)
+            # the trial, and each of its tries before it a retry kept (``retried/``), as the pages read them
+            for src, dest in [(os.path.join(s["dir"], t), os.path.join(out, t))] + [
+                    (os.path.join(s["dir"], "retried", k), os.path.join(out, "retried", k)) for k in _tries(s["dir"], t)]:
+                _link_tree(src, dest)
+                # the record is its own copy, naming the merged job and the shard it came from
+                res = _read(os.path.join(src, "result.json"))
+                std = dict(res.get("standard") or {}, job=name, shard_job=s["name"])
+                res["standard"] = std
+                os.unlink(os.path.join(dest, "result.json"))
+                with open(os.path.join(dest, "result.json"), "w", encoding="utf-8") as f:
+                    json.dump(res, f, indent=1)
+            results.append(_read(os.path.join(out, t, "result.json")))
     summary = result_of(shards, results)
     planned = summary["n_total_trials"]
     with open(os.path.join(out, "result.json"), "w", encoding="utf-8") as f:
-        json.dump({"id": name, **summary}, f, indent=1)
+        json.dump({"id": name, **summary, **({"served": who} if (who := _served(shards, results)) else {})}, f, indent=1)
     cfg = json.loads(json.dumps(shards[0]["config"]))
     cfg["job_name"] = name
     std = cfg.setdefault("standard", {})
     std.pop("shard", None)
+    own = len({json.dumps(_at(s["config"], ("standard", "benchmark_options")), sort_keys=True) for s in shards}) > 1
+    if own:
+        std.pop("benchmark_options", None)
     std["merged_from"] = [{"job": s["name"], "trials": len(s["trials"]),
-                           **({"shard": f"{s['shard'].get('index')}/{s['shard'].get('of')}"} if s["shard"] else {})} for s in shards]
+                           **({"shard": f"{s['shard'].get('index')}/{s['shard'].get('of')}"} if s["shard"] else {}),
+                           **({"benchmark_options": _at(s["config"], ("standard", "benchmark_options")) or {}} if own else {}),
+                           **({"merged_from": _at(s["config"], ("standard", "merged_from"))}
+                              if _at(s["config"], ("standard", "merged_from")) else {})}
+                          for s in shards]
     if got["units_total"] is not None:
         std["units_total"] = got["units_total"]
     if got["differ"]:

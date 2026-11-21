@@ -1,12 +1,11 @@
 # Sandbox
 
-Docker or Podman on this machine, where agents run apart from it. Under **Execution**.
+Where agents run apart from this machine: Boat VMs. Under **Execution**.
 
 | Card | Does |
 | --- | --- |
-| Engine | Docker or Podman: whether it answers, its name and version; why not when it does not |
+| Boat | The [Boat backend](../standard.md#the-boat-backend)'s API key, never shown again. `BOAT_API_KEY` wins |
 
 | Rule | |
 | --- | --- |
-| Hosts | This machine only; a run host keeps its own login and images |
-| Code | `app/nullius/sandbox.py` |
+| Code | `app/nullius/standard/boat.py` |

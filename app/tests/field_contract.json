@@ -1,5 +1,21 @@
 {
  "artifacts": {},
+ "attempts": {
+  "Attempts": [
+   "endings",
+   "has_verdicts",
+   "mean_score",
+   "n",
+   "n_infra",
+   "n_passed",
+   "n_ran",
+   "n_scored",
+   "ran",
+   "rate",
+   "scores",
+   "trials"
+  ]
+ },
  "behavior": {
   "Behavior": [
    "edit_test_cycles",
@@ -90,7 +106,8 @@
    "timeouts",
    "title",
    "upstream_limitations",
-   "usable_routes"
+   "usable_routes",
+   "versions"
   ],
   "Catalog": [
    "_folders",
@@ -118,6 +135,59 @@
    "reason",
    "summary",
    "usable"
+  ]
+ },
+ "categorical": {
+  "Mark": [
+   "cls",
+   "h",
+   "r",
+   "shape",
+   "title",
+   "w",
+   "x",
+   "x2",
+   "y",
+   "y2"
+  ],
+  "Metric": [
+   "fmt",
+   "label",
+   "values"
+  ],
+  "Panel": [
+   "height",
+   "marks",
+   "table",
+   "texts",
+   "title",
+   "viewbox",
+   "width"
+  ],
+  "Style": [
+   "axes",
+   "draw",
+   "label"
+  ],
+  "Text": [
+   "anchor",
+   "cls",
+   "leading",
+   "lines",
+   "x",
+   "y"
+  ],
+  "Value": [
+   "baseline",
+   "check",
+   "label",
+   "name",
+   "note",
+   "reading",
+   "series",
+   "tag",
+   "text",
+   "value"
   ]
  },
  "charts": {
@@ -249,6 +319,7 @@
    "excluded_trials",
    "jobs",
    "n_differing",
+   "pass_k",
    "references",
    "repeated_trials",
    "selected",
@@ -271,9 +342,12 @@
    "attempts",
    "dataset",
    "differs",
+   "movement",
+   "rate_moved",
    "shared",
    "task",
-   "trials"
+   "trials",
+   "tried"
   ]
  },
  "conversation": {},
@@ -325,6 +399,7 @@
    "raw_solve_rate",
    "reasoning_effort",
    "reports_regressions",
+   "retries",
    "runner",
    "runner_commit",
    "runner_items",
@@ -371,6 +446,7 @@
    "n_output_tokens",
    "n_parts",
    "n_rate_limited_retries",
+   "n_retries",
    "outcome",
    "outcome_label",
    "p2p_fail",
@@ -382,6 +458,7 @@
    "patch_exists",
    "phases",
    "reasoning_effort",
+   "retried_cost_usd",
    "reward",
    "score",
    "source",
@@ -517,6 +594,7 @@
  },
  "workspace": {
   "Workspace": [
+   "closed",
    "created",
    "dir",
    "imports_dir",

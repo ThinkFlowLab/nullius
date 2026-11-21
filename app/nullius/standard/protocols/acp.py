@@ -43,6 +43,10 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 PROTOCOL_VERSION = 1
+# How long an agent has to answer each of the two requests that set it up: together, the limit of
+# a unit's agent setup (``run``).
+INITIALIZE_SECONDS = 120
+SESSION_SECONDS = 180
 
 
 class AgentFailed(Exception):
@@ -135,7 +139,7 @@ class Client:
         self.info = self.request("initialize", {"protocolVersion": PROTOCOL_VERSION,
                                                 "clientCapabilities": {"fs": {"readTextFile": self.fs, "writeTextFile": self.fs},
                                                                        "terminal": False, "session": {"notices": {}}},
-                                                "clientInfo": {"name": "nullius", "version": "1"}}, timeout=120)
+                                                "clientInfo": {"name": "nullius", "version": "1"}}, timeout=INITIALIZE_SECONDS)
         return self
 
     def _send(self, msg: dict):
@@ -242,11 +246,11 @@ class Client:
                     "env": [{"name": k, "value": v} for k, v in (s.get("env") or {}).items()]} for s in mcp or []]
         params = {"cwd": os.path.abspath(cwd), "mcpServers": servers}
         try:
-            res = self.request("session/new", params, timeout=180)
+            res = self.request("session/new", params, timeout=SESSION_SECONDS)
         except AgentFailed as e:
             if "auth" not in str(e).lower() or not self.authenticate():
                 raise
-            res = self.request("session/new", params, timeout=180)
+            res = self.request("session/new", params, timeout=SESSION_SECONDS)
         sid = res["sessionId"]
         self.roots[sid] = os.path.abspath(cwd)
         return sid

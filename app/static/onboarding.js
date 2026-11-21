@@ -89,12 +89,13 @@
       <p>A one-minute look at the main pages, then a checklist that takes you to a first result:</p>
       <ul><li>Set up a key and where runs happen</li><li>A free check run: oracle and nop call no model</li><li>Read the result, then compare an agent's run</li></ul>
       <div class="onb-actions"><button class="btn ghost" type="button" data-a="no">No, I'll explore</button><button class="btn" type="button" data-a="yes">Yes, guide me</button></div></div>`;
+    const back = document.activeElement;
     document.body.append(layer);
     layer.querySelector('[data-a=yes]').focus();
     layer.addEventListener('click', e => {
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (!a) return;
-      S.asked = true; S.open = a === 'yes'; save(); layer.remove();
+      S.asked = true; S.open = a === 'yes'; save(); layer.remove(); back?.focus();
       if (a === 'yes') startTour(); else renderPanel();
     });
   }

@@ -262,10 +262,10 @@ class AddBenchmark(unittest.TestCase):
                 self.assertEqual(Path(self.root, "benchmarks", "longmemeval", name).read_bytes(), content)
         self.assertFalse(os.path.exists(os.path.join(self.root, "benchmarks", "code-bench")))   # no second entry
         cards = self.get("/benchmarks").get_data(as_text=True)
-        self.assertEqual(cards.count('<a class="bench-card" href="/benchmarks/longmemeval"'), 1)
-        self.assertIn('data-runs="standard harbor"', cards)
-        card = cards[cards.index('<a class="bench-card" href="/benchmarks/longmemeval"'):]
-        card = card[:card.index("</a>")]
+        self.assertEqual(cards.count('<a class="card-link" href="/benchmarks/longmemeval"'), 1)
+        self.assertIn('data-f-runs="standard&#10;harbor&#10;"', cards)
+        card = cards[cards.index('data-keys="longmemeval '):]
+        card = card[:card.index("</article>")]
         self.assertEqual([x for x in ("rt-harbor", "rt-standard", "rt-runner") if x in card], ["rt-harbor", "rt-standard"])
         node = shutil.which("node")
         if node:                                                                                   # its Harbor dataset opens a Harbor recipe, its own the standard's

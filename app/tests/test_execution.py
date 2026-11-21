@@ -84,14 +84,14 @@ class Here(Base):
         self.assertLessEqual({"API_KEY_TYPESAFE", "API_TOKEN"}, set(execution.withheld()))     # old spellings of a secret
         self.assertEqual({"HOST", "PORT"} & set(execution.withheld()), set())                 # old names of start-up options are no secret
         held = {n: "sk-held-" + n.lower() for n in execution.withheld()}
-        plan = execution.Plan(name="own", script="env", model="m", key_var="OPENROUTER_API_KEY", url_var="", base_url=providers.PROVIDER_BASE["openrouter"])
+        plan = execution.Plan(name="own", script="env", model="m", key_var="OPENROUTER_API_KEY", url_var="", base_url=providers.PRESETS["openrouter"]["base"])
         with mock.patch.dict(os.environ, held):
             self.assertEqual([k for k in execution._clean_env() if k in held], [])
             ex = self.wait(execution.Execution(plan, root=str(self.tmp)).start())
         self.assertEqual((ex.state, ex.error), ("done", None), ex.lines)
         env = dict(l.split("=", 1) for l in (self.tmp / "own" / "run-run.log").read_text().splitlines() if "=" in l)
         self.assertEqual({k: v for k, v in env.items() if v.startswith("sk-held-")}, {n: held["OPENROUTER_API_KEY"] for n in execution.KEY_NAMES})
-        self.assertEqual({n: env.get(n) for n in execution.URL_NAMES}, {n: providers.PROVIDER_BASE["openrouter"] for n in execution.URL_NAMES})
+        self.assertEqual({n: env.get(n) for n in execution.URL_NAMES}, {n: providers.PRESETS["openrouter"]["base"] for n in execution.URL_NAMES})
 
     def test_a_run_on_a_named_endpoint_gets_its_url_and_key_alone(self):
         """Several OpenAI-compatible endpoints in Settings: a run on one is sent
@@ -413,6 +413,22 @@ class KeyCutShort(LocalHost):
                     self.assertEqual(marker.read_text().strip(), f"cursor={secret}" if runner == "harbor" else "cursor=none")
                     self.assertNotIn(secret, "\n".join(ex.lines))                                      # redacted from the log
 
+    def test_only_a_standard_run_on_boat_is_handed_the_boat_key(self):
+        # the Boat key starts VMs: over stdin to the standard run that uses it, never inherited by any other
+        secret = "boat_0123456789abcdef"
+        for target, runner, backend in (("here", "standard", "boat"), ("host", "standard", "boat"),
+                                        ("here", "standard", "container"), ("here", "harbor", "")):
+            with self.subTest(target, runner=runner, backend=backend):
+                name = f"boat-{target}-{runner}-{backend or 'none'}"; root = self.tmp / name; marker = root / "seen"
+                parts = [{"id": "a", "label": "a", "script": f'echo "boat=${{BOAT_API_KEY:-none}}" > {marker}; echo "$BOAT_API_KEY"'}]
+                plan = execution.Plan(name=name, script="", parts=parts) if target == "here" else self.plan(parts, name)
+                plan.runner, plan.recipe = runner, ({"backend": backend} if backend else {})
+                with patch.dict(os.environ, {"BOAT_API_KEY": secret}):
+                    ex = self.wait(execution.Execution(plan, root=str(root), key=self.KEY, url=self.URL).start())
+                self.assertEqual(ex.state, "done", ex.lines)
+                self.assertEqual(marker.read_text().strip(), f"boat={secret}" if backend == "boat" else "boat=none")
+                self.assertNotIn(secret, "\n".join(ex.lines))
+
     def test_a_standard_run_on_a_host_is_handed_its_benchmarks_licences_and_here_none(self):
         # on a host: the declared names that are set, one stdin line, in the part's environment and never on disk
         # but for the in-memory folder a licence file is written to, which the part's shell removes when it ends;
@@ -641,6 +657,37 @@ class Refused(Base):
         self.assertIn("is not set in Settings", ex.refused("std-r"))
         alive = execution.Execution(self.plan(), root=str(self.tmp / "runs2"), record={"id": "a", "state": "running"})
         self.assertIsNone(alive.refused("std-r"))                                    # still going: nothing to say yet
+
+
+class RetriedOnHost(unittest.TestCase):
+    """A host's retry moved a trial into retried/ and wrote it again; the copy
+    here, taken without deleting, keeps the earlier try's files under the trial."""
+
+    def test_the_earlier_trys_files_leave_the_trials_copy(self):
+        import tempfile
+        jobs = tempfile.mkdtemp(prefix="nullius-settle-")
+        self.addCleanup(shutil.rmtree, jobs, True)
+        trial, kept = Path(jobs, "job", "t__u0001"), Path(jobs, "job", "retried", "t__u0001.try-1")
+        for d in (trial / "agent", kept / "agent"):
+            d.mkdir(parents=True)
+        def put(path, text, at):
+            path.write_text(text)
+            os.utime(path, (at, at))
+        put(kept / "agent" / "trace.json", "try 1's spans", 1_700_000_000)     # the try, copied whole
+        put(trial / "agent" / "trace.json", "try 1's spans", 1_700_000_000)    # its copy under the trial: stale
+        put(kept / "result.json", '{"try": 1}', 1_700_000_000)
+        put(trial / "result.json", '{"try": 2}', 1_700_000_900)               # the retry's own, written again
+        put(trial / "agent" / "view.json", "a view saved here", 1_700_000_500)  # never on the host
+        seen = set()
+        execution.settle_retried(jobs, seen)
+        self.assertFalse((trial / "agent" / "trace.json").exists())
+        self.assertEqual((trial / "result.json").read_text(), '{"try": 2}')
+        self.assertTrue((trial / "agent" / "view.json").exists())
+        self.assertEqual((kept / "agent" / "trace.json").read_text(), "try 1's spans")   # the kept try itself is untouched
+        self.assertEqual(seen, {str(kept)})
+        put(trial / "agent" / "trace.json", "try 1's spans", 1_700_000_000)
+        execution.settle_retried(jobs, seen)                                   # settled once: its copy was whole then
+        self.assertTrue((trial / "agent" / "trace.json").exists())
 
 
 class TasksOnHost(unittest.TestCase):

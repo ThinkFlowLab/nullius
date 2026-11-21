@@ -1,14 +1,17 @@
 """A trial: its trace, trajectory, conversation, artifacts and saved views."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import re
 import threading
 from collections import OrderedDict
-from flask import abort, flash, jsonify, redirect, render_template, request, url_for
+from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 from markupsafe import Markup, escape
 from nullius.traces import behavior, charts, conversation, trace, trajectory
-from nullius.runs import artifacts, parse
+from nullius.runs import artifacts, attempts as task_attempts, parse
+from nullius import importers as harnesses
 
 from .core import app
 from . import shared
@@ -72,16 +75,47 @@ def _gold_localization(job, trial, traj):
     return None
 
 
+# An attempt's try before its last, as a page addresses it (parse.tries)
+_TRY_RE = re.compile(r"^(?P<trial>.+)\.try-(?P<n>[1-9][0-9]?)$")
+
+
 def _find_trial(job, trial_name):
     return next((x for x in job.trials if x.trial_name == trial_name), None)
 
 
-def _trial_evidence(job_id, trial_name):
-    """Resolve URL identifiers through parsed runs, never as filesystem paths."""
-    job = shared._find_job(shared._jobs_for_request(), job_id)
+def _tries(attempt):
+    """``parse.tries`` of an attempt, read once a request: a try's page finds
+    its try in the same list its tabs show."""
+    seen = g.setdefault("tries", {})
+    key = (attempt.job_id, attempt.trial_name)
+    if key not in seen:
+        seen[key] = parse.tries(attempt)
+    return seen[key]
+
+
+def _find_try(job, name):
+    m = _TRY_RE.match(name)
+    kept = _find_trial(job, m["trial"]) if m else None
+    return next((t for _, t in _tries(kept) if t.trial_name == name), None) if kept else None
+
+
+def _attempt_of(job, trial):
+    """The trial a try is one of: the attempt's last, the one the job counts.
+    A trial of the job is its own."""
+    if any(t is trial for t in job.trials):
+        return trial
+    m = _TRY_RE.match(trial.trial_name)
+    return (_find_trial(job, m["trial"]) if m else None) or trial
+
+
+def _trial_evidence(job_id, trial_name, tries=False):
+    """Resolve URL identifiers through parsed runs, never as filesystem paths.
+    ``tries``: an attempt's earlier try too, ``<trial>.try-N``: evidence to
+    read, never a trial to judge."""
+    job = shared._job_for_request(job_id)
     if job is None:
         abort(404)
-    trial = _find_trial(job, trial_name)
+    trial = _find_trial(job, trial_name) or (_find_try(job, trial_name) if tries else None)
     if trial is None:
         abort(404)
     return job, trial
@@ -139,7 +173,7 @@ def _parsed_trace(path, filt):
 
 @app.route("/trial/<job_id>/<trial_name>/artifact/<key>")
 def artifact_page(job_id, trial_name, key):
-    job, trial = _trial_evidence(job_id, trial_name)
+    job, trial = _trial_evidence(job_id, trial_name, tries=True)
     try:
         record = artifacts.read(trial.dir, key, request.args.get("page", 1))
     except (LookupError, OSError):
@@ -150,9 +184,31 @@ def artifact_page(job_id, trial_name, key):
     return response
 
 
+@app.route("/trial/<job_id>/<trial_name>/artifact/<key>/download")
+def artifact_download(job_id, trial_name, key):
+    """The record whole, redacted as the reader shows it: what Download saves
+    and Copy puts on the clipboard. One past the reader's limit is cut there,
+    as its page says, and saved under a name that says so."""
+    _, trial = _trial_evidence(job_id, trial_name, tries=True)
+    try:
+        text, truncated = artifacts.whole(trial.dir, key)
+    except (LookupError, OSError):
+        abort(404)
+    name = os.path.basename(artifacts.FILES[key][1])
+    if truncated:
+        stem, ext = os.path.splitext(name)
+        name = f"{stem}.partial{ext}"
+    response = app.response_class(text, mimetype="application/json" if name.endswith(".json") else "text/plain")
+    if not request.args.get("inline"):
+        response.headers["Content-Disposition"] = f'attachment; filename="{name}"'
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"      # a run's own text, shown as text whatever it holds
+    return response
+
+
 @app.route("/trial/<job_id>/<trial_name>/conversation")
 def conversation_data(job_id, trial_name):
-    _, t = _trial_evidence(job_id, trial_name)
+    _, t = _trial_evidence(job_id, trial_name, tries=True)
     traj = trajectory.load(t.trajectory_path) if t.has_trajectory else None
     payload = conversation.page(
         traj, query=request.args.get("q", ""), kind=request.args.get("kind", "all"),
@@ -167,7 +223,7 @@ def conversation_data(job_id, trial_name):
 
 @app.route("/trial/<job_id>/<trial_name>/trace-span")
 def trace_span_data(job_id, trial_name):
-    _, t = _trial_evidence(job_id, trial_name)
+    _, t = _trial_evidence(job_id, trial_name, tries=True)
     tr, _ = _requested_trace(t)
     try:
         payload = conversation.span_detail(
@@ -181,18 +237,26 @@ def trace_span_data(job_id, trial_name):
     return response
 
 
+def _imported_from(job) -> str:
+    """The importer's name for a job an importer wrote (``harness`` in its ``config.json``: ATIF,
+    OpenTelemetry), else "". Such a job has no benchmark and no runner: its pages say where it came from."""
+    try:
+        with open(os.path.join(job.dir, "config.json"), encoding="utf-8") as fh:
+            name = json.load(fh).get("harness")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    module = harnesses.available().get(name) if isinstance(name, str) else None
+    return getattr(module, "LABEL", name.upper()) if module else ""
+
+
 @app.route("/trial/<job_id>/<trial_name>")
 def trial(job_id, trial_name):
-    j, t = _trial_evidence(job_id, trial_name)
+    j, t = _trial_evidence(job_id, trial_name, tries=True)
+    attempt = _attempt_of(j, t)            # t itself, or the attempt's last try when t is an earlier one
     traj = trajectory.load(t.trajectory_path) if t.has_trajectory else None
     ok = traj is not None and not traj.error
-    bench_judge = bench_parts = None
-    if j.runner:                                   # the benchmark's own judge: what it was asked, what it said
-        try:
-            with open(os.path.join(t.dir, "verifier", "judge.json"), encoding="utf-8") as fh:
-                bench_judge = json.load(fh)
-        except (OSError, ValueError):
-            pass
+    bench_parts = None
+    if j.runner:
         try:                                       # an item scored part by part: each part's text, answer and score
             with open(os.path.join(t.dir, "verifier", "parts.json"), encoding="utf-8") as fh:
                 got = json.load(fh)
@@ -217,20 +281,37 @@ def trial(job_id, trial_name):
     # filtered view by construction, so there is one definition of "which spans
     # are in this view" and it is still the query string.
     ch = charts.charts_for(tr.roots, cfilt) if tr and tr.visible else None
-    records = artifacts.listing(t.dir)
+    records = [r for r in artifacts.listing(t.dir) if r["exists"]]   # a record never written has no row
     for record in records:
         record["url"] = url_for("artifact_page", job_id=job_id, trial_name=trial_name,
                                 key=record["key"], workspace=request.args.get("workspace"))
+        record["download"] = url_for("artifact_download", job_id=job_id, trial_name=trial_name,
+                                     key=record["key"], workspace=request.args.get("workspace"))
     return render_template(
-        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_judge=bench_judge, bench_parts=bench_parts,
-        trace=tr, charts=ch, viewing=viewing,
+        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts,
+        trace=tr, charts=ch, viewing=viewing, imported_from=_imported_from(j),
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
-        artifacts=records,
-        judgement=_judgement_panel(j, t), llm_judgement=_judgement_panel(j, t, "llm"), csrf=shared._csrf_token(),
+        artifacts=records, attempt=attempt, attempts=task_attempts.of(j, attempt), tries=_tries(attempt),
+        # an earlier try is evidence only: the job counts its last, and only that is judged
+        judgement=_judgement_panel(j, t) if attempt is t else None,
+        llm_judgement=_judgement_panel(j, t, "llm") if attempt is t else None, csrf=shared._csrf_token(),
     )
 
 
-def _judgement_panel(job, trial, lane="system-one"):
+@app.route("/trial/<job_id>/<trial_name>/attempts")
+def trial_attempts(job_id, trial_name):
+    """Every attempt at this trial's task, one line each, and a line for each
+    earlier try its runner kept."""
+    j, t = _trial_evidence(job_id, trial_name, tries=True)
+    t = _attempt_of(j, t)
+    # a task tried once has no tab that leads here; its one line still answers
+    attempts = task_attempts.of(j, t) or task_attempts.Attempts((t,))
+    tries = {a.trial_name: _tries(a) for a in attempts.trials if a.n_retries}
+    return render_template("traces/attempts.html", job=j, trial=t, attempts=attempts, tries=tries,
+                           imported_from=_imported_from(j))
+
+
+def _judgement_panel(job, trial, lane="decision"):
     from . import judge
     return judge.panel(job, trial, lane)
 
@@ -245,7 +326,7 @@ def save_trace(job_id, trial_name):
     is not reproducible, so nothing here may overwrite one.
     """
     shared._require_csrf()
-    _, t = _trial_evidence(job_id, trial_name)
+    _, t = _trial_evidence(job_id, trial_name, tries=True)
 
     # The zoom rides along only so the page comes back as it was; the file written
     # is the filtered tree whole — a zoom is a way of looking, not a change.
@@ -281,10 +362,7 @@ def save_trace(job_id, trial_name):
     if os.path.realpath(dest) == os.path.realpath(source) or os.path.basename(dest) == "trace.json":
         flash(Markup(f"{shown} is the trace being read — save the view under another name."), "error")
         return redirect(back)
-    if os.path.exists(dest):
-        flash(Markup(f"{shown} already exists; nothing was overwritten."), "error")
-        return redirect(back)
-
+    created = False
     try:
         with open(source, encoding="utf-8") as fh:
             data = json.load(fh)
@@ -292,9 +370,18 @@ def save_trace(job_id, trial_name):
         # producer wrote — including the content this app redacts at render. It is
         # exactly as sensitive as its source.
         out = trace.filtered_document(data, filt)
-        with open(dest, "w", encoding="utf-8") as fh:
-            json.dump(out, fh, ensure_ascii=False, indent=1)
+        text = json.dumps(out, ensure_ascii=False, indent=1)
+        # Exclusive create: a file that appeared since the name was chosen is refused, never replaced.
+        with open(dest, "x", encoding="utf-8") as fh:
+            created = True
+            fh.write(text)
+    except FileExistsError:
+        flash(Markup(f"{shown} already exists; nothing was overwritten."), "error")
+        return redirect(back)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
+        if created:
+            with contextlib.suppress(OSError):
+                os.remove(dest)
         flash(Markup(f"Could not write {shown}: {escape(str(exc))}"), "error")
         return redirect(back)
 

@@ -1,0 +1,49 @@
+{% from '_tables.html' import table, cell, greyed %}
+{% extends "base.html" %}
+{% from '_page.html' import page_head %}
+{% block title %}Recipes — Nullius{% endblock %}
+{% block crumb %}/ recipes{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">{# its dialog #}
+<link rel="stylesheet" href="{{ url_for('static', filename='builder/recipes.css') }}">
+<script src="{{ url_for('static', filename='tables.js') }}"></script>{% endblock %}
+{#- A recipe's row: its step cells and its search are filled by builder/recipes.js. #}
+{% macro recipe_tr(x) %} data-recipe="{{ x.id }}"{% endmacro %}
+
+{% block body %}
+{% set local, why = builder_data.local, builder_data.recipesWhy %}
+{% set actions %}<button type="button" class="btn sm" id="rcp-import"{% if not local %} aria-disabled="true" title="{{ why }}"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-import"/></svg>Import</button>
+  <input type="file" accept=".json,application/json" id="rcp-file" hidden aria-label="Import a recipe JSON file">{% endset %}
+{{ page_head('Recipes', actions=actions) }}
+
+{% if recipes %}
+{#- a column per step of the run builder, 01 to 07, by its key in command-builder-core.js (STEP) #}
+{% set cols = [dict(key='name', label='Name', sticky=true, menu=false, width='expand'), dict(key='benchmark', label='Benchmark'), dict(key='runner', label='Runner'),
+               dict(key='dataset', label='Dataset'), dict(key='agent', label='Agent'), dict(key='model', label='Model'), dict(key='limits', label='Limits'),
+               dict(key='where', label='Where'), dict(key='saved', label='Saved', type='num', align='left'), dict(key='actions', label='Actions', blank=true)] %}
+{% call(x, c) table('recipes', cols, recipes, recipe_tr, search='Search by name, benchmark or agent', columns=true, empty='No recipe matches.', noun='recipes') %}
+  {%- if c.key == 'name' %}{% call cell(c, sort=x.name) %}<span class="rcp-name">{{ x.name }}</span>
+    <span class="rcp-warn" hidden><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg>Cannot run here</span>{% endcall %}
+  {%- elif c.key == 'saved' %}{% call cell(c, sort=x.saved[:19]|replace('-', '')|replace(':', '')|replace('T', ''), class='mono faint nowrap') %}{{ x.saved[:16]|replace('T', ' ') }}{% endcall %}
+  {%- elif c.key == 'actions' %}{% call cell(c, class='acts-col') %}
+    <a class="icon-btn" href="{{ url_for('new_run', saved=x.id) }}" aria-label="Open {{ x.name }} in the run builder" title="Open in the run builder"><svg class="ic"><use href="#i-newrun"/></svg></a>
+    <button type="button" class="icon-btn" data-act="info" aria-haspopup="dialog" aria-label="Info: {{ x.name }}" title="Info"><svg class="ic"><use href="#i-info"/></svg></button>
+    {%- if local %}<button type="button" class="icon-btn" data-act="duplicate" aria-label="Duplicate {{ x.name }}" title="Duplicate"><svg class="ic"><use href="#i-copy"/></svg></button>
+    {%- else %}{{ greyed('Duplicate ' ~ x.name, 'Duplicate', why, 'dup-' ~ x.id, icon='copy', class='icon-btn') }}{% endif %}
+    <button type="button" class="icon-btn" data-act="export" aria-label="Export {{ x.name }}" title="Export JSON"><svg class="ic"><use href="#i-export"/></svg></button>
+    {%- if local %}<button type="button" class="icon-btn danger" data-act="delete" aria-haspopup="dialog" aria-label="Delete {{ x.name }}" title="Delete recipe"><svg class="ic"><use href="#i-trash"/></svg></button>
+    {%- else %}{{ greyed('Delete ' ~ x.name, 'Delete recipe', why, 'del-' ~ x.id) }}{% endif %}
+  {% endcall %}
+  {%- else %}{% call cell(c) %}<span class="rcp-val"></span>{% endcall %}
+  {%- endif %}
+{% endcall %}
+{% else %}
+<div class="alert">No saved recipe yet.{% if local %} <a href="{{ url_for('new_run') }}">Build one <span aria-hidden="true">→</span></a>{% endif %}</div>
+{% endif %}
+<dialog class="std-how launch-delete" id="rcp-dialog" aria-labelledby="rcp-dialog-h"></dialog>
+<script id="rcp-data" type="application/json">{{ dict(schema=builder_data, recipes=recipes, compiled=compiled)|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='builder/command-builder-core.js') }}"></script>
+<script src="{{ url_for('static', filename='builder/recipes.js') }}"></script>
+{% endblock %}

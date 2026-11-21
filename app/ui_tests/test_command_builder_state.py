@@ -11,10 +11,46 @@ from ui_tests.builder_support import AGENT, PIN, CompilerCase
 class StandardBenchmarkSwitch(CompilerCase):
     def test_original_is_default_for_every_benchmark_with_a_reference(self):
         out = self.js('process.stdout.write(JSON.stringify(C.standard().benchmarks.filter(b=>(b.setups||[]).some(s=>s.key==="original"))'
-                      '.map(b=>[b.key,C.createStandard(b.key).others])));')
+                      '.map(b=>[b.key,C.createStandard(b.key).others,(C.ownAgentsOf(b)[0]||{}).key])));')
         self.assertTrue(out)
-        for key, others in out:
-            self.assertEqual(others, ["original"], key)
+        for key, others, own in out:
+            self.assertEqual(others, [own or "original"], key)              # a benchmark with agents of its own: its first
+
+    def test_a_benchmarks_own_agents_are_its_agents_and_greyed_elsewhere(self):
+        out = self.js('const os=C.standardOthers(C.createStandard("osworld1")),g=C.standardOthers(C.createStandard("gsm8k"));'
+                      'const cua=g.find(o=>o.key==="osworld1:openai-cua");'
+                      'process.stdout.write(JSON.stringify([os.filter(o=>o.own).map(o=>o.key).slice(0,2),os.findIndex(o=>!o.own),os.filter(o=>o.own).length,'
+                      'os.some(o=>o.setup&&!o.own),cua.why,cua.benchmark,os.find(o=>o.key==="osworld2:m3").why]));')
+        self.assertEqual(out[0], ["osworld1:m3", "osworld1:prompt"])
+        self.assertEqual((out[1], out[2], out[3]), (12, 12, False))                # first, and no Original tile beside them
+        self.assertEqual((out[4], out[5]), (["OpenAI CUA belongs to OSWorld1"], "osworld1"))   # another benchmark's: the grid's From says so
+        self.assertEqual(out[6], ["MiniMax M3 belongs to OSWorld2"])
+        tags = self.js('const os=C.standardOthers(C.createStandard("osworld1"));'
+                       'process.stdout.write(JSON.stringify([...new Set(os.filter(o=>o.benchmark).map(o=>o.protocol))]));')
+        self.assertEqual(tags, ["Its own script"])                                    # its own and another's read the same
+
+    def test_a_recipe_from_before_reads_as_its_benchmarks_agent(self):
+        out = self.js('const old=o=>C.fromJSON(JSON.stringify({version:1,harness:"standard",benchmark:"osworld1",datasets:["test_small"],others:["original","nop"],bench_options:o}));'
+                      'const a=old({agent:"openai_cua",pause:"1.5"}),b=old({}),c=old({agent:"nope"});'
+                      'a.model_choice="paper";'
+                      'process.stdout.write(JSON.stringify([a.others,a.bench_options,b.others,c.others,C.paperModels(a).models,C.runsOf(a)]));')
+        self.assertEqual(out[0], ["osworld1:openai-cua", "nop"])
+        self.assertEqual(out[1], {"pause": "1.5"})
+        self.assertEqual(out[2], ["osworld1:m3", "nop"])
+        self.assertEqual(out[3], ["osworld1:nope", "nop"])                          # kept, for the server to name
+        self.assertEqual(out[4], ["computer-use-preview"])                          # Like the paper: the chosen agent's models
+        self.assertEqual(out[5], ["original", "nop"])
+
+    def test_no_time_limit_is_forced_until_the_user_types_one(self):
+        """The benchmark's and the agent's own limits apply by themselves: choosing a setup or a
+        benchmark forces none on the recipe, and a saved recipe keeps exactly what it was saved with."""
+        out = self.js('const r=C.createStandard("tau3-bench");const osw=C.createStandard("osworld1");'
+                      'const saved=JSON.parse(JSON.stringify(r));saved.timeouts={agent:45};'
+                      'process.stdout.write(JSON.stringify([r.others,"timeouts" in r,"timeouts" in osw,C.fromJSON(JSON.stringify(saved)).timeouts]));')
+        self.assertEqual(out[0], ["original"])
+        self.assertFalse(out[1])
+        self.assertFalse(out[2])
+        self.assertEqual(out[3], {"agent": 45})
 
     def test_explicit_agent_is_preserved(self):
         out = self.js('const r=C.createStandard("gsm8k");'
@@ -114,6 +150,7 @@ class CommonAndPerAgent(CompilerCase):
         self.assertEqual(out['e'], [])
         bad = self.runs("r.attempts=0;r.verifierTimeoutMultiplier='x'")['e']
         self.assertEqual(sorted(g for g, _ in bad), ['Common', 'Common'])
+        self.assertIn('Attempts per task must be a whole number of at least 1, or empty.', [m for _, m in bad])   # the field's own name
 
     def test_an_agents_own_kwarg_reaches_that_agent_only(self):
         out = self.runs("r.custom=[{scope:'agent',key:'shared',type:'string',value:'s'},{scope:'agent',key:'mine',type:'number',value:'7',agent:'oracle'},{scope:'agent',key:'mine',type:'number',value:'8',agent:'custom-0'}]")
@@ -121,6 +158,24 @@ class CommonAndPerAgent(CompilerCase):
         self.assertIn("--ak 'shared=s'", out['runs']['run-custom-0']); self.assertIn("--ak 'shared=s'", out['runs']['run-oracle'])
         self.assertIn("--ak 'mine=8'", out['runs']['run-custom-0']); self.assertNotIn("--ak 'mine=7'", out['runs']['run-custom-0'])
         self.assertIn("--ak 'mine=7'", out['runs']['run-oracle']); self.assertNotIn("--ak 'mine=8'", out['runs']['run-oracle'])
+
+    def test_a_harbor_recipe_retries_nothing_unless_asked(self):
+        for text in self.runs()['runs'].values():
+            self.assertIn('--max-retries 0', text)
+        for text in self.runs("r.retries=2")['runs'].values():
+            self.assertIn('--max-retries 2', text)
+        # an emptied field is none, as the standard's reads it: never a flag without its value
+        out = self.runs("r.retries=''")
+        self.assertEqual(out['e'], [])
+        for text in out['runs'].values():
+            self.assertIn('--max-retries 0', text)
+        self.assertEqual([m for _, m in self.runs("r.retries=-1")['e']], ['Retries per attempt must be a whole number of at least 0, or empty.'])
+
+    def test_a_standard_recipes_retries_survive_reopening(self):
+        out = self.js('const r=C.createStandard("gsm8k");r.retries=2;'
+                      'process.stdout.write(JSON.stringify([C.fromJSON(JSON.stringify(r)).retries,'
+                      'C.fromJSON(JSON.stringify(Object.assign(r,{retries:10}))).retries,"retries" in C.createStandard("gsm8k")]));')
+        self.assertEqual(out, [2, None, False])
 
     def test_the_common_fields_and_agent_kwargs_survive_a_saved_recipe(self):
         out = self.js('const r=C.create("harbor");r.attempts=2;r.verifierTimeoutMultiplier=1.5;r.custom=[{scope:"agent",key:"k",type:"string",value:"v",agent:"nop"}];'

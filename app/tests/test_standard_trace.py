@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 from nullius.standard.runner import job
 from nullius.traces import trace
@@ -137,8 +139,91 @@ class Written(unittest.TestCase):
                               exception=("UnitSpendingCapError", "its own spending cap"), calls=[call(1, 2), refused, failed], trajectory=None)
         self.assertEqual((res["agent_result"]["n_model_calls"], res["agent_result"]["n_input_tokens"]), (2, 10))
 
+    def scratch(self):
+        d = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
+        self.addCleanup(shutil.rmtree, d, True)
+        return d
+
+    def trial(self, events, calls, **kw):
+        d = self.scratch()
+        traj = job.trajectory_from_events(list(events), list(calls), AGENT, "m", "j/u") if events is not None else None
+        res = job.write_trial(d, job="j", bench=BENCH, other=AGENT, model="m", unit="u", t0=T, t1=T + 40, produce=(T + 1, T + 30),
+                              score=kw.pop("score", {"reward": 1.0}), exception=kw.pop("exception", None), calls=list(calls),
+                              trajectory=traj, setup_end=T + 1, **kw)
+        at = os.path.join(d, "agent", "trace.json")
+        if not os.path.isfile(at):
+            return res, None
+        with open(at) as f:
+            return res, json.load(f)
+
+    #: an agent first asked at T+4, once it is in its session
+    LATE = [ev(4, "user_message_chunk", content={"type": "text", "text": "first"}),
+            ev(6, "agent_message_chunk", content={"type": "text", "text": "done"})]
+
+    def test_the_agent_s_setup_is_its_own_phase_and_its_run_and_its_trace_start_after_it(self):
+        """In its session at T+3: its setup is T+1 to T+3, its run and its
+        trace's window T+3 to T+30, as Harbor's agent_setup and agent_execution are."""
+        res, doc = self.trial(self.LATE, [call(5, 6)], agent_ready=T + 3)
+        self.assertEqual(res["agent_setup"], {"started_at": job.iso(T + 1), "finished_at": job.iso(T + 3)})
+        self.assertEqual(res["agent_execution"], {"started_at": job.iso(T + 3), "finished_at": job.iso(T + 30)})
+        session = doc["spans"][0]
+        self.assertEqual((session["start_ns"], session["end_ns"]), (int((T + 3) * 10**9), int((T + 30) * 10**9)))
+        self.assertEqual(doc["totals"]["wall_ns"], 27 * 10**9)
+        unset, same = self.trial(self.LATE, [call(5, 6)])                      # no clock given: the window is the whole of produce
+        self.assertEqual(same["spans"][0]["start_ns"], int((T + 1) * 10**9))
+        self.assertEqual(same["totals"]["wall_ns"], 29 * 10**9)
+
+    def test_a_call_made_while_the_agent_set_up_widens_its_trace_and_is_never_clamped(self):
+        """A model call at T+2, before the session opened at T+3: it is in the
+        setup, and the trace's session starts with it."""
+        res, doc = self.trial(self.LATE, [call(2, 2.5), call(5, 6)], agent_ready=T + 3)
+        self.assertEqual(res["agent_execution"]["started_at"], job.iso(T + 3))
+        self.assertEqual(doc["spans"][0]["start_ns"], int((T + 2) * 10**9))
+        self.assertEqual(res["agent_result"]["n_model_calls"], 2)             # counted all the same
+
+    def test_a_start_that_ended_with_no_session_is_all_setup_and_no_run(self):
+        """It never answered its start, or exited: Harbor writes a failed agent
+        setup with its window and no agent_execution, and so does a standard run."""
+        res, doc = self.trial(None, [], agent_unready=T + 5, score=None, exception=("AgentSetupTimeoutError", "the agent did not answer initialize in time"))
+        self.assertEqual(res["agent_setup"], {"started_at": job.iso(T + 1), "finished_at": job.iso(T + 5)})
+        self.assertIsNone(res["agent_execution"])
+        self.assertIsNone(doc)
+        self.assertEqual(job.feed_durations(res), {"env_setup": 1.0, "agent_setup": 4.0})
+
+    def test_a_trial_given_no_agent_clock_has_no_setup_phase(self):
+        res, _ = self.trial(None, [])
+        self.assertIsNone(res["agent_setup"])
+        self.assertEqual(res["agent_execution"]["started_at"], job.iso(T + 1))
+        self.assertEqual(job.feed_durations(res), {"env_setup": 1.0, "agent_run": 29.0})
+        self.assertIsNone(job.feed_durations({}))
+
     def test_a_control_writes_none(self):
         self.assertFalse(os.path.exists(self.write({"key": "nop", "_kind": "control"}, None)))
+
+    def test_a_trace_that_fails_leaves_the_result_and_says_its_error(self):
+        traj = job.trajectory_from_events(list(EVENTS), [call(1, 2)], AGENT, "m", "j/u")
+        with mock.patch.object(job, "trace_from_run", side_effect=KeyError("the task's own words")):
+            path = self.write(AGENT, traj)
+        agent = os.path.dirname(path)
+        self.assertFalse(os.path.exists(path))
+        with open(os.path.join(os.path.dirname(agent), "result.json")) as f:
+            self.assertEqual(json.load(f)["verifier_result"]["rewards"], {"reward": 1.0})
+        with open(os.path.join(agent, "trace.error.txt")) as f:
+            self.assertEqual(f.read(), "KeyError\n")
+        self.assertTrue(os.path.exists(os.path.join(agent, "trajectory.json")))
+
+    def test_a_trace_error_that_cannot_be_written_leaves_the_result(self):
+        traj = job.trajectory_from_events(list(EVENTS), [call(1, 2)], AGENT, "m", "j/u")
+        write = job._write
+
+        def refusing(path, text):
+            if os.path.basename(path).startswith("trace"):
+                raise PermissionError(path)
+            write(path, text)
+
+        with mock.patch.object(job, "_write", refusing):
+            path = self.write(AGENT, traj)
+        self.assertTrue(os.path.exists(os.path.join(os.path.dirname(os.path.dirname(path)), "result.json")))
 
 
 class Backfill(unittest.TestCase):

@@ -154,7 +154,7 @@ def _first_line(text: str, width: int = 96) -> str:
 
 
 def _secs(value) -> str:
-    return "—" if value is None else f"{value:.1f}s"
+    return "—" if value is None else f"{value:.2f}s"
 
 
 def _print_trial(job: parse.Job, trial: parse.Trial) -> None:
@@ -202,7 +202,7 @@ def _print_trial(job: parse.Job, trial: parse.Trial) -> None:
                           for c in s["tool_calls"])
         text = _first_line(s["message"]) if s["message"] and s["message"] != "(tool use)" else ""
         body = " · ".join(x for x in (text, calls) if x)
-        dur = "" if s["dur"] is None else f"  {s['dur']:.1f}s"
+        dur = "" if s["dur"] is None else f"  {s['dur']:.2f}s"
         print(f"    {s['step_id']:>{width}} {s['source']:<6} {body}{dur}")
 
 

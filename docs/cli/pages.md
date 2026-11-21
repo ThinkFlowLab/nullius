@@ -10,7 +10,7 @@ Each page's command, or why there is none.
 | `/job/<id>` | `nullius runs show <root> <id> [--json]` |
 | `/trial/<job>/<trial>` | `nullius runs show <root> <job> <trial> [--json]` |
 | `/import`, `/use-path` | `nullius import <run tree> -o <job root> [--json]`; `--list` |
-| `/compare`, `/compare/pick` | `nullius compare <root> <id> <id>... [--matched] [--json]` |
+| `/compare` | `nullius compare <root> <id> <id>... [--matched] [--json]` |
 | `/workspaces/open/<name>` | `nullius serve <root>...`, `WORKSPACE=<name>` |
 | `/workspaces` | `nullius workspace list [--home DIR] [--json]` |
 | `/settings` | User `settings.json`, or the environment; `nullius paths` locates the file |
@@ -27,7 +27,7 @@ Each page's command, or why there is none.
 | Page | Route |
 | --- | --- |
 | The live board | `/job/<id>/live` |
-| A trial's conversation, spans, artifacts | `/trial/…/conversation`, `/trial/…/trace-span`, `/trial/…/artifact/<key>` |
+| A trial's conversation, spans, artifacts | `/trial/…/conversation`, `/trial/…/trace-span`, `/trial/…/artifact/<key>`, `/trial/…/artifact/<key>/download` |
 | One task side by side | `/compare/task/<task>` |
 
 ## No command yet
@@ -37,7 +37,10 @@ Each page's command, or why there is none.
 | `/trial/…/save-trace` | a `harbor-trace-v1` writer |
 | `/judge/…` | `judge.cli job <root> <id> --confirm` |
 | Rename or delete a workspace | `nullius workspace rename`, `nullius workspace delete --yes` |
+| Unlink a workspace's root, delete its folder | `workspace.forget`, `execution.delete`; today `POST /workspaces/<name>/roots/unlink` and `/roots/delete` |
 | `/new-run` | `recipes.cli`; today `POST /new-run/runner` |
+| Delete a launch | `execution.delete`; today `POST /launch/<key>/delete` |
+| `/launches`, add a launch to a workspace | `execution.restore` reads every run record; today `POST /launch/<key>/add` |
 
 ## None needed
 
@@ -45,7 +48,7 @@ Each page's command, or why there is none.
 | --- | --- |
 | `/runs/pulse`, refresh a workspace | commands read fresh every call |
 | `/upload` | import the directory |
-| Test a run host, install a key | `ssh -o BatchMode=yes <host> true`, `ssh-copy-id` |
+| Test a host, install a key | `ssh -o BatchMode=yes <host> true`, `ssh-copy-id` |
 | A Harbor recipe: run, follow, continue, stop | the generated script |
 
 <div class="grid cards" markdown>

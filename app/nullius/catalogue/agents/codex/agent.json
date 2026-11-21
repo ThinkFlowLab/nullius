@@ -138,6 +138,45 @@
           "kit_version": 1,
           "backend": "docker",
           "job": "2026-11-12__10-24-26__kit__agent-search-v1__codex-2.2.2"
+        },
+        "agent.computer/v1": {
+          "passed": "4/4",
+          "on": "2026-11-19",
+          "model": "gpt-6-luna",
+          "provider": "openai",
+          "version": "2.2.2",
+          "kit_version": 2,
+          "backend": "container",
+          "job": "2026-11-19__09-44-46__kit__agent-computer-v1__codex-2.2.2",
+          "repeat": 3,
+          "checks": {
+            "see": "3/3",
+            "click": "3/3",
+            "type": "3/3",
+            "limit": "3/3"
+          },
+          "skills": {
+            "drag": {
+              "passed": "3/3",
+              "ok": true
+            },
+            "scroll": {
+              "passed": "3/3",
+              "ok": true
+            },
+            "recover": {
+              "passed": "3/3",
+              "ok": true
+            },
+            "batch": {
+              "passed": "3/3",
+              "ok": true
+            },
+            "late": {
+              "passed": "3/3",
+              "ok": true
+            }
+          }
         }
       }
     },

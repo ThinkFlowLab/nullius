@@ -24,10 +24,57 @@ from . import shared
 
 @app.route("/benchmarks")
 def benchmarks_page():
-    # the benchmarks of the standard some of whose options need a machine's setup (``host``): a bubble on their card
-    setup = {b["key"]: sorted(b["host"]) for b in standard_definitions.load("benchmark")[0] if b.get("host")}
-    return render_template("catalogue/benchmarks.html", cat=shared._catalog_cached(), origins=catalog.ORIGINS,
-                           prompts=howto.prompts(), catalogue_dir=paths.catalogue_dir(), setup=setup)
+    cat = shared._catalog_cached()
+    return render_template("catalogue/benchmarks.html", cat=cat, items=benchmark_cards(cat), choices=benchmark_choices(cat),
+                           prompts=howto.prompts(), catalogue_dir=paths.catalogue_dir())
+
+
+RUNS_WITH = {"standard": ("Nullius", "the Nullius standard"), "harbor": ("Harbor", "Harbor")}
+# what a benchmark evaluates (``recipe.benchmarks``' family): its agents or its capabilities, as a card and its filter say it
+FAMILIES = {"agent": "Agents", "capability": "Capabilities"}
+
+
+def benchmark_cards(cat) -> list:
+    """The benchmarks as cards (templates/_cards.html), one per row of ``recipe.benchmarks``: what the Benchmarks
+    page and the builder's Benchmark step both draw."""
+    with open(MARKS, encoding="utf-8") as fh:
+        sprite = fh.read()
+    sheet = url_for("static", filename="catalogue/marks.svg")
+    return [_card(row, sheet if f'<symbol id="bm-{row["b"].key}"' in sprite or _user_mark(cat, row["b"]) else None)
+            for row in standard_recipe.benchmarks(cat)]
+
+
+def benchmark_choices(cat) -> dict:
+    """The values the benchmarks' cards are filtered by: their category, what runs them, their origin, what they run."""
+    return {"category": [(c, c) for c in cat.categories], "runs": [(way, label) for way, (label, _) in RUNS_WITH.items()],
+            "origin": [(o, o.capitalize()) for o in catalog.ORIGINS], "evaluates": list(FAMILIES.items())}
+
+
+def _card(row, sheet) -> dict:
+    """A benchmark's card on the list (templates/_cards.html), from a row of ``recipe.benchmarks``: ``sheet`` the
+    sprite holding its own mark, none when it has none."""
+    b, ds, tasks, unit, needs = row["b"], row["datasets"], row["tasks"], row["unit"], row["host"]
+    return {"key": b.key, "href": url_for("benchmark_page", key=b.key), "shelf": b.origin, "keys": " ".join([b.key, *b.datasets]),
+            "search": " ".join([b.title, b.category, b.key, *(d.title for d in ds), *b.datasets]),
+            "category": b.category, "origin": {"text": b.label, "class": b.origin, "value": b.origin},
+            "icon": sheet and f"{sheet}#bm-{b.key}", "title": b.title, "domain": b.domain,
+            "runs": [{"text": label, "class": "rt-" + way, "title": "Runs with " + name, "value": way}
+                     for way, (label, name) in RUNS_WITH.items() if way in b.harness],
+            "needs": needs and {"text": "needs " + ", ".join(needs),
+                                "title": f"Some of its options need {', '.join(needs)} installed on the machine it runs on: see its page"},
+            "tasks": {"text": tasks, "label": unit.capitalize(), "value": tasks.replace(",", "").split("–")[-1]},
+            "versions": {v: {"text": n, "label": u.capitalize()} for v, (n, u) in row["versions"].items()},
+            "datasets": {"text": len(ds), "label": "Datasets" if len(ds) != 1 else "Dataset"},
+            "evaluates": {"text": FAMILIES[row["family"]], "value": row["family"], "title": f"{row['kind'].capitalize()} capabilities" if row["kind"] else ""},
+            "scoring": b.scoring, "blocker": b.blocker[:1].upper() + b.blocker[1:]}
+
+
+def _proven(std: dict) -> dict:
+    """How many of a version's checks (each dataset's units, leak and controls) hold a proof."""
+    oracle = any(c["key"] == "oracle" for c in std["controls"])
+    checks = [p for d in std["datasets"] for p in [d["proofs"].get("units")] + ([d["proofs"].get("leak")] if oracle else [])
+              + [c.get("proven") for c in d["controls"]]]
+    return {"proven": sum(1 for p in checks if p), "checks": len(checks)}
 
 
 @app.route("/benchmarks/<key>")
@@ -40,13 +87,28 @@ def benchmark_page(key):
     entry = harbor_entry.entry_of(key)
     # the standard's definition of it, when it has one: its proofs per dataset, and the form that runs cli prove
     std = standard_recipe.page_of(key) if "standard" in b.harness else None
-    # where each dataset's data comes from, one row per way it runs - each fetched by its harness, never by hand
-    std_def = standard_definitions.find(standard_definitions.load("benchmark")[0], key) if std else None
-    ds = cat.datasets_of(b)
-    data = {d.key: sources.of(d, b.harness, std_def, only=len(ds) == 1) for d in ds}
+    # A benchmark with versions is the whole page once per version, one shown (``?v=``, the default without it) and the
+    # others swapped in place: each its own pin, proofs, setup, options, task counts, data and limitations.
+    v = request.args.get("v")
+    listed = (std or {}).get("versions") or [{"ref": key, "version": "", "label": "", "default": True}]
+    if v and v not in {x["version"] for x in listed if x["version"]}:
+        abort(404)
+    every = standard_definitions.load("benchmark", every=True)[0] if std else []
+    views = []
+    for x in listed:
+        page = std if x["default"] else standard_recipe.page_of(x["ref"])
+        vb, vds = cat.in_version(b, x["version"]) if x["version"] and not x["default"] else (b, cat.datasets_of(b))
+        # where each dataset's data comes from, one row per way it runs - each fetched by its harness, never by hand
+        std_def = standard_definitions.find(every, x["ref"]) if std else None
+        views.append(dict(x, std=page, b=vb, ds=vds, tasks=cat.tasks_of(vb, vds),
+                          data={d.key: sources.of(d, b.harness, std_def, only=len(vds) == 1) for d in vds},
+                          current=(x["version"] == v) if v else x["default"], **(_proven(page) if page else {})))
+    shown = next(x for x in views if x["current"])
+    std, ds, data = shown["std"], cat.datasets_of(b), shown["data"]
+    versions = views if len(views) > 1 else []
     jobs = {j.job_id for j in shared._jobs_for_request()} if std else set()
     return render_template("catalogue/benchmark.html", cat=cat, b=b, csrf=shared._csrf_token(), papers=citation.parse(b.citation), data=data,
-                           editable=entry is not None and not harbor_entry.not_editable(entry), std=std, std_jobs=jobs,
+                           editable=entry is not None and not harbor_entry.not_editable(entry), std=std, std_jobs=jobs, versions=versions, views=views,
                            deletable=os.path.isfile(os.path.join(paths.catalogue_dir(), catalog.BENCHMARKS, key, catalog.ENTRY)),
                            restore_bundle=storage.can_restore("benchmarks", key, catalog.ROOT),
                            local=shared._local_client(),
@@ -80,11 +142,12 @@ def benchmark_prove(key):
     shared._require_csrf()
     if not shared._local_client():
         abort(403, description="Proofs are started from a browser on the application host only.")
-    back = url_for("benchmark_page", key=key) + "#standard"
+    version = request.form.get("version", "")
+    back = url_for("benchmark_page", key=key, **({"v": version} if version else {})) + "#standard"
     limit = request.form.get("limit", "").strip()
     provider, endpoint = providers.split(request.form.get("provider", "openai"))
     stamp = time.strftime(prove.STAMP)
-    got = standard_recipe.proving(key, dataset=request.form.get("dataset", ""), limit=int(limit) if limit.isdigit() else (limit or None),
+    got = standard_recipe.proving(f"{key}@{version}" if version else key, dataset=request.form.get("dataset", ""), limit=int(limit) if limit.isdigit() else (limit or None),
                                   provider=provider, judge_model=request.form.get("judge_model", "").strip(), stamp=stamp)
     problem = " ".join(got["errors"]) or ("" if got["keyless"] else execute.provider_problem(provider, endpoint))
     if problem:
@@ -187,17 +250,7 @@ def benchmark_marks():
         text = fh.read()
     cat = shared._catalog_cached()
     for b in cat.benchmarks:
-        symbol = None
-        try:
-            with open(os.path.join(cat.entry_dir(b.key), "logo.json"), encoding="utf-8") as fh:
-                logo = json.load(fh)
-            if (isinstance(logo, dict) and logo.get("kind") in LOGO_TYPES.values()
-                    and isinstance(logo.get("data"), str) and len(logo["data"]) * 3 // 4 <= LOGO_MAX
-                    and re.fullmatch(r"[A-Za-z0-9+/=]+", logo["data"])):
-                symbol = (f'<symbol id="bm-{html.escape(b.key, quote=True)}" viewBox="0 0 24 24">'
-                          f'<image width="24" height="24" href="data:{logo["kind"]};base64,{logo["data"]}"/></symbol>')
-        except (OSError, ValueError):
-            pass
+        symbol = _user_mark(cat, b)
         have = re.search(rf'<symbol id="bm-{re.escape(b.key)}"[\s\S]*?</symbol>', text)
         if have:
             if symbol:
@@ -206,6 +259,21 @@ def benchmark_marks():
             at = text.rindex("</svg>")
             text = text[:at] + "  " + (symbol or PLAIN_MARK.format(key=html.escape(b.key, quote=True))) + "\n" + text[at:]
     return app.response_class(text, mimetype="image/svg+xml", headers={"Cache-Control": "no-cache"})
+
+
+def _user_mark(cat, b):
+    """The sprite's symbol of the logo kept beside ``b``'s user entry, or None."""
+    try:
+        with open(os.path.join(cat.entry_dir(b.key), "logo.json"), encoding="utf-8") as fh:
+            logo = json.load(fh)
+        if (isinstance(logo, dict) and logo.get("kind") in LOGO_TYPES.values()
+                and isinstance(logo.get("data"), str) and len(logo["data"]) * 3 // 4 <= LOGO_MAX
+                and re.fullmatch(r"[A-Za-z0-9+/=]+", logo["data"])):
+            return (f'<symbol id="bm-{html.escape(b.key, quote=True)}" viewBox="0 0 24 24">'
+                    f'<image width="24" height="24" href="data:{logo["kind"]};base64,{logo["data"]}"/></symbol>')
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 def _logo(values: dict):

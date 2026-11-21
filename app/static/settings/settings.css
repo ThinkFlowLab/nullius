@@ -2,8 +2,7 @@
    Colours are the app's tokens (style.css). */
 .st-page { width: 100%; max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
 .st-page .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.st-head { display: flex; flex-direction: column; gap: 14px; }
-.st-head h1 { margin: 0; }
+.st-page > .page-head { margin-bottom: calc(var(--head-gap) - 22px); }   /* the column's gap is part of the head's */
 .st-ready { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 12px 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); }
 .st-ready-t { font-weight: 500; }
 .st-ready-i { font-size: 13px; color: var(--nav-text); text-decoration: none; }
@@ -92,7 +91,7 @@
   .st-key-new-fields { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* run hosts: a row each - its name tests it, the result says what answered */
+/* hosts: a row each - its name tests it, the result says what answered */
 .st-hosts { padding: 14px 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); }
 .host-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .host-table th, .host-table td { padding: 6px 4px; text-align: left; vertical-align: middle; font-weight: 400; }
@@ -224,17 +223,7 @@
 .settings-dialog .dialog-status:empty { display: none; }
 .settings-dialog [data-cancel] { margin-left: auto; }
 
-/* the judge in use: two cards, one checked once JUDGE is set; the one in use says so either way */
-.st-judges { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px; margin: 0 0 16px; }
-.st-judge { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
-.st-judge:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
-.st-judge input { margin-top: 3px; }
-.st-judge b { font-weight: 500; }
-.st-judge small { display: block; color: var(--text-dim); font-size: 12px; margin-top: 3px; }
-
 [data-when][hidden] { display: none; }
-.st-judge small { overflow-wrap: anywhere; }
-.st-judge > span { min-width: 0; }
 
 /* Grouped settings navigation, shared by the modal and direct page. */
 .st-index .st-nav-group { display: flex; flex-direction: column; gap: 2px; }
@@ -243,11 +232,6 @@
 .st-index a span { color: inherit; font-size: 15px; }
 .st-index a .ic { flex: none; width: 17px; height: 17px; }
 .st-index [hidden] { display: none; }
-.st-search { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--surface-2); color: var(--text-dim); }
-.st-search .ic { flex: none; width: 17px; height: 17px; }
-.st-search input { min-width: 0; width: 100%; padding: 0; border: 0; background: transparent; color: var(--text); font: 13px var(--sans); }
-.st-search input:focus-visible { outline: none; }
-.st-search:focus-within { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .st-search-empty { padding: 8px 12px; font-size: 13px; color: var(--text-dim); }
 .st-theme-options { display: flex; flex-wrap: wrap; gap: 8px; }
 .st-theme-options .btn[aria-pressed="true"] { border-color: transparent; background: var(--accent-soft); color: var(--text); }
@@ -309,15 +293,18 @@
 .st-provider-choice { display: flex; align-items: center; gap: 12px; padding: 18px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: 500 14px/1.5 var(--sans); text-align: left; cursor: pointer; }
 .st-provider-choice:hover { background: var(--nav-hover); border-color: var(--text-faint); }
 .st-provider-choice .st-logo { width: 28px; height: 28px; }
+/* A custom provider's logo: the first two letters of its name, on the workspace badge. */
+.ws-avatar.st-logo { width: 20px; height: 20px; font-size: .5rem; border-radius: 5px; color: var(--accent); letter-spacing: 0; }
+.st-provider-choice .ws-avatar.st-logo { width: 28px; height: 28px; font-size: .64rem; border-radius: 7px; }
 .st-provider-summary { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .st-provider-summary > div { flex: 1; min-width: 0; }
 .st-provider-summary h3 { overflow-wrap: anywhere; }
+.st-endpoints { margin-top: 4px; }
+.st-endpoint-rows { display: flex; flex-direction: column; gap: 18px; padding-top: 8px; }
+.st-endpoints > summary { display: flex; align-items: center; padding: 10px 0; font-size: 13px; }
 .st-provider-summary .st-about { margin-top: 3px; }
 .st-provider-done { align-self: flex-end; }
 .st-provider-ask { position: static; width: 420px; max-width: 100%; box-sizing: border-box; margin: 12px 0 0 auto; }
-.st-judge-single { margin-bottom: 0; }
-.st-judge-single .st-judge { border: 0; padding: 0; background: transparent; }
-.st-judge-single input { display: none; }
 
 /* Labels follow the action row, not the combined action and status height. */
 .st-guidance .st-row { align-items: start; }

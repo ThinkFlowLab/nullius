@@ -22,7 +22,6 @@ from nullius import providers
 from nullius.standard.containers import container
 
 CONTROLS = ("nop", "oracle")
-PROVIDER_KEYS = ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "MODEL_API_URL")
 
 SECTIONS = [
     {"id": "setup", "name": "Set up", "page": "settings_page", "where": "Settings", "subs": [
@@ -31,11 +30,11 @@ SECTIONS = [
         {"id": "where", "text": "Choose where runs happen", "fact": "where",
          "target": [["#hosts", "Add a host, or run on this machine with Docker or Podman"]]},
         {"id": "judge", "text": "Pick a judge", "fact": "judge", "optional": True,
-         "target": [["#judge", "Choose System One or an LLM judge"]]},
+         "target": [["#judge", "Choose Decision or an LLM judge"]]},
     ]},
     {"id": "bench", "name": "Pick a benchmark", "page": "benchmarks_page", "where": "Benchmarks", "subs": [
         {"id": "browse", "text": "Browse the catalogue", "visit": r"^/benchmarks/?$",
-         "target": [[".bench-filters, #bench-find", "Filter by category, runner or origin"]]},
+         "target": [["#benchmarks-tools", "Search or filter by category, runner or origin"]]},
         {"id": "open", "text": "Open a benchmark's page", "visit": r"^/benchmarks/(?!new)[^/]+$",
          "target": [[".bench-card", "Open a benchmark"]]},
     ]},
@@ -85,9 +84,9 @@ def facts(env, jobs: Iterable[dict] = (), judged: bool = False, docker: Optional
     agents = [(j.get("agent") or "").lower() for j in jobs]
     found = (docker or docker_answers)()
     return {
-        "provider": any((env.get(k) or "").strip() for k in PROVIDER_KEYS) or bool(providers.endpoints(env)),
+        "provider": bool(providers.available(env)),            # a run provider: a TypeSafe key serves the judge only
         "where": bool((env.get("HOSTS") or "").strip()) or found,
-        "judge": bool(client.system_one(env)) or bool(client.llm_judge(env)),
+        "judge": bool(client.decision_judge(env)) or bool(client.llm_judge(env)),
         "control_run": any(a in CONTROLS for a in agents),
         "agent_run": any(a and a not in CONTROLS for a in agents),
         "judged": bool(judged),

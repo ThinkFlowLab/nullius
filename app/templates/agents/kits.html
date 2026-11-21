@@ -1,12 +1,17 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}{{ entry.label ~ ' kit' if entry else 'Kits' }} — Nullius{% endblock %}
 {% block crumb %}/ <a href="{{ url_for('kits_page') }}">kits</a>{% if entry %} / {{ entry.label }}{% endif %}{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
+{% if not entry %}<script src="{{ url_for('static', filename='tables.js') }}"></script>{% endif %}{% endblock %}
+{% from '_cards.html' import cards %}
 {% block body %}
 {% if entry %}
 {% set d = entry.d %}
-<div class="std-index"><section class="std-card">
-  <div class="std-head"><div><h1>{{ entry.label }} kit</h1><div class="std-tags"><code class="std-tag">{{ entry.port }}</code><span class="std-tag">v{{ entry.version }}</span><span class="std-tag">{{ d.datasets|sum(attribute='units') }} checks</span></div></div></div>
+<div class="std-index">
+  {% set tags %}<code class="std-tag">{{ entry.port }}</code><span class="std-tag">v{{ entry.version }}</span><span class="std-tag">{{ d.datasets|sum(attribute='units') }} checks</span>{% endset %}
+  {{ page_head(entry.label ~ ' kit', sub=tags) }}
+  <section class="std-card">
   <p class="std-summary">{{ d.summary }}</p>
   <section class="std-source"><h2>Pass criteria</h2><p>{{ d.score.says }}.</p><p>Every basic check must pass to prove this port.</p></section>
   {% if d.get('skills') %}<section class="std-source"><h2>Skills</h2><dl class="std-source-grid">{% for name, description in d.skills.items() %}<div><dt>{{ name }}</dt><dd>{{ description }}</dd></div>{% endfor %}</dl><p>Skills are recorded separately from the basic port proof.</p></section>{% endif %}
@@ -35,19 +40,12 @@
 </div>
 {% else %}
 <div class="bench-index">
-  <header class="bench-index-head"><div><h1>Kits</h1><p class="bench-count">{{ entries|length }} conformance kits</p></div><label class="bench-find">Find<input type="search" id="bench-find" placeholder="Name, port, check" autocomplete="off"></label></header>
-  <div class="bench-filters"><div class="bench-cats" role="group" aria-label="Kit family" data-filter="family">
-    {% for value, label in [('', 'All'), ('agent', 'Agents'), ('capability', 'Capabilities')] %}<button type="button" class="bench-cat{{ ' on' if not value }}" data-value="{{ value }}" aria-pressed="{{ 'false' if value else 'true' }}">{{ label }}</button>{% endfor %}
-  </div></div>
-  <div class="bench-grid">
-    {% for e in entries %}<a class="bench-card" data-keys="{{ e.d.key }}" data-family="{{ e.d.family }}" data-find="{{ (e.label ~ ' ' ~ e.port ~ ' ' ~ e.d.summary ~ ' ' ~ e.d.get('check_details', {}))|lower }}" href="{{ url_for('kit_page', key=e.d.key) }}">
-      <div class="bench-card-top"><span class="std-tag">{{ e.d.family }}</span><span class="bench-harness">v{{ e.version }}</span></div>
-      <div class="bench-card-title">{{ e.label }}</div>
-      <div class="bench-card-domain"><code>{{ e.port }}</code></div>
-      <div class="bench-stats"><div><b>{{ e.d.datasets|sum(attribute='units') }}</b><span>checks</span></div></div>
-    </a>{% endfor %}
-  </div>
-  <p class="bench-none" id="bench-none" hidden>No kits match.</p>
+  {{ page_head('Kits', sub=items|length ~ ' conformance kits') }}
+  {#- A card's fields (web/agents.py `_kit_card`); the family's pills filter them. #}
+  {% set cols = [dict(key='title', label='Name', card='title'), dict(key='family', label='Family', card='tag', class='std-tag', filter='pills'),
+                 dict(key='port', label='Port', card='text', style='code'), dict(key='checks', label='Checks', card='stat', type='num'),
+                 dict(key='version', label='Version', card='meta')] %}
+  {{ cards('kits', cols, items, search='Name, port, check', choices={'family': [('agent', 'Agents'), ('capability', 'Capabilities')]}, sort=['title', 'port', 'checks'], empty='No kits match.', noun='kits', layout='table' if request.args.get('view') == 'table' else 'cards', default='cards') }}
 </div>
 {% endif %}
 {% endblock %}

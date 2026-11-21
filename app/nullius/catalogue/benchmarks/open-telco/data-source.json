@@ -1,0 +1,104 @@
+{
+  "cards": {
+    "GSMA/ot-lite": "91c38cb7fc86f7f93a06705fec69bf454542540969a0e5cc0635dbcd1e5e70de",
+    "GSMA/ot-full": "fe85b5a82350552bd4cc87d48c7a667d90ef6d563f00c786dfa9319fcf8fe46d"
+  },
+  "datasets": {
+    "teleqna-lite": {
+      "repository": "GSMA/ot-lite",
+      "revision": "1c0f2eac3ad0baa29704b147a95fea283b2906c7",
+      "file": "test_teleqna.json",
+      "sha256": "3bbb71301dd7a2228a8f42d4ca48c100fd57cbbb80b2e22749d5efe86ae31b5a"
+    },
+    "teleqna-full": {
+      "repository": "GSMA/ot-full",
+      "revision": "6319806f04783eafe04d9facf755d379c66b7664",
+      "file": "teleqna/test-00000-of-00001.parquet",
+      "sha256": "73f3cd724d8ff3c1071fbb135e80d69a54b0773acde590006949a67956338e57"
+    },
+    "teletables-lite": {
+      "repository": "GSMA/ot-lite",
+      "revision": "1c0f2eac3ad0baa29704b147a95fea283b2906c7",
+      "file": "test_teletables.json",
+      "sha256": "d08065834a41cf295242816594963a9ec3f59699c0d26e8bfaabbe6445647b73"
+    },
+    "teletables-full": {
+      "repository": "GSMA/ot-full",
+      "revision": "6319806f04783eafe04d9facf755d379c66b7664",
+      "file": "teletables/test-00000-of-00001.parquet",
+      "sha256": "6b4d56dc644e9999519349202a80d2f9b525322ce228b5ed35387757c31b72df"
+    },
+    "telemath-lite": {
+      "repository": "GSMA/ot-lite",
+      "revision": "1c0f2eac3ad0baa29704b147a95fea283b2906c7",
+      "file": "test_telemath.json",
+      "sha256": "5d4c64ae79d3cdec50c28a4d5cb36b098ae982bd5301aec0337358ec9db4453a"
+    },
+    "telemath-full": {
+      "repository": "GSMA/ot-full",
+      "revision": "6319806f04783eafe04d9facf755d379c66b7664",
+      "file": "telemath/test-00000-of-00001.parquet",
+      "sha256": "c9b0523f7c6ae2ee83478f810a30fd8fbb3e320c615373a3f7e71c1e0f4cd9be"
+    },
+    "telelogs-lite": {
+      "repository": "GSMA/ot-lite",
+      "revision": "1c0f2eac3ad0baa29704b147a95fea283b2906c7",
+      "file": "test_telelogs.json",
+      "sha256": "9d1eea3a86d39cc9ab792bca0f69edba8703e5681583e70ae82f6ef49b531bf9"
+    },
+    "telelogs-full": {
+      "repository": "GSMA/ot-full",
+      "revision": "6319806f04783eafe04d9facf755d379c66b7664",
+      "file": "telelogs/test-00000-of-00001.parquet",
+      "sha256": "6ee5861ad6ec21f14d3debecff7c37575b0eed35efd55a2df808edf9b2b553b1"
+    },
+    "3gpp_tsg-lite": {
+      "repository": "GSMA/ot-lite",
+      "revision": "1c0f2eac3ad0baa29704b147a95fea283b2906c7",
+      "file": "test_3gpp_tsg.json",
+      "sha256": "a7ae12665448bc35dd656629daea640a02fb96a7fe32e400f6a95055c65be20b"
+    },
+    "3gpp_tsg-full": {
+      "repository": "GSMA/ot-full",
+      "revision": "6319806f04783eafe04d9facf755d379c66b7664",
+      "file": "3gpp_tsg/test-00000-of-00001.parquet",
+      "sha256": "1a8607099873455d9079bfbb19dfcfc6fd796973f2242eb44e1a3232a1943104"
+    },
+    "oranbench-lite": {
+      "repository": "GSMA/ot-lite",
+      "revision": "1c0f2eac3ad0baa29704b147a95fea283b2906c7",
+      "file": "test_oranbench.json",
+      "sha256": "458be8c1962041196908aabb94838eae82633efac56c56d114c6982883e81fe8"
+    },
+    "oranbench-full": {
+      "repository": "GSMA/ot-full",
+      "revision": "6319806f04783eafe04d9facf755d379c66b7664",
+      "file": "oranbench/test-00000-of-00001.parquet",
+      "sha256": "1dafd3e4606c9e08add68797cdb0f202679dca4e4f6136c99a30bd1939f62778"
+    },
+    "srsranbench-lite": {
+      "repository": "GSMA/ot-lite",
+      "revision": "1c0f2eac3ad0baa29704b147a95fea283b2906c7",
+      "file": "test_srsranbench.json",
+      "sha256": "e7e43cb23c76970a8881c1f5e83319df4dcdc817cedd3841f4dd6144dd57eb88"
+    },
+    "srsranbench-full": {
+      "repository": "GSMA/ot-full",
+      "revision": "6319806f04783eafe04d9facf755d379c66b7664",
+      "file": "srsranbench/test-00000-of-00001.parquet",
+      "sha256": "f59c40de70add5a4cce8513f7652ab4f95cdd15864b148e173f326403be48198"
+    },
+    "sixg_bench-lite": {
+      "repository": "GSMA/ot-lite",
+      "revision": "1c0f2eac3ad0baa29704b147a95fea283b2906c7",
+      "file": "test_sixg_bench.json",
+      "sha256": "b86cff25bb490a5c10a8e22b34d0473fbe6e6b04566f8187942bd6302ba5a5da"
+    },
+    "sixg_bench-full": {
+      "repository": "GSMA/ot-full",
+      "revision": "6319806f04783eafe04d9facf755d379c66b7664",
+      "file": "sixg_bench/test-00000-of-00001.parquet",
+      "sha256": "1e5995e1248a8f69f514a6d7afaac74fd8f82e8e05514778aecdaff873ed9371"
+    }
+  }
+}

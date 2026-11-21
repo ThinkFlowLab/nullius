@@ -1,54 +1,159 @@
+{% from '_tables.html' import table, cell, greyed %}
+{% from '_cards.html' import cards %}
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}Workspaces — Nullius{% endblock %}
 {% block crumb %}/ workspaces{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='runs/launches.css') }}">{# its dialog #}
+<link rel="stylesheet" href="{{ url_for('static', filename='workspaces/workspaces.css') }}">
+<script src="{{ url_for('static', filename='tables.js') }}"></script>{% endblock %}
+{#- A workspace's row: the open one marked, what its search reads. #}
+{% macro ws_tr(ws) %} class="{{ 'ws-current' if workspace and ws.name == workspace.name }}" data-ws="{{ ws.name }}" data-search="{{ ws.label }} {{ ws.name }}"{% endmacro %}
+{#- A workspace's launches, a link to them when it has any; when it was last opened, as digits to sort by (UTC, as every
+    workspace records it; never opened sorts last, newest first). #}
+{% macro launches(ws) %}{% set n = n_launches[ws.name] %}{% if n %}<a class="btn ghost sm count-btn" href="{{ url_for('launches_page', ws=ws.name) }}" aria-label="Launches of {{ ws.label }}: {{ n }}" title="Launches of {{ ws.label }}"><svg class="ic" aria-hidden="true"><use href="#i-launches"/></svg>{{ n }}</a>
+  {%- else %}{{ greyed('Launches of ' ~ ws.label ~ ': 0', '', 'No launches in ' ~ ws.label, 'none-' ~ ws.name, icon='launches', class='btn ghost sm count-btn', text='0') }}{% endif %}{% endmacro %}
+{% macro roots(ws) %}<button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="{{ url_for('workspace_roots', name=ws.name) }}" aria-haspopup="dialog" aria-label="Roots of {{ ws.label }}: {{ ws.roots|length }}" title="Roots"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>{{ ws.roots|length }}</button>{% endmacro %}
+{#- A workspace's rename: the pencil, and the form it swaps in for the name (the page's script); `view` the one to return to. #}
+{% macro pencil(ws) %}<button type="button" class="icon-btn ws-edit" aria-label="Rename workspace {{ ws.label }}" title="Rename"><svg class="ic"><use href="#i-pencil"/></svg></button>{% endmacro %}
+{% macro rename(ws, view=none) %}<form method="post" action="{{ url_for('workspace_rename') }}" class="ws-rename" hidden>
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ ws.name }}">{% if view %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
+          <input type="text" name="label" value="{{ ws.label }}" required aria-label="New name of workspace {{ ws.label }}" spellcheck="false" autocomplete="off">
+          <button class="btn sm" type="submit">Save</button><button class="btn sm ghost ws-cancel" type="button">Cancel</button>
+        </form>{% endmacro %}
+{% macro opened(ws) %}{{ ws.opened[:19]|replace('-', '')|replace(':', '')|replace('T', '') or 0 }}{% endmacro %}
+
 {% block body %}
-
-
-<div class="page-title"><h1>Workspaces</h1></div>
-<p class="subtitle">A named set of run roots and what was read from them. <a href="{{ url_for('import_page', new=1) }}">New workspace →</a></p>
+{% set actions %}<a class="btn sm" href="{{ url_for('import_page', new=1) }}"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New workspace</a>{% endset %}
+{{ page_head('Workspaces', actions=actions) }}
 
 {% if workspaces %}
-<table class="grid">
-  <thead>
-    <tr><th></th><th>Workspace</th><th>Name</th><th>Roots</th><th class="num" title="Parsed runs held in the cache">Cached runs</th><th>Last opened</th><th></th><th></th></tr>
-  </thead>
-  <tbody>
-    {% for ws in workspaces %}
-    {% set current = workspace and ws.name == workspace.name %}
-    <tr class="{{ 'ws-current' if current }}">
-      <td class="ws-mark">{% if current %}<span class="ok" title="open">●</span>{% endif %}</td>
-      <td>
-        {# every workspace renames from its own row, open or not; its directory follows the name #}
-        <form method="post" action="{{ url_for('workspace_rename') }}" class="ws-rename">
-          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ ws.name }}">
-          <input type="text" name="label" value="{{ ws.label }}" aria-label="Rename the workspace {{ ws.label }}" spellcheck="false" autocomplete="off">
-          <button class="linkish" type="submit">rename</button>
-        </form>
-      </td>
-      <td class="mono faint">{{ ws.name }}</td>
-      <td class="ws-roots" title="{{ ws.roots|join('&#10;') }}">{% for r in ws.roots %}<span class="mono">{{ r }}</span>{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
-      <td class="num">{{ ws.n_cached }}</td>
-      <td class="mono faint">{{ ws.opened[:16]|replace('T', ' ') }}</td>
-      <td class="arrow">
-        {% if current %}<a href="{{ url_for('index') }}">runs →</a>
-        {% else %}<form method="post" action="{{ url_for('workspace_open', name=ws.name) }}" class="header-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sm" type="submit">Open</button></form>{% endif %}
-      </td>
-      <td class="ws-delete">
-        {# removes the workspace's cache, imports and export record; the job roots stay where they are #}
-        <form method="post" action="{{ url_for('workspace_delete', name=ws.name) }}" class="header-form" data-confirm="Remove the workspace {{ ws.label }}? Its cached parses, converted imports and export record go; the job directories it read stay.">
-          <input type="hidden" name="csrf" value="{{ csrf }}">
-          <button class="ws-remove" type="submit" title="Remove this workspace (its job roots are untouched)" aria-label="Remove workspace {{ ws.label }}">×</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+{% set labels = workspaces|map(attribute='label')|list %}{% set trash %}<svg class="ic"><use href="#i-trash"/></svg>{% endset %}
+{% set cols = [dict(key='open', label='Open', blank=true, card='status'), dict(key='name', label='Name', width='expand', card='title'),
+               dict(key='disk', label='Folder', blank=true, table=false, card='text', class='mono faint'),
+               dict(key='runs', label='Runs', type='num', card='stat'), dict(key='checks', label='Checks', type='num', card='stat'),
+               dict(key='opened', label='Last opened', type='num', align='left', card='meta'),
+               dict(key='launches', label='Launches', type='num', align='right', card='stat'), dict(key='roots', label='Roots', type='num', align='right', card='stat'),
+               dict(key='actions', label='Actions', blank=true, card='delete')] %}
+{% if request.args.get('view') == 'cards' %}
+{#- the same fields as the table's columns, each in its card slot; a rename only in the table #}
+{% set items = [] %}
+{% for ws in workspaces %}{% set current = workspace and ws.name == workspace.name %}
+  {%- set open %}{% if current %}<span class="ok" role="img" aria-label="Open" title="Open">●</span>{% endif %}{% endset %}
+  {%- set _ = items.append(dict(open=open, name=dict(text=ws.label, class='ws-name', after=pencil(ws) ~ rename(ws, 'cards')), disk=ws.name if labels.count(ws.label) > 1 else '', runs=counts[ws.name].runs, checks=counts[ws.name].checks,
+        opened=dict(text=ws.opened[:16]|replace('T', ' '), value=opened(ws)), launches=dict(text=launches(ws), value=n_launches[ws.name]),
+        roots=dict(text=roots(ws), value=ws.roots|length),
+        actions=dict(title='Delete workspace', attrs={'data-ask': 'ws-ask-delete', 'data-label': ws.label, 'data-action': url_for('workspace_delete', name=ws.name), 'data-judged': n_judged[ws.name], 'aria-haspopup': 'dialog', 'aria-label': 'Delete workspace ' ~ ws.label}),
+        search=ws.label ~ ' ' ~ ws.name)) %}
+{%- endfor %}
+{{ cards('workspaces', cols, items, search='Search by name', empty='No workspace matches.', noun='workspaces', sort=true, layout='cards') }}
+{% else %}
+{% call(ws, c) table('workspaces', cols, workspaces, ws_tr, class='ws-table', search='Search by name', noun='workspaces', layout='table') %}
+    {%- set current = workspace and ws.name == workspace.name %}{% set clash = labels.count(ws.label) > 1 %}
+    {%- if c.key == 'open' %}{% call cell(c) %}{% if current %}<span class="ok" role="img" aria-label="Open" title="Open">●</span>{% endif %}{% endcall %}
+    {%- elif c.key == 'name' %}{% call cell(c, sort=ws.label, class='ws-name') %}
+
+        {#- the label; the name on disk too where two labels are alike #}
+        <span class="ws-show"><span class="ws-title" title="{{ ws.name }}">{{ ws.label }}</span>{% if clash %} <small class="mono faint">{{ ws.name }}</small>{% endif %}
+          {{ pencil(ws) }}</span>
+        {{ rename(ws) }}
+      {% endcall %}
+    {%- elif c.key == 'runs' %}{% call cell(c) %}{{ counts[ws.name].runs }}{% endcall %}
+    {%- elif c.key == 'checks' %}{% call cell(c) %}{{ counts[ws.name].checks }}{% endcall %}
+    {%- elif c.key == 'opened' %}{% call cell(c, sort=opened(ws), class='mono faint nowrap') %}{{ ws.opened[:16]|replace('T', ' ') }}{% endcall %}
+    {%- elif c.key == 'launches' %}{% call cell(c) %}{{ launches(ws) }}{% endcall %}
+    {%- elif c.key == 'roots' %}{% call cell(c, sort=ws.roots|length) %}{{ roots(ws) }}{% endcall %}
+    {%- elif c.key == 'actions' %}{% call cell(c, class='acts-col') %}
+        <button type="button" class="icon-btn danger" data-ask="ws-ask-delete" data-label="{{ ws.label }}" data-action="{{ url_for('workspace_delete', name=ws.name) }}" data-judged="{{ n_judged[ws.name] }}" aria-haspopup="dialog" aria-label="Delete workspace {{ ws.label }}" title="Delete workspace">{{ trash }}</button>
+      {% endcall %}
+    {%- endif %}
+{% endcall %}
+{% endif %}
+{#- every row's Delete, filled from its button #}
+<template id="ws-ask-delete">
+  <div class="std-how-head"><h2 id="ws-dialog-h">Delete workspace </h2></div>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <p>Its run folders stay on disk.</p>
+    <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete workspace</button></div>
+  </form>
+</template>
+<dialog class="std-how launch-delete" id="ws-dialog" aria-labelledby="ws-dialog-h"></dialog>
+<script>
+(() => {
+  // One dialog: a [data-ask] button fills it from the template of that class in its [data-holder], a row's
+  // Delete from the page's one template, the Roots from the server. An ask opened inside it (a root's Unlink
+  // or Delete) goes back to what it replaced on Keep it.
+  const d = document.getElementById('ws-dialog');
+  let opener = null, back = null;
+  // a template of the page, or, for an address, the server's answer: what a Delete takes is worked out only now
+  const content = async b => {
+    if (b.dataset.ask === 'ws-ask-delete') {
+      const c = document.getElementById('ws-ask-delete').content.cloneNode(true), n = +b.dataset.judged;
+      c.querySelector('h2').append(b.dataset.label);
+      c.querySelector('form').action = b.dataset.action;
+      if (n) c.querySelector('p').prepend(`Its judgements (${n}) are deleted. `);
+      return c;
+    }
+    if (!b.dataset.ask.startsWith('/')) return b.closest('[data-holder]').querySelector('template.' + b.dataset.ask).content.cloneNode(true);
+    const r = await nulliusFetch(b.dataset.ask);
+    if (!r.ok) { b.title = await r.text(); return null; }
+    return document.createRange().createContextualFragment(await r.text());
+  };
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('[data-ask]');
+    if (b && d.contains(b)) {
+      const nodes = [...d.childNodes], c = await content(b);
+      if (!c) return;
+      back = {nodes, b};
+      d.replaceChildren(c);
+      d.querySelector('[autofocus]')?.focus();
+    } else if (b?.classList.contains('ws-roots-btn')) {   // the Roots: a skeleton until the server lists them
+      opener = b; back = null;
+      d.classList.add('wide');
+      d.setAttribute('aria-busy', 'true');
+      d.innerHTML = '<div class="page-skeleton" aria-hidden="true"><div class="skel skel-title"></div>' + '<div class="skel skel-line"></div>'.repeat(3) + '</div>';
+      d.showModal();
+      const r = await nulliusFetch(b.dataset.ask).catch(() => null), html = r?.ok ? await r.text().catch(() => null) : null;
+      if (opener !== b || !d.open) return;   // closed, or another opened, while it loaded
+      d.removeAttribute('aria-busy');
+      if (html !== null) d.replaceChildren(document.createRange().createContextualFragment(html));
+      else d.innerHTML = '<p id="ws-dialog-h">Could not load the roots. Close and try again.</p>';
+      d.querySelector('a[href], button:not([aria-disabled])')?.focus();
+    } else if (b) {
+      const c = await content(b);
+      if (!c) return;
+      opener = b; back = null;
+      d.classList.remove('wide');
+      d.replaceChildren(c);
+      d.showModal();
+    } else if (e.target.closest('[data-back]') && back) {
+      d.replaceChildren(...back.nodes);
+      back.b.focus();
+      back = null;
+    } else if (e.target === d) {   // the backdrop, not the dialog's own padding
+      const r = d.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close();
+    }
+  });
+  d.addEventListener('close', () => opener?.focus());
+
+  // Rename in place: the pencil opens the field; Escape or Cancel puts the name back.
+  document.querySelectorAll('.ws-name').forEach(cell => {
+    const shows = cell.querySelectorAll('.ws-show, .card-link, .ws-edit'), form = cell.querySelector('.ws-rename'), input = form.elements.label;
+    const edit = cell.querySelector('.ws-edit');
+    const toggle = on => {   // a row's name and pencil, or a card's
+      shows.forEach(s => { s.hidden = on; }); form.hidden = !on;
+      if (on) { input.focus(); input.select(); } else { input.value = input.defaultValue; edit.focus(); }
+    };
+    edit.addEventListener('click', () => toggle(true));
+    cell.querySelector('.ws-cancel').addEventListener('click', () => toggle(false));
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); toggle(false); } });
+  });
+})();
+</script>
 {% else %}
 <div class="alert">No workspace yet.</div>
 {% endif %}
-<script>
-  document.querySelectorAll('form[data-confirm]').forEach(f => f.addEventListener('submit', e => { if (!confirm(f.dataset.confirm)) e.preventDefault(); }));
-</script>
-
 {% endblock %}

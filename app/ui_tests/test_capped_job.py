@@ -121,6 +121,14 @@ class CappedJobPage(unittest.TestCase):
         self.assertNotIn('id="cap-stopped"', alone)
         self.assertEqual(self.text(alone, r'<div class="kv" id="unit-cap".*?</div>'), "Cap per task $0.002")
 
+    def test_a_trial_with_no_record_of_a_judge_has_no_judge_panel(self):
+        """Scored by its tests, never by a judge: nothing to say about one."""
+        r = self.client.get("/trial/uncapped/t-0__u0000"); self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertNotIn('id="runner-verdict"', html)
+        self.assertNotIn("No record of its call", html)
+
 
 class BuilderKeepsTheCap(CompilerCase):
     def test_a_saved_recipe_keeps_an_amount_above_zero_and_nothing_else(self):

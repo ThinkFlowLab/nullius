@@ -200,7 +200,7 @@
       const k = PHASES.indexOf(t.phase), p = pressure(t), tok = tokensOf(t), line = t.activity || t.last_line;
       const dim = opts.filter && t.outcome !== opts.filter ? ' dim' : '';
       return `<tr class="lb-row lbp-${esc(t.phase)}${dim}" data-trial="${esc(t.trial)}" tabindex="0" aria-current="${opts.selected === t.trial}">
-        <td><span class="task" title="${esc(t.task || t.trial)}">${esc(shortTask(t))}</span>${agents.length > 1 ? `<small>${esc(t.agent || '')}</small>` : ''}${t.attempt > 1 ? `<small class="lb-retry" title="Harbor ran it again after: ${esc((t.retried || []).join(', '))}">attempt ${t.attempt}, after ${esc((t.retried || []).slice(-1)[0] || 'an error').replace('_', ' ')}</small>` : ''}</td>
+        <td><span class="task" title="${esc(t.task || t.trial)}">${esc(shortTask(t))}</span>${agents.length > 1 ? `<small>${esc(t.agent || '')}</small>` : ''}${t.attempt > 1 ? `<small class="lb-retry" title="Tried again after: ${esc((t.retried || []).join(', '))}">retried ${t.attempt === 2 ? 'once' : (t.attempt - 1) + ' times'}, after ${esc((t.retried || []).slice(-1)[0] || 'an error').replace('_', ' ')}</small>` : ''}</td>
         <td><span class="lb-phase"><span class="lb-ticks">${PHASES.map((_, j) => `<s class="${j < k ? 'done' : j === k ? 'now' : ''}"></s>`).join('')}</span>${esc(PHASE_LABEL[t.phase] || t.phase || '—')}</span></td>
         <td><span class="lb-limit"><span class="lb-bar${p > .6 ? ' near' : ''}"><i style="width:${(100 * Math.min(1, p)).toFixed(1)}%"></i></span><span><b>${clock(t.elapsed_sec)}</b> of ${t.timeout_sec ? clock(t.timeout_sec) : '—'}</span></span></td>
         ${has.steps ? `<td class="num${t.step == null ? ' na' : ''}">${t.step == null ? '—' : esc(t.step)}</td>` : ''}

@@ -92,8 +92,8 @@ class Stored(unittest.TestCase):
         (self.tmp / "judgements" / "job-a" / "broken.json").write_text("{not json")
         (self.tmp / "judgements" / "job-a" / "notes.txt").write_text("x")
         seen = sorted((j, t, v) for j, t, v, _ in store.all_records(self.d))
-        self.assertEqual(seen, [("job-a", "t1", "judgement.questions.v1"), ("job-a", "t1", "judgement.questions.v2"), ("job-b", "t_2", "judgement.questions.v2")])
-        self.assertEqual([t for _, t, _, _ in store.all_records(self.d, "job-b")], ["t_2"])
+        self.assertEqual(seen, [("job-a", "t1", "judgement.questions.v1"), ("job-a", "t1", "judgement.questions.v2"), ("job-b", store.key("t/2"), "judgement.questions.v2")])
+        self.assertEqual([t for _, t, _, _ in store.all_records(self.d, "job-b")], [store.key("t/2")])
         self.assertEqual(store.calibration(self.d), {"chars_per_token": 3.25, "n": 2, "low": 2.5, "high": 3.5, "n_large": 0})   # small samples only: the band widened to the default
 
     def test_truncation_is_counted_per_state_kind_so_the_cut_state_can_be_named(self):

@@ -53,8 +53,9 @@ An agent's run that fails with more to come pauses the run and the page
 asks: continue or stop. Every state change lands in ``runs/<name>/run.json``;
 ``restore`` reads those records when Nullius starts and reattaches to what
 is still running, waits again where it was paused, and settles what ended
-while nobody was looking. A record is checked against the part's files and
-processes on the target before it is trusted (``_settle``): a part whose pid
+while nobody was looking; one process at a time, by the runs root's lock.
+A record is checked against the part's files and processes on the target
+before it is trusted (``_settle``): a part whose pid
 was never saved, but which was claimed or started, is followed by the pid it
 wrote itself or by its processes - never started a second time; a record
 from before a part's end was one save, naming the next part with the ended
@@ -109,11 +110,13 @@ a restart, and ``summary``'s ``stages`` is them folded for the page.
 from __future__ import annotations
 
 import base64
+import fcntl
 import hashlib
 import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import threading
@@ -122,7 +125,9 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
-from nullius import hosts, ondisk, paths, prices as price_list, progress, redact, secrets, settings
+from nullius import hosts, ondisk, paths, prices as price_list, progress, providers, redact, secrets, settings, workspace
+from nullius.judge import store as judgements
+from nullius.runs import parse
 from nullius.harbor import source as harbor_source
 from nullius.standard.containers import container
 from nullius.standard.runner import payload as standard_payload
@@ -141,6 +146,7 @@ STOP_WAIT = 20.0                              # seconds a Stop's own commands on
 LAUNCH_GRACE = 5.0                            # seconds a restart waits for a part a launcher claimed to start (_settle)
 UV_INSTALL = "curl -LsSf https://astral.sh/uv/install.sh | sh"
 RECORD = "run.json"
+LOCK = ".lock"                                # in the runs root, held by the one process that follows its runs
 STANDARD = "standard"                         # the Nullius standard's runner key (standard/pages/recipe.py HARNESS)
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # this repository: app/ is in it
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
@@ -251,7 +257,7 @@ class Plan:
     url_var: str = "MODEL_API_URL"            # same for the endpoint, which a run on it cannot go without; "" for none
     base_url: str = ""                        # the endpoint when url_var names none: a provider's own (OpenRouter's), or "" for its clients' default
     model: str = ""
-    jobs: List[dict] = field(default_factory=list)   # the job directories the script writes: [{"name", "agent", "dataset"}]
+    jobs: List[dict] = field(default_factory=list)   # the job directories the script writes: [{"name", "agent", "dataset"}], a shard's also its "launch"
     parts: List[dict] = field(default_factory=list)  # the run, one agent at a time: [{"id", "label", "script"}]; empty: the whole script at once
     recipe: dict = field(default_factory=dict)       # the builder's recipe the script was compiled from, so the run can be opened again as one; {} for a plan from before
     runner: str = "harbor"                    # or "standard" (standard/pages/recipe.py): the Nullius standard's own cli
@@ -334,15 +340,16 @@ def withheld() -> List[str]:
     names other tools give them or this application gave them before
     (``settings.INSTEAD``, those that stand for a secret), the launcher's own
     names for the run's key and endpoint, the agent keys (a Harbor run is
-    sent them by its launcher, as the key), the names a standard benchmark's
+    sent them by its launcher, as the key), the Boat key (a standard run on
+    Boat is sent it the same way), the names a standard benchmark's
     own licences go by - kept in its own store (``nullius.secrets``), although
     imported saved settings may still hold a value until it is moved in
     Custom keys - and GitHub tokens from saved settings or the
     shell Nullius was started in. Every named endpoint's settings too, so a
     run gets its own endpoint's key alone. A data provider's token name is not one."""
-    secret = {v.name for v in settings.VARIABLES if v.secret or v.kind == "endpoint"} | set(settings.endpoint_names())
+    secret = {v.name for v in settings.VARIABLES if v.secret or v.kind in ("endpoint", "provider")} | set(settings.endpoint_names())
     return sorted(secret | {old for old, new in settings.INSTEAD.items() if new in secret}
-                  | set(KEY_NAMES + URL_NAMES) | {"GITHUB_TOKEN", "GH_TOKEN"} | set(settings.agent_key_names())
+                  | set(KEY_NAMES + URL_NAMES) | {"GITHUB_TOKEN", "GH_TOKEN", "BOAT_API_KEY"} | set(settings.agent_key_names())
                   | set(_licence_names()))
 
 
@@ -391,11 +398,15 @@ class Execution:
         self._run = run or (lambda argv, timeout=600.0, stdin=None: subprocess_run(argv, timeout, stdin, stop=self._stop))
         # an endpoint of the run's own (url_var: an OpenAI-compatible one) may check no key: it is sent the placeholder
         self._key = (key if key is not None else env.get(plan.key_var, "")) or (settings.MODEL_KEY_PLACEHOLDER if plan.url_var else "")
-        self._url = url if url is not None else (env.get(plan.url_var, "") if plan.url_var else plan.base_url)
+        self._url = url if url is not None else (providers.base_of(plan.url_var, env) if plan.url_var else plan.base_url)
         if plan.keyless:                          # a run that calls no model is given nothing it could leak
             self._key, self._url = "", ""
         # the agent keys Settings holds (CURSOR_API_KEY, ...): a Harbor run's agent may need its own vendor's; the standard's never gets one
         self._agent_keys = dict(agent_keys) if agent_keys is not None else (settings.agent_key_values(env) if plan.runner == "harbor" else {})
+        if plan.runner == "standard" and (plan.recipe or {}).get("backend") == "boat":
+            from nullius.standard import boat      # the Boat key, to the standard run that starts VMs with it, and to no other command
+            if boat.key(env):
+                self._agent_keys[boat.NAME] = boat.key(env)
         # the benchmark's licences a standard run on a host is sent: read from its store at each launch, unless given
         self._licences_given = licences
         self._redact: List[str] = []              # the licences' values sent, as text: never in a log line
@@ -440,6 +451,7 @@ class Execution:
         self.workspace = rec.get("workspace", "")   # the workspace its job was added to, the one a restart adds it back to
         # the trials the log has said already, (job, trial), so a restart says each once; none in a record from before
         self._seen_trials: set = {(k[0], k[1]) for k in rec.get("seen_trials") or ()}
+        self._settled: set = set()                  # the kept tries whose trial's copy was settled (settle_retried)
         if record:
             # a run still going reads its log now, to go on from it; one that ended (most of them, and
             # history only grows) when its page asks - start-up read every one, seconds and hundreds of MB
@@ -564,10 +576,29 @@ class Execution:
 
     def job_state(self, job_id: str) -> Optional[tuple]:
         """``(state, finished_at)`` for one job of this run once it has ended:
+        a complete, error-free standard result when jobs share a part, then
         its own part's result when that part ran to its end - an arm that
         answered every question is done though a later one failed - else the
         run's, once the run has ended. None while it is still to come."""
-        end = self.ends.get(self.part_for(job_id) or "")
+        part = self.part_for(job_id)
+        # Conformance runs several kits in one process. Its exit code belongs
+        # to the whole step, not to each kit that already finished cleanly.
+        # Read only the small result record, including on a restored run or a
+        # host's mirrored jobs. Interrupted/errored jobs still use the runner.
+        if self.plan.runner == "standard" and part is not None and sum(
+                self.part_for(str(j.get("name"))) == part for j in self.plan.jobs) > 1:
+            try:
+                with open(os.path.join(self.jobs, job_id, "result.json"), encoding="utf-8") as f:
+                    result = json.load(f)
+                stats = result["stats"]
+                if (result["id"] == job_id and result["n_total_trials"] > 0
+                        and stats["n_completed_trials"] == result["n_total_trials"]
+                        and all(stats[k] == 0 for k in ("n_errored_trials", "n_cancelled_trials", "n_running_trials", "n_pending_trials"))):
+                    at = datetime.fromisoformat(result["finished_at"].replace("Z", "+00:00"))
+                    return "done", at
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                pass                            # absent or being written/synced: the runner still owns the state
+        end = self.ends.get(part or "")
         if end is not None:
             return ("done" if end["rc"] == 0 else "failed"), datetime.fromtimestamp(end["at"], tz=timezone.utc)
         if self.state in ENDED and self.finished:
@@ -1586,7 +1617,40 @@ class Execution:
         rc, out = self._copy_back(run, timeout)
         if rc != 0:
             self.log("  the job did not sync back: " + out.strip()[-300:])
+        else:
+            settle_retried(self.jobs, self._settled)
         self._trial_lines()
+
+
+def settle_retried(jobs: str, seen: Optional[set] = None) -> None:
+    """A standard run's retry moves a trial's folder into ``retried/<trial>.try-N``
+    on the host and writes the trial again (``run.run_again``). The copy here is
+    taken without deleting, so the trial's own folder still holds the earlier
+    try's files the retry did not write again: each one the same, by size and
+    time, as the kept try's copy goes - what the retry wrote, and anything
+    written here, stays. ``seen``: the kept tries settled already, each
+    copied whole by the time it is first seen (the try had ended)."""
+    for job in os.listdir(jobs) if os.path.isdir(jobs) else ():
+        kept = os.path.join(jobs, job, "retried")
+        if not os.path.isdir(kept):
+            continue
+        for k in os.listdir(kept):
+            trial, sep, n = k.rpartition(".try-")
+            src, dest = os.path.join(kept, k), os.path.join(jobs, job, trial)
+            if not sep or not n.isdigit() or not os.path.isdir(src) or not os.path.isdir(dest) or src in (seen or ()):
+                continue
+            if seen is not None:
+                seen.add(src)
+            for d, dirs, files in os.walk(src):
+                here = os.path.join(dest, os.path.relpath(d, src))
+                for f in files:
+                    a, b = os.path.join(d, f), os.path.join(here, f)
+                    try:
+                        x, y = os.lstat(a), os.lstat(b)
+                    except OSError:
+                        continue
+                    if (x.st_size, int(x.st_mtime)) == (y.st_size, int(y.st_mtime)) and not os.path.isdir(b):
+                        os.unlink(b)
 
 
 def _probe(run: Callable, argv: List[str], timeout: float) -> tuple:
@@ -1610,34 +1674,83 @@ def active() -> List[Execution]:
     return [e for e in EXECUTIONS.values() if e.state in ALIVE]
 
 
-def for_job(job_id: str) -> Optional[Execution]:
+def owners() -> Dict[str, Execution]:
+    """Each job a plan names -> the newest execution whose script writes it; of
+    several started at once, the first listed."""
+    out: Dict[str, Execution] = {}
+    for e in EXECUTIONS.values():
+        for j in e.plan.jobs:
+            name = str(j.get("name"))
+            if name not in out or e.started > out[name].started:
+                out[name] = e
+    return out
+
+
+def run_ends(owner: Optional[Dict[str, Execution]] = None) -> Dict[str, Optional[tuple]]:
+    """Each job a run writes -> its ``job_state`` once the whole run has ended,
+    None while the run is alive: the ``runs`` of ``workspace.load_jobs``. A
+    part's end is written down before the run's last copy from its host.
+    ``owner``: ``owners()``, when the caller holds it."""
+    return {name: None if e.state in ALIVE else e.job_state(name)
+            for name, e in (owners() if owner is None else owner).items()}
+
+
+def for_job(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[Execution]:
     """The newest execution whose script writes this job, if any - the one
     the job page shows beside the job, or instead of it while Harbor has
-    not written it yet."""
-    found = [e for e in EXECUTIONS.values() if any(str(j.get("name")) == job_id for j in e.plan.jobs)]
-    return max(found, key=lambda e: e.started) if found else None
+    not written it yet. ``owner``: ``owners()``, when the caller holds it."""
+    return (owners() if owner is None else owner).get(job_id)
 
 
 ENDED = ("stopped", "failed", "done")
 
 
-def ended_for(job_id: str) -> Optional[tuple]:
+def ended_for(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[tuple]:
     """``(state, finished_at)`` when the run that writes this job has ended
     - stopped, failed or done - by the runner's own record; None while it
     is alive or when no run of this application wrote the job. A Harbor
     killed by a Stop leaves its feed without ``job.end`` and its result
     record with trials "running", so a page reading either alone would say
-    the job goes on; this is the fact that says otherwise."""
-    ex = for_job(job_id)
+    the job goes on; this is the fact that says otherwise. ``owner``: as ``for_job``'s."""
+    ex = for_job(job_id, owner)
     return ex.job_state(job_id) if ex is not None else None
+
+
+class Followed(RuntimeError):
+    """Another process follows the runs under this root."""
+
+
+_FOLLOWED: Dict[str, object] = {}                 # runs root -> its lock, open for the rest of this process
+
+
+def _follow(root: str) -> None:
+    """Hold *root*'s lock for the rest of this process, or raise ``Followed``:
+    two processes following one run both resume it and both write its record.
+    The lock goes with the process, however it ends."""
+    key = os.path.realpath(root)
+    if key in _FOLLOWED:
+        return
+    try:
+        os.makedirs(key, exist_ok=True)
+        fh = open(os.path.join(key, LOCK), "a")
+    except OSError:
+        return                                    # no runs root here: nothing to resume
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        fh.close()
+        raise Followed(f"another Nullius follows the runs in {key}: stop it before starting this one") from None
+    _FOLLOWED[key] = fh
 
 
 def restore(root: Optional[str] = None, **kw) -> List[Execution]:
     """At start-up: every recorded run under the root. The ones still alive
     are reattached (their thread follows the part that was running, or
     waits at the pause it was at); the finished ones are listed as they
-    ended. Returns the ones reattached."""
+    ended. Returns the ones reattached. ``Followed`` when another process
+    holds the root (``_follow``)."""
     root = root or runs_root(kw.get("env", os.environ))
+    _follow(root)
     back = []
     try:
         names = sorted(os.listdir(root))
@@ -1656,3 +1769,162 @@ def restore(root: Optional[str] = None, **kw) -> List[Execution]:
         if ex.state in ALIVE:
             back.append(ex.resume())
     return back
+
+
+# --- deleting a launch ---------------------------------------------------------
+
+def run_folder(name: str, root: Optional[str] = None) -> str:
+    """The folder of the run *name* directly in the runs root, holding its
+    record; ValueError for any other path, a link included."""
+    root = os.path.realpath(root or runs_root())
+    path = os.path.join(root, name or "")
+    if not _NAME.fullmatch(name or "") or os.path.realpath(path) != path or not os.path.isfile(os.path.join(path, RECORD)):
+        raise ValueError(f"{name} is not a run Nullius made")
+    return path
+
+
+def run_of(path: str, root: Optional[str] = None) -> Optional[str]:
+    """The name of the run Nullius made whose folder, or its ``jobs`` folder,
+    *path* is once its links are resolved; None for any other path: the one
+    folder a workspace root may be deleted as is a run's own, in the runs root."""
+    real, runs = os.path.realpath(path), os.path.realpath(root or runs_root())
+    name, _, rest = os.path.relpath(real, runs).partition(os.sep)
+    if name in (os.curdir, os.pardir) or rest not in ("", "jobs"):
+        return None
+    try:
+        run_folder(name, runs)
+    except ValueError:
+        return None
+    return name
+
+
+def size_of(path: str) -> int:
+    """The bytes of every file under *path*, links not followed; a file gone
+    since the walk listed it (a run still writing replaces its own) counts 0."""
+    total = 0
+    for d, _, names in os.walk(path):
+        for n in names:
+            try:
+                total += os.lstat(os.path.join(d, n)).st_size
+            except FileNotFoundError:
+                pass
+    return total
+
+
+# Sizes of ended runs' folders, by folder: (what they were read at, bytes).
+_SIZES: Dict[str, tuple] = {}
+_SIZES_LOCK = threading.Lock()
+
+
+def run_size(ex: "Execution") -> int:
+    """``size_of`` the run's folder, as the Launches page lists it: walked at
+    each ask while the run is alive; once it has ended, again only when its
+    state, its record, its folder or its jobs folder moved. What Delete asks
+    (``deletion``) walks the folder afresh.
+    shortcut: a file changed deep in an ended run alone (a trace view saved on
+    its trial page) is counted from the next move of those; walk the job folders too if that matters."""
+    if ex.state in ALIVE:
+        return size_of(ex.dir)
+
+    def mtime(path):
+        try:
+            return os.stat(path).st_mtime_ns
+        except OSError:
+            return None
+    seen = (ex.state, ex.finished, *map(mtime, (ex.dir, os.path.join(ex.dir, RECORD), ex.jobs)))
+    with _SIZES_LOCK:
+        known = _SIZES.get(ex.dir)
+    if known is not None and known[0] == seen:
+        return known[1]
+    size = size_of(ex.dir)
+    with _SIZES_LOCK:
+        _SIZES[ex.dir] = (seen, size)
+    return size
+
+
+def _deletable(name: str, root: Optional[str]) -> tuple:
+    """A run's folder and record, when it is a run that has ended; ValueError
+    (alive, or not a run) or OSError (its record unreadable) otherwise."""
+    path = run_folder(name, root)
+    with open(os.path.join(path, RECORD), encoding="utf-8") as fh:
+        rec = json.load(fh)
+    ex = next((e for e in EXECUTIONS.values() if e.plan.name == name and os.path.realpath(e.dir) == path), None)
+    state = ex.state if ex is not None else rec.get("state")
+    if state in ALIVE:
+        raise ValueError(f"{name} is {state}: stop it before you delete it")
+    return path, rec
+
+
+def deletable(names: List[str], root: Optional[str] = None) -> None:
+    """Raise as ``deletion`` would for the runs *names*, without working out what goes."""
+    for n in dict.fromkeys(names):
+        _deletable(n, root)
+
+
+def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, ends: dict) -> dict:
+    path, rec = _deletable(name, root)
+    plan = rec.get("plan") or {}
+    # a run refused at the name check never made the host folder: one of that name there is not its own
+    host = hosts.parse(plan["host"]) if plan.get("host") and (rec.get("launched") or rec.get("step") not in ("connect", "name")) else None
+    held = []
+    for ws, roots in holding(path):
+        dirs = parse.find_job_dirs(roots)
+        ids = [j.job_id for j in workspace.load_jobs(ws, roots, ends)]
+        # a job of the same id from another root shares these judgements: they stay
+        others = {e.get("job_id") for d, e in workspace.job_index(ws).items() if d not in dirs}
+        judged = judgements.job_dirs(ws.dir, [i for i in ids if i.split("~")[0] not in others])
+        held.append({"ws": ws, "roots": roots, "jobs": dirs,
+                     "judged": judged, "judgements": sum(len(os.listdir(d)) for d in judged)})
+    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held,
+            "judgements": sum(w["judgements"] for w in held)}
+
+
+def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None) -> dict:
+    """What deleting the runs *names* of one launch removes: per run (``runs``)
+    its folder and size, the host copy that is its own, and per workspace that
+    holds it its roots, parsed jobs and judgement folders; the totals, and the
+    number of copies per host. ValueError when any of them is alive or is not
+    a run: nothing goes then. ``holding``: a run folder's ``workspace.holding``,
+    when the caller has it already."""
+    holding = holding or (lambda path: workspace.holding(home, path))
+    ends = run_ends()
+    runs = [_run_deletion(n, home, root, holding, ends) for n in dict.fromkeys(names)]
+    copies: Dict[str, int] = {}
+    for r in runs:
+        if r["host"]:
+            copies[r["host"].label] = copies.get(r["host"].label, 0) + 1
+    return {"runs": runs, "bytes": sum(r["bytes"] for r in runs), "judgements": sum(r["judgements"] for r in runs),
+            "workspaces": list(dict.fromkeys(w["ws"].label for r in runs for w in r["workspaces"])), "hosts": copies}
+
+
+def delete(names: List[str], home: str, root: Optional[str] = None, copies=(), run: Optional[Callable] = None) -> dict:
+    """Delete the runs *names* of one launch (``deletion`` says what goes):
+    per run its folder, its entry here, its roots, parsed jobs and judgements
+    in every workspace, and its copy on its host when that host's label is in
+    *copies*. Returns ``deletion``'s answer, with ``stays``: the runs whose
+    folder could not go (they keep everything else), and ``kept``: one line
+    per thing that stays."""
+    gone = deletion(names, home, root)
+    gone["stays"], gone["kept"] = [], []
+    for r in gone["runs"]:
+        try:
+            shutil.rmtree(r["dir"])
+        except OSError as e:
+            gone["stays"].append(r["name"])
+            gone["kept"].append(f"{r['name']} stays in {r['dir']}: {e.strerror or e}")
+            continue
+        for key in [k for k, e in EXECUTIONS.items() if os.path.realpath(e.dir) == r["dir"]]:
+            del EXECUTIONS[key]
+        for w in r["workspaces"]:
+            for d in w["judged"]:
+                shutil.rmtree(d, ignore_errors=True)
+            # read again: another run of the launch may have left this workspace already
+            ws = workspace.load(home, w["ws"].name)
+            if ws is not None:
+                workspace.forget(ws, w["roots"], w["jobs"])
+        host = r["host"]
+        if host and host.label in copies:
+            rc, out = (run or subprocess_run)(host.argv(f"rm -rf {_rq(REMOTE_HOME + '/runs/' + r['name'])}", timeout=15), 60)
+            if rc != 0:
+                gone["kept"].append(f"the copy of {r['name']} on {host.label} stays: " + redact.redact(out.strip()[-200:]))
+    return gone

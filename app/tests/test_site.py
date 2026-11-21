@@ -16,6 +16,21 @@ def module(name):
 
 
 class Website(unittest.TestCase):
+    def test_computer_port_states_the_desktop_code_and_named_path_limits(self):
+        page = (SITE.parents[1] / "docs/ports/agent-computer-v1.md").read_text()
+        limits = page.split("## Known limits\n", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("Inside the desktop, the agent's code can read and write wherever the desktop's user can "
+                      "and can create links outside `folder`; `folder` bounds the names of paths passed to "
+                      "`upload` and `files`, and the benchmark's records hold the code of every step action "
+                      "and `prepare` call.", limits)
+
+    def test_computer_port_links_to_the_step_option_without_repeating_its_default(self):
+        page = (SITE.parents[1] / "docs/ports/agent-computer-v1.md").read_text()
+        row = next(line for line in page.splitlines() if line.startswith("| The step budget |"))
+        self.assertIn("[OSWorld1's `max_steps`](../benchmarks/supported/osworld1.md#options)", row)
+        self.assertNotIn("`default`", row)
+        self.assertNotIn("100", row)
+
     def test_staging_preserves_authored_docs(self):
         build = module('build')
         with tempfile.TemporaryDirectory() as directory:

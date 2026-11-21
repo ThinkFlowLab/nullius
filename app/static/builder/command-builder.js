@@ -1,19 +1,98 @@
 /* Builder page controller: edit recipes, resolve their dependencies, and start an explicit Run. */
 (() => {
   'use strict';
+  // Served by: a row after each model field's, on OpenRouter alone: the serving providers that may answer that model,
+  // in order (recipe.py, served_by). Its picker is the Model row's (model-picker.js, list="nb-served"): typing filters
+  // the model's providers (POST /new-run/endpoints), a pick or a slug typed and Enter joins the list under it, each
+  // removable. Empty: any provider. What a row shows is C.servedRow's; `compiled()` is the server's last compile and
+  // the key of the recipe it was made for (C.servedKey). The tests run this under Node, with stand-ins for the page.
+  function servedRows({C, root, r, compiled, esc, button, providers}) {
+    const NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
+    // the model a Served by is for, as the step shows it: the field's, else the leaderboard's or the official one
+    const shown = (rec, role) => {
+      if (role === 'model') return rec.model || '';
+      const b = C.standardBench(rec) || {}, lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
+      return (!paper && rec[role + '_model']) || lb && lb[role] || b[role] || '';
+    };
+    // the server's compile, while what decides the models it names has not changed since
+    const known = rec => { const c = compiled(); return c && c.out && c.key === C.servedKey(rec) ? c.out : null; };
+    providers.subscribe(model => {
+      // A late list for a previous model never draws its row. Shared models update every field still using it,
+      // including a list refreshed by opening the picker after the cache expires.
+      const current = r(), out = known(current);
+      if (C.servedRoles(current).some(role => C.servedModelOf(role, '', out) === model)) sync();
+    });
+    // A compile's models can still apply after a pin edit; the rest of its answer needs the whole recipe's key.
+    const acceptCompile = (rec, last, out, key, currentKey) => ({
+      current: key === currentKey,
+      served: C.servedKey(JSON.parse(key)) === C.servedKey(rec) ? C.servedCompiled(last, out, key) : last,
+    });
+    const row = (rec, role) => {
+      const out = known(rec), model = C.servedModelOf(role, '', out);
+      const entry = C.servedRoles(rec).includes(role) && model ? providers(model) : null;
+      return C.servedRow(rec, role, shown(rec, role), out, entry && entry.result);
+    };
+    const chips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick"><span class="std-served-slug">${esc(slug) || '“”'}</span>`
+      + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
+    const field = (rec, role) => { if (!C.servedRoles(rec).includes(role)) return ''; const s = row(rec, role);
+      return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any."${s.visible ? '' : ' hidden'}>Served by<input list="nb-served" aria-label="Served by, ${NAME[role]}" data-served-by="${role}" data-served-model="${esc(s.model)}" data-served-pending="${s.pending}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
+        + `<span class="nb-chips std-served-list" data-served-list="${role}" data-of="${esc(JSON.stringify(s.chosen))}">${chips(role, s.chosen)}</span></label>`; };
+    // each Served by drawn again in place, as the recipe holds it now: its list, and the model its providers are listed
+    // for. The rest of the form stays as it is: the keyboard stays where it is, and an open menu stays open.
+    function sync() {
+      const rec = r();
+      root.querySelectorAll('input[data-served-by]').forEach(input => {
+        const role = input.dataset.servedBy, s = row(rec, role), list = root.querySelector(`[data-served-list="${role}"]`);
+        input.closest('.std-served').hidden = !C.servedRoles(rec).includes(role) || !s.visible;
+        Object.assign(input.dataset, {servedModel: s.model, servedPending: String(s.pending), chosen: s.chosen.join(',')});
+        input.placeholder = s.placeholder;
+        if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = chips(role, s.chosen); }
+      });
+    }
+    return {field, sync, acceptCompile};
+  }
+  // Saved recipes are the server's (/new-run/recipes, nullius/recipes/store.py); a browser on its host alone writes them.
+  // move() sends what this browser kept before (nullius.recipes.v1, and the older nullius.recipes.v1.<workspace> lists)
+  // to the lenient import, which skips names already saved, and removes those keys once the server answered. The
+  // recipes it refused or skipped are kept under REJECTED, never sent again; move() returns how many of each. On a
+  // failure the keys stay for the next visit. `request` is nulliusFetch; the tests run this under Node with stand-ins.
+  function recipeStore({request, csrf, storage}) {
+    const call = async (url, method, body) => {
+      const res = await request(url, method ? {method, headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify(body || {})} : {});
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j.ok === false) throw Error(j.error || 'HTTP ' + res.status);
+      return j;
+    };
+    const OLD = 'nullius.recipes.v1', REJECTED = OLD + '.rejected';
+    const read = k => { try { const l = JSON.parse(storage.getItem(k)); return Array.isArray(l) ? l : [l]; } catch { return [storage.getItem(k)]; } };
+    return {
+      list: async () => (await call('/new-run/recipes')).recipes,
+      save: async (recipe, id) => (await call('/new-run/recipes', 'POST', {recipe, id})).recipe,
+      remove: id => call('/new-run/recipes/' + encodeURIComponent(id), 'DELETE'),
+      async move() {
+        const keys = Array.from({length: storage.length}, (_, i) => storage.key(i)).filter(k => k !== REJECTED && (k === OLD || k.startsWith(OLD + '.')));
+        const recipes = keys.flatMap(read);
+        if (!keys.length) return {refused: 0, taken: 0};
+        const out = recipes.length ? await call('/new-run/recipes/import', 'POST', {recipes, lenient: true}) : {rejected: [], skipped: []};
+        const bad = [...out.rejected, ...out.skipped].map(x => recipes[x.index]);
+        if (bad.length) storage.setItem(REJECTED, JSON.stringify([...(storage.getItem(REJECTED) ? read(REJECTED) : []), ...bad]));
+        keys.forEach(k => storage.removeItem(k));
+        return {refused: out.rejected.length, taken: out.skipped.length};
+      },
+    };
+  }
+  // The Saved recipes dialog's list. A browser on another machine gets Delete greyed, `why` its tooltip.
+  function savedList({saved, local, why, esc, button, state}) {
+    const del = id => local ? `data-delete="${esc(id)}"` : `aria-disabled="true" title="${esc(why)}"`;
+    return saved.length ? saved.map(s => `<div class="nb-savedrow"><span><strong>${esc(s.name)}</strong><small>${esc(s.recipe.harness)} · ${esc(new Date(s.saved).toLocaleDateString())}${state(s.recipe)}</small></span>`
+      + `<div>${button('Load', `data-load="${esc(s.id)}"`)} ${button('Delete', del(s.id))}</div></div>`).join('') : '<p class="nb-note">No saved recipes.</p>';
+  }
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
   const C = window.NulliusRecipe(schema), $ = s => root.querySelector(s);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const agentMarks = JSON.parse(root.dataset.agentMarks || '{}');
-  const agentMark = (key, label) => {
-    const source = agentMarks[String(key).split('@')[0]];
-    if (!source) return esc(label[0]);
-    return source.includes('#')
-      ? `<svg class="agent-logo" aria-hidden="true"><use href="/static/${esc(source)}"/></svg>`
-      : `<img class="agent-logo" src="/static/${esc(source)}" alt="" aria-hidden="true">`;
-  };
   const steps = C.STEPS, S = C.STEP, REVIEW = S.review;
   const query = Object.fromEntries(new URLSearchParams(location.search));
   let recipe = C.prefill(query);
@@ -23,15 +102,19 @@
   // A run's own recipe (?run=) or a prefill from a run's fields comes first.
   // A draft comes back silently: the page simply is as it was left.
   const draftKey = 'nullius.recipe-draft.v1';
-  let opened = '';
+  let opened = '', savedId = '';   // savedId: the saved recipe this page holds, which a save updates (renames)
   if (schema.loadRecipe) { try { recipe = C.fromJSON(schema.loadRecipe); step = REVIEW; opened = 'Opened the recipe of run “' + schema.loadRun + '”. Run gives it a new name.'; } catch (e) { opened = 'This run’s recipe cannot be read: ' + e.message; } }
   else if (schema.loadLike) { const o = C.fromJob(schema.loadLike); recipe = o.recipe; step = REVIEW; opened = o.notes.join(' '); }
+  else if (schema.loadSaved) { try { recipe = C.fromJSON(schema.loadSaved.recipe); savedId = schema.loadSaved.id; step = REVIEW; opened = 'Loaded “' + schema.loadSaved.name + '”.'; } catch (e) { opened = 'This saved recipe cannot be read: ' + e.message; } }
   // An unsupported draft opens nothing; its rejection is shown as a toast.
-  else { let d = null; try { d = C.unpackDraft(localStorage.getItem(draftKey), query); } catch {} if (d && d.recipe) { recipe = d.recipe; step = d.step; tab = d.tab; } else if (d && d.gone) opened = d.gone; }
-  const saveDraft = () => { try { localStorage.setItem(draftKey, C.packDraft({recipe, step, tab})); } catch {} };
+  else { let d = null; try { d = C.unpackDraft(localStorage.getItem(draftKey), query); } catch {} if (d && d.recipe) { recipe = d.recipe; step = d.step; tab = d.tab; savedId = d.saved; } else if (d && d.gone) opened = d.gone; }
+  const saveDraft = () => { try { localStorage.setItem(draftKey, C.packDraft({recipe, step, tab, saved: savedId})); } catch {} };
+  // Settings closed: reload from the draft to read what changed
+  document.addEventListener('close', e => { if (e.target.id === 'settings-modal') { saveDraft(); location.replace(location.pathname); } }, true);
   let compiled, pendingDirs, dirsSequence = 0;
   const r = () => recipe;
-  const storageKey = 'nullius.recipes.v1';   // one list for this browser; a run may open another workspace and the recipes stay
+  const store = recipeStore({request: (...a) => nulliusFetch(...a), csrf: schema.csrf, storage: (() => { try { return localStorage; } catch { return {length: 0}; } })()});
+  let saved = [];
   // A message is a toast at the bottom right: a new one replaces it, its bar runs down and it goes, or its × closes it.
   // Shown again on each message, so it lands above a dialog opened since.
   const status = text => {
@@ -99,7 +182,7 @@
   };
   const commonSettings = rec => `<div class="nb-categoryhead"><h3>Common settings</h3><p>Every trial, whichever agent runs it.</p></div>`
     + `<div id="nb-timeouts">${timeLimits(rec)}</div>`
-    + `<div class="nb-two">${field('Repeats per task', 'attempts', rec.attempts, {type: 'number', min: 1, placeholder: '1', hint: 'Every task is run this many times, pass or fail (Harbor\'s --n-attempts). Retries after a failure are on Limits.'})}<span></span></div>`
+    + `<div class="nb-two">${field('Attempts per task', 'attempts', rec.attempts, {type: 'number', min: 1, placeholder: '1'})}<span></span></div>`
 ;
   // One tab per selected agent: the parameters this catalogue knows for it,
   // its extra --ak list, and what else it needs.
@@ -114,34 +197,31 @@
   };
   // The standard's recipe as the server compiles it from the definitions (POST
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
-  let runnerOut = null, runnerKey = '', runnerTimer;
+  let runnerOut = null, runnerKey = '', runnerTimer, runnerServed = null;
+  // Served by's rows (servedRows above), given the models the server last named and what decided them (C.servedCompiled)
+  const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
   const runnerMark = x => x.standard ? '<span class="brand-mark nb-nullius-mark" aria-hidden="true"></span>'
     : '<svg aria-hidden="true"><use href="/static/brand/marks.svg#harbor"/></svg>';
-  // Two cards: Harbor, and Nullius (the standard) - a benchmark's own scripts run there, as its Original setup.
+  // A card per runner that runs the benchmark, alone when only one does: Harbor, and Nullius (the standard) - a benchmark's own scripts run there, as its Original setup.
   const runnerCard = (x, on, label, summary, mark) => tile({attr: 'runner', key: x.key, on, mark, title: label, tip: summary || ''});
   const runnerStep = rec => {
     const has = C.runnersOf(C.benchKey(rec)), list = C.runners().filter(x => x.builtin && has.includes(x.key));
-    const cards = list.length > 1 ? `<div class="nb-pick-grid">` + list.map(x => runnerCard(x, x.key === rec.harness, x.label, x.summary, runnerMark(x))).join('') + '</div>'
+    const cards = list.length ? `<div class="nb-pick-grid">` + list.map(x => runnerCard(x, x.key === rec.harness, x.label, x.summary, runnerMark(x))).join('') + '</div>'
       : `<label class="nb-field ui-field-row"><span class="ui-field-copy">Runner</span><span class="nb-fixed">${esc((C.runners().find(x => x.key === rec.harness) || {}).label || rec.harness)}</span></label>`;
     return `<div class="nb-sectionhead"><h2>What runs it?</h2></div>` + cards + (rec.harness === 'harbor' ? harborPanel(rec) : '');
   };
-  // Every benchmark of both runners in one list; picking one sets the runner that runs it (Nullius when both do).
+  // the version a standard recipe names (``key@version``), '' for the default
+  const versionOf = rec => C.isStandard(rec) && String(rec.benchmark || '').includes('@') ? String(rec.benchmark).split('@')[1] : '';
+  // Every benchmark of both runners in one list, the Benchmarks page's (placeGrid, /new-run/benchmarks); picking one
+  // sets the runner that runs it (Nullius when both do).
   const benchmarkStep = rec => {
-    const st = C.standard(), sb = C.standardBench(rec), on = C.benchKey(rec), seen = new Set(), tiles = [];
-    const add = (key, title, fam, kind, summary) => { if (seen.has(key)) return; seen.add(key); const c = catOf(key);
-      tiles.push({attr: 'bench', key, on: key === on, title: c.title || title,
-        mark: `<svg aria-hidden="true"><use href="/static/catalogue/marks.svg#bm-${esc(key)}"/></svg>`, cat: c.category, origin: c.origin,
-        fam, famLabel: fam === 'agent' ? 'Agents' : 'Capabilities · ' + kind, tip: c.domain || summary || '', meta: tasksOf(key),
-        find: [c.title || title, key, c.category, c.domain, kind].join(' ')}); };
-    st.benchmarks.forEach(x => add(x.key, x.label, x.family, x.kind, x.summary));
-    C.benchmarks().forEach(x => add(x.key, x.title, 'agent', '', x.domain));
-    tiles.sort((a, b) => a.title.localeCompare(b.title, 'en', {sensitivity: 'base'}));
+    const sb = C.standardBase(rec);
     const versions = C.isStandard(rec) && sb && (sb.versions || []).length > 1
-      ? `<label class="nb-field">Version of ${esc(sb.label)}<select data-std-version>${sb.versions.map(v => `<option value="${esc(v.ref)}" ${v.ref === rec.benchmark || (v.default && rec.benchmark === sb.key) ? 'selected' : ''}>${esc(v.version)}${v.default ? ' (the default)' : ''}</option>`).join('')}</select><small>Each version pins its own upstream, datasets and proofs.</small></label>` : '';
-    return `<div class="nb-sectionhead"><h2>Choose a benchmark.</h2></div>` + picker(tiles, [['agent', 'Agents'], ['capability', 'Capabilities']]) + versions;
+      ? `<label class="nb-field">Version of ${esc(sb.label)}<select data-std-version>${sb.versions.map(v => `<option value="${esc(v.ref)}" ${v.ref === rec.benchmark || (v.default && rec.benchmark === sb.key) ? 'selected' : ''}>${esc(v.label || v.version)}${v.default ? ' (the default)' : ''}</option>`).join('')}</select><small>Each version pins its own upstream, datasets and proofs.</small></label>` : '';
+    return `<div class="nb-sectionhead"><h2>Choose a benchmark.</h2></div><div id="nb-bench-grid"></div>` + versions;
   };
   // Put the recipe on a runner, keeping the one each runner had: the benchmark follows.
   const toRunner = (target, key) => {
@@ -336,8 +416,8 @@
   // ones that have not proved the ports it needs shown greyed, with the reasons - a model and a scope. The server
   // compiles the choices (POST /new-run/runner, nullius/standard/pages/recipe.py).
   // what a unit is: the benchmark's, or a setup's own when only setups run (a conversation, where the paper batches its questions)
-  const unitsOf = rec => { const b = C.standardBench(rec) || {}, own = (b.setups || []).filter(x => C.chosenOf(rec).includes(x.key));
-    return own.length && own.length === C.chosenOf(rec).length ? own[0].units : b.units || {noun: 'unit', nouns: 'units'}; };
+  const unitsOf = rec => { const b = C.standardBench(rec) || {}, runs = C.runsOf(rec), own = (b.setups || []).filter(x => runs.includes(x.key));
+    return own.length && own.length === runs.length ? own[0].units : b.units || {noun: 'unit', nouns: 'units'}; };
   // the first clause of a long description, for a line; the whole goes in its title
   // settings as sub-tabs, one a chosen way of running that has any: [key, label, html]; the open one kept while it is there
   let setTab = '';
@@ -351,23 +431,38 @@
   // reached against its bound, or not run. Its source (nullius/standard/contract/definitions.py, SOURCES) is in its title.
   const SOURCE_SAYS = {official: 'from the authors', adapter: 'from Harbor\'s adapter', nullius: 'made by Nullius'};
   const bound = e => { const [k, v] = Object.entries(e || {})[0] || ['at_least', 1]; return [k === 'at_most' ? '>' : '<', v]; };
-  function proofOf(proven, failed, expect) {
-    if (proven) return {state: 'ok', text: '✓ ' + (proven.passed || '') + (proven.limit ? ' · first ' + proven.limit : ''), title: 'proven on ' + (proven.on || '?') + (proven.shard ? ', shard ' + proven.shard : '')};
+  // short: a proof that met a bound short of the full mark (prove.short_of) - its tick is not green, its bound on hover
+  function proofOf(proven, failed, expect, short) {
+    if (proven) return {state: short ? 'part' : 'ok', text: '✓ ' + (proven.passed || '') + (proven.limit ? ' · first ' + proven.limit : ''), title: (short ? short + ' · ' : '') + 'proven on ' + (proven.on || '?') + (proven.shard ? ', shard ' + proven.shard : '')};
     if (failed && failed.value !== undefined) { const [op, v] = bound(failed.expect || expect); return {state: 'no', text: '✕ ' + failed.value + ' ' + op + ' ' + v, title: 'not proven: ' + [failed.passed, failed.on, ...(failed.problems || [])].filter(Boolean).join(' · ')}; }
     if (failed) return {state: 'no', text: '✕ not proven', title: (failed.problems || []).join(' · ')};
     return {state: 'none', text: 'not run'};
   }
   const proofSpan = p => `<span class="std-proof std-proof-${p.state}"${p.title ? ` title="${esc(p.title)}"` : ''}>${esc(p.text)}</span>`;
   // A control or a check as a plain chip: its name and its proof; where the control comes from is in its title.
-  const controlChip = (c, proof = true) => `<span class="std-ctl" title="${esc(c.key === 'nop' ? 'no answer at all: must score nothing' : c.key === 'oracle' ? 'the reference answers: must score everything' : '')} - ${esc(SOURCE_SAYS[c.source] || c.source)}: ${esc(c.from)}"><b>${esc(c.key)}</b>`
-    + (proof ? proofSpan(proofOf(c.proven, c.failed, c.expect)) : '') + '</span>';
+  const controlChip = (c, proof = true) => `<span class="std-ctl" title="${esc((c.key === 'nop' ? 'no answer at all' : c.key === 'oracle' ? 'the reference answers' : '') + ': must score ' + (c.must || (c.key === 'nop' ? 'nothing' : 'everything')))} - ${esc(SOURCE_SAYS[c.source] || c.source)}: ${esc(c.from)}"><b>${esc(c.key)}</b>`
+    + (proof ? proofSpan(proofOf(c.proven, c.failed, c.expect, c.short)) : '') + '</span>';
   const checkChip = (name, proven, failed, says) => { const p = proofOf(proven, failed); if (p.state === 'ok') { p.title = [says, proven.passed, p.title].filter(Boolean).join(' · '); p.text = '✓'; }
     return `<span class="std-ctl std-checkchip"><b>${esc(name)}</b>${proofSpan(p)}</span>`; };
   // The yes to an agent running as you: asked only for the local backend, where it is no sandbox.
   const consentBox = rec => `<label class="nb-field nb-consent"><span><input type="checkbox" data-std-unsandboxed ${rec.unsandboxed ? 'checked' : ''}> Run it as me, not sandboxed</span></label>`;
-  // The standard's Where step: one machine or several (one shard each), and the backend on them.
+  // A benchmark whose units each boot a VM of their own (OSWorld's guest): a Where option has a value declaring
+  // one (needs.<value>.vm); vmMemory, that VM's memory in GB under the chosen values, 0 for none.
+  const bootsVms = b => Object.values((b || {}).options || {}).some(o => o.step === 'where' && Object.values(o.needs || {}).some(n => n && n.vm));
+  const vmMemory = (rec, b) => Math.max(0, ...Object.entries((b || {}).options || {}).filter(([, o]) => o.step === 'where')
+    .map(([n, o]) => (((o.needs || {})[(rec.bench_options || {})[n] ?? o.default] || {}).vm || {}).memory_gb || 0));
+  // Boat's sizes as the account offers them (nullius/standard/boat.py, SIZES), each with why it cannot be chosen:
+  // the account cannot start one, or it is too small to boot the unit's own VM (boat.fits).
+  const boatSizes = (rec, b) => { const mem = vmMemory(rec, b);
+    return ((schema.standardHere || {}).boatSizes || []).map(z => z.why ? {...z, note: 'Not on this account', why: 'Not on this account: ' + z.why}
+      : mem && typeof z.memory_gb === 'number' && z.memory_gb <= mem ? {...z, note: 'Too small', why: `Too small for ${b.label}'s ${mem} GB VM`} : {...z, why: ''}); };
+  // The standard's Where step. Machines: hosts (this machine, Settings hosts; one shard each) or Boat sandboxes (a VM
+  // per unit, as many at once as the account runs), never both. How it runs: on hosts, local processes or a container;
+  // in a sandbox, or for a benchmark whose units boot VMs of their own (which a container cannot start), fixed.
   function standardWhere(rec) {
     const here = schema.standardHere || {}, list = C.whereList(rec), H = schema.hosts || [], b = C.standardBench(rec);
+    const sandboxes = rec.backend === 'boat', vms = bootsVms(b), noun = unitsOf(rec).noun;
+    if (vms && rec.backend === 'container') rec.backend = 'local';          // recipe.py refuses it: nothing to choose
     const backend = rec.backend || 'local';
     const selected = C.standardOthers(rec).filter(o => C.chosenOf(rec).includes(o.key));
     const dockerWhy = list.includes('local') && here.docker ? 'Not on this machine: ' + here.docker : '';
@@ -375,20 +470,38 @@
     const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
     const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
+    const kind = (v, label, why = '') => `<button type="button" data-std-machines="${v}" aria-pressed="${(v === 'boat') === sandboxes}"${why ? ` disabled aria-disabled="true" title="${esc(why)}"` : ''}>${label}</button>`;
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));
-    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : '', mark: v === 'local' ? '$' : '▣', title: t, tip: sub});
+    const how = (v, t, sub, why) => tile({attr: 'std-backend', key: v, on: backend === v && !why, disabled: !!why, why, note: why ? 'Not usable here' : v === 'local' ? 'Not sandboxed' : `Each ${noun} in a container`, mark: v === 'local' ? icon('terminal') : icon('container'), title: t, tip: sub});
     const dockerOnly = Object.entries((b || {}).environments || {}).filter(([, e]) => !e.local_ok).map(([n]) => n);
     const web = agentRun && Object.values((b || {}).environments || {}).some(e => e.network);   // an agent's public web proxy
+    // a VM benchmark's provider of one value goes on the fixed line; several are its cards (benchOptions)
+    const provider = vms && Object.values(b.options || {}).find(o => o.step === 'where' && o.values && o.values.length === 1 && Object.values(o.needs || {}).some(n => n && n.vm));
+    let sizes = '';
+    if (sandboxes && !here.boat) {
+      const offered = boatSizes(rec, b), fit = offered.find(z => !z.why);
+      if (fit && !offered.some(z => z.key === (rec.boat_size || 'small') && !z.why)) rec.boat_size = fit.key;
+      const size = rec.boat_size || 'small';
+      sizes = '<div class="nb-sectionhead std-wherehead"><h3>VM size</h3></div>'
+        + `<div class="nb-pick-grid std-backends std-boat-sizes">${offered.map(z => tile({attr: 'std-boat-size', key: z.key, on: size === z.key && !z.why,
+          disabled: !!z.why, why: z.why, note: z.note || z.spec, title: z.label})).join('')}</div>`;
+    }
     return '<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
-      + `<div class="nb-pick-grid nb-where">${machine('local', 'This machine', 'Nullius runs it here, in runs/' + rec.name + '.')}${H.map(h => machine(h.entry, h.label, 'Over ssh: the standard\'s code at this commit is sent there, uv put there if missing; its job comes back as it runs.')).join('')}</div>`
-      + (H.length ? (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : '') : `<p class="nb-note">Hosts are named in ${button('Settings → Run hosts', 'data-href="/settings#HOSTS"', 'nb-inlinebutton')}; this machine is the only choice until then.</p>`)
-      + '<div class="nb-sectionhead std-wherehead"><h3>How it runs there</h3></div>'
-      + `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
-      + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
-        : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>'
+      + `<div class="std-machines" role="group" aria-label="Machines">${kind('hosts', 'Hosts')}${kind('boat', 'Sandboxes', here.boatKey ? here.boat || '' : '')}</div>`
+      + (sandboxes ? `<div class="std-boat-card${here.boat ? ' off' : ''}"><strong><img class="std-boat-logo on-light-bg" src="/static/brand/boat.svg" alt="" aria-hidden="true"><img class="std-boat-logo on-dark-bg" src="/static/brand/boat-dark.svg" alt="" aria-hidden="true">Boat</strong>${here.boat ? (here.boatKey ? `<span class="nb-error">${esc(here.boat)}</span>` : button('Add API Key', 'data-href="/settings#sandbox-boat-key"', 'nb-inlinebutton std-boat-key')) : ''}</div>` + sizes
+        : `<div class="nb-pick-grid nb-where std-hosts">${machine('local', 'This machine', 'Runs here')}${H.map(h => machine(h.entry, h.label, 'Over SSH')).join('')}</div>`
+        + (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : ''))
+      + '<div class="nb-sectionhead std-wherehead"><h3>Isolation</h3></div>'
+      + (sandboxes || vms
+        ? `<div class="nb-fixed std-isolation"><span>${vms ? `Each ${esc(noun)} in its own VM` : `The agent alone in each ${esc(noun)}'s VM`}</span>`
+          + `<small>${vms ? (provider ? (sandboxes ? `${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, inside the ${esc(noun)}'s Boat VM` : `${esc(provider.label)}: ${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}`) : '') : 'Answers and keys stay on this machine'}</small></div>`
+        : `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
+          + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
+            : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>')
+      + (b ? benchOptions(rec, b, 'where') : '')
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
-      + (dockerOnly.length && backend === 'local' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - on local processes their units are recorded as not run.</p>` : '')
-      + hostSetup(rec);
+      + (dockerOnly.length && backend !== 'container' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - ${sandboxes ? 'in a Boat VM' : 'on local processes'} their units are recorded as not run.</p>` : '')
+      + (sandboxes ? '' : hostSetup(rec));
   }
   // What the chosen options of the benchmark need: an embedding model, requirements of the machine (standard.json host).
   function optionNeeds(rec) {
@@ -404,7 +517,7 @@
   }
   // The machines' setup for those requirements: each chosen machine's state, a check, an install on an explicit
   // click (sudo -n: a machine whose sudo asks for a password is told the commands instead), the commands to copy.
-  const hostState = {};                                       // entry -> {missing, error, said}
+  const hostState = {};                                       // benchmark:entry:requirement -> {missing, error, said}
   function hostSetup(rec) {
     const b = C.standardBench(rec), need = optionNeeds(rec).host;
     if (!b || !need.length) return '';
@@ -413,66 +526,81 @@
     if ((rec.backend || 'local') === 'container' && chosen.length && chosen.every(o => o.setup)) return '';
     const reqs = need.map(n => [n, (b.host || {})[n]]).filter(([, r]) => r);
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
-    // what installs them; none for a machine's own hardware (a GPU), which no package puts there
-    const lines = reqs.flatMap(([n]) => b.host[n].install).filter((x, i, a) => a.indexOf(x) === i);
-    const line = w => {
-      const st = hostState[w] || (w === 'local' ? {missing: Object.fromEntries(need.filter(n => local[n]).map(n => [n, local[n]]))} : null);
-      const gone = st && st.missing ? Object.entries(st.missing).filter(([n]) => need.includes(n)) : [];
-      const state = !st ? '<span class="nb-tick">not checked</span>' : st.error ? `<span class="nb-tick no">${esc(st.error)}</span>`
-        : gone.length ? `<span class="nb-tick no">${esc(gone.map(([, ps]) => ps.join(', ')).join(', '))}</span>` : '<span class="nb-tick ok">ready ✓</span>';
-      return `<li><b>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</b> ${state} ${button('Check', `data-hostreq-check="${esc(w)}"`, 'nb-inlinebutton')}${lines.length && (gone.length || (st && st.error)) ? ' ' + button('Install for me', `data-hostreq-install="${esc(w)}"`, 'nb-inlinebutton') : ''}${st && st.said ? ` <small>${esc(st.said)}</small>` : ''}</li>`;
-    };
-    return `<div class="nb-sectionhead std-wherehead"><h3>Machine setup</h3><small>Needed by the options you chose, on each machine it runs on</small></div>`
-      + reqs.map(([n, r]) => `<p class="nb-note"><b>${esc(n)}</b>: ${esc(r.summary)}</p>`).join('')
-      + `<ul class="nb-hostreq">${C.whereList(rec).map(line).join('')}</ul>`
-      + (lines.length ? `<div class="std-code"><div class="std-code-head"><span>or run it yourself, on each machine</span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div>` : '');
+    return reqs.map(([name, req]) => {
+      const lines = req.install || [];
+      const machines = C.whereList(rec);
+      const rows = machines.map(w => {
+        const st = hostState[b.key + ':' + w + ':' + name] || (w === 'local' ? {missing: local[name] ? {[name]: local[name]} : {}} : null);
+        const missing = st && st.missing && st.missing[name];
+        const state = !st ? 'Not checked' : st.error ? st.error : missing && missing.length ? 'Missing' : 'Ready';
+        const attrs = `data-hostreq-name="${esc(name)}"`;
+        return `<div class="std-hostreq-row">${machines.length > 1 || w !== 'local' ? `<strong>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</strong>` : ''}`
+          + `<span class="std-hostreq-names">${esc(req.summary || req.label)}</span>`
+          + `<div class="std-hostreq-actions"><span class="${!st || st.error || missing && missing.length ? 'nb-error' : ''}"${missing ? ` title="${esc(missing.join(', '))}"` : ''}>${esc(state)}</span>`
+          + button('Check', `data-hostreq-check="${esc(w)}" ${attrs}`, 'nb-button')
+          + (lines.length && (missing && missing.length || st && st.error) ? button('Install', `data-hostreq-install="${esc(w)}" ${attrs}`, 'nb-button nb-primary') : '')
+          + `</div>${st && st.said ? `<small>${esc(st.said)}</small>` : ''}</div>`;
+      }).join('');
+      return `<div class="nb-sectionhead std-wherehead"><h3>${esc(req.label)}</h3></div><div class="std-hostreq">${rows}`
+        + (lines.length ? `<details><summary>Install manually</summary><div class="std-code"><div class="std-code-head"><span></span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div></details>` : '') + '</div>';
+    }).join('');
   }
-  async function hostReq(entry, what) {
-    const rec = r(), b = C.standardBench(rec);
-    hostState[entry] = {...(hostState[entry] || {}), said: what === 'install' ? 'installing…' : 'checking…', error: ''};
+  async function hostReq(entry, what, name) {
+    const rec = r(), b = C.standardBench(rec), key = b.key + ':' + entry + ':' + name;
+    hostState[key] = {...(hostState[key] || {}), said: what === 'install' ? 'Installing…' : 'Checking…', error: ''};
     renderForm();
     try {
       const res = await nulliusFetch('/new-run/host/' + what, {method: 'POST', headers: {'X-CSRF-Token': schema.csrf},
-        body: new URLSearchParams({entry, benchmark: b.key, requirements: optionNeeds(rec).host.join(',')})});
+        body: new URLSearchParams({entry, benchmark: b.key, requirements: name})});
       const j = await res.json();
-      if (what === 'install' && j.ok) return hostReq(entry, 'check');
-      hostState[entry] = j.ok ? {missing: j.missing || {}} : {...(hostState[entry] || {}), error: j.error || ('HTTP ' + res.status), said: j.manual ? 'run the commands below by hand' : ''};
-    } catch (e) { hostState[entry] = {error: String(e)}; }
+      if (what === 'install' && j.ok) return hostReq(entry, 'check', name);
+      hostState[key] = j.ok ? {missing: j.missing || {}} : {...(hostState[key] || {}), error: j.error || ('HTTP ' + res.status), said: j.manual ? 'Use Install manually below' : ''};
+    } catch (e) { hostState[key] = {error: String(e)}; }
     renderForm();
   }
   // A benchmark's own options (a search, a mode), for the chosen datasets they apply to, and what a value needs of this
   // machine. Those an agent's or capability's run takes ('yours') on the Agent step, with the agents; those only a setup
   // takes (a retriever, a top-k of the paper's pipeline) in that setup's tab, once it is chosen.
-  function benchOptions(rec, b, scope = 'yours') {
+  // A benchmark with agents of its own: its agent option is each one's own choice, and an option whose `when` names
+  // agents is in the tab of each of them (scope 'own', `agent` the one); else the options of `scope`.
+  function benchOptions(rec, b, scope = 'yours', agent = null) {
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
-    const chosen = C.chosenOf(rec);
-    return Object.entries(b.options || {}).filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
+    const chosen = C.runsOf(rec), owned = C.ownAgentsOf(b).length > 0;
+    const given = {...(rec.bench_options || {}), ...(agent ? {agent: agent.agent} : {})};
+    return Object.entries(b.options || {}).filter(([, o]) => !o.limit && o.step === (['where', 'dataset'].includes(scope) ? scope : ''))   // a bound of the upstream's own is with the limits
+      .filter(([n, o]) => !owned || (n !== 'agent' && (scope === 'own') === !!(o.when || {}).agent))
+      .filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
       // one that applies only under another's values (a top-k, only with a retrieval) is left out otherwise
-      .filter(([, o]) => Object.entries(o.when || {}).every(([k, vs]) => vs.includes((rec.bench_options || {})[k] ?? (b.options[k] || {}).default)))
+      .filter(([, o]) => Object.entries(o.when || {}).every(([k, vs]) => vs.includes(given[k] ?? (b.options[k] || {}).default)))
       .filter(([, o]) => {
+        if (scope === 'own') return true;
         const on = o.setups || ['yours'];
+        if (o.step) return on.some(s => s === 'yours' ? chosen.some(k => !(b.setups || []).some(x => x.key === k)) : chosen.includes(s));
         const shared = on.includes('yours') && on.includes('original');
         if (scope === 'shared') return shared;
         if (shared) return false;
-        return scope === 'setup' ? !on.includes('yours') && on.some(k => chosen.includes(k)) : on.includes('yours');
+        // 'agent': an agent's run alone takes it, shown with the agents
+        return scope === 'setup' ? !on.includes('yours') && !on.includes('agent') && on.some(k => chosen.includes(k)) : on.includes('yours') || on.includes('agent');
       })
       .map(([n, o]) => {
       const cur = (rec.bench_options || {})[n] ?? o.default;
-      if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(n === 'temperature' && o.default === 'default' ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
+      if (scope === 'where' && o.values.length === 1 && Object.values(o.needs || {}).some(x => x && x.vm)) return '';   // on the How it runs line
+      if (scope === 'where' && o.values.length === 1) return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}</h3></div><p class="nb-fixed"${(o.about || {})[cur] ? ` title="${esc(o.about[cur])}"` : ''}>${esc((o.names || {})[cur] || cur)}</p>`;
+      if (o.pattern) return `<label class="nb-field std-optselect" title="${esc(o.summary)}${o.example ? esc(' e.g. ' + o.example) : ''}">${esc(o.label)}<input data-bench-opt-select="${esc(n)}" value="${esc(cur === o.default ? '' : cur)}" placeholder="${esc(o.default === 'default' && !o.limit ? 'Provider default' : o.default)}" aria-label="${esc(o.label)}" pattern="${esc(o.pattern)}" autocomplete="off" spellcheck="false"></label>`;
       const tileOf = v => { const need = (o.needs || {})[v] || {};
         const foot = [need.embeddings ? `<span class="nb-tick" title="${esc(need.embeddings)} through the run's relay">${need.embeddings.includes('/') ? 'OpenRouter key' : 'OpenAI or OpenRouter key'}</span>` : '',
           need.reranker ? `<span class="nb-tick">reranker ${esc(need.reranker)}</span>` : '',
-          ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(h)}</span>`),
+          ...(need.host || []).filter(h => local[h]).map(h => `<span class="nb-tick no" title="${esc(((b.host || {})[h] || {}).summary || '')}">needs ${esc(((b.host || {})[h] || {}).label || h)}</span>`),
           v === o.default ? '<span class="nb-tag">default</span>' : ''].join('');
-        return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: v, mark: '', tip: (o.about || {})[v] || '', foot}); };
+        return tile({attr: 'bench-opt', key: n, data: ` data-bench-val="${esc(v)}"`, on: v === cur, title: (o.names || {})[v] || v, mark: '', tip: (o.about || {})[v] || '', foot}); };
       return `<div class="nb-sectionhead std-wherehead"><h3 title="${esc(o.summary)}">${esc(o.label)}${o.datasets.length ? ' · ' + esc(o.datasets.join(', ')) : ''}</h3></div>`
         // by the data: every value with its line (or a need) - cards of one size, the line whole; plain values - one small
         // card each, all one size, or a select past five of them (a line some have is their tooltip)
         + (o.values.some(v => ((o.needs || {})[v] || {}).embeddings || ((o.needs || {})[v] || {}).reranker || (((o.needs || {})[v] || {}).host || []).some(h => local[h]))
           ? `<div class="nb-pick-grid std-optgrid" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(tileOf).join('')}</div>`
           : o.values.length > 5
-          ? `<label class="nb-field std-optselect"><select data-bench-opt-select="${esc(n)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''} title="${esc((o.about || {})[v] || '')}">${esc(v === 'default' ? 'Default' : v + (v === o.default ? ' (default)' : ''))}</option>`).join('')}</select></label>`
-          : `<div class="std-valgrid" style="--w:${Math.max(7, ...o.values.map(v => String(v).length))}ch" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(v => `<button class="nb-tile std-val" data-bench-opt="${esc(n)}" data-bench-val="${esc(v)}" aria-pressed="${v === cur}" title="${esc((o.about || {})[v] || (v === o.default ? 'default' : v))}"><strong>${esc(v)}</strong>${v === o.default ? '<small>default</small>' : ''}</button>`).join('')}</div>`);
+          ? `<label class="nb-field std-optselect"><select data-bench-opt-select="${esc(n)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''} title="${esc((o.about || {})[v] || '')}">${esc(v === 'default' && !(o.names || {})[v] ? 'Default' : ((o.names || {})[v] || v) + (v === o.default ? ' (default)' : ''))}</option>`).join('')}</select></label>`
+          : `<div class="std-valgrid" style="--w:${Math.max(7, ...o.values.map(v => String((o.names || {})[v] || v).length))}ch" role="radiogroup" aria-label="${esc(o.label)}">${o.values.map(v => `<button class="nb-tile std-val" data-bench-opt="${esc(n)}" data-bench-val="${esc(v)}" aria-pressed="${v === cur}" title="${esc((o.about || {})[v] || (v === o.default ? 'default' : v))}"><strong>${esc((o.names || {})[v] || v)}</strong>${v === o.default ? '<small>default</small>' : ''}</button>`).join('')}</div>`);
     }).join('');
   }
   // Only credentials needing attention belong in the builder. Without a dataset's default
@@ -493,44 +621,78 @@
       return `<p class="nb-note nb-error">${state ? `Replace the expired ${what}` : `Add ${provider ? 'a ' : ''}${what}`} in ${settings}${required ? '' : ' (some tasks may need it)'}.</p>`;
     }).join('');
   }
-  // The benchmark step, both ways (Harbor's catalogue, the standard's benchmarks): a search, filter chips and a grid
-  // of tiles, as the Benchmarks page draws them. The filter hides tiles in place (applyPick), so typing keeps focus.
-  const picks = {}, pickOf = () => (picks[step] ||= {q: '', cat: '', fam: ''});   // each step its own search and filters
-  const catOf = key => (schema.benchmarks || []).find(b => b.key === key) || {};
-  const tasksOf = key => { const total = catOf(key).task_count;
-    if (Number.isInteger(total) && total > 0) return `${total.toLocaleString('en-US')} tasks`;
-    const t = schema.datasets.filter(d => d.benchmark === key && d.tasks).map(d => d.tasks);
-    return !t.length ? '' : t.every(n => n === t[0]) && t.length > 1 ? `${t[0]} tasks each` : `${t.reduce((a, n) => a + n, 0)} tasks`; };
-  const pickChip = (attr, v, label, on) => `<button type="button" class="nb-pick-chip" data-${attr}="${esc(v)}" aria-pressed="${on}">${esc(label)}</button>`;
-  // one tile: {attr, key, on, title, mark, cat, origin, line, meta, foot, find, fam, data (more attributes), tip (its title)}
-  const tile = t => `<button class="nb-tile${t.disabled ? ' nb-tile-unfit' : ''}" data-${t.attr}="${esc(t.key)}" aria-pressed="${t.on}"${t.data || ''}${t.disabled ? ` disabled aria-disabled="true" title="${esc(t.why || '')}"` : t.tip ? ` title="${esc(t.tip)}"` : ''} data-cat="${esc(t.cat || '')}" data-fam="${esc(t.fam || '')}" data-find="${esc((t.find || t.title).toLowerCase())}">`
+  // one tile: {attr, key, on, title, mark, line, note, meta, foot, data (more attributes), tip (its title)}
+  const tile = t => `<button class="nb-tile${t.disabled ? ' nb-tile-unfit' : ''}" data-${t.attr}="${esc(t.key)}" aria-pressed="${t.on}"${t.data || ''}${t.disabled ? ` disabled aria-disabled="true" title="${esc(t.why || '')}"` : t.tip ? ` title="${esc(t.tip)}"` : ''}>`
     + `<span class="nb-tile-head">${t.mark ? `<span class="nb-mark">${t.mark}</span>` : ''}<strong>${esc(t.title)}</strong><span class="nb-tile-check" aria-hidden="true">${t.on ? '✓' : ''}</span></span>`
-    + (t.cat || t.origin || t.fam ? `<span class="nb-tile-tags">${t.cat ? `<span class="nb-tile-cat">${esc(t.cat)}</span>` : ''}${t.origin === 'community' ? '<span class="nb-tile-community">Community</span>' : ''}${t.famLabel ? `<span class="nb-tile-fam">${esc(t.famLabel)}</span>` : ''}</span>` : '')
     + (t.line ? `<span class="nb-tile-line">${esc(t.line)}</span>` : '') + (t.note ? `<span class="nb-tile-note">${esc(t.note)}</span>` : '')
     + (t.meta || t.foot ? `<span class="nb-tile-foot">${t.meta ? `<span>${esc(t.meta)}</span>` : ''}${t.foot || ''}</span>` : '') + '</button>';
   // a machine to run on: this one or a host, its connection state filled in by Test connection
-  const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: v === 'local' ? '⌂' : '⇄', title: t, tip: sub,
+  const icon = name => `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: icon(v === 'local' ? 'machine' : 'network'), title: t, tip: sub,
     foot: v !== 'local' ? `<span class="nb-state nb-hoststate" data-host-state="${esc(v)}"></span>` : ''});
-  const picker = (tiles, fams, noun = 'benchmark') => {
-    const pick = pickOf(), cats = [...new Set(tiles.map(t => t.cat).filter(Boolean))].sort();
-    return `<div class="nb-pick"><div class="nb-pick-bar">`
-      + `<label class="nb-pick-find"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input type="search" data-pick-find value="${esc(pick.q)}" placeholder="Search ${noun === 'capability' ? 'capabilities' : noun + 's'}" aria-label="Search ${noun === 'capability' ? 'capabilities' : noun + 's'}" autocomplete="off"></label>`
-      + (cats.length > 1 ? `<div class="nb-pick-chips" role="group" aria-label="Category">${pickChip('pick-cat', '', 'All', !pick.cat)}${cats.map(c => pickChip('pick-cat', c, c, pick.cat === c)).join('')}</div>` : '')
-      + (fams ? `<div class="nb-pick-chips" role="group" aria-label="Runs">${pickChip('pick-fam', '', 'Any', !pick.fam)}${fams.map(([v, l]) => pickChip('pick-fam', v, l, pick.fam === v)).join('')}</div>` : '')
-      + `</div><div class="nb-pick-grid">${tiles.map(tile).join('')}</div><p class="nb-pick-none" hidden>No ${noun} matches.</p></div>`;
-  };
-  function applyPick() {
-    const box = root.querySelector('.nb-pick'), pick = pickOf(); if (!box) return;
-    const words = pick.q.toLowerCase().split(/\s+/).filter(Boolean);
-    let shown = 0;
-    box.querySelectorAll('.nb-tile').forEach(t => {
-      const on = t.getAttribute('aria-pressed') === 'true';
-      const fits = (!pick.cat || t.dataset.cat === pick.cat) && (!pick.fam || t.dataset.fam === pick.fam) && words.every(w => t.dataset.find.includes(w));
-      t.hidden = !fits && !on; if (!t.hidden) shown++;
+  // The grids drawn by the server and run by the card toolkit (tables.js): the Benchmark step's (/new-run/benchmarks,
+  // one choice) and the standard's Agent step's for its benchmark (/new-run/agents, from the Agents page's entries).
+  // Each is kept while what it draws is the same, so a search or a filter survives each render, and its cards are
+  // pressed as the recipe chooses (nullius-pick changes the recipe). Its view, cards or a table, is the viewer's:
+  // the toggle switches it in place, never leaving the page.
+  const grids = [
+    {slot: 'nb-bench-grid', store: 'nb-bench-view', url: () => '/new-run/benchmarks?', chosen: rec => [C.benchKey(rec)], after: benchTasks},
+    {slot: 'nb-agent-grid', store: 'nb-agent-view', url: rec => '/new-run/agents?' + new URLSearchParams({benchmark: rec.benchmark}) + '&', chosen: rec => C.chosenOf(rec)},
+  ];
+  grids.forEach(g => { g.view = 'cards'; g.ref = ''; g.node = null; try { g.view = localStorage.getItem(g.store) === 'table' ? 'table' : 'cards'; } catch {} });
+  const placeGrids = () => grids.forEach(placeGrid);
+  function placeGrid(g) {
+    const slot = $('#' + g.slot), rec = r();
+    if (!slot) return;
+    const ref = g.url(rec) + (g.view === 'table' ? 'view=table' : '');
+    if (g.ref !== ref) { g.ref = ref; g.node = null; loadGrid(g, ref); }
+    if (!g.node) { slot.setAttribute('aria-busy', 'true'); slot.innerHTML = '<div class="page-skeleton" aria-hidden="true">' + '<div class="skel skel-block"></div>'.repeat(3) + '</div>'; return; }
+    slot.replaceWith(g.node);
+    const chosen = g.chosen(rec);
+    g.node.querySelectorAll('[data-pick]').forEach(b => {   // a card's toggle, or a row's box
+      const on = !b.disabled && chosen.includes(b.dataset.pick);
+      if (b.type === 'checkbox' || b.type === 'radio') b.checked = on; else b.setAttribute('aria-pressed', String(on));
     });
-    box.querySelectorAll('[data-pick-cat]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pickCat === pick.cat));
-    box.querySelectorAll('[data-pick-fam]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pickFam === pick.fam));
-    box.querySelector('.nb-pick-none').hidden = shown > 0;
+    // a choice made elsewhere (a recipe loaded) that the filters hide: the toolkit draws again, and it shows
+    if (g.node.dataset.wired && [...g.node.querySelectorAll('[data-pick]')].some(b => b.matches('[aria-pressed="true"], :checked') && b.closest('[data-card], tr').hidden))
+      g.node.querySelector('[data-search]')?.dispatchEvent(new Event('input'));
+    g.after?.();
+    if (!g.node.dataset.wired) {
+      g.node.dataset.wired = '1';
+      const cards = g.node.querySelector('[data-cards]'), table = g.node.querySelector('table[data-table]');
+      if (cards) NulliusTable.cards(cards);
+      if (table) { NulliusTable.sticky(table); NulliusTable.wire(table); }
+      g.node.querySelectorAll('.seg-toggle a').forEach(a => a.addEventListener('click', e => {
+        e.preventDefault();
+        g.view = new URL(a.href).searchParams.get('view') === 'table' ? 'table' : 'cards';
+        try { localStorage.setItem(g.store, g.view); } catch {}
+        placeGrid(g);
+      }));
+    }
+  }
+  // the Tasks of a benchmark with versions (its data-tasks, {version: {text, label}}, the default's under ''): the
+  // chosen benchmark's as the version the recipe names reads, any other's its default's
+  function benchTasks() {
+    const rec = r(), on = C.benchKey(rec), v = versionOf(rec);
+    root.querySelectorAll('#nb-bench-grid [data-tasks]').forEach(el => {
+      const by = JSON.parse(el.dataset.tasks), t = by[el.querySelector('[data-pick]')?.dataset.pick === on && by[v] ? v : ''];
+      const dd = el.querySelector('.bench-stats dd'), dt = el.querySelector('.bench-stats dt'), td = el.querySelector('td[data-col="tasks"] > span');
+      if (dd) { dd.textContent = t.text; dt.textContent = t.label; }
+      if (td) td.textContent = t.text;
+    });
+  }
+  async function loadGrid(g, ref) {
+    const res = await nulliusFetch(ref).catch(() => null);
+    const html = res && res.ok ? await res.text().catch(() => null) : null;
+    if (g.ref !== ref) return;   // another benchmark or view was chosen while it loaded
+    if (html === null) {         // said once; the next render asks again
+      g.ref = '';
+      const slot = $('#' + g.slot);
+      if (slot) { slot.removeAttribute('aria-busy'); slot.innerHTML = '<p class="nb-note nb-error">Could not load the list. Change step and come back to try again.</p>'; }
+      return;
+    }
+    g.node = Object.assign(document.createElement('div'), {id: g.slot, innerHTML: html});
+    placeGrid(g);
   }
   function modelChoiceCards(rec) {
     const hasPaper = C.paperOffered(rec), on = rec.model_choice || 'any';
@@ -548,50 +710,36 @@
           tip: x.summary || '', meta: x.units ? x.units + ' ' + u.nouns : '',
           foot: (x.controls || []).map(c => controlChip(c)).join('') + checkChip('stable', (x.proofs || {}).units, (x.failed || {}).units, 'the same ids twice, each unique')
             + ((b.controls || []).some(c => c.key === 'oracle') ? checkChip('no leak', (x.proofs || {}).leak, (x.failed || {}).leak, 'nothing of the reference shows before the run') : '')})).join('')}</div>`
-        + credentialWarnings(b, b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)));
+        + benchOptions(rec, b, 'dataset') + credentialWarnings(b, b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)));
     if (step === S.agent) {
-      const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && !o.setup);
-      const setups = all.filter(o => o.setup), controls = all.filter(o => o.control);
+      const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && (!o.setup || o.own));
+      const setups = all.filter(o => o.setup && !o.own), controls = all.filter(o => o.control);
       const ds = b.datasets.find(x => C.datasetsOf(rec).includes(x.id)) || b.datasets[0];
-      // an agent or a capability as a tile: its name, a skill it failed or a fidelity that differs as a tick; one that has not
-      // proved a port the benchmark needs greyed, the ports it lacks named (the reasons whole in its title)
-      const tileOf = o => {
-        const ok = !o.why.length, lacks = b.needs.filter(p => !o.proven[p]);
-        const skills = b.needs.flatMap(p => o.proven[p] ? o.proven[p].skills || [] : []).filter(s => !s.shown).map(s => `<span class="nb-tick no" title="${esc(s.says)}">${esc(s.id)} ✗</span>`).join('');
-        const fid = o.fidelity && o.fidelity.verdict !== 'same' ? `<span class="nb-tick ${o.fidelity.verdict === 'same' ? 'ok' : 'no'}" title="ACP ${o.fidelity.verdict === 'same' ? 'gives its model the same requests as its own CLI' : 'differs from its own CLI: ' + esc(o.fidelity.verdict)}">ACP ${o.fidelity.verdict === 'same' ? '= CLI ✓' : '≠ CLI'}</span>` : '';
-        const older = b.needs.some(p => o.proven[p] && o.proven[p].older) ? '<span class="nb-tick no" title="proven on an older kit: worth running again">older kit</span>' : '';
-        return {attr: 'std-other', key: o.key, on: ok && C.chosenOf(rec).includes(o.key), disabled: !ok, why: o.why.join('; '), title: o.label + (o.version && !o.label.includes(o.version) ? ' ' + o.version : ''),
-          mark: agent ? agentMark(o.key, o.label) : esc(o.label[0]), cat: o.protocol, fam: ok ? 'fit' : 'unfit', tip: o.summary, note: ok ? '' : 'Lacks ' + (lacks.map(p => p.replace(/^[^.]+\./, '').replace(/\/v\d+$/, '').replace(/[-_]/g, ' ')).join(', ') || 'a port it needs'),
-          foot: fid + skills + older, find: [o.label, o.key, o.version, o.protocol, o.summary].join(' ')};
-      };
       // each chosen agent's options, at its vendor's default unless changed: {ref: {name: word}}
-      const chosen = others.filter(o => C.chosenOf(rec).includes(o.key) && !o.why.length);
+      const chosen = others.filter(o => C.chosenOf(rec).includes(o.key) && !o.why.length), mine = chosen.filter(o => !o.own);
       const optionsOf = o => { const mine = (rec.options || {})[o.key] || {}, opts = Object.entries(o.options || {});
         return !opts.length ? '' : `<div class="std-options">` + opts.map(([n, x]) => {
           const cur = mine[n] ?? x.default;
           return x.values
             ? `<label class="nb-field std-optselect" title="${esc(x.summary)}">${esc(words(n))}<select data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}">${x.values.map(v => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(v === 'default' ? 'Default' : v + (v === x.default ? ' (its default)' : ''))}</option>`).join('')}</select></label>`
-            : `<label class="nb-field std-optselect" title="${esc(x.summary)}">${esc(words(n))}<input data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}" value="${esc(mine[n] ?? '')}" placeholder="${esc(x.default ?? '')} (its default)" spellcheck="false" autocomplete="off"></label>`;
+            : `<label class="nb-field std-optselect" title="${esc(x.summary)}${x.example ? esc(' e.g. ' + x.example) : ''}">${esc(words(n))}<input data-std-option="${esc(n)}" data-std-option-of="${esc(o.key)}" value="${esc(mine[n] ?? '')}" placeholder="${esc(x.default ?? '')} (its default)" spellcheck="false" autocomplete="off"></label>`;
         }).join('') + '</div>'; };
       // the chosen ones' settings, one tab each: the benchmark's own way, the benchmark's settings every agent takes, each one's own
       const yoursWord = agent ? 'agent' : (b.kind || 'capability');
-      // the benchmark's own way of running it (its reference, as published) is one more choice beside yours
-      const setupTile = o => ({attr: 'std-other', key: o.key, on: C.chosenOf(rec).includes(o.key), mark: o.key === 'original' ? '◆' : '◇',
-        title: o.reference_agent || (agent ? 'No agent · Original' : 'Original ' + (b.kind || 'capability')), cat: 'reference', fam: 'fit', tip: o.summary, find: [b.label, o.label, 'reference'].join(' ')});
       const ds2 = ds;
       const controlTile = o => { const c = ((ds2 || {}).controls || []).find(x => x.key === o.key) || {...o, from: o.summary};
         return tile({attr: 'std-other', key: o.key, on: C.chosenOf(rec).includes(o.key), mark: o.key === 'nop' ? '∅' : '≡', title: o.label,
           tip: o.summary + (b.judged ? ' The judge still runs.' : ''), foot: controlChip(c)}); };
       const setupsNamed = ls => ls.filter(l => !ls.some(m => m !== l && l.startsWith(m))).join(' and ');
-      const onSetups = setups.filter(o => C.chosenOf(rec).includes(o.key));
+      const onSetups = setups.filter(o => C.chosenOf(rec).includes(o.key)).concat(chosen.some(o => o.own) ? [{label: 'Original'}] : []);
       return `<div class="nb-sectionhead"><h2>Who runs it?</h2></div>`
-        + picker([...setups.map(setupTile), ...others.map(tileOf)], [['fit', 'Can run it'], ['unfit', 'Cannot']], agent ? 'agent' : 'capability')
+        + '<div id="nb-agent-grid"></div>'
         + (others.length || setups.length ? '' : note('None yet', 'Bring one in with the /import-standard skill, or by hand: docs/standard.md.'))
         + settingsTabs([
             ...(chosen.length || onSetups.length ? [['shared', 'Every ' + yoursWord, benchOptions(rec, b, 'shared')]] : []),
             ...(onSetups.length ? [['setup', b.label + ' · ' + setupsNamed(onSetups.map(o => o.label)), benchOptions(rec, b, 'setup')]] : []),
-            ...(chosen.length ? [['yours', agent ? 'Selected agents' : 'Selected capabilities', benchOptions(rec, b)]] : []),
-            ...chosen.map(o => [o.key, o.label, optionsOf(o)])])
+            ...(mine.length ? [['yours', agent ? 'Selected agents' : 'Selected capabilities', benchOptions(rec, b)]] : []),
+            ...chosen.map(o => [o.key, o.label, o.own ? benchOptions(rec, b, 'own', o) : optionsOf(o)])])
         + (controls.length ? `<div class="nb-sectionhead std-controlshead std-sethead"><h3>Checks</h3></div><div class="nb-pick-grid">${controls.map(controlTile).join('')}</div>` : '')
         ;
     }
@@ -600,15 +748,16 @@
     if (step === S.model) {
       const lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
       return `<div class="nb-sectionhead"><h2>Choose the model.</h2></div>` + modelChoiceCards(rec)
-        + providerField(rec, C.PROVIDERS)
+        + providerField(rec, C.providersOf(rec))
         + field('Model', 'model', rec.model, {list:'nb-models', placeholder:paper && C.paperListed(rec) ? 'Choose a paper model' : 'Search or enter a model ID'})
+        + servedField(rec, 'model')
         // the benchmark's other models: the user simulator its conversations need, the judge that grades - each its official one
         // unless named; like the paper, the official one; like the leaderboard, its own and the options it fixes
         + (b.simulator ? (paper ? fixed('Model for the user simulator', lb && lb.simulator || b.simulator, lb && lb.simulator ? 'leaderboard' : 'official') : field('Model for the user simulator', 'simulator_model', rec.simulator_model || '', {list: 'nb-models', placeholder: b.simulator + ' (official)',
-            hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) : '')
+            hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator') : '')
         + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)',
-            hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) : '')
-        + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, v, 'leaderboard')).join('') : '')
+            hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
+        + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, ((b.options[k] || {}).names || {})[v] || v, 'leaderboard')).join('') : '')
         + keyLine(rec);
     }
     if (step === S.limits) {
@@ -617,13 +766,70 @@
       const ds = sets.length === 1 ? sets[0] : null, all = ds && ds.units ? String(ds.units) : 'all';
       return '<div class="nb-sectionhead"><h2>Scope</h2></div><div class="nb-two">'
         + field('Number of ' + u.nouns, 'limit', rec.limit, {type: 'number', min: 1, placeholder: all, hint: 'The first ones' + per + ', in its order.'})
-        + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: '1'}) + '</div>'
-        + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
+        + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: rec.backend === 'boat' ? String((schema.standardHere || {}).boatSlots || 'Boat\'s limit') : '1'}) + '</div>'
+        + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
+        + field('Retries per attempt', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0'}) + '</div>'
+        // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
+        + ((b.needs || []).includes('agent.conversation/v1')
+          ? field('Turns per conversation', 'turns', rec.turns ?? '', {type: 'number', min: 1, placeholder: String((b.timeouts || {}).turns || ''),
+              declared: ((b.timeouts || {}).catalogue || []).includes('turns')}) : '')
+        // the most model calls a unit's agent may make, the whole unit through (recipe.py: run --max-calls); none calls no model
+        // an agent's alone: a capability's route carries the benchmark's reader too (run.py refuses it)
+        + (C.standardKeyless(rec) || (b.needs || []).some(n => n.startsWith('cap.')) ? '' : field('Model calls per ' + u.noun, 'max_calls', rec.max_calls ?? '', {type: 'number', min: 1, placeholder: 'none'}))
         // the whole run's, shared by its jobs (recipe.py); a run that calls no model spends nothing: no cap to offer
         + (C.standardKeyless(rec) ? '' : field('Spending cap (USD)', 'max_usd', rec.max_usd ?? '', {type: 'number', min: 0, placeholder: 'none'})
-          + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'}));
+          + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'}))
+        + standardTimeLimits(rec, b, u) + benchLimits(rec, b);
     }
     return '';
+  }
+  // The bounds the benchmark's upstream has of its own (its steps, its errors: options with ``limit``), in a section
+  // of the benchmark's name after the run's scope and its time limits: those the chosen datasets and participants
+  // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).
+  function benchLimits(rec, b) {
+    const chosen = C.runsOf(rec), yours = chosen.some(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k));
+    // a default by agent: the chosen own agents' one when they share it
+    const own = [...new Set(C.ownChosen(rec).map(a => a.agent))], given = rec.bench_options || {};
+    const of = k => k === 'agent' && own.length ? (own.length === 1 ? own[0] : '') : given[k] ?? (b.options[k] || {}).default;
+    const rows = Object.entries(b.options || {}).filter(([, o]) => o.limit).sort(([, x], [, y]) => x.label.localeCompare(y.label))
+      .filter(([, o]) => !o.datasets.length || C.datasetsOf(rec).some(id => o.datasets.includes(id)))
+      .filter(([, o]) => (o.setups || ['yours']).some(s => s === 'yours' ? yours : chosen.includes(s)))
+      .map(([n, o]) => {
+        const [k, by] = Object.entries(o.by || {})[0] || [];
+        const def = (!yours && k && by[of(k)]) || o.default;
+        return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}<input class="nb-declared" data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
+      });
+    return rows.length ? `<div class="nb-sectionhead nb-sectionnext"><h2>${esc(b.label)}</h2></div>` + rows.join('') : '';
+  }
+  // a time limit's row, laid out as every other field of the step: its name and its unit
+  const LIMIT_TIPS = {agent: 'A task that declares its own limit keeps it unless one is typed here.', verify: 'Each task\'s own check limit unless one is typed here.'};
+  const minutesRow = (k, name, value, [placeholder, declared]) => `<label class="nb-field"${LIMIT_TIPS[k] ? ` title="${esc(LIMIT_TIPS[k])}"` : ''}>${esc(name)} (min)`
+    + `<input${declared ? ' class="nb-declared"' : ''} aria-label="${esc(name)}" type="number" min="0.1" step="any" data-std-minutes="${k}" value="${value ?? ''}" placeholder="${esc(placeholder)}" autocomplete="off"></label>`;
+  // The agent's limit while its field is empty, as [minutes, declared]: by priority, the benchmark's (a setup's own,
+  // as its Original declares it, else its limits.turn_seconds), then the agent's, then Nullius's default. Participants
+  // that would get different ones read "per setup"; a check (a control) has its own.
+  function agentDefault(rec, b) {
+    const d = b.timeouts || {}, m = s => String(+(s / 60).toFixed(2)), benchwide = (d.catalogue || []).includes('agent');
+    const ofOne = k => { const s = (b.setups || []).find(x => x.key === k); return s && s.turn_seconds ? [s.turn_seconds, true] : [d.agent, benchwide]; };
+    const each = C.runsOf(rec).filter(k => !(b.controls || []).some(x => x.key === k)).map(ofOne);
+    const all = each.length ? each : [[d.agent, benchwide]];
+    if (all.some(x => x[0] !== all[0][0])) return ['per setup', true];
+    return [m(all[0][0]), all[0][1]];
+  }
+  // A unit's time limit for each phase, in minutes, forced on every participant (recipe.py: run --timeout);
+  // empty keeps the default: the task's own when it declares one, else the benchmark's, else Nullius's.
+  function standardTimeLimits(rec, b, u) {
+    const d = b.timeouts || {}, t = rec.timeouts || {};
+    // each field shows, greyed, the value used while it is empty; a task that declares its own keeps it
+    const m = s => String(+(s / 60).toFixed(2));
+    // [placeholder, declared]: the benchmark's or the agent's own reads as a value, Nullius's default stays grey
+    const setupSeconds = C.runsOf(rec).map(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k) && b.family === 'agent' ? (d.setup_agent || d.setup) : d.setup);
+    const setup = setupSeconds.length && setupSeconds.some(s => s !== setupSeconds[0]) ? ['per setup', true]
+      : [m(setupSeconds[0] || d.setup), (setupSeconds[0] || d.setup) !== d.setup];
+    const def = {setup, image: [m(d.image), false], agent: agentDefault(rec, b), verify: ['per task', true], score: [m(d.score), (d.catalogue || []).includes('score')]};
+    const label = (k, l) => k === 'agent' ? 'Agent, whole ' + u.noun : l;
+    return '<div class="nb-sectionhead nb-sectionnext"><h2>Time limits</h2></div>'
+      + C.STANDARD_PHASES.map(([k, l]) => minutesRow(k, label(k, l), t[k], def[k])).join('');
   }
   function compileRunner() {
     const rec = r(), key = JSON.stringify(rec);
@@ -636,17 +842,19 @@
         const res = await nulliusFetch('/new-run/runner', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({recipe: rec})});
         out = await res.json();
       } catch (e) { out = {errors: [{step: REVIEW, message: 'The recipe could not be compiled here: ' + e}], notes: [], review: []}; }
-      if (key !== runnerKey) return;
+      const accepted = acceptCompile(r(), runnerServed, out, key, runnerKey);
+      runnerServed = accepted.served;
+      if (step === S.model) syncServed();
+      if (!accepted.current) return;
       runnerOut = out;
       if (step === REVIEW) renderForm();
       refreshPlan();
     }, 120);
   }
-  const field = (label,key,value,{type='text',hint='',list='',min='',max='',placeholder=''}={}) => `<label class="nb-field">${label}<input aria-label="${esc(label)}" data-field="${key}" type="${type}" value="${esc(value)}" ${list?`list="${list}"`:''} ${min!==''?`min="${min}"`:''} ${max!==''?`max="${max}"`:''} ${type==='number'?'step="any"':''} placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false">${hint?`<small>${hint}</small>`:''}</label>`;
+  const field = (label,key,value,{type='text',hint='',list='',min='',max='',placeholder='',declared=false}={}) => `<label class="nb-field">${label}<input${declared?' class="nb-declared"':''} aria-label="${esc(label)}" data-field="${key}" type="${type}" value="${esc(value)}" ${list?`list="${list}"`:''} ${min!==''?`min="${min}"`:''} ${max!==''?`max="${max}"`:''} ${type==='number'?'step="any"':''} placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false">${hint?`<small>${hint}</small>`:''}</label>`;
   const select = (label,key,value,options) => `<label class="nb-field">${label}<select data-field="${key}">${options.map(([v,t])=>`<option value="${esc(v)}" ${v===value?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
   const fixed = (label,value,whose='official') => `<label class="nb-field ui-field-row"><span class="ui-field-copy">${esc(label)}</span><span class="nb-fixed">${esc(value)} (${whose})</span></label>`;
   const note = (title,text) => `<div class="nb-notice"><strong>${title}</strong>${text}</div>`;
-
   function customRows(agent = '') {
     // '' lists the shared entries (every agent, and the other owners); an id lists that agent's own --ak.
     const rows = r().custom.map((p, i) => [p, i]).filter(([p]) => agent ? p.scope === 'agent' && p.agent === agent : !p.agent);
@@ -667,7 +875,7 @@
       if(C.needsCredentials(rec)){
         const controlOnly=!rec.agents.some(id=>!schema.agents.find(a=>a.id===id)?.control);
         const tau3=rec.benchmark==='tau3-bench';
-        html+=providerField(rec,C.PROVIDERS);
+        html+=providerField(rec,C.providersOf(rec));
         if(tau3&&controlOnly)html+=`<div class="nb-two">${field('Model · customer','userModel',rec.userModel,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'})}${field('Model · evaluator','evalModel',rec.evalModel,{list:'nb-models',placeholder:'same as the customer'})}</div>`;
         else if(tau3)html+=field('Model · agent','model',rec.model,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'})+`<div class="nb-two">${field('Model · customer','userModel',rec.userModel,{list:'nb-models',placeholder:'same as the agent'})}${field('Model · evaluator','evalModel',rec.evalModel,{list:'nb-models',placeholder:'same as the customer'})}</div>`;
         else html+=field('Model','model',rec.model,{list:'nb-models',placeholder:'vendor/model, as the provider lists it'});
@@ -714,7 +922,7 @@
       html='<div class="nb-sectionhead"><h2>Scope & execution</h2></div>';
       const allTasks=(()=>{const ds=schema.datasets.find(d=>d.benchmark===rec.benchmark);return ds&&ds.tasks?'all '+ds.tasks:'all';})();
       html+=`<div class="nb-two">${field('Number of tasks','tasks',rec.tasks,{type:'number',min:1,placeholder:allTasks,hint:'Empty: '+allTasks+'.'})}${field('Concurrent trials','concurrency',rec.concurrency,{type:'number',min:1})}</div>`;
-      html+=`<div class="nb-two">${field('Retries per trial','retries',rec.retries,{type:'number',min:0,hint:'Run a trial again after an error, up to this many times.'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
+      html+=`<div class="nb-two">${field('Retries per attempt','retries',rec.retries,{type:'number',min:0,placeholder:'0'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
         +harborExecutableFields(rec);
       html+=field('Output directory','output',rec.output,{});
     }
@@ -724,14 +932,14 @@
       const H=schema.hosts||[], rec2=r(), on=v=>rec2.where===v;
       html='<div class="nb-sectionhead"><h2>Where does it run?</h2></div>'
         +`<div class="nb-pick-grid nb-where">${[['local','This machine','Nullius runs the script here, in runs/'+esc(rec2.name)+'.'],...H.map(h=>[h.entry,h.label,own?'Over ssh. uv and a snapshot of this runner are put there if missing; results and proofs come back as it runs.':'Over ssh. The tasks are sent there, and a repository’s Harbor as the wheels built here; uv runs the Harbor the recipe pins; the job comes back as it runs.'])].map(([v,t,sub])=>machineTile('where',v,t,sub,on(v))).join('')}</div>`
-        +(H.length?button('Test connection','id="nb-test-host"'+(rec2.where==='local'?' disabled':''))+' <span id="nb-hosttest" class="nb-note"></span>':note('No host yet','Hosts are named in Settings → Run hosts; this machine is the only choice until then.'));
+        +(H.length?button('Test connection','id="nb-test-host"'+(rec2.where==='local'?' disabled':''))+' <span id="nb-hosttest" class="nb-note"></span>':note('No host yet','Hosts are named in Settings → Hosts; this machine is the only choice until then.'));
     }
     if(step===REVIEW){
       // the standard's review names Where itself (recipe.py): its machines and its backend
       const rows=own?[...((runnerOut&&runnerOut.review)||[]),...(C.isStandard(rec)?[]:[[S.where,'Where',C.whereLabel(rec)]])]:C.review(rec);
       html='<div class="nb-sectionhead"><h2>Review the experiment.</h2></div>'+rows.map(([i,t,v])=>`<div class="nb-reviewrow"><div><small>${t}</small><strong>${esc(v)}</strong></div>${button('Edit',`data-step="${i}"`)}</div>`).join('')+'<div id="nb-errors" class="nb-errorlist" hidden></div><div id="nb-reviewnotes"></div>'+(schema.local?'<section id="nb-prereq" class="nb-prereq" aria-live="polite"></section>':'')+runPanel();
     }
-    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';applyPick();
+    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';placeGrids();
     if(step===REVIEW&&schema.local){drawPrereq();checkPrereq();}
     $('#nb-back').hidden=step===S.benchmark;
     $('#nb-next').textContent=step===REVIEW?'Export recipe JSON':stepName(steps[nextShown(step,1)],nextShown(step,1))+' →';
@@ -744,7 +952,7 @@
       const out=runnerOut||{errors:[],notes:[]};
       compiled={errors:out.errors||[],notes:out.notes||[]};
     }else{compiled=C.compile(rec);}
-    $('#nb-localerrors').textContent=compiled.errors.filter(e=>e.step===step).map(e=>e.message).join(' ');
+    $('#nb-localerrors').textContent=compiled.errors.filter(e=>e.step===step&&!e.shown).map(e=>e.message).join(' ');
     const errors=$('#nb-errors');
     if(errors){
       errors.hidden=!compiled.errors.length;
@@ -762,59 +970,54 @@
     return i===S.agent&&b?(b.family==='agent'?'Agent':(b.kind||'capability').replace(/^./,c=>c.toUpperCase())):t;}
   // Next and Back skip a step no recipe shows (Setup, its number kept for saved drafts)
   const nextShown=(i,dir)=>{let j=i+dir;while(j>S.benchmark&&j<REVIEW&&!C.stepShown(r(),j))j+=dir;return Math.max(S.benchmark,Math.min(REVIEW,j));};
-  function render(focus=false) {
+  // draw again where the reader is: every scrolled box the builder sits in keeps its offset (a pick redraws the step)
+  function inPlace(draw){
+    const boxes=[];for(let e=root;e;e=e.parentElement)if(e.scrollTop)boxes.push([e,e.scrollTop]);
+    const page=document.scrollingElement,y=page?page.scrollTop:0;
+    draw();boxes.forEach(([e,t])=>{e.scrollTop=t;});if(page)page.scrollTop=y;
+  }
+  function render(focus=false,form=true) {
     const nav=$('.nb-steps');
     if(!nav.querySelector('.nb-stepbar'))nav.innerHTML='<span class="nb-stepbar" aria-hidden="true"></span>';
     nav.querySelectorAll('.nb-step').forEach(b=>b.remove());
     if(!C.stepShown(r(),step))step=nextShown(step,step>S.setup?-1:1);
     const shown=steps.map((t,i)=>i).filter(i=>C.stepShown(r(),i));
     nav.insertAdjacentHTML('afterbegin',shown.map((i,n)=>button(`<em>0${n+1}</em>${stepName(steps[i],i)}`,`data-step="${i}" aria-pressed="${step===i}"`,'nb-step')).join(''));
-    renderForm();refreshPlan();moveUnderline();saveDraft();harborFollow();
+    if(form)renderForm();refreshPlan();moveUnderline();saveDraft();harborFollow();
     if(focus){const heading=$('#nb-form h2');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'nearest'});}}
   }
-  function readSaved(){
-    try{
-      const ok=list=>Array.isArray(list)?list.filter(x=>x&&x.recipe&&typeof x.id==='string'):[];
-      let list=ok(JSON.parse(localStorage.getItem(storageKey)||'[]'));
-      // Merge workspace-scoped recipe lists into this browser's shared list.
-      for(const k of Object.keys(localStorage))if(k.startsWith(storageKey+'.')){const old=ok(JSON.parse(localStorage.getItem(k)||'[]'));list=list.concat(old.filter(o=>!list.some(x=>x.id===o.id)));localStorage.removeItem(k);localStorage.setItem(storageKey,JSON.stringify(list));}
-      return list;
-    }catch{return [];}
-  }
-  const workspaceLabel = () => schema.workspace && schema.workspace!=='unassigned' ? 'Workspace: '+schema.workspace : 'Personal recipes · no workspace selected';
+  async function loadSaved(){try{saved=await store.list();}catch(e){status('Saved recipes cannot be read: '+e.message);}if($('#nb-saved').open)renderSaved();}
   const recipeSlug = title => title.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9._-]+/g,'-').replace(/^[^a-z0-9]+|[-.]+$/g,'').slice(0,72) || 'recipe';
   function savedState(recipe){try{return C.validate(C.fromJSON(recipe)).errors.length?' · Draft':'';}catch{return ' · Needs review';}}
   function renderSaved(){
-    const saved=readSaved();
-    $('#nb-saved-list').innerHTML='<p class="nb-note">'+esc(workspaceLabel())+' · stored in this browser</p>'+(saved.length?saved.map(s=>`<div class="nb-savedrow"><span><strong>${esc(s.recipe.title||s.recipe.name)}</strong><small>${esc(s.recipe.harness)} · ${esc(s.updated)}${savedState(s.recipe)}</small></span><div>${button('Load',`data-load="${esc(s.id)}"`)} ${button('Delete',`data-delete="${esc(s.id)}"`)}</div></div>`).join(''):'<p class="nb-note">Save your first recipe to find it here.</p>');
+    $('#nb-saved-list').innerHTML=savedList({saved,local:schema.local,why:schema.recipesWhy,esc,button,state:savedState});
   }
   function download(text,filename,type){const url=URL.createObjectURL(new Blob([text],{type})),link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function updateSavePreview(){
-    const title=$('#nb-recipe-title').value.trim(),name=recipeSlug(title),existing=readSaved().find(s=>s.id===(r().harness||'harbor')+':'+name);
-    $('#nb-recipe-title').setCustomValidity(title?'':'Enter a name for this recipe.');
-    $('#nb-save-submit').textContent=existing?'Update recipe':'Save recipe';
-    $('#nb-save-message').textContent=existing?'A recipe with this name exists. Saving will update it.':workspaceLabel()+'. You can save unfinished recipes as drafts.';
+    // as the store decides: the recipe this page holds is updated (renamed), else the one of this name; a name another holds is refused
+    const title=$('#nb-recipe-title').value.trim(),held=saved.find(s=>s.id===savedId),other=saved.find(s=>s.name===title&&s!==held);
+    $('#nb-recipe-title').setCustomValidity(!title?'Enter a name for this recipe.':held&&other?'Another saved recipe has this name.':'');
+    $('#nb-save-submit').textContent=held||other?'Update recipe':'Save recipe';
+    $('#nb-save-message').textContent=held&&other?'Another saved recipe has this name.':held&&held.name!==title?'Saving renames “'+held.name+'”.':other?'A recipe with this name exists. Saving will update it.':'';
   }
   function openSave(){
     $('#nb-recipe-title').value=r().title||r().name.replace(/-/g,' ');
     updateSavePreview();$('#nb-save-dialog').showModal();$('#nb-recipe-title').focus();$('#nb-recipe-title').select();
   }
-  function save(){
+  async function save(){
     const title=$('#nb-recipe-title').value.trim();if(!title){$('#nb-recipe-title').focus();return;}
     const candidate={...C.copy(r()),title,name:recipeSlug(title)};
     if(C.validate(candidate).errors.some(e=>/environment variable name|credentials; do not put/.test(e.message))){$('#nb-save-message').textContent='Use environment variable names for credentials before saving. Their values belong in your shell.';return;}
     try{
-      const list=readSaved(),id=(candidate.harness||'harbor')+':'+candidate.name;   // the harness prefix earlier versions wrote; a runner's key for its recipes
-      const saved={id,updated:new Date().toLocaleDateString(),recipe:candidate};
-      localStorage.setItem(storageKey,JSON.stringify([saved,...list.filter(s=>s.id!==id)].slice(0,50)));
+      const item=await store.save(candidate,savedId);saved=[item,...saved.filter(s=>s.id!==item.id)];savedId=item.id;
       recipe=candidate;$('#nb-save-dialog').close();render();renderSaved();
       status('Saved “'+title+'”'+(compiled.errors.length?' as a draft.':'.'));
-    }catch{ $('#nb-save-message').textContent='Browser storage is unavailable. Close this dialog and export the recipe as JSON instead.'; }
+    }catch(e){ $('#nb-save-message').textContent='Not saved: '+e.message; }
   }
   root.addEventListener('submit',event=>{if(event.target.id==='nb-save-form'){event.preventDefault();save();}});
   // Running from here: the runner script is posted with the target; the page follows the log until the run ends.
   const runPanel=()=>{
-    const rec=r(), where=C.whereList(rec).map(w=>w==='local'?'this machine':C.machineLabel(w)).join(' + ');
+    const rec=r(), where=C.isStandard(rec)&&rec.backend==='boat'?'Boat sandboxes':C.whereList(rec).map(w=>w==='local'?'this machine':C.machineLabel(w)).join(' + ');
     if(!schema.local)return note('Run from the application host','Runs start from a browser on the machine Nullius runs on.');
     // A provider not set in Settings: Run waits and says why.
     const blocked=C.providerBlocker(rec);
@@ -891,14 +1094,15 @@
   root.addEventListener('click',async event=>{
     const b=event.target.closest('button');if(!b)return;const d=b.dataset;
     if(d.modelChoice){C.setModelChoice(r(),d.modelChoice);renderForm();refreshPlan();return;}
+    // a provider taken out of a Served by. Its row's label does not then focus the field (its menu would open); by
+    // key, the keyboard goes back to that field
+    if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);syncServed();refreshPlan();if(event.detail===0)root.querySelector(`input[data-served-by="${d.servedRole}"]`)?.focus();return;}
     if(d.benchOpt!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOpt]||{};rec.bench_options={...(rec.bench_options||{})};if(d.benchVal===o.default)delete rec.bench_options[d.benchOpt];else rec.bench_options[d.benchOpt]=d.benchVal;renderForm();refreshPlan();return;}
-    if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check');return;}
-    if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install');return;}
+    if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check',d.hostreqName);return;}
+    if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install',d.hostreqName);return;}
     if(d.copyCode!==undefined){const t=b.closest('.std-code').querySelector('code').textContent;try{await navigator.clipboard.writeText(t);b.textContent='Copied';}catch{b.textContent='Select it';}setTimeout(()=>{b.textContent='Copy';},1500);return;}
-    if(d.pickCat!==undefined){pickOf().cat=d.pickCat;applyPick();return;}
-    if(d.pickFam!==undefined){pickOf().fam=d.pickFam;applyPick();return;}
     if(d.agent){const on=r().agents.includes(d.agent);r().agents=on?r().agents.filter(id=>id!==d.agent):[...r().agents,d.agent];renderForm();refreshPlan();return;}
-    else if(d.href){location.href=d.href;return;}
+    else if(d.href){if(!window.nulliusOpenSettings?.(d.href,b))location.href=d.href;return;}
     else if(b.id==='nb-add-custom-agent'){r().customAgents.push('');r().agents.push('custom-'+(r().customAgents.length-1));renderForm();refreshPlan();root.querySelector('[data-custom-agent="'+(r().customAgents.length-1)+'"]')?.focus();return;}
     else if(d.removeCustomAgent!==undefined){const i=Number(d.removeCustomAgent),rec=r(),kept=rec.agents.filter(id=>id.startsWith('custom-')&&id!=='custom-'+i).map(id=>Number(id.slice(7)));rec.customAgents.splice(i,1);rec.agents=rec.agents.filter(id=>!id.startsWith('custom-')).concat(kept.map(k=>'custom-'+(k>i?k-1:k)));renderForm();refreshPlan();return;}
     // The Harbor panel (Runner step): a release or a repository, a ref of it, installed and asked for its agents.
@@ -907,13 +1111,15 @@
     else if(d.harborScan!==undefined){askScan(true);return;}
     else if(d.harborRefsFresh!==undefined){loadRefs(C.harborRepoUrl(r().harbor.repo),true);return;}
     else if(d.runner){toRunner(d.runner,C.benchKey(r()));}
-    else if(d.bench){toRunner(C.runnerFor(r(),d.bench),d.bench);}
     else if(d.stdBench){C.setStandardBenchmark(r(),d.stdBench);}
+    else if(d.stdOther){const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(d.stdOther)?c.filter(k=>k!==d.stdOther):[...c,d.stdOther];delete rec.other;if(rec.options)delete rec.options[d.stdOther];}   // a check
     else if(d.stdDataset){const rec=r(),c=C.datasetsOf(rec);rec.datasets=c.includes(d.stdDataset)?(c.length>1?c.filter(k=>k!==d.stdDataset):c):[...c,d.stdDataset];delete rec.dataset;}
-    else if(d.stdOther){const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(d.stdOther)?c.filter(k=>k!==d.stdOther):[...c,d.stdOther];delete rec.other;if(rec.options)delete rec.options[d.stdOther];}
     // the standard's machines: each a toggle, one at least; several split the run into shards
     else if(d.stdWhere){const rec=r(),list=C.whereList(rec),on=list.includes(d.stdWhere),next=on?list.filter(w=>w!==d.stdWhere):[...list,d.stdWhere];if(!next.length)return;rec.where=next.length>1?next:next[0];}
+    // hosts or Boat sandboxes: a sandbox run starts from this machine alone
+    else if(d.stdMachines){const rec=r();if(d.stdMachines==='boat'){rec.backend='boat';rec.where='local';}else if(rec.backend==='boat')rec.backend='local';}
     else if(d.stdBackend){r().backend=d.stdBackend;}
+    else if(d.stdBoatSize){r().boat_size=d.stdBoatSize;}
     else if(d.harborSource){r().source=d.harborSource;}
     else if(d.benchmark){C.setBenchmark(r(),d.benchmark);}
     else if(d.where!==undefined){r().where=d.where;}
@@ -930,25 +1136,28 @@
       return;
     }
     else if(d.remove!==undefined)r().custom.splice(Number(d.remove),1);
-    else if(d.load){try{const saved=readSaved().find(s=>s.id===d.load);recipe=C.fromJSON(saved.recipe);step=REVIEW;$('#nb-saved').close();status('Loaded “'+(recipe.title||recipe.name)+'”.');}catch(error){status('This saved recipe cannot be read: '+error.message);return;}}
-    else if(d.delete){try{localStorage.setItem(storageKey,JSON.stringify(readSaved().filter(s=>s.id!==d.delete)));renderSaved();status('Saved recipe deleted.');}catch{status('Browser storage is unavailable.');}return;}
+    else if(d.load){try{recipe=C.fromJSON(saved.find(s=>s.id===d.load).recipe);savedId=d.load;step=REVIEW;$('#nb-saved').close();status('Loaded “'+(recipe.title||recipe.name)+'”.');}catch(error){status('This saved recipe cannot be read: '+error.message);return;}}
+    else if(d.delete){try{await store.remove(d.delete);saved=saved.filter(s=>s.id!==d.delete);if(savedId===d.delete)savedId='';renderSaved();status('Saved recipe deleted.');}catch(e){status('Not deleted: '+e.message);}return;}
     else if(b.id==='nb-add'){r().custom.push({scope:'agent',key:'',type:'string',value:'',...(d.addAgent?{agent:d.addAgent}:{})});}
     else if(b.id==='nb-next'){if(step===REVIEW){if(!compiled.errors.length)download(JSON.stringify(r(),null,2)+'\n',r().name+'.json','application/json');return;}step=nextShown(step,1);}
     else if(b.id==='nb-back')step=nextShown(step,-1);
-    else if(b.id==='nb-save'){openSave();return;}
-    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});runnerOut=null;runnerKey='';step=S.benchmark;tab='select';status('Started over from the defaults.');}
+    else if(b.id==='nb-save'){if(schema.local)openSave();return;}
+    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});savedId='';runnerOut=null;runnerKey='';step=S.benchmark;tab='select';status('Started over from the defaults.');}
     else if(b.id==='nb-save-cancel'){$('#nb-save-dialog').close();return;}
-    else if(b.id==='nb-saved-toggle'){renderSaved();$('#nb-saved').showModal();return;}
+    else if(b.id==='nb-saved-toggle'){renderSaved();$('#nb-saved').showModal();loadSaved();return;}
     else if(b.id==='nb-saved-close'){$('#nb-saved').close();return;}
     else if(b.id==='nb-import'){$('#nb-import-file').click();return;}
     else if(b.id==='nb-refresh'){await refreshRegistry();return;}
     else return;
     render(d.step!==undefined||['nb-next','nb-back'].includes(b.id));
   });
+  // a benchmark chosen on the Benchmark step's grid, or an agent, a capability or the setup picked or let go on the
+  // Agent step's; the page stays where it is and the focus on its card
+  root.addEventListener('nullius-pick',event=>{const k=event.detail.value;if(event.target.closest('#nb-bench-grid')){toRunner(C.runnerFor(r(),k),k);}else{const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(k)?c.filter(x=>x!==k):[...c,k];delete rec.other;if(rec.options)delete rec.options[k];}inPlace(()=>render());event.target.focus({preventScroll:true});});
   root.addEventListener('input',event=>{
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
-    if(d.pickFind!==undefined){pickOf().q=el.value;applyPick();return;}
+    if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
     if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
       const value=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;
@@ -958,8 +1167,10 @@
       else if(!d.providerModel&&['model','userModel','evalModel'].includes(d.field)&&/^(openrouter|openai)\//.test(String(value))){rec.provider=C.providerOf(rec,value);rec[d.field]=C.bareModel(value);
         renderForm();refreshPlan();const f=root.querySelector(`[data-field="${d.field}"]`);if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);}return;}   // the provider the prefix named, and whether it is set
       else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
+      else if(['model','simulator_model','judge_model'].includes(d.field)){C.setModelOf(rec,d.field,value);syncServed();}   // the field's pin goes with its model; its Served by follows, in place
       else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
+    }else if(d.stdMinutes){const t=Object.assign({},rec.timeouts);if(el.value===''||!(Number(el.value)>0))delete t[d.stdMinutes];else t[d.stdMinutes]=Number(el.value);if(Object.keys(t).length)rec.timeouts=t;else delete rec.timeouts;refreshPlan();return;
     }else if(d.minutes){C.setPhaseMinutes(rec,d.minutes,el.value===''?'':Number(el.value));const row=el.closest('tr');if(row){const m=row.querySelector('.nb-mono');const t=C.effectiveTimeouts(rec);const p=t&&t.phases.find(x=>x.key===d.minutes);if(m&&p)m.textContent='×'+p.multiplier;}refreshPlan();return;}
     else if(d.customAgent!==undefined){rec.customAgents[Number(d.customAgent)]=el.value;refreshPlan();return;}
     else if(d.harborRepo!==undefined){const h=rec.harbor;h.repo=el.value;h.commit='';h.revision='';applyScan();}
@@ -973,13 +1184,16 @@
   // no cap, unsaid. It is said, and the field emptied, so that it shows what the recipe holds
   root.addEventListener('focusout',event=>{
     const el=event.target;
-    if(el.type==='number'&&el.dataset.field&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
+    if(el.type==='number'&&(el.dataset.field||el.dataset.stdMinutes||el.dataset.benchOptSelect)&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
   });
+  // a provider picked in a Served by, or slugs typed there and Enter: they join its list, after the ones there
+  root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);syncServed();refreshPlan();});
   root.addEventListener('change',async event=>{
     const el=event.target,d=el.dataset;
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
-    else if(d.stdVersion!==undefined){C.setStandardBenchmark(r(),el.value);render();}
+    else if(d.stdVersion!==undefined){   // in place: only the card's count changes on this step, so nothing else is drawn again
+      C.setStandardBenchmark(r(),el.value);benchTasks();render(false,false);}
     // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
     // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the
     // menu button controls.js puts after it once this change is handled; a typed value is left as it is
@@ -994,10 +1208,11 @@
     else if(d.harborChoice!==undefined){const rec=r(),v=el.value;if(v==='path')rec.harborDev='';else if(v==='dev')rec.harborDev=rec.harborDev||'~/harbor-dev/.venv/bin/harbor';renderForm();refreshPlan();if(v==='dev')root.querySelector('[data-field="harborDev"]')?.select();}
     else if(el.id==='nb-import-file'){
       const file=el.files[0];if(!file)return;
-      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Review the recipe before copying commands.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
+      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Review the recipe before copying commands.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
     }
   });
   { const dl=document.getElementById('nb-models'); if(dl){const seen=new Set(); for(const o of [...dl.options]){const v=C.bareModel(o.value); if(!v||seen.has(v)){o.remove();continue;} seen.add(v); o.value=v;}} }
   render();
   status(opened||'');
+  (async()=>{if(schema.local)try{const {refused,taken}=await store.move(),n=(k,w)=>k+' old recipe'+(k>1?'s':'')+w;const say=[refused&&n(refused,' could not be moved.'),taken&&n(taken,' not moved: '+(taken>1?'their names are':'its name is')+' already saved.')].filter(Boolean);if(say.length)status(say.join(' '));}catch(e){status('Recipes saved in this browser were not moved to Nullius: '+e.message+'. Trying again next time.');}loadSaved();})();
 })();

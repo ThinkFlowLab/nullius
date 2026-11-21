@@ -342,7 +342,7 @@ output to stderr: stdout carries the JSON lines.
    (and `model`); then `cli prove KEY` (its controls, units, no leak).
    An agent or capability: `cli conform KEY --model <cheap model> [--unsandboxed]`.
    A value that needs a `host` requirement this machine lacks (a GPU) is
-   proven on a machine that has it: choose a run host from Settings and
+   proven on a machine that has it: choose a host from Settings and
    launch the short trial from the builder's Review step. Execution snapshots
    the current standard runtime and effective catalogue, including user
    additions, and sends that payload to the host. A `git archive` of the
@@ -433,8 +433,8 @@ Do not add custom prose-heavy layout or one full-width row per simple value.
 Check the shared benchmark page at desktop and mobile widths; simple options,
 detailed prerequisites and single/multiple datasets should remain readable.
 
-For continuous upstream settings such as temperature, use an input `pattern`
-rather than an arbitrary shortlist of `values`. Say what an omitted parameter
+For continuous upstream settings such as temperature, use an input `pattern`, with an `example` the
+pattern allows, rather than an arbitrary shortlist of `values`. Say what an omitted parameter
 means and retain any setup restrictions; do not imply every model accepts it.
 
 Normal upstream scoring rules and expected use of a chosen model belong in
@@ -448,7 +448,12 @@ upstream rule as a Nullius defect. Show one **Original** procedure. Model select
 **Like the paper** filters documented models; **Any of your choice** uses the
 provider catalogue. Do not invent paper models. Declare `reference_agent` on
 `setups.original` when upstream runs a named agent; otherwise the builder shows
-**No agent · Original**, or **Original memory** for a memory benchmark. The
+**No agent · Original**, or **Original memory** for a memory benchmark. An
+upstream that ships several agent scripts brings them as its own agents:
+`agents.json` beside `standard.json`, each entry an agent with `start.driver`
+and its published `models` (docs/standard.md, "A benchmark's own agents"),
+`options.agent` written with its label, summary and setups only; recipes then
+name one as `<benchmark>:<key>`. The
 `original` / `model` driver methods preserve upstream model aliases; they are
 not separate user-facing setups. Recipes select `others: ["original"]`, one
 `model`, and `model_choice: "paper" | "any"`.

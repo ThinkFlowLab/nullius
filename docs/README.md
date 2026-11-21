@@ -23,7 +23,7 @@ Nullius runs AI evaluations on your machines and opens every score into the evid
 
 | Section | Holds |
 | --- | --- |
-| [Settings](settings/README.md) | Model and data providers, judges, custom keys, run hosts |
+| [Settings](settings/README.md) | Model and data providers, judges, custom keys, hosts |
 | [Benchmarks](benchmarks/supported/README.md) | Every benchmark, and how to add one |
 | [Agents](agents/supported/README.md) | Every agent, its proven ports, how to add one |
 | [Capabilities](capabilities/supported/README.md) | Every capability, its port, how to add one |
@@ -38,6 +38,7 @@ Nullius runs AI evaluations on your machines and opens every score into the evid
 | Path | Holds |
 | --- | --- |
 | `settings/`, `cli/`, `benchmarks/`, `agents/`, `capabilities/` | The sections above |
+| `ports/` | A port's tools and rules, a page each, linked from the standard's table of ports |
 | `releases/` | Reviewed notes for each release |
 | `examples/new-benchmark/` | A worked Harbor entry to copy |
 | `assets/` | The screenshots these pages use |

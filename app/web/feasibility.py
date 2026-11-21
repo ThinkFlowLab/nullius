@@ -42,9 +42,10 @@ def judge_feasibility_route(job_id):
     todo = summary["todo"]
     judge._guard()
     done, failed = 0, []
+    cal = judge.batch_calibration()
     for row, side in todo:
         try:
-            judge.judge_control(side, jobs, judge.key()); done += 1
+            judge.judge_control(side, jobs, judge.key(), calibration=cal); done += 1
         except client.JudgeError as e:
             failed.append(f"{row.task_base} ({side.control}): {e}")
             if e.status in (401, 0):

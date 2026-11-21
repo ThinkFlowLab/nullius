@@ -218,6 +218,7 @@ class TrialState:
     started_at: datetime | None = None
     attempt: int = 1                  #: its attempt; above 1 when Harbor retried it under the same name
     retried: list = field(default_factory=list)   #: the outcomes its earlier attempts ended with
+    cost_before: float | None = None  #: what its earlier attempts cost, counted in the board's total
     finished_at: datetime | None = None
     #: (ts, {token field: value}) per report — only the keys that report
     #: carried — for the rate window; see Board.tokens_per_sec.
@@ -531,7 +532,7 @@ def _totals(trials: list) -> dict:
     for f in TOKEN_FIELDS:
         vals = [getattr(t, f) for t in trials if getattr(t, f) is not None]
         out[f] = sum(vals) if vals else None
-    costs = [t.cost_usd for t in trials if t.cost_usd is not None]
+    costs = [c for t in trials for c in (t.cost_usd, t.cost_before) if c is not None]   # an earlier attempt's paid for too
     out["cost_usd"] = sum(costs) if costs else None   # absent, never zero
     return out
 
@@ -607,6 +608,13 @@ def fold(events: list[Event], now: datetime | None = None, notices: list[str] | 
                 t.retried.append(t.outcome)
                 t.outcome, t.reward, t.score, t.parts, t.finished_at = None, None, None, None, None
                 t.phases_done, t.durations, t.started_at = [], {}, e.ts
+                # its counters are the new attempt's own: what the one before spent is not reported by this one,
+                # but it was paid for, and the board's cost goes on counting it
+                if t.cost_usd is not None:
+                    t.cost_before = (t.cost_before or 0.0) + t.cost_usd
+                for key in COUNTERS:
+                    setattr(t, key, None)
+                t._series = []
             if t.phase and t.phase not in t.phases_done and t.phase != d["phase"]:
                 t.phases_done.append(t.phase)
             t.phase, t.since = d["phase"], e.ts       # the last phase event wins

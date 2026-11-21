@@ -79,7 +79,7 @@ Keep the whole copied definition, `model.env` and `options` included.
 
     ```bash title="Run conformance · Container backend"
     nullius standard conform my-agent \
-      --provider openai --model gpt-5-mini --backend container --repeat 3
+      --provider openai --model gpt-5-mini --backend container --attempts 3
     ```
 
 3. Which benchmarks it fits:
@@ -99,7 +99,7 @@ contribute it to the bundled catalogue, copy its whole folder into
 and refresh `python3 app/tests/catalogue_docs.py --write`.
 
 !!! warning "Conformance makes paid model calls"
-    Each check is a trial; `--repeat 3` runs each three times.
+    Each check is a trial; `--attempts 3` runs each three times.
 
 ## Another agent
 
@@ -128,6 +128,10 @@ nullius standard new agent another-agent
 A benchmark's own reference agent, made for that benchmark rather than for any
 task, names it in `only_for` (`"only_for": ["terminal-bench"]` for Terminus 2):
 it is offered for those benchmarks alone, whatever ports it has proven.
+
+A benchmark whose upstream ships its own agent scripts keeps them in its folder's
+`agents.json` instead, each started by the benchmark's driver (`start.driver`):
+see [A benchmark's own agents](../standard.md#a-benchmarks-own-agents).
 
 ## If it does not work
 

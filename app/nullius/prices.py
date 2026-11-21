@@ -5,7 +5,7 @@ Nullius ships no price. The list lives in one file of the user's
 configuration, ``prices.json`` (``NULLIUS_PRICES`` names another: the file a
 host is sent), in two parts:
 
-``models``  a public list, fetched on request (``update``) and kept whole
+``models``  a public list, fetched on request and before a capped run (``update``) and kept whole
             with where it came from and when: LiteLLM's
             ``model_prices_and_context_window.json``, keyed by the model
             names the providers themselves use
@@ -17,7 +17,7 @@ A row is USD per million tokens: ``input`` and ``output``, optionally
 the model's output limit in tokens. A model is priced by exactly its name or
 not at all: a name that only starts like another's is another model.
 
-Nothing here runs during a run: a run reads the file, never the network.
+A run reads the file; ``cli run`` fetches the list first when the run has a spending cap.
 
     nullius prices                     # where the list came from, how many models, the user's own rows
     nullius prices list MODEL ...      # those models' rows

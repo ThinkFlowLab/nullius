@@ -71,6 +71,17 @@ of its own behaviour, each with its allowed values and a default that is the
 vendor's own, filled into its templates as ``{opt_<name>}`` (:func:`options_of`).
 An agent may name its own non-interactive command (``fidelity.command``), which
 ``fidelity`` drives beside ACP to show both send the model the same requests.
+
+A benchmark may bring its **own agents**: ``agents.json`` beside its
+``standard.json``, keyed JSON whose ``agents`` are agent definitions that start
+with ``start.driver`` - the upstream's own value (``agent``) and what its driver
+runs (``script``, ``argv``, ``env``) in the benchmark's Original setup - each
+with the ``models`` it is published with. Such an agent speaks no port: no
+``offers``, no ``proven``. Where an agent comes from (``from``: ``bundled``,
+``yours``, ``benchmark``) and a benchmark agent's ``only_for`` (its benchmark)
+are derived from where it sits, never written; :func:`own_agents` lists them,
+each named ``<benchmark>:<key>``, and the loader rebuilds the benchmark's
+``options.agent`` (its values, names, about and default) from them.
 """
 from __future__ import annotations
 
@@ -209,15 +220,32 @@ def resolve(d: dict, version: Optional[str] = None) -> Optional[dict]:
             out[k] = block[k]
     if isinstance(d.get("options"), dict) and isinstance(block.get("options"), dict):
         out["options"] = dict(d["options"], **block["options"])       # a version adds an option or restates one
-    up = dict(d.get("upstream") or {})
-    own = block.get("upstream") or {}
-    if ("repository" in own or "tested" in own) and "tag" not in own:
-        up.pop("tag", None)                                           # another repository or commit: the shared tag is not its
-    out["upstream"] = dict(up, **own, version=v)
+    out["upstream"] = _version_upstream(d, v)
     out["proven"] = dict(block.get("proven") or {})
     if not bench:                                                     # a benchmark offers nothing: it needs
         out["offers"] = [p for p in ports.PORTS if p in out["proven"]]
-    return dict(out, _version=v, _versions=list(vs), _default=d.get("default"), _ref=f"{d.get('key')}@{v}")
+    labels = {x: version_label({"upstream": _version_upstream(d, x), "_version": x}) for x in vs if isinstance(vs[x], dict)}
+    return dict(out, _version=v, _versions=list(vs), _default=d.get("default"), _ref=f"{d.get('key')}@{v}", _labels=labels)
+
+
+def _version_upstream(d: dict, v: str) -> dict:
+    """One version's upstream: the shared one, its own block over it."""
+    up = dict(d.get("upstream") or {})
+    own = (d["versions"][v] or {}).get("upstream") or {}
+    if ("repository" in own or "tested" in own) and "tag" not in own:
+        up.pop("tag", None)                                           # another repository or commit: the shared tag is not its
+    return dict(up, **own, version=v)
+
+
+def version_label(d: dict) -> str:
+    """A version as a reader names it: its release tag, else its branch and short commit
+    (``main (044bc33)``), else its key."""
+    up = d.get("upstream") or {}
+    if up.get("tag"):
+        return str(up["tag"])
+    if up.get("branch") and up.get("tested"):
+        return f"{up['branch']} ({str(up['tested'])[:7]})"
+    return str(d.get("_version") or "")
 
 
 def title(d: dict) -> str:
@@ -311,7 +339,9 @@ def _install(d: dict, where: str = "install") -> List[str]:
     project's resolution keeps them; each a name, or a name pinned), and ``prefetch``, models fetched from
     the Hugging Face hub at install time so a run needs no network for them;
     ``locked``, the project's own lock file (``uv.lock``) installed as its
-    pins, ``pip`` resolved beside them, rather than its loose requirements.
+    pins, ``pip`` resolved beside them, rather than its loose requirements;
+    ``virtual``, with ``locked``, those pins without the project itself, as
+    ``uv sync`` installs a project that declares no build system.
     A benchmark's driver has the same block, ``driver.install`` (:func:`driver_install`):
     ``where`` is the name its problems are said under."""
     inst = d.get("install") or {}
@@ -353,6 +383,10 @@ def _install_block(d: dict, inst: dict) -> List[str]:
         bad.append("install.locked: true or false")
     elif inst.get("locked") and "project" not in inst:
         bad.append("install.locked: the lock file of install.project, which is not set")
+    if "virtual" in inst and not isinstance(inst["virtual"], bool):
+        bad.append("install.virtual: true or false")
+    elif inst.get("virtual") and not inst.get("locked"):
+        bad.append("install.virtual: the lock's packages without the project, which needs install.locked")
     for i, x in enumerate(inst.get("indexes") or []):
         if not isinstance(x, dict) or not _HTTPS.match(str(x.get("url", ""))) or not x.get("packages") \
                 or any(not _PKG.match(str(p)) for p in x.get("packages") or []):
@@ -391,7 +425,7 @@ def option_problem(spec: dict, value) -> Optional[str]:
     if "values" in spec:
         return None if value in (spec.get("values") or []) else f"{value!r} is not one of {', '.join(spec.get('values') or [])}"
     try:
-        return None if re.fullmatch(str(spec.get("pattern")), value) else f"{value!r} does not match {spec.get('pattern')}"
+        return None if re.fullmatch(str(spec.get("pattern")), value) else f"{value!r} is not a value it takes" + (f", e.g. {spec['example']}" if spec.get("example") else "")
     except re.error:
         return "its pattern is not a regular expression"
 
@@ -414,12 +448,12 @@ def _option_slots(d: dict) -> List[Tuple[str, str]]:
 
 def _options(d: dict) -> List[str]:
     """``options``: what a run may set of the agent's own behaviour, each with
-    a ``summary``, its ``values`` (or a ``pattern``) and a ``default`` that is
+    a ``summary``, its ``values`` (or a ``pattern`` and an ``example`` of it) and a ``default`` that is
     the vendor's own - so a run that sets nothing is the agent as it ships.
     Every ``{opt_<name>}`` slot a template carries must be one of them."""
     opts = d.get("options")
     if opts is not None and not isinstance(opts, dict):
-        return ["options: an object, name -> {summary, values or pattern, default}"]
+        return ["options: an object, name -> {summary, values or pattern and example, default}"]
     opts, bad = opts or {}, []
     for name, o in opts.items():
         w = f"options.{name}"
@@ -446,6 +480,8 @@ def _options(d: dict) -> List[str]:
             except re.error:
                 bad.append(f"{w}.pattern: a regular expression")
                 continue
+            if "example" in o and (option_problem(o, o["example"]) or o["example"] == o.get("default")):
+                bad.append(f"{w}.example: a value its pattern allows besides its default, shown in its place")
         if option_problem(o, o.get("default")):
             bad.append(f"{w}.default: the vendor's own default, a value it allows")
     for where, n in _option_slots(d):
@@ -468,7 +504,9 @@ def _bench_options(d: dict) -> List[str]:
     ``summary``, its ``values``, a ``default`` a run gets when it chooses none, and optionally the
     ``datasets`` it applies to, a line ``about`` each value, what a value ``needs``: an
     ``embeddings`` model called through the run's relay, ``host`` requirements or ``files`` by name - and
-    ``when`` it applies: another option's values (a retriever's, only with a retrieval)."""
+    ``when`` it applies: another option's values (a retriever's, only with a retrieval). ``limit``:
+    a bound the upstream has of its own (its steps, its errors), offered with the run's limits; ``by``:
+    its default under each value of another option (an agent's own steps), for a default of ``default``. ``names``: a name for some of its values, shown in their place. ``step``: ``where`` for a choice of where the work runs, ``dataset`` for one its datasets need, the builder step that asks it."""
     opts = d.get("options")
     if opts is None:
         return []
@@ -484,22 +522,42 @@ def _bench_options(d: dict) -> List[str]:
         if ds is not None and (not isinstance(ds, list) or not ds or any(x not in ids for x in ds)):
             bad.append(f"{w}.datasets: some of the benchmark's dataset ids")
         on = o.get("setups")
-        if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours",) for x in on)):
-            bad.append(f"{w}.setups: where it applies - some of original, model, yours (an agent or a capability)")
+        if "limit" in o and (not isinstance(o["limit"], bool) or "pattern" not in o):
+            bad.append(f"{w}.limit: true for a bound the upstream has of its own, a number its pattern allows")
+        if o.get("step", "dataset") != "dataset" and (o["step"] != "where" or "values" not in o) or "step" in o and o.get("limit"):
+            bad.append(f"{w}.step: where, a choice of where the work runs among its values, or dataset")
+        by = o.get("by")
+        if by is not None and not (isinstance(by, dict) and len(by) == 1 and all(
+                k != name and k in opts and isinstance(m, dict) and set(m) == set(opts[k].get("values") or [None])
+                and all(option_problem(o, v) is None for v in m.values()) for k, m in by.items())):
+            bad.append(f"{w}.by: another option -> its every value -> this one's default under it")
+        # agent: an agent's run alone, on a benchmark agents run, and never beside another scope
+        if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours", "agent") for x in on)
+                               or "agent" in on and (on != ["agent"] or d.get("family") != "agent")):
+            bad.append(f"{w}.setups: where it applies - some of original, model, yours (an agent or a capability); "
+                       "or agent alone (an agent's run), on a benchmark agents run")
         when = o.get("when") or {}
         if not _when_valid(name, when, opts):
             bad.append(f"{w}.when: another option -> the values of it this one applies under")
         about = o.get("about") or {}
         if not isinstance(about, dict) or any(option_problem(o, k) is not None or not isinstance(v, str) for k, v in about.items()):
             bad.append(f"{w}.about: a line for some of its values")
+        names = o.get("names", {})
+        if not isinstance(names, dict) or any(k not in (o.get("values") or []) or not isinstance(v, str) or not v.strip() for k, v in names.items()) \
+                or len(set(names.values())) != len(names):
+            bad.append(f"{w}.names: a name for some of its values")
         needs = o.get("needs") or {}
         if not isinstance(needs, dict):
             bad.append(f"{w}.needs: value -> {{embeddings, reranker, host, files}}")
             continue
         for v, n in needs.items():
-            if option_problem(o, v) is not None or not isinstance(n, dict) or any(k not in NEED_KEYS + ("when",) for k in n):
-                bad.append(f"{w}.needs.{v}: one of its values -> {{embeddings: a model, reranker: a model, host: [requirements], files: [names]}}")
+            if option_problem(o, v) is not None or not isinstance(n, dict) or any(k not in NEED_KEYS + ("when", "vm") for k in n):
+                bad.append(f"{w}.needs.{v}: one of its values -> {{embeddings: a model, reranker: a model, host: [requirements], files: [names], vm: {{memory_gb}}}}")
                 continue
+            if "vm" in n and (o.get("step") != "where" or not isinstance(n["vm"], dict) or set(n["vm"]) != {"memory_gb"}
+                              or isinstance(n["vm"]["memory_gb"], bool) or not isinstance(n["vm"]["memory_gb"], (int, float))
+                              or n["vm"]["memory_gb"] <= 0):
+                bad.append(f"{w}.needs.{v}.vm: on a Where option, the memory in GB of the VM each unit boots: {{memory_gb: a number}}")
             if not _when_valid(name, n.get("when") or {}, opts):
                 bad.append(f"{w}.needs.{v}.when: another option -> the values that need these requirements")
             for kind in ("embeddings", "reranker"):
@@ -541,7 +599,7 @@ def _files(d: dict) -> List[str]:
 
 def _host(d: dict) -> List[str]:
     """A benchmark's ``host``: what the machine its driver runs on must have for some of its options,
-    by name - a ``summary``, the programs that ``check`` it (each on PATH) and how to ``install`` them
+    by name - a ``label``, a ``summary``, the programs that ``check`` it (each on PATH) and how to ``install`` them
     (``apt`` and ``npm`` packages, pinned where the upstream pins them); no ``install`` for the
     machine's own hardware (a GPU, checked by its driver's program), which no package puts there."""
     h = d.get("host")
@@ -570,14 +628,17 @@ def _host(d: dict) -> List[str]:
     return bad
 
 
-def bench_options_of(bench: dict, dataset: str, given: Optional[dict] = None, setup: str = "yours") -> Tuple[dict, List[str]]:
+def bench_options_of(bench: dict, dataset: str, given: Optional[dict] = None, setup: str = "yours",
+                     kind: Optional[str] = None) -> Tuple[dict, List[str]]:
     """The benchmark's options for one run on ``dataset`` in ``setup`` (original, model, or yours: an
     agent or a capability in its port): each that applies to both, at the value ``given`` or its default;
     and what is wrong with the given ones. An option given for a dataset or a setup it does not apply
     to is ignored - a run of several carries one choice for all. An option applies to an agent's or a
-    capability's run unless its ``setups`` say otherwise."""
+    capability's run unless its ``setups`` say otherwise; one whose ``setups`` name ``agent`` applies to a run
+    whose ``kind`` is an agent, never to a capability's or a control's."""
     opts = {n: o for n, o in (bench.get("options") or {}).items()
-            if dataset in (o.get("datasets") or [dataset]) and setup in (o.get("setups") or ["yours"])}
+            if dataset in (o.get("datasets") or [dataset])
+            and (setup in (o.get("setups") or ["yours"]) or (kind == "agent" and setup == "yours" and "agent" in (o.get("setups") or [])))}
     given = {n: v for n, v in (given or {}).items() if n in opts or n not in (bench.get("options") or {})}
     vals, bad = options_of(dict(options=opts, label=bench.get("label"), key=bench.get("key")), given)
     return vals, bad
@@ -600,6 +661,21 @@ def option_needs(bench: dict, values: dict) -> dict:
         for kind in ("host", "files"):
             out[kind] += [x for x in need.get(kind) or [] if x not in out[kind]]
     return out
+
+
+def vm_memory_gb(bench: dict, values: dict) -> float:
+    """The memory in GB of the VM each unit boots of its own (OSWorld's guest) under the chosen option
+    values: a Where option's ``needs.<value>.vm``; 0 when it boots none."""
+    opts = bench.get("options") or {}
+    return max([((opts.get(n, {}).get("needs") or {}).get(v) or {}).get("vm", {}).get("memory_gb", 0)
+                for n, v in values.items() if _when_applies(opts.get(n, {}).get("when") or {}, opts, values)] or [0])
+
+
+def boots_vms(bench: dict) -> bool:
+    """Whether each unit boots a VM of its own on the machine its driver runs on: a Where option of the
+    benchmark has a value that declares one (``needs.<value>.vm``)."""
+    return any("vm" in (n or {}) for o in (bench.get("options") or {}).values() if o.get("step") == "where"
+               for n in (o.get("needs") or {}).values())
 
 
 def options_of(d: dict, given: Optional[dict] = None) -> Tuple[dict, List[str]]:
@@ -695,6 +771,8 @@ def _upstream(u) -> List[str]:
         bad.append("upstream.tag: the release tag the tested commit is, a plain tag name (v1.0.1)")
     elif "tag" in u and "repository" not in u:
         bad.append("upstream.tag: a tag of upstream.repository, which is not set")
+    if "branch" in u and (not tag_ok(u["branch"]) or "tag" in u or "repository" not in u):
+        bad.append("upstream.branch: the branch an untagged tested commit is on (main), with upstream.repository and no tag")
     if not u.get("license"):
         bad.append("upstream.license: say it, or 'unknown'")
     return bad
@@ -924,7 +1002,7 @@ def _secrets(w: str, secrets, local_ok: bool, settings) -> List[str]:
         n = s.get("name")
         if not isinstance(n, str) or not _ENV_NAME.match(n) or n in seen:
             bad.append(f"{sw}.name: a variable name, each once")
-        elif settings.reserved_name(n):
+        elif settings.reserved_name(n, records=False):
             bad.append(f"{sw}.name: {n} is already the name of something else")
         seen.add(n)
         to, kind = s.get("to"), s.get("kind", "value")
@@ -947,7 +1025,7 @@ def _secrets(w: str, secrets, local_ok: bool, settings) -> List[str]:
                 bad.append(f"{sw}: path and env are a file's; a {kind} reaches its process as the variable {n}")
             continue
         if v is not None:
-            if not isinstance(v, str) or not _ENV_NAME.match(v) or settings.reserved_name(v) or v in seen:
+            if not isinstance(v, str) or not _ENV_NAME.match(v) or settings.reserved_name(v, records=False) or v in seen:
                 bad.append(f"{sw}.env: a variable name of its own, which will hold the file's path")
             seen.add(v)
         if to == "driver":
@@ -1033,6 +1111,25 @@ def control(bench: dict, which: str) -> Optional[dict]:
     return {"key": which, "label": CONTROL_LABEL[which], "summary": c.get("from", ""), "source": c.get("source", ""),
             "from": c.get("from", ""), "expect": {bound: (c.get("expect") or {}).get(bound, value)}, "upstream": {},
             "_kind": "control", "_ref": which, "_here": bench.get("_here", "")}
+
+
+def comparable(orig: dict, model: str) -> bool:
+    """Whether a run of the original with ``model`` compares with the paper's: ``comparable`` a bool, or the models that do."""
+    c = orig.get("comparable", True)
+    return model in c if isinstance(c, list) else bool(c)
+
+
+def upstream_name(orig: dict, model: str, provider: str) -> str:
+    """``model`` by the name the original's upstream knows, when given as ``provider`` lists it."""
+    pre = (orig.get("providers") or {}).get(provider, "")
+    names = {pre + (orig.get("served_as") or {}).get(m, m): m for m in orig.get("models") or []}
+    return model if model in (orig.get("models") or []) else names.get(model, model)
+
+
+def paper_models(orig: dict) -> List[str]:
+    """The original's models whose runs compare with the paper's."""
+    c = orig.get("comparable", True)
+    return [m for m in orig.get("models") or [] if not isinstance(c, list) or m in c]
 
 
 def _leaderboard(d: dict) -> List[str]:
@@ -1122,8 +1219,11 @@ def _setups(s) -> List[str]:
                 bad.append(f"{w}.turn_seconds: a whole number of seconds")
             if "paper" in x and (not isinstance(x["paper"], str) or not x["paper"].strip()):
                 bad.append(f"{w}.paper: where the paper reports its numbers, in a phrase")
-            if "comparable" in x and not isinstance(x["comparable"], bool):
-                bad.append(f"{w}.comparable: false when no served model is the paper's, so its runs compare with each other only")
+            c = x.get("comparable", True)
+            if not isinstance(c, bool) and (not isinstance(c, list) or not c or len(set(c)) != len(c) or any(m not in models for m in c)
+                                            or x.get("default") not in c):
+                bad.append(f"{w}.comparable: false when no served model is the paper's, so its runs compare with each other only; "
+                           "or those of its models whose runs compare with the paper's, its default among them")
         else:
             allowed |= {"runs_as"}
             orig = s.get("original") if isinstance(s.get("original"), dict) else None
@@ -1192,16 +1292,22 @@ def settings_problems(versions: List[dict]) -> List[str]:
     return bad
 
 
-def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple:
+def setup(bench: dict, which: str, model: str = "", provider: str = "", agent: str = "") -> tuple:
     """The setup ``which`` of ``bench`` as the other side of a run, with
     ``model`` on ``provider``: (definition, why not). The definition says the
     model the upstream's code is asked as (``asked``) and the one the relay
     sends (``sent``). ``original`` takes only the paper's models, on a
-    provider that serves them; ``model`` takes any, asked as its ``runs_as``.
+    provider that serves them; ``model`` takes any, asked as its ``runs_as`` - or,
+    on a benchmark with agents of its own, as the agent's first model, the one its driver asks.
+    On a benchmark with agents of its own, ``agent`` is the upstream's name of
+    the one that runs (its agent option; none, the first), whose key the
+    definition carries (``agent``).
     (None, why) when the benchmark has no such setup or the model is refused."""
     s = bench.get("setups") or {}
     if which not in SETUPS or not isinstance(s.get(which), dict):
         return None, f"{bench['label']} has no {which} setup"
+    own = own_agents(bench)
+    mine = next((a for a in own if a["start"]["driver"]["agent"] == agent), None) if agent else (own[0] if own else None)
     orig, x = s["original"], s[which]
     model = (model or "").strip()
     side = []
@@ -1215,7 +1321,7 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple
         model = model or orig["default"]
         if model not in orig["models"]:
             return None, (f"the original {bench['label']} runs only the paper's models ({', '.join(orig['models'])}): "
-                          f"{model} is not one - choose the model setup for another")
+                          f"{model} is not one" + (" - choose the model setup for another" if "model" in bench.get("setups", {}) else ""))
         if provider and provider not in orig["providers"]:
             return None, (f"the paper's models are not served by {provider}: the original runs on "
                           + " or ".join(orig["providers"]))
@@ -1228,12 +1334,126 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "") -> tuple
     else:
         if not model:
             return None, f"the model setup needs a model: the one to put in {orig['default']}'s place"
-        asked, sent = x["runs_as"], model
+        asked, sent = (mine["models"][0] if mine else x["runs_as"]), model      # its own agent asks its own first model
     units = orig.get("units") or bench.get("units") or {"noun": "unit", "nouns": "units"}
-    return {"model": {"side_models": side}, "key": which, "label": f"{bench['label']} {setup_label(bench, which).lower()}",
-            "summary": x["summary"], "asked": asked, "sent": sent, "units": units, "comparable": which == "original" and x.get("comparable", True),
+    return {**({"agent": mine["key"]} if mine else {}), "model": {"side_models": side}, "key": which, "label": f"{bench['label']} {setup_label(bench, which).lower()}",
+            "summary": x["summary"], "asked": asked, "sent": sent, "units": units, "comparable": which == "original" and comparable(x, model),
             "turn_seconds": orig.get("turn_seconds"), "upstream": {}, "_kind": "upstream", "_ref": which,
             "_here": bench.get("_here", "")}, ""
+
+
+AGENTS_FILE = "agents.json"
+FROM = {"bundled": "Nullius", "yours": "Yours", "benchmark": "A benchmark's own"}
+
+
+def _driver_agent(d: dict) -> List[str]:
+    """An agent of a benchmark's ``agents.json``: ``start.driver``, what the benchmark's driver runs; the
+    models it is published with; no port, so no ``offers`` and no ``proven``; its benchmark in ``only_for``."""
+    st, bad = d["start"], []
+    if "acp" in st or "command" in st:
+        bad.append("start: acp, command or driver, one of them")
+    drv = st["driver"]
+    if not isinstance(drv, dict):
+        return bad + ["start.driver: {agent, script, argv, env}, what the benchmark's driver runs"]
+    if not isinstance(drv.get("agent"), str) or not _OPTION_VALUE.match(drv["agent"]):
+        bad.append("start.driver.agent: the upstream's own name for it, a plain word")
+    if not isinstance(drv.get("script"), str) or not _RELATIVE.match(drv["script"]):
+        bad.append("start.driver.script: its script, a path in the upstream")
+    if not isinstance(drv.get("argv", []), list) or not all(isinstance(w, str) for w in drv.get("argv", [])):
+        bad.append("start.driver.argv: the words its documented invocation passes")
+    env = drv.get("env", {})
+    if not isinstance(env, dict) or not all(_ENV_NAME.match(str(k)) and isinstance(v, str) for k, v in env.items()):
+        bad.append("start.driver.env: variable names and templates")
+    if d.get("offers") or d.get("proven"):
+        bad.append("offers, proven: none - a benchmark's own agent speaks no port, its driver runs it")
+    only = d.get("only_for")
+    if not isinstance(only, list) or len(only) != 1:
+        bad.append(f"start.driver: a benchmark's own agent, in its folder's {AGENTS_FILE}")
+    ms = d.get("models")
+    if not isinstance(ms, list) or not ms or len(set(map(str, ms))) != len(ms) \
+            or not all(isinstance(m, str) and _MODEL_NAME.match(m) for m in ms):
+        bad.append("models: the models it is published with, each once, as its code names them")
+    return bad
+
+
+def _own_entry(bench: dict, key: str, e: dict) -> dict:
+    """One entry of a benchmark's ``agents.json`` as an agent definition: where it comes from and the one
+    benchmark it runs derived from its folder."""
+    return dict(e, schema=KINDS["agent"]["schema"], only_for=[bench.get("key")], benchmark=bench.get("key"),
+                benchmark_label=bench.get("label"), _kind="agent", _here=bench.get("_here", ""),
+                _ref=f"{bench.get('key')}:{key}", _version="", _versions=[""], _default="", **{"from": "benchmark"})
+
+
+def own_agents(bench: dict) -> List[dict]:
+    """A benchmark's own agents (its ``agents.json``), each an agent definition named ``<benchmark>:<key>``."""
+    rows = bench.get("_agents")
+    return [_own_entry(bench, k, e) for k, e in rows.items() if isinstance(e, dict)] if isinstance(rows, dict) else []
+
+
+def benchmark_agents(benches: List[dict]) -> List[dict]:
+    """Every benchmark's own agents, once: those of each benchmark's default version."""
+    return [a for b in benches if b.get("_version") == b.get("_default") for a in own_agents(b)]
+
+
+def own_agent(bench: dict, ref: str) -> Optional[dict]:
+    """The benchmark's own agent ``ref`` names (``<benchmark>:<key>``), or None."""
+    return next((a for a in own_agents(bench) if a["_ref"] == ref), None)
+
+
+def _with_agents(d: dict, here: str) -> dict:
+    """A benchmark whose folder holds ``agents.json``: its entries (``_agents``) and ``options.agent``
+    rebuilt from them - the upstream values in order, their labels and summaries, the first the default."""
+    path = os.path.join(here, AGENTS_FILE)
+    if not isinstance(d, dict) or not os.path.isfile(path):
+        return d
+    with open(path) as f:
+        raw = json.load(f)
+    rows = raw.get("agents") if isinstance(raw, dict) else None
+    d = dict(d, _agents=rows)
+    opt = (d.get("options") or {}).get("agent") if isinstance(d.get("options"), dict) else None
+    if not isinstance(opt, dict) or not isinstance(rows, dict):
+        return d
+    written = [k for k in ("values", "names", "about", "default") if k in opt]
+    if written:
+        return dict(d, _agents_written=written)
+    es = [e for e in rows.values() if isinstance(e, dict)]
+    ups = [((e.get("start") or {}).get("driver") or {}).get("agent") if isinstance(e.get("start"), dict) else None for e in es]
+    opt = dict(opt, values=ups, names={u: e.get("label") for u, e in zip(ups, es)},
+               about={u: e.get("summary") for u, e in zip(ups, es)}, default=ups[0] if ups else None)
+    return dict(d, options=dict(d["options"], agent=opt))
+
+
+def _own_agents(d: dict) -> List[str]:
+    """A benchmark's ``agents.json``: each entry an agent (:func:`_driver_agent`) keyed by its key, each
+    upstream value once, each model among the Original setup's; ``options.agent`` with its label, summary
+    and setups only, the rest rebuilt from the file."""
+    if "_agents" not in d:
+        return []
+    rows, w = d["_agents"], AGENTS_FILE
+    if not isinstance(rows, dict) or not rows:
+        return [f"{w}: agents, key -> an agent (nullius.agent/v1, start.driver)"]
+    bad = [f"options.agent.{k}: from {w}, not written here (label, summary and setups only)" for k in d.get("_agents_written") or []]
+    if not isinstance((d.get("options") or {}).get("agent"), dict):
+        bad.append(f"options.agent: {{label, summary, setups}}, its values from {w}")
+    orig = (d.get("setups") or {}).get("original") or {}
+    seen = set()
+    for k, e in rows.items():
+        at = f"{w}: agents.{k}"
+        if not isinstance(e, dict):
+            bad.append(f"{at}: an object")
+            continue
+        if "only_for" in e and e["only_for"] != [d.get("key")]:
+            bad.append(f"{at}.only_for: its own benchmark ({d.get('key')}) alone, or left out")
+        if e.get("key") != k:
+            bad.append(f"{at}.key: {k}, its name in agents")
+        bad += [f"{at}: {p}" for p in problems(_own_entry(d, k, dict(e, only_for=[d.get("key")])), "agent")]
+        up = ((e.get("start") or {}).get("driver") or {}).get("agent") if isinstance(e.get("start"), dict) else None
+        if up in seen:
+            bad.append(f"{at}.start.driver.agent: {up} is another entry's")
+        seen.add(up)
+        if isinstance(orig.get("models"), list) and isinstance(e.get("models"), list):
+            bad += [f"{at}.models: {m} is not one of setups.original.models" for m in e["models"] if m not in orig["models"]]
+    return bad
 
 
 def problems(d: dict, kind: str) -> List[str]:
@@ -1278,6 +1498,12 @@ def problems(d: dict, kind: str) -> List[str]:
                 bad += _install(dict(driver_install(d), install=drv["install"]), "driver.install")
             elif any("{install}" in w for w in drv.get("command") or [] if isinstance(w, str)):
                 bad.append("driver.command: {install} names driver.install, which is not set")
+            if "participant" in drv and not isinstance(drv["participant"], bool):
+                bad.append("driver.participant: true or false - whether setup is told the participant's kind")
+            if "unit_end" in drv and not isinstance(drv["unit_end"], bool):
+                bad.append("driver.unit_end: true or false - whether the driver is told each unit's end")
+            if "task_given" in drv and not isinstance(drv["task_given"], bool):
+                bad.append("driver.task_given: true or false - whether the driver is told when the agent is given its task")
         bad += _mcp_servers(d.get("mcp_servers"), isinstance(drv, dict) and "install" in drv)
         ds = d.get("datasets")
         if not isinstance(ds, list) or not ds:
@@ -1313,7 +1539,7 @@ def problems(d: dict, kind: str) -> List[str]:
             if not isinstance(lim, dict):
                 bad.append("limits: an object")
             else:
-                for f in ("turn_seconds", "turns"):
+                for f in ("turn_seconds", "turns", "setup_seconds", "score_seconds", "call_seconds"):
                     v = lim.get(f)
                     if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 100000):
                         bad.append(f"limits.{f}: a whole number from 1")
@@ -1321,6 +1547,8 @@ def problems(d: dict, kind: str) -> List[str]:
                 if a is not None and (not isinstance(a, str) or not a.strip()):
                     bad.append("limits.attempts: how the upstream tells one attempt of a unit from another (its seed per trial), "
                                "in a sentence - the driver is then sent attempt with setup, turn and answer")
+        if "gated" in d and not isinstance(d["gated"], bool):
+            bad.append("gated: true for a benchmark whose tasks are gated, so no provider's words about them are kept")
         s = d.get("score") or {}
         if s.get("kind") not in SCORES or not s.get("says"):
             bad.append(f"score: {{kind: one of {SCORES}, says}}")
@@ -1341,6 +1569,7 @@ def problems(d: dict, kind: str) -> List[str]:
         bad += _controls(d.get("controls"))
         bad += _leaderboard(d)
         bad += _setups(d.get("setups"))
+        bad += _own_agents(d)
         bad += _environments(d.get("environments"), d.get("_here"))
         envs = d.get("environments") if isinstance(d.get("environments"), dict) else {}
         if d.get("family") == "capability":
@@ -1351,6 +1580,8 @@ def problems(d: dict, kind: str) -> List[str]:
                 bad.append(f"datasets[{i}].environment: one of environments ({', '.join(envs) or 'none declared'})")
         if d.get("proven") is not None and not isinstance(d.get("proven"), dict):
             bad.append("proven: an object, per dataset, written by cli prove")
+    elif kind == "agent" and "driver" in (d.get("start") or {}):
+        bad += _driver_agent(d)
     elif kind == "agent":
         st = d.get("start") or {}
         if ("acp" in st) == ("command" in st):
@@ -1417,6 +1648,8 @@ def _read(path: str, kind: str, key: str) -> Tuple[Optional[dict], List[str]]:
     try:
         with open(path) as f:
             d = names.definition(json.load(f))
+        if kind == "benchmark":
+            d = _with_agents(d, os.path.dirname(path))
     except (OSError, ValueError, TypeError, AttributeError) as e:
         return None, [f"{kind} {key}: {e}"]
     try:
@@ -1426,9 +1659,14 @@ def _read(path: str, kind: str, key: str) -> Tuple[Optional[dict], List[str]]:
     bad = [f"{kind} {key}: {p}" for p in found]
     if isinstance(d, dict) and d.get("key") != key:
         bad.append(f"{kind} {key}: key {d.get('key')!r} is not its folder's name")
+    if kind == "agent" and isinstance(d, dict) and "driver" in (d.get("start") or {}):
+        bad.append(f"{kind} {key}: start.driver: only an entry of a benchmark's {AGENTS_FILE}")
     if bad:
         return None, bad
     d = dict(d, _here=os.path.dirname(path), _kind=kind)
+    if kind == "agent":                          # where it comes from: the user's catalogue, or the bundle
+        user = os.path.realpath(paths.catalogue_dir())
+        d["from"] = "yours" if os.path.realpath(path).startswith(user + os.sep) else "bundled"
     return d, []
 
 

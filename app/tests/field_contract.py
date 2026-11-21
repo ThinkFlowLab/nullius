@@ -45,15 +45,16 @@ MANIFEST = os.path.join(HERE, "field_contract.json")
 # Moving a module must not reset the field comparison or conceal removals.
 PACKAGE_OF = {
     "parse": "nullius.runs", "classify": "nullius.runs", "artifacts": "nullius.runs",
+    "attempts": "nullius.runs",
     "trace": "nullius.traces", "spans": "nullius.traces", "breakdown": "nullius.traces", "waterfall": "nullius.traces",
     "trajectory": "nullius.traces", "charts": "nullius.traces",
     "conversation": "nullius.traces", "behavior": "nullius.traces",
     "comparison": "nullius.compare",
     "catalog": "nullius.catalogue", "benchmarks": "nullius.runs",
-    "harnesses": "nullius", "workspace": "nullius",
+    "harnesses": "nullius", "workspace": "nullius", "categorical": "nullius",
 }
 # Manifest keys whose importable module names differ.
-MODULE_NAME = {"harnesses": "importers", "benchmarks": "verifier"}
+MODULE_NAME = {"harnesses": "importers", "benchmarks": "verifier", "categorical": "charts"}
 
 MODULES = tuple(PACKAGE_OF)
 

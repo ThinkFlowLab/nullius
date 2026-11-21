@@ -225,12 +225,14 @@ def _load(kind: str, every: bool = True) -> list:
 
 def _values(spec: dict) -> str:
     """An option's values, the default in bold; a pattern when it has no list."""
-    values = ", ".join(f"**`{v}`**" if v == spec.get("default") else f"`{v}`" for v in spec.get("values") or [])
-    return values or f"pattern `{spec.get('pattern')}`, default `{spec.get('default')}`"
+    named = {v: f"`{v}` ({n})" for v, n in (spec.get("names") or {}).items()}
+    values = ", ".join(f"**{named.get(v, f'`{v}`')}**" if v == spec.get("default") else named.get(v, f"`{v}`") for v in spec.get("values") or [])
+    return values or (f"e.g. `{spec['example']}`, " if spec.get("example") else "") + f"default `{spec.get('default')}`"
 
 
 def _needs_rows(name: str, spec: dict) -> list:
-    return [[f"`{name}`", f"`{val}`", "; ".join(f"{k}: {', '.join(w) if isinstance(w, list) else w}" for k, w in need.items())]
+    said = lambda k, w: f"a {w['memory_gb']:g} GB VM per unit" if k == "vm" else ", ".join(w) if isinstance(w, list) else w
+    return [[f"`{name}`", f"`{val}`", "; ".join(f"{k}: {said(k, w)}" for k, w in need.items())]
             for val, need in (spec.get("needs") or {}).items()]
 
 
@@ -459,7 +461,8 @@ def _setups(v: dict) -> str:
     fixed = original.get("models") or v.get("simulator") or (v.get("score") or {}).get("judge")
     model_choice = ", ".join((["Like the paper"] if fixed else []) + (["Like the leaderboard"] if v.get("leaderboard") else []) + ["Any of your choice"])
     model_choice = " or ".join(model_choice.rsplit(", ", 1))
-    participant = original.get("reference_agent") or ("Original memory" if v.get("family") == "capability" else "No agent")
+    participant = original.get("reference_agent") or ("its own agents" if definitions.own_agents(v)
+                                                      else "Original memory" if v.get("family") == "capability" else "No agent")
     return f"Original · {participant} · {model_choice}"
 
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -50,6 +51,8 @@ FEED = FIXTURES / "live" / "events.jsonl"
 WORKFLOW_ONLY = {
     "/compare/task/<path:task>": "driven under the comparison workflow with a real two-run cohort",
     "/job/<job_id>/live": "driven under the live-board workflow with a job carrying a feed",
+    "/launch/<key>/ask": "driven under the Launches page workflow with a run record (test_run_routes.LaunchesPage)",
+    "/launch/<key>/open": "driven under the Launches page workflow with a run record (test_run_routes.LaunchesPage)",
 }
 
 # Rules that answer 404 without a query argument by design - the argument names
@@ -58,10 +61,16 @@ NEEDS_SPAN = ("/trial/<job_id>/<trial_name>/trace-span",)
 
 # The Harbor source routes answer 400 without the source they are asked
 # about; asked with one, offline: refs with git unreachable (NO_GIT), the
-# agents of a release pin from the cache only (a GET never builds).
+# agents of a release pin from the cache only (a GET never builds); the
+# builder's agent grid answers 404 without the benchmark it draws.
 HARBOR_QUERY = {"/new-run/harbor/refs": "repo=example/harbor",
-                "/new-run/harbor/agents": "kind=release&version=0.24.0"}
+                "/new-run/harbor/agents": "kind=release&version=0.24.0",
+                "/new-run/agents": "benchmark=gsm8k"}
 NO_GIT = "/nonexistent/nullius-route-test/git"
+
+
+# The page head (templates/_page.html): the page's one h1 is the first thing in its header, so nothing sits above it.
+HEAD = re.compile(r'<header class="page-head">\s*<h1[ >]')
 
 
 def offline(*args, **kwargs):
@@ -129,6 +138,15 @@ class EveryRoute(unittest.TestCase):
         self.addCleanup(resp.close)
         return resp
 
+    def assert_page_head(self, resp):
+        """A page with a title has one h1, first in the page head."""
+        if resp.status_code != 200 or resp.mimetype != "text/html":
+            return
+        html = resp.get_data(as_text=True)
+        if "<h1" in html:
+            self.assertEqual(html.count("<h1"), 1, resp.request.path)
+            self.assertRegex(html, HEAD, resp.request.path)
+
     def test_the_fixture_workspace_loads_jobs(self):
         self.assertIn("job_id", self.values, "no job parsed from the fixtures: every job route would go unexercised")
         self.assertIn("trial_name", self.values)
@@ -172,9 +190,10 @@ class EveryRoute(unittest.TestCase):
                     url = f"{url}?{HARBOR_QUERY[raw]}"
                 resp = self.get(url)
                 attempted += 1
-                if raw == "/":
+                self.assert_page_head(resp)
+                if raw in ("/", "/compare/pick"):              # the old picker opens Compare
                     self.assertEqual(resp.status_code, 302, url)
-                    self.assertEqual(resp.location, "/runs")
+                    self.assertEqual(resp.location, "/runs" if raw == "/" else "/compare?cohort=whole")
                 else:
                     self.assertEqual(resp.status_code, 200, url)
         self.assertGreater(attempted, 0)
@@ -185,7 +204,9 @@ class EveryRoute(unittest.TestCase):
         base = f"/trial/{self.values['job_id']}/{self.values['trial_name']}"
         for tab in ("conversation", "trace", "artifacts", "behavior"):
             with self.subTest(tab=tab):
-                self.assertEqual(self.get(f"{base}?tab={tab}").status_code, 200)
+                resp = self.get(f"{base}?tab={tab}")
+                self.assertEqual(resp.status_code, 200)
+                self.assert_page_head(resp)
 
     def test_the_comparison_workflow_answers(self):
         """A selection is `<workspace>:<job_id>`, so a cohort cannot come from
@@ -197,10 +218,17 @@ class EveryRoute(unittest.TestCase):
         picks = "&".join(f"pick={self.ws_name}:{i}" for i in ids)
         task = next((t.task_base for j in jobs for t in j.trials if t.task_base), None)
         self.assertTrue(task, "no task shared by the fixture jobs")
-        for url in (f"/compare?{picks}", f"/compare/pick?{picks}",
-                    f"/compare/task/{task}?{picks}"):
+        for url in (f"/compare?{picks}", f"/compare/task/{task}?{picks}"):
             with self.subTest(url=url):
-                self.assertEqual(self.get(url).status_code, 200)
+                resp = self.get(url)
+                self.assertEqual(resp.status_code, 200)
+                self.assert_page_head(resp)
+
+    def test_the_empty_runs_page_has_the_page_head(self):
+        with patch.dict(web.shared.STATE, {"workspace": None}):
+            resp = self.get("/runs")
+        self.assertIn("<h1>Runs</h1>", resp.get_data(as_text=True))
+        self.assert_page_head(resp)
 
     def test_the_batch_judge_routes_judge_on_a_post(self):
         """A batch button's click is the request: the POST asks the judge
@@ -217,7 +245,7 @@ class EveryRoute(unittest.TestCase):
         with patch.object(judge, "judge_trial", stub), patch.object(judge, "judge_side", stub), \
              patch.object(judge, "judge_task", stub), patch.object(judge, "judge_control", stub), \
              patch.object(judge, "tasks_todo", lambda j: list(j.trials)), \
-             patch.object(judge, "_sides_todo", lambda view: [(t.task_base, job, t) for t in job.trials]), \
+             patch.object(judge, "_sides_todo", lambda view: [(t.task_base, job, t, None) for t in job.trials]), \
              patch.dict(os.environ, TYPESAFE_API_KEY="ts-fake"):
             with self.client.session_transaction() as sess:
                 sess["csrf"] = "route-token"
@@ -239,7 +267,7 @@ class EveryRoute(unittest.TestCase):
         self.assertTrue(asked, "no batch route asked the judge anything")
 
     def test_the_job_page_offers_each_judge_its_own_button(self):
-        """System One and the LLM judge judge apart, so the job page has a
+        """Decision and the LLM judge judge apart, so the job page has a
         button for each, and the one a post names is the one asked."""
         judge = web.judge
         job = web.shared._load_jobs()[0]                         # the fixtures are controls: read as an agent's job here
@@ -247,7 +275,7 @@ class EveryRoute(unittest.TestCase):
         env = dict(TYPESAFE_API_KEY="ts-fake", OPENROUTER_API_KEY="sk-or-fake", LLM_JUDGE_PROVIDER="openrouter", LLM_JUDGE_MODEL="vendor/judge-1")
         with patch.dict(os.environ, env):
             page = self.get(f"/job/{job.job_id}").get_data(as_text=True)
-            for lane in ("system-one", "llm"):
+            for lane in ("decision", "llm"):
                 self.assertIn(f'id="judge-all-{lane}"', page)
             asked = []
             with patch.object(judge, "judge_trial", lambda j, t, k: asked.append(k.lane) or {}):

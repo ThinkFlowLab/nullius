@@ -31,7 +31,7 @@ A pair is an **agent benchmark** × an **agent**, or a **capability benchmark** 
 | `agent.conversation/v1` | Several prompts in one session, the earlier turns remembered | Turn 2 asks for what turn 1 said |
 | `agent.search/v1` | Search an HTTP collection with the agent's own tools, retrieve a source and answer with evidence | Find a source, choose the current one, follow a reference (3 checks) |
 | `agent.browser/v1` | A browser, through an MCP server Nullius starts | Defined; its kit comes with the first browser benchmark |
-| `agent.computer/v1` | A desktop seen in screenshots and driven by mouse and keyboard actions | Defined; no kit yet |
+| `agent.computer/v1` | A desktop seen in screenshots and driven by mouse and keyboard actions, through [the tools of an MCP server the benchmark's runner serves](ports/agent-computer-v1.md), reached through steps alone once the task is given: each step's answer holds what the agent learns of it | Four basic checks, five skills on a small desktop in a container ([the kit](ports/agent-computer-v1.md#the-kit)) |
 | `cap.memory/v1` | `add {session}` then `recall {question}` → `{memory}`; a session is `{id, date, turns: [{role, text}], text}` | Recall a place and an exact name among distractors (2 checks); nothing it stores is a credential |
 
 - **The last message** follows ACP `messageId` boundaries and other events (a tool call, a notice). Without IDs, session metadata parts messages but never erases the final answer.
@@ -58,7 +58,7 @@ no generic agent-plus-capability recipe or swap control.
 
 | Rule | Detail |
 | --- | --- |
-| Declared | A kit's `kit_version`: 1 for every kit but the tools kit, at 2 |
+| Declared | A kit's `kit_version`: 1 for every kit but the tools kit and the computer kit, at 2 |
 | Bumped | When a check gets stronger or tests something new; rewording a check that still tests the same thing keeps the version and the proofs made on it |
 | Recorded | `kit_version` in the `proven` entry; none means version 1 |
 | Older proofs | Still proofs, read as *proven on kit v1; kit v2 is current* |
@@ -89,7 +89,7 @@ A kit names its skills in its `standard.json`; any other check is basic.
 
 A proof from before skills were recorded reads as every skill shown on the current kit. A benchmark that relies on a skill says `"needs_skills": {"agent.tools/v1": ["decoys"]}`, each one its port's kit names (`cli check` refuses another); an agent that has not shown it does not fit.
 
-`cli conform --repeat K` (default 1) runs each check K times, each a trial (`u0002r1` … `u0002rK`); a check holds when a majority pass. The proof records `"repeat": 3`, `"checks": {"one-tool": "3/3", "arguments": "2/3"}` and each skill's `"passed": "1/3"`.
+`cli conform --attempts K` (default 1) runs each check K times, each a trial (`u0002r1` … `u0002rK`); a check holds when a majority pass. The proof records `"repeat": 3`, `"checks": {"one-tool": "3/3", "arguments": "2/3"}` and each skill's `"passed": "1/3"`.
 
 ### The tools kit
 
@@ -121,8 +121,8 @@ benchmark[@version] × agent|capability × model × dataset × its options × li
    │ backend, or --backend container (see Safety); an option that needs the
    │ machine's programs is refused without them, one that embeds gets
    │ the run's own relay, started before the driver
-   ▼ for each unit, N at a time (its agent turn: the unit's agent_seconds,
-   │ else limits.turn_seconds)
+   ▼ for each unit, N at a time (the agent's whole work on it: --timeout agent,
+   │ else the unit's agent_seconds, else limits.turn_seconds)
 setup    driver fills the unit's workspace, returns the prompt (+ MCP servers),
          or for a capability, what to add and what to recall
 produce  agent: an ACP session in the workspace, model via the relay
@@ -141,13 +141,17 @@ record); verifier/reward.txt and score.json
 | Rule | Detail |
 | --- | --- |
 | Units | Run `-j` at a time, each with its own workspace (a git repository of its own), home and relay |
-| A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost |
-| Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/containers/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/containers/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image |
+| A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost. A 200 with no reply, not streamed, reaches the caller as a 502 (or the 429 or 402 its error held); the record keeps `answered: 200`. A call refused with 400, 413 or 422 records its inline images' types and sizes as `images`, never their bytes |
+| Job name | One run at a time per job name: another is refused before it writes anything. A later run under the same name moves each trial's earlier record aside to the trial's `.work/earlier.<ns>` |
+| Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/containers/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing, is podman under that name, or does not answer (`docker ps` fails) while `podman ps` succeeds. Podman needs no Docker API socket and no `containers.conf` change. Where neither answers, Nullius keeps `docker` and its reason says that podman is on the machine. A host is probed by the same rule. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/containers/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image. `boat`: each unit's agent or capability in a boat.dev VM of its own (`standard/boat.py`, [The boat backend](#the-boat-backend)) |
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
-| Outcomes | A last model call that got a 429 is `rate_limited`, a refused key an API error, both outside the agent's rate, unless the unit passed; a turn past its limit is the agent's timeout. `"kind": "score"` leaves a score and no pass |
-| Rate limits | After a unit ends `rate_limited`, no unit starts for 5 s, doubling while units keep ending so (up to 300 s) and reset by any other end; `stage=units state=progress` says the pause and how many run. Each `rate_limited` unit is run once more after the others, one at a time: its first attempt moves whole to `retried/<trial>/`, the second is the trial and counts. Not after a Stop, a refused key or the spending cap, which counts both attempts |
-| The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. Provider `anthropic` speaks Anthropic's Messages (`ANTHROPIC_API_KEY` as `x-api-key`) |
+| Outcomes | A last model call that got a 429 is `rate_limited` (calls in the order they began; a side model's later 200 does not cover the agent's own), a refused key an API error, both outside the agent's rate, unless the unit passed; a unit asked to stop (a `stop` beside its relay's records) keeps the score its driver gave despite the agent's own last 429; the agent's own last call over the model's context window is `ContextWindowExceededError`, the agent's; an agent past its limit for the unit, every turn included, is the agent's timeout ([time limits](cli/run.md#time-limits)). `"kind": "score"` leaves a score and no pass |
+| Rate limits | After a `rate_limited` end no unit starts for 60 s, or the provider's `Retry-After`, doubling to 300 s while units keep ending so |
+| The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. The key goes as the agent's protocol says: `x-api-key` and `anthropic-version` for `messages`, else a bearer header. Provider `anthropic` serves `messages` only ([protocols](settings/model-providers.md#protocols)) |
 | Constraints (`--constraint KEY=VALUE`) | What the machine allows Nullius, from Settings ([constraints](settings/run-hosts.md#constraints)): flags on every container the run starts on the machine, on either backend; a systemd scope for each process the run starts there (its drivers, and its agents and capabilities on the local backend); the most units at a time; the CPU affinity; the driver's `CUDA_VISIBLE_DEVICES`. Before the first unit, the run checks the container caps on the engine and the scope caps on systemd: the local backend refuses a cap that no scope holds, and the container backend runs its drivers without a scope. `config.json` records the values under `standard.constraints` |
+| A cap on model calls (`--max-calls`) | Agents only. A unit's relay counts its agent route's answered calls and refuses the one past the cap: the agent's error, as a timeout is ([Run a benchmark](cli/run.md#a-cap-on-model-calls)) |
+| Who served a call | Each call's record keeps the routing field it was sent with (`request.routing`), the serving provider its reply names (`reply.served_by`), how the reply ended (`reply.end`: `finish_reason`, `stop_reason` or a Responses status) and an error the reply holds under a 200 (`reply.error`: the top-level one, else that of the first choice that has one), each read apart from the rest of the record and cleaned of credentials. The call keeps its status, and the unit's verdict reads it as before, but for a 200 with no reply |
+| Serving providers (`--served-by`) | On OpenRouter, the providers that may answer a model, in order and no other: each relay, a container's included, sends `provider: {order, allow_fallbacks: false}` on every request sent as that model, in place of the caller's own (kept as `request.routing_asked`). `config.json` records `standard.served_by`; each trial's `result.json` and the job's say the calls of every route by serving provider and, for each pinned model, `held`, which reads the provider's name alone ([Run a benchmark](cli/run.md#serving-providers)) |
 | A spending cap (`--max-usd`, `--max-usd-per-unit`) | Each relay books a call in the job's ledger (`.work/ledger`, `standard/calls/ledger.py`) before sending it, and refuses the one that does not fit the run's cap or its unit's ([Run a benchmark](cli/run.md#a-spending-cap)) |
 
 ## Safety
@@ -172,6 +176,28 @@ The container backend (`--backend container`) is the isolation, and needs no suc
 Through Podman's Docker API (a docker CLI with `DOCKER_HOST` at `podman system service`'s socket), Nullius runs docker and needs `netns = "bridge"`, a DNS-enabled `default_network`, and `userns` at its default in `containers.conf`: with `keep-id`, a container's root is a sub-uid and cannot write the unit's folders.
 
 A rootful Docker with `userns-remap` maps the uids of each container to sub-uids. There, the containers that use your files (the agent's, the relay, an install, the check, a door and an own image) run with `--userns=host`, as on a default Docker. The licence forwarder and the check's proxy keep the remap.
+
+### The boat backend
+
+`--backend boat`: each unit's agent or capability in its own [boat.dev](https://boat.dev) VM. Driver, relay, spending cap and scoring stay with the run.
+
+Except for VM benchmarks below, computer-port runs, Original setups and checks require Hosts.
+
+VM benchmarks such as OSWorld run each task entirely inside Boat, including scoring. Model keys and declared benchmark credentials enter those VMs.
+
+For these runs, spending caps are split equally across tasks; unused shares cannot transfer. Use a dataset and limit instead of `--units` or `--shard`.
+
+| Piece | Rule |
+| --- | --- |
+| Key | Settings → Sandbox, or `BOAT_API_KEY` |
+| VM | One per unit, `--boat-size` (`small` by default). Always deleted. Free trial: 2 hours at most. VM benchmarks need more RAM than their guest VM |
+| Machines | Runs from this machine; never mixed with hosts |
+| Units at a time | The account's VM limit; a recipe may set fewer. The run warns when it cannot start every unit |
+| Agent time | Excludes the VM's start-up |
+| Isolation | Agent-only VMs reach loopback only: no internet, no DNS, no model key. VM benchmarks isolate the whole task |
+| Files | A link into your home or keys refuses the unit. Links out of the workspace are not copied back |
+| Code checks | A `runs_code` check needs Docker where the run runs |
+| Not run | Units needing the public web, their own image, a licence file or server of this machine, or MCP servers. No GPUs |
 
 ### A benchmark's MCP server on the machine
 
@@ -341,8 +367,10 @@ N machines are N runs of the same command, each with `--shard I/N`, and one merg
 | Shards by the unit's id | `sha256(unit id) mod N` (`standard/runner/shard.py`); changing N moves most units. Order: the driver's `units`, the units `--units FILE` lists, the shard, then `--limit` (`--shard 1/2 --limit 6` is the first six units of shard 1) |
 | A unit keeps its place | `u0042` is the 43rd unit of the whole dataset in every shard |
 | One launch | Each shard's `config.json` records `standard.shard` (`index`, `of`, `units_total`, `partition`, `planned`, `limit`) and `standard.launch` (`--launch`, else the UTC day, benchmark, agent or capability and model). With `--units`, `units_total` counts the listed units. The shards' lists hold the same units; a list's file name, comments and sha256 may differ from shard to shard |
-| `cli merge JOB_DIR... -o OUT` | One job (`standard/runner/merge.py`): trials hard-linked, `result.json` recomputed, `config.json` with `merged_from`. Shards that differ in launch, version, dataset, agent, model, backend or N are refused unless `--force`. Shards whose lists hold different units, and two trials of one unit, are refused always. `merge` compares the units each list holds, in any order; the sha256 is kept in the record only |
+| `cli merge JOB_DIR... -o OUT` | One job (`standard/runner/merge.py`): trials hard-linked, `result.json` recomputed, `config.json` with `merged_from`. Shards that differ in launch, version, dataset, agent, model, serving providers, backend or N are refused unless `--force`. Shards whose lists hold different units, and two trials of one unit, are refused always. `merge` compares the units each list holds, in any order; the sha256 is kept in the record only |
 | `cli prove --shard I/N` | The controls and the leak check on that shard's units; each record says `shard` |
+| Different options per shard | Shards of one launch may differ in `--bench-option` (a unit that needs a service its machine serves); the merged config keeps each shard's in `merged_from` |
+| `cli prove --job nop=MERGED` | Checks a merged launch of a control against its bound instead of running it. The job and each of its trials name that benchmark, version, control and job; each unit of the dataset has one trial, scored 0 to 1; the units check passes. `--dataset` named, no `--limit` or `--shard`. The record names the job and its options |
 
 ```bash title="Two machines, one merge"
 nullius standard run humaneval oracle --shard 1/2 --limit 6   # machine 1
@@ -406,19 +434,31 @@ use the source folders and repository checks.
 | Op | Sent | Replies |
 | --- | --- | --- |
 | `units` | `dataset`, `setup` | Every unit id |
-| `setup` | `unit`, `dir` | `{prompt}`, any `mcp` servers, `environment`, an own image's `image`, `prepare`, `internet` and `verify`, and `agent_seconds`, the unit's own agent timeout (up to 6 hours, instead of `limits.turn_seconds`) |
+| `setup` | `unit`, `dir`; `attempt` with `limits.attempts`; `participant` (`agent`, `capability` or `control`) with `driver.participant` | `{prompt}`, any `mcp` servers, `environment`, an own image's `image`, `prepare`, `internet` and `verify`, and `agent_seconds`, the unit's own agent timeout (up to 6 hours, instead of `limits.turn_seconds`) |
 | `turn` | The transcript so far; `simulator: {model, base_url, key}` when there is one; `judge` for an upstream that grades as the conversation ends; `attempt` with `limits.attempts` | The next message, `{done: true}`, or `restart` |
 | `produce` | A capability benchmark's recall, `base_url` and `key` | The reading, through the relay |
 | `answer` | `unit, dir, setup, model, base_url, key` | `{answer}`: the upstream's own answerer, for a [setup](#setups-as-published-your-model-your-agent-or-capability) |
-| `score` | `unit, dir, transcript, answer`, `setup`, `verified` for an own image, `judge: {model, base_url, key}` when judged | `{reward, detail}`, and `passed` when the benchmark passes or fails; `parts: {n, by, parts}` when the reward is a mean over several parts (a conversation's questions), so the job's mean weighs it by `n` and breaks it down by `by` |
+| `score` | `unit, dir, transcript, answer`, `setup`, `verified` for an own image, `judge: {model, base_url, key}` when judged | `{reward, detail}`, and `passed` when the benchmark passes or fails; `parts: {n, by, parts}` when the reward is a mean over several parts (a conversation's questions), so the job's mean weighs it by `n` and breaks it down by `by`; `stopped`, the reason of a stop asked while the unit ran, kept as `verifier_result.stopped` |
 | `oracle` | `{unit, dir}` | `{answer}`, the reference; a workspace benchmark also writes it into `dir` |
+| `end` | `{unit, dir}`, with `driver.unit_end`, once a unit an agent ran has ended, also after a stop, when its `setup` was sent and the driver still runs with no request left unanswered | `{}` |
+| `task_given` | `{unit, dir}`, with `driver.task_given`, just before an agent is sent its task: its first prompt, or its command | `{}` once the benchmark's side has taken it; a failure ends the unit before the task is sent |
+
+An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierError: `, `CancelledError: ` or `CauseUnknownError: ` keeps that kind.
 
 | Field in `standard.json` | Meaning |
 | --- | --- |
+| `gated` | `true` for a benchmark whose tasks are gated: a unit's failing model endpoint (the agent's, the judge's, the simulated user's) is kept as its status and class, never the provider's words, which can quote the request |
 | `score.judge` | `{model, says}`: the official judge. Its route (`<unit>-judge`) is asked as that model, recorded beside the unit's calls, never as the agent's. `cli run --judge-model` asks another |
 | `simulator` | `{model, says}`, only with `agent.conversation/v1`: the user's model, on `<unit>-simulator`. The conversation opens with a `turn` on an empty transcript, its message after `setup`'s prompt and a blank line. A control never asks it. `cli run --simulator-model` asks another |
 | `leaderboard` | `{says, simulator?, judge?, bench_options?, repeat?}`: what the upstream's leaderboard fixes besides the ranked model, from its own submission rules - the user simulator's and judge's models, the benchmark's options it sets and the fewest attempts per unit. The builder then offers **Like the leaderboard** |
-| `limits.turns` | At most this many agent turns in a conversation (default 20) |
+| `limits.turns` | At most this many agent turns in a conversation (default 20; `cli run --max-turns` forces another) |
+| `limits.turn_seconds` | The agent's whole work on a unit, every turn of a conversation included (default 900; a task's `agent_seconds`, a setup's own `turn_seconds` or `cli run --timeout agent=` before it) |
+| `limits.setup_seconds` | How long `setup` may take, in seconds, for a unit an agent runs (a setup that starts a machine of its own for an agent); every other unit keeps 600; `cli run --timeout setup=` forces either. A benchmark's driver may hold a bound of its own (OSWorld1: setup 1 hour, scoring 10 minutes): a value raised above it is then not reached |
+| `limits.score_seconds` | How long `score` may take (default 600; `cli run --timeout score=` before it). A driver that runs the unit's environment in `score`, as its null control does, sets it |
+| `limits.call_seconds` | How long the relay waits for one model call's reply (default 900). A benchmark whose agent waits longer for a call sets it above that agent's own wait, so the agent's client, not the relay, ends a long call |
+| `driver.participant` | `true`: `setup` is also sent `participant`, the kind of what runs the unit, for a driver that starts something only an agent uses. A driver whose `setup` takes `unit` and `dir` alone leaves it out |
+| `driver.unit_end` | `true`: the driver is sent `end` (`unit`, `dir`) once each unit an agent ran has ended, scored or not, so that what its setup started for the agent ends with the unit. Only a unit whose `setup` was sent gets it, and only while that driver still runs: a driver closed after a request got no reply in its time is not asked, nor is one whose request a stop left unanswered. A control's or a setup's unit gets none, nor does any other driver |
+| `driver.task_given` | `true`: the driver is sent `task_given` before each agent is given its task, and the task waits for its answer: [the computer port](ports/agent-computer-v1.md#the-window-before-the-task) closes its window before the task there. A control's or a setup's unit gets none |
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
 
@@ -444,25 +484,30 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `indexes` | Packages from another index |
 | `wheels` | A wheel served by URL only (a model package such as spaCy's `en_core_web_sm`), `{url, sha256}`: refused unless the file matches, resolved with `pip` |
 | `project` | The upstream itself, from its clone; `locked: true` installs it at its own lock file's pins (`uv export --frozen`), `pip` resolved beside them |
+| `virtual` | With `locked`: the lock's pins without the project itself, as `uv sync` leaves a project with no build system; the driver imports the upstream from its clone |
 | `extras`, `prefetch` | The project's extras; what to download ahead |
 
 #### Benchmark options
 
 | Key of an option | Meaning |
 | --- | --- |
-| `summary`, `values` or `pattern`, `default` | What it changes, its allowed choices or input pattern, and its value when unset |
+| `summary`, `values` or `pattern`, `example`, `default` | What it changes, its allowed choices or input pattern, and its value when unset. `example`, optional and checked when given, is a value the pattern allows besides the default; pages show it in the pattern's place, and a pattern without one shows nothing |
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
-| `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, or named `files` |
+| `names` | A name for some values, shown in their place; a recipe and the CLI keep the value |
+| `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, named `files`, or on a Where option the `vm` each unit boots (`{"memory_gb": 4}`) |
 | `when` | Another option's values that make it apply |
-| `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`) |
+| `limit` | `true`: a bound of the upstream's own (steps, errors). The builder shows it in Limits, under the benchmark's name |
+| `step` | `where`: where the work runs, such as the VMs' provider, asked on Where, one value as fixed; `dataset`: what its datasets need, asked on Dataset for the datasets it applies to |
+| `by` | Its default under each value of another option, e.g. each OSWorld agent's own steps |
+| `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`); `["agent"]`: an agent's run alone, never a capability's or a control's |
 
 - **Temperature** in GSM8K and HumanEval's Original setups accepts a non-negative decimal, such as `0.5`. **Provider default** omits the parameter; the provider/model decides. Some models restrict overrides. In the builder, leave the input empty for provider default; the CLI accepts `--bench-option temperature=0.5` or `temperature=default`. This does not override an agent's own sampling settings.
 - **Read** by the driver as `NULLIUS_OPTION_<NAME>`; set with `cli run --bench-option NAME=VALUE`.
 - **`embeddings`**: the value gets the run's own relay as the driver's `OPENAI_BASE_URL` (and its MCP servers'), the model pinned on its route. Bare OpenAI model names work on OpenAI or OpenRouter; qualified names such as `qwen/qwen3-embedding-8b` require OpenRouter. On OpenRouter, bare names acquire their maker's prefix in both the price inventory and the sent request. A judge route handed to litellm goes in its `api_base`.
 - **`reranker`**: the chat model used by the upstream search. The driver receives one `OPENAI_BASE_URL`: embeddings requests use the embedding pin when present, while chat and Responses requests use the reranker pin. A BM25 reranker needs no embedding model. Both models count toward the run's price requirements and spending cap.
 - **`files`**: a benchmark declares `{name: {url: "https://…", sha256: "…"}}`; an option value names them with `needs.files: [name]`. A needs block may add `when: {other_option: [values]}` to require its resources only under those selections. Only active options and needs fetch files, once per digest under `STANDARD_DATA_DIR` (the dataset cache by default), refusing a mismatched download. The driver receives each path as `NULLIUS_FILE_<NAME>` (upper case). Names use lower case letters and underscores.
-- **`host`**: `{summary, check: [programs on PATH], install: {apt, npm}}` (`standard/requirements/hostreq.py`), whatever the backend; hardware (a CUDA GPU, by `nvidia-smi`) has no `install`. Optional `gpu_memory_mb` is a positive whole number of MiB required on the largest GPU, read with `nvidia-smi` (total memory, not free memory or the sum across cards). The local builder and run startup refuse insufficient memory with the required and available amounts; an unavailable query names `nvidia-smi` instead. Remote GPU memory is checked when the run starts on the host. A run refuses missing programs and says the install commands when supplied.
+- **`host`**: `{label, summary, check: [programs on PATH], install: {apt, npm}}`, `label` the name a page shows, the key without it (`standard/requirements/hostreq.py`), whatever the backend; hardware (a CUDA GPU, by `nvidia-smi`) has no `install`. Optional `gpu_memory_mb` is a positive whole number of MiB required on the largest GPU, read with `nvidia-smi` (total memory, not free memory or the sum across cards). The local builder and run startup refuse insufficient memory with the required and available amounts; an unavailable query names `nvidia-smi` instead. Remote GPU memory is checked when the run starts on the host. A run refuses missing programs and says the install commands when supplied.
 - **One integration per benchmark.** Add supported behavior as options on that entry, not numbered integration revisions. Record the selected options with each run and revalidate affected proofs.
 
 ### An agent
@@ -495,6 +540,8 @@ An agent or a capability may keep several versions in its one file: an older rel
 | Naming | `KEY@VERSION` in `cli run`, `cli prove`, `cli fit` and the recipe's `benchmark` |
 | In jobs | `…__KEY-VERSION__…` in the name; `standard.benchmark_version` and `standard.benchmark_ref` in `config.json` |
 | A fork is a version | `versions.<name>.upstream = {repository, tag, tested}`, never a patch of ours; cloned at its commit (`upstreams/<key>/<commit>/`), its datasets checked by their own `sha256`; a private repository uses the machine's git credentials. It proves its own controls (`cli prove KEY@NAME`) |
+| A release is the default | An earlier untagged pin stays as a version with `upstream.branch` (`main`): shown as `main (044bc33)` |
+| Its page | `benchmark.json` `versions.<name>`: whole `good_to_know`, `upstream_limitations`, `limitations`, and `datasets.<key>` `tasks`, `notes`, `verifier`; the page and builder switch all of it with the version |
 
 ### Options
 
@@ -502,7 +549,7 @@ An agent or a capability may keep several versions in its one file: an older rel
 
 | Rule | Detail |
 | --- | --- |
-| Shape | A `summary`, `values` (or a `pattern`) and a `default`, the vendor's own; the summary says where it comes from |
+| Shape | A `summary`, `values` (or a `pattern`, with an optional `example` it allows besides the default, shown in its place) and a `default`, the vendor's own; the summary says where it comes from |
 | Reaches the agent | As `{opt_<name>}` in `model.env`, `env`, or a file `model.files` writes; `cli check` refuses a slot naming no option, and a default the option does not allow |
 | Set | `cli run` and `cli conform` take `--option name=value` (repeatable) |
 | Recorded | Every value under `standard.options` in `config.json`, defaults included |
@@ -582,11 +629,40 @@ already accepts arbitrary models needs only the `original` method.
 | Rule | Detail |
 | --- | --- |
 | `original` driver method | A model of `models` only, by the name the upstream knows; the relay sends it as `served_as` says, with the prefix `providers` gives. A provider not in `providers` is refused. A model the upstream asks besides the answerer is a `side_models` entry. Without `models`, any model: its own agent runs as the run's model |
-| `model` driver method | The upstream is told `runs_as` (its window, batching and token budget) while the relay sends the model chosen; one that reasons by default can spend that budget first: `OutputLengthExceededError` |
+| `model` driver method | The upstream is told `runs_as` (its window, batching and token budget) while the relay sends the model chosen. A model that reasons by default can spend that budget thinking: a last reply with neither text nor a tool call is `OutputLengthExceededError`. A last Responses reply that `failed` is an API error. A runner that fails after the unit is asked to stop is `CancelledError` |
 | `units` | A setup may count its own units; `units` is sent `setup` |
 | `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes or the Original setup driver container |
-| Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper` |
-| Attempts | `cli run --repeat K` runs each unit K times; `result.json` carries `pass_hat_k` (C(c, k) / C(n, k) averaged over the units, an errored unit left out) |
+| `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice |
+| Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper`, and the benchmark's own agent that ran (`agent`), whose key is also the job's agent (`agent_info.name`) |
+| Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
+| Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |
+
+### A benchmark's own agents
+
+A benchmark whose upstream ships several agent scripts (OSWorld's) keeps them in
+`agents.json` beside its `standard.json`. Each entry of its `agents` is an agent
+definition (`nullius.agent/v1`) that starts with `start.driver`: the upstream's
+own name for it (`agent`) and what the driver runs in the Original setup
+(`script`, `argv`, `env`, and whatever else the driver reads), with the `models`
+it is published with. It speaks no port, so it has no `offers` or `proven`.
+`common` and `aws` beside `agents` stay driver data.
+
+```json title="agents.json · one entry"
+"openai-cua": {
+  "key": "openai-cua", "label": "OpenAI CUA", "summary": "...",
+  "models": ["computer-use-preview"],
+  "start": {"driver": {"agent": "openai_cua", "script": "scripts/python/run_multienv_openaicua.py", "argv": ["..."], "env": {"...": "..."}}}
+}
+```
+
+| Rule | Detail |
+| --- | --- |
+| Named | `<benchmark>:<key>`, e.g. `osworld1:openai-cua`; the key follows the key rule (lower case, digits, dashes) |
+| Derived, never written | Where it comes from (`from`: `benchmark`; a catalogue agent's is `bundled` or `yours`) and `only_for`, its benchmark. A written `only_for` names that benchmark alone |
+| `options.agent` | `standard.json` writes its `label`, `summary` and `setups`; the loader rebuilds `values` (each entry's `start.driver.agent`, in order), `names`, `about` and `default` (the first), so `when`, `by`, `--bench-option agent=...` and `NULLIUS_OPTION_AGENT` read as before |
+| Checked | Each entry's `models` are among `setups.original.models`; each upstream name once |
+| Offered | On the Agents page behind its From filter, and shown whenever Runs on chooses its benchmark (Runs on lists each benchmark's agents, as the builder enables them), and in the builder beside the catalogue's agents; another benchmark greys it with the reason |
+| Run | As the Original setup, its upstream name as the agent option: `nullius standard run osworld1 original --bench-option agent=openai_cua`. Its jobs name it by its key (`openai-cua`); an older job, recorded as `original`, is read the same way from its agent option |
 
 ### Every setting, inventoried
 
@@ -627,7 +703,7 @@ A benchmark proves itself by its two **controls**, `nop` and `oracle`, and two c
 
 `cli run KEY nop` and `cli run KEY oracle` need no `--model` and no `--unsandboxed`: no model is called but a judged benchmark's judge. The config and every trial record `standard.control`.
 
-`cli prove KEY [--dataset D] [--limit N]` runs, for each dataset:
+`cli prove KEY [--dataset D] [--limit N] [--bench-option NAME=VALUE ...] [--job nop=JOB_DIR]` runs, for each dataset:
 
 | Check | Passes when |
 | --- | --- |
@@ -635,6 +711,8 @@ A benchmark proves itself by its two **controls**, `nop` and `oracle`, and two c
 | `oracle` | Everything passes, or every score at the ceiling, down to its `expect` |
 | `units` | Two `units` calls give the same ids: unique, plain enough to name a trial, as many as the dataset says |
 | `leak` | After `setup`, the oracle's answer and the lines it writes are not already in the prompt or the workspace. A reference under 12 characters is not looked for; the record says how many were skipped |
+
+`--bench-option NAME=VALUE` sets the benchmark's own options for the units check's driver and each control's run, resolved and refused as `cli run` does them, the programs a value needs on this machine included, before anything is installed or started; the control job's config records the values.
 
 What passed is written into `standard.json` per dataset, dated; a failing check is taken back, and a run on fewer units does not replace one on more.
 

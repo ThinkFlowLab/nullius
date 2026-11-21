@@ -26,40 +26,41 @@ def fake(status, data):
 
 
 class Configured(unittest.TestCase):
-    def test_system_one_and_the_llm_judge_are_set_apart(self):
-        self.assertFalse(client.system_one({})); self.assertTrue(client.system_one({"TYPESAFE_API_KEY": "ts-1"}))
-        self.assertEqual(client.system_one({}).lane, "system-one")
+    def test_decision_judge_and_the_llm_judge_are_set_apart(self):
+        self.assertFalse(client.decision_judge({})); self.assertTrue(client.decision_judge({"TYPESAFE_API_KEY": "ts-1"}))
+        self.assertEqual(client.decision_judge({}).lane, "decision")
         j = client.llm_judge({"OPENROUTER_API_KEY": "sk-or-1"})
-        self.assertEqual((j.provider, j.lane, j.url), ("openrouter", "llm", client.LLM_PROVIDERS["openrouter"]["url"]))
+        self.assertEqual((j.provider, j.lane, j.url), ("openrouter", "llm", "https://openrouter.ai/api/v1/chat/completions"))
         self.assertFalse(j); self.assertEqual(j.missing, "a model")                                         # no model: not ready
         j = client.llm_judge({"OPENROUTER_API_KEY": "sk-or-1", "OPENAI_API_KEY": "sk-oa-1", "LLM_JUDGE_PROVIDER": "openai", "LLM_JUDGE_MODEL": "gpt-x"})
         self.assertTrue(j); self.assertEqual((j.key, j.url), ("sk-oa-1", "https://api.openai.com/v1/chat/completions"))
         local = client.llm_judge({"MODEL_API_URL": "http://box:8000/v1/", "LLM_JUDGE_MODEL": "qwen"})          # the first provider set
-        self.assertEqual((local.provider, local.url, local.key), ("local", "http://box:8000/v1/chat/completions", "local"))
+        self.assertEqual((local.provider, local.url, local.key), ("custom", "http://box:8000/v1/chat/completions", "local"))
         self.assertTrue(local)
         self.assertNotIn("sk-or-1", repr(client.llm_judge({"OPENROUTER_API_KEY": "sk-or-1"})))
 
     def test_the_llm_judge_on_a_named_endpoint_uses_its_url_and_its_key(self):
         env = {"MODEL_API_URL": "http://default/v1", "MODEL_API_KEY": "default-key", "MODEL_GPU_NAME": "GPU box",
                "MODEL_GPU_API_URL": "http://gpu:8000/v1", "MODEL_GPU_API_KEY": "gpu-key", "LLM_JUDGE_MODEL": "qwen"}
-        self.assertEqual(client.llm_providers(env)["local:GPU"], {"label": "GPU box", "url_var": "MODEL_GPU_API_URL", "key": "MODEL_GPU_API_KEY"})
-        j = client.llm_judge(dict(env, LLM_JUDGE_PROVIDER="local:GPU"))
-        self.assertEqual((j.provider, j.url, j.key, j.label), ("local:GPU", "http://gpu:8000/v1/chat/completions", "gpu-key", "GPU box · qwen"))
+        self.assertEqual(client.llm_providers(env)["custom:GPU"], {"label": "GPU box", "url": "http://gpu:8000/v1/chat/completions", "key": "MODEL_GPU_API_KEY",
+                                                          "ready": True, "protocol": "chat", "fit": ["chat", "messages"], "listed": []})
+        j = client.llm_judge(dict(env, LLM_JUDGE_PROVIDER="local:GPU"))                                       # the old name of custom:GPU
+        self.assertEqual((j.provider, j.url, j.key, j.label), ("custom:GPU", "http://gpu:8000/v1/chat/completions", "gpu-key", "GPU box · qwen"))
         self.assertTrue(j)
         keyless = client.llm_judge({"MODEL_GPU_API_URL": "http://gpu:8000/v1", "LLM_JUDGE_PROVIDER": "local:GPU", "LLM_JUDGE_MODEL": "qwen"})
         self.assertEqual(keyless.key, "local"); self.assertTrue(keyless)                                      # no key: the placeholder, as a run
         bad = client.llm_judge({"MODEL_API_URL": "http://u:pw@box/v1", "LLM_JUDGE_PROVIDER": "local", "LLM_JUDGE_MODEL": "qwen"})
         self.assertEqual(bad.url, ""); self.assertFalse(bad)                                                  # a credential in its URL: not asked
         gone = client.llm_judge(dict(env, LLM_JUDGE_PROVIDER="local:GONE"))                                   # removed: the first one set
-        self.assertEqual((gone.provider, gone.key), ("local", "default-key"))
+        self.assertEqual((gone.provider, gone.key), ("custom", "default-key"))
 
 
-class SystemOneOnOpenRouter(unittest.TestCase):
-    def test_system_one_is_asked_where_settings_say_with_the_model_named(self):
-        self.assertEqual(client.system_one({"OPENROUTER_API_KEY": "sk-or-1"}).provider, "openrouter")          # the only key: OpenRouter
-        self.assertEqual(client.system_one({"OPENROUTER_API_KEY": "sk-or-1", "TYPESAFE_API_KEY": "ts-1"}).provider, "typesafe")
-        j = client.system_one({"OPENROUTER_API_KEY": "sk-or-1", "SYSTEM_ONE_PROVIDER": "openrouter", "SYSTEM_ONE_MODEL": "jaredpalmer/kev-4b"})
-        self.assertEqual((j.lane, j.url, j.model), ("system-one", "https://openrouter.ai/api/v1/systemone", "jaredpalmer/kev-4b"))
+class DecisionOnOpenRouter(unittest.TestCase):
+    def test_decision_judge_is_asked_where_settings_say_with_the_model_named(self):
+        self.assertEqual(client.decision_judge({"OPENROUTER_API_KEY": "sk-or-1"}).provider, "openrouter")          # the only key: OpenRouter
+        self.assertEqual(client.decision_judge({"OPENROUTER_API_KEY": "sk-or-1", "TYPESAFE_API_KEY": "ts-1"}).provider, "typesafe")
+        j = client.decision_judge({"OPENROUTER_API_KEY": "sk-or-1", "DECISION_PROVIDER": "openrouter", "DECISION_MODEL": "jaredpalmer/kev-4b"})
+        self.assertEqual((j.lane, j.url, j.model), ("decision", "https://openrouter.ai/api/v1/systemone", "jaredpalmer/kev-4b"))
         sent = []
         def post(url, body, key):
             sent.append((url, body, key))
@@ -67,14 +68,14 @@ class SystemOneOnOpenRouter(unittest.TestCase):
         rec = client.ask("the state", ["task_completed"], j, post=post)
         url, body, key = sent[0]
         self.assertEqual((url, key, body["model"]), ("https://openrouter.ai/api/v1/systemone", "sk-or-1", "jaredpalmer/kev-4b"))
-        self.assertIn("questions", body); self.assertEqual(body["state"], "the state")                         # the System One contract, not a chat
+        self.assertIn("questions", body); self.assertEqual(body["state"], "the state")                         # the Decision contract, not a chat
         self.assertEqual(rec["judge"], {"provider": "openrouter", "model": "jaredpalmer/kev-4b"})
         self.assertEqual(rec["answers"], {"task_completed": {"noul": 0.81}})
-        self.assertEqual(client.system_one({"OPENROUTER_API_KEY": "k", "SYSTEM_ONE_PROVIDER": "openrouter"}).model, "~typesafe/jev-latest")
+        self.assertEqual(client.decision_judge({"OPENROUTER_API_KEY": "k", "DECISION_PROVIDER": "openrouter"}).model, "~typesafe/jev-latest")
 
 
 class OpenRouterJudge(unittest.TestCase):
-    judge = client.Judge("openrouter", "sk-or-1", "vendor/judge-1", client.LLM_PROVIDERS["openrouter"]["url"])
+    judge = client.Judge("openrouter", "sk-or-1", "vendor/judge-1", "https://openrouter.ai/api/v1/chat/completions")
 
     def test_one_call_asks_every_question_and_reads_each_answer_by_its_type(self):
         post, sent = fake(200, completion({
@@ -83,7 +84,7 @@ class OpenRouterJudge(unittest.TestCase):
             "transcript_quality": {"score": 1}}))
         rec = client.ask("the state", IDS, self.judge, post=post, kind="trial")
         url, body, key = sent[0]
-        self.assertEqual((url, key, body["model"]), (client.LLM_PROVIDERS["openrouter"]["url"], "sk-or-1", "vendor/judge-1"))
+        self.assertEqual((url, key, body["model"]), ("https://openrouter.ai/api/v1/chat/completions", "sk-or-1", "vendor/judge-1"))
         self.assertEqual(body["response_format"], {"type": "json_object"})
         prompt = body["messages"][1]["content"]
         for qid in IDS:
@@ -94,6 +95,7 @@ class OpenRouterJudge(unittest.TestCase):
         self.assertEqual(rec["answers"]["failure_cause"]["probabilities"], {"agent_error": 0.75, "environment_error": 0.25})   # normalised
         self.assertIsNone(rec["answers"]["failure_cause"]["confidence"])                                   # stated, not calibrated
         self.assertEqual(rec["answers"]["transcript_quality"]["legend"], Q.QUESTIONS["transcript_quality"]["criteria"])
+        self.assertGreaterEqual(rec["usage"].pop("seconds"), 0)
         self.assertEqual(rec["usage"], {"input_tokens": 1200, "output_tokens": 80, "cost_usd": 0.0012})
         self.assertEqual(rec["states"]["trial"]["input_tokens"], 1200)
         self.assertNotIn("sk-or-1", json.dumps(rec))
@@ -116,7 +118,7 @@ class OpenRouterJudge(unittest.TestCase):
             with self.subTest(status), self.assertRaisesRegex(client.JudgeError, said):
                 client.ask("s", IDS, self.judge, post=post, sleep=lambda s: None)
         with self.assertRaisesRegex(client.JudgeError, "needs a model"):
-            client.ask("s", IDS, client.Judge("openrouter", "sk-or-1", "", client.LLM_PROVIDERS["openrouter"]["url"]))
+            client.ask("s", IDS, client.Judge("openrouter", "sk-or-1", "", "https://openrouter.ai/api/v1/chat/completions"))
 
     def test_a_busy_openrouter_is_asked_again(self):
         answers = iter([(429, {}), (200, completion({"task_completed": {"noul": 0.4}}))])

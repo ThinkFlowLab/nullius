@@ -1,6 +1,6 @@
 # Prepare a machine for OSWorld1
 
-Run each step where the tasks run, on this machine or a [run host](../settings/run-hosts.md), as the user that runs Nullius there, from the root of a Nullius checkout.
+Run each step where the tasks run, on this machine or a [host](../settings/run-hosts.md), as the user that runs Nullius there, from the root of a Nullius checkout.
 
 ## What it needs
 

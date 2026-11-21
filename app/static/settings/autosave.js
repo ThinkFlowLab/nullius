@@ -33,11 +33,13 @@
       } else if (key.startsWith('value:')) names.add(key.slice(6));
     }
     // A model edit always carries the displayed provider, including a sole auto-selection.
-    for (const prefix of ['SYSTEM_ONE', 'LLM_JUDGE']) {
+    for (const prefix of ['DECISION', 'LLM_JUDGE']) {
       if (body.has('value:' + prefix + '_MODEL') || body.has('clear:' + prefix + '_MODEL')) {
         const provider = current.get('value:' + prefix + '_PROVIDER');
         if (provider) body.set('value:' + prefix + '_PROVIDER', provider);
       }
+      // The provider and the model decide the protocol: redraw the judge's rows from the saved state.
+      if (['_PROVIDER', '_PROTOCOL', '_MODEL'].some(part => names.has(prefix + part))) ['_PROVIDER', '_PROTOCOL'].forEach(part => names.add(prefix + part));
     }
     // Removing the final host is an explicit removal, not an empty "keep" input.
     if (body.has('value:HOSTS') && !body.get('value:HOSTS')) body.set('clear:HOSTS', '1');
@@ -52,12 +54,12 @@
         return false;
       }
     }
-    // A new endpoint: its name, URL and optional key go together.
+    // A new custom provider: its name, base and optional key go together.
     const endpointChanged = changed.some(([key]) => key.startsWith('endpoint_'));
     if (endpointChanged) {
       for (const part of ['name', 'url', 'key']) body.set('endpoint_' + part, current.get('endpoint_' + part) || '');
       if (!body.get('endpoint_name') || !body.get('endpoint_url')) {
-        say('Enter the endpoint name and its URL.', true);
+        say('Enter the provider name and its base URL.', true);
         return false;
       }
     }
@@ -93,7 +95,7 @@
       for (const [key, value] of changed) saved.set(key, value);
       for (const name of names) {
         const field = document.getElementById(name), replacement = fresh.getElementById(name);
-        if (!field || !replacement || (field.contains(document.activeElement) && document.activeElement.matches('input:not([type=hidden]), textarea, select')) || field.querySelector('input[type=radio]')) continue;
+        if (!field || !replacement || (field.contains(document.activeElement) && document.activeElement.matches('input:not([type=hidden]), textarea, select, .ui-select-trigger')) || field.querySelector('input[type=radio]')) continue;
         const keys = [...field.querySelectorAll('[name]')].map(input => input.name);
         if (keys.some(key => now.get(key) !== current.get(key))) continue;
         field.replaceWith(replacement);

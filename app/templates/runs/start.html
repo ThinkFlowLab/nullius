@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_page.html' import page_head %}
 {% block title %}Runs — Nullius{% endblock %}
 {% block crumb %}/ runs{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/start.css') }}">{% endblock %}
@@ -6,10 +7,7 @@
 {# No workspace open: the two ways to have runs - start one, or bring the ones
    made elsewhere - then the workspaces already here, and the mark last. #}
 <div class="start">
-  <header class="start-head">
-    <div class="start-title"><h1>Runs</h1><span class="start-count">0 runs</span></div>
-    <p>Your next experiment starts here.</p>
-  </header>
+  {{ page_head('Runs', sub='0 runs') }}
 
   <div class="start-ways">
     <section class="start-card" aria-labelledby="start-build">

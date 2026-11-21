@@ -4,10 +4,12 @@ The relay passes a 429 to the caller unchanged and never answers for the
 provider; a unit whose last model call was refused that way ends as
 ``RateLimitError``. Starting the next unit at once only sends it into the same
 limit, so after such an end no new unit starts for a while: a pause that
-doubles while units keep ending rate-limited (``FIRST`` seconds, up to
-``LONGEST``) and resets on a unit that ends any other way. Units already
-running are left alone; the concurrency asked for is unchanged, only how soon
-the next unit starts.
+doubles while units keep ending rate-limited (``FIRST`` seconds, a provider's
+limits being mostly per minute, up to ``LONGEST``) and resets on a unit that
+ends any other way - or the pause the provider said (``Retry-After``) when it
+is longer. Units already running are left alone; the concurrency asked for is
+unchanged, only how soon the next unit starts. A retry of a rate-limited
+attempt waits the same pause from that attempt's end (``run.run_again``).
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ import threading
 import time
 from typing import Optional
 
-FIRST = 5.0
+FIRST = 60.0
 LONGEST = 300.0
 RATE_LIMITED = "RateLimitError"
 
@@ -29,16 +31,26 @@ class Pace:
         self.until = 0.0
         self._lock = threading.Lock()
 
-    def ended(self, exception_type: Optional[str]) -> Optional[float]:
+    def ended(self, exception_type: Optional[str], said: Optional[float] = None) -> Optional[float]:
         """A unit's end: the pause it starts, in seconds, when it ended
-        rate-limited; None otherwise (and the pause is reset)."""
+        rate-limited - ``said``, the provider's own, when that is longer; None
+        otherwise (and the pause is reset)."""
         with self._lock:
             if exception_type != RATE_LIMITED:
                 self.pause = 0.0
                 return None
             self.pause = min(self.longest, self.pause * 2 if self.pause else self.first)
-            self.until = max(self.until, time.time() + self.pause)
-            return self.pause
+            wait = max(self.pause, said or 0.0)
+            self.until = max(self.until, time.time() + wait)
+            return wait
+
+    def due(self, ended_at: float, said: Optional[float] = None) -> float:
+        """A rate-limited unit tried again: nothing starts before its pause,
+        counted from its end (``ended_at``), is over - the doubled pause, at
+        least ``FIRST``, or ``said`` when longer. The seconds left."""
+        with self._lock:
+            self.until = max(self.until, ended_at + max(self.first, self.pause, said or 0.0))
+            return max(0.0, self.until - time.time())
 
     def wait(self) -> None:
         """Until the pause is over, or the run is stopped."""

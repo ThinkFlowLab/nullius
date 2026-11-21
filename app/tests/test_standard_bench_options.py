@@ -41,6 +41,14 @@ class Definition(unittest.TestCase):
         problems = " ".join(definitions.problems({k: v for k, v in bad.items() if not k.startswith("_")}, "benchmark"))
         for said in ("options.retrieval.datasets", "needs.alltools.host", "needs.alltools.embeddings"):
             self.assertIn(said, problems)
+        # a unit's own VM is a Where option's, and says its memory in GB alone
+        for o, vm in ((TAU["options"]["retrieval"], {"memory_gb": 4}), (dict(TAU["options"]["retrieval"], step="where"), {"memory_gb": "4G"}),
+                      (dict(TAU["options"]["retrieval"], step="where"), {"memory_gb": 4, "cpus": 4})):
+            bad = tau(options={"retrieval": dict(o, needs={"bm25": {"vm": vm}})})
+            self.assertIn("needs.bm25.vm", " ".join(definitions.problems({k: v for k, v in bad.items() if not k.startswith("_")}, "benchmark")))
+        good = tau(options={"retrieval": dict(TAU["options"]["retrieval"], step="where", needs={"bm25": {"vm": {"memory_gb": 4}}})})
+        self.assertNotIn("needs.bm25", " ".join(definitions.problems({k: v for k, v in good.items() if not k.startswith("_")}, "benchmark")))
+        self.assertEqual((definitions.vm_memory_gb(good, {"retrieval": "bm25"}), definitions.vm_memory_gb(good, {"retrieval": "terminal_use"})), (4, 0))
         worse = tau(host={"sandbox": {"summary": "x", "check": ["srt; rm"], "install": {"brew": ["x"]}}})
         problems = " ".join(definitions.problems({k: v for k, v in worse.items() if not k.startswith("_")}, "benchmark"))
         self.assertIn("host.sandbox.check", problems)
@@ -50,7 +58,7 @@ class Definition(unittest.TestCase):
 class Scope(unittest.TestCase):
     def test_an_option_applies_only_to_its_datasets(self):
         self.assertEqual(definitions.bench_options_of(TAU, "airline", {"retrieval": "alltools"}),
-                         ({"task_split": "base", "user_reasoning_effort": "default"}, []))
+                         ({"task_split": "base", "user_reasoning_effort": "default", "max_steps": "200", "max_errors": "10"}, []))
         vals, bad = definitions.bench_options_of(TAU, "banking_knowledge", {"retrieval": "alltools"})
         self.assertEqual((vals["retrieval"], "task_split" in vals, bad), ("alltools", False, []))
         self.assertEqual(definitions.bench_options_of(TAU, "banking_knowledge")[0]["retrieval"], "bm25")
@@ -264,7 +272,27 @@ class OtherBenchmarks(unittest.TestCase):
         for path in root.glob("*/standard.json"):
             with self.subTest(benchmark=path.parent.name):
                 data = json.loads(path.read_text())
-                self.assertNotIn("versions", data)
+                shared = (data.get("upstream") or {}).get("repository")
+                for name, block in (data.get("versions") or {}).items():
+                    if name == data.get("default"):
+                        continue
+                    up = definitions.resolve(data, name)["upstream"]
+                    # a version beside the default is an upstream release (its tag), a commit of a branch (an untagged
+                    # earlier pin, named by its branch) or a fork (another repository) - never an integration revision
+                    self.assertTrue(up.get("tag") or up.get("branch") or up.get("repository") != shared, name)
+                    self.assertEqual(len(up.get("tested") or ""), 40, name)
+
+
+class UpstreamBranch(unittest.TestCase):
+    def test_an_untagged_pin_names_its_branch_and_reads_by_it(self):
+        ok = {"repository": "https://github.com/o/r", "tested": "a" * 40, "license": "MIT"}
+        self.assertEqual(definitions._upstream(dict(ok, branch="main")), [])
+        for bad in (dict(ok, branch="main", tag="v1"), {"branch": "main", "license": "MIT"}, dict(ok, branch="no spaces")):
+            with self.subTest(bad=bad):
+                self.assertTrue(any("upstream.branch" in p for p in definitions._upstream(bad)))
+        self.assertEqual(definitions.version_label({"upstream": dict(ok, branch="main"), "_version": "aaaaaaa"}), "main (aaaaaaa)")
+        self.assertEqual(definitions.version_label({"upstream": dict(ok, tag="v1.0"), "_version": "v1.0"}), "v1.0")
+        self.assertEqual(definitions.version_label({"upstream": ok, "_version": "x"}), "x")
 
 
 class MachineDocker(unittest.TestCase):
@@ -288,8 +316,22 @@ class MachineDocker(unittest.TestCase):
                 setups = {n["name"]: n for n in out["host"]["needs"]}
                 rows = prerequisites.check_here([], setups, which=lambda p: None)
                 self.assertEqual([(x["name"], x["state"]) for x in rows], [("setup:docker", "missing")])
+                self.assertEqual(rows[0]["label"], "docker")
                 self.assertFalse(prerequisites.ready([{"rows": rows}]))
                 self.assertTrue(prerequisites.ready([{"rows": prerequisites.check_here([], setups, which=lambda p: "/usr/bin/" + p)}]))
+
+    def test_a_value_shows_its_name_and_the_recipe_keeps_the_value(self):
+        out = recipe.compile(self.a_recipe(["original"], bench_options={"agent": "muse_spark"}, model="muse-spark-1.1"))
+        self.assertEqual(out["errors"], [])
+        self.assertIn([4, "Participant", "Muse Spark · OSWorld1's own"], out["review"])       # a recipe from before: its agent
+        self.assertIn([6, "Steps per task", "100 (its default) · test_small"], out["review"])
+        self.assertIn("agent=muse_spark", out["script"])
+        self.assertEqual(out["review"][-1], [7, "Where", "this machine · local backend · VM provider docker"])
+        b = copy.deepcopy(definitions.get("benchmark", "osworld1"))
+        b["options"]["agent"]["names"]["nobody"] = "Nobody"
+        b["options"]["thinking"]["step"] = "agent"
+        self.assertTrue(any("agent.names" in p for p in definitions.problems(b, "benchmark")))
+        self.assertTrue(any("thinking.step" in p for p in definitions.problems(b, "benchmark")))
 
     def test_the_null_control_is_refused_as_it_starts_on_a_machine_without_docker(self):
         b = definitions.get("benchmark", "osworld1")
@@ -299,14 +341,72 @@ class MachineDocker(unittest.TestCase):
         self.assertIn("vm_provider=docker needs on this machine docker (docker not on PATH)", str(e.exception))
 
 
+class UpstreamBounds(unittest.TestCase):
+    """The bounds a benchmark's upstream has of its own - τ³-bench's steps and tool errors per conversation,
+    OSWorld's agents' steps - are options with ``limit``: a run sets them as any option, the builder shows
+    them with the limits, and an OSWorld agent's own steps are its default (``by``)."""
+
+    def osworld_driver(self):
+        import importlib.util
+        b = definitions.get("benchmark", "osworld1")
+        with patch.dict(os.environ, {"NULLIUS_UPSTREAM": "/nonexistent"}), patch("sys.argv", ["driver.py"]):
+            spec = importlib.util.spec_from_file_location("osworld1_driver", os.path.join(b["_here"], "driver.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        return b, mod
+
+    def test_an_option_bound_is_a_number_and_its_default_by_another_option_names_each_value(self):
+        for key in ("tau3-bench", "osworld1"):
+            self.assertEqual(definitions.problems(definitions.get("benchmark", key), "benchmark"), [], key)
+        b = copy.deepcopy(definitions.get("benchmark", "osworld1"))
+        b["options"]["max_steps"]["by"]["agent"].pop("m3")
+        self.assertTrue(any("max_steps.by" in p for p in definitions.problems(b, "benchmark")))
+        b = copy.deepcopy(definitions.get("benchmark", "osworld1"))
+        del b["options"]["max_steps"]["pattern"]
+        b["options"]["max_steps"]["values"] = ["default"]
+        self.assertTrue(any("max_steps.limit" in p for p in definitions.problems(b, "benchmark")))
+
+    def test_each_osworld_agents_own_steps_are_its_default_and_a_run_forces_another(self):
+        b, mod = self.osworld_driver()
+        own = b["options"]["max_steps"]["by"]["agent"]
+        for name, spec in mod.AGENTS["agents"].items():
+            if "--max_steps" in spec["argv"]:
+                self.assertEqual(spec["argv"][spec["argv"].index("--max_steps") + 1], own[name], name)
+        argv = ["x.py", "--max_steps", "100", "--model", "m"]
+        self.assertEqual(mod.with_steps(argv, "default"), argv)
+        self.assertEqual(mod.with_steps(argv, "30"), ["x.py", "--max_steps", "30", "--model", "m"])
+        self.assertEqual(mod.with_steps(["x.py"], "30"), ["x.py", "--max_steps", "30"])
+
+    def test_a_recipe_sets_a_bound_on_the_participants_it_applies_to(self):
+        r = {"version": 1, "harness": "standard", "name": "t", "title": "t", "benchmark": "tau3-bench", "datasets": ["airline"],
+             "others": ["original"], "model_choice": "any", "provider": "openrouter", "model": "vendor/m", "limit": 1,
+             "concurrency": 1, "where": "local", "bench_options": {"max_steps": "60", "max_errors": "4"}}
+        out = recipe.compile(r)
+        self.assertEqual(out["errors"], [])
+        self.assertIn("--bench-option max_steps=60", out["script"])
+        self.assertIn("--bench-option max_errors=4", out["script"])
+        for over in ("0", "201"):        # above the upstream's 200, limits.turns would end it first
+            bad = recipe.compile(dict(r, bench_options={"max_steps": over}))["errors"]
+            self.assertTrue(bad, over)
+
+
 class TurnLimit(unittest.TestCase):
     def test_a_units_own_agent_limit_wins_within_bounds(self):
         r = run.Run.__new__(run.Run)
         r.turn_seconds = 900
-        self.assertEqual(r.turn_limit({"agent_seconds": 3600}), 3600)
-        self.assertEqual(r.turn_limit({}), 900)
+        self.assertEqual(r.agent_limit({"agent_seconds": 3600}), 3600)
+        self.assertEqual(r.agent_limit({}), 900)
         for bad in (0, -5, True, "3600", run.MAX_AGENT_SECONDS + 1):
-            self.assertEqual(r.turn_limit({"agent_seconds": bad}), 900, bad)
+            self.assertEqual(r.agent_limit({"agent_seconds": bad}), 900, bad)
+
+    def test_a_runs_own_limits_are_forced_over_the_task_and_the_step(self):
+        r = run.Run.__new__(run.Run)
+        r.turn_seconds = 900
+        self.assertEqual((r.phase_limit("setup", 600), r.step_limit("verify", {"seconds": 120}), r.step_limit("verify", {})), (600, 120, 900))
+        r.timeouts = {"agent": 60.0, "setup": 30.0, "verify": 45.0}
+        self.assertEqual(r.agent_limit({"agent_seconds": 3600}), 60)            # the run's, over the task's own
+        self.assertEqual((r.phase_limit("setup", 600), r.phase_limit("score", 600)), (30, 600))
+        self.assertEqual((r.step_limit("verify", {"seconds": 120}), r.step_limit("setup", {"seconds": 900})), (45, 30))
 
 
 GPU = {"summary": "A CUDA GPU with enough memory.", "check": ["nvidia-smi"], "gpu_memory_mb": 12000}

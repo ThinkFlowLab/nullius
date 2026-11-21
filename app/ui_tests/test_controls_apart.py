@@ -10,6 +10,7 @@ temporary root by `tests.test_feasibility.write_job`; nothing is run.
 """
 from __future__ import annotations
 
+import json
 import re
 import tempfile
 import unittest
@@ -19,7 +20,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from nullius import workspace
-from nullius.runs import feasibility
+from nullius.runs import feasibility, parse
 from tests.test_feasibility import write_job
 from .test_routes import web
 
@@ -75,7 +76,7 @@ class ControlsApart(unittest.TestCase):
         self.stack.enter_context(patch.object(workspace, "job_index", return_value={}))
         self.stack.enter_context(patch.object(workspace, "load", side_effect=lambda home, name: self.ws))
         self.jobs = [self.agent, self.nop, self.oracle]
-        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda ws, roots: self.jobs))
+        self.stack.enter_context(patch.object(workspace, "load_jobs", side_effect=lambda ws, roots, runs=None: self.jobs))
         self.stack.enter_context(patch.object(web.shared, "_jobs_for_request", side_effect=lambda: self.jobs))
         self.client = web.app.test_client()
 
@@ -85,10 +86,23 @@ class ControlsApart(unittest.TestCase):
         self.assertEqual(response.status_code, 200, path)
         return response.get_data(as_text=True)
 
+    def header(self, html):
+        return text_of(re.search(r'<div class="page-head-sub">.*?</div>', html, re.S).group(0))
+
     def row(self, html, job_id):
         rows = [r for r in re.findall(r'<tr [^>]*>.*?</tr>', html, re.S) if '<td data-col="run"><a href="/job/%s">' % job_id in r]
         self.assertEqual(len(rows), 1, job_id)
         return rows[0]
+
+    def test_a_control_whose_config_has_a_null_model_lists(self):
+        with tempfile.TemporaryDirectory() as root:
+            write_job(root, "tau-z-oracle", "oracle", {"a": 1}, n_tasks=1)
+            path = Path(root) / "tau-z-oracle" / "config.json"
+            cfg = json.loads(path.read_text()); cfg["agents"][0]["model_name"] = None
+            path.write_text(json.dumps(cfg))
+            self.jobs = [self.agent, parse.parse_job(str(path.parent))]
+        html = self.get("/runs")
+        self.assertNotIn("None", self.row(html, "tau-x-agent") + self.row(html, "tau-z-oracle"))
 
     def test_a_control_is_read_as_behaved_or_not_never_as_a_score(self):
         self.assertIsNone(feasibility.summary_of(self.agent))
@@ -112,13 +126,22 @@ class ControlsApart(unittest.TestCase):
     def test_the_header_the_chips_and_the_mix_bar_count_the_agent_only(self):
         html = self.get("/runs")
         self.assertIn('data-runs="1" data-trials="4"', html)
-        self.assertIn("1 runs", text_of(re.search(r'<p class="subtitle" id="counts".*?</p>', html, re.S).group(0)))
+        self.assertEqual(self.header(html), "3 launches · 1 run · 4 trials · 2 checks")
+        self.assertIn('class="dataset-count">1 run<span class="dot">·</span>4 trials', html)
         legend = re.search(r'<div class="legend">.*?</div>', html, re.S).group(0)
         chips = dict(re.findall(r'data-outcome="([a-z_]+)"[^>]*>[^<]*<b>(\d+)</b>', legend))
         self.assertEqual(chips, {"resolved": "2", "failed_verification": "1", "rate_limited": "1"})
         bar = re.search(r'<div class="bar">.*?</div>', html, re.S).group(0)
         self.assertEqual(sorted(re.findall(r'style="flex:(\d+)" data-outcome="([a-z_]+)"', bar)),
                          [("1", "failed_verification"), ("1", "rate_limited"), ("2", "resolved")])
+
+    def test_the_header_counts_the_checks_apart_and_only_when_there_are_some(self):
+        # each job is a launch of its own here: no start time is recorded
+        for jobs, header in (([self.nop, self.oracle], "2 launches · 0 runs · 0 trials · 2 checks"),
+                             ([self.nop], "1 launch · 0 runs · 0 trials · 1 check"),
+                             ([self.agent], "1 launch · 1 run · 4 trials")):
+            self.jobs = jobs
+            self.assertEqual(self.header(self.get("/runs")), header)
 
     def test_a_controls_line_names_each_control_with_its_verdict(self):
         # the controls are their launch's task checks: a row each at the top of its table, with its verdict
@@ -177,7 +200,7 @@ class ControlsApart(unittest.TestCase):
     # -- the job page -----------------------------------------------------------
     def test_the_job_page_of_a_control_reads_its_header_the_same_way(self):
         html = self.get("/job/tau-x-nop")
-        header = re.search(r'<header class="run-header">.*?</header>', html, re.S).group(0)
+        header = re.search(r'<header class="page-head">.*?</header>', html, re.S).group(0)
         self.assertIn('id="control-verdict" data-state="ok"', header)
         self.assertIn("5/5 rejected ✓", text_of(header))
         self.assertIn("Feasibility · nop + oracle", text_of(header))

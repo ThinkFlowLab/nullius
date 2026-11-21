@@ -1,7 +1,7 @@
 #nullius-builder { --nb-bg: var(--bg); --nb-surface: var(--surface); --nb-soft: var(--surface-2); --nb-text: var(--text); --nb-muted: var(--text-dim); --nb-line: var(--border); --nb-blue: var(--accent); --nb-tint: var(--accent-soft); --nb-ok: var(--ok); --nb-warn: var(--warn); --nb-red: var(--bad); color: var(--text); font: 14px/1.5 var(--sans); text-align: left; }
-#nullius-builder *{box-sizing:border-box}#nullius-builder button,#nullius-builder input,#nullius-builder select{font:inherit}#nullius-builder button{cursor:pointer}#nullius-builder button:disabled{cursor:default;opacity:.55}#nullius-builder button:focus-visible,#nullius-builder input:focus-visible,#nullius-builder select:focus-visible,#nullius-builder summary:focus-visible{outline:2px solid var(--nb-blue);outline-offset:3px}#nullius-builder [hidden]{display:none!important}#nullius-builder h1,#nullius-builder h2,#nullius-builder h3,#nullius-builder p{margin:0}#nullius-builder h1{font-size:29px;line-height:1.2;letter-spacing:-1px;font-weight:500}#nullius-builder h2{font-size:19px;font-weight:500;letter-spacing:-.35px}#nullius-builder h3{font-size:14px;font-weight:500}#nullius-builder small{font-size:12px;color:var(--nb-muted)}#nullius-builder strong{font-weight:500}#nullius-builder .nb-mono{font:12px/1.65 var(--mono);overflow-wrap:anywhere}#nullius-builder .nb-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:23px}#nullius-builder .nb-kicker{font:11px/1.5 var(--mono);letter-spacing:1.2px;color:var(--nb-muted);text-transform:uppercase;margin-bottom:9px}#nullius-builder .nb-heading p{margin-top:8px;color:var(--nb-muted);font-size:13px}#nullius-builder .nb-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--nb-line);color:var(--nb-text);background:var(--nb-surface);border-radius:7px;padding:8px 12px;white-space:nowrap;font-size:12px}#nullius-builder .nb-button:hover{border-color:var(--nb-blue)}#nullius-builder .nb-primary{background:var(--nb-blue);color:var(--nb-bg);border-color:var(--nb-blue)}#nullius-builder svg{width:16px;height:16px}#nullius-builder .nb-steps{display:flex;gap:4px;border-bottom:1px solid var(--nb-line);margin-bottom:24px}#nullius-builder .nb-step{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:12px 3px;background:none;border:0;border-bottom:2px solid transparent;color:var(--nb-muted);font-size:12px}#nullius-builder .nb-step[aria-pressed=true]{color:var(--nb-blue);border-bottom-color:var(--nb-blue)}#nullius-builder .nb-step em{font:11px var(--mono);font-style:normal;color:inherit}#nullius-builder .nb-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(265px,.68fr);gap:26px;align-items:start}#nullius-builder .nb-editor{min-width:0}#nullius-builder .nb-sectionhead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:17px}#nullius-builder .nb-state{font:11px/1.4 var(--mono);color:var(--nb-ok);margin-top:4px;display:block}#nullius-builder .nb-state.warn{color:var(--nb-warn)}#nullius-builder .nb-note{padding:12px 0;color:var(--nb-muted);font-size:12px;line-height:1.7}#nullius-builder .nb-notice{padding:12px 14px;background:var(--nb-soft);border-left:2px solid var(--nb-warn);border-radius:0 6px 6px 0;font-size:12px;color:var(--nb-muted);margin:15px 0}#nullius-builder .nb-notice strong{display:block;color:var(--nb-warn);margin-bottom:3px}#nullius-builder .nb-field{display:grid;gap:7px;color:var(--nb-muted);font-size:12px;margin-bottom:16px}#nullius-builder .nb-field input,#nullius-builder .nb-field select{width:100%;min-width:0;color:var(--nb-text);border:1px solid var(--nb-line);border-radius:7px;background:var(--nb-surface);padding:10px 11px;font-size:13px}#nullius-builder select option{color:var(--nb-text);background:var(--nb-surface)}#nullius-builder .nb-field input[type=checkbox]{width:17px;height:17px;accent-color:var(--nb-blue)}#nullius-builder .nb-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}#nullius-builder input[type=checkbox]{accent-color:var(--nb-blue);width:17px;height:17px;flex-shrink:0}#nullius-builder .nb-subtabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:17px}#nullius-builder .nb-subtab{border:0;background:none;color:var(--nb-muted);border-radius:6px;padding:7px 10px;font-size:12px}#nullius-builder .nb-subtab[aria-pressed=true]{background:var(--nb-soft);color:var(--nb-text)}#nullius-builder .nb-bottom{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--nb-line);padding-top:18px;margin-top:23px}#nullius-builder .nb-reviewrow{padding:14px 0;border-bottom:1px solid var(--nb-line);display:flex;justify-content:space-between;align-items:center;gap:12px}#nullius-builder .nb-reviewrow small{display:block;margin-bottom:3px}#nullius-builder .nb-reviewrow strong{overflow-wrap:anywhere}#nullius-builder .nb-custom{border:1px solid var(--nb-line);border-radius:8px;padding:13px;margin-bottom:10px;background:var(--nb-surface)}#nullius-builder .nb-custom .nb-field{margin-bottom:9px}#nullius-builder .nb-rowhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}#nullius-builder .nb-remove{border:0;background:none;color:var(--nb-muted);padding:3px 7px}#nullius-builder .nb-error{color:var(--nb-red);font-size:12px;margin-top:8px}#nullius-builder details{border-top:1px solid var(--nb-line);margin-top:16px;padding-top:12px}#nullius-builder summary{cursor:pointer;font-size:12px;color:var(--nb-muted)}#nullius-builder .nb-badge{color:var(--nb-blue);font-size:11px}#nullius-builder .nb-headingactions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+#nullius-builder *{box-sizing:border-box}#nullius-builder button,#nullius-builder input,#nullius-builder select{font:inherit}#nullius-builder button{cursor:pointer}#nullius-builder button:disabled{cursor:default;opacity:.55}#nullius-builder button:focus-visible,#nullius-builder input:focus-visible,#nullius-builder select:focus-visible,#nullius-builder summary:focus-visible{outline:2px solid var(--nb-blue);outline-offset:3px}#nullius-builder [hidden]{display:none!important}#nullius-builder h1,#nullius-builder h2,#nullius-builder h3,#nullius-builder p{margin:0}#nullius-builder h2{font-size:19px;font-weight:500;letter-spacing:-.35px}#nullius-builder h3{font-size:14px;font-weight:500}#nullius-builder small{font-size:12px;color:var(--nb-muted)}#nullius-builder strong{font-weight:500}#nullius-builder .nb-mono{font:12px/1.65 var(--mono);overflow-wrap:anywhere}#nullius-builder .nb-kicker{font:11px/1.5 var(--mono);letter-spacing:1.2px;color:var(--nb-muted);text-transform:uppercase;margin-bottom:9px}#nullius-builder .nb-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--nb-line);color:var(--nb-text);background:var(--nb-surface);border-radius:7px;padding:8px 12px;white-space:nowrap;font-size:12px}#nullius-builder .nb-button:hover{border-color:var(--nb-blue)}#nullius-builder .nb-primary{background:var(--nb-blue);color:var(--nb-bg);border-color:var(--nb-blue)}#nullius-builder svg{width:16px;height:16px}#nullius-builder .nb-steps{display:flex;gap:4px;border-bottom:1px solid var(--nb-line);margin-bottom:24px}#nullius-builder .nb-step{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:12px 3px;background:none;border:0;border-bottom:2px solid transparent;color:var(--nb-muted);font-size:12px}#nullius-builder .nb-step[aria-pressed=true]{color:var(--nb-blue);border-bottom-color:var(--nb-blue)}#nullius-builder .nb-step em{font:11px var(--mono);font-style:normal;color:inherit}#nullius-builder .nb-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(265px,.68fr);gap:26px;align-items:start}#nullius-builder .nb-editor{min-width:0}#nullius-builder .nb-sectionhead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:17px}#nullius-builder .nb-state{font:11px/1.4 var(--mono);color:var(--nb-ok);margin-top:4px;display:block}#nullius-builder .nb-state.warn{color:var(--nb-warn)}#nullius-builder .nb-note{padding:12px 0;color:var(--nb-muted);font-size:12px;line-height:1.7}#nullius-builder .nb-notice{padding:12px 14px;background:var(--nb-soft);border-left:2px solid var(--nb-warn);border-radius:0 6px 6px 0;font-size:12px;color:var(--nb-muted);margin:15px 0}#nullius-builder .nb-notice strong{display:block;color:var(--nb-warn);margin-bottom:3px}#nullius-builder .nb-field{display:grid;gap:7px;color:var(--nb-muted);font-size:12px;margin-bottom:16px}#nullius-builder .nb-field input,#nullius-builder .nb-field select{width:100%;min-width:0;color:var(--nb-text);border:1px solid var(--nb-line);border-radius:7px;background:var(--nb-surface);padding:10px 11px;font-size:13px}#nullius-builder select option{color:var(--nb-text);background:var(--nb-surface)}#nullius-builder .nb-field input[type=checkbox]{width:17px;height:17px;accent-color:var(--nb-blue)}#nullius-builder .nb-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}#nullius-builder input[type=checkbox]{accent-color:var(--nb-blue);width:17px;height:17px;flex-shrink:0}#nullius-builder .nb-subtabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:17px}#nullius-builder .nb-subtab{border:0;background:none;color:var(--nb-muted);border-radius:6px;padding:7px 10px;font-size:12px}#nullius-builder .nb-subtab[aria-pressed=true]{background:var(--nb-soft);color:var(--nb-text)}#nullius-builder .nb-bottom{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--nb-line);padding-top:18px;margin-top:23px}#nullius-builder .nb-reviewrow{padding:14px 0;border-bottom:1px solid var(--nb-line);display:flex;justify-content:space-between;align-items:center;gap:12px}#nullius-builder .nb-reviewrow small{display:block;margin-bottom:3px}#nullius-builder .nb-reviewrow strong{overflow-wrap:anywhere}#nullius-builder .nb-custom{border:1px solid var(--nb-line);border-radius:8px;padding:13px;margin-bottom:10px;background:var(--nb-surface)}#nullius-builder .nb-custom .nb-field{margin-bottom:9px}#nullius-builder .nb-rowhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}#nullius-builder .nb-remove{border:0;background:none;color:var(--nb-muted);padding:3px 7px}#nullius-builder .nb-error{color:var(--nb-red);font-size:12px;margin-top:8px}#nullius-builder details{border-top:1px solid var(--nb-line);margin-top:16px;padding-top:12px}#nullius-builder summary{cursor:pointer;font-size:12px;color:var(--nb-muted)}#nullius-builder .nb-badge{color:var(--nb-blue);font-size:11px}
 @media(max-width:850px){#nullius-builder .nb-layout{grid-template-columns:1fr}}
-@media(max-width:520px){#nullius-builder .nb-heading{flex-direction:column}#nullius-builder .nb-headingactions{justify-content:flex-start}#nullius-builder .nb-step{font-size:11px;gap:3px;flex-direction:column}#nullius-builder .nb-two{grid-template-columns:1fr;gap:0}#nullius-builder h1{font-size:26px}#nullius-builder .nb-field input,#nullius-builder .nb-field select{font-size:16px}}
+@media(max-width:520px){#nullius-builder .nb-step{font-size:11px;gap:3px;flex-direction:column}#nullius-builder .nb-two{grid-template-columns:1fr;gap:0}#nullius-builder .nb-field input,#nullius-builder .nb-field select{font-size:16px}}
 @media(pointer:coarse){#nullius-builder button{min-height:44px}}
 
 #nullius-builder .nb-layout { grid-template-columns: minmax(0, 1fr); gap: clamp(24px, 3vw, 48px); }
@@ -29,9 +29,10 @@
 #nullius-builder .nb-savedrow > span { min-width: 0; overflow-wrap: anywhere; }
 #nullius-builder .nb-savedrow small { display: block; }
 #nullius-builder .nb-button[hidden] { display: none; }
+#nullius-builder .nb-button[aria-disabled=true] { opacity: .55; cursor: default; border-color: var(--nb-line); }   /* it cannot here: greyed, its reason the tooltip */
 #nullius-builder .nb-field input { scroll-margin-top: 100px; }
 
-@media(max-width:520px) { #nullius-builder .nb-headingactions { gap: 8px; } #nullius-builder .nb-errorlist { padding: 10px; } #nullius-builder .nb-field input { font-size: 16px; } }
+@media(max-width:520px) { #nullius-builder .nb-errorlist { padding: 10px; } #nullius-builder .nb-field input { font-size: 16px; } }
 
 #nullius-builder h3 { text-transform: none; letter-spacing: -.1px; }
 #nullius-builder #nb-status:empty { min-height: 0; margin: 0; }
@@ -50,11 +51,9 @@
 
 /* Configuration hierarchy: labels lead; help text stays readable. */
 #nullius-builder { font-size: 15px; line-height: 1.6; }
-#nullius-builder h1 { font-size: 32px; font-weight: 500; }
 #nullius-builder h2 { font-size: 24px; font-weight: 500; line-height: 1.3; }
 #nullius-builder h3 { font-size: 18px; font-weight: 500; }
 #nullius-builder small { font-size: 13px; font-weight: 400; line-height: 1.6; }
-#nullius-builder .nb-heading p { font-size: 15px; }
 #nullius-builder .nb-steps { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0,1fr); }
 #nullius-builder .nb-step { font-size: 14px; padding-block: 15px; }
 #nullius-builder .nb-step em { font-size: 12px; }
@@ -73,6 +72,7 @@
 #nullius-builder .nb-notice strong { font-size: 15px; font-weight: 500; margin-bottom: 5px; }
 #nullius-builder summary { font-size: 14px; }
 #nullius-builder .nb-button { font-size: 14px; padding: 10px 14px; }
+#nullius-builder .page-head-actions .nb-button { padding-block: 0; font-size: .8rem; }   /* the page head's height, a small button's text */
 #nullius-builder .nb-subtab { font-size: 13px; }
 #nullius-builder .nb-dialog { color: var(--nb-text); background: var(--nb-surface); border: 1px solid var(--nb-line); border-radius: 14px; padding: 30px; width: min(500px,calc(100vw - 32px)); box-shadow: 0 24px 80px #0006; }
 #nullius-builder .nb-dialog::backdrop { background: #0008; backdrop-filter: blur(3px); }
@@ -80,7 +80,7 @@
 #nullius-builder .nb-dialog .nb-field { margin-top: 24px; }
 #nullius-builder .nb-dialogactions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; }
 #nullius-builder .nb-save-message { min-height: 2em; }
-@media(max-width:650px) { #nullius-builder .nb-steps { grid-auto-flow: row; grid-template-columns: repeat(3,minmax(0,1fr)); } #nullius-builder .nb-step { flex-direction: row; font-size: 13px; } #nullius-builder h1 { font-size: 29px; } #nullius-builder h2 { font-size: 22px; } #nullius-builder .nb-categories .nb-subtab { padding: 9px 10px; } #nullius-builder .nb-dialog { padding: 22px; } #nullius-builder .nb-field input, #nullius-builder .nb-field select { font-size: 16px; } }
+@media(max-width:650px) { #nullius-builder .nb-steps { grid-auto-flow: row; grid-template-columns: repeat(3,minmax(0,1fr)); } #nullius-builder .nb-step { flex-direction: row; font-size: 13px; } #nullius-builder h2 { font-size: 22px; } #nullius-builder .nb-categories .nb-subtab { padding: 9px 10px; } #nullius-builder .nb-dialog { padding: 22px; } #nullius-builder .nb-field input, #nullius-builder .nb-field select { font-size: 16px; } }
 /* The effective per-phase limits under the timeout multiplier, live. */
 #nullius-builder .nb-timeouts { width: 100%; border-collapse: collapse; margin: 8px 0 6px; font-size: 12px; }
 #nullius-builder .nb-timeouts th, #nullius-builder .nb-timeouts td { text-align: left; padding: 5px 10px 5px 0; border-bottom: 1px solid var(--nb-line); }
@@ -99,6 +99,7 @@
 #nullius-builder .nb-customagent input { font: 12.5px/1.4 var(--mono); padding: 5px 9px; border: 1px solid var(--nb-line); border-radius: 7px; background: var(--nb-surface); color: var(--nb-text); width: 26ch; }
 #nullius-builder .nb-agentline { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--nb-muted); margin-top: 4px; }
 #nullius-builder .nb-timelimits input { width: 10ch; color: var(--nb-text); border: 1px solid var(--nb-line); border-radius: 6px; background: var(--nb-surface); padding: 5px 8px; font-size: 13px; }
+#nullius-builder .nb-sectionnext { margin-top: 36px; }
 #nullius-builder .nb-timelimits td { vertical-align: middle; }
 #nullius-builder .nb-timelimits .nb-mono { font: 12px var(--mono); color: var(--nb-muted); }
 #nullius-builder .nb-note code, #nullius-builder .nb-categoryhead code { font: 12px var(--mono); background: var(--nb-soft); border: 1px solid var(--nb-line); border-radius: 5px; padding: 2px 6px; color: var(--nb-text); white-space: nowrap; }
@@ -145,19 +146,7 @@
 /* Consent to run without a sandbox. */
 #nullius-builder .nb-consent { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--nb-line); border-radius: 8px; background: var(--nb-surface); }
 #nullius-builder .nb-consent > span { display: flex; align-items: center; gap: 9px; color: var(--nb-text); font-size: 13px; }
-/* The benchmark and agent steps: a search and filter chips above a grid of tiles, as the Benchmarks page draws its
-   cards. A tile: its mark and name, its tags, one line on what it is, then its facts; chosen, it takes the accent. */
-#nullius-builder .nb-pick { display: grid; gap: 16px; }
-#nullius-builder .nb-pick-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-#nullius-builder .nb-pick-find { position: relative; flex: 1 1 240px; max-width: 360px; display: flex; align-items: center; }
-#nullius-builder .nb-pick-find svg { position: absolute; left: 11px; width: 15px; height: 15px; color: var(--nb-muted); pointer-events: none; }
-#nullius-builder .nb-pick-find input { width: 100%; min-height: 38px; padding: 8px 12px 8px 33px; font: inherit; font-size: 13px; color: var(--nb-text); background: var(--nb-surface); border: 1px solid var(--nb-line); border-radius: 8px; }
-#nullius-builder .nb-pick-find input:focus { outline: none; border-color: var(--nb-blue); box-shadow: inset 0 0 0 1px var(--nb-blue); }
-#nullius-builder .nb-pick-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-#nullius-builder .nb-pick-chips + .nb-pick-chips { padding-left: 14px; border-left: 1px solid var(--nb-line); }
-#nullius-builder .nb-pick-chip { font: inherit; font-size: 12px; color: var(--nb-muted); background: transparent; border: 1px solid var(--nb-line); border-radius: 999px; padding: 6px 13px; min-height: 32px; cursor: pointer; }
-#nullius-builder .nb-pick-chip:hover { color: var(--nb-text); border-color: var(--nb-muted); }
-#nullius-builder .nb-pick-chip[aria-pressed=true] { color: var(--nb-bg); background: var(--nb-blue); border-color: var(--nb-blue); }
+/* A choice as a tile: its mark and name, one line on what it is, then its facts; chosen, it takes the accent. */
 #nullius-builder .nb-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
 #nullius-builder .nb-tile { position: relative; display: flex; flex-direction: column; gap: 9px; min-width: 0; text-align: left; padding: 15px 16px; border-radius: 10px; background: var(--nb-surface); border: 1px solid var(--nb-line); color: var(--nb-text); cursor: pointer; transition: border-color .12s ease, background .12s ease; }
 #nullius-builder .nb-tile[hidden] { display: none; }
@@ -171,10 +160,6 @@
 #nullius-builder .nb-tile-head strong { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #nullius-builder .nb-tile-check { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: var(--nb-bg); }
 #nullius-builder .nb-tile[aria-pressed=true] .nb-tile-check { background: var(--nb-blue); }
-#nullius-builder .nb-tile-tags { display: flex; flex-wrap: wrap; gap: 5px; }
-#nullius-builder .nb-tile-tags > span { font-size: 11px; font-weight: 500; letter-spacing: .02em; padding: 1px 7px; border-radius: 4px; color: var(--nb-muted); background: var(--nb-soft); }
-#nullius-builder .nb-tile-tags .nb-tile-cat { color: var(--nb-blue); background: var(--nb-tint); }
-#nullius-builder .nb-tile-tags .nb-tile-community { color: var(--origin-community, #b8741a); background: color-mix(in srgb, var(--origin-community, #b8741a) 16%, transparent); }
 #nullius-builder .nb-tile-line { font-size: 12.5px; line-height: 1.5; color: var(--nb-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 #nullius-builder .nb-tile-note { font-size: 11.5px; color: var(--nb-warn); }
 #nullius-builder .nb-tile-foot { margin-top: auto; padding-top: 9px; border-top: 1px solid var(--nb-line); display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; font-size: 11.5px; color: var(--nb-muted); }
@@ -184,12 +169,18 @@
 #nullius-builder .nb-tick.ok { color: var(--nb-ok); }
 #nullius-builder .nb-tick.no { color: var(--nb-warn); }
 #nullius-builder .nb-tile-unfit { opacity: .5; cursor: not-allowed; background: transparent; }
-#nullius-builder .nb-pick-none { color: var(--nb-muted); font-size: 13px; margin: 0; }
-@media (max-width: 640px) { #nullius-builder .nb-pick-chips + .nb-pick-chips { padding-left: 0; border-left: 0; } #nullius-builder .nb-pick-find { max-width: none; } #nullius-builder .nb-pick-find input { font-size: 16px; } }
 /* The Where step's machine setup: each chosen machine, its state for the search's requirements, check and install. */
-#nullius-builder .nb-hostreq { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
-#nullius-builder .nb-hostreq li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--nb-line); border-radius: 8px; font-size: 12.5px; }
-#nullius-builder .nb-hostreq small { color: var(--nb-muted); }
+#nullius-builder .std-hostreq { padding: 16px; border: 1px solid var(--nb-line); border-radius: 8px; font-size: 13px; }
+#nullius-builder .std-hostreq-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+#nullius-builder .std-hostreq-row + .std-hostreq-row { margin-top: 12px; }
+#nullius-builder .std-hostreq-names { flex: 1 1 240px; }
+#nullius-builder .std-hostreq-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+#nullius-builder .std-hostreq small { color: var(--nb-muted); }
+#nullius-builder .std-hostreq details { margin-top: 12px; }
+#nullius-builder .std-hostreq summary { color: var(--nb-muted); cursor: pointer; }
+#nullius-builder .std-hostreq .std-code { margin: 12px 0 0; display: flex; align-items: center; }
+#nullius-builder .std-hostreq .std-code-head { order: 1; border: 0; }
+#nullius-builder .std-hostreq .std-code pre { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 #nullius-builder .std-code { border: 1px solid var(--nb-line); border-radius: 8px; background: var(--nb-bg); overflow: hidden; margin-bottom: 12px; }
 #nullius-builder .std-code-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--nb-line); font: 11.5px var(--mono); color: var(--nb-muted); }
 #nullius-builder .std-copy { border: 1px solid var(--nb-line); background: var(--nb-surface); color: var(--nb-muted); border-radius: 6px; padding: 2px 9px; font-size: 11.5px; cursor: pointer; }
@@ -240,9 +231,58 @@
 /* Compact settings rows use one shared control column, including paired fields. */
 #nullius-builder .nb-two:has(> .ui-field-row) { grid-template-columns: minmax(0, 1fr); gap: 0; }
 
-#nullius-builder .std-backends { grid-template-columns: repeat(2, minmax(0, 240px)); gap: 8px; }
-#nullius-builder .std-backends .nb-tile { flex-direction: row; align-items: center; gap: 8px; padding: 10px 12px; }
-#nullius-builder .std-backends .nb-tile-head { flex: 1; }
+#nullius-builder .std-backends { grid-template-columns: repeat(3, minmax(0, 240px)); gap: 8px; }
+@media (max-width: 860px) { #nullius-builder .std-backends { grid-template-columns: repeat(2, minmax(0, 240px)); } }
+/* the name keeps the tile's width; why one cannot be used goes under it, so a row's tiles stay one height */
+#nullius-builder .std-backends .nb-tile { flex-direction: column; align-items: stretch; justify-content: center; gap: 0; padding: 10px 12px; }
 #nullius-builder .std-backends .nb-mark { width: 20px; height: 20px; }
-#nullius-builder .std-backends .nb-tile-note { font-size: 11px; white-space: nowrap; }
-@media (max-width: 560px) { #nullius-builder .std-backends { grid-template-columns: minmax(0, 320px); } }
+#nullius-builder .std-backends .nb-mark svg { width: 20px; height: 20px; }
+#nullius-builder .std-backends .nb-tile-note { font-size: 11px; padding-left: 30px; }
+#nullius-builder .std-boat-sizes { grid-template-columns: repeat(4, minmax(0, 160px)); grid-auto-rows: auto; }
+#nullius-builder .std-boat-sizes .nb-tile { flex-direction: column; align-items: stretch; gap: 2px; }
+#nullius-builder .std-boat-sizes .nb-tile-note { white-space: normal; padding-left: 0; }
+#nullius-builder .std-boat-sizes .nb-tile:not([disabled]) .nb-tile-note { color: var(--nb-muted); }
+@media (max-width: 760px) { #nullius-builder .std-boat-sizes { grid-template-columns: repeat(2, minmax(0, 180px)); } }
+@media (max-width: 560px) { #nullius-builder .std-backends { grid-template-columns: minmax(0, 320px); } #nullius-builder .std-boat-sizes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Served by: a row after its model's row, as that row is: the label left, the picker right, the providers chosen
+   under the picker in their order */
+#nullius-builder .std-served-list { grid-column: 2; min-width: 0; }
+#nullius-builder .std-served-list:empty { display: none; }
+#nullius-builder label.std-served:has(.std-served-list:not(:empty)) > .ui-field-copy { grid-row: span 2; align-self: start; margin-top: 6px; }
+#nullius-builder .std-served-pick { cursor: default; gap: 2px; padding: 3px 3px 3px 11px; font: 12.5px/1.4 var(--mono); border-color: var(--nb-blue); background: var(--nb-tint); max-width: 100%; }
+/* a slug is never cut: a long one wraps inside its chip, which stays inside its row */
+#nullius-builder .std-served-slug { min-width: 0; overflow-wrap: anywhere; }
+#nullius-builder .std-served-pick .nb-remove { flex: none; padding: 0 6px; font-size: 14px; line-height: 1; }
+@media (max-width: 650px) { #nullius-builder .std-served-list { grid-column: 1; } #nullius-builder label.std-served:has(.std-served-list:not(:empty)) > .ui-field-copy { grid-row: auto; margin-top: 0; } }
+/* a limit the benchmark or the agent declares: its placeholder reads as a value; Nullius's default stays grey */
+#nullius-builder .nb-field input.nb-declared::placeholder { color: var(--nb-text); opacity: 1; }
+
+/* Where: machine kind, its machines, then isolation. Fixed values are not controls. */
+#nullius-builder .std-machines { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--nb-line); border-radius: 999px; }
+#nullius-builder .std-machines button { padding: 6px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--nb-text); font: 14px/1.4 var(--sans); }
+#nullius-builder .std-machines button[aria-pressed=true] { background: var(--nb-tint); }
+#nullius-builder .std-machines button:focus-visible { outline: 2px solid var(--nb-blue); outline-offset: 2px; }
+#nullius-builder .std-machines button:disabled { opacity: .45; cursor: not-allowed; }
+#nullius-builder .std-boat-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: fit-content; max-width: 100%; min-width: 190px; margin-top: 20px; padding: 12px 14px; border: 1px solid var(--nb-blue); border-radius: 10px; background: var(--nb-tint); }
+#nullius-builder .std-boat-card strong { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; }
+#nullius-builder .std-boat-logo { width: 20px; height: 20px; flex: none; }
+#nullius-builder .std-boat-card > span { font-size: 13px; color: var(--nb-muted); }
+#nullius-builder .std-boat-card.off { border-color: var(--nb-line); background: transparent; cursor: not-allowed; }
+#nullius-builder .std-boat-card.off > :not(.std-boat-key) { opacity: .5; }
+#nullius-builder .std-boat-card.off .std-boat-key { cursor: pointer; }
+#nullius-builder .std-hosts { margin-top: 20px; grid-template-columns: repeat(auto-fill, minmax(190px, 240px)); }
+#nullius-builder .std-isolation { padding: 12px 14px; border: 1px solid var(--nb-line); border-radius: 10px; background: var(--nb-soft); }
+#nullius-builder .std-isolation small { display: block; margin-top: 4px; font-size: 13px; color: var(--nb-muted); }
+#nullius-builder .std-isolation small:empty { display: none; }
+#nullius-builder .std-boat-sizes .nb-tile { min-height: 60px; }
+#nullius-builder .std-boat-sizes .nb-tile-note { font-size: 13px; line-height: 1.4; }
+/* the Benchmark and Agent steps' grids: the card toolkit's (catalogue.css), fitted to the form */
+#nullius-builder .nb-step { border-radius: 0; margin: 0; }   /* catalogue.css has a .nb-step of its own */
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) { margin-bottom: 20px; }
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .bench-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 12px; grid-auto-rows: 1fr; }
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .bench-card { padding: 16px; gap: 10px; }
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .bench-card-title { font-size: 15px; }
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .std-tag { white-space: nowrap; }
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .card-link:focus-visible { outline: none; }
+/* its outlined pills (Protocol, Proven) want more air than snug's text beside text; a phone keeps snug's, for the pinned name */
+@media (min-width: 641px) { #nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .grid.snug :is(th, td):not(.pick-col) { padding-left: .6rem; padding-right: .6rem; } }   /* the card's ring (catalogue.css), not a box round the name */

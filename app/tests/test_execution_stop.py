@@ -51,6 +51,21 @@ class StopBetweenParts(Base):
         self.assertEqual(ex.ends["oracle"]["rc"], 3)                                          # it did end, with its own result
         self.assertFalse((self.tmp / "r" / "run-next.log").exists())
 
+    def test_a_stopped_part_s_job_is_written_until_the_run_ends(self):
+        """Its part's end is written down before the run's last copy from its
+        host: until the run itself ends, ``run_ends`` says the job is still written."""
+        plan = execution.Plan(name="r", script="", parts=self.PARTS, jobs=[{"name": "r-oracle", "agent": "oracle"}])
+        ex = execution.Execution(plan, root=str(self.tmp))
+        seen = []
+        class Seen(StopAsItEnds):
+            def __setitem__(self, key, value):
+                super().__setitem__(key, value)
+                seen.append((ex.state, execution.run_ends({"r-oracle": ex})["r-oracle"]))
+        ex.ends = Seen(ex)
+        self.wait(ex.start(), 5)
+        self.assertEqual(seen, [("stopping", None)])
+        self.assertEqual(execution.run_ends({"r-oracle": ex})["r-oracle"][0], "failed")    # the part's own result, once the run ended
+
     def test_a_run_stopped_before_any_part_says_it_was_stopped(self):
         """Stopped as the target was made ready: no part ran, the run's exit
         is the one it had (0), and its last line says it was stopped and

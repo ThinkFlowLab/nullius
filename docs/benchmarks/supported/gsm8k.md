@@ -39,7 +39,7 @@ Grade-school math word problems that take two to eight steps of basic arithmetic
 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
-| `temperature` | pattern `default\|(?:0\|[1-9][0-9]*)(?:\.[0-9]+)?`, default `default` | Sampling randomness. Provider default sends no temperature; enter a non-negative decimal to override it. Accepted values depend on the model. | `original` |
+| `temperature` | e.g. `0.5`, default `default` | Sampling randomness. Provider default sends no temperature; enter a non-negative decimal to override it. Accepted values depend on the model. | `original` |
 
 ## Good to know
 

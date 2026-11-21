@@ -143,11 +143,25 @@ def _runs_podman(path: str) -> bool:
     return head.startswith(b"#!") and re.search(rb"^\s*exec\s+\S*podman\b", head, re.M) is not None
 
 
+def _answers(program: str) -> bool:
+    """Whether ``<program> ps`` succeeds, as the host probe asks (``hosts.PROBE``)."""
+    try:
+        return subprocess.run([program, "ps"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def engine() -> str:
     """``podman`` when it is on the PATH and ``docker`` is not, or is podman
-    under that name; else ``docker``."""
+    under that name, or does not answer while podman does; else ``docker``.
+    Only a machine with both is asked, so one engine costs no call."""
     docker, podman = shutil.which("docker"), shutil.which("podman")
-    return "podman" if podman and (not docker or _runs_podman(docker)) else "docker"
+    if not podman:
+        return "docker"
+    if not docker or _runs_podman(docker):
+        return "podman"
+    return "podman" if not _answers(docker) and _answers(podman) else "docker"
 
 
 DOCKER = engine()                          # the engine's program, chosen once
@@ -272,7 +286,7 @@ def unusable() -> Optional[str]:
         hint = (" (add this user to the docker group, then log in again)"
                 if not podman() and "permission denied" in r.stderr.lower() else "")
         if not podman() and shutil.which("podman"):     # docker wins (engine), so say podman is there
-            hint += ". podman is on this machine: Nullius uses it when docker is not on the PATH"
+            hint += ". podman is on this machine: Nullius uses it when docker does not answer and podman does"
         return f"{DOCKER} is installed but not usable by this user: " + (said[-1][:200] if said else f"exit {r.returncode}") + hint
     if podman():
         try:
@@ -725,7 +739,8 @@ def install_argv(image: str, where: str, cmd: List[str], env: Optional[dict] = N
 def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_file: str, base: str,
                model: Optional[str], routes: Dict[str, str], prices: Optional[dict] = None, side_models=(),
                key_header: str = "authorization", hosts: Optional[Dict[str, str]] = None,
-               ledger: Optional[str] = None) -> List[str]:
+               ledger: Optional[str] = None, serving: Optional[Dict[str, List[str]]] = None,
+               timeout: Optional[int] = None, max_calls: Optional[int] = None) -> List[str]:
     """``docker run`` for a unit's relay: on the default bridge (its way to the
     provider), its port published on 127.0.0.1 only. The key is never given:
     ``key_file``, its file, is mounted read-only at ``RELAY_KEY_IN`` with
@@ -733,7 +748,9 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
     an empty folder). ``hosts``: names it resolves
     (``--add-host``), the machine's own for an endpoint on its loopback.
     ``ledger``: the file of the run's spending cap, its folder mounted so
-    this relay books its calls where every other relay of the job does."""
+    this relay books its calls where every other relay of the job does.
+    ``serving``: by model, the serving providers that may answer it, as the
+    unit's own relay is given them (``relay.Relay``)."""
     a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_userns(), "--user", _user(),
          "--cap-drop", "ALL", *_security_opt(), "--init", *capped(),
          *[w for n, ip in sorted((hosts or {}).items()) for w in ("--add-host", f"{n}:{ip}")],
@@ -751,10 +768,19 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
         a += ["--prices", json.dumps(prices, separators=(",", ":"))]
     if ledger:
         a += ["--ledger", ledger]
+    if max_calls:
+        a += ["--max-calls", str(max_calls)]
     for m in side_models:
         a += ["--side-model", m]
+    # the pins of the models this relay sends; the run's other models (an option's embeddings) are another relay's
+    sends = {model} | set(routes.values()) | {str(s).partition("=")[2] or str(s) for s in side_models}
+    for m, slugs in sorted((serving or {}).items()):
+        if m in sends:
+            a += ["--served-by", f"{m}={','.join(slugs)}"]
     if key_header != "authorization":
         a += ["--key-header", key_header]
+    if timeout:
+        a += ["--timeout", str(timeout)]
     return a
 
 
@@ -1015,9 +1041,13 @@ class Unit:
                  model: Optional[str] = None, routes: Optional[Dict[str, str]] = None, prices: Optional[dict] = None,
                  side_models=(), key_header: str = "authorization", servers: Iterable[str] = (),
                  doors: Iterable[Tuple[str, int, str]] = (), hosts: Optional[Dict[str, str]] = None,
-                 ledger: Optional[str] = None, network_probe: Optional[str] = None, probe_now: bool = True):
+                 ledger: Optional[str] = None, network_probe: Optional[str] = None, probe_now: bool = True,
+                 serving: Optional[Dict[str, List[str]]] = None, timeout: Optional[int] = None, max_calls: Optional[int] = None):
         self.job, self.tag, self.dir, self.image, self.app = job, tag, record_dir, image, app
+        self.max_calls = max_calls               # the run's cap on its agent's model calls, when it has one
         self.ledger = ledger                     # the file of the run's spending cap, when it has one
+        self.serving = dict(serving or {})       # by model, the serving providers that may answer it
+        self.timeout = timeout
         self.servers = list(servers)             # licence servers, host:port each: a forwarder apiece
         self.doors = list(doors)                 # servers on this machine: (alias, port, socket), a door apiece
         self.side_models, self.key_header = tuple(side_models), key_header
@@ -1043,7 +1073,8 @@ class Unit:
             argv = relay_argv(self.image, name=self.names["relay"], job=self.job, app=self.app, record=self.dir,
                               key_file=self._key_file(), base=self.base, model=self.model, routes=self.routes,
                               prices=self.prices, side_models=self.side_models, key_header=self.key_header,
-                              hosts=self.hosts, ledger=self.ledger)
+                              hosts=self.hosts, ledger=self.ledger, serving=self.serving,
+                              timeout=self.timeout, max_calls=self.max_calls)
             self.started.append(self.names["relay"])
             _docker(argv[1:])
             _docker(["network", "connect", "--alias", RELAY_ALIAS, self.names["network"], self.names["relay"]])
@@ -1425,16 +1456,17 @@ def own_tag(bench: dict, rel: str, path: str) -> str:
     return f"nullius/own-{bench['key']}-{word}:{h.hexdigest()[:12]}"
 
 
-def own_image(bench: dict, spec: dict, root: str, log_dir: Optional[str] = None) -> str:
+def own_image(bench: dict, spec: dict, root: str, log_dir: Optional[str] = None, timeout: float = 3600) -> str:
     """A unit's own image: ``pull``ed by its digest, or built from the folder
     ``build`` names in the benchmark's upstream (``root``) - the task's own
     Dockerfile, its own ``FROM``, its folder the whole build context - the
     first time a unit asks for it, and kept by its tag after. Two units
-    asking at once wait for one build. No secret is given to a build."""
+    asking at once wait for one build. No secret is given to a build.
+    ``timeout``: the most seconds the pull or the build may take."""
     if spec.get("pull"):
         ref = spec["pull"]
         if not present(ref):
-            r = _docker(["pull", ref], timeout=3600, check=False)
+            r = _docker(["pull", ref], timeout=timeout, check=False)
             if r.returncode != 0:
                 raise Unavailable(f"pulling {ref}: {(r.stderr or r.stdout).strip()[-300:]}")
             _built[ref] = True
@@ -1450,7 +1482,7 @@ def own_image(bench: dict, spec: dict, root: str, log_dir: Optional[str] = None)
         if present(tag):
             return tag
         # --force-rm: a build that fails (a task's Dockerfile fetching what is gone) leaves no container behind
-        r = _docker(["build", "--force-rm", "--label", f"nullius.own={bench['key']}", "-t", tag, path], timeout=3600, check=False)
+        r = _docker(["build", "--force-rm", "--label", f"nullius.own={bench['key']}", "-t", tag, path], timeout=timeout, check=False)
         if log_dir:
             os.makedirs(log_dir, exist_ok=True)
             with open(os.path.join(log_dir, "own-" + tag.split(":")[0].split("/")[-1] + ".log"), "a") as f:

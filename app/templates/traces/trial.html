@@ -1,4 +1,3 @@
-{% from 'runs/_runtime.html' import what_ran %}
 {% extends "base.html" %}
 {% block title %}{{ trial.task_base }} — Nullius{% endblock %}
 {% block crumb %}/ <a href="{{ url_for('job', job_id=job.job_id) }}">{{ job.job_id }}</a> / {{ trial.task_base }}{% endblock %}
@@ -23,79 +22,58 @@
 {%- endmacro %}
 
 {% from 'traces/_judgement.html' import judgement_panel %}
+{% from 'traces/_attempts.html' import attempt_tabs, attempt_count, try_tabs %}
+{% from 'traces/_head.html' import ran_cards %}
+{% from '_page.html' import page_head %}
 {% block body %}
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
 
 
-<div class="page-title">
-  <h1>{{ trial.task_base }}</h1>
+{% set sub %}
   <span class="tag oc-{{ trial.outcome }}">{{ trial.outcome_label }}</span>
   {# The recorded exception type, beside the label that came from it. For an
      Unknown it says which class the classifier has no side for, so a reader
      can place it (classify._AGENT_EXCEPTIONS / _INFRA_EXCEPTIONS) instead of
      guessing from the colour. #}
   {% if trial.exception_type %}<span class="mono faint exception-type"
-    title="{% if trial.outcome == 'unknown' %}Harbor recorded this exception on the trial and the classifier has no side for it, so the trial counts and is charged to nobody. To place it, add the name to _AGENT_EXCEPTIONS or _INFRA_EXCEPTIONS in app/nullius/runs/classify.py.{% else %}Harbor recorded this exception on the trial; the outcome label follows from it.{% endif %}">{{ trial.exception_type }}</span>{% endif %}
+    title="{% if trial.outcome == 'unknown' %}Harbor recorded this exception on the trial and the classifier has no side for it, so the trial counts and is charged to nobody. To place it, add the name to _AGENT_EXCEPTIONS or _INFRA_EXCEPTIONS in app/nullius/runs/classify.py.{% else %}Harbor recorded this exception on the trial; the outcome label follows from it.{% endif %}">{{ trial.exception_type }}</span>{% endif %}{% endset %}
+{{ page_head(trial.task_base, sub=sub, mono=true) }}
+{# an earlier try of an attempt: evidence only, never judged #}
+{% set replaced = trial.trial_name != attempt.trial_name %}
+{# What ran (traces/_head.html, the same on All attempts), then how it went: the dataset's own
+   checks, the reward or the score, the agent's time and its steps. A value the trial does not
+   have has no cell, and a block with no cell is not drawn. A task run several times, or an attempt
+   tried again, has its tabs between the two: what ran is every attempt's and stays above them,
+   the numbers are this one's and change under them. #}
+{% set vocab = trial.vocab %}
+{% set cells %}
+  {%- if vocab.gained and (trial.f2p_pass or trial.f2p_fail) %}<div><span class="k">{{ vocab.gained }}</span><span class="n"><span class="ok">{{ trial.f2p_pass }}</span><small>/{{ trial.f2p_fail }}</small></span></div>{% endif -%}
+  {%- if vocab.held and (trial.p2p_pass or trial.p2p_fail) %}<div><span class="k">{{ vocab.held }}</span><span class="n"><span class="ok">{{ trial.p2p_pass }}</span><small>/{{ trial.p2p_fail }}</small></span></div>{% endif -%}
+  {%- if vocab.has_patch and trial.patch_exists is not none %}<div><span class="k">Patch applied</span><span class="n">{{ 'Yes' if trial.patch_applied else 'No' }}</span></div>{% endif -%}
+  {%- if trial.reward is not none %}<div title="{{ "The benchmark's verdict on this trial: 1 when it counts as right" if job.runner else "The verifier's reward for this trial, what Harbor's headline mean averages" }}"><span class="k">Reward</span><span class="n">{{ trial.reward }}</span></div>{% endif -%}
+  {%- if trial.score is not none %}<div title="{% if trial.n_parts %}The mean score of its {{ trial.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it"><span class="k">Score</span><span class="n">{{ '%.2f'|format(trial.score) }}</span></div>{% endif -%}
+  {%- if trial.dur_agent is not none %}<div><span class="k">Agent time</span><span class="n">{{ trial.dur_agent|secs }}</span></div>{% endif -%}
+  {%- if traj and not traj.error %}<div><span class="k">Steps</span><span class="n">{{ traj.n_steps }}</span></div>{% endif -%}
+{% endset %}
+{% if attempts or tries %}
+<div class="trial-head">{{ ran_cards(job, trial, imported_from, agent_mark) }}</div>
+{% if attempts %}
+<div class="attempt-head">
+  <span class="attempt-count">{{ attempt_count(attempts) }}</span>
+  {{ attempt_tabs(job, attempts, attempt, request.args.get('workspace'), trial) }}
 </div>
-{# The trial records a bare model name ("gpt-5.6-luna"); the job keeps the
-   provider-qualified one ("openai/gpt-5.6-luna"). Prefer the fuller id. #}
-{% set model = job.model_name if job.model_name and job.model_name.endswith(trial.model_name or '~')
-               else (trial.model_name or job.model_name) %}
-<p class="subtitle">
-  <span class="mono">{{ model }}</span><span class="dot">·</span>
-  <span title="{{ trial.source }}">{{ trial.source|dsname }}</span>
-  {%- if trial.agent_version %}<span class="dot">·</span><span class="mono faint"
-    title="The agent's version as the trial's agent_info reports it">v{{ trial.agent_version }}</span>{% endif %}
-  {%- if job.runner %}<span class="dot">·</span>{{ what_ran(job) }}{% endif %}
-</p>
+{% endif %}
+{% if tries %}{{ try_tabs(job, tries, trial, request.args.get('workspace')) }}{% endif %}
+{% if cells|trim %}<div class="trial-head"><div class="th-strip">{{ cells }}</div></div>{% endif %}
+{% else %}
+<div class="trial-head">
+  {{ ran_cards(job, trial, imported_from, agent_mark) }}
+  {% if cells|trim %}<div class="th-strip">{{ cells }}</div>{% endif %}
+</div>
+{% endif %}
 
-<div class="cards">
-  {# The check cards speak the dataset's language: labels come from its
-     Vocabulary, and a category it doesn't have (a verifier with no
-     regression guard and no patches; a session-derived trial has neither)
-     is not drawn at all rather than dashed under a foreign name. The dash
-     inside a drawn card still means "this trial reported nothing". #}
-  {% set vocab = trial.vocab %}
-  {% if vocab.gained %}
-  <div class="card"><div class="k">{{ vocab.gained }}</div><div class="v">{% if trial.f2p_pass or trial.f2p_fail %}<span class="ok">{{ trial.f2p_pass }}</span><small>/{{ trial.f2p_fail }}</small>{% else %}—{% endif %}</div></div>
-  {% endif %}
-  {% if vocab.held %}
-  <div class="card"><div class="k">{{ vocab.held }}</div><div class="v">{% if trial.p2p_pass or trial.p2p_fail %}<span class="ok">{{ trial.p2p_pass }}</span><small>/{{ trial.p2p_fail }}</small>{% else %}—{% endif %}</div></div>
-  {% endif %}
-  {% if vocab.has_patch %}
-  <div class="card"><div class="k">Patch applied</div><div class="v">{% if trial.patch_exists is none %}—{% else %}{{ 'Yes' if trial.patch_applied else 'No' }}{% endif %}</div></div>
-  {% endif %}
-  {# The verifier's numeric score. Mostly redundant with the outcome tag on
-     a pass/fail verifier (0 or 1), but it's the number Harbor's mean is built from, and
-     partial-credit verifiers make it a real scalar. #}
-  <div class="card" title="{{ "The judge's verdict on this answer: 1 when it said the answer is right" if job.runner else "The verifier's reward for this trial — what Harbor's headline mean averages" }}">
-    <div class="k">Reward</div>
-    <div class="v">{{ trial.reward if trial.reward is not none else '—' }}</div>
-  </div>
-  <div class="card"><div class="k">Agent time</div><div class="v">{{ trial.dur_agent|secs }}</div></div>
-  {% if traj and not traj.error %}
-  <div class="card"><div class="k">Steps</div><div class="v">{{ traj.n_steps }}</div></div>
-  <div class="card"><div class="k">Tool calls</div><div class="v">{{ traj.n_tool_calls }}</div></div>
-  {% endif %}
-</div>
-
-<div class="evidence-strip" aria-label="Evidence recorded">
-  <span>Trajectory · {{ 'recorded' if trial.has_trajectory else 'absent' }}</span>
-  <span>Trace · {{ 'recorded' if trial.has_trace else 'absent' }}</span>
-  <span>Reward · {{ 'recorded' if trial.reward is not none else 'absent' }}</span>
-  {# Rate limits the agent's SDK retried and the run survived. They are in the
-     gateway log and nowhere else — result.json records only the 429 that
-     killed a run — so a trial without that log reads as unmeasured, not clean. #}
-  {% if trial.n_rate_limited_retries is none %}
-  <span class="rate-limits" title="No agent/gateway.log in this trial, so retried rate limits cannot be counted">Rate limits · not recorded</span>
-  {% elif trial.n_rate_limited_retries %}
-  <span class="rate-limits" title="Rate-limit records in agent/gateway.log — 429s the agent's SDK retried below the harness. The run survived them; the outcome does not show them."><b class="warn">{{ trial.n_rate_limited_retries }} rate-limited call{{ '' if trial.n_rate_limited_retries == 1 else 's' }} retried</b></span>
-  {% else %}
-  <span class="rate-limits" title="agent/gateway.log carries no rate-limit record">Rate limits · none logged</span>
-  {% endif %}
-</div>
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
-  {% for name, label in [('overview', 'Overview'), ('judgement', 'System One judge'), ('llm-judge', 'LLM judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] %}
+  {% for name, label in [('overview', 'Overview'), ('judgement', 'Decision model'), ('llm-judge', 'LLM judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] if not (replaced and name in ('judgement', 'llm-judge')) %}
   <button id="tab-{{ name }}" role="tab" type="button" data-tab="{{ name }}" aria-controls="trial-{{ name }}" aria-selected="{{ 'true' if name == 'overview' else 'false' }}" tabindex="{{ '0' if name == 'overview' else '-1' }}">{{ label }}</button>
   {% endfor %}
 </nav>
@@ -127,48 +105,42 @@
 </div>
 {% endif %}
 
-<h2>Shape of the run</h2>
-
 {# The phase bar reads only trial.*, so it renders whether or not a trajectory
    was recorded: a trial that failed before writing one still shows its timing. #}
 {% set total = trial.dur_phases + trial.dur_other %}
 {% if total %}
+<div class="overview-tiles">
 <div class="panel">
-  <h3 style="margin-top:0">Where the time went</h3>
-  {# All four phases Harbor records. Leaving agent_setup out understated the
-     bar by a third on some agents, and it is the most actionable number in
-     the set — installing the agent can cost more than solving the task. #}
+  <h3 style="margin-top:0">Where the time went{% if trial.dur_total is not none %} <b class="total">{{ trial.dur_total|secs }}</b>{% endif %}</h3>
+  {# The phases the trial recorded, Harbor's four names for them. On a runner's trial Env is the
+     unit's environment, Setup (when it has one) the agent's start and session, Verify its check and
+     score, a model judge included. A recorded phase has its chip however short it was: a check that
+     took no time was still made. One never recorded has none, and Other, which is what the phases
+     leave of the trial, only when there is some. A segment needs enough time to draw, and its
+     weight is in milliseconds: weights that sum under 1 (a trial shorter than a second) would
+     leave the bar part empty. #}
+  {%- if job.runner %}
+  {%- set says = {'env': "The unit's environment: the driver's setup, the relay, its image", 'setup': "The agent's start and its session, its MCP servers included", 'verify': "The unit's check and its score, a model judge included", 'other': 'What the phases leave of the trial: the waits between them and the work after the check'} %}
+  {%- else %}
+  {%- set says = {'env': 'Environment build', 'setup': 'Installing the agent', 'verify': 'Verifier', 'other': 'Time Harbor does not attribute to a phase: image pull, container start and teardown, artifact collection'} %}
+  {%- endif %}
+  {%- set phases = [('env', 'Env', trial.dur_env, says.env), ('setup', 'Setup', trial.dur_agent_setup, says.setup), ('agent', 'Agent', trial.dur_agent, 'The agent working'), ('verify', 'Verify', trial.dur_verifier, says.verify), ('other', 'Other', trial.dur_other, says.other)] %}
   <div class="bar phases">
-    {# A 0s phase emits no segment at all, so a control's empty setup leaves
-       no stray sliver. #}
-    {% if trial.dur_env|phase %}<span class="seg ph-env" style="flex:{{ trial.dur_env|phase }}" title="Environment build: {{ trial.dur_env|secs }}"></span>{% endif %}
-    {% if trial.dur_agent_setup|phase %}<span class="seg ph-setup" style="flex:{{ trial.dur_agent_setup|phase }}" title="Agent setup (installing the agent): {{ trial.dur_agent_setup|secs }}"></span>{% endif %}
-    {% if trial.dur_agent|phase %}<span class="seg ph-agent" style="flex:{{ trial.dur_agent|phase }}" title="Agent working: {{ trial.dur_agent|secs }}"></span>{% endif %}
-    {% if trial.dur_verifier|phase %}<span class="seg ph-verify" style="flex:{{ trial.dur_verifier|phase }}" title="Verifier: {{ trial.dur_verifier|secs }}"></span>{% endif %}
-    {% set items = job.runner_items[1] if job.runner_items else 'items' %}
-    {% set other_is = 'the wait between the answer and its judgement: the judge reads the answers once its share of the ' ~ items ~ ' is answered' if job.runner else 'time Harbor does not attribute to a phase: image pull, container start and teardown, artifact collection' %}
-    {% if trial.dur_other|phase %}<span class="seg ph-other" style="flex:{{ trial.dur_other|phase }}" title="Other: {{ trial.dur_other|secs }} — {{ other_is }}"></span>{% endif %}
+    {% for key, label, dur, title in phases if dur|phase %}<span class="seg ph-{{ key }}" style="flex:{{ ((dur|phase) * 1000)|round|int }}" title="{{ label }}: {{ dur|secs }}. {{ title }}"></span>{% endfor %}
   </div>
   <div class="legend" style="margin-bottom:0">
-    <span class="chip ph-env">Env <b>{{ trial.dur_env|secs }}</b></span>
-    <span class="chip ph-setup">Setup <b>{{ trial.dur_agent_setup|secs }}</b></span>
-    <span class="chip ph-agent">Agent <b>{{ trial.dur_agent|secs }}</b></span>
-    <span class="chip ph-verify">Verify <b>{{ trial.dur_verifier|secs }}</b></span>
-    <span class="chip ph-other"
-          title="{{ other_is|capitalize }}">Other <b>{{ trial.dur_other|secs }}</b></span>
+    {% for key, label, dur, title in phases if (dur is not none and key != 'other') or dur|phase %}<span class="chip ph-{{ key }}" title="{{ title }}">{{ label }} <b>{{ dur|secs }}</b></span>
+    {% endfor %}
   </div>
-  <p class="muted small">The bar spans the trial's full {{ trial.dur_total|secs }}.
-    {% if job.runner %}“Other” is the wait for the judge, which reads the answers once its share of the {{ items }} is answered.{% else %}“Other” is harness overhead Harbor doesn't break out — the same tax for every agent.{% endif %}
-    {% if trace and trace.has_spans %}The Trace tab shows recorded span timing and its
-    measured or inferred provenance.{% elif traj and traj.has_step_clock %}Conversation
-    reports time between source steps; these are not per-tool durations.{% else %}No
-    per-step clock is available. Conversation preserves the recorded order.{% endif %}</p>
+</div>
 </div>
 {% endif %}
 
 {% if traj and traj.error %}
   <div class="panel err"><h3 style="margin-top:0">Trajectory unreadable</h3><pre>{{ traj.error }}</pre></div>
 {% elif traj %}
+  {# usage and tool calls; a trajectory with neither (one answer, no per-step usage) has no panel #}
+  {% if traj.token_series or traj.total_reasoning_tokens is not none or traj.calls %}
   <div class="panel">
     {% set has_growth = traj.token_series|length > 1 %}
     {% if has_growth %}
@@ -263,8 +235,7 @@
     {% endif %}
     {% endif %}
   </div>
-
-
+  {% endif %}
 
   {% if loc %}
   <div class="panel">
@@ -291,6 +262,7 @@
   <div class="panel"><p class="muted" style="margin:0">No trajectory recorded for this trial.</p></div>
 {% endif %}
 </section>
+{% if not replaced %}
 <section class="trial-tab" id="trial-judgement" role="tabpanel" aria-labelledby="tab-judgement">
 {% if job.runner and bench_parts %}
 {#- scored part by part by the benchmark's own script: the score is the mean of these, each as the script wrote it #}
@@ -308,19 +280,6 @@
     {% endfor %}
     </tbody>
   </table></details>
-  <p class="small muted" style="margin-bottom:0">Below, Nullius's own trajectory judge: experimental, asked on a click.</p>
-</div>
-{% elif job.runner %}
-<div class="panel" id="runner-verdict">
-  <h3 style="margin-top:0">{{ job.runner }}'s judge <span class="badge">gives the outcome</span></h3>
-  {% if bench_judge %}
-  <p class="small muted">{{ bench_judge.judge or job.runner_judge }}{% if bench_judge.model %} · sent as <span class="mono">{{ bench_judge.model }}</span>{% endif %}</p>
-  <p>Said <b class="mono">{{ (bench_judge.said or '—')[:200] }}</b>: {{ 'resolved' if trial.outcome == 'resolved' else trial.outcome|replace('_', ' ') }}.</p>
-  <details class="tc"><summary class="small">What it was asked</summary><pre class="wrap">{{ bench_judge.asked }}</pre></details>
-  {% else %}
-  <p class="small muted">{% if job.runner_judge %}{{ job.runner_judge }}. {% endif %}No record of its call for this one{% if trial.outcome not in ('resolved', 'failed_verification') %}: it never got to judge it{% endif %}.</p>
-  {% endif %}
-  <p class="small muted" style="margin-bottom:0">Below, Nullius's own trajectory judge: experimental, asked on a click.</p>
 </div>
 {% endif %}
 {{ judgement_panel(judgement, job, trial, csrf) }}
@@ -329,6 +288,7 @@
 <section class="trial-tab" id="trial-llm-judge" role="tabpanel" aria-labelledby="tab-llm-judge">
 {{ judgement_panel(llm_judgement, job, trial, csrf) }}
 </section>
+{% endif %}
 <section class="trial-tab" id="trial-task" role="tabpanel" aria-labelledby="tab-task">
 {# The task's instruction, scored on its own text: once per dataset and task, the same for every attempt,
    nothing of any run read. An unclear instruction caps every agent on this task - a finding about the
@@ -484,7 +444,7 @@
     {% endfor %}
   </div>
   <p class="muted small">Categories, not a sequence. Reported by the trace, never summed from the bars below: spans nest.{% if trace.totals.unaccounted_ns %} Unaccounted is wall clock outside the instrumented spans.{% endif %}</p>
-  {% else %}
+  {%- else %}
   <p class="muted" style="margin:0">The trace reports no totals.</p>
   {% endif %}
 
@@ -517,7 +477,7 @@
     the call it ran inside), because summing spans that nest or overlap attributes more than the run.
     So hiding a span moves its time into “Unaccounted” rather than out of the total: the run took just
     as long.</p>
-  {% else %}
+  {%- else %}
   <p class="muted" style="margin:0">Nothing is left to break down.</p>
   {% endif %}
   {% endif %}
@@ -644,7 +604,7 @@
   <div class="legend" style="margin:0">
     {% for q in trace.qualities_present %}<span class="chip q-{{ q }}">{{ q }}</span>{% endfor %}
   </div>
-  {% else %}
+  {%- else %}
   <h3>Waterfall</h3>
   <p class="muted" style="margin:0">Every span is filtered out — nothing left to draw.</p>
   {% endif %}
@@ -666,14 +626,16 @@
 {% include 'traces/_conversation.html' %}
 </section>
 <section class="trial-tab" id="trial-artifacts" role="tabpanel" aria-labelledby="tab-artifacts">
-  <div class="reader-heading"><div><h2>Artifacts</h2><p class="muted small">Read the recorded source files. Content is redacted and paged; source files remain intact.</p></div></div>
+  {% if artifacts %}
   <div class="panel">
-    <table class="grid"><thead><tr><th>Record</th><th>Availability</th><th class="num">Size</th><th></th></tr></thead><tbody>
+    <table class="grid"><thead><tr><th>Record</th><th class="num">Size</th><th></th></tr></thead><tbody>
     {% for artifact in artifacts %}
-      <tr><td>{{ artifact.label }}</td><td class="muted">{{ 'Recorded' if artifact.exists else 'Not recorded' }}</td><td class="num mono muted">{{ ((artifact.size / 1024)|round(1)) ~ ' KB' if artifact.exists else '—' }}</td><td>{% if artifact.exists %}<a href="{{ artifact.url }}">Read →</a>{% endif %}</td></tr>
+      <tr><td>{{ artifact.label }}</td><td class="num mono muted">{{ '%.2f'|format(artifact.size / 1024) }} KB</td>
+        <td><span class="artifact-actions"><a class="btn ghost sm" href="{{ artifact.url }}">Read</a><a class="btn ghost sm" href="{{ artifact.download }}" download>Download</a></span></td></tr>
     {% endfor %}
     </tbody></table>
   </div>
+  {% endif %}
 </section>
 <script src="{{ url_for('static', filename='traces/conversation.js') }}"></script>
 <script>

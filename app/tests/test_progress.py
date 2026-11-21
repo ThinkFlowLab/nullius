@@ -117,6 +117,17 @@ class Fold(unittest.TestCase):
         u = got["units"]
         self.assertEqual((u["n"], u["noun"], u["done"], u["passed"], u["failed"], u["errors"], u["running"]), (10, "tasks", 3, 1, 1, 1, 0))
 
+    def test_a_retry_takes_the_place_of_its_try_in_the_count(self):
+        """Two attempts, one rate-limited and run again: 2 of 2 at the end, no
+        error - the retry's end replaces its try's, never 3 of 2."""
+        first = [ev("units", "start", n=2), ev("unit", "start", unit="a"), ev("unit", "start", unit="b"),
+                 ev("unit", "done", outcome="passed"), ev("unit", "done", outcome="error", error="RateLimitError"),
+                 ev("units", "progress", detail="trying 1 again, one at a time: retry 1 of 1"), ev("unit", "start", unit="b")]
+        u = progress.fold(first)["units"]
+        self.assertEqual((u["n"], u["done"], u["errors"], u["running"]), (2, 2, 1, 1))     # the retry running, the try's error still said
+        u = progress.fold(first + [ev("unit", "retried", unit="b"), ev("unit", "done", outcome="passed")])["units"]
+        self.assertEqual((u["n"], u["done"], u["passed"], u["errors"], u["running"]), (2, 2, 2, 0, 0))
+
     def test_a_run_of_several_parts_counts_every_parts_units_and_goes_on_after_one_ends(self):
         """nop then oracle, three units each: 6 of 6 at the end, never 6 of 3,
         and the first part's end is not the run's."""

@@ -1,10 +1,6 @@
-"""The Settings page's Sandbox: the container backend's engine on this machine,
-docker or podman (``container.DOCKER``), and its Docker Hub login under Data
-providers.
+"""The container engine's Docker Hub login, under Data providers: docker or
+podman (``container.DOCKER``).
 
-Two things, each something a user acts on:
-
-- **Engine**: whether it answers, and its name and version (``container.unusable``).
 - **Registry login**: Docker Hub limits anonymous pulls, which stops a
   benchmark with an image per unit part-way. The username and an access token
   go to ``docker login --password-stdin`` (``podman login ... docker.io``)
@@ -28,16 +24,6 @@ REGISTRY = "https://index.docker.io/v1/"            # Docker Hub, as docker name
 HUB = "docker.io"                                   # as podman names it: without it, podman logs in to its first search registry
 _USER = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 _TOKEN_MAX = 4096
-
-
-def docker_state() -> dict:
-    """{ok, version} when the engine answers - its name and version, ``podman
-    6.1.4`` - else {ok: False, error}."""
-    why = container.unusable()
-    if why:
-        return {"ok": False, "error": why}
-    r = container._docker(["version", "--format", "{{.Server.Version}}"], timeout=30, check=False)
-    return {"ok": True, "version": f"{container.DOCKER} {r.stdout.strip()}"}
 
 
 def _config_dir() -> str:

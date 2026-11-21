@@ -35,6 +35,15 @@ class Parts(unittest.TestCase):
                         exception=None, calls=[], trajectory=None)
         return d
 
+    def test_a_stopped_score_says_so_in_the_result(self):
+        for name, score in (("stopped", {"reward": 0.5, "stopped": "batch cap"}), ("whole", {"reward": 0.5})):
+            job.write_trial(os.path.join(self.job, name), job="job", bench=BENCH, other={"key": "original", "_kind": "upstream"},
+                            model="m", unit=name, t0=0, t1=1, produce=(0, 1), score=score, exception=None, calls=[], trajectory=None)
+        with open(os.path.join(self.job, "stopped", "result.json")) as f:
+            self.assertEqual(json.load(f)["verifier_result"]["stopped"], "batch cap")
+        with open(os.path.join(self.job, "whole", "result.json")) as f:
+            self.assertNotIn("stopped", json.load(f)["verifier_result"])
+
     def test_the_mean_is_over_every_question(self):
         self.trial("conv-a", [1.0] * 4)                 # 4 questions, all right
         self.trial("conv-b", [0.0] * 12)                # 12 questions, all wrong

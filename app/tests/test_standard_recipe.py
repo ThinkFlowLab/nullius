@@ -38,6 +38,33 @@ def a_recipe(**kw):
 
 
 class Compile(unittest.TestCase):
+    def test_time_limits_are_forced_in_seconds_on_every_job_and_turns_only_on_a_conversation(self):
+        out = recipe.compile(a_recipe(timeouts={"agent": 30, "verify": 1.5, "setup": ""}, turns=40), defs())
+        self.assertEqual(out["errors"], [])
+        self.assertIn("--timeout agent=1800 --timeout verify=90 ", out["script"])
+        self.assertNotIn("--timeout setup", out["script"])
+        self.assertNotIn("--max-turns", out["script"])                          # fakebench holds no conversation
+        self.assertIn(["Time limits", "agent 30 min · verify 1.5 min"], [row[1:] for row in out["review"]])
+        for bad in ({"agent": 0}, {"agent": -1}, {"lunch": 5}, {"agent": True}, {"agent": 24 * 60 + 1}, {"agent": 0.0001}):   # the last rounds to no time
+            errors = recipe.compile(a_recipe(timeouts=bad), defs())["errors"]
+            self.assertEqual([e["step"] for e in errors], [recipe.STEP["limits"]], bad)
+        talk = dict(next(x for x in defs()["benchmark"] if x["key"] == "fakebench"), needs=["agent.task/v1", "agent.conversation/v1"])
+        real = recipe.definitions.find
+        with patch.object(recipe.definitions, "find", lambda items, key: talk if key == "fakebench" else real(items, key)), \
+                patch.object(recipe.match, "fit", lambda b, o: None):
+            out = recipe.compile(a_recipe(turns=40), defs())
+            self.assertIn("--max-turns 40 ", out["script"])
+            self.assertEqual(recipe.compile(a_recipe(turns=0), defs())["errors"][0]["step"], recipe.STEP["limits"])
+
+    def test_a_cap_on_model_calls_reaches_every_job_that_calls_a_model(self):
+        out = recipe.compile(a_recipe(max_calls=60), defs())
+        self.assertEqual(out["errors"], [])
+        self.assertIn("--max-calls 60 ", out["script"])
+        self.assertIn(["Model calls per task", "60"], [row[1:] for row in out["review"]])
+        for bad in (0, -3, 1.5, True, "x"):
+            errors = recipe.compile(a_recipe(max_calls=bad), defs())["errors"]
+            self.assertEqual([e["step"] for e in errors], [recipe.STEP["limits"]], bad)
+
     def test_a_fitting_pair_is_one_command_and_one_job(self):
         out = recipe.compile(a_recipe(), defs())
         self.assertEqual(out["errors"], [])
@@ -381,6 +408,18 @@ class Choices(unittest.TestCase):
         self.assertNotIn("example-mem", [o["key"] for o in c["capabilities"]])
 
 
+    def test_another_version_carries_its_whole_page_so_choosing_it_changes_every_step(self):
+        b = next(x for x in recipe.choices()["benchmarks"] if x["key"] == "osworld1")
+        self.assertEqual((b["version"], [d["units"] for d in b["datasets"]][:2]), ("desktop-env-v1.0.3", [360, 368]))
+        other = next(v for v in b["versions"] if not v["default"])
+        self.assertEqual((other["ref"], other["label"]), ("osworld1@044bc33", "main (044bc33)"))
+        page = other["page"]
+        self.assertEqual([d["units"] for d in page["datasets"]][:2], [361, 369])            # its own datasets, not the default's
+        self.assertEqual((page["upstream"]["branch"], page["upstream"]["tested"][:7], page["ref"]), ("main", "044bc33", "osworld1@044bc33"))
+        self.assertEqual(page["versions"], [])
+        self.assertNotEqual(page["setups"][0]["comparable"], b["setups"][0]["comparable"])  # the release's scores are its own
+
+
 class Conformance(unittest.TestCase):
     def test_the_check_names_its_jobs_before_they_exist(self):
         fake = definitions.load("agent", ROOT)[0][0]
@@ -388,7 +427,8 @@ class Conformance(unittest.TestCase):
             got = recipe.conformance("agent", "fake", model="gpt-5-mini", provider="openai", unsandboxed=True, stamp="2026-10-10__12-00-00")
         self.assertEqual(got["errors"], [])
         self.assertEqual([j["name"] for j in got["jobs"]],
-                         [conform.job_name("2026-10-10__12-00-00", k, "fake") for k in ("agent-task-v1", "agent-workspace-v1", "agent-tools-v1", "agent-conversation-v1", "agent-search-v1")])   # an ACP agent takes every kit
+                         [conform.job_name("2026-10-10__12-00-00", k, "fake") for k in ("agent-task-v1", "agent-workspace-v1", "agent-tools-v1", "agent-conversation-v1", "agent-search-v1",
+                                                                        "agent-computer-v1")])   # an ACP agent takes every kit
         self.assertIn("conform fake --model gpt-5-mini --provider openai --stamp 2026-10-10__12-00-00 --unsandboxed --from-run", got["script"])
 
     def test_container_conformance_does_not_grant_local_permissions(self):
@@ -420,6 +460,14 @@ class FromRun(unittest.TestCase):
         self.assertEqual(cli.run_env("openrouter", env), {"OPENROUTER_API_KEY": "sk-handed", "PATH": "/bin"})
         self.assertEqual(cli.run_env("custom", env), {"MODEL_API_KEY": "sk-handed", "MODEL_API_URL": "http://127.0.0.1:9/v1", "PATH": "/bin"})
         self.assertEqual(cli.run_env("openai", env), {"OPENAI_API_KEY": "sk-handed", "PATH": "/bin"})
+
+    def test_the_boat_key_handed_to_a_run_on_boat_is_kept(self):
+        # on a host, the key handed over stdin is the run's only one: no store there holds it
+        env = {"OPENAI_API_KEY": "sk-handed", "BOAT_API_KEY": "boat_handed", "PATH": "/bin"}
+        self.assertEqual(cli.run_env("openai", env), {"OPENAI_API_KEY": "sk-handed", "BOAT_API_KEY": "boat_handed", "PATH": "/bin"})
+        from nullius.standard import boat
+        with patch.object(boat.secrets, "value", return_value=None):
+            self.assertEqual(boat.key(cli.run_env("openai", env)), "boat_handed")
 
     def test_a_run_started_by_nullius_does_not_read_app_env(self):
         loaded = []
@@ -453,7 +501,7 @@ class Where(unittest.TestCase):
         for i, sh in enumerate(out["shards"], 1):
             self.assertIn(f"--name fake-0101-120000-shard-{i}of3", sh["script"])
             self.assertIn(f"--shard {i}/3 --launch fake-0101-120000 --from-run", sh["script"])
-            self.assertEqual(sh["jobs"], [{"name": sh["name"], "agent": "fake", "dataset": "fakebench"}])
+            self.assertEqual(sh["jobs"], [{"name": sh["name"], "agent": "fake", "dataset": "fakebench", "launch": "fake-0101-120000"}])
         self.assertEqual([j["name"] for j in out["jobs"]], [sh["name"] for sh in out["shards"]])
         self.assertEqual(len(out["parts"]), 3)
         self.assertIn("3 shards, one per machine", out["review"][-1][2])
