@@ -465,7 +465,7 @@ class FromRun(unittest.TestCase):
         # on a host, the key handed over stdin is the run's only one: no store there holds it
         env = {"OPENAI_API_KEY": "sk-handed", "BOAT_API_KEY": "boat_handed", "PATH": "/bin"}
         self.assertEqual(cli.run_env("openai", env), {"OPENAI_API_KEY": "sk-handed", "BOAT_API_KEY": "boat_handed", "PATH": "/bin"})
-        from nullius.standard import boat
+        from nullius.standard.backends import boat
         with patch.object(boat.secrets, "value", return_value=None):
             self.assertEqual(boat.key(cli.run_env("openai", env)), "boat_handed")
 

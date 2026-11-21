@@ -13,8 +13,9 @@ from flask import abort, flash, jsonify, redirect, render_template, request, url
 from nullius import execution, paths, providers, secrets, settings
 from nullius.catalogue import catalog, citation, harbor_entry, sources, storage
 from nullius.standard.contract import definitions as standard_definitions
-from nullius.standard.pages import howto, recipe as standard_recipe
+from nullius.standard.pages import howto
 from nullius.standard.proofs import prove
+from nullius.standard.pages import recipe as standard_recipe
 
 from .core import app
 from . import execute

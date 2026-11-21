@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from nullius.standard.containers import container, setup_container
+from nullius.standard.backends import container, setup_container
 from nullius.standard.protocols import jsonl
 from tests import docker_tier
 
@@ -148,7 +148,7 @@ class DriverContainer(unittest.TestCase):
             env = {'PATH': os.environ.get('PATH', ''), 'PYTHONPATH': APP, 'NULLIUS_HOME': root + '/profile'}
 
             def launch(*credentials):
-                return subprocess.run([sys.executable, '-m', 'nullius.standard.containers.setup_container', root + '/setup.json',
+                return subprocess.run([sys.executable, '-m', 'nullius.standard.backends.setup_container', root + '/setup.json',
                                        root + '/cache', 'run', *credentials], env=env, capture_output=True, text=True,
                                       timeout=60).stdout
             self.assertEqual(launch(root + '/credentials'), 'fixture-only')
@@ -163,7 +163,7 @@ class DriverContainer(unittest.TestCase):
             with open(root + '/setup.json', 'w') as f:
                 json.dump({'bench': bench, 'upstream': None, 'needs': []}, f)
             env = {'PATH': os.environ.get('PATH', ''), 'PYTHONPATH': APP, 'NULLIUS_HOME': root + '/profile'}
-            said = subprocess.run([sys.executable, '-m', 'nullius.standard.containers.setup_container', root + '/setup.json',
+            said = subprocess.run([sys.executable, '-m', 'nullius.standard.backends.setup_container', root + '/setup.json',
                                    root + '/cache', 'run'], env=env, capture_output=True, text=True, timeout=60).stdout
             command, extra = install.driver_argv(bench, root + '/cache')
             self.assertEqual((said, extra), (' '.join(command[1:]), {}))

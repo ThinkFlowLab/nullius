@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 import tempfile
-from nullius.standard.containers import container
+from nullius.standard.backends import container
 from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
 from nullius.standard.requirements import network_requirements as net

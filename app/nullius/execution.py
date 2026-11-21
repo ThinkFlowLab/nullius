@@ -129,7 +129,7 @@ from nullius import hosts, ondisk, paths, prices as price_list, progress, provid
 from nullius.judge import store as judgements
 from nullius.runs import parse
 from nullius.harbor import source as harbor_source
-from nullius.standard.containers import container
+from nullius.standard.backends import container
 from nullius.standard.runner import payload as standard_payload
 
 REMOTE_HOME = "~/.nullius"                    # on a host: tasks/, runs/, app/, harbor/ (a pinned Harbor's wheels)
@@ -404,7 +404,7 @@ class Execution:
         # the agent keys Settings holds (CURSOR_API_KEY, ...): a Harbor run's agent may need its own vendor's; the standard's never gets one
         self._agent_keys = dict(agent_keys) if agent_keys is not None else (settings.agent_key_values(env) if plan.runner == "harbor" else {})
         if plan.runner == "standard" and (plan.recipe or {}).get("backend") == "boat":
-            from nullius.standard import boat      # the Boat key, to the standard run that starts VMs with it, and to no other command
+            from nullius.standard.backends import boat      # the Boat key, to the standard run that starts VMs with it, and to no other command
             if boat.key(env):
                 self._agent_keys[boat.NAME] = boat.key(env)
         # the benchmark's licences a standard run on a host is sent: read from its store at each launch, unless given

@@ -20,7 +20,7 @@ import types
 import unittest
 from unittest import mock
 
-from nullius.standard import computer_port
+from nullius.standard.protocols import computer_port
 
 ENTRY = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nullius", "catalogue", "benchmarks",
                      "osworld1")
@@ -630,7 +630,7 @@ class Snapshot(unittest.TestCase):
         files = set(payload._entry(Path(ENTRY)))
         self.assertTrue({"driver.py", "agents.json", "nop.py", "runner.py"} <= files, sorted(files))
         package = set(payload._python(payload.PACKAGE))
-        self.assertTrue({"standard/computer_port.py", "standard/computer_pipe.py"} <= package)
+        self.assertTrue({"standard/protocols/computer_port.py", "standard/protocols/computer_pipe.py"} <= package)
 
 
 class FakeEnv:

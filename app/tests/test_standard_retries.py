@@ -3,8 +3,7 @@
 import time
 import unittest
 
-from nullius.standard import retries
-from nullius.standard.runner import pace
+from nullius.standard.runner import pace, retries
 
 
 def ended(exception_type):

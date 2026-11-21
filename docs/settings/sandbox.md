@@ -8,4 +8,4 @@ Where agents run apart from this machine: Boat VMs. Under **Execution**.
 
 | Rule | |
 | --- | --- |
-| Code | `app/nullius/standard/boat.py` |
+| Code | `app/nullius/standard/backends/boat.py` |

@@ -18,7 +18,7 @@ import unittest
 from unittest import mock
 
 from nullius import constraints, prerequisites, settings
-from nullius.standard.containers import container
+from nullius.standard.backends import container
 from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
 from nullius.standard.requirements import install
@@ -320,7 +320,7 @@ class Containers(unittest.TestCase):
         self.addCleanup(container.cap, {})
 
     def test_every_container_a_run_starts_takes_the_machine_s_caps(self):
-        from nullius.standard.containers import setup_container
+        from nullius.standard.backends import setup_container
         container.cap({"cpus": 1.5, "memory_mb": 512, "concurrency": 2, "gpu_ids": [0]})
         flags = ["--cpus", "1.5", "--memory", "512m", "--memory-swap", "512m"]
         tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)

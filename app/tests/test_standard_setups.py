@@ -231,13 +231,13 @@ class SetupRun(unittest.TestCase):
 
     def test_a_docker_setup_still_requires_a_working_daemon(self):
         o, _ = definitions.setup(self.b, "original")
-        with patch("nullius.standard.containers.container.unusable", return_value="daemon unavailable"):
+        with patch("nullius.standard.backends.container.unusable", return_value="daemon unavailable"):
             with self.assertRaisesRegex(run.Refused, "daemon unavailable"):
                 run.Run(self.b, o, model="paper-1", provider="custom", jobs_root=self.tmp, env=self.env, backend="container")
 
     def test_docker_setup_runs_driver_and_linux_dependencies_with_scoped_credentials(self):
         from tests import docker_tier
-        from nullius.standard.containers import container
+        from nullius.standard.backends import container
         why = docker_tier.why_not()
         if why:
             self.skipTest(why)

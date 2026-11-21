@@ -10,7 +10,7 @@ import unittest
 from unittest import mock
 
 from nullius import onboarding
-from nullius.standard.containers import container
+from nullius.standard.backends import container
 
 NO_DOCKER = lambda: False
 

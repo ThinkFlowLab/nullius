@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 from nullius import hosts, prerequisites
-from nullius.standard.containers import container
+from nullius.standard.backends import container
 from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
 from nullius.standard.runner import run

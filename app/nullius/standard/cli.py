@@ -18,10 +18,10 @@ An agent runs commands as you on the local backend, which is not a sandbox:
 an agent's run or conformance check there is refused without ``--unsandboxed``.
 ``--backend container`` (``docker``, its earlier name) runs each unit's agent or capability in a container whose
 only way out is the unit's relay, or a public web proxy when its environment
-declares ``network`` (``standard/containers/container.py``), and needs no such yes.
+declares ``network`` (``standard/backends/container.py``), and needs no such yes.
 ``--backend boat`` runs each unit's agent or capability in a boat.dev VM of its
 own, whose only way out is a tunnel to the unit's relay on this machine
-(``standard/boat.py``); its API key is Settings → Sandbox's, or ``BOAT_API_KEY``.
+(``standard/backends/boat.py``); its API key is Settings → Sandbox's, or ``BOAT_API_KEY``.
 A benchmark's control (``nop``, ``oracle``: its ``controls``) runs no agent
 and calls no model - only a judged benchmark's judge - so it asks for neither.
 ``prove`` runs a benchmark's controls and checks its units and that nothing
@@ -75,14 +75,14 @@ import sys
 import tempfile
 import time
 
-from nullius.standard.retries import MAX_RETRIES, RETRIES
+from nullius.standard.runner.retries import MAX_RETRIES, RETRIES
 from nullius import constraints as limits, paths, prices as price_list, progress, providers, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed, just like the unified CLI does.
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
     settings.load(paths.settings_file())
 
-from nullius.standard import boat
+from nullius.standard.backends import boat
 from nullius.standard.contract import definitions, match, ports
 from nullius.standard.proofs import conform, fidelity, pins, prove
 from nullius.standard.runner import job, merge, run, shard
@@ -616,7 +616,7 @@ def boat_credentials(a, bench, other, vals) -> dict:
 
 def _boat_units(a, b, other) -> int:
     """A benchmark whose units boot VMs of their own, on Boat: each unit whole in a Boat VM (``boat_units``)."""
-    from nullius.standard import boat_units
+    from nullius.standard.runner import boat_units
     if a.units or a.shard:
         print("refused: whole-task Boat runs do not accept --units or --shard; choose a dataset and --limit")
         return 2

@@ -20,7 +20,7 @@ import sys
 import uuid
 from urllib.parse import urlsplit
 
-from nullius.standard.containers import container
+from nullius.standard.backends import container
 from nullius.standard.contract import definitions
 from nullius.standard.protocols import jsonl
 from nullius.standard.requirements import hostreq, install
@@ -82,7 +82,7 @@ class Driver:
                       UV_CACHE_DIR=os.path.join(self.cache, "uv-cache"),
                       UV_PYTHON_INSTALL_DIR=os.path.join(self.cache, "python"))
         name = "nullius-setup-" + uuid.uuid4().hex[:20]
-        cmd = ["python3", "-m", "nullius.standard.containers.setup_container", self.config, self.cache,
+        cmd = ["python3", "-m", "nullius.standard.backends.setup_container", self.config, self.cache,
                "prepare" if prepare else "run"] + ([CREDENTIALS_IN] if credentials else [])
         argv = container.run_argv(self.image, cmd, name=name, network=container.BRIDGE if container.podman() else "bridge", job=self.job,
                                   workdir=cwd, mounted=mounts, env=values, path=container.IMAGE_PATH)

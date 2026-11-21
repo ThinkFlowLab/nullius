@@ -1126,7 +1126,7 @@ class SettingsPage(unittest.TestCase):
 
     def test_the_boat_key_is_saved_from_this_machines_browser_and_never_echoed(self):
         from nullius import secrets
-        from nullius.standard import boat
+        from nullius.standard.backends import boat
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"SECRETS_DIR": folder}):
             os.environ.pop(boat.NAME, None)
             headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}

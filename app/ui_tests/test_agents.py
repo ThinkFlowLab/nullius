@@ -598,7 +598,7 @@ class StandardPieces(unittest.TestCase):
         self.assertIn('<span class="nb-tick no" title="chooses the right tool among similar ones">decoys ✗</span>', card[:card.index("</article>")])
 
     def test_the_builder_is_given_the_controls_their_proofs_and_whether_docker_runs_here(self):
-        from nullius.standard import boat
+        from nullius.standard.backends import boat
         self.fixture()
         with patch.object(boat, "unusable", lambda here=True: "no Boat API key: set it in Settings → Sandbox"):
             html = self.get("/new-run").get_data(as_text=True)
@@ -615,7 +615,7 @@ class StandardPieces(unittest.TestCase):
                                                   "boatSizes": sizes, "boatSlots": None, "boatKey": False, "licences": {}, "host": {}})
 
     def test_the_builder_offers_the_boat_sizes_and_vms_at_once_its_account_says(self):
-        from nullius.standard import boat
+        from nullius.standard.backends import boat
         self.fixture()
         account = {"types": {"small": None, "default": None, "large": "not during the free trial"}, "slots": 2}
         with patch.object(boat, "unusable", lambda here=True: None), patch.object(web.execute, "boat_account", lambda: account):

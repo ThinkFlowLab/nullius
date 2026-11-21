@@ -15,7 +15,7 @@ from nullius.harbor import source as harbor_source
 from nullius.catalogue import catalog
 from nullius.recipes import launch as command_builder
 from nullius.recipes import store as recipe_store
-from nullius.standard import boat
+from nullius.standard.backends import boat
 from nullius.standard.contract import definitions
 from nullius.standard.requirements import hostreq
 from nullius.standard.pages import recipe as standard_recipe

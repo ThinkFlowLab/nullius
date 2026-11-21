@@ -241,7 +241,7 @@ class Driver(unittest.TestCase):
         """The agent starts it in its container: this machine's interpreter, mounted over the image's, would not run."""
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)
-        from nullius.standard.containers import container
+        from nullius.standard.backends import container
         env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": APP, "PYTHONDONTWRITEBYTECODE": "1",
                container.CHECK_IMAGE: "nullius/base:test"}
         d = jsonl.Proc([sys.executable, os.path.join(KIT, "driver.py")], KIT, env, os.path.join(tmp, "driver.log")).start()

@@ -1,5 +1,5 @@
 """One unit of an agent on OSWorld1: the upstream's DesktopEnv and its own run_single_example, imported and called as
-they are, with the computer port's bridge as the loop's agent (nullius.standard.computer_port, agent.computer/v1).
+they are, with the computer port's bridge as the loop's agent (nullius.standard.protocols.computer_port, agent.computer/v1).
 
     runner.py --example TASK_JSON --result-dir DIR --socket PATH --ready FILE --lifeline FD --steps N --pause SECONDS
               --vm VM_IMAGE --calls FILE [--held FOLDER] [--prepared FILE] [--given FILE]
@@ -138,7 +138,7 @@ def main(argv=None):
     p.add_argument("--steps", type=int, required=True)
     p.add_argument("--pause", type=float, required=True)
     a = p.parse_args(argv)
-    from nullius.standard import computer_port as port
+    from nullius.standard.protocols import computer_port as port
     stop, turn = port.Stop(STOP_SECONDS), Turn()
     turn.given, turn.said = a.given, port.ready
     try:                                             # the clean-up holds before the lifeline can stop the runner

@@ -8,7 +8,7 @@ import time
 from flask import abort, jsonify, request, url_for
 from nullius import execution, hosts, prerequisites, prices, providers, settings
 from nullius.harbor import source as harbor_source
-from nullius.standard import boat
+from nullius.standard.backends import boat
 from nullius.standard.pages import recipe as standard_recipe
 
 from .core import app

@@ -11,11 +11,10 @@ import unittest
 from unittest.mock import patch
 
 from nullius.runs import classify, parse
-from nullius.standard import retries
 from nullius.standard.calls import relay
 from nullius.standard.contract import definitions
 from nullius.standard.requirements import install
-from nullius.standard.runner import job, run
+from nullius.standard.runner import job, retries, run
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 WORDS = "the gated task's own sentence"

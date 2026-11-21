@@ -451,7 +451,7 @@
   const bootsVms = b => Object.values((b || {}).options || {}).some(o => o.step === 'where' && Object.values(o.needs || {}).some(n => n && n.vm));
   const vmMemory = (rec, b) => Math.max(0, ...Object.entries((b || {}).options || {}).filter(([, o]) => o.step === 'where')
     .map(([n, o]) => (((o.needs || {})[(rec.bench_options || {})[n] ?? o.default] || {}).vm || {}).memory_gb || 0));
-  // Boat's sizes as the account offers them (nullius/standard/boat.py, SIZES), each with why it cannot be chosen:
+  // Boat's sizes as the account offers them (nullius/standard/backends/boat.py, SIZES), each with why it cannot be chosen:
   // the account cannot start one, or it is too small to boot the unit's own VM (boat.fits).
   const boatSizes = (rec, b) => { const mem = vmMemory(rec, b);
     return ((schema.standardHere || {}).boatSizes || []).map(z => z.why ? {...z, note: 'Not on this account', why: 'Not on this account: ' + z.why}

@@ -42,7 +42,7 @@ import subprocess
 import threading
 from typing import Dict, List, Optional
 
-from nullius.standard.containers import container
+from nullius.standard.backends import container
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENVIRONMENT = "desktop"

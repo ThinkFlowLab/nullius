@@ -12,12 +12,12 @@ from contextlib import redirect_stdout
 from types import SimpleNamespace
 from unittest import mock
 
-from nullius.standard import cli, retries
-from nullius.standard.containers import container
+from nullius.standard import cli
+from nullius.standard.backends import container
 from nullius.standard.contract import definitions, match
 from nullius.standard.proofs import conform
 from nullius.standard.requirements import install
-from nullius.standard.runner import run
+from nullius.standard.runner import retries, run
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard")
 

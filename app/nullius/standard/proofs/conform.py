@@ -28,9 +28,8 @@ import time
 from typing import Callable, Dict, List, Optional
 
 from nullius.runs import parse
-from nullius.standard import retries
 from nullius.standard.contract import definitions, ports
-from nullius.standard.runner import run
+from nullius.standard.runner import retries, run
 
 
 STAMP = "%Y-%m-%d__%H-%M-%S"

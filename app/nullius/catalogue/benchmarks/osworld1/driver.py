@@ -409,7 +409,7 @@ def answer(unit, dir, setup, model, base_url, key, **_):
 
 def _port():
     """The computer port's shared code, from the nullius package on this driver's import path."""
-    from nullius.standard import computer_port
+    from nullius.standard.protocols import computer_port
     return computer_port
 
 

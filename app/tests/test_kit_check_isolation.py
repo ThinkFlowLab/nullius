@@ -17,7 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nullius.standard.containers import container
+from nullius.standard.backends import container
 from nullius.standard.contract import definitions
 from nullius.standard.protocols import jsonl
 from tests import APP

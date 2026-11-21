@@ -22,7 +22,7 @@ import re
 import secrets
 import sys
 
-from nullius.standard.containers.container import CHECK_IMAGE
+from nullius.standard.backends.container import CHECK_IMAGE
 from nullius.standard.protocols.jsonl import serve
 
 HERE = os.path.dirname(os.path.abspath(__file__))

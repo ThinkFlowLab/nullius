@@ -1,4 +1,4 @@
-"""The boat backend (``standard/boat.py``): its API client, a unit's VM, what it is sent, and a run
+"""The boat backend (``standard/backends/boat.py``): its API client, a unit's VM, what it is sent, and a run
 whose agent goes to a VM - here a stand-in that runs it on this machine, so nothing reaches boat.dev."""
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import unittest
 import urllib.error
 from unittest import mock
 
-from nullius.standard import boat
+from nullius.standard.backends import boat
 from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
 from nullius.standard.runner import run

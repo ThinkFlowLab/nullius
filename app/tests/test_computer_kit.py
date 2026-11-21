@@ -23,7 +23,7 @@ import time
 import unittest
 from unittest import mock
 
-from nullius.standard.containers import container
+from nullius.standard.backends import container
 from nullius.standard.contract import definitions
 from tests import docker_tier
 
