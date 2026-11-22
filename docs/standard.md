@@ -271,6 +271,7 @@ A benchmark whose tasks need different software names **environments**.
 | Rule | Detail |
 | --- | --- |
 | A layer on the base image | The Dockerfile has no `FROM`: Nullius writes it. `ADD` is refused; `COPY` only of the files `files` lists, the build's whole context |
+| Own base | `base`: another image, pinned by digest (`name[:tag]@sha256:...`), when the environment needs none of the base image. The Dockerfile then installs everything it uses |
 | Pinned | `nullius/env-<benchmark>-<name>:<hash>`, the sha256 of the Dockerfile and each listed file; built when a unit first asks, its output the job's `.work/env-<name>.log` |
 | Which unit uses which | `setup` may reply `"environment": "<name>"`, a dataset may name a default, none is the base; an undeclared name is a setup error. The trial records `standard.environment` and `standard.image` |
 | Local backend | Runs only the base; another environment is refused unless `local_ok: true`. A control is never refused for an environment, but still not run without the secrets |

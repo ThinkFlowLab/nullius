@@ -310,6 +310,12 @@ class Image(unittest.TestCase):
             names.add(ln.split("==")[0].lower())
         self.assertTrue({"pyautogui", "pillow"} <= names)
 
+    def test_the_desktop_is_built_as_the_kit_declares_it(self):
+        with open(os.path.join(KIT, "standard.json")) as f:
+            declared = json.load(f)["environments"]["desktop"]
+        for field in ("base", "dockerfile", "files"):
+            self.assertEqual(desktop.KIT["environments"]["desktop"][field], declared[field], field)
+
     def test_the_package_carries_every_file_the_image_is_built_from(self):
         with open(os.path.join(ROOT, "pyproject.toml")) as f:
             line = next(ln for ln in f if ln.startswith('"nullius.standard"'))
@@ -759,7 +765,7 @@ class DockerDesktop(unittest.TestCase):
     def test_the_desktop_ends_when_its_window_manager_does(self):
         self.d.python("import os, signal\nfor p in os.listdir('/proc'):\n    if p.isdigit():\n        try:\n"
                       "            name = open(f'/proc/{p}/comm').read().strip()\n        except OSError:\n            continue\n"
-                      "        if name == 'openbox':\n            os.kill(int(p), signal.SIGKILL)")
+                      f"        if name == {session.WINDOW_MANAGER[:15]!r}:\n            os.kill(int(p), signal.SIGKILL)")
         state = ""
         for _ in range(40):
             r = subprocess.run([container.DOCKER, "container", "inspect", "--format", "{{.State.Running}}", self.d.name],

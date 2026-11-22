@@ -80,7 +80,7 @@ class Schema(unittest.TestCase):
         self.assertTrue(any(".files: nope is not" in p for p in self.problems({"x": dict(tool, files=["nope"])})))
         self.assertTrue(any(".summary" in p for p in self.problems({"x": dict(tool, summary="")})))
         self.assertTrue(any(".local_ok" in p for p in self.problems({"x": dict(tool, local_ok="yes")})))
-        self.assertTrue(any("is not a field of an environment" in p for p in self.problems({"x": dict(tool, base="x")})))
+        self.assertTrue(any("is not a field of an environment" in p for p in self.problems({"x": dict(tool, from_image="x")})))
         self.assertTrue(any(".image: 'own'" in p for p in self.problems({"x": dict(tool, image="x")})))
         said = self.problems({"x": dict(tool, needs_secrets=[{"name": "LIC"}])})
         self.assertTrue(any(".to: one of ('agent', 'driver')" in p for p in said), said)
@@ -91,6 +91,16 @@ class Schema(unittest.TestCase):
             self.assertFalse(any("already the name" in p for p in said), said)
         said = self.problems({"x": dict(tool, needs_secrets=[{"name": "A", "to": "agent"}, {"name": "A", "to": "driver"}])})
         self.assertTrue(any("each once" in p for p in said), said)
+
+    def test_an_own_base_is_pinned_by_digest(self):
+        tool = {"summary": "s", "dockerfile": "env/tool.Dockerfile"}
+        pinned = "docker.io/library/debian:trixie-slim@sha256:" + "a" * 64
+        self.assertEqual(self.problems({"tool": dict(tool, base=pinned)}), [])
+        for base in ("debian:trixie-slim", "debian@sha256:abc", 3, pinned + " ", "Debian@sha256:" + "a" * 64):
+            said = self.problems({"tool": dict(tool, base=base)})
+            self.assertTrue(any(".base: an image reference pinned by digest" in p for p in said), (base, said))
+        said = self.problems({"task": {"summary": "s", "image": "own", "base": pinned}})
+        self.assertTrue(any(".base: not with an own image" in p for p in said), said)
 
     def test_a_datasets_default_must_be_declared(self):
         said = self.problems(datasets=[{"id": "all", "units": 3, "environment": "gpu"}])
@@ -142,6 +152,27 @@ class Tag(unittest.TestCase):
         with open(os.path.join(work, "env-licensed.log")) as f:
             self.assertIn(t1, f.read())
         self.assertFalse(os.path.exists(os.path.join(work, "env-tool.log")))   # lazy: tool was never asked for
+        container._built.clear()
+
+
+    def test_an_environment_on_its_own_base_does_not_build_the_standards(self):
+        b = bench(self.root)
+        own = "docker.io/library/debian:trixie-slim@sha256:" + "b" * 64
+        b["environments"]["tool"]["base"] = own
+        calls = []
+
+        def docker(args, **kw):
+            calls.append(args)
+            ok = args[:2] != ["image", "inspect"] or any(c[0] == "build" for c in calls)
+            return subprocess.CompletedProcess(args, 0 if ok else 1, "built\n", "")
+
+        container._built.clear()
+        with mock.patch.object(container, "base_image", side_effect=AssertionError("the standard's base was built")), \
+                mock.patch.object(container, "_docker", side_effect=docker), \
+                mock.patch.object(container, "_security", None):
+            tag = container.image_for(b, {"environment": "tool"}, None, os.path.join(self.tmp, "work"))
+        self.assertEqual(tag, container.env_tag(b, "tool", own))
+        self.assertTrue(container.env_context(b, "tool", own)[0].startswith(f"FROM {own}\n"))
         container._built.clear()
 
 

@@ -115,7 +115,7 @@ Every check also fails when a pointer or key event came outside an acting call: 
 
 | Piece | Where |
 | --- | --- |
-| The desktop | A container of the kit's image, `desktop.Dockerfile` on Nullius's base image, built the first time a unit needs it: an X display at 1920 by 1080, a window manager, a session bus, the accessibility bus, Python with Tk, `pyautogui` and Pillow. The agent's actions run as its user; the kit's fixture runs as another, its log out of that user's reach |
+| The desktop | A container of the kit's image, `desktop.Dockerfile` on Debian slim pinned by digest, built the first time a unit needs it: an X display at 1920 by 1080, a window manager, a session bus, Python with Tk, `pyautogui` and Pillow. The agent's actions run as its user; the kit's fixture runs as another, its log out of that user's reach |
 | The server and the loop | In the kit's driver: the port's server over the unit's desktop, and a loop of the kit's own that runs each step's actions and waits the pause |
 | What a stop leaves | A unit that never reaches its score is let go by the next unit or by the driver's end; a reaper the driver starts removes the containers and sockets of a driver that was killed |
 | The controls | The null control passes no check; the reference is given its task as it starts, makes the right calls through the unit's own server, reads the words and their gaps from the screenshot it gets and, for `late`, looks again by `wait` until a step's observation was taken with the button up, then clicks it: it passes all nine |
