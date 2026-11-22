@@ -78,16 +78,14 @@
     "humaneval": {
       "units": {
         "units": 164,
-        "passed": "164 ids, the same twice, unique",
-        "on": "2026-10-13"
+        "passed": "164 ids, the same twice, unique"
       },
       "leak": {
         "units": 164,
         "looked_for": 163,
         "short": 1,
         "passed": "164/164",
-        "note": "1 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
-        "on": "2026-10-13"
+        "note": "1 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
       },
       "nop": {
         "passed": "0/164",
@@ -95,10 +93,7 @@
         "expect": {
           "at_most": 0.0
         },
-        "units": 164,
-        "job": "2026-10-13__14-46-10__humaneval-2__humaneval__prove-nop",
-        "source": "nullius",
-        "on": "2026-10-13"
+        "units": 164
       },
       "oracle": {
         "passed": "164/164",
@@ -106,10 +101,7 @@
         "expect": {
           "at_least": 1.0
         },
-        "units": 164,
-        "job": "2026-10-13__14-46-10__humaneval-2__humaneval__prove-oracle",
-        "source": "official",
-        "on": "2026-10-13"
+        "units": 164
       }
     }
   }

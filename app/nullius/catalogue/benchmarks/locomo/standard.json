@@ -219,8 +219,7 @@
     "locomo10": {
       "units": {
         "units": 1540,
-        "passed": "1540 ids, the same twice, unique",
-        "on": "2026-11-02"
+        "passed": "1540 ids, the same twice, unique"
       },
       "leak": {
         "units": 1540,
@@ -235,8 +234,7 @@
           ],
           "why": "A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
         },
-        "note": "396 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 2 prompt(s) name their answer, as the benchmark says they may: A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it.",
-        "on": "2026-11-02"
+        "note": "396 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 2 prompt(s) name their answer, as the benchmark says they may: A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
       },
       "nop": {
         "passed": "0/1540",
@@ -244,10 +242,7 @@
         "expect": {
           "at_most": 0.0
         },
-        "units": 1540,
-        "job": "2026-11-02__15-03-51__locomo__locomo10__prove-nop",
-        "source": "nullius",
-        "on": "2026-11-02"
+        "units": 1540
       },
       "oracle": {
         "passed": "1540/1540",
@@ -255,10 +250,7 @@
         "expect": {
           "at_least": 1.0
         },
-        "units": 1540,
-        "job": "2026-11-02__15-03-51__locomo__locomo10__prove-oracle",
-        "source": "nullius",
-        "on": "2026-11-02"
+        "units": 1540
       }
     }
   }

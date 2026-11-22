@@ -33,33 +33,27 @@
   "proven": {
     "agent.task/v1": {
       "passed": "3/3",
-      "on": "2026-11-02",
       "model": "openai/gpt-5-mini",
       "provider": "openrouter",
       "version": "1",
       "kit_version": 1,
-      "backend": "docker",
-      "job": "2026-11-02__14-14-35__kit__agent-task-v1__reference"
+      "backend": "docker"
     },
     "agent.workspace/v1": {
       "passed": "2/2",
-      "on": "2026-11-02",
       "model": "openai/gpt-5-mini",
       "provider": "openrouter",
       "version": "1",
       "kit_version": 1,
-      "backend": "docker",
-      "job": "2026-11-02__14-15-19__kit__agent-workspace-v1__reference"
+      "backend": "docker"
     },
     "agent.tools/v1": {
       "passed": "2/2",
-      "on": "2026-11-02",
       "model": "openai/gpt-5-mini",
       "provider": "openrouter",
       "version": "1",
       "kit_version": 2,
       "backend": "docker",
-      "job": "2026-11-02__14-15-59__kit__agent-tools-v1__reference",
       "skills": {
         "decoys": {
           "passed": "1/1",
@@ -77,13 +71,11 @@
     },
     "agent.conversation/v1": {
       "passed": "2/2",
-      "on": "2026-11-02",
       "model": "openai/gpt-5-mini",
       "provider": "openrouter",
       "version": "1",
       "kit_version": 1,
-      "backend": "docker",
-      "job": "2026-11-02__14-17-27__kit__agent-conversation-v1__reference"
+      "backend": "docker"
     }
   }
 }
